@@ -26,10 +26,10 @@ type DeferredMessage struct {
 
 // sentryInitialized tracks whether Sentry has been initialized
 var (
-	sentryInitialized   bool
-	deferredMessages    []DeferredMessage
-	deferredMutex       sync.Mutex
-	attachmentUploader  *AttachmentUploader
+	sentryInitialized  bool
+	deferredMessages   []DeferredMessage
+	deferredMutex      sync.Mutex
+	attachmentUploader *AttachmentUploader
 )
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -429,12 +429,12 @@ func isNumeric(s string) bool {
 func GetAttachmentUploader() *AttachmentUploader {
 	deferredMutex.Lock()
 	defer deferredMutex.Unlock()
-	
+
 	if attachmentUploader == nil {
 		// Create a disabled uploader if Sentry is not initialized
 		attachmentUploader = NewAttachmentUploader(false)
 	}
-	
+
 	return attachmentUploader
 }
 

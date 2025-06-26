@@ -37,7 +37,7 @@ func NewCollector(configPath, dataPath, systemID, version string) *Collector {
 	if dataPath == "" {
 		dataPath = "."
 	}
-	
+
 	return &Collector{
 		configPath: configPath,
 		dataPath:   dataPath,
@@ -349,15 +349,15 @@ func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, erro
 
 	// Calculate since time
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
-	
+
 	// Run journalctl command
-	cmd := exec.Command("journalctl", 
+	cmd := exec.Command("journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",
 		"-o", "json",
 		"--no-hostname")
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		// journalctl might not be available or service might not exist
@@ -382,7 +382,7 @@ func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, erro
 		message, _ := entry["MESSAGE"].(string)
 		priority, _ := entry["PRIORITY"].(string)
 		timestamp, _ := entry["__REALTIME_TIMESTAMP"].(string)
-		
+
 		// Convert timestamp (microseconds since epoch)
 		var ts time.Time
 		if timestamp != "" {
@@ -418,11 +418,11 @@ func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, erro
 // collectLogFiles collects logs from files in the data directory
 func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]LogEntry, error) {
 	var logs []LogEntry
-	
+
 	// Look for log files in common locations
 	// The logging package creates logs in a "logs" directory
 	logPaths := []string{
-		"logs",                                    // Default logs directory from logging package
+		"logs",                                   // Default logs directory from logging package
 		filepath.Join(c.dataPath, "logs"),        // Legacy location
 		filepath.Join(c.dataPath, "birdnet.log"), // Legacy location
 		filepath.Join(c.configPath, "logs"),      // Config directory logs
@@ -471,9 +471,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]Lo
 }
 
 // parseLogFile parses a log file and extracts entries
-func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64) ([]LogEntry, int64) {
-	var logs []LogEntry
-	var totalSize int64
+func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64) (logs []LogEntry, totalSize int64) {
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -486,7 +484,7 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 	for scanner.Scan() {
 		line := scanner.Text()
 		totalSize += int64(len(line))
-		
+
 		if totalSize > maxSize {
 			break
 		}
@@ -510,34 +508,34 @@ func (c *Collector) parseLogLine(line string) *LogEntry {
 		entry := &LogEntry{
 			Source: "file",
 		}
-		
+
 		// Parse timestamp
 		if timeStr, ok := jsonLog["time"].(string); ok {
 			if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
 				entry.Timestamp = t
 			}
 		}
-		
+
 		// Parse level
 		if level, ok := jsonLog["level"].(string); ok {
 			entry.Level = strings.ToUpper(level)
 		}
-		
+
 		// Parse message
 		if msg, ok := jsonLog["msg"].(string); ok {
 			entry.Message = msg
 		}
-		
+
 		// Add service info if available
 		if service, ok := jsonLog["service"].(string); ok {
 			entry.Source = service
 		}
-		
+
 		if entry.Message != "" {
 			return entry
 		}
 	}
-	
+
 	// Fallback to simple text format
 	// Format: 2024-01-20 15:04:05 [LEVEL] message
 	parts := strings.SplitN(line, " ", 4)
@@ -553,7 +551,7 @@ func (c *Collector) parseLogLine(line string) *LogEntry {
 
 	// Extract level
 	level := strings.Trim(parts[2], "[]")
-	
+
 	return &LogEntry{
 		Timestamp: timestamp,
 		Level:     level,

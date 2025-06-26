@@ -7,14 +7,14 @@ import (
 
 // SupportDump represents a collection of support data
 type SupportDump struct {
-	ID          string              `json:"id"`
-	Timestamp   time.Time           `json:"timestamp"`
-	SystemID    string              `json:"system_id"`
-	Version     string              `json:"version"`
-	Logs        []LogEntry          `json:"logs"`
-	Config      map[string]any      `json:"config"`
-	SystemInfo  SystemInfo          `json:"system_info"`
-	Attachments []AttachmentInfo    `json:"attachments"`
+	ID          string           `json:"id"`
+	Timestamp   time.Time        `json:"timestamp"`
+	SystemID    string           `json:"system_id"`
+	Version     string           `json:"version"`
+	Logs        []LogEntry       `json:"logs"`
+	Config      map[string]any   `json:"config"`
+	SystemInfo  SystemInfo       `json:"system_info"`
+	Attachments []AttachmentInfo `json:"attachments"`
 }
 
 // LogEntry represents a single log entry
