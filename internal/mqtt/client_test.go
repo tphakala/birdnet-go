@@ -35,6 +35,14 @@ func getBrokerAddress() string {
 	if broker := os.Getenv("MQTT_TEST_BROKER"); broker != "" {
 		return broker
 	}
+	// Skip using remote brokers in CI unless explicitly requested
+	if os.Getenv("CI") == "true" && os.Getenv("USE_REMOTE_MQTT_BROKER") != "true" {
+		// In CI, only use local broker to avoid flaky tests
+		if isLocalBrokerAvailable() {
+			return localTestBroker
+		}
+		return "" // No broker available in CI
+	}
 	// Prefer local broker first for faster tests
 	if isLocalBrokerAvailable() {
 		return localTestBroker
@@ -248,7 +256,7 @@ func testConnectionLossBeforePublish(t *testing.T) {
 	}
 	mqttClient, _ := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting initial connection")
@@ -312,11 +320,15 @@ func testReconnectionWithBackoff(t *testing.T) {
 	}
 	mqttClient, _ := createTestClient(t, broker)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use longer timeout for reconnection test as it needs to connect twice
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting initial connection")
-	err := mqttClient.Connect(ctx)
+	// Create a shorter timeout for individual connection attempts
+	connectCtx, connectCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer connectCancel()
+	err := mqttClient.Connect(connectCtx)
 	if err != nil {
 		t.Fatalf("Failed to connect to MQTT broker: %v", err)
 	}
@@ -329,7 +341,10 @@ func testReconnectionWithBackoff(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	debugLog(t, "Attempting immediate reconnection (should fail due to cooldown)")
-	err = mqttClient.Connect(ctx)
+	// Use short timeout for the expected failure
+	failCtx, failCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer failCancel()
+	err = mqttClient.Connect(failCtx)
 	if err == nil {
 		t.Fatal("Expected reconnection to fail due to cooldown")
 	}
@@ -339,7 +354,10 @@ func testReconnectionWithBackoff(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	debugLog(t, "Attempting reconnection after cooldown")
-	err = mqttClient.Connect(ctx)
+	// Create new timeout for second connection
+	reconnectCtx, reconnectCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer reconnectCancel()
+	err = mqttClient.Connect(reconnectCtx)
 	if err != nil {
 		t.Fatalf("Failed to reconnect after cooldown: %v", err)
 	}
@@ -367,7 +385,7 @@ func testMetricsCollection(t *testing.T) {
 
 	// Connect with retries
 	debugLog(t, "Attempting to connect with retries")
-	err := retryWithTimeout(20*time.Second, func() error {
+	err := retryWithTimeout(15*time.Second, func() error {
 		return mqttClient.Connect(ctx)
 	})
 	if err != nil {
@@ -541,7 +559,7 @@ func testContextCancellation(t *testing.T) {
 		}
 		mqttClient, _ := createTestClient(t, broker)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		err := mqttClient.Connect(ctx)
@@ -604,7 +622,7 @@ func testTimeoutHandling(t *testing.T) {
 		}
 		mqttClient, _ := createTestClient(t, broker)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		err := mqttClient.Connect(ctx)
