@@ -26,6 +26,10 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 		{"different extension", "data.txt", false},
 		{"hidden log file", ".hidden.log", true},
 		{"log in filename", "mylog.txt", false},
+		{"empty filename", "", false},
+		{"only extension", ".log", true},
+		{"path with log file", "/path/to/file.log", true},
+		{"path without log file", "/path/to/file.txt", false},
 	}
 
 	for _, tt := range tests {
@@ -215,6 +219,111 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 	}
 }
 
+// TestCollector_scrubConfig tests sensitive data scrubbing
+func TestCollector_scrubConfig(t *testing.T) {
+	c := &Collector{
+		sensitiveKeys: defaultSensitiveKeys(),
+	}
+
+	tests := []struct {
+		name   string
+		config map[string]any
+		want   map[string]any
+	}{
+		{
+			name: "scrub password fields",
+			config: map[string]any{
+				"password":   "secret123",
+				"api_key":    "key123",
+				"safe_field": "visible",
+				"nested": map[string]any{
+					"token":        "token456",
+					"normal_field": "also_visible",
+				},
+			},
+			want: map[string]any{
+				"password":   "[REDACTED]",
+				"api_key":    "[REDACTED]",
+				"safe_field": "visible",
+				"nested": map[string]any{
+					"token":        "[REDACTED]",
+					"normal_field": "also_visible",
+				},
+			},
+		},
+		{
+			name: "scrub array values",
+			config: map[string]any{
+				"urls": []any{"http://example.com", "http://secret.com"},
+				"data": []any{"safe1", "safe2"},
+			},
+			want: map[string]any{
+				"urls": "[REDACTED]",
+				"data": []any{"safe1", "safe2"},
+			},
+		},
+		{
+			name: "handle mixed case keys",
+			config: map[string]any{
+				"Password": "secret",
+				"API_KEY":  "key",
+				"ApiToken": "token",
+				"normal":   "visible",
+			},
+			want: map[string]any{
+				"Password": "[REDACTED]",
+				"API_KEY":  "[REDACTED]",
+				"ApiToken": "[REDACTED]",
+				"normal":   "visible",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := c.scrubConfig(tt.config)
+			if !compareConfigs(got, tt.want) {
+				t.Errorf("scrubConfig() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// compareConfigs compares two config maps for equality
+func compareConfigs(a, b map[string]any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v1 := range a {
+		v2, ok := b[k]
+		if !ok {
+			return false
+		}
+		switch t1 := v1.(type) {
+		case map[string]any:
+			t2, ok := v2.(map[string]any)
+			if !ok || !compareConfigs(t1, t2) {
+				return false
+			}
+		case []any:
+			t2, ok := v2.([]any)
+			if !ok || len(t1) != len(t2) {
+				return false
+			}
+			for i := range t1 {
+				if t1[i] != t2[i] {
+					return false
+				}
+			}
+		default:
+			if v1 != v2 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // mockFileInfo implements os.FileInfo for testing
 type mockFileInfo struct {
 	name    string
@@ -229,4 +338,4 @@ func (m *mockFileInfo) Size() int64        { return m.size }
 func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
 func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
-func (m *mockFileInfo) Sys() interface{}   { return nil }
+func (m *mockFileInfo) Sys() any           { return nil }
