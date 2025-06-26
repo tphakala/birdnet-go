@@ -6,7 +6,17 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
+
+// getSoundLevelMetrics is a helper function to safely retrieve the SoundLevel metrics object
+func getSoundLevelMetrics(apiController *api.Controller) *metrics.SoundLevelMetrics {
+	if apiController == nil || apiController.Processor == nil || 
+	   apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
+		return nil
+	}
+	return apiController.Processor.Metrics.SoundLevel
+}
 
 // startSoundLevelSSEPublisher starts a goroutine to consume sound level data and publish via SSE
 func startSoundLevelSSEPublisher(wg *sync.WaitGroup, quitChan chan struct{}, apiController *api.Controller) {
@@ -30,17 +40,19 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, quitChan chan struct{}, api
 				// Publish sound level data via SSE
 				if err := apiController.BroadcastSoundLevel(&soundData); err != nil {
 					// Record error metric
-					if apiController.Processor != nil && apiController.Processor.Metrics != nil && apiController.Processor.Metrics.SoundLevel != nil {
-						apiController.Processor.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
-						apiController.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
+					if soundLevelMetrics := getSoundLevelMetrics(apiController); soundLevelMetrics != nil {
+						soundLevelMetrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
+						soundLevelMetrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
 					}
 					// Only log errors occasionally to avoid spam
 					if time.Now().Unix()%60 == 0 { // Log once per minute at most
 						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
 					}
-				} else if apiController.Processor != nil && apiController.Processor.Metrics != nil && apiController.Processor.Metrics.SoundLevel != nil {
+				} else {
 					// Record success metric
-					apiController.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
+					if soundLevelMetrics := getSoundLevelMetrics(apiController); soundLevelMetrics != nil {
+						soundLevelMetrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
+					}
 				}
 			}
 		}
