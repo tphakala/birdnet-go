@@ -84,7 +84,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Collect data
-	dump, err := collector.Collect(context.Background(), opts)
+	dump, err := collector.Collect(ctx.Request().Context(), opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to collect support data",
 			"error", err,
@@ -97,7 +97,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Create archive
-	archiveData, err := collector.CreateArchive(context.Background(), dump, opts)
+	archiveData, err := collector.CreateArchive(ctx.Request().Context(), dump, opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to create support archive",
 			"error", err,
@@ -119,7 +119,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	switch {
 	case req.UploadToSentry && settings.Sentry.Enabled:
 		uploader := telemetry.GetAttachmentUploader()
-		if err := uploader.UploadSupportDump(context.Background(), archiveData, settings.SystemID, req.UserMessage); err != nil {
+		if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
 			// Log error but don't fail the request
 			c.apiLogger.Error("Failed to upload support dump to Sentry",
 				"error", err,
