@@ -26,11 +26,12 @@ type ControlMonitor struct {
 	bufferManager    *BufferManager
 	proc             *processor.Processor
 	audioLevelChan   chan myaudio.AudioLevelData
+	soundLevelChan   chan myaudio.SoundLevelData
 	bn               *birdnet.BirdNET
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) *ControlMonitor {
 	return &ControlMonitor{
 		wg:               wg,
 		controlChan:      controlChan,
@@ -38,8 +39,9 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		restartChan:      restartChan,
 		notificationChan: notificationChan,
 		bufferManager:    bufferManager,
+		audioLevelChan:   audioLevelChan,
+		soundLevelChan:   soundLevelChan,
 		proc:             proc,
-		audioLevelChan:   make(chan myaudio.AudioLevelData),
 		bn:               proc.Bn,
 	}
 }
@@ -175,7 +177,30 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	cm.bufferManager.UpdateMonitors(sources)
 
 	// Reconfigure RTSP streams
-	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.audioLevelChan)
+	// Create a unified audio channel for audio level data
+	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
+	go func() {
+		// Convert unified audio data back to separate channels for existing handlers
+		for unifiedData := range unifiedAudioChan {
+			// Send audio level data to existing audio level channel
+			select {
+			case cm.audioLevelChan <- unifiedData.AudioLevel:
+			default:
+				// Channel full, drop data
+			}
+			
+			// Send sound level data to existing sound level channel if present
+			if unifiedData.SoundLevel != nil {
+				select {
+				case cm.soundLevelChan <- *unifiedData.SoundLevel:
+				default:
+					// Channel full, drop data
+				}
+			}
+		}
+	}()
+	
+	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, unifiedAudioChan)
 
 	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
 	cm.notifySuccess("Audio capture reconfigured successfully")

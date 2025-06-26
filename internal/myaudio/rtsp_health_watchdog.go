@@ -416,8 +416,15 @@ func (w *RTSPHealthWatchdog) startNewProcess(url string, stats *StreamHealthStat
 			stats.mu.Unlock()
 		}()
 
-		audioLevelChan := getAudioLevelChannelForURL(url)
-		if err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan); err != nil {
+		// For health watchdog, create a dummy unified audio channel since it's not used for actual data processing
+		unifiedAudioChan := make(chan UnifiedAudioData, 10)
+		go func() {
+			// Drain the unified audio channel to prevent blocking
+			for range unifiedAudioChan {
+				// Discard audio data in health watchdog context
+			}
+		}()
+		if err := manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan); err != nil {
 			enhancedErr := errors.New(err).
 				Component("rtsp-health-watchdog").
 				Category(errors.CategoryRTSP).
@@ -547,23 +554,23 @@ func UpdateStreamDataReceived(url string) {
 // restartChannels stores restart channels for each URL
 var restartChannels sync.Map
 
-// audioLevelChannels stores audio level channels for each URL
-var audioLevelChannels sync.Map
+// unifiedAudioChannels stores unified audio channels for each URL
+var unifiedAudioChannels sync.Map
 
 // RegisterStreamChannels registers the restart and audio level channels for a URL
-func RegisterStreamChannels(url string, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+func RegisterStreamChannels(url string, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	if restartChan != nil {
 		restartChannels.Store(url, restartChan)
 	}
-	if audioLevelChan != nil {
-		audioLevelChannels.Store(url, audioLevelChan)
+	if unifiedAudioChan != nil {
+		unifiedAudioChannels.Store(url, unifiedAudioChan)
 	}
 }
 
 // UnregisterStreamChannels removes the channels for a URL
 func UnregisterStreamChannels(url string) {
 	restartChannels.Delete(url)
-	audioLevelChannels.Delete(url)
+	unifiedAudioChannels.Delete(url)
 }
 
 // getRestartChannelForURL retrieves the restart channel for a URL
@@ -574,13 +581,28 @@ func getRestartChannelForURL(url string) chan struct{} {
 	return nil
 }
 
-// getAudioLevelChannelForURL retrieves the audio level channel for a URL
+// getAudioLevelChannelForURL retrieves a simple audio level channel for a URL
+// This creates a dummy channel for health watchdog use since it only needs basic monitoring
 func getAudioLevelChannelForURL(url string) chan AudioLevelData {
-	if ch, ok := audioLevelChannels.Load(url); ok {
-		return ch.(chan AudioLevelData)
+	if unifiedCh, ok := unifiedAudioChannels.Load(url); ok {
+		// Create a dummy audio level channel that discards data for health monitoring
+		audioLevelCh := make(chan AudioLevelData, 10)
+		go func() {
+			// Convert unified audio data to simple audio level data for health monitoring
+			unifiedChannel := unifiedCh.(chan UnifiedAudioData)
+			for unifiedData := range unifiedChannel {
+				select {
+				case audioLevelCh <- unifiedData.AudioLevel:
+					// Sent successfully
+				default:
+					// Channel full, just discard for health monitoring
+				}
+			}
+		}()
+		return audioLevelCh
 	}
 	// Log missing channel registration to help diagnose configuration issues
-	logging.Debug("No audio level channel registered for URL, returning fallback channel",
+	logging.Debug("No unified audio channel registered for URL, returning fallback channel",
 		"service", "rtsp-health-watchdog",
 		"url", url,
 		"operation", "get_audio_level_channel",
