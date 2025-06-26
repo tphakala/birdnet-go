@@ -32,17 +32,18 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	}
 
 	// Create a new event specifically for support dumps
+	now := time.Now()
 	event := sentry.NewEvent()
 	event.Level = sentry.LevelInfo
-	event.Message = fmt.Sprintf("Support Dump - System: %s - %s", systemID, time.Now().Format("2006-01-02 15:04:05 UTC"))
-	event.Timestamp = time.Now()
+	event.Message = fmt.Sprintf("Support Dump - System: %s - %s", systemID, now.Format(time.RFC3339))
+	event.Timestamp = now
 
 	// Add custom context
 	event.Contexts["support"] = map[string]interface{}{
 		"system_id":    systemID,
 		"user_message": userMessage,
 		"dump_size":    len(dumpData),
-		"upload_time":  time.Now().Format(time.RFC3339),
+		"upload_time":  now.Format(time.RFC3339),
 	}
 
 	// Set user context with system ID
