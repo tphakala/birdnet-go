@@ -2,14 +2,24 @@
 package myaudio
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
+
+var (
+	processMetrics *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
+)
+
+// SetProcessMetrics sets the metrics instance for audio processing operations
+func SetProcessMetrics(metrics *metrics.MyAudioMetrics) {
+	processMetrics = metrics
+}
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
@@ -101,7 +111,13 @@ func ConvertToFloat32(sample []byte, bitDepth int) ([][]float32, error) {
 	case 32:
 		return [][]float32{convert32BitToFloat32(sample)}, nil
 	default:
-		return nil, errors.New("unsupported audio bit depth")
+		return nil, errors.Newf("unsupported audio bit depth: %d", bitDepth).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "convert_to_float32").
+			Context("bit_depth", bitDepth).
+			Context("supported_bit_depths", "16,24,32").
+			Build()
 	}
 }
 

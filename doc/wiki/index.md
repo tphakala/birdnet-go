@@ -36,6 +36,13 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 * [Authentication](cloudflare_tunnel_guide.md#enabling-authentication) - Securing your BirdNET-Go instance
 * [Cloudflare Tunnel Setup](cloudflare_tunnel_guide.md) - Detailed guide for secure internet access
 
+## Privacy & Telemetry
+
+* [Error Tracking & Telemetry](telemetry.md) - Optional privacy-first error tracking system
+* [Privacy & Data Collection](telemetry-privacy.md) - Detailed privacy information and data protection
+* [Telemetry Setup Guide](telemetry-setup.md) - Step-by-step configuration instructions
+* [Telemetry Troubleshooting](telemetry-troubleshooting.md) - Resolving telemetry-related issues
+
 ## Troubleshooting & Support
 
 * [Docker Troubleshooting](BirdNET‐Go-Guide#docker-installation-troubleshooting) - Resolving common Docker issues

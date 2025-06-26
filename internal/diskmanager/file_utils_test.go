@@ -18,13 +18,13 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 		// Too few parts
 		{"bubo_bubo.wav", "invalid file name format: bubo_bubo.wav (has 2 parts, expected at least 3)"},
 		// This actually gets parsed as species="bubo", confidence="bubo_80p", which fails at the confidence parsing step
-		{"bubo_bubo_80p.wav", "invalid confidence value in file bubo_bubo_80p.wav"},
+		{"bubo_bubo_80p.wav", "strconv.Atoi: parsing \"bubo\": invalid syntax"},
 
 		// Invalid confidence value
-		{"bubo_bubo_XXp_20210102T150405Z.wav", "invalid confidence value in file bubo_bubo_XXp_20210102T150405Z.wav"},
+		{"bubo_bubo_XXp_20210102T150405Z.wav", "strconv.Atoi: parsing \"XX\": invalid syntax"},
 
 		// Invalid timestamp format
-		{"bubo_bubo_80p_invalid.wav", "invalid timestamp format in file bubo_bubo_80p_invalid.wav"},
+		{"bubo_bubo_80p_invalid.wav", "parsing time \"invalid\" as \"20060102T150405Z\": cannot parse \"invalid\" as \"2006\""},
 	}
 
 	for _, tc := range testCases {

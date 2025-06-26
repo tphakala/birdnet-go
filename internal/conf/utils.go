@@ -3,7 +3,6 @@ package conf
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
@@ -27,14 +28,20 @@ func GetDefaultConfigPaths() ([]string, error) {
 	// Fetch the directory of the executable.
 	exePath, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf("error fetching executable path: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategorySystem).
+			Context("operation", "get-executable-path").
+			Build()
 	}
 	exeDir := filepath.Dir(exePath)
 
 	// Fetch the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("error fetching user home directory: %w", err)
+		return nil, errors.New(err).
+			Category(errors.CategorySystem).
+			Context("operation", "get-home-directory").
+			Build()
 	}
 
 	// Define default paths based on the operating system.
@@ -70,7 +77,10 @@ func GetDefaultConfigPaths() ([]string, error) {
 func FindConfigFile() (string, error) {
 	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
-		return "", fmt.Errorf("error getting default config paths: %w", err)
+		return "", errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "find-config-paths").
+			Build()
 	}
 
 	for _, path := range configPaths {
@@ -80,7 +90,10 @@ func FindConfigFile() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("config file not found")
+	return "", errors.New(fmt.Errorf("config file not found")).
+		Category(errors.CategoryFileIO).
+		Context("operation", "find-config-file").
+		Build()
 }
 
 // GetBasePath expands environment variables in the given path and ensures the resulting path exists.
@@ -109,7 +122,10 @@ func GetHLSDirectory() (string, error) {
 	// Get config directory paths
 	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
-		return "", fmt.Errorf("failed to get config paths: %w", err)
+		return "", errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "hls-get-config-paths").
+			Build()
 	}
 
 	if len(configPaths) == 0 {
@@ -125,12 +141,20 @@ func GetHLSDirectory() (string, error) {
 	// Get absolute path for consistent operations
 	absPath, err := filepath.Abs(hlsDir)
 	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path for HLS directory: %w", err)
+		return "", errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "hls-get-abs-path").
+			Context("path", hlsDir).
+			Build()
 	}
 
 	// Create directory if it doesn't exist
 	if err := os.MkdirAll(absPath, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create HLS directory: %w", err)
+		return "", errors.New(err).
+			Category(errors.CategoryFileIO).
+			Context("operation", "hls-create-directory").
+			Context("path", absPath).
+			Build()
 	}
 
 	return absPath, nil
@@ -250,7 +274,11 @@ func ParsePercentage(percentage string) (float64, error) {
 		}
 		return value, nil
 	}
-	return 0, errors.New("invalid percentage format")
+	return 0, errors.Newf("invalid percentage format").
+		Component("conf").
+		Category(errors.CategoryValidation).
+		Context("input", percentage).
+		Build()
 }
 
 // ParseRetentionPeriod converts a string like "24h", "7d", "1w", "3m", "1y" to hours.

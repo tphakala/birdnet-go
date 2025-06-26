@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -59,7 +60,11 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 	apiKey := settings.Realtime.Weather.OpenWeather.APIKey
 	if apiKey == "" {
 		weatherLogger.Error("OpenWeather API key is missing", "provider", openWeatherProviderName)
-		return nil, fmt.Errorf("OpenWeather API key not configured")
+		return nil, errors.New(fmt.Errorf("OpenWeather API key not configured")).
+			Component("weather").
+			Category(errors.CategoryConfiguration).
+			Context("provider", openWeatherProviderName).
+			Build()
 	}
 
 	apiURL := fmt.Sprintf("%s?lat=%.3f&lon=%.3f&appid=%s&units=%s&lang=en",
@@ -81,7 +86,12 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
 		logger.Error("Failed to create HTTP request", "url", safeURL, "error", err)
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, errors.New(err).
+			Component("weather").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_http_request").
+			Context("provider", openWeatherProviderName).
+			Build()
 	}
 
 	req.Header.Set("User-Agent", UserAgent)
@@ -97,7 +107,13 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 			attemptLogger.Warn("HTTP request failed", "error", err)
 			if i == MaxRetries-1 {
 				logger.Error("Failed to fetch weather data after max retries", "error", err)
-				return nil, fmt.Errorf("error fetching weather data after %d retries: %w", MaxRetries, err)
+				return nil, errors.New(err).
+					Component("weather").
+					Category(errors.CategoryNetwork).
+					Context("operation", "weather_api_request").
+					Context("provider", openWeatherProviderName).
+					Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
+					Build()
 			}
 			time.Sleep(RetryDelay)
 			continue
@@ -111,7 +127,14 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
 			if i == MaxRetries-1 {
 				logger.Error("Failed to fetch weather data due to non-OK status after max retries", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
-				return nil, fmt.Errorf("received non-200 response (%d) after %d retries", resp.StatusCode, MaxRetries)
+				return nil, errors.New(fmt.Errorf("received non-200 response (%d) after %d retries", resp.StatusCode, MaxRetries)).
+					Component("weather").
+					Category(errors.CategoryNetwork).
+					Context("operation", "weather_api_response").
+					Context("provider", openWeatherProviderName).
+					Context("status_code", fmt.Sprintf("%d", resp.StatusCode)).
+					Context("max_retries", fmt.Sprintf("%d", MaxRetries)).
+					Build()
 			}
 			time.Sleep(RetryDelay)
 			continue
@@ -121,12 +144,22 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		resp.Body.Close()
 		if err != nil {
 			logger.Error("Failed to read response body", "status_code", resp.StatusCode, "error", err)
-			return nil, fmt.Errorf("error reading response body: %w", err)
+			return nil, errors.New(err).
+				Component("weather").
+				Category(errors.CategoryNetwork).
+				Context("operation", "read_response_body").
+				Context("provider", openWeatherProviderName).
+				Build()
 		}
 
 		if err := json.Unmarshal(body, &weatherData); err != nil {
 			logger.Error("Failed to unmarshal response JSON", "status_code", resp.StatusCode, "error", err, "response_body", string(body))
-			return nil, fmt.Errorf("error unmarshaling weather data: %w", err)
+			return nil, errors.New(err).
+				Component("weather").
+				Category(errors.CategoryValidation).
+				Context("operation", "unmarshal_weather_data").
+				Context("provider", openWeatherProviderName).
+				Build()
 		}
 
 		logger.Info("Successfully received and parsed weather data", "status_code", resp.StatusCode)
@@ -135,7 +168,12 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 
 	if len(weatherData.Weather) == 0 {
 		logger.Error("API response parsed successfully but contained no weather conditions")
-		return nil, fmt.Errorf("no weather conditions returned from API")
+		return nil, errors.New(fmt.Errorf("no weather conditions returned from API")).
+			Component("weather").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_weather_response").
+			Context("provider", openWeatherProviderName).
+			Build()
 	}
 
 	mappedData := &WeatherData{

@@ -3,8 +3,6 @@ package mqtt
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -13,8 +11,9 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
-	"github.com/tphakala/birdnet-go/internal/telemetry/metrics"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 const (
@@ -35,7 +34,7 @@ type client struct {
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
-func NewClient(settings *conf.Settings, metrics *telemetry.Metrics) (Client, error) {
+func NewClient(settings *conf.Settings, metrics *observability.Metrics) (Client, error) {
 	mqttLogger.Info("Creating new MQTT client")
 	config := DefaultConfig()
 	config.Broker = settings.Realtime.MQTT.Broker
@@ -125,7 +124,15 @@ func (c *client) Connect(ctx context.Context) error {
 		lastAttemptAgo := time.Since(c.lastConnAttempt)
 		c.mu.Unlock() // Unlock before returning
 		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptAgo, "cooldown", c.config.ReconnectCooldown)
-		return fmt.Errorf("connection attempt too recent, last attempt was %v ago", lastAttemptAgo)
+		enhancedErr := errors.Newf("connection attempt too recent, last attempt was %v ago", lastAttemptAgo).
+			Component("mqtt").
+			Category(errors.CategoryMQTTConnection).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("last_attempt_ago", lastAttemptAgo).
+			Context("cooldown", c.config.ReconnectCooldown).
+			Build()
+		return enhancedErr
 	}
 
 	// Disconnect existing client if needed - requires lock
@@ -181,7 +188,14 @@ func (c *client) Connect(ctx context.Context) error {
 	u, err := url.Parse(c.config.Broker)
 	if err != nil {
 		logger.Error("Invalid broker URL", "error", err)
-		return fmt.Errorf("invalid broker URL: %w", err)
+		enhancedErr := errors.New(err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("operation", "parse_broker_url").
+			Build()
+		return enhancedErr
 	}
 
 	// Perform DNS resolution (potentially blocking network I/O)
@@ -206,12 +220,28 @@ func (c *client) Connect(ctx context.Context) error {
 				c.mu.Lock()
 				c.lastConnAttempt = time.Now()
 				c.mu.Unlock()
-				return dnsErr
+				enhancedErr := errors.New(dnsErr).
+					Component("mqtt").
+					Category(errors.CategoryNetwork).
+					Context("broker", c.config.Broker).
+					Context("client_id", c.config.ClientID).
+					Context("hostname", host).
+					Context("operation", "dns_resolution").
+					Build()
+				return enhancedErr
 			}
 			c.mu.Lock()
 			c.lastConnAttempt = time.Now()
 			c.mu.Unlock()
-			return fmt.Errorf("failed to resolve hostname %s: %w", host, err)
+			enhancedErr := errors.New(err).
+				Component("mqtt").
+				Category(errors.CategoryNetwork).
+				Context("broker", c.config.Broker).
+				Context("client_id", c.config.ClientID).
+				Context("hostname", host).
+				Context("operation", "dns_resolution").
+				Build()
+			return enhancedErr
 		}
 		logger.Debug("Broker hostname resolved successfully", "host", host)
 	}
@@ -244,12 +274,27 @@ func (c *client) Connect(ctx context.Context) error {
 			// If token.Error() is nil but not connected, it implies Paho's WaitTimeout might have returned true
 			// because the "wait" finished, but the connection itself failed without an error on the token.
 			// This can happen if the timeout was very short.
-			connectErr = errors.New("mqtt connection failed post-wait, client not connected")
+			connectErr = errors.Newf("mqtt connection failed post-wait, client not connected").
+				Component("mqtt").
+				Category(errors.CategoryMQTTConnection).
+				Context("broker", c.config.Broker).
+				Context("client_id", c.config.ClientID).
+				Context("operation", "connect_post_wait").
+				Context("connect_timeout", c.config.ConnectTimeout).
+				Build()
 			logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
 		}
 	case <-time.After(c.config.ConnectTimeout + 500*time.Millisecond): // Add a small grace period over Paho's configured timeout
-		connectErr = fmt.Errorf("mqtt connection attempt actively timed out by client wrapper after %v", c.config.ConnectTimeout+500*time.Millisecond)
-		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", c.config.ConnectTimeout+500*time.Millisecond)
+		timeoutDuration := c.config.ConnectTimeout + 500*time.Millisecond
+		connectErr = errors.Newf("mqtt connection attempt actively timed out by client wrapper after %v", timeoutDuration).
+			Component("mqtt").
+			Category(errors.CategoryMQTTConnection).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("operation", "connect_timeout").
+			Context("timeout_duration", timeoutDuration).
+			Build()
+		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", timeoutDuration)
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
 			logger.Debug("Calling Disconnect(0) to cancel connection attempt and prevent goroutine leak")
@@ -279,6 +324,19 @@ func (c *client) Connect(ctx context.Context) error {
 			c.metrics.UpdateConnectionStatus(false)
 		}
 		c.mu.Unlock()
+
+		// If connectErr is not already an enhanced error, enhance it
+		var enhancedErr *errors.EnhancedError
+		if !errors.As(connectErr, &enhancedErr) {
+			connectErr = errors.New(connectErr).
+				Component("mqtt").
+				Category(errors.CategoryMQTTConnection).
+				Context("broker", c.config.Broker).
+				Context("client_id", c.config.ClientID).
+				Context("operation", "mqtt_connect").
+				Context("connect_timeout", c.config.ConnectTimeout).
+				Build()
+		}
 		return connectErr
 	}
 
@@ -304,7 +362,15 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 	if c.internalClient == nil || !c.internalClient.IsConnected() {
 		c.mu.Unlock() // Unlock before returning error
 		mqttLogger.Warn("Publish failed: client is not connected")
-		return fmt.Errorf("not connected to MQTT broker")
+		enhancedErr := errors.Newf("not connected to MQTT broker").
+			Component("mqtt").
+			Category(errors.CategoryMQTTConnection).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("topic", topic).
+			Context("operation", "publish_not_connected").
+			Build()
+		return enhancedErr
 	}
 	mqttLogger.Debug("Client is connected, continuing")
 	clientToPublish := c.internalClient // Get client instance under lock
@@ -329,15 +395,36 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 			return ctxErr
 		}
 		// If context is okay, return a specific timeout error
-		c.metrics.IncrementErrors() // Count timeout as an error
-		return fmt.Errorf("publish timeout after %v", c.config.PublishTimeout)
+		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_timeout") // Count timeout as an error
+		enhancedErr := errors.Newf("publish timeout after %v", c.config.PublishTimeout).
+			Component("mqtt").
+			Category(errors.CategoryMQTTPublish).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("topic", topic).
+			Context("publish_timeout", c.config.PublishTimeout).
+			Context("payload_size", len(payload)).
+			Context("operation", "publish_timeout").
+			Build()
+		return enhancedErr
 	}
 
 	// Check token for errors after waiting
 	if publishErr := token.Error(); publishErr != nil {
 		logger.Error("MQTT publish failed", "error", publishErr)
-		c.metrics.IncrementErrors()
-		return fmt.Errorf("publish error: %w", publishErr)
+		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_error")
+		enhancedErr := errors.New(publishErr).
+			Component("mqtt").
+			Category(errors.CategoryMQTTPublish).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("topic", topic).
+			Context("payload_size", len(payload)).
+			Context("qos", defaultQoS).
+			Context("retain", currentRetain).
+			Context("operation", "publish_error").
+			Build()
+		return enhancedErr
 	}
 
 	// Only increment success metrics if the publish call did not return an error
@@ -411,10 +498,19 @@ func (c *client) onConnect(client mqtt.Client) {
 }
 
 func (c *client) onConnectionLost(client mqtt.Client, err error) {
+	// Enhance the connection lost error
+	enhancedErr := errors.New(err).
+		Component("mqtt").
+		Category(errors.CategoryMQTTConnection).
+		Context("broker", c.config.Broker).
+		Context("client_id", c.config.ClientID).
+		Context("operation", "connection_lost").
+		Build()
+
 	// Log using the package-level logger
-	mqttLogger.Error("Connection to MQTT broker lost", "broker", c.config.Broker, "client_id", c.config.ClientID, "error", err)
+	mqttLogger.Error("Connection to MQTT broker lost", "broker", c.config.Broker, "client_id", c.config.ClientID, "error", enhancedErr)
 	c.metrics.UpdateConnectionStatus(false)
-	c.metrics.IncrementErrors()
+	c.metrics.IncrementErrorsWithCategory("mqtt-connection", "connection_lost")
 	// Check if we should attempt to reconnect or if Disconnect was called
 	select {
 	case <-c.reconnectStop:
@@ -470,6 +566,15 @@ func (c *client) reconnectWithBackoff() {
 
 	if err := c.Connect(ctx); err != nil {
 		logger.Error("Reconnect attempt failed", "error", err)
+
+		// Extract error category for metrics
+		errorCategory := "generic"
+		var enhancedErr *errors.EnhancedError
+		if errors.As(err, &enhancedErr) {
+			errorCategory = string(enhancedErr.GetCategory())
+		}
+		c.metrics.IncrementErrorsWithCategory(errorCategory, "reconnect_failed")
+
 		// Check if stopped *after* failed attempt before rescheduling
 		select {
 		case <-c.reconnectStop:

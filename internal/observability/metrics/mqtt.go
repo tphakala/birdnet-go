@@ -13,7 +13,7 @@ import (
 type MQTTMetrics struct {
 	ConnectionStatus  prometheus.Gauge
 	MessagesDelivered prometheus.Counter
-	Errors            prometheus.Counter
+	Errors            *prometheus.CounterVec
 	ReconnectAttempts prometheus.Counter
 	LastConnectTime   prometheus.Gauge
 	MessageSize       prometheus.Histogram
@@ -47,10 +47,10 @@ func (m *MQTTMetrics) initMetrics() error {
 		Help: "Total number of MQTT messages successfully delivered",
 	})
 
-	m.Errors = prometheus.NewCounter(prometheus.CounterOpts{
+	m.Errors = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "mqtt_errors_total",
 		Help: "Total number of MQTT errors encountered",
-	})
+	}, []string{"error_category", "operation"})
 
 	m.ReconnectAttempts = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "mqtt_reconnect_attempts_total",
@@ -93,9 +93,14 @@ func (m *MQTTMetrics) IncrementMessagesDelivered() {
 	m.MessagesDelivered.Inc()
 }
 
-// IncrementErrors increments the count of MQTT errors.
+// IncrementErrors increments the count of MQTT errors with categorization.
 func (m *MQTTMetrics) IncrementErrors() {
-	m.Errors.Inc()
+	m.Errors.WithLabelValues("generic", "unknown").Inc()
+}
+
+// IncrementErrorsWithCategory increments the count of MQTT errors with specific category and operation.
+func (m *MQTTMetrics) IncrementErrorsWithCategory(category, operation string) {
+	m.Errors.WithLabelValues(category, operation).Inc()
 }
 
 // IncrementReconnectAttempts increments the count of MQTT reconnection attempts.
@@ -137,22 +142,22 @@ func (pt *PublishTimer) ObserveDuration() {
 // Collect implements the prometheus.Collector interface.
 func (m *MQTTMetrics) Collect(ch chan<- prometheus.Metric) {
 	log.Println("MQTTMetrics Collect method called")
-	ch <- m.ConnectionStatus
-	ch <- m.MessagesDelivered
-	ch <- m.Errors
-	ch <- m.ReconnectAttempts
-	ch <- m.LastConnectTime
-	ch <- m.MessageSize
-	ch <- m.PublishLatency
+	m.ConnectionStatus.Collect(ch)
+	m.MessagesDelivered.Collect(ch)
+	m.Errors.Collect(ch)
+	m.ReconnectAttempts.Collect(ch)
+	m.LastConnectTime.Collect(ch)
+	m.MessageSize.Collect(ch)
+	m.PublishLatency.Collect(ch)
 }
 
 // Describe implements the prometheus.Collector interface.
 func (m *MQTTMetrics) Describe(ch chan<- *prometheus.Desc) {
-	ch <- m.ConnectionStatus.Desc()
-	ch <- m.MessagesDelivered.Desc()
-	ch <- m.Errors.Desc()
-	ch <- m.ReconnectAttempts.Desc()
-	ch <- m.LastConnectTime.Desc()
-	ch <- m.MessageSize.Desc()
-	ch <- m.PublishLatency.Desc()
+	m.ConnectionStatus.Describe(ch)
+	m.MessagesDelivered.Describe(ch)
+	m.Errors.Describe(ch)
+	m.ReconnectAttempts.Describe(ch)
+	m.LastConnectTime.Describe(ch)
+	m.MessageSize.Describe(ch)
+	m.PublishLatency.Describe(ch)
 }

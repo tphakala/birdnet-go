@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -47,10 +48,11 @@ type Controller struct {
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
-	SFS                 *securefs.SecureFS // Add SecureFS instance
-	apiLogger           *slog.Logger       // Structured logger for API operations
-	apiLevelVar         *slog.LevelVar     // Dynamic level control (type declaration)
-	apiLoggerClose      func() error       // Function to close the log file
+	SFS                 *securefs.SecureFS     // Add SecureFS instance
+	apiLogger           *slog.Logger           // Structured logger for API operations
+	apiLevelVar         *slog.LevelVar         // Dynamic level control (type declaration)
+	apiLoggerClose      func() error           // Function to close the log file
+	metrics             *observability.Metrics // Shared metrics instance
 
 	// Auth related fields
 	// AuthService stores the shared authentication service instance.
@@ -147,7 +149,8 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 // New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server) (*Controller, error) {
+	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
+	metrics *observability.Metrics) (*Controller, error) {
 
 	if logger == nil {
 		logger = log.Default()
@@ -221,6 +224,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		logger:         logger,
 		detectionCache: cache.New(5*time.Minute, 10*time.Minute),
 		SFS:            sfs, // Assign SecureFS instance
+		metrics:        metrics,
 	}
 
 	// Initialize structured logger for API requests
@@ -871,10 +875,10 @@ func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, proc *processor.Processor,
-	oauth2Server *security.OAuth2Server) *Controller { // Added oauth2Server parameter
+	oauth2Server *security.OAuth2Server, metrics *observability.Metrics) *Controller { // Added oauth2Server and metrics parameters
 
-	// Create API controller, passing oauth2Server directly to New
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server)
+	// Create API controller, passing oauth2Server and metrics directly to New
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
 	if err != nil {
 		logger.Fatalf("Failed to initialize API: %v", err)
 	}

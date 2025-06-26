@@ -14,8 +14,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/gorm"
 )
 
@@ -304,8 +304,8 @@ func (m *TestImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 }
 
 // NewTestMetrics creates a new metrics instance for testing
-func NewTestMetrics(t *testing.T) *telemetry.Metrics {
-	metrics, err := telemetry.NewMetrics()
+func NewTestMetrics(t *testing.T) *observability.Metrics {
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create test metrics: %v", err)
 	}
@@ -624,8 +624,11 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	// Create control channel
 	controlChan := make(chan string)
 
+	// Create mock metrics for testing
+	mockMetrics, _ := observability.NewMetrics()
+
 	// Create API controller
-	controller, err := New(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, nil)
+	controller, err := New(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics)
 	if err != nil {
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}

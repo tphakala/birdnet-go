@@ -1,7 +1,6 @@
 package imageprovider_test
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -11,8 +10,9 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"gorm.io/gorm"
 )
 
@@ -32,7 +32,7 @@ func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 	m.mu.Unlock()
 
 	if m.shouldFail {
-		return imageprovider.BirdImage{}, errors.New("mock fetch error")
+		return imageprovider.BirdImage{}, errors.NewStd("mock fetch error")
 	}
 
 	// Simulate network delay if specified
@@ -267,7 +267,7 @@ func (m *mockFailingStore) GetSpeciesSummaryData(startDate, endDate string) ([]d
 func TestBirdImageCache(t *testing.T) {
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestBirdImageCache(t *testing.T) {
 func TestBirdImageCacheError(t *testing.T) {
 	mockProvider := &mockImageProvider{shouldFail: true}
 	mockStore := newMockStore()
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestBirdImageCacheError(t *testing.T) {
 
 // TestCreateDefaultCache tests creating a default cache
 func TestCreateDefaultCache(t *testing.T) {
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestBirdImageEstimateSize(t *testing.T) {
 // TestBirdImageCacheMemoryUsage tests the cache memory usage calculation
 func TestBirdImageCacheMemoryUsage(t *testing.T) {
 	mockProvider := &mockImageProvider{}
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestBirdImageCacheDatabaseFailures(t *testing.T) {
 			failingStore.failSaveCache = tt.failSaveCache
 			failingStore.failGetAllCache = tt.failGetAllInit
 
-			metrics, err := telemetry.NewMetrics()
+			metrics, err := observability.NewMetrics()
 			if err != nil {
 				t.Fatalf("Failed to create metrics: %v", err)
 			}
@@ -460,7 +460,7 @@ func TestBirdImageCacheDatabaseFailures(t *testing.T) {
 // TestBirdImageCacheNilStore tests that the cache works without a database store
 func TestBirdImageCacheNilStore(t *testing.T) {
 	mockProvider := &mockImageProvider{}
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	t.Log("Starting TestBirdImageCacheRefresh")
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestConcurrentInitialization(t *testing.T) {
 		fetchDelay: 200 * time.Millisecond, // Delay to make race conditions more likely
 	}
 	mockStore := newMockStore()
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -641,7 +641,7 @@ func TestInitializationTimeout(t *testing.T) {
 		fetchDelay: 2 * time.Second, // Longer than the total retry time
 	}
 	mockStore := newMockStore()
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
@@ -703,7 +703,7 @@ func TestInitializationFailure(t *testing.T) {
 		shouldFail: true,
 	}
 	mockStore := newMockStore()
-	metrics, err := telemetry.NewMetrics()
+	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}

@@ -12,6 +12,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// LabelLoadResult contains the result of loading a label file
+type LabelLoadResult struct {
+	Data             []byte
+	RequestedLocale  string
+	ActualLocale     string
+	FallbackOccurred bool
+	Error            error
+}
+
 // Model version constants
 const (
 	BirdNET_GLOBAL_6K_V2_4 = "BirdNET_GLOBAL_6K_V2.4"
@@ -80,12 +89,19 @@ func GetLabelFileData(modelVersion, localeCode string) ([]byte, error) {
 	return GetLabelFileDataWithLogger(modelVersion, localeCode, nil)
 }
 
-// GetLabelFileDataWithLogger loads a label file with optional logging support
-func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) ([]byte, error) {
+// GetLabelFileDataWithResult loads a label file and returns detailed result information
+func GetLabelFileDataWithResult(modelVersion, localeCode string, logger Logger) *LabelLoadResult {
+	result := &LabelLoadResult{
+		RequestedLocale:  localeCode,
+		ActualLocale:     localeCode,
+		FallbackOccurred: false,
+	}
+
 	// Get the appropriate filesystem for this model version (validates model version)
 	fileSystem, err := getModelFileSystem(modelVersion)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get filesystem for model %s: %w", modelVersion, err)
+		result.Error = fmt.Errorf("failed to get filesystem for model %s: %w", modelVersion, err)
+		return result
 	}
 
 	// Use the proper locale mapping from conf package
@@ -100,8 +116,14 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 		data, fallbackErr := tryReadFallbackFile(modelVersion, logger)
 		if fallbackErr != nil {
 			combinedErr := errors.Join(originalMappingErr, fallbackErr)
-			return nil, fmt.Errorf("failed to get filename for locale '%s': %w", localeCode, combinedErr)
+			result.Error = fmt.Errorf("failed to get filename for locale '%s': %w", localeCode, combinedErr)
+			return result
 		}
+
+		// Mark fallback and set actual locale
+		result.FallbackOccurred = true
+		result.ActualLocale = conf.DefaultFallbackLocale
+		result.Data = data
 
 		// Log warning about fallback usage
 		if logger != nil {
@@ -109,13 +131,14 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 				localeCode, conf.DefaultFallbackLocale)
 		}
 
-		return data, nil
+		return result
 	}
 
 	// Try to read the file
 	data, originalReadErr := fs.ReadFile(fileSystem, path.Join("data", "labels", filename))
 	if originalReadErr == nil {
-		return data, nil
+		result.Data = data
+		return result
 	}
 
 	// If the mapped file doesn't exist, try fallback to English
@@ -127,8 +150,14 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 	data, fallbackErr := tryReadFallbackFile(modelVersion, logger)
 	if fallbackErr != nil {
 		combinedErr := errors.Join(originalReadErr, fallbackErr)
-		return nil, fmt.Errorf("failed to load locale '%s': %w", localeCode, combinedErr)
+		result.Error = fmt.Errorf("failed to load locale '%s': %w", localeCode, combinedErr)
+		return result
 	}
+
+	// Mark fallback and set actual locale
+	result.FallbackOccurred = true
+	result.ActualLocale = conf.DefaultFallbackLocale
+	result.Data = data
 
 	// Log warning about fallback usage
 	if logger != nil {
@@ -136,7 +165,16 @@ func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) 
 			filename, conf.DefaultFallbackLocale)
 	}
 
-	return data, nil
+	return result
+}
+
+// GetLabelFileDataWithLogger loads a label file with optional logging support
+func GetLabelFileDataWithLogger(modelVersion, localeCode string, logger Logger) ([]byte, error) {
+	result := GetLabelFileDataWithResult(modelVersion, localeCode, logger)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return result.Data, nil
 }
 
 // listAvailableFiles returns a list of available label files for debugging
