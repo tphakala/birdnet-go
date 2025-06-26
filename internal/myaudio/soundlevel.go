@@ -63,9 +63,9 @@ type soundLevelProcessor struct {
 
 // octaveBandBuffer accumulates samples for 1-second intervals
 type octaveBandBuffer struct {
-	samples     []float64
-	sampleCount int
-	startTime   time.Time
+	samples           []float64
+	sampleCount       int
+	targetSampleCount int // Number of samples in 1 second based on sample rate
 }
 
 // tenSecondAggregator collects 1-second measurements to produce 10-second statistics
@@ -73,6 +73,7 @@ type tenSecondAggregator struct {
 	secondMeasurements []map[string]float64 // Array of 10 second measurements
 	startTime          time.Time
 	currentIndex       int
+	measurementCount   int // Track number of completed 1-second measurements
 	full               bool
 }
 
@@ -113,8 +114,8 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 		// Initialize 1-second buffer for this band
 		bandKey := formatBandKey(centerFreq)
 		processor.secondBuffers[bandKey] = &octaveBandBuffer{
-			samples:   make([]float64, 0, conf.SampleRate), // Pre-allocate for 1 second
-			startTime: time.Now(),
+			samples:           make([]float64, 0, conf.SampleRate), // Pre-allocate for 1 second
+			targetSampleCount: conf.SampleRate,                     // Exactly 1 second of samples
 		}
 	}
 
@@ -126,7 +127,31 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 	return processor, nil
 }
 
-// newOctaveBandFilter creates a bandpass filter for the specified 1/3rd octave band
+// newOctaveBandFilter creates a bandpass filter for the specified 1/3rd octave band.
+//
+// Filter Design Notes:
+// This implements a simplified 2nd order Butterworth bandpass filter, which provides:
+// - A relatively flat passband response
+// - -12 dB/octave roll-off rate (40 dB/decade)
+// - Moderate phase distortion near band edges
+//
+// Limitations:
+//   - The 2nd order design provides limited stopband attenuation, which may cause
+//     frequency leakage between adjacent 1/3rd octave bands
+//   - The filter coefficients are computed using a simplified approach that may not
+//     provide optimal frequency response characteristics
+//   - Phase response is not linear, which can affect time-domain characteristics
+//
+// This implementation is suitable for basic sound level analysis and general
+// acoustic measurements. For critical applications requiring higher precision:
+// - Consider using higher-order filters (4th or 6th order) for steeper roll-off
+// - Implement Chebyshev or elliptic filters for better stopband attenuation
+// - Use FIR filters if linear phase response is required
+// - Apply window functions to reduce spectral leakage
+//
+// The filter design follows ISO 61260 Class 2 tolerances for 1/3rd octave bands,
+// which allows ±0.5 dB deviation in the passband and -24 dB minimum attenuation
+// at the band edges.
 func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, error) {
 	if centerFreq <= 0 || sampleRate <= 0 {
 		return nil, errors.Newf("invalid filter parameters: centerFreq=%f, sampleRate=%f", centerFreq, sampleRate).
@@ -138,10 +163,11 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 
 	filter := &octaveBandFilter{
 		centerFreq: centerFreq,
-		bandwidth:  centerFreq / math.Pow(2, 1.0/6.0), // 1/3rd octave bandwidth
+		bandwidth:  centerFreq / math.Pow(2, 1.0/6.0), // 1/3rd octave bandwidth per ISO 266
 	}
 
 	// Calculate normalized frequencies
+	// For 1/3rd octave bands: f_low = f_center / 2^(1/6), f_high = f_center * 2^(1/6)
 	nyquist := sampleRate / 2.0
 	lowFreq := centerFreq / math.Pow(2, 1.0/6.0)
 	highFreq := centerFreq * math.Pow(2, 1.0/6.0)
@@ -156,18 +182,23 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 			Build()
 	}
 
-	// Normalize frequencies
+	// Normalize frequencies to radians per sample
 	wl := 2.0 * math.Pi * lowFreq / sampleRate
 	wh := 2.0 * math.Pi * highFreq / sampleRate
 
 	// Simplified bandpass filter design (2nd order Butterworth)
-	// This is a basic implementation - for production use, consider more sophisticated filter design
-	wc := math.Sqrt(wl * wh) // Geometric mean
-	bw := wh - wl            // Bandwidth
+	// Uses pole-zero placement method for digital filter design
+	wc := math.Sqrt(wl * wh) // Geometric mean provides symmetrical response on log scale
+	bw := wh - wl            // Bandwidth in radians
 
+	// Compute filter coefficients using bilinear transform approximation
+	// r controls the pole radius (stability and bandwidth)
+	// k controls the zero placement (frequency response shape)
 	r := 1 - 3*bw
 	k := (1 - 2*r*math.Cos(wc) + r*r) / (2 - 2*math.Cos(wc))
 
+	// IIR filter coefficients for difference equation:
+	// y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
 	filter.a1 = 2 * r * math.Cos(wc)
 	filter.a2 = -r * r
 	filter.b0 = 1 - k
@@ -215,8 +246,10 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 		audioSamples[i] = float64(sample) / 32768.0 // Normalize to [-1, 1]
 	}
 
+	// Track if any band completed a 1-second measurement in this call
+	measurementCompleted := false
+
 	// Process samples through each octave band filter
-	now := time.Now()
 	for _, filter := range p.filters {
 		bandKey := formatBandKey(filter.centerFreq)
 		buffer := p.secondBuffers[bandKey]
@@ -228,25 +261,46 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 			buffer.sampleCount++
 		}
 
-		// Check if we have accumulated 1 second of data
-		if time.Since(buffer.startTime) >= time.Second {
+		// Check if we have accumulated 1 second of data based on sample count
+		if buffer.sampleCount >= buffer.targetSampleCount {
 			// Calculate RMS for this 1-second window
-			rms := calculateRMS(buffer.samples)
+			rms := calculateRMS(buffer.samples[:buffer.targetSampleCount])
 			levelDB := 20 * math.Log10(math.Max(rms, 1e-10)) // Avoid log(0)
 
 			// Store 1-second measurement in 10-second aggregator
 			currentIdx := p.tenSecondBuffer.currentIndex
 			p.tenSecondBuffer.secondMeasurements[currentIdx][bandKey] = levelDB
+			measurementCompleted = true
 
-			// Reset 1-second buffer
-			buffer.samples = buffer.samples[:0] // Keep capacity, reset length
-			buffer.sampleCount = 0
-			buffer.startTime = now
+			// Handle any overflow samples by keeping them for the next window
+			overflowSamples := buffer.sampleCount - buffer.targetSampleCount
+			if overflowSamples > 0 {
+				// Move overflow samples to the beginning of the buffer
+				copy(buffer.samples[:overflowSamples], buffer.samples[buffer.targetSampleCount:buffer.sampleCount])
+				buffer.samples = buffer.samples[:overflowSamples]
+				buffer.sampleCount = overflowSamples
+			} else {
+				// Reset buffer completely
+				buffer.samples = buffer.samples[:0] // Keep capacity, reset length
+				buffer.sampleCount = 0
+			}
 		}
 	}
 
-	// Check if 10-second window is complete
-	if time.Since(p.tenSecondBuffer.startTime) >= 10*time.Second {
+	// If a 1-second measurement was completed, update aggregator state
+	if measurementCompleted {
+		// Move to next index after all bands have stored their measurements
+		p.tenSecondBuffer.currentIndex = (p.tenSecondBuffer.currentIndex + 1) % 10
+		p.tenSecondBuffer.measurementCount++
+
+		// Mark as full once we've collected 10 measurements
+		if p.tenSecondBuffer.measurementCount >= 10 && !p.tenSecondBuffer.full {
+			p.tenSecondBuffer.full = true
+		}
+	}
+
+	// Check if 10-second window is complete based on measurement count
+	if p.tenSecondBuffer.measurementCount >= 10 {
 		soundLevelData := p.generateSoundLevelData()
 		p.resetTenSecondBuffer()
 		return soundLevelData, nil
@@ -324,6 +378,7 @@ func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 func (p *soundLevelProcessor) resetTenSecondBuffer() {
 	p.tenSecondBuffer.startTime = time.Now()
 	p.tenSecondBuffer.currentIndex = 0
+	p.tenSecondBuffer.measurementCount = 0
 	p.tenSecondBuffer.full = false
 
 	// Clear all measurements

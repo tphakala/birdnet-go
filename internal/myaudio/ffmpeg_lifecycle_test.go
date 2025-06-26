@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -1443,6 +1444,143 @@ func mockProcessAudioDataForChannelTest(url string, data []byte, unifiedAudioCha
 	default:
 		// Channel is full, drop the data to avoid blocking audio processing
 		// Audio data is not critical and can be dropped for testing
+	}
+
+	return nil
+}
+
+// TestSoundLevelDataPath tests that sound level data is properly included in UnifiedAudioData
+func TestSoundLevelDataPath(t *testing.T) {
+	// Register sound level processor for test
+	testSource := "test_rtsp_stream"
+	testName := "Test Camera"
+	err := RegisterSoundLevelProcessor(testSource, testName)
+	assert.NoError(t, err, "Failed to register sound level processor")
+	defer UnregisterSoundLevelProcessor(testSource)
+
+	// Create a channel to receive unified audio data
+	unifiedAudioChan := make(chan UnifiedAudioData, 10)
+
+	// Create test audio data that will produce sound level measurements
+	// Use a 10-second buffer to ensure we get a complete sound level measurement
+	sampleRate := 48000
+	duration := 11                     // 11 seconds to ensure we complete a 10-second window
+	samplesPerSecond := sampleRate * 2 // 16-bit samples
+	totalSamples := samplesPerSecond * duration
+
+	// Generate test audio data with a 1kHz tone
+	testData := make([]byte, totalSamples)
+	frequency := 1000.0 // 1kHz tone
+	amplitude := 0.5
+
+	for i := 0; i < totalSamples/2; i++ {
+		// Generate sine wave
+		t := float64(i) / float64(sampleRate)
+		sample := int16(amplitude * 32767 * math.Sin(2*math.Pi*frequency*t))
+
+		// Write as little-endian 16-bit
+		testData[i*2] = byte(sample & 0xFF)
+		testData[i*2+1] = byte((sample >> 8) & 0xFF)
+	}
+
+	// Process audio data in chunks to simulate real streaming
+	chunkSize := samplesPerSecond // 1 second chunks
+	soundLevelReceived := false
+
+	// Start a goroutine to receive data
+	done := make(chan bool)
+	go func() {
+		timeout := time.After(15 * time.Second)
+		for {
+			select {
+			case unifiedData := <-unifiedAudioChan:
+				// Verify we have audio level data
+				assert.NotNil(t, unifiedData.AudioLevel)
+				assert.Equal(t, testSource, unifiedData.AudioLevel.Source)
+
+				// Check if we received sound level data
+				if unifiedData.SoundLevel != nil {
+					soundLevelReceived = true
+
+					// Verify sound level data
+					assert.Equal(t, testSource, unifiedData.SoundLevel.Source)
+					assert.Equal(t, testName, unifiedData.SoundLevel.Name)
+					assert.Equal(t, 10, unifiedData.SoundLevel.Duration)
+					assert.NotEmpty(t, unifiedData.SoundLevel.OctaveBands)
+
+					// Verify we have measurements for the 1kHz band
+					found1kHz := false
+					for bandKey, bandData := range unifiedData.SoundLevel.OctaveBands {
+						if !strings.Contains(bandKey, "1.0_kHz") && !strings.Contains(bandKey, "1000") {
+							continue
+						}
+						found1kHz = true
+						// The 1kHz tone should produce significant levels in this band
+						assert.True(t, bandData.Mean > -40, "Expected significant level for 1kHz tone, got %f dB", bandData.Mean)
+						assert.True(t, bandData.Max >= bandData.Mean, "Max should be >= mean")
+						assert.True(t, bandData.Min <= bandData.Mean, "Min should be <= mean")
+						break
+					}
+					assert.True(t, found1kHz, "Expected to find 1kHz band in octave band data")
+
+					done <- true
+					return
+				}
+			case <-timeout:
+				t.Error("Timeout waiting for sound level data")
+				done <- false
+				return
+			}
+		}
+	}()
+
+	// Process audio data in chunks
+	for i := 0; i < duration; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		if end > len(testData) {
+			end = len(testData)
+		}
+
+		chunk := testData[start:end]
+
+		// Process through the mock function
+		err := mockProcessAudioDataWithSoundLevel(testSource, chunk, unifiedAudioChan)
+		assert.NoError(t, err)
+
+		// Small delay to simulate real-time processing
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait for sound level data to be received
+	success := <-done
+	assert.True(t, success, "Failed to receive sound level data")
+	assert.True(t, soundLevelReceived, "Sound level data was not included in UnifiedAudioData")
+}
+
+// mockProcessAudioDataWithSoundLevel is an enhanced version that includes sound level processing
+func mockProcessAudioDataWithSoundLevel(url string, data []byte, unifiedAudioChan chan UnifiedAudioData) error {
+	// Calculate audio level
+	audioLevelData := calculateAudioLevel(data, url, "")
+
+	// Process sound level data
+	var soundLevelData *SoundLevelData
+	if soundLevel, err := ProcessSoundLevelData(url, data); err == nil && soundLevel != nil {
+		soundLevelData = soundLevel
+	}
+
+	// Create unified audio data structure
+	unifiedData := UnifiedAudioData{
+		AudioLevel: audioLevelData,
+		SoundLevel: soundLevelData,
+		Timestamp:  time.Now(),
+	}
+
+	select {
+	case unifiedAudioChan <- unifiedData:
+		// Successfully sent data
+	default:
+		// Channel is full, drop the data to avoid blocking
 	}
 
 	return nil

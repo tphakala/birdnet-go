@@ -35,6 +35,12 @@ var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 // soundLevelChan is a channel to send sound level updates
 var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
 
+// audioDemuxDoneChan is used to signal the audio demultiplexing goroutine to stop
+var (
+	audioDemuxDoneChan chan struct{}
+	audioDemuxMutex    sync.Mutex
+)
+
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
@@ -248,24 +254,54 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
 func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
+	// Manage previous demultiplexing goroutine
+	audioDemuxMutex.Lock()
+
+	// Signal previous goroutine to stop if it exists
+	if audioDemuxDoneChan != nil {
+		close(audioDemuxDoneChan)
+		// Give the goroutine time to exit
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Create new done channel
+	audioDemuxDoneChan = make(chan struct{})
+	doneChan := audioDemuxDoneChan
+
+	audioDemuxMutex.Unlock()
+
 	// Create a unified audio channel
 	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
 	go func() {
 		// Convert unified audio data back to separate channels for existing handlers
-		for unifiedData := range unifiedAudioChan {
-			// Send audio level data to existing audio level channel
+		for {
 			select {
-			case audioLevelChan <- unifiedData.AudioLevel:
-			default:
-				// Channel full, drop data
-			}
+			case <-doneChan:
+				// Exit when signaled
+				return
+			case <-quitChan:
+				// Exit when quit signal received
+				return
+			case unifiedData, ok := <-unifiedAudioChan:
+				if !ok {
+					// Channel closed, exit
+					return
+				}
 
-			// Send sound level data to existing sound level channel if present
-			if unifiedData.SoundLevel != nil {
+				// Send audio level data to existing audio level channel
 				select {
-				case soundLevelChan <- *unifiedData.SoundLevel:
+				case audioLevelChan <- unifiedData.AudioLevel:
 				default:
 					// Channel full, drop data
+				}
+
+				// Send sound level data to existing sound level channel if present
+				if unifiedData.SoundLevel != nil {
+					select {
+					case soundLevelChan <- *unifiedData.SoundLevel:
+					default:
+						// Channel full, drop data
+					}
 				}
 			}
 		}
