@@ -244,7 +244,7 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 			default:
 				// Channel full, drop data
 			}
-			
+
 			// Send sound level data to existing sound level channel if present
 			if unifiedData.SoundLevel != nil {
 				select {
@@ -255,7 +255,7 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 			}
 		}
 	}()
-	
+
 	// waitgroup is managed within CaptureAudio
 	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 }

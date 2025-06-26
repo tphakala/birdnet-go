@@ -112,10 +112,10 @@ type AudioLevelData struct {
 type UnifiedAudioData struct {
 	// Basic audio level information (always present)
 	AudioLevel AudioLevelData `json:"audio_level"`
-	
+
 	// Sound level data (present only when 10-second window is complete)
 	SoundLevel *SoundLevelData `json:"sound_level,omitempty"`
-	
+
 	// Metadata
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -732,7 +732,7 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	wg.Add(1)
 	defer wg.Done()
-	
+
 	// Clean up sound level processor when function exits
 	defer UnregisterSoundLevelProcessor("malgo")
 

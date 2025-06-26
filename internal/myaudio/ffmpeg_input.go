@@ -515,7 +515,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 
 	// Calculate audio level
 	audioLevelData := calculateAudioLevel(data, url, "")
-	
+
 	// Create unified audio data structure
 	unifiedData := UnifiedAudioData{
 		AudioLevel: audioLevelData,
@@ -1024,7 +1024,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// Register the channels for this stream
 	RegisterStreamChannels(url, restartChan, unifiedAudioChan)
 	defer UnregisterStreamChannels(url)
-	
+
 	// Initialize sound level processor for this RTSP source
 	displayName := conf.SanitizeRTSPUrl(url)
 	if err := RegisterSoundLevelProcessor(url, displayName); err != nil {

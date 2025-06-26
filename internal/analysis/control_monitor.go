@@ -188,7 +188,7 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 			default:
 				// Channel full, drop data
 			}
-			
+
 			// Send sound level data to existing sound level channel if present
 			if unifiedData.SoundLevel != nil {
 				select {
@@ -199,7 +199,7 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 			}
 		}
 	}()
-	
+
 	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, unifiedAudioChan)
 
 	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
