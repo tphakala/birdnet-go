@@ -254,5 +254,35 @@ func basicURLScrub(message string) string {
 	queryParamRegex := regexp.MustCompile(`[?&]([^=\s]+)=([^&\s]+)`)
 	scrubbed = queryParamRegex.ReplaceAllString(scrubbed, "?[REDACTED]")
 
+	// Specific patterns for sensitive data
+	// API keys in various formats
+	apiKeyPatterns := []string{
+		`api[_-]?key[=:]\S+`,     // api_key=xxx, apikey:xxx
+		`token[=:]\S+`,           // token=xxx
+		`auth[=:]\S+`,            // auth=xxx
+		`key[=:][0-9a-fA-F]{8,}`, // key=hexstring
+		`[0-9a-fA-F]{32,}`,       // Long hex strings (likely API keys)
+	}
+
+	// Station IDs and other identifiers
+	idPatterns := []string{
+		`station[_-]?id[=:]\S+`, // station_id=xxx, stationid:xxx
+		`user[_-]?id[=:]\S+`,    // user_id=xxx
+		`device[_-]?id[=:]\S+`,  // device_id=xxx
+		`client[_-]?id[=:]\S+`,  // client_id=xxx
+	}
+
+	// Apply API key patterns
+	for _, pattern := range apiKeyPatterns {
+		regex := regexp.MustCompile(pattern)
+		scrubbed = regex.ReplaceAllString(scrubbed, "[API_KEY_REDACTED]")
+	}
+
+	// Apply ID patterns
+	for _, pattern := range idPatterns {
+		regex := regexp.MustCompile(pattern)
+		scrubbed = regex.ReplaceAllString(scrubbed, "[ID_REDACTED]")
+	}
+
 	return scrubbed
 }

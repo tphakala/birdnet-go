@@ -454,7 +454,7 @@ func NetworkError(err error, url string, timeout time.Duration) *EnhancedError {
 
 // ValidationError creates a validation error
 func ValidationError(message string) *EnhancedError {
-	return New(stderrors.New(message)).
+	return New(NewStd(message)).
 		Category(CategoryValidation).
 		Build()
 }
