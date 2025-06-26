@@ -71,7 +71,7 @@ func categorizeStreamURL(url string) string {
 		if strings.Contains(url, "localhost") || strings.Contains(url, "127.0.0.1") {
 			return "rtsp-local"
 		}
-		if strings.Contains(url, "192.168.") || strings.Contains(url, "10.") || 
+		if strings.Contains(url, "192.168.") || strings.Contains(url, "10.") ||
 			containsPrivateIP172Range(url) {
 			return "rtsp-private"
 		}
@@ -494,12 +494,9 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
 
-				continueProcessing, err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
+				_, err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
 				if err != nil {
 					return err
-				}
-				if continueProcessing {
-					continue
 				}
 			}
 		}
