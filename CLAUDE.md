@@ -97,6 +97,8 @@ Based on golangci-lint analysis, avoid these patterns:
 
 ### Custom Errors Package Usage
 
+**MANDATORY**: Always use the enhanced error handling from `internal/errors/` package for all error returns in the codebase. This ensures consistent telemetry integration and meaningful error reporting in Sentry.
+
 When importing and using the custom errors package:
 
 ```go
@@ -105,18 +107,36 @@ import (
 )
 ```
 
-**Important**: Always import as `errors` (not as an alias like `customerrors`) to maintain consistency with the existing codebase patterns. The custom errors package provides enhanced error handling with automatic telemetry integration and categorization.
+**Important**: 
+- Always import as `errors` (not as an alias like `customerrors`) to maintain consistency with the existing codebase patterns
+- Do NOT import the standard `errors` package alongside the custom one - the custom package provides all standard error functions (`errors.Is()`, `errors.As()`, etc.)
+- The custom errors package provides enhanced error handling with automatic telemetry integration and categorization
 
 Use the fluent builder pattern for creating enhanced errors:
 ```go
+// For wrapping existing errors
 return errors.New(err).
     Component("component_name").
     Category(errors.CategoryNetwork).
     Context("key", "value").
     Build()
+
+// For creating new errors with descriptive messages
+return errors.Newf("component: failed to perform operation").
+    Component("component_name").
+    Category(errors.CategoryValidation).
+    Context("operation", "specific_operation").
+    Build()
 ```
 
 The package automatically reports errors to Sentry when configured, with privacy-safe context data.
+
+**Never use plain error returns** like:
+- `return fmt.Errorf("error: %w", err)` 
+- `return errors.New("some error")` (standard library)
+- `return err` (without enhancement)
+
+Instead, always enhance errors with component, category, and context information for better observability.
 
 ### Telemetry Error Message Guidelines
 
