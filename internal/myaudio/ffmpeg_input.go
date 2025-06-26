@@ -35,8 +35,10 @@ type FFmpegProcess struct {
 	done           <-chan error       // The error channel for the FFmpeg process
 	stdout         io.ReadCloser      // The stdout of the FFmpeg process
 	restartTracker *FFmpegRestartTracker
-	cleanupMutex   sync.Mutex // Mutex to protect cleanup operations
-	cleanupDone    bool       // Flag to track if cleanup has been performed
+	cleanupMutex   sync.Mutex     // Mutex to protect cleanup operations
+	cleanupDone    bool           // Flag to track if cleanup has been performed
+	startTime      time.Time      // Track when the process started
+	stderrBuf      *BoundedBuffer // Buffer for stderr output
 }
 
 // audioWatchdog is a struct that keeps track of the last time data was received from the RTSP source
@@ -55,6 +57,13 @@ type FFmpegRestartTracker struct {
 
 // restartTrackers keeps track of restart information for each RTSP source URL
 var restartTrackers sync.Map
+
+// startupMutex prevents concurrent FFmpeg process starts for the same URL
+var startupMutex sync.Map
+
+// ffmpegPlaceholder is used as a placeholder in the ffmpegProcesses map
+// to indicate that a process is being started for a URL
+type ffmpegPlaceholder struct{}
 
 // containsPrivateIP172Range checks if URL contains an IP in the 172.16.0.0/12 range (172.16.x.x through 172.31.x.x)
 func containsPrivateIP172Range(url string) bool {
@@ -453,8 +462,8 @@ func (p *FFmpegProcess) handleWatchdogTimeout(url string, restartChan chan struc
 }
 
 // processAudioData processes a chunk of audio data and handles buffer errors
-// Returns (true, nil) if processing should continue, (false, nil) if successful, or (false, error) if there's a real error
-func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, audioLevelChan chan AudioLevelData) (bool, error) {
+// Returns an error if processing should stop, nil if it should continue
+func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCount *int, lastBufferErrorTime *time.Time, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
 	const maxBufferErrors = 10
 	hasBufferError := false
 
@@ -486,7 +495,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 			telemetry.CaptureMessage(fmt.Sprintf("Buffer error threshold exceeded for %s: %d errors", url, *bufferErrorCount),
 				sentry.LevelError, "rtsp-buffer-error-threshold")
 			p.sendRestartSignal(restartChan, url, "Buffer error threshold")
-			return false, errors.New(fmt.Errorf("too many buffer write errors for RTSP source %s", url)).
+			return errors.New(fmt.Errorf("too many buffer write errors for RTSP source %s", url)).
 				Category(errors.CategoryAudio).
 				Component("ffmpeg-buffer").
 				Context("url_type", categorizeStreamURL(url)).
@@ -495,7 +504,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		}
 
 		time.Sleep(1 * time.Second)
-		return true, nil // Signal to continue processing
+		return nil // Continue processing after temporary error
 	}
 
 	// Reset error count on successful buffer writes
@@ -514,7 +523,8 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		// Audio level data is not critical and can be dropped
 	}
 
-	return false, nil
+	// Continue processing - return nil to indicate success
+	return nil
 }
 
 // processAudio reads audio data from FFmpeg's stdout and writes it to buffers
@@ -544,6 +554,34 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			n, err := p.stdout.Read(buf)
 			if err != nil {
 				<-watchdogDone // Wait for watchdog to finish
+
+				// Check if FFmpeg exited too quickly (within 5 seconds)
+				runtime := time.Since(p.startTime)
+				if runtime < 5*time.Second {
+					// FFmpeg exited too quickly, likely a connection or configuration error
+					stderrOutput := ""
+					if p.stderrBuf != nil {
+						stderrOutput = p.stderrBuf.String()
+					}
+
+					if stderrOutput != "" {
+						log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
+						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v): %s", runtime, stderrOutput)).
+							Category(errors.CategoryRTSP).
+							Component("ffmpeg-quick-exit").
+							Context("url_type", categorizeStreamURL(url)).
+							Context("runtime_seconds", runtime.Seconds()).
+							Build()
+					} else {
+						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - likely connection failure", runtime)).
+							Category(errors.CategoryRTSP).
+							Component("ffmpeg-quick-exit").
+							Context("url_type", categorizeStreamURL(url)).
+							Context("runtime_seconds", runtime.Seconds()).
+							Build()
+					}
+				}
+
 				// Check if this is a normal shutdown
 				if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "file already closed") {
 					return nil
@@ -560,13 +598,11 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
 
-				shouldContinue, err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
+				err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
 				if err != nil {
 					return err
 				}
-				if !shouldContinue {
-					return nil
-				}
+				// nil error means continue processing
 			}
 		}
 	}
@@ -587,6 +623,9 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 
 	// Create a new context with cancellation
 	ctx, cancel := context.WithCancel(ctx)
+
+	// Track when the process starts
+	startTime := time.Now()
 
 	// Get the FFmpeg-compatible values for sample rate, channels, and bit depth
 	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
@@ -649,8 +688,28 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	go func() {
 		// Wait for the FFmpeg process to exit
 		err := cmd.Wait()
-		if err != nil {
-			// Don't log if process was killed (normal shutdown) or context was cancelled
+
+		// Check if FFmpeg exited quickly (potential connection issue)
+		runtime := time.Since(startTime)
+		if runtime < 5*time.Second {
+			// FFmpeg exited too quickly, log stderr regardless of error status
+			stderrOutput := stderrBuf.String()
+			if stderrOutput != "" {
+				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with stderr:\n%s", runtime, config.URL, stderrOutput)
+				if err == nil {
+					// Create an error if FFmpeg exited with status 0 but too quickly
+					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
+				} else {
+					err = fmt.Errorf("%w\nStderr: %s", err, stderrOutput)
+				}
+			} else {
+				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with no stderr output", runtime, config.URL)
+				if err == nil {
+					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - possible connection failure", runtime)
+				}
+			}
+		} else if err != nil {
+			// Normal error logging for longer-running processes
 			if !strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
 				log.Printf("⚠️ FFmpeg process for RTSP source %s exited with error: %v", config.URL, err)
 				// Include stderr in the error if available
@@ -673,6 +732,8 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		done:           done,
 		stdout:         stdout,
 		restartTracker: restartTracker,
+		startTime:      startTime,
+		stderrBuf:      stderrBuf,
 	}, nil
 }
 
@@ -722,6 +783,17 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 		if !lm.isStreamConfigured() {
 			lm.cleanupProcessFromMap()
 			return nil, fmt.Errorf("stream %s no longer configured", lm.config.URL)
+		}
+
+		// Double-check if a process already exists (race condition protection)
+		if existing, exists := ffmpegProcesses.Load(lm.config.URL); exists {
+			// Check if it's an actual running process
+			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
+				log.Printf("⚠️ FFmpeg process already exists during retry for URL %s (PID: %d)", lm.config.URL, p.cmd.Process.Pid)
+				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
+			}
+			// Note: We skip placeholder checks here because this function is called by the same
+			// goroutine that created the placeholder, and needs to proceed to replace it with the actual process
 		}
 
 		// Attempt to start FFmpeg process
@@ -802,6 +874,8 @@ func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmp
 
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("⚠️ FFmpeg process for RTSP source %s ended unexpectedly: %v", lm.config.URL, err)
+			// Return the error so the lifecycle manager can handle it with proper backoff
+			return true, false, err
 		}
 		return true, false, nil // Process ended normally
 
@@ -836,6 +910,34 @@ func (lm *lifecycleManager) handleRestartDelay(ctx context.Context, process *FFm
 
 // manageFfmpegLifecycle manages the complete lifecycle of an FFmpeg process with simplified logic
 func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan chan struct{}, audioLevelChan chan AudioLevelData) error {
+	// Get or create a mutex for this URL to prevent concurrent starts
+	mutexInterface, _ := startupMutex.LoadOrStore(config.URL, &sync.Mutex{})
+	mutex := mutexInterface.(*sync.Mutex)
+
+	// Lock to prevent concurrent starts for the same URL
+	mutex.Lock()
+
+	// Check if a process is already running for this URL
+	if existing, exists := ffmpegProcesses.Load(config.URL); exists {
+		// Check if it's a placeholder
+		if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
+			log.Printf("⚠️ FFmpeg process is already being started for URL %s", config.URL)
+			mutex.Unlock()
+			return fmt.Errorf("FFmpeg process already being started for URL: %s", config.URL)
+		}
+		// Check if it's an actual process
+		if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
+			log.Printf("⚠️ FFmpeg process already exists for URL %s (PID: %d), not starting duplicate", config.URL, p.cmd.Process.Pid)
+			mutex.Unlock()
+			return fmt.Errorf("FFmpeg process already running for URL: %s", config.URL)
+		}
+	}
+
+	// Store a placeholder to prevent other goroutines from starting
+	placeholder := &ffmpegPlaceholder{}
+	ffmpegProcesses.Store(config.URL, placeholder)
+	mutex.Unlock()
+
 	manager := newLifecycleManager(config, restartChan, audioLevelChan)
 
 	for {
@@ -864,6 +966,19 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 			// For stream-no-longer-configured errors, return
 			if strings.Contains(err.Error(), "no longer configured") {
 				return nil
+			}
+			// For FFmpeg quick exit errors, update restart info and apply backoff
+			if strings.Contains(err.Error(), "FFmpeg exited too quickly") {
+				process.updateRestartInfo()
+				// Handle restart delay before next iteration
+				if delayErr := manager.handleRestartDelay(ctx, process, false); delayErr != nil {
+					if errors.Is(delayErr, context.Canceled) {
+						return delayErr
+					}
+					if strings.Contains(delayErr.Error(), "no longer configured") {
+						return nil
+					}
+				}
 			}
 			// For other errors, continue the lifecycle loop
 			continue
