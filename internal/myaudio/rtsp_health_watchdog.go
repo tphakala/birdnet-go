@@ -550,6 +550,12 @@ func getAudioLevelChannelForURL(url string) chan AudioLevelData {
 	if ch, ok := audioLevelChannels.Load(url); ok {
 		return ch.(chan AudioLevelData)
 	}
+	// Log missing channel registration to help diagnose configuration issues
+	logging.Debug("No audio level channel registered for URL, returning fallback channel",
+		"service", "rtsp-health-watchdog",
+		"url", url,
+		"operation", "get_audio_level_channel",
+		"action", "fallback_channel_created")
 	// Return a new channel if none exists (will be discarded but prevents nil)
 	return make(chan AudioLevelData, 1)
 }
