@@ -9,6 +9,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+const (
+	// maxBreadcrumbs defines the maximum number of breadcrumbs to keep in Sentry events
+	maxBreadcrumbs = 10
+)
+
 // AttachmentUploader handles uploading support dumps as Sentry attachments
 type AttachmentUploader struct {
 	enabled bool
@@ -89,7 +94,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 				Message:   userMessage,
 				Level:     sentry.LevelInfo,
 				Timestamp: time.Now(),
-			}, 10)
+			}, maxBreadcrumbs)
 		}
 
 		// Capture the event within this scope
