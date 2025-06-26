@@ -283,7 +283,7 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 				"url", maskedURL,
 				"status_code", resp.StatusCode,
 				"html_error", htmlError,
-				"response_preview", string(responseBody[:minInt(len(responseBody), 500)]))
+				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
 			return nil, errors.New(fmt.Errorf("%s failed: %s (status %d)", operation, htmlError, resp.StatusCode)).
 				Component("birdweather").
 				Category(errors.CategoryNetwork).
@@ -321,14 +321,6 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 	}
 
 	return responseBody, nil
-}
-
-// minInt returns the smaller of two integers
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
@@ -638,7 +630,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 				"operation", "soundscape upload",
 				"url", maskedURL,
 				"html_error", htmlError,
-				"response_preview", string(responseBody[:minInt(len(responseBody), 500)]))
+				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
 			return "", errors.New(fmt.Errorf("soundscape upload failed: %s", htmlError)).
 				Component("birdweather").
 				Category(errors.CategoryNetwork).
