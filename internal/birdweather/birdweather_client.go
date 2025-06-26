@@ -192,6 +192,137 @@ func handleNetworkError(err error, url string, timeout time.Duration, operation 
 		Build()
 }
 
+// isHTMLResponse checks if the response content type indicates HTML
+func isHTMLResponse(resp *http.Response) bool {
+	contentType := resp.Header.Get("Content-Type")
+	return strings.Contains(strings.ToLower(contentType), "text/html")
+}
+
+// extractHTMLError attempts to extract error message from HTML response
+// This handles common error page patterns from web servers and proxies
+func extractHTMLError(htmlContent string) string {
+	// Common patterns for error messages in HTML
+	// Look for title tags first as they often contain the error summary
+	titleStart := strings.Index(htmlContent, "<title>")
+	titleEnd := strings.Index(htmlContent, "</title>")
+	if titleStart != -1 && titleEnd != -1 && titleEnd > titleStart {
+		title := htmlContent[titleStart+7 : titleEnd]
+		title = strings.TrimSpace(title)
+		if title != "" {
+			return fmt.Sprintf("HTML error page: %s", title)
+		}
+	}
+
+	// Look for common error patterns in body
+	lowerHTML := strings.ToLower(htmlContent)
+	errorPatterns := []string{
+		"error",
+		"not found",
+		"unauthorized",
+		"forbidden",
+		"bad request",
+		"internal server error",
+		"service unavailable",
+		"gateway timeout",
+		"too many requests",
+	}
+
+	for _, pattern := range errorPatterns {
+		if !strings.Contains(lowerHTML, pattern) {
+			continue
+		}
+		// Try to extract a reasonable snippet around the error
+		index := strings.Index(lowerHTML, pattern)
+		start := index - 50
+		if start < 0 {
+			start = 0
+		}
+		end := index + 100
+		if end > len(htmlContent) {
+			end = len(htmlContent)
+		}
+		snippet := htmlContent[start:end]
+		// Remove HTML tags for cleaner output
+		snippet = strings.ReplaceAll(snippet, "<", " <")
+		snippet = strings.ReplaceAll(snippet, ">", "> ")
+		// Clean up whitespace
+		fields := strings.Fields(snippet)
+		snippet = strings.Join(fields, " ")
+		return fmt.Sprintf("HTML error detected: %s", snippet)
+	}
+
+	// If no specific error found, return generic message with beginning of content
+	maxLen := 200
+	if len(htmlContent) < maxLen {
+		maxLen = len(htmlContent)
+	}
+	preview := strings.TrimSpace(htmlContent[:maxLen])
+	return fmt.Sprintf("Unexpected HTML response (first %d chars): %s", maxLen, preview)
+}
+
+// handleHTTPResponse processes HTTP response and handles both JSON and HTML responses
+func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, maskedURL string) ([]byte, error) {
+	// Check status code first
+	if resp.StatusCode != expectedStatus {
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			serviceLogger.Error("Failed to read response body after non-expected status",
+				"operation", operation,
+				"url", maskedURL,
+				"expected_status", expectedStatus,
+				"actual_status", resp.StatusCode,
+				"read_error", readErr)
+			return nil, fmt.Errorf("%s failed with status %d, failed to read response: %w", operation, resp.StatusCode, readErr)
+		}
+
+		// Check if response is HTML
+		if isHTMLResponse(resp) {
+			htmlError := extractHTMLError(string(responseBody))
+			serviceLogger.Error("Received HTML error response instead of JSON",
+				"operation", operation,
+				"url", maskedURL,
+				"status_code", resp.StatusCode,
+				"html_error", htmlError,
+				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
+			return nil, errors.New(fmt.Errorf("%s failed: %s (status %d)", operation, htmlError, resp.StatusCode)).
+				Component("birdweather").
+				Category(errors.CategoryNetwork).
+				Context("response_type", "html").
+				Context("status_code", resp.StatusCode).
+				Context("operation", operation).
+				Build()
+		}
+
+		// Not HTML, return the raw response
+		err := fmt.Errorf("%s failed with status %d: %s", operation, resp.StatusCode, string(responseBody))
+		serviceLogger.Error("Request failed with non-expected status",
+			"operation", operation,
+			"url", maskedURL,
+			"expected_status", expectedStatus,
+			"actual_status", resp.StatusCode,
+			"response_body", string(responseBody))
+		return nil, errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryNetwork).
+			Context("status_code", resp.StatusCode).
+			Context("operation", operation).
+			Build()
+	}
+
+	// Status is OK, read the body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		serviceLogger.Error("Failed to read response body",
+			"operation", operation,
+			"url", maskedURL,
+			"status_code", resp.StatusCode,
+			"error", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return responseBody, nil
+}
+
 // encodeFlacUsingFFmpeg converts PCM data to FLAC format using FFmpeg directly into a bytes buffer.
 // It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
 // This avoids writing temporary files to disk.
@@ -480,11 +611,10 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	defer resp.Body.Close()
 	serviceLogger.Debug("Received soundscape upload response", "url", maskedURL, "status_code", resp.StatusCode)
 
-	// Process the response
-	responseBody, err := io.ReadAll(resp.Body)
+	// Process the response using the new handler
+	responseBody, err := handleHTTPResponse(resp, http.StatusOK, "soundscape upload", maskedURL)
 	if err != nil {
-		serviceLogger.Error("Failed to read soundscape response body", "url", maskedURL, "status_code", resp.StatusCode, "error", err)
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return "", err
 	}
 
 	if b.Settings.Realtime.Birdweather.Debug {
@@ -493,6 +623,21 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 	var sdata SoundscapeResponse
 	if err := json.Unmarshal(responseBody, &sdata); err != nil {
+		// Check if this might be HTML even though we got 200 OK
+		if strings.Contains(string(responseBody), "<") && strings.Contains(string(responseBody), ">") {
+			htmlError := extractHTMLError(string(responseBody))
+			serviceLogger.Error("Received HTML response with 200 OK status",
+				"operation", "soundscape upload",
+				"url", maskedURL,
+				"html_error", htmlError,
+				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
+			return "", errors.New(fmt.Errorf("soundscape upload failed: %s", htmlError)).
+				Component("birdweather").
+				Category(errors.CategoryNetwork).
+				Context("response_type", "html_with_200").
+				Context("operation", "soundscape upload").
+				Build()
+		}
 		serviceLogger.Error("Failed to decode soundscape JSON response", "url", maskedURL, "status_code", resp.StatusCode, "body", string(responseBody), "error", err)
 		return "", fmt.Errorf("failed to decode JSON response: %w", err)
 	}
@@ -617,15 +762,15 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	defer resp.Body.Close()
 	serviceLogger.Debug("Received detection post response", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode)
 
-	// Handle response
-	if resp.StatusCode != http.StatusCreated {
-		responseBody, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			serviceLogger.Error("Failed to read detection response body after non-201 status", "url", maskedDetectionURL, "status_code", resp.StatusCode, "read_error", readErr)
-			return fmt.Errorf("failed to read response body: %w", readErr)
+	// Handle response using the new handler
+	_, err = handleHTTPResponse(resp, http.StatusCreated, "detection post", maskedDetectionURL)
+	if err != nil {
+		// Add additional context for detection-specific error
+		var enhancedErr *errors.EnhancedError
+		if errors.As(err, &enhancedErr) {
+			enhancedErr.Context["soundscape_id"] = soundscapeID
+			enhancedErr.Context["scientific_name"] = scientificName
 		}
-		err := fmt.Errorf("failed to post detection, status code: %d, response: %s", resp.StatusCode, string(responseBody))
-		serviceLogger.Error("Detection post failed", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode, "response_body", string(responseBody), "error", err)
 		return err
 	}
 
