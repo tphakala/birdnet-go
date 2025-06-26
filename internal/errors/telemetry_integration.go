@@ -3,6 +3,7 @@ package errors
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -243,7 +244,15 @@ func scrubMessageForPrivacy(message string) string {
 
 // basicURLScrub provides basic URL anonymization as fallback
 func basicURLScrub(message string) string {
-	// Basic implementation - just return as-is
-	// The full privacy protection should be provided by the telemetry package
-	return message
+	// Regex to match URLs with query parameters
+	urlRegex := regexp.MustCompile(`(https?://[^?\s]+)\?[^\s]*`)
+	
+	// Replace query parameters with [REDACTED]
+	scrubbed := urlRegex.ReplaceAllString(message, "$1?[REDACTED]")
+	
+	// Also scrub any standalone query parameters that might appear
+	queryParamRegex := regexp.MustCompile(`[?&]([^=\s]+)=([^&\s]+)`)
+	scrubbed = queryParamRegex.ReplaceAllString(scrubbed, "?[REDACTED]")
+	
+	return scrubbed
 }
