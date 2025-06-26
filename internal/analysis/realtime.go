@@ -158,6 +158,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
 	httpServer.Start()
 
+	// Store reference for sound level publishers
+	httpServerRefForSoundLevel = httpServer
+
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
 
@@ -873,4 +876,104 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 		topic, soundData.Source, len(soundData.OctaveBands))
 
 	return nil
+}
+
+// startSoundLevelPublishers starts all sound level publishers with the given done channel
+func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData) {
+	settings := conf.Setting()
+
+	// Create a merged quit channel that responds to both the done channel and global quit
+	mergedQuitChan := make(chan struct{})
+	go func() {
+		<-doneChan
+		close(mergedQuitChan)
+	}()
+
+	// Start MQTT publisher if enabled
+	if settings.Realtime.MQTT.Enabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-mergedQuitChan:
+					return
+				case soundData := <-soundLevelChan:
+					// Publish sound level data to MQTT
+					if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
+						log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+					}
+				}
+			}
+		}()
+	}
+
+	// Start SSE publisher if API is available
+	httpServer := getHTTPServer()
+	if httpServer != nil && httpServer.APIV2 != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			log.Println("📡 Started sound level SSE publisher")
+			for {
+				select {
+				case <-mergedQuitChan:
+					log.Println("🔌 Stopping sound level SSE publisher")
+					return
+				case soundData := <-soundLevelChan:
+					// Publish sound level data via SSE
+					if err := httpServer.APIV2.BroadcastSoundLevel(&soundData); err != nil {
+						// Record error metric
+						if httpServer.APIV2.Processor != nil && httpServer.APIV2.Processor.Metrics != nil &&
+							httpServer.APIV2.Processor.Metrics.SoundLevel != nil {
+							httpServer.APIV2.Processor.Metrics.SoundLevel.RecordSoundLevelPublishingError(
+								soundData.Source, soundData.Name, "sse", "broadcast_error")
+							httpServer.APIV2.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(
+								soundData.Source, soundData.Name, "sse", "error")
+						}
+						// Only log errors occasionally to avoid spam
+						if time.Now().Unix()%60 == 0 { // Log once per minute at most
+							log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
+						}
+					} else {
+						// Record success metric
+						if httpServer.APIV2.Processor != nil && httpServer.APIV2.Processor.Metrics != nil &&
+							httpServer.APIV2.Processor.Metrics.SoundLevel != nil {
+							httpServer.APIV2.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(
+								soundData.Source, soundData.Name, "sse", "success")
+						}
+					}
+				}
+			}
+		}()
+	}
+
+	// Start metrics publisher
+	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			log.Println("📊 Started sound level metrics publisher")
+			for {
+				select {
+				case <-mergedQuitChan:
+					log.Println("🔌 Stopping sound level metrics publisher")
+					return
+				case soundData := <-soundLevelChan:
+					// Update Prometheus metrics
+					if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+						// Use the existing updateSoundLevelMetrics function
+						updateSoundLevelMetrics(soundData, proc.Metrics)
+					}
+				}
+			}
+		}()
+	}
+}
+
+// getHTTPServer returns a reference to the HTTP server (if available)
+var httpServerRefForSoundLevel *httpcontroller.Server
+
+func getHTTPServer() *httpcontroller.Server {
+	return httpServerRefForSoundLevel
 }

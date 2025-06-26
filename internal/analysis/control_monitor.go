@@ -33,21 +33,27 @@ type ControlMonitor struct {
 	unifiedAudioChan     chan myaudio.UnifiedAudioData
 	unifiedAudioDoneChan chan struct{}
 	unifiedAudioMutex    sync.Mutex
+
+	// Track sound level publisher goroutines
+	soundLevelPublishersWg    *sync.WaitGroup
+	soundLevelPublishersDone  chan struct{}
+	soundLevelPublishersMutex sync.Mutex
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
 func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) *ControlMonitor {
 	return &ControlMonitor{
-		wg:               wg,
-		controlChan:      controlChan,
-		quitChan:         quitChan,
-		restartChan:      restartChan,
-		notificationChan: notificationChan,
-		bufferManager:    bufferManager,
-		audioLevelChan:   audioLevelChan,
-		soundLevelChan:   soundLevelChan,
-		proc:             proc,
-		bn:               proc.Bn,
+		wg:                     wg,
+		controlChan:            controlChan,
+		quitChan:               quitChan,
+		restartChan:            restartChan,
+		notificationChan:       notificationChan,
+		bufferManager:          bufferManager,
+		audioLevelChan:         audioLevelChan,
+		soundLevelChan:         soundLevelChan,
+		proc:                   proc,
+		bn:                     proc.Bn,
+		soundLevelPublishersWg: &sync.WaitGroup{},
 	}
 }
 
@@ -83,6 +89,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureBirdWeather()
 	case "update_detection_intervals":
 		cm.handleUpdateDetectionIntervals()
+	case "reconfigure_sound_level":
+		cm.handleReconfigureSoundLevel()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -329,5 +337,39 @@ func (cm *ControlMonitor) notifyError(message string, err error) {
 	cm.notificationChan <- handlers.Notification{
 		Message: fmt.Sprintf("%s: %v", message, err),
 		Type:    "error",
+	}
+}
+
+// handleReconfigureSoundLevel reconfigures sound level monitoring
+func (cm *ControlMonitor) handleReconfigureSoundLevel() {
+	log.Printf("🔄 Reconfiguring sound level monitoring...")
+	settings := conf.Setting()
+
+	// Lock the mutex to ensure thread-safe access
+	cm.soundLevelPublishersMutex.Lock()
+	defer cm.soundLevelPublishersMutex.Unlock()
+
+	// Check if we need to stop existing publishers
+	if cm.soundLevelPublishersDone != nil {
+		// Signal existing publishers to stop
+		close(cm.soundLevelPublishersDone)
+		// Wait for all publishers to finish
+		cm.soundLevelPublishersWg.Wait()
+		cm.soundLevelPublishersDone = nil
+	}
+
+	// If sound level monitoring is enabled, start new publishers
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		// Create a new done channel
+		cm.soundLevelPublishersDone = make(chan struct{})
+
+		// Start sound level publishers
+		startSoundLevelPublishers(cm.soundLevelPublishersWg, cm.soundLevelPublishersDone, cm.proc, cm.soundLevelChan)
+
+		log.Printf("✅ Sound level monitoring enabled")
+		cm.notifySuccess("Sound level monitoring enabled")
+	} else {
+		log.Printf("✅ Sound level monitoring disabled")
+		cm.notifySuccess("Sound level monitoring disabled")
 	}
 }
