@@ -34,7 +34,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	// Create a new event specifically for support dumps
 	event := sentry.NewEvent()
 	event.Level = sentry.LevelInfo
-	event.Message = "User Support Dump"
+	event.Message = fmt.Sprintf("Support Dump - System: %s - %s", systemID, time.Now().Format("2006-01-02 15:04:05 UTC"))
 	event.Timestamp = time.Now()
 
 	// Add custom context
