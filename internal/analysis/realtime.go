@@ -37,11 +37,47 @@ var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 // soundLevelChan is a channel to send sound level updates
 var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
 
-// audioDemuxDoneChan is used to signal the audio demultiplexing goroutine to stop
-var (
-	audioDemuxDoneChan chan struct{}
-	audioDemuxMutex    sync.Mutex
-)
+// AudioDemuxManager manages the lifecycle of audio demultiplexing goroutines
+type AudioDemuxManager struct {
+	doneChan chan struct{}
+	mutex    sync.Mutex
+	wg       sync.WaitGroup
+}
+
+// NewAudioDemuxManager creates a new AudioDemuxManager
+func NewAudioDemuxManager() *AudioDemuxManager {
+	return &AudioDemuxManager{}
+}
+
+// Stop signals the current demux goroutine to stop and waits for it to exit
+func (m *AudioDemuxManager) Stop() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.doneChan != nil {
+		close(m.doneChan)
+		m.wg.Wait() // Wait for goroutine to exit
+		m.doneChan = nil
+	}
+}
+
+// Start creates a new done channel and increments the wait group
+func (m *AudioDemuxManager) Start() chan struct{} {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.doneChan = make(chan struct{})
+	m.wg.Add(1)
+	return m.doneChan
+}
+
+// Done should be called when the goroutine exits
+func (m *AudioDemuxManager) Done() {
+	m.wg.Done()
+}
+
+// Global audio demux manager instance
+var audioDemuxManager = NewAudioDemuxManager()
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
@@ -107,10 +143,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
-	// Initialize audioLevelChan, used to visualize audio levels on web ui
-	audioLevelChan = make(chan myaudio.AudioLevelData, 100)
-	// Initialize soundLevelChan, used to send sound level data
-	soundLevelChan = make(chan myaudio.SoundLevelData, 100)
+	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
 	// Prepare sources list
 	var sources []string
@@ -159,9 +192,6 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize and start the HTTP server
 	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
 	httpServer.Start()
-
-	// Store reference for sound level publishers
-	httpServerRefForSoundLevel = httpServer
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
@@ -219,7 +249,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	startTelemetryEndpoint(&wg, settings, metrics, quitChan)
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc)
+	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
@@ -266,25 +296,17 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
 func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
-	// Manage previous demultiplexing goroutine
-	audioDemuxMutex.Lock()
+	// Stop previous demultiplexing goroutine if it exists
+	audioDemuxManager.Stop()
 
-	// Signal previous goroutine to stop if it exists
-	if audioDemuxDoneChan != nil {
-		close(audioDemuxDoneChan)
-		// Give the goroutine time to exit
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// Create new done channel
-	audioDemuxDoneChan = make(chan struct{})
-	doneChan := audioDemuxDoneChan
-
-	audioDemuxMutex.Unlock()
+	// Start new demux goroutine
+	doneChan := audioDemuxManager.Start()
 
 	// Create a unified audio channel
 	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
 	go func() {
+		defer audioDemuxManager.Done()
+
 		// Convert unified audio data back to separate channels for existing handlers
 		for {
 			select {
@@ -300,8 +322,12 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 					return
 				}
 
-				// Send audio level data to existing audio level channel
+				// Send audio level data to existing audio level channel with safety check
 				select {
+				case <-doneChan:
+					return
+				case <-quitChan:
+					return
 				case audioLevelChan <- unifiedData.AudioLevel:
 				default:
 					// Channel full, drop data
@@ -310,6 +336,10 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 				// Send sound level data to existing sound level channel if present
 				if unifiedData.SoundLevel != nil {
 					select {
+					case <-doneChan:
+						return
+					case <-quitChan:
+						return
 					case soundLevelChan <- *unifiedData.SoundLevel:
 					default:
 						// Channel full, drop data
@@ -485,13 +515,13 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to create WikiMedia image cache: %v", err)
 			log.Println(errMsg)
-			errs = append(errs, fmt.Errorf("%s", errMsg))
+			errs = append(errs, fmt.Errorf(errMsg))
 			// Continue even if one provider fails
 		} else {
 			if err := registry.Register("wikimedia", wikiCache); err != nil {
 				errMsg := fmt.Sprintf("Failed to register WikiMedia image provider: %v", err)
 				log.Println(errMsg)
-				errs = append(errs, fmt.Errorf("%s", errMsg))
+				errs = append(errs, fmt.Errorf(errMsg))
 			} else {
 				log.Println("Registered WikiMedia image provider")
 			}
@@ -522,7 +552,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
 			errMsg := fmt.Sprintf("Failed to register AviCommons provider: %v", err)
 			log.Println(errMsg)
-			errs = append(errs, fmt.Errorf("%s", errMsg))
+			errs = append(errs, fmt.Errorf(errMsg))
 			// Check if we can read the data file for debugging
 			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
 				log.Printf("Error reading AviCommons data file: %v", errRead)
@@ -729,8 +759,9 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor) {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server) {
 	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan)
+	monitor.httpServer = httpServer
 	monitor.Start()
 }
 
@@ -881,7 +912,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 }
 
 // startSoundLevelPublishers starts all sound level publishers with the given done channel
-func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData, httpServer *httpcontroller.Server) {
 	settings := conf.Setting()
 
 	// Create a merged quit channel that responds to both the done channel and global quit
@@ -897,7 +928,6 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 	}
 
 	// Start SSE publisher if API is available
-	httpServer := getHTTPServer()
 	if httpServer != nil && httpServer.APIV2 != nil {
 		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, httpServer.APIV2, soundLevelChan)
 	}
@@ -1011,13 +1041,6 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 			}
 		}
 	}()
-}
-
-// getHTTPServer returns a reference to the HTTP server (if available)
-var httpServerRefForSoundLevel *httpcontroller.Server
-
-func getHTTPServer() *httpcontroller.Server {
-	return httpServerRefForSoundLevel
 }
 
 // registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources

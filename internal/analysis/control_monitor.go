@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -28,6 +29,7 @@ type ControlMonitor struct {
 	audioLevelChan   chan myaudio.AudioLevelData
 	soundLevelChan   chan myaudio.SoundLevelData
 	bn               *birdnet.BirdNET
+	httpServer       *httpcontroller.Server
 
 	// Track unified audio channel and its done channel to prevent goroutine leaks
 	unifiedAudioChan     chan myaudio.UnifiedAudioData
@@ -370,7 +372,7 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		cm.soundLevelPublishersDone = make(chan struct{})
 
 		// Start sound level publishers
-		startSoundLevelPublishers(cm.soundLevelPublishersWg, cm.soundLevelPublishersDone, cm.proc, cm.soundLevelChan)
+		startSoundLevelPublishers(cm.soundLevelPublishersWg, cm.soundLevelPublishersDone, cm.proc, cm.soundLevelChan, cm.httpServer)
 
 		log.Printf("✅ Sound level monitoring enabled")
 		cm.notifySuccess("Sound level monitoring enabled")
