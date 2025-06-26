@@ -117,7 +117,7 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 
 				// If the function returned an error, validate it's the right kind of error
 				if hasError {
-					assert.Contains(t, err.Error(), "file type not eligible for cleanup operation",
+					assert.Contains(t, err.Error(), "diskmanager: file type not eligible for cleanup",
 						"Error message should indicate file is not eligible for cleanup")
 				}
 			}
