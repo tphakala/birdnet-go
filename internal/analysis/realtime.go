@@ -139,7 +139,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
-	// Initialize the restart channel for capture restart control.
+	// Initialize the restart channel - now only used internally by RTSP streams
+	// Sound card capture no longer uses this channel to prevent cross-source interference
 	restartChan := make(chan struct{}, 10) // Increased buffer to prevent dropped restart signals
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
@@ -288,9 +289,12 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			return nil
 
 		case <-restartChan:
-			// Handle the restart signal.
-			fmt.Println("🔄 Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+			// Global restart is deprecated - each audio source manages its own restarts
+			// RTSP streams have individual restart channels
+			// Sound card capture doesn't restart
+			if settings.Debug {
+				fmt.Println("⚠️ Global restart signal received but ignored - audio sources manage their own lifecycle")
+			}
 		}
 	}
 }
