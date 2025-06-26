@@ -1130,6 +1130,13 @@ html {
   flex-grow: 1;
 }
 
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
 .card figure {
   display: flex;
   align-items: center;
@@ -4918,6 +4925,15 @@ html:has(.drawer-toggle:checked) {
   --tab-padding: 0.5rem;
 }
 
+.textarea-sm {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 2rem;
+}
+
 [type="checkbox"].toggle-sm {
   --handleoffset: 0.75rem;
   height: 1.25rem;
@@ -6475,6 +6491,10 @@ html:has(.drawer-toggle:checked) {
   padding-left: 1rem;
 }
 
+.pl-6 {
+  padding-left: 1.5rem;
+}
+
 .pr-10 {
   padding-right: 2.5rem;
 }
@@ -6630,6 +6650,10 @@ html:has(.drawer-toggle:checked) {
   color: var(--fallback-bc,oklch(var(--bc)/0.7));
 }
 
+.text-base-content\/80 {
+  color: var(--fallback-bc,oklch(var(--bc)/0.8));
+}
+
 .text-black {
   --tw-text-opacity: 1;
   color: rgb(0 0 0 / var(--tw-text-opacity));
@@ -6680,11 +6704,6 @@ html:has(.drawer-toggle:checked) {
   color: var(--fallback-in,oklch(var(--in)/var(--tw-text-opacity)));
 }
 
-.text-neutral-content {
-  --tw-text-opacity: 1;
-  color: var(--fallback-nc,oklch(var(--nc)/var(--tw-text-opacity)));
-}
-
 .text-orange-500 {
   --tw-text-opacity: 1;
   color: rgb(249 115 22 / var(--tw-text-opacity));
@@ -6723,6 +6742,10 @@ html:has(.drawer-toggle:checked) {
 .text-warning {
   --tw-text-opacity: 1;
   color: var(--fallback-wa,oklch(var(--wa)/var(--tw-text-opacity)));
+}
+
+.text-warning\/80 {
+  color: var(--fallback-wa,oklch(var(--wa)/0.8));
 }
 
 .text-white {
@@ -6885,6 +6908,10 @@ html:has(.drawer-toggle:checked) {
 
 .duration-300 {
   transition-duration: 300ms;
+}
+
+.duration-500 {
+  transition-duration: 500ms;
 }
 
 .duration-75 {

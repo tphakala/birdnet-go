@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
@@ -50,7 +51,12 @@ func (t *TemplateRenderer) validateErrorTemplates() error {
 	requiredTemplates := []string{"error-404", "error-500", "error-default"}
 	for _, name := range requiredTemplates {
 		if tmpl := t.templates.Lookup(name); tmpl == nil {
-			return fmt.Errorf("required error template not found: %s", name)
+			return errors.Newf("required error template not found: %s", name).
+				Component("template_renderer").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "validate_error_templates").
+				Context("template_name", name).
+				Build()
 		}
 	}
 	return nil
@@ -67,7 +73,14 @@ func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c 
 		} else {
 			log.Printf("ERROR (TemplateRenderer): Error executing template %s: %v", name, err)
 		}
-		return err
+		// Wrap the error with enhanced error handling
+		return errors.New(err).
+			Component("template_renderer").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "execute_template").
+			Context("template_name", name).
+			Context("error_detail", err.Error()).
+			Build()
 	}
 
 	// If execution was successful, write the result to the original writer
@@ -78,8 +91,15 @@ func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c 
 		} else {
 			log.Printf("ERROR (TemplateRenderer): Error writing template result for %s: %v", name, err)
 		}
+		// Wrap the error with enhanced error handling
+		return errors.New(err).
+			Component("template_renderer").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_template_result").
+			Context("template_name", name).
+			Build()
 	}
-	return err
+	return nil
 }
 
 // setupTemplateRenderer configures the template renderer for the server
@@ -114,7 +134,12 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	d, ok := data.(RenderData)
 	if !ok {
 		// Return an error if the data type is invalid
-		return "", fmt.Errorf("invalid data type: %s", data)
+		return "", errors.Newf("invalid data type for RenderContent: %T", data).
+			Component("template_renderer").
+			Category(errors.CategoryValidation).
+			Context("operation", "render_content").
+			Context("data_type", fmt.Sprintf("%T", data)).
+			Build()
 	}
 
 	// Extract the context from the data
@@ -132,7 +157,12 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 
 	if !isPageRoute && !isFragment && !isLoginRoute {
 		// Return an error if no route is found for the path
-		return "", fmt.Errorf("no route found for path: %s", path)
+		return "", errors.Newf("no route found for path: %s", path).
+			Component("template_renderer").
+			Category(errors.CategoryValidation).
+			Context("operation", "find_route").
+			Context("path", path).
+			Build()
 	}
 
 	// Create a buffer to store the rendered template
@@ -142,7 +172,13 @@ func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
 	err := s.Echo.Renderer.Render(buf, d.Page, d, c)
 	if err != nil {
 		// Return an error if template rendering fails
-		return "", err
+		return "", errors.New(err).
+			Component("template_renderer").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "render_page_content").
+			Context("page", d.Page).
+			Context("path", path).
+			Build()
 	}
 
 	// Return the rendered template as HTML
@@ -228,7 +264,14 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 		log.Printf("ERROR: Failed to render settings content: %v", err)
 		// Log the template data that caused the error
 		log.Printf("ERROR: Template data dump: %+v", data)
-		return "", err
+		return "", errors.New(err).
+			Component("template_renderer").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "render_settings_content").
+			Context("template_name", templateName).
+			Context("settings_type", settingsType).
+			Context("path", path).
+			Build()
 	}
 
 	// Return the rendered HTML

@@ -73,17 +73,16 @@
                 </div>
             </label>
             <div class="join">
-                <input type="text" id="systemID" value="{{.Settings.SystemID}}" class="input input-bordered join-item w-full font-mono" readonly />
-                <button type="button" class="btn join-item" onclick="navigator.clipboard.writeText('{{.Settings.SystemID}}').then(() => { 
-                    const btn = event.target;
-                    const originalText = btn.innerHTML;
-                    btn.innerHTML = 'Copied!';
-                    btn.classList.add('btn-success');
-                    setTimeout(() => {
-                        btn.innerHTML = originalText;
-                        btn.classList.remove('btn-success');
-                    }, 2000);
-                })">
+                <input type="text" id="systemID" value="{{.Settings.SystemID}}" class="input input-sm input-bordered join-item w-full font-mono text-base-content" readonly />
+                <button type="button" class="btn btn-sm join-item" 
+                        @click="navigator.clipboard.writeText('{{.Settings.SystemID}}').then(() => { 
+                            $el.innerHTML = '✓ Copied!';
+                            $el.classList.add('btn-success');
+                            setTimeout(() => {
+                                $el.innerHTML = '<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; class=&quot;h-5 w-5&quot; fill=&quot;none&quot; viewBox=&quot;0 0 24 24&quot; stroke=&quot;currentColor&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z&quot; /></svg>Copy';
+                                $el.classList.remove('btn-success');
+                            }, 2000);
+                        })">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
@@ -91,7 +90,7 @@
                 </button>
             </div>
             <label class="label">
-                <span class="label-text-alt text-neutral-content">Include this ID when reporting issues if you want developers to identify your error reports</span>
+                <span class="label-text-alt text-base-content/60">Include this ID when reporting issues if you want developers to identify your error reports</span>
             </label>
         </div>
 
@@ -117,32 +116,325 @@
 </div>
 <!-- Sentry Telemetry Settings end -->
 
-<!-- Future Support Features placeholder -->
+<!-- Support Tools -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
      role="region" 
-     aria-labelledby="localSupportHeader">
+     aria-labelledby="supportToolsHeader"
+     x-data="{ 
+        supportOpen: false,
+        generating: false,
+        uploadProgress: false,
+        showTooltip: null,
+        statusMessage: '',
+        statusType: '', // 'info', 'success', 'error'
+        progressPercent: 0,
+        supportDump: {
+            includeLogs: true,
+            includeConfig: true,
+            includeSystemInfo: true,
+            userMessage: '',
+            uploadToSentry: true  // Default to true for upload
+        },
+        checkbox(id, label, model, name) {
+            return {
+                id,
+                label,
+                model,
+                name: name || model
+            }
+        },
+        generateSupportDump() {
+            this.generating = true;
+            this.statusMessage = '';
+            this.statusType = '';
+            this.progressPercent = 0;
+            
+            // Show initial status
+            this.updateStatus('Preparing support dump...', 'info', 10);
+            
+            fetch('/api/v2/support/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF_TOKEN
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    include_logs: this.supportDump.includeLogs,
+                    include_config: this.supportDump.includeConfig,
+                    include_system_info: this.supportDump.includeSystemInfo,
+                    user_message: this.supportDump.userMessage,
+                    upload_to_sentry: this.supportDump.uploadToSentry
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                this.generating = false;
+                if (data.success) {
+                    if (this.supportDump.uploadToSentry && data.uploaded_at) {
+                        this.updateStatus('Support dump successfully uploaded to developers!', 'success', 100);
+                        // Show upload confirmation with reference ID
+                        if (data.dump_id) {
+                            this.statusMessage += ` Reference ID: ${data.dump_id}`;
+                        }
+                    } else if (data.download_url) {
+                        this.updateStatus('Support dump generated successfully! Downloading...', 'success', 100);
+                        // Download the file
+                        setTimeout(() => {
+                            window.location.href = data.download_url;
+                        }, 500);
+                    } else {
+                        this.updateStatus('Support dump generated successfully!', 'success', 100);
+                    }
+                    
+                    // Clear status after 10 seconds
+                    setTimeout(() => {
+                        this.statusMessage = '';
+                        this.statusType = '';
+                        this.progressPercent = 0;
+                    }, 10000);
+                } else {
+                    this.updateStatus('Failed to generate support dump: ' + (data.message || 'Unknown error'), 'error', 0);
+                }
+            })
+            .catch(error => {
+                this.generating = false;
+                this.updateStatus('Error: ' + error.message, 'error', 0);
+            });
+        },
+        updateStatus(message, type, percent) {
+            this.statusMessage = message;
+            this.statusType = type;
+            this.progressPercent = percent;
+            
+            // Simulate progress for long operations
+            if (type === 'info' && percent < 90) {
+                setTimeout(() => {
+                    if (this.generating && this.progressPercent < 90) {
+                        this.progressPercent = Math.min(this.progressPercent + 10, 90);
+                    }
+                }, 1000);
+            }
+        }
+    }">
 
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" 
-           id="localSupportSettingsOpen" 
-           aria-controls="localSupportSettingsContent"
+           id="supportToolsOpen" 
+           x-on:change="supportOpen = !supportOpen"
+           aria-controls="supportToolsContent"
            aria-expanded="true" />
 
     {{template "sectionHeader" dict
-        "id" "localSupport"
-        "title" "Local Support Tools"
-        "description" "Tools for collecting local logs and diagnostic information"}}
+        "id" "supportTools"
+        "title" "Support & Diagnostics"
+        "description" "Help developers fix your issues faster by providing essential diagnostic information"}}
 
     <div class="collapse-content"
-         id="localSupportSettingsContent"
+         id="supportToolsContent"
          role="group" 
-         aria-labelledby="localSupportDescription">
+         aria-labelledby="supportToolsDescription">
 
-        <div class="alert alert-warning" role="alert">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        <!-- Support Dump Generation -->
+        <div class="card bg-base-200">
+            <div class="card-body">
+                <h3 class="card-title text-lg">Generate Support Report</h3>
+                
+                <!-- Enhanced Description -->
+                <div class="space-y-3 mb-4">
+                    <p class="text-sm text-base-content/80">
+                        Support reports are <strong>essential for troubleshooting</strong> and dramatically improve our ability to resolve issues you're experiencing. They provide developers with crucial context about your system configuration, recent application logs, and error patterns that would be impossible to diagnose otherwise.
+                    </p>
+                    
+                    <div class="alert alert-warning shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <div>
+                            <h4 class="font-bold">Important: File a GitHub Issue</h4>
+                            <p class="text-sm">
+                                Please <a href="https://github.com/tphakala/birdnet-go/issues/new" target="_blank" class="link link-primary font-semibold">create a GitHub issue</a> describing your problem <strong>before or after</strong> generating this support report. This allows for proper tracking and communication about your issue.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-base-100 rounded-lg p-3 border border-base-300">
+                        <h4 class="font-semibold text-sm mb-2">What's included in the report:</h4>
+                        <ul class="text-xs space-y-1 text-base-content/70">
+                            <li class="flex items-start gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span><strong>Application logs</strong> - Recent errors and debug information</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span><strong>Configuration</strong> - Your settings with sensitive data removed</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span><strong>System information</strong> - OS version, memory, and runtime details</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span><strong>NOT included</strong> - Audio files, bird detections, or personal data</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Options -->
+                <div class="space-y-2">
+                    {{template "checkbox" dict
+                        "id" "includeLogs"
+                        "model" "supportDump.includeLogs"
+                        "name" "support.includeLogs"
+                        "label" "Include recent logs"
+                        "tooltip" "Include application logs from the last 24 hours to help diagnose issues"}}
+
+                    {{template "checkbox" dict
+                        "id" "includeConfig"
+                        "model" "supportDump.includeConfig"
+                        "name" "support.includeConfig"
+                        "label" "Include configuration (sensitive data removed)"
+                        "tooltip" "Include your configuration file with all sensitive information automatically removed"}}
+
+                    {{template "checkbox" dict
+                        "id" "includeSystemInfo"
+                        "model" "supportDump.includeSystemInfo"
+                        "name" "support.includeSystemInfo"
+                        "label" "Include system information"
+                        "tooltip" "Include basic system information like OS version, memory, and disk usage"}}
+
+                    <!-- User Message -->
+                    <div class="form-control mt-4">
+                        <label class="label" for="userMessage">
+                            <span class="label-text">Describe the issue</span>
+                            <span class="help-icon" @mouseenter="showTooltip = 'userMessage'"
+                                @mouseleave="showTooltip = null">ⓘ</span>
+                        </label>
+                        <textarea 
+                            id="userMessage"
+                            x-model="supportDump.userMessage" 
+                            class="textarea textarea-bordered textarea-sm h-24 text-base-content" 
+                            placeholder="Please describe the issue and include GitHub issue link if applicable (e.g., #123)"
+                            rows="4"></textarea>
+                        
+                        <!-- Tooltip -->
+                        <div x-show="showTooltip === 'userMessage'" x-cloak
+                            class="tooltip">
+                            Provide details about the problem to help developers understand and fix the issue
+                        </div>
+                        
+                        <!-- GitHub Issue Note -->
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">
+                                💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123) and mention your System ID <span class="font-mono text-xs">{{.Settings.SystemID}}</span> in the GitHub issue to help developers link your support data.
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- Upload Option (only shown if telemetry is enabled) -->
+                    <div x-show="{{.Settings.Sentry.Enabled}}" class="mt-4">
+                        {{template "checkbox" dict
+                            "id" "uploadToSentry"
+                            "model" "supportDump.uploadToSentry"
+                            "name" "support.uploadToSentry"
+                            "label" "Upload to developers (recommended)"
+                            "tooltip" "Upload the support report to developers for analysis via Sentry's secure cloud service."}}
+                        <div class="pl-6 mt-2 space-y-2">
+                            <div class="text-xs text-base-content/60">
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Data is uploaded to <a href="https://sentry.io" target="_blank" class="link link-primary">Sentry</a> cloud service
+                                </p>
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Stored in EU data center (Frankfurt, Germany)
+                                </p>
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    Privacy-compliant with sensitive data removed
+                                </p>
+                            </div>
+                            <div class="text-xs text-warning/80 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Uncheck only if you prefer to handle the support file manually
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Message -->
+                <div x-show="statusMessage" x-transition class="mt-4">
+                    <div class="alert" 
+                         :class="{
+                            'alert-info': statusType === 'info',
+                            'alert-success': statusType === 'success',
+                            'alert-error': statusType === 'error'
+                         }">
+                        <svg x-show="statusType === 'info'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <svg x-show="statusType === 'success'" xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg x-show="statusType === 'error'" xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span x-text="statusMessage"></span>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div x-show="generating && progressPercent > 0" class="mt-2">
+                        <div class="w-full bg-base-300 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full transition-all duration-500" 
+                                 :style="`width: ${progressPercent}%`"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <div class="card-actions justify-end mt-6">
+                    <button 
+                        @click="generateSupportDump()"
+                        :disabled="generating || (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo)"
+                        class="btn btn-primary"
+                        :class="{'btn-disabled': generating || (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo)}">
+                        <span x-show="!generating" class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                            </svg>
+                            <span x-text="supportDump.uploadToSentry ? 'Generate & Upload' : 'Generate & Download'"></span>
+                        </span>
+                        <span x-show="generating" class="loading loading-spinner loading-sm"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Privacy Notice -->
+        <div class="alert alert-info mt-4" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <div>
-                <h3 class="font-bold">Coming Soon</h3>
-                <p class="text-sm">Local log collection and diagnostic tools will be available in a future update. These tools will help you collect system logs and diagnostic information for troubleshooting without sending data externally.</p>
+                <h3 class="font-bold">Privacy & Data Protection</h3>
+                <div class="text-sm mt-1">
+                    <p>Support reports are designed to protect your privacy:</p>
+                    <ul class="list-disc list-inside mt-2 space-y-1">
+                        <li>Passwords, API keys, and tokens are automatically removed</li>
+                        <li>No audio recordings or bird detection data is included</li>
+                        <li>Only application logs and scrubbed configuration are collected</li>
+                        <li>Data is encrypted in transit and at rest</li>
+                        <li>Uploaded data is retained for 90 days in Sentry's EU data center</li>
+                        <li>You can download the report locally before deciding to upload</li>
+                    </ul>
+                    <p class="mt-2 text-xs">
+                        Learn more about <a href="https://docs.sentry.io/organization/data-storage-location/" target="_blank" class="link link-primary">Sentry's data storage</a> and <a href="https://sentry.io/security/" target="_blank" class="link link-primary">security practices</a>.
+                    </p>
+                </div>
             </div>
         </div>
     </div>
