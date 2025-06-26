@@ -1,4 +1,4 @@
-// weather_test.go provides HTTP handlers for weather provider testing functionality
+// weather_testing.go provides HTTP handlers for weather provider testing functionality
 package handlers
 
 import (
