@@ -245,14 +245,14 @@ func scrubMessageForPrivacy(message string) string {
 // basicURLScrub provides basic URL anonymization as fallback
 func basicURLScrub(message string) string {
 	// Regex to match URLs with query parameters
-	urlRegex := regexp.MustCompile(`(https?://[^?\s]+)\?[^\s]*`)
-	
+	urlRegex := regexp.MustCompile(`(https?://[^?\s]+)\?\S*`)
+
 	// Replace query parameters with [REDACTED]
 	scrubbed := urlRegex.ReplaceAllString(message, "$1?[REDACTED]")
-	
+
 	// Also scrub any standalone query parameters that might appear
 	queryParamRegex := regexp.MustCompile(`[?&]([^=\s]+)=([^&\s]+)`)
 	scrubbed = queryParamRegex.ReplaceAllString(scrubbed, "?[REDACTED]")
-	
+
 	return scrubbed
 }
