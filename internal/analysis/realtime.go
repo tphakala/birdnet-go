@@ -29,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/weather"
+	"golang.org/x/time/rate"
 )
 
 // audioLevelChan is a channel to send audio level updates
@@ -979,6 +980,9 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 		defer wg.Done()
 		log.Println("📡 Started sound level SSE publisher")
 
+		// Create a rate limiter: 1 log per minute
+		errorLogLimiter := rate.NewLimiter(rate.Every(time.Minute), 1)
+
 		for {
 			select {
 			case <-doneChan:
@@ -986,8 +990,8 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 				return
 			case soundData := <-soundLevelChan:
 				if err := broadcastSoundLevelSSE(apiController, soundData); err != nil {
-					// Only log errors occasionally to avoid spam
-					if time.Now().Unix()%60 == 0 {
+					// Only log errors if rate limiter allows
+					if errorLogLimiter.Allow() {
 						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
 					}
 				}
