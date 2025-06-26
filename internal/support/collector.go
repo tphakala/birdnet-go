@@ -657,29 +657,60 @@ func (c *Collector) addConfigToArchive(w *zip.Writer, scrubSensitive bool) error
 	return nil
 }
 
+// logFileCollector encapsulates the state for collecting log files
+type logFileCollector struct {
+	collector  *Collector
+	cutoffTime time.Time
+	maxSize    int64
+	totalSize  int64
+	logsAdded  int
+}
+
 // addLogFilesToArchive adds log files to the archive in their original format
 func (c *Collector) addLogFilesToArchive(w *zip.Writer, duration time.Duration, maxSize int64) error {
-	cutoffTime := time.Now().Add(-duration)
-	totalSize := int64(0)
-
-	// Create logs directory in archive
-	logsAdded := 0
-
-	// Look for log files in common locations
-	logPaths := []string{
-		"logs",                              // Default logs directory from logging package
-		filepath.Join(c.dataPath, "logs"),   // Data directory logs
-		filepath.Join(c.configPath, "logs"), // Config directory logs
+	lfc := &logFileCollector{
+		collector:  c,
+		cutoffTime: time.Now().Add(-duration),
+		maxSize:    maxSize,
+		totalSize:  0,
+		logsAdded:  0,
 	}
 
-	// Also try to find logs relative to current working directory
-	if cwd, err := os.Getwd(); err == nil {
-		logPaths = append(logPaths, filepath.Join(cwd, "logs"))
+	// Get unique log paths
+	uniquePaths := c.getUniqueLogPaths()
+
+	// Process each log path
+	for _, logPath := range uniquePaths {
+		if lfc.totalSize >= lfc.maxSize {
+			break
+		}
+
+		if err := lfc.processLogPath(w, logPath); err != nil {
+			// Continue with next path on error
+			continue
+		}
 	}
 
-	// Remove duplicates
+	// Add journald logs
+	if err := lfc.addJournaldLogs(w, duration); err == nil {
+		lfc.logsAdded++
+	}
+
+	// Add README if no logs found
+	if lfc.logsAdded == 0 {
+		lfc.addNoLogsNote(w)
+	}
+
+	return nil
+}
+
+// getUniqueLogPaths returns deduplicated list of log paths to check
+func (c *Collector) getUniqueLogPaths() []string {
+	logPaths := c.getLogSearchPaths()
+
 	seen := make(map[string]bool)
 	uniquePaths := []string{}
+
 	for _, path := range logPaths {
 		if absPath, err := filepath.Abs(path); err == nil {
 			if !seen[absPath] {
@@ -689,79 +720,191 @@ func (c *Collector) addLogFilesToArchive(w *zip.Writer, duration time.Duration, 
 		}
 	}
 
-	for _, logPath := range uniquePaths {
-		info, err := os.Stat(logPath)
-		if err != nil {
+	return uniquePaths
+}
+
+// getLogSearchPaths returns all paths where logs might be located
+func (c *Collector) getLogSearchPaths() []string {
+	paths := []string{
+		"logs",                              // Default logs directory
+		filepath.Join(c.dataPath, "logs"),   // Data directory logs
+		filepath.Join(c.configPath, "logs"), // Config directory logs
+	}
+
+	// Add current working directory logs
+	if cwd, err := os.Getwd(); err == nil {
+		paths = append(paths, filepath.Join(cwd, "logs"))
+	}
+
+	return paths
+}
+
+// processLogPath processes a single log path (file or directory)
+func (lfc *logFileCollector) processLogPath(w *zip.Writer, logPath string) error {
+	info, err := os.Stat(logPath)
+	if err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "stat_log_path").
+			Context("path", logPath).
+			Build()
+	}
+
+	if info.IsDir() {
+		return lfc.processLogDirectory(w, logPath)
+	}
+
+	// Process single log file
+	return lfc.processSingleLogFile(w, logPath, info)
+}
+
+// processLogDirectory processes all log files in a directory
+func (lfc *logFileCollector) processLogDirectory(w *zip.Writer, dirPath string) error {
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_log_directory").
+			Context("path", dirPath).
+			Build()
+	}
+
+	for _, file := range files {
+		if lfc.totalSize >= lfc.maxSize {
+			break
+		}
+
+		if !lfc.isLogFile(file.Name()) {
 			continue
 		}
 
-		if info.IsDir() {
-			// Add all log files from directory
-			files, err := os.ReadDir(logPath)
-			if err != nil {
-				continue
-			}
-
-			for _, file := range files {
-				if !strings.HasSuffix(file.Name(), ".log") {
-					continue
-				}
-
-				filePath := filepath.Join(logPath, file.Name())
-				fileInfo, err := file.Info()
-				if err != nil {
-					continue
-				}
-
-				// Skip old files
-				if fileInfo.ModTime().Before(cutoffTime) {
-					// Log skipped file for debugging
-					continue
-				}
-
-				// Check size limit
-				if totalSize+fileInfo.Size() > maxSize {
-					break
-				}
-
-				// Add file to archive
-				if err := c.addFileToArchive(w, filePath, filepath.Join("logs", file.Name())); err == nil {
-					totalSize += fileInfo.Size()
-					logsAdded++
-				}
-			}
-		} else if totalSize+info.Size() <= maxSize {
-			// Single log file
-			if err := c.addFileToArchive(w, logPath, filepath.Join("logs", filepath.Base(logPath))); err == nil {
-				totalSize += info.Size()
-				logsAdded++
-			}
-		}
-
-		if totalSize >= maxSize {
-			break
-		}
-	}
-
-	// Add journald logs if available
-	if journalLogs := c.getJournaldLogs(duration); journalLogs != "" {
-		journalFile, err := w.Create("logs/journald.log")
-		if err == nil {
-			if _, err := journalFile.Write([]byte(journalLogs)); err == nil {
-				logsAdded++
-			}
-		}
-	}
-
-	if logsAdded == 0 {
-		// Add a note if no logs were found
-		noteFile, _ := w.Create("logs/README.txt")
-		if noteFile != nil {
-			_, _ = noteFile.Write([]byte("No log files were found or all logs were older than the specified duration."))
+		if err := lfc.processLogFileEntry(w, dirPath, file); err != nil {
+			// Continue with next file on error
+			continue
 		}
 	}
 
 	return nil
+}
+
+// processLogFileEntry processes a single log file entry from a directory
+func (lfc *logFileCollector) processLogFileEntry(w *zip.Writer, dirPath string, file os.DirEntry) error {
+	filePath := filepath.Join(dirPath, file.Name())
+	fileInfo, err := file.Info()
+	if err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "get_file_info").
+			Context("file", file.Name()).
+			Build()
+	}
+
+	// Check if file is within time range
+	if !lfc.isFileWithinTimeRange(fileInfo) {
+		return nil
+	}
+
+	// Check if adding file would exceed size limit
+	if !lfc.canAddFile(fileInfo.Size()) {
+		return nil
+	}
+
+	// Add file to archive
+	archivePath := filepath.Join("logs", file.Name())
+	if err := lfc.collector.addFileToArchive(w, filePath, archivePath); err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "add_log_to_archive").
+			Context("file", file.Name()).
+			Build()
+	}
+
+	lfc.totalSize += fileInfo.Size()
+	lfc.logsAdded++
+	return nil
+}
+
+// processSingleLogFile processes a single log file (not in a directory)
+func (lfc *logFileCollector) processSingleLogFile(w *zip.Writer, logPath string, info os.FileInfo) error {
+	if !lfc.canAddFile(info.Size()) {
+		return nil
+	}
+
+	archivePath := filepath.Join("logs", filepath.Base(logPath))
+	if err := lfc.collector.addFileToArchive(w, logPath, archivePath); err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "add_single_log_to_archive").
+			Context("file", logPath).
+			Build()
+	}
+
+	lfc.totalSize += info.Size()
+	lfc.logsAdded++
+	return nil
+}
+
+// isLogFile checks if a file is a log file based on its extension
+func (lfc *logFileCollector) isLogFile(filename string) bool {
+	return strings.HasSuffix(filename, ".log")
+}
+
+// isFileWithinTimeRange checks if file modification time is within the collection range
+func (lfc *logFileCollector) isFileWithinTimeRange(info os.FileInfo) bool {
+	return !info.ModTime().Before(lfc.cutoffTime)
+}
+
+// canAddFile checks if a file can be added without exceeding size limit
+func (lfc *logFileCollector) canAddFile(fileSize int64) bool {
+	return lfc.totalSize+fileSize <= lfc.maxSize
+}
+
+// addJournaldLogs adds systemd journal logs to the archive
+func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Duration) error {
+	journalLogs := lfc.collector.getJournaldLogs(duration)
+	if journalLogs == "" {
+		return errors.Newf("no journald logs available").
+			Component("support").
+			Category(errors.CategorySystem).
+			Context("operation", "get_journald_logs").
+			Build()
+	}
+
+	journalFile, err := w.Create("logs/journald.log")
+	if err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_journald_file").
+			Build()
+	}
+
+	if _, err := journalFile.Write([]byte(journalLogs)); err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_journald_logs").
+			Build()
+	}
+
+	return nil
+}
+
+// addNoLogsNote adds a README when no logs are found
+func (lfc *logFileCollector) addNoLogsNote(w *zip.Writer) {
+	noteFile, err := w.Create("logs/README.txt")
+	if err != nil {
+		// Non-critical error, don't propagate
+		return
+	}
+
+	message := "No log files were found or all logs were older than the specified duration."
+	_, _ = noteFile.Write([]byte(message))
 }
 
 // addFileToArchive adds a single file to the zip archive
