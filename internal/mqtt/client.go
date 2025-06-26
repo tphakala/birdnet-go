@@ -395,7 +395,7 @@ func (c *client) Publish(ctx context.Context, topic, payload string) error {
 			return ctxErr
 		}
 		// If context is okay, return a specific timeout error
-		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "timeout") // Count timeout as an error
+		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_timeout") // Count timeout as an error
 		enhancedErr := errors.Newf("publish timeout after %v", c.config.PublishTimeout).
 			Component("mqtt").
 			Category(errors.CategoryMQTTPublish).
