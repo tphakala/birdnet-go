@@ -115,10 +115,16 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	event.Message = "User Support Request"
 	event.Timestamp = time.Now()
 
+	// Create a copy of metadata to avoid modifying the input
+	supportContext := make(map[string]interface{})
+	for k, v := range metadata {
+		supportContext[k] = v
+	}
+	supportContext["system_id"] = systemID
+	supportContext["message"] = message
+	
 	// Add contexts
-	event.Contexts["support"] = metadata
-	event.Contexts["support"]["system_id"] = systemID
-	event.Contexts["support"]["message"] = message
+	event.Contexts["support"] = supportContext
 
 	// Set user
 	event.User = sentry.User{
