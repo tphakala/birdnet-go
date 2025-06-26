@@ -35,6 +35,7 @@ type ControlMonitor struct {
 	unifiedAudioChan     chan myaudio.UnifiedAudioData
 	unifiedAudioDoneChan chan struct{}
 	unifiedAudioMutex    sync.Mutex
+	unifiedAudioWg       sync.WaitGroup
 
 	// Track sound level publisher goroutines
 	soundLevelPublishersWg    *sync.WaitGroup
@@ -197,8 +198,10 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	// Close previous goroutine if it exists
 	if cm.unifiedAudioDoneChan != nil {
 		close(cm.unifiedAudioDoneChan)
-		// Give the goroutine time to exit
-		time.Sleep(100 * time.Millisecond)
+		// Wait for the goroutine to fully exit using WaitGroup
+		cm.unifiedAudioMutex.Unlock()
+		cm.unifiedAudioWg.Wait()
+		cm.unifiedAudioMutex.Lock()
 	}
 
 	// Close previous channel if it exists
@@ -214,9 +217,13 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	doneChan := cm.unifiedAudioDoneChan
 	unifiedChan := cm.unifiedAudioChan
 
+	// Add to WaitGroup before starting the goroutine
+	cm.unifiedAudioWg.Add(1)
+
 	cm.unifiedAudioMutex.Unlock()
 
 	go func() {
+		defer cm.unifiedAudioWg.Done()
 		// Convert unified audio data back to separate channels for existing handlers
 		for {
 			select {
