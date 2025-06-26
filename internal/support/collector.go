@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -226,10 +227,16 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		DiskInfo:     []DiskInfo{},
 	}
 
-	// Get memory info (simplified, platform-specific implementations would be better)
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-	info.MemoryMB = memStats.Sys / 1024 / 1024
+	// Get system memory info using gopsutil
+	memInfo, err := mem.VirtualMemory()
+	if err == nil {
+		info.MemoryMB = memInfo.Total / 1024 / 1024
+	} else {
+		// Fallback to runtime memory stats if gopsutil fails
+		var memStats runtime.MemStats
+		runtime.ReadMemStats(&memStats)
+		info.MemoryMB = memStats.Sys / 1024 / 1024
+	}
 
 	// Collect disk information
 	partitions, err := disk.Partitions(false)
@@ -876,9 +883,9 @@ func (lfc *logFileCollector) processSingleLogFile(w *zip.Writer, logPath string,
 	return nil
 }
 
-// isLogFile checks if a file is a log file based on its extension
+// isLogFile checks if a file is a log file based on its suffix
 func (lfc *logFileCollector) isLogFile(filename string) bool {
-	return strings.HasSuffix(filename, ".log")
+	return strings.HasSuffix(strings.ToLower(filename), "log")
 }
 
 // isFileWithinTimeRange checks if file modification time is within the collection range

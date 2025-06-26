@@ -25,8 +25,8 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 	}{
 		{"standard log file", "application.log", true},
 		{"rotated log file", "birdweather-2025-06-25T15-36-29.209.log", true},
-		{"uppercase extension", "ERROR.LOG", false},
-		{"no extension", "logfile", false},
+		{"uppercase extension", "ERROR.LOG", true},
+		{"no extension logfile", "logfile", false},
 		{"different extension", "data.txt", false},
 		{"hidden log file", ".hidden.log", true},
 		{"log in filename", "mylog.txt", false},
@@ -34,6 +34,13 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 		{"only extension", ".log", true},
 		{"path with log file", "/path/to/file.log", true},
 		{"path without log file", "/path/to/file.txt", false},
+		{"custom log suffix", "app.debuglog", true},
+		{"custom log suffix uppercase", "app.ERRORLOG", true},
+		{"another log suffix", "system.applog", true},
+		{"ends with log word", "mylog", true},
+		{"ends with LOG uppercase", "MYLOG", true},
+		{"log in middle", "logdata.txt", false},
+		{"composite extension", "file.log.bak", false},
 	}
 
 	for _, tt := range tests {
