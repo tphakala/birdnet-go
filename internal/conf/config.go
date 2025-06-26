@@ -57,13 +57,20 @@ type RetentionSettings struct {
 }
 
 // AudioSettings contains settings for audio processing and export.
+// SoundLevelSettings contains settings for sound level monitoring
+type SoundLevelSettings struct {
+	Enabled  bool // true to enable sound level monitoring
+	Interval int  // measurement interval in seconds (default: 10)
+}
+
 type AudioSettings struct {
-	Source          string         // audio source to use for analysis
-	FfmpegPath      string         // path to ffmpeg, runtime value
-	SoxPath         string         // path to sox, runtime value
-	SoxAudioTypes   []string       `yaml:"-"` // supported audio types of sox, runtime value
-	StreamTransport string         // preferred transport for audio streaming: "auto", "sse", or "ws"
-	Export          ExportSettings // export settings
+	Source          string             // audio source to use for analysis
+	FfmpegPath      string             // path to ffmpeg, runtime value
+	SoxPath         string             // path to sox, runtime value
+	SoxAudioTypes   []string           `yaml:"-"` // supported audio types of sox, runtime value
+	StreamTransport string             // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          ExportSettings     // export settings
+	SoundLevel      SoundLevelSettings // sound level monitoring settings
 
 	Equalizer EqualizerSettings // equalizer settings
 }

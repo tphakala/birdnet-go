@@ -174,18 +174,25 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 
-	// start sound level MQTT publisher if MQTT is enabled
-	if settings.Realtime.MQTT.Enabled {
-		startSoundLevelMQTTPublisher(&wg, quitChan, proc)
-	}
+	// start sound level publishers only if sound level monitoring is enabled
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		// start sound level MQTT publisher if MQTT is enabled
+		if settings.Realtime.MQTT.Enabled {
+			startSoundLevelMQTTPublisher(&wg, quitChan, proc)
+		}
 
-	// start sound level SSE publisher
-	if httpServer.APIV2 != nil {
-		startSoundLevelSSEPublisher(&wg, quitChan, httpServer.APIV2)
-	}
+		// start sound level SSE publisher
+		if httpServer.APIV2 != nil {
+			startSoundLevelSSEPublisher(&wg, quitChan, httpServer.APIV2)
+		}
 
-	// start sound level metrics publisher
-	startSoundLevelMetricsPublisher(&wg, quitChan, metrics)
+		// start sound level metrics publisher
+		startSoundLevelMetricsPublisher(&wg, quitChan, metrics)
+
+		log.Println("🔊 Sound level monitoring enabled")
+	} else {
+		log.Println("🔇 Sound level monitoring disabled")
+	}
 
 	// Start RTSP health watchdog if we have RTSP streams
 	if len(settings.Realtime.RTSP.URLs) > 0 {
