@@ -81,7 +81,7 @@ type CollectorOptions struct {
 }
 
 // DefaultCollectorOptions returns default collector options with sensible defaults:
-// includes all data types, 4-week log window, 10MB max log size, and sensitive data scrubbing enabled.
+// includes all data types, 4-week log window, 50MB max log size, and sensitive data scrubbing enabled.
 func DefaultCollectorOptions() CollectorOptions {
 	return CollectorOptions{
 		IncludeLogs:       true,
