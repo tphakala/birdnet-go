@@ -31,6 +31,19 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 			Build()
 	}
 
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return errors.New(ctx.Err()).
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", "upload_support_dump").
+			Context("reason", "context_cancelled_before_upload").
+			Build()
+	default:
+		// Continue with upload
+	}
+
 	// Create a new event specifically for support dumps
 	now := time.Now()
 	event := sentry.NewEvent()
@@ -93,10 +106,25 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 			Build()
 	}
 
-	// Flush to ensure the event is sent
-	Flush(5 * time.Second)
+	// Flush to ensure the event is sent with context awareness
+	flushDone := make(chan struct{})
+	go func() {
+		Flush(5 * time.Second)
+		close(flushDone)
+	}()
 
-	return nil
+	// Wait for flush or context cancellation
+	select {
+	case <-ctx.Done():
+		return errors.New(ctx.Err()).
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", "upload_support_dump").
+			Context("reason", "context_cancelled_during_flush").
+			Build()
+	case <-flushDone:
+		return nil
+	}
 }
 
 // CreateSupportEvent creates a support request event without an attachment
@@ -148,6 +176,23 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 			Build()
 	}
 
-	Flush(5 * time.Second)
-	return nil
+	// Flush with context awareness
+	flushDone := make(chan struct{})
+	go func() {
+		Flush(5 * time.Second)
+		close(flushDone)
+	}()
+
+	// Wait for flush or context cancellation
+	select {
+	case <-ctx.Done():
+		return errors.New(ctx.Err()).
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_support_event").
+			Context("reason", "context_cancelled_during_flush").
+			Build()
+	case <-flushDone:
+		return nil
+	}
 }
