@@ -13,20 +13,20 @@ import (
 
 // OctaveBandData represents sound level statistics for a single 1/3rd octave band
 type OctaveBandData struct {
-	CenterFreq float64 `json:"center_frequency_hz"`
-	Min        float64 `json:"min_db"`
-	Max        float64 `json:"max_db"`
-	Mean       float64 `json:"mean_db"`
-	SampleCount int    `json:"-"` // Internal use only
+	CenterFreq  float64 `json:"center_frequency_hz"`
+	Min         float64 `json:"min_db"`
+	Max         float64 `json:"max_db"`
+	Mean        float64 `json:"mean_db"`
+	SampleCount int     `json:"-"` // Internal use only
 }
 
 // SoundLevelData represents complete sound level measurements for all octave bands
 type SoundLevelData struct {
-	Timestamp   time.Time                    `json:"timestamp"`
-	Source      string                       `json:"source"`
-	Name        string                       `json:"name"`
-	Duration    int                          `json:"duration_seconds"`
-	OctaveBands map[string]OctaveBandData   `json:"octave_bands"`
+	Timestamp   time.Time                 `json:"timestamp"`
+	Source      string                    `json:"source"`
+	Name        string                    `json:"name"`
+	Duration    int                       `json:"duration_seconds"`
+	OctaveBands map[string]OctaveBandData `json:"octave_bands"`
 }
 
 // Standard 1/3rd octave band center frequencies (Hz) - ISO 266 standard
@@ -47,17 +47,17 @@ type octaveBandFilter struct {
 
 // soundLevelProcessor handles 1/3rd octave sound level analysis
 type soundLevelProcessor struct {
-	source       string
-	name         string
-	sampleRate   int
-	filters      []*octaveBandFilter
-	
+	source     string
+	name       string
+	sampleRate int
+	filters    []*octaveBandFilter
+
 	// 1-second aggregation buffers
 	secondBuffers map[string]*octaveBandBuffer
-	
+
 	// 10-second aggregation
 	tenSecondBuffer *tenSecondAggregator
-	
+
 	mutex sync.RWMutex
 }
 
@@ -79,11 +79,11 @@ type tenSecondAggregator struct {
 // newSoundLevelProcessor creates a new sound level processor for the given source
 func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 	processor := &soundLevelProcessor{
-		source:          source,
-		name:           name,
-		sampleRate:     conf.SampleRate,
-		filters:        make([]*octaveBandFilter, 0, len(octaveBandCenterFreqs)),
-		secondBuffers:  make(map[string]*octaveBandBuffer),
+		source:        source,
+		name:          name,
+		sampleRate:    conf.SampleRate,
+		filters:       make([]*octaveBandFilter, 0, len(octaveBandCenterFreqs)),
+		secondBuffers: make(map[string]*octaveBandBuffer),
 		tenSecondBuffer: &tenSecondAggregator{
 			secondMeasurements: make([]map[string]float64, 10),
 			startTime:          time.Now(),
@@ -109,7 +109,7 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 		}
 
 		processor.filters = append(processor.filters, filter)
-		
+
 		// Initialize 1-second buffer for this band
 		bandKey := formatBandKey(centerFreq)
 		processor.secondBuffers[bandKey] = &octaveBandBuffer{
@@ -145,7 +145,7 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 	nyquist := sampleRate / 2.0
 	lowFreq := centerFreq / math.Pow(2, 1.0/6.0)
 	highFreq := centerFreq * math.Pow(2, 1.0/6.0)
-	
+
 	// Ensure frequencies are within valid range
 	if lowFreq <= 0 || highFreq >= nyquist {
 		return nil, errors.Newf("filter frequencies out of range: low=%f, high=%f, nyquist=%f", lowFreq, highFreq, nyquist).
@@ -159,15 +159,15 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 	// Normalize frequencies
 	wl := 2.0 * math.Pi * lowFreq / sampleRate
 	wh := 2.0 * math.Pi * highFreq / sampleRate
-	
+
 	// Simplified bandpass filter design (2nd order Butterworth)
 	// This is a basic implementation - for production use, consider more sophisticated filter design
 	wc := math.Sqrt(wl * wh) // Geometric mean
-	bw := wh - wl           // Bandwidth
-	
+	bw := wh - wl            // Bandwidth
+
 	r := 1 - 3*bw
 	k := (1 - 2*r*math.Cos(wc) + r*r) / (2 - 2*math.Cos(wc))
-	
+
 	filter.a1 = 2 * r * math.Cos(wc)
 	filter.a2 = -r * r
 	filter.b0 = 1 - k
@@ -181,13 +181,13 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 func (f *octaveBandFilter) processAudioSample(input float64) float64 {
 	// Apply filter equation: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
 	output := f.b0*input + f.b1*f.x1 + f.b2*f.x2 - f.a1*f.y1 - f.a2*f.y2
-	
+
 	// Update state variables
 	f.x2 = f.x1
 	f.x1 = input
 	f.y2 = f.y1
 	f.y1 = output
-	
+
 	return output
 }
 
@@ -208,7 +208,7 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	// Convert bytes to float64 samples
 	sampleCount := len(samples) / 2
 	audioSamples := make([]float64, sampleCount)
-	
+
 	for i := 0; i < sampleCount; i++ {
 		// Convert 16-bit little-endian to float64
 		sample := int16(samples[i*2]) | int16(samples[i*2+1])<<8
@@ -220,38 +220,38 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	for _, filter := range p.filters {
 		bandKey := formatBandKey(filter.centerFreq)
 		buffer := p.secondBuffers[bandKey]
-		
+
 		// Process each audio sample through this filter
 		for _, sample := range audioSamples {
 			filteredSample := filter.processAudioSample(sample)
 			buffer.samples = append(buffer.samples, filteredSample)
 			buffer.sampleCount++
 		}
-		
+
 		// Check if we have accumulated 1 second of data
 		if time.Since(buffer.startTime) >= time.Second {
 			// Calculate RMS for this 1-second window
 			rms := calculateRMS(buffer.samples)
 			levelDB := 20 * math.Log10(math.Max(rms, 1e-10)) // Avoid log(0)
-			
+
 			// Store 1-second measurement in 10-second aggregator
 			currentIdx := p.tenSecondBuffer.currentIndex
 			p.tenSecondBuffer.secondMeasurements[currentIdx][bandKey] = levelDB
-			
+
 			// Reset 1-second buffer
 			buffer.samples = buffer.samples[:0] // Keep capacity, reset length
 			buffer.sampleCount = 0
 			buffer.startTime = now
 		}
 	}
-	
+
 	// Check if 10-second window is complete
 	if time.Since(p.tenSecondBuffer.startTime) >= 10*time.Second {
 		soundLevelData := p.generateSoundLevelData()
 		p.resetTenSecondBuffer()
 		return soundLevelData, nil
 	}
-	
+
 	return nil, nil // 10-second window not yet complete
 }
 
@@ -260,57 +260,57 @@ func calculateRMS(samples []float64) float64 {
 	if len(samples) == 0 {
 		return 0.0
 	}
-	
+
 	sum := 0.0
 	for _, sample := range samples {
 		sum += sample * sample
 	}
-	
+
 	return math.Sqrt(sum / float64(len(samples)))
 }
 
 // generateSoundLevelData creates SoundLevelData from 10-second aggregated measurements
 func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 	octaveBands := make(map[string]OctaveBandData)
-	
+
 	// For each octave band, calculate min/max/mean from the 10 one-second measurements
 	for _, filter := range p.filters {
 		bandKey := formatBandKey(filter.centerFreq)
-		
+
 		var values []float64
 		for _, secondMeasurement := range p.tenSecondBuffer.secondMeasurements {
 			if val, exists := secondMeasurement[bandKey]; exists {
 				values = append(values, val)
 			}
 		}
-		
+
 		if len(values) > 0 {
-			min := values[0]
-			max := values[0]
+			minVal := values[0]
+			maxVal := values[0]
 			sum := 0.0
-			
+
 			for _, val := range values {
-				if val < min {
-					min = val
+				if val < minVal {
+					minVal = val
 				}
-				if val > max {
-					max = val
+				if val > maxVal {
+					maxVal = val
 				}
 				sum += val
 			}
-			
+
 			mean := sum / float64(len(values))
-			
+
 			octaveBands[bandKey] = OctaveBandData{
 				CenterFreq:  filter.centerFreq,
-				Min:         min,
-				Max:         max,
+				Min:         minVal,
+				Max:         maxVal,
 				Mean:        mean,
 				SampleCount: len(values),
 			}
 		}
 	}
-	
+
 	return &SoundLevelData{
 		Timestamp:   time.Now(),
 		Source:      p.source,
@@ -325,7 +325,7 @@ func (p *soundLevelProcessor) resetTenSecondBuffer() {
 	p.tenSecondBuffer.startTime = time.Now()
 	p.tenSecondBuffer.currentIndex = 0
 	p.tenSecondBuffer.full = false
-	
+
 	// Clear all measurements
 	for i := range p.tenSecondBuffer.secondMeasurements {
 		for k := range p.tenSecondBuffer.secondMeasurements[i] {
@@ -352,7 +352,7 @@ var (
 func RegisterSoundLevelProcessor(source, name string) error {
 	soundLevelProcessorMutex.Lock()
 	defer soundLevelProcessorMutex.Unlock()
-	
+
 	processor, err := newSoundLevelProcessor(source, name)
 	if err != nil {
 		return errors.New(err).
@@ -363,7 +363,7 @@ func RegisterSoundLevelProcessor(source, name string) error {
 			Context("name", name).
 			Build()
 	}
-	
+
 	soundLevelProcessors[source] = processor
 	return nil
 }
@@ -372,7 +372,7 @@ func RegisterSoundLevelProcessor(source, name string) error {
 func UnregisterSoundLevelProcessor(source string) {
 	soundLevelProcessorMutex.Lock()
 	defer soundLevelProcessorMutex.Unlock()
-	
+
 	delete(soundLevelProcessors, source)
 }
 
@@ -381,7 +381,7 @@ func ProcessSoundLevelData(source string, audioData []byte) (*SoundLevelData, er
 	soundLevelProcessorMutex.RLock()
 	processor, exists := soundLevelProcessors[source]
 	soundLevelProcessorMutex.RUnlock()
-	
+
 	if !exists {
 		return nil, errors.Newf("no sound level processor registered for source: %s", source).
 			Component("myaudio").
@@ -390,6 +390,6 @@ func ProcessSoundLevelData(source string, audioData []byte) (*SoundLevelData, er
 			Context("source", source).
 			Build()
 	}
-	
+
 	return processor.ProcessAudioData(audioData)
 }
