@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"gopkg.in/yaml.v3"
 )
 
 // Collector collects support data for troubleshooting
@@ -170,7 +169,7 @@ func (c *Collector) collectConfig(scrub bool) (map[string]any, error) {
 	}
 
 	var config map[string]any
-	if err := conf.UnmarshalYAML(data, &config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 

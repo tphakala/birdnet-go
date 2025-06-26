@@ -117,32 +117,160 @@
 </div>
 <!-- Sentry Telemetry Settings end -->
 
-<!-- Future Support Features placeholder -->
+<!-- Support Tools -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
      role="region" 
-     aria-labelledby="localSupportHeader">
+     aria-labelledby="supportToolsHeader"
+     x-data="{ 
+        supportOpen: false,
+        generating: false,
+        uploadProgress: false,
+        supportDump: {
+            includeLogs: true,
+            includeConfig: true,
+            includeSystemInfo: true,
+            userMessage: '',
+            uploadToSentry: false
+        },
+        generateSupportDump() {
+            this.generating = true;
+            
+            // Build form data
+            const formData = new FormData();
+            formData.append('include_logs', this.supportDump.includeLogs);
+            formData.append('include_config', this.supportDump.includeConfig);
+            formData.append('include_system_info', this.supportDump.includeSystemInfo);
+            formData.append('user_message', this.supportDump.userMessage);
+            formData.append('upload_to_sentry', this.supportDump.uploadToSentry);
+            
+            fetch('/api/v1/support/generate', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.generating = false;
+                if (data.success) {
+                    if (data.download_url) {
+                        // Download the file
+                        window.location.href = data.download_url;
+                    }
+                    // Show success notification (will be handled by SSE)
+                } else {
+                    alert('Failed to generate support dump: ' + data.message);
+                }
+            })
+            .catch(error => {
+                this.generating = false;
+                alert('Error generating support dump: ' + error);
+            });
+        }
+    }">
 
     <!-- control collapse element open state and label visibility -->
     <input type="checkbox" 
-           id="localSupportSettingsOpen" 
-           aria-controls="localSupportSettingsContent"
+           id="supportToolsOpen" 
+           x-on:change="supportOpen = !supportOpen"
+           aria-controls="supportToolsContent"
            aria-expanded="true" />
 
     {{template "sectionHeader" dict
-        "id" "localSupport"
-        "title" "Local Support Tools"
-        "description" "Tools for collecting local logs and diagnostic information"}}
+        "id" "supportTools"
+        "title" "Support & Diagnostics"
+        "description" "Generate diagnostic reports for troubleshooting and support"}}
 
     <div class="collapse-content"
-         id="localSupportSettingsContent"
+         id="supportToolsContent"
          role="group" 
-         aria-labelledby="localSupportDescription">
+         aria-labelledby="supportToolsDescription">
 
-        <div class="alert alert-warning" role="alert">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        <!-- Support Dump Generation -->
+        <div class="card bg-base-200">
+            <div class="card-body">
+                <h3 class="card-title text-lg">Generate Support Report</h3>
+                <p class="text-sm text-base-content/70 mb-4">
+                    Create a diagnostic report containing system information, logs, and configuration (with sensitive data removed).
+                </p>
+
+                <!-- Options -->
+                <div class="space-y-4">
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-4">
+                            <input type="checkbox" x-model="supportDump.includeLogs" class="checkbox checkbox-primary" />
+                            <span class="label-text">Include recent logs</span>
+                        </label>
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-4">
+                            <input type="checkbox" x-model="supportDump.includeConfig" class="checkbox checkbox-primary" />
+                            <span class="label-text">Include configuration (sensitive data removed)</span>
+                        </label>
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-4">
+                            <input type="checkbox" x-model="supportDump.includeSystemInfo" class="checkbox checkbox-primary" />
+                            <span class="label-text">Include system information</span>
+                        </label>
+                    </div>
+
+                    <!-- User Message -->
+                    <div class="form-control">
+                        <label class="label" for="userMessage">
+                            <span class="label-text">Describe the issue (optional)</span>
+                        </label>
+                        <textarea 
+                            id="userMessage"
+                            x-model="supportDump.userMessage" 
+                            class="textarea textarea-bordered h-24" 
+                            placeholder="Please describe what issue you're experiencing..."></textarea>
+                    </div>
+
+                    <!-- Upload Option (only shown if telemetry is enabled) -->
+                    <div x-show="{{.Settings.Sentry.Enabled}}" class="form-control">
+                        <label class="label cursor-pointer justify-start gap-4">
+                            <input type="checkbox" x-model="supportDump.uploadToSentry" class="checkbox checkbox-primary" />
+                            <span class="label-text">Upload to developers (via secure telemetry)</span>
+                        </label>
+                        <label class="label">
+                            <span class="label-text-alt text-warning">⚠️ Only enable if you want to share this data with developers</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <div class="card-actions justify-end mt-6">
+                    <button 
+                        @click="generateSupportDump()"
+                        :disabled="generating || (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo)"
+                        class="btn btn-primary">
+                        <span x-show="!generating" class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                            </svg>
+                            <span x-text="supportDump.uploadToSentry ? 'Generate & Upload' : 'Generate & Download'"></span>
+                        </span>
+                        <span x-show="generating" class="loading loading-spinner"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Privacy Notice -->
+        <div class="alert alert-info mt-4" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <div>
-                <h3 class="font-bold">Coming Soon</h3>
-                <p class="text-sm">Local log collection and diagnostic tools will be available in a future update. These tools will help you collect system logs and diagnostic information for troubleshooting without sending data externally.</p>
+                <h3 class="font-bold">Privacy Notice</h3>
+                <div class="text-sm mt-1">
+                    <p>Support reports are designed to protect your privacy:</p>
+                    <ul class="list-disc list-inside mt-2 space-y-1">
+                        <li>Passwords, API keys, and tokens are automatically removed</li>
+                        <li>No audio recordings or bird detection data is included</li>
+                        <li>System paths and hostnames are anonymized</li>
+                        <li>Reports are only uploaded if you explicitly choose to do so</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
