@@ -188,4 +188,3 @@ func RecordMetric(name string, value float64, tags map[string]string) {
 
 	// Note: Detailed metrics are now recorded via spans automatically
 }
-
