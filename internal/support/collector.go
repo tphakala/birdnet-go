@@ -24,10 +24,21 @@ import (
 
 // Collector collects support data for troubleshooting
 type Collector struct {
-	configPath string
-	dataPath   string
-	systemID   string
-	version    string
+	configPath    string
+	dataPath      string
+	systemID      string
+	version       string
+	sensitiveKeys []string
+}
+
+// defaultSensitiveKeys returns the default list of sensitive configuration keys to redact
+func defaultSensitiveKeys() []string {
+	return []string{
+		"password", "token", "secret", "key", "api_key", "api_token",
+		"client_id", "client_secret", "webhook_url", "mqtt_password",
+		"id", "apikey", "username", "broker", "topic", "urls",
+		"mqtt_username", "mqtt_topic", "birdweather_id",
+	}
 }
 
 // NewCollector creates a new support data collector
@@ -41,10 +52,35 @@ func NewCollector(configPath, dataPath, systemID, version string) *Collector {
 	}
 
 	return &Collector{
-		configPath: configPath,
-		dataPath:   dataPath,
-		systemID:   systemID,
-		version:    version,
+		configPath:    configPath,
+		dataPath:      dataPath,
+		systemID:      systemID,
+		version:       version,
+		sensitiveKeys: defaultSensitiveKeys(),
+	}
+}
+
+// NewCollectorWithOptions creates a new support data collector with custom options
+func NewCollectorWithOptions(configPath, dataPath, systemID, version string, sensitiveKeys []string) *Collector {
+	// Set defaults for empty paths
+	if configPath == "" {
+		configPath = "."
+	}
+	if dataPath == "" {
+		dataPath = "."
+	}
+
+	// Use default sensitive keys if none provided
+	if len(sensitiveKeys) == 0 {
+		sensitiveKeys = defaultSensitiveKeys()
+	}
+
+	return &Collector{
+		configPath:    configPath,
+		dataPath:      dataPath,
+		systemID:      systemID,
+		version:       version,
+		sensitiveKeys: sensitiveKeys,
 	}
 }
 
@@ -274,17 +310,9 @@ func (c *Collector) collectConfig(scrub bool) (map[string]any, error) {
 
 // scrubConfig removes sensitive information from configuration
 func (c *Collector) scrubConfig(config map[string]any) map[string]any {
-	// List of sensitive keys to redact (expanded list)
-	sensitiveKeys := []string{
-		"password", "token", "secret", "key", "api_key", "api_token",
-		"client_id", "client_secret", "webhook_url", "mqtt_password",
-		"id", "apikey", "username", "broker", "topic", "urls",
-		"mqtt_username", "mqtt_topic", "birdweather_id",
-	}
-
 	scrubbed := make(map[string]any)
 	for k, v := range config {
-		scrubbed[k] = c.scrubValue(k, v, sensitiveKeys)
+		scrubbed[k] = c.scrubValue(k, v, c.sensitiveKeys)
 	}
 
 	return scrubbed
