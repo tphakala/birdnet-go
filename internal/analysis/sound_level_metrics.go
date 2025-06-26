@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"log"
+	"math"
 	"sync"
 	"time"
 
@@ -58,13 +59,19 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 		)
 	}
 
-	// Calculate overall sound level (simplified - using mean of all bands)
+	// Calculate overall sound level using logarithmic averaging
+	// Sound levels in dB must be converted to power, averaged, then converted back
 	if len(soundData.OctaveBands) > 0 {
-		var totalMean float64
+		var totalPower float64
 		for _, bandData := range soundData.OctaveBands {
-			totalMean += bandData.Mean
+			// Convert dB to power: power = 10^(dB/10)
+			power := math.Pow(10, bandData.Mean/10.0)
+			totalPower += power
 		}
-		overallLevel := totalMean / float64(len(soundData.OctaveBands))
+		// Average the power values
+		avgPower := totalPower / float64(len(soundData.OctaveBands))
+		// Convert back to dB: dB = 10 * log10(power)
+		overallLevel := 10 * math.Log10(avgPower)
 		metrics.SoundLevel.UpdateSoundLevel(soundData.Source, soundData.Name, "overall", overallLevel)
 	}
 
