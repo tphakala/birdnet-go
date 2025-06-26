@@ -231,7 +231,7 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 	}
 
 	deferredMutex.Lock()
-	
+
 	if sentryInitialized {
 		// Sentry is already initialized, send immediately
 		deferredMutex.Unlock() // Unlock before calling CaptureMessage to avoid deadlock
@@ -374,8 +374,8 @@ func isPrivateIP(host string) bool {
 		"192.168.", "169.254.",
 		// IPv6 private ranges
 		"fc00:", "fd00:", // Unique local addresses
-		"fe80:", // Link-local addresses
-		"::1",   // Loopback
+		"fe80:",                   // Link-local addresses
+		"::1",                     // Loopback
 		"ff00:", "ff01:", "ff02:", // Multicast
 	}
 
