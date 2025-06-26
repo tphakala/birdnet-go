@@ -235,7 +235,6 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 
 	if sentryInitialized {
 		// Sentry is already initialized, send immediately
-		deferredMutex.Unlock()
 		CaptureMessage(message, level, component)
 		return
 	}
