@@ -17,5 +17,13 @@ func setupProcessGroup(cmd *exec.Cmd) {
 
 // killProcessGroup kills a process and its children on Unix systems
 func killProcessGroup(cmd *exec.Cmd) error {
-	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	// Ignore "no such process" errors as the process may have already exited
+	if err == syscall.ESRCH {
+		return nil
+	}
+	return err
 }

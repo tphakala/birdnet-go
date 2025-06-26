@@ -47,8 +47,10 @@ type audioWatchdog struct {
 
 // FFmpegRestartTracker keeps track of restart information for each RTSP source
 type FFmpegRestartTracker struct {
-	restartCount  int
-	lastRestartAt time.Time
+	restartCount   int
+	lastRestartAt  time.Time
+	recentRestarts []time.Time // Track recent restart times for rate limiting
+	mu             sync.Mutex  // Protect concurrent access
 }
 
 // restartTrackers keeps track of restart information for each RTSP source URL
@@ -177,7 +179,29 @@ func getRestartTracker(cmd *exec.Cmd) *FFmpegRestartTracker {
 
 // updateRestartInfo updates the restart information for the given FFmpeg process
 func (p *FFmpegProcess) updateRestartInfo() {
+	if p == nil || p.restartTracker == nil || p.cmd == nil {
+		log.Printf("⚠️ Attempted to update restart info on nil process or command")
+		return
+	}
+
+	p.restartTracker.mu.Lock()
+	defer p.restartTracker.mu.Unlock()
+
 	now := time.Now()
+
+	// Clean up old restart entries (older than 5 minutes)
+	cutoff := now.Add(-5 * time.Minute)
+	filtered := []time.Time{}
+	for _, t := range p.restartTracker.recentRestarts {
+		if t.After(cutoff) {
+			filtered = append(filtered, t)
+		}
+	}
+	p.restartTracker.recentRestarts = filtered
+
+	// Add current restart
+	p.restartTracker.recentRestarts = append(p.restartTracker.recentRestarts, now)
+
 	// if the last restart was more than a minute ago, reset the restart count
 	if now.Sub(p.restartTracker.lastRestartAt) > time.Minute {
 		p.restartTracker.restartCount = 0
@@ -186,8 +210,35 @@ func (p *FFmpegProcess) updateRestartInfo() {
 	p.restartTracker.lastRestartAt = now
 }
 
+// isRestartStorm checks if we're experiencing too many restarts in a short period
+func (p *FFmpegProcess) isRestartStorm() bool {
+	if p == nil || p.restartTracker == nil {
+		return false
+	}
+
+	p.restartTracker.mu.Lock()
+	defer p.restartTracker.mu.Unlock()
+
+	// Check if we have more than 5 restarts in the last minute
+	oneMinuteAgo := time.Now().Add(-1 * time.Minute)
+	recentCount := 0
+	for _, t := range p.restartTracker.recentRestarts {
+		if t.After(oneMinuteAgo) {
+			recentCount++
+		}
+	}
+
+	return recentCount > 5
+}
+
 // getRestartDelay returns the delay before the next restart attempt
 func (p *FFmpegProcess) getRestartDelay() time.Duration {
+	// Check for restart storm
+	if p.isRestartStorm() {
+		log.Printf("⚠️ Restart storm detected, applying extended backoff")
+		return 5 * time.Minute // Extended delay during restart storm
+	}
+
 	delay := time.Duration(p.restartTracker.restartCount) * 5 * time.Second
 	if delay > 2*time.Minute {
 		delay = 2 * time.Minute // Cap the maximum delay at 2 minutes
@@ -269,6 +320,18 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 					telemetry.CaptureError(fmt.Errorf("Failed to kill FFmpeg process for %s: %w", url, err), "ffmpeg-kill-failure")
 				}
 			}
+		}
+
+		// Verify the process is actually terminated
+		verifyTimer := time.NewTimer(2 * time.Second)
+		select {
+		case <-done:
+			verifyTimer.Stop()
+			log.Printf("✅ FFmpeg process for %s confirmed terminated after force kill", url)
+		case <-verifyTimer.C:
+			log.Printf("❌ FFmpeg process for %s may still be running after force kill attempt", url)
+			telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process for %s possibly stuck after kill attempts", url),
+				sentry.LevelError, "ffmpeg-zombie-process")
 		}
 	}
 
@@ -400,6 +463,9 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
 		telemetry.CaptureError(fmt.Errorf("Analysis buffer write error for %s: %w", url, err), "rtsp-analysis-buffer-error")
 		hasBufferError = true
+	} else {
+		// Update health watchdog that we received data
+		UpdateStreamDataReceived(url)
 	}
 
 	// Write the audio data to the capture buffer
@@ -824,6 +890,10 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+	// Register the channels for this stream
+	RegisterStreamChannels(url, restartChan, audioLevelChan)
+	defer UnregisterStreamChannels(url)
+
 	// Return with error if FFmpeg path is not set
 	if conf.GetFfmpegBinaryName() == "" {
 		err := fmt.Errorf("FFmpeg not available for RTSP source %s", url)
