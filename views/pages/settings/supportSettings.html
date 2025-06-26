@@ -133,7 +133,7 @@
             includeConfig: true,
             includeSystemInfo: true,
             userMessage: '',
-            uploadToSentry: false
+            uploadToSentry: true  // Default to true for upload
         },
         checkbox(id, label, model, name) {
             return {
@@ -274,7 +274,7 @@
                     <!-- User Message -->
                     <div class="form-control mt-4">
                         <label class="label" for="userMessage">
-                            <span class="label-text">Describe the issue (optional)</span>
+                            <span class="label-text">Describe the issue</span>
                             <span class="help-icon" @mouseenter="showTooltip = 'userMessage'"
                                 @mouseleave="showTooltip = null">ⓘ</span>
                         </label>
@@ -282,7 +282,7 @@
                             id="userMessage"
                             x-model="supportDump.userMessage" 
                             class="textarea textarea-bordered textarea-sm h-24 text-base-content" 
-                            placeholder="Please describe what issue you're experiencing..."
+                            placeholder="Please describe the issue and include GitHub issue link if applicable (e.g., #123)"
                             rows="4"></textarea>
                         
                         <!-- Tooltip -->
@@ -290,6 +290,13 @@
                             class="tooltip">
                             Provide details about the problem to help developers understand and fix the issue
                         </div>
+                        
+                        <!-- GitHub Issue Note -->
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">
+                                💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123) and mention your System ID <span class="font-mono text-xs">{{.Settings.SystemID}}</span> in the GitHub issue to help developers link your support data.
+                            </span>
+                        </label>
                     </div>
 
                     <!-- Upload Option (only shown if telemetry is enabled) -->
@@ -298,15 +305,35 @@
                             "id" "uploadToSentry"
                             "model" "supportDump.uploadToSentry"
                             "name" "support.uploadToSentry"
-                            "label" "Upload to developers (via secure telemetry)"
-                            "tooltip" "Automatically upload the support report to developers for analysis. Only enable if you want to share this data."}}
-                        <div class="pl-6 mt-1">
-                            <span class="text-xs text-warning/80 flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            "label" "Upload to developers (recommended)"
+                            "tooltip" "Upload the support report to developers for analysis via Sentry's secure cloud service."}}
+                        <div class="pl-6 mt-2 space-y-2">
+                            <div class="text-xs text-base-content/60">
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Data is uploaded to <a href="https://sentry.io" target="_blank" class="link link-primary">Sentry</a> cloud service
+                                </p>
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Stored in EU data center (Frankfurt, Germany)
+                                </p>
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    Privacy-compliant with sensitive data removed
+                                </p>
+                            </div>
+                            <div class="text-xs text-warning/80 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                Only enable if you want to share this data with developers
-                            </span>
+                                Uncheck only if you prefer to handle the support file manually
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -357,15 +384,20 @@
         <div class="alert alert-info mt-4" role="alert">
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <div>
-                <h3 class="font-bold">Privacy Notice</h3>
+                <h3 class="font-bold">Privacy & Data Protection</h3>
                 <div class="text-sm mt-1">
                     <p>Support reports are designed to protect your privacy:</p>
                     <ul class="list-disc list-inside mt-2 space-y-1">
                         <li>Passwords, API keys, and tokens are automatically removed</li>
                         <li>No audio recordings or bird detection data is included</li>
-                        <li>System paths and hostnames are anonymized</li>
-                        <li>Reports are only uploaded if you explicitly choose to do so</li>
+                        <li>Only application logs and scrubbed configuration are collected</li>
+                        <li>Data is encrypted in transit and at rest</li>
+                        <li>Uploaded data is retained for 90 days in Sentry's EU data center</li>
+                        <li>You can download the report locally before deciding to upload</li>
                     </ul>
+                    <p class="mt-2 text-xs">
+                        Learn more about <a href="https://docs.sentry.io/organization/data-storage-location/" target="_blank" class="link link-primary">Sentry's data storage</a> and <a href="https://sentry.io/security/" target="_blank" class="link link-primary">security practices</a>.
+                    </p>
                 </div>
             </div>
         </div>
