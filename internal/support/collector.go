@@ -421,7 +421,42 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 
 // parseLogLine parses a single log line
 func (c *Collector) parseLogLine(line string) *LogEntry {
-	// Try to parse common log formats
+	// First try to parse as JSON (from slog)
+	var jsonLog map[string]interface{}
+	if err := json.Unmarshal([]byte(line), &jsonLog); err == nil {
+		// Extract fields from JSON log
+		entry := &LogEntry{
+			Source: "file",
+		}
+		
+		// Parse timestamp
+		if timeStr, ok := jsonLog["time"].(string); ok {
+			if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+				entry.Timestamp = t
+			}
+		}
+		
+		// Parse level
+		if level, ok := jsonLog["level"].(string); ok {
+			entry.Level = strings.ToUpper(level)
+		}
+		
+		// Parse message
+		if msg, ok := jsonLog["msg"].(string); ok {
+			entry.Message = msg
+		}
+		
+		// Add service info if available
+		if service, ok := jsonLog["service"].(string); ok {
+			entry.Source = service
+		}
+		
+		if entry.Message != "" {
+			return entry
+		}
+	}
+	
+	// Fallback to simple text format
 	// Format: 2024-01-20 15:04:05 [LEVEL] message
 	parts := strings.SplitN(line, " ", 4)
 	if len(parts) < 4 {
