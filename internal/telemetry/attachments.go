@@ -93,7 +93,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	}
 
 	// Flush to ensure the event is sent
-	sentry.Flush(5 * time.Second)
+	Flush(5 * time.Second)
 
 	return nil
 }
@@ -141,6 +141,6 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 			Build()
 	}
 
-	sentry.Flush(5 * time.Second)
+	Flush(5 * time.Second)
 	return nil
 }
