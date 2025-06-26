@@ -61,6 +61,10 @@ var restartTrackers sync.Map
 // startupMutex prevents concurrent FFmpeg process starts for the same URL
 var startupMutex sync.Map
 
+// ffmpegPlaceholder is used as a placeholder in the ffmpegProcesses map
+// to indicate that a process is being started for a URL
+type ffmpegPlaceholder struct{}
+
 // containsPrivateIP172Range checks if URL contains an IP in the 172.16.0.0/12 range (172.16.x.x through 172.31.x.x)
 func containsPrivateIP172Range(url string) bool {
 	// Check for 172.16 through 172.31
@@ -783,6 +787,12 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 
 		// Double-check if a process already exists (race condition protection)
 		if existing, exists := ffmpegProcesses.Load(lm.config.URL); exists {
+			// Skip if it's a placeholder (process is being started)
+			if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
+				log.Printf("⚠️ FFmpeg process is being started for URL %s, skipping retry", lm.config.URL)
+				return nil, fmt.Errorf("FFmpeg process already being started for URL: %s", lm.config.URL)
+			}
+			// Check if it's an actual running process
 			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 				log.Printf("⚠️ FFmpeg process already exists during retry for URL %s (PID: %d)", lm.config.URL, p.cmd.Process.Pid)
 				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
@@ -912,6 +922,13 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 
 	// Check if a process is already running for this URL
 	if existing, exists := ffmpegProcesses.Load(config.URL); exists {
+		// Check if it's a placeholder
+		if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
+			log.Printf("⚠️ FFmpeg process is already being started for URL %s", config.URL)
+			mutex.Unlock()
+			return fmt.Errorf("FFmpeg process already being started for URL: %s", config.URL)
+		}
+		// Check if it's an actual process
 		if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 			log.Printf("⚠️ FFmpeg process already exists for URL %s (PID: %d), not starting duplicate", config.URL, p.cmd.Process.Pid)
 			mutex.Unlock()
@@ -920,7 +937,7 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 	}
 
 	// Store a placeholder to prevent other goroutines from starting
-	placeholder := &FFmpegProcess{}
+	placeholder := &ffmpegPlaceholder{}
 	ffmpegProcesses.Store(config.URL, placeholder)
 	mutex.Unlock()
 
