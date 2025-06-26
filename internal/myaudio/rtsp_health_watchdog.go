@@ -79,6 +79,9 @@ func (w *RTSPHealthWatchdog) monitorLoop() {
 	ticker := time.NewTicker(w.checkInterval)
 	defer ticker.Stop()
 
+	// Wait a moment before the initial check to allow processes to start
+	time.Sleep(2 * time.Second)
+
 	// Perform initial check
 	w.performHealthCheck()
 
@@ -124,36 +127,62 @@ func (w *RTSPHealthWatchdog) checkStreamHealth(url string) {
 	previouslyHealthy := stats.IsHealthy
 	stats.mu.Unlock()
 
-	// Check if FFmpeg process exists
-	processInterface, exists := ffmpegProcesses.Load(url)
-	if !exists {
-		logging.Warn("RTSP health check: No FFmpeg process found",
+	// Check if stream is already being initialized
+	if _, isActive := activeStreams.Load(url); isActive {
+		// Stream is active, check if FFmpeg process exists
+		processInterface, exists := ffmpegProcesses.Load(url)
+		if !exists {
+			// Stream is active but process not yet registered - this is normal during startup
+			// Give it some time before considering it missing
+			if time.Since(stats.LastHealthCheck) < 10*time.Second {
+				logging.Debug("RTSP health check: Stream active but process not yet registered",
+					"service", "rtsp-health-watchdog",
+					"url", url,
+					"operation", "startup_grace_period")
+				return
+			}
+			logging.Warn("RTSP health check: No FFmpeg process found after grace period",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "check_process_exists")
+			w.handleMissingProcess(url, stats)
+			return
+		}
+
+		// Type assert to FFmpegProcess
+		process, ok := processInterface.(*FFmpegProcess)
+		if !ok {
+			logging.Error("RTSP health check: Invalid process type",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "type_assertion",
+				"actual_type", fmt.Sprintf("%T", processInterface))
+			return
+		}
+
+		// Check if process is alive
+		if !w.isProcessAlive(process) {
+			logging.Warn("RTSP health check: FFmpeg process dead",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "check_process_alive")
+			w.handleDeadProcess(url, stats)
+			return
+		}
+	} else {
+		// Stream is not active at all - should not happen for configured streams
+		logging.Warn("RTSP health check: Stream not active",
 			"service", "rtsp-health-watchdog",
 			"url", url,
-			"operation", "check_process_exists")
+			"operation", "check_active_streams")
 		w.handleMissingProcess(url, stats)
 		return
 	}
 
-	// Type assert to FFmpegProcess
-	process, ok := processInterface.(*FFmpegProcess)
-	if !ok {
-		logging.Error("RTSP health check: Invalid process type",
-			"service", "rtsp-health-watchdog",
-			"url", url,
-			"operation", "type_assertion",
-			"actual_type", fmt.Sprintf("%T", processInterface))
-		return
-	}
-
-	// Check if process is alive
-	if !w.isProcessAlive(process) {
-		logging.Warn("RTSP health check: FFmpeg process dead",
-			"service", "rtsp-health-watchdog",
-			"url", url,
-			"operation", "check_process_alive")
-		w.handleDeadProcess(url, stats)
-		return
+	// Get process for later use
+	var process *FFmpegProcess
+	if processInterface, exists := ffmpegProcesses.Load(url); exists {
+		process, _ = processInterface.(*FFmpegProcess)
 	}
 
 	// Check data reception status
@@ -184,8 +213,8 @@ func (w *RTSPHealthWatchdog) checkStreamHealth(url string) {
 				"time_since_last_data", timeSinceLastData,
 				"consecutive_timeouts", stats.ConsecutiveTimeouts)
 
-			// Only attempt restart if not already in progress
-			if !stats.RestartInProgress {
+			// Only attempt restart if not already in progress and we have a valid process
+			if !stats.RestartInProgress && process != nil {
 				stats.RestartInProgress = true
 				stats.mu.Unlock()
 				w.handleUnhealthyStream(url, stats, process)
