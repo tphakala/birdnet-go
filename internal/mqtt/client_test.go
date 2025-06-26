@@ -22,11 +22,12 @@ import (
 )
 
 const (
-	defaultTestBroker = "tcp://test.mosquitto.org:1883"
-	localTestBroker   = "tcp://localhost:1883"
-	testQoS           = 1 // Use QoS 1 for more reliable delivery
-	testTimeout       = 45 * time.Second
-	testTopic         = "birdnet-go/test"
+	defaultTestBroker      = "tcp://test.mosquitto.org:1883"
+	localTestBroker        = "tcp://localhost:1883"
+	testQoS                = 1 // Use QoS 1 for more reliable delivery
+	testTimeout            = 45 * time.Second
+	testTopic              = "birdnet-go/test"
+	connectionCheckTimeout = 2 * time.Second
 )
 
 // getBrokerAddress returns the MQTT broker address to use for testing
@@ -34,35 +35,35 @@ func getBrokerAddress() string {
 	if broker := os.Getenv("MQTT_TEST_BROKER"); broker != "" {
 		return broker
 	}
-	if isMosquittoTestServerAvailable() {
+	// Prefer local broker first for faster tests
+	if isLocalBrokerAvailable() {
+		return localTestBroker
+	}
+	// Fall back to public test broker
+	if isTestBrokerAvailable() {
 		return defaultTestBroker
 	}
-	return localTestBroker
+	return "" // No broker available
 }
 
-// isMosquittoTestServerAvailable checks if the public test server is available and responding properly
-func isMosquittoTestServerAvailable() bool {
-	// Try multiple times as the server might be temporarily busy
-	for i := 0; i < 3; i++ {
-		conn, err := net.DialTimeout("tcp", "test.mosquitto.org:1883", 5*time.Second)
-		if err == nil {
-			conn.Close()
-			// Try a quick connect/disconnect to verify server responsiveness
-			client, _ := createTestClient(nil, defaultTestBroker)
-			if client == nil {
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := client.Connect(ctx); err == nil {
-				client.Disconnect()
-				cancel()
-				return true
-			}
-			cancel()
-		}
-		time.Sleep(time.Second)
+// isLocalBrokerAvailable checks if a local MQTT broker is available
+func isLocalBrokerAvailable() bool {
+	conn, err := net.DialTimeout("tcp", "localhost:1883", connectionCheckTimeout)
+	if err != nil {
+		return false
 	}
-	return false
+	conn.Close()
+	return true
+}
+
+// isTestBrokerAvailable checks if the public test server is available
+func isTestBrokerAvailable() bool {
+	conn, err := net.DialTimeout("tcp", "test.mosquitto.org:1883", connectionCheckTimeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // Add debug logging helper
@@ -106,6 +107,12 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 // It covers basic functionality, error handling, reconnection scenarios, and metrics collection.
 func TestMQTTClient(t *testing.T) {
 	broker := getBrokerAddress()
+	if broker == "" {
+		//nolint:misspell // "mosquitto" is the correct spelling for the MQTT broker software
+		t.Skip("No MQTT broker available for testing. Set MQTT_TEST_BROKER env var or ensure mosquitto is running on localhost:1883")
+		return
+	}
+
 	if broker == localTestBroker {
 		//nolint:misspell // "mosquitto" is the correct spelling for the MQTT broker software
 		t.Log("Using local MQTT broker. Please ensure mosquitto is running on localhost:1883")
@@ -128,18 +135,22 @@ func TestMQTTClient(t *testing.T) {
 // connection, publishing a message, and disconnection.
 func testBasicFunctionality(t *testing.T) {
 	debugLog(t, "Starting Basic Functionality test")
-	mqttClient, _ := createTestClient(t, getBrokerAddress())
+	broker := getBrokerAddress()
+	if broker == "" {
+		t.Skip("No MQTT broker available")
+		return
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	mqttClient, _ := createTestClient(t, broker)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	debugLog(t, "Attempting initial connection")
-	// Try to connect with retries and longer timeout
-	err := retryWithTimeout(30*time.Second, func() error {
-		return mqttClient.Connect(ctx)
-	})
+	// Try to connect with shorter timeout for tests
+	err := mqttClient.Connect(ctx)
 	if err != nil {
-		t.Fatalf("Failed to connect to MQTT broker after retries: %v", err)
+		t.Fatalf("Failed to connect to MQTT broker: %v", err)
 	}
 
 	if !mqttClient.IsConnected() {
@@ -147,23 +158,18 @@ func testBasicFunctionality(t *testing.T) {
 	}
 	debugLog(t, "Successfully connected to broker")
 
-	// Try to publish with retries and longer timeout
+	// Try to publish
 	debugLog(t, "Attempting to publish message")
-	err = retryWithTimeout(20*time.Second, func() error {
-		if !mqttClient.IsConnected() {
-			return fmt.Errorf("client disconnected before publish")
-		}
-		return mqttClient.Publish(ctx, testTopic, "Hello, MQTT!")
-	})
+	err = mqttClient.Publish(ctx, testTopic, "Hello, MQTT!")
 	if err != nil {
 		debugLog(t, "Warning: Publish failed: %v", err)
 		t.Logf("Warning: Publish failed, this might be due to broker limitations: %v", err)
-		return // Skip further tests if publish fails
+		// Don't fail the test as some brokers may have restrictions
 	}
 	debugLog(t, "Successfully published message")
 
 	debugLog(t, "Waiting for message processing")
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	debugLog(t, "Disconnecting client")
 	mqttClient.Disconnect()
@@ -235,7 +241,12 @@ func testIncorrectBrokerAddress(t *testing.T) {
 // the client reports as disconnected after the connection loss.
 func testConnectionLossBeforePublish(t *testing.T) {
 	debugLog(t, "Starting Connection Loss Before Publish test")
-	mqttClient, _ := createTestClient(t, getBrokerAddress())
+	broker := getBrokerAddress()
+	if broker == "" {
+		t.Skip("No MQTT broker available")
+		return
+	}
+	mqttClient, _ := createTestClient(t, broker)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -270,7 +281,12 @@ func testConnectionLossBeforePublish(t *testing.T) {
 // It verifies that the publish operation fails when the client is not connected to a broker.
 func testPublishWhileDisconnected(t *testing.T) {
 	debugLog(t, "Starting Publish While Disconnected test")
-	mqttClient, _ := createTestClient(t, getBrokerAddress())
+	broker := getBrokerAddress()
+	if broker == "" {
+		t.Skip("No MQTT broker available")
+		return
+	}
+	mqttClient, _ := createTestClient(t, broker)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -289,7 +305,12 @@ func testPublishWhileDisconnected(t *testing.T) {
 // waits for the cooldown period, and then attempts another reconnection which should succeed.
 func testReconnectionWithBackoff(t *testing.T) {
 	debugLog(t, "Starting Reconnection With Backoff test")
-	mqttClient, _ := createTestClient(t, getBrokerAddress())
+	broker := getBrokerAddress()
+	if broker == "" {
+		t.Skip("No MQTT broker available")
+		return
+	}
+	mqttClient, _ := createTestClient(t, broker)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -334,7 +355,12 @@ func testReconnectionWithBackoff(t *testing.T) {
 // MQTT client operations, including connection status, message delivery, and error counts.
 func testMetricsCollection(t *testing.T) {
 	debugLog(t, "Starting Metrics Collection test")
-	mqttClient, metrics := createTestClient(t, getBrokerAddress())
+	broker := getBrokerAddress()
+	if broker == "" {
+		t.Skip("No MQTT broker available")
+		return
+	}
+	mqttClient, metrics := createTestClient(t, broker)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -508,7 +534,12 @@ func testContextCancellation(t *testing.T) {
 	})
 
 	t.Run("Publish Cancellation", func(t *testing.T) {
-		mqttClient, _ := createTestClient(t, getBrokerAddress())
+		broker := getBrokerAddress()
+		if broker == "" {
+			t.Skip("No MQTT broker available")
+			return
+		}
+		mqttClient, _ := createTestClient(t, broker)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -566,7 +597,12 @@ func testTimeoutHandling(t *testing.T) {
 	})
 
 	t.Run("Publish Timeout", func(t *testing.T) {
-		mqttClient, _ := createTestClient(t, getBrokerAddress())
+		broker := getBrokerAddress()
+		if broker == "" {
+			t.Skip("No MQTT broker available")
+			return
+		}
+		mqttClient, _ := createTestClient(t, broker)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
