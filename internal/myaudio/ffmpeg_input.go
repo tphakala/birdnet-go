@@ -463,6 +463,9 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
 		telemetry.CaptureError(fmt.Errorf("Analysis buffer write error for %s: %w", url, err), "rtsp-analysis-buffer-error")
 		hasBufferError = true
+	} else {
+		// Update health watchdog that we received data
+		UpdateStreamDataReceived(url)
 	}
 
 	// Write the audio data to the capture buffer
@@ -887,6 +890,10 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 
 // CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, audioLevelChan chan AudioLevelData) {
+	// Register the channels for this stream
+	RegisterStreamChannels(url, restartChan, audioLevelChan)
+	defer UnregisterStreamChannels(url)
+
 	// Return with error if FFmpeg path is not set
 	if conf.GetFfmpegBinaryName() == "" {
 		err := fmt.Errorf("FFmpeg not available for RTSP source %s", url)
