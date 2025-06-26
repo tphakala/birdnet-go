@@ -204,7 +204,6 @@ func (s *Server) initRoutes() {
 	s.Echo.POST("/api/v1/settings/save", h.WithErrorHandling(h.SaveSettings), s.AuthMiddleware)
 	s.Echo.GET("/api/v1/settings/audio/get", h.WithErrorHandling(h.GetAudioDevices), s.AuthMiddleware)
 
-
 	// Add DELETE method for detection deletion
 	s.Echo.DELETE("/api/v1/detections/delete", h.WithErrorHandling(h.DeleteDetection), s.AuthMiddleware)
 

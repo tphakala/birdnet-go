@@ -64,11 +64,11 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if err != nil || len(configPath) == 0 {
 		configPath = []string{"."}
 	}
-	
+
 	// Create collector with proper paths
 	collector := support.NewCollector(
-		configPath[0],  // Use first config path
-		".",            // Data directory (current directory)
+		configPath[0], // Use first config path
+		".",           // Data directory (current directory)
 		settings.SystemID,
 		settings.Version,
 	)
@@ -116,7 +116,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Upload to Sentry if requested and telemetry is enabled
-	if req.UploadToSentry && settings.Sentry.Enabled {
+	switch {
+	case req.UploadToSentry && settings.Sentry.Enabled:
 		uploader := telemetry.GetAttachmentUploader()
 		if err := uploader.UploadSupportDump(context.Background(), archiveData, settings.SystemID, req.UserMessage); err != nil {
 			// Log error but don't fail the request
@@ -133,9 +134,9 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 				"system_id", settings.SystemID,
 			)
 		}
-	} else if req.UploadToSentry && !settings.Sentry.Enabled {
+	case req.UploadToSentry && !settings.Sentry.Enabled:
 		response.Message = "Support dump generated successfully (upload skipped - telemetry disabled)"
-	} else {
+	default:
 		response.Message = "Support dump generated successfully"
 	}
 
@@ -143,7 +144,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if !req.UploadToSentry || !settings.Sentry.Enabled {
 		// Store temporarily for download
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
-		if err := os.WriteFile(tempFile, archiveData, 0644); err != nil {
+		if err := os.WriteFile(tempFile, archiveData, 0o644); err != nil {
 			c.apiLogger.Error("Failed to store temporary file",
 				"error", err,
 				"path", tempFile,
@@ -174,21 +175,21 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 
 	// Construct temp file path
 	tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dumpID))
-	
+
 	// Check if file exists
 	if _, err := os.Stat(tempFile); os.IsNotExist(err) {
 		return ctx.JSON(http.StatusNotFound, ErrorResponse{
 			Error: "Support dump not found",
 		})
 	}
-	
+
 	// Set headers for download
 	ctx.Response().Header().Set("Content-Type", "application/zip")
 	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"birdnet-go-support-%s.zip\"", dumpID))
-	
+
 	// Serve the file
 	err := ctx.File(tempFile)
-	
+
 	// Clean up temp file after serving
 	go func() {
 		time.Sleep(5 * time.Second) // Give time for download to complete
@@ -199,7 +200,7 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 			)
 		}
 	}()
-	
+
 	return err
 }
 
@@ -214,8 +215,8 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 
 	status := map[string]any{
 		"telemetry_enabled": settings.Sentry.Enabled,
-		"system_id":        settings.SystemID,
-		"version":          settings.Version,
+		"system_id":         settings.SystemID,
+		"version":           settings.Version,
 	}
 
 	return ctx.JSON(http.StatusOK, status)
