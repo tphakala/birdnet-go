@@ -68,8 +68,8 @@ func (m *WeatherMetrics) initMetrics() error {
 
 	m.weatherFetchDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "weather_fetch_duration_seconds",
-			Help:    "Time taken to fetch weather data",
+			Name: "weather_fetch_duration_seconds",
+			Help: "Time taken to fetch weather data",
 			// Buckets cover typical weather API response times: 100ms to ~100s
 			// Exponential buckets: 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 25.6, 51.2s
 			// This range captures fast local responses (100ms) to slow/timeout scenarios (50s+)
@@ -123,8 +123,8 @@ func (m *WeatherMetrics) initMetrics() error {
 
 	m.weatherDbDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "weather_db_duration_seconds",
-			Help:    "Time taken for weather database operations",
+			Name: "weather_db_duration_seconds",
+			Help: "Time taken for weather database operations",
 			// Buckets cover typical database operation times: 1ms to ~1s
 			// Exponential buckets: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms
 			// This range captures fast queries (1ms) to slow database operations (500ms+)
