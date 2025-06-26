@@ -789,8 +789,11 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 		if existing, exists := ffmpegProcesses.Load(lm.config.URL); exists {
 			// Skip if it's a placeholder (process is being started)
 			if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
-				log.Printf("⚠️ FFmpeg process is being started for URL %s, skipping retry", lm.config.URL)
-				return nil, fmt.Errorf("FFmpeg process already being started for URL: %s", lm.config.URL)
+				// Wait a short time and continue retry loop instead of flooding logs
+				if waitErr := lm.waitWithInterrupts(ctx, 500*time.Millisecond); waitErr != nil {
+					return nil, waitErr
+				}
+				continue // Try again after short wait
 			}
 			// Check if it's an actual running process
 			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
