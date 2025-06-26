@@ -30,6 +30,9 @@ import (
 // audioLevelChan is a channel to send audio level updates
 var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 
+// soundLevelChan is a channel to send sound level updates
+var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
+
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
@@ -96,6 +99,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Initialize audioLevelChan, used to visualize audio levels on web ui
 	audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+	// Initialize soundLevelChan, used to send sound level data
+	soundLevelChan = make(chan myaudio.SoundLevelData, 100)
 
 	// Prepare sources list
 	var sources []string
@@ -159,7 +164,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 
 	// Start RTSP health watchdog if we have RTSP streams
 	if len(settings.Realtime.RTSP.URLs) > 0 {
@@ -221,15 +226,38 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("🔄 Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
+			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 		}
 	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
+	// Create a unified audio channel
+	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
+	go func() {
+		// Convert unified audio data back to separate channels for existing handlers
+		for unifiedData := range unifiedAudioChan {
+			// Send audio level data to existing audio level channel
+			select {
+			case audioLevelChan <- unifiedData.AudioLevel:
+			default:
+				// Channel full, drop data
+			}
+			
+			// Send sound level data to existing sound level channel if present
+			if unifiedData.SoundLevel != nil {
+				select {
+				case soundLevelChan <- *unifiedData.SoundLevel:
+				default:
+					// Channel full, drop data
+				}
+			}
+		}
+	}()
+	
 	// waitgroup is managed within CaptureAudio
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioLevelChan)
+	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
@@ -639,7 +667,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 
 // startControlMonitor handles various control signals for realtime analysis mode
 func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor) {
-	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc)
+	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan)
 	monitor.Start()
 }
 
