@@ -1,7 +1,8 @@
 package analysis
 
 import (
-	"errors"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -165,6 +167,19 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+
+	// start sound level MQTT publisher if MQTT is enabled
+	if settings.Realtime.MQTT.Enabled {
+		startSoundLevelMQTTPublisher(&wg, quitChan, proc)
+	}
+
+	// start sound level SSE publisher
+	if httpServer.APIV2 != nil {
+		startSoundLevelSSEPublisher(&wg, quitChan, httpServer.APIV2)
+	}
+
+	// start sound level metrics publisher
+	startSoundLevelMetricsPublisher(&wg, quitChan, metrics)
 
 	// Start RTSP health watchdog if we have RTSP streams
 	if len(settings.Realtime.RTSP.URLs) > 0 {
@@ -422,13 +437,13 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to create WikiMedia image cache: %v", err)
 			log.Println(errMsg)
-			errs = append(errs, errors.New(errMsg))
+			errs = append(errs, fmt.Errorf("%s", errMsg))
 			// Continue even if one provider fails
 		} else {
 			if err := registry.Register("wikimedia", wikiCache); err != nil {
 				errMsg := fmt.Sprintf("Failed to register WikiMedia image provider: %v", err)
 				log.Println(errMsg)
-				errs = append(errs, errors.New(errMsg))
+				errs = append(errs, fmt.Errorf("%s", errMsg))
 			} else {
 				log.Println("Registered WikiMedia image provider")
 			}
@@ -459,7 +474,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
 			errMsg := fmt.Sprintf("Failed to register AviCommons provider: %v", err)
 			log.Println(errMsg)
-			errs = append(errs, errors.New(errMsg))
+			errs = append(errs, fmt.Errorf("%s", errMsg))
 			// Check if we can read the data file for debugging
 			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
 				log.Printf("Error reading AviCommons data file: %v", errRead)
@@ -737,6 +752,82 @@ func cleanupHLSStreamingFiles() error {
 	if len(cleanupErrors) > 0 {
 		return fmt.Errorf("failed to remove some HLS stream directories: %s", strings.Join(cleanupErrors, "; "))
 	}
+
+	return nil
+}
+
+// startSoundLevelMQTTPublisher starts a goroutine to consume sound level data and publish to MQTT
+func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, proc *processor.Processor) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-quitChan:
+				return
+			case soundData := <-soundLevelChan:
+				// Publish sound level data to MQTT
+				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
+					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+// publishSoundLevelToMQTT publishes sound level data to MQTT
+func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.Processor) error {
+	// Get current settings to determine MQTT topic
+	settings := conf.Setting()
+	if !settings.Realtime.MQTT.Enabled {
+		return nil // MQTT not enabled, skip
+	}
+
+	// Create MQTT topic for sound level data
+	topic := fmt.Sprintf("%s/soundlevel", strings.TrimSuffix(settings.Realtime.MQTT.Topic, "/"))
+
+	// Marshal sound level data to JSON
+	jsonData, err := json.Marshal(soundData)
+	if err != nil {
+		// Record error metric
+		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "marshal_error")
+		}
+		return errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryNetwork).
+			Context("operation", "marshal_sound_level_data").
+			Context("source", soundData.Source).
+			Build()
+	}
+
+	// Publish to MQTT
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := proc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+		// Record error metric
+		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "publish_error")
+			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "error")
+		}
+		return errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryNetwork).
+			Context("operation", "publish_sound_level_mqtt").
+			Context("topic", topic).
+			Context("source", soundData.Source).
+			Build()
+	}
+
+	// Record success metric
+	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "success")
+	}
+
+	log.Printf("📡 Published sound level data to MQTT topic: %s (source: %s, bands: %d)",
+		topic, soundData.Source, len(soundData.OctaveBands))
 
 	return nil
 }
