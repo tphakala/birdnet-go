@@ -9,6 +9,7 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
 - Linting: `golangci-lint run -v`
 - Always run linter before committing code
 - **Always run linter "golangci-lint run" to validate code before git commit**
+- Format edited .go source files with gofmt to avoid linter errors
 
 ### Common Linter Issues to Avoid
 
