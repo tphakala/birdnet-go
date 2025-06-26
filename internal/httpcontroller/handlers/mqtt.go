@@ -141,7 +141,6 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 	return nil
 }
 
-
 // generateTroubleshootingHint provides context-specific troubleshooting suggestions
 func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string {
 	// Convert error to lowercase once for case-insensitive comparisons
