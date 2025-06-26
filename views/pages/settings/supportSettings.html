@@ -125,6 +125,9 @@
         generating: false,
         uploadProgress: false,
         showTooltip: null,
+        statusMessage: '',
+        statusType: '', // 'info', 'success', 'error'
+        progressPercent: 0,
         supportDump: {
             includeLogs: true,
             includeConfig: true,
@@ -142,6 +145,12 @@
         },
         generateSupportDump() {
             this.generating = true;
+            this.statusMessage = '';
+            this.statusType = '';
+            this.progressPercent = 0;
+            
+            // Show initial status
+            this.updateStatus('Preparing support dump...', 'info', 10);
             
             fetch('/api/v2/support/generate', {
                 method: 'POST',
@@ -158,23 +167,59 @@
                     upload_to_sentry: this.supportDump.uploadToSentry
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 this.generating = false;
                 if (data.success) {
-                    if (data.download_url) {
+                    if (this.supportDump.uploadToSentry && data.uploaded_at) {
+                        this.updateStatus('Support dump successfully uploaded to developers!', 'success', 100);
+                        // Show upload confirmation with reference ID
+                        if (data.dump_id) {
+                            this.statusMessage += ` Reference ID: ${data.dump_id}`;
+                        }
+                    } else if (data.download_url) {
+                        this.updateStatus('Support dump generated successfully! Downloading...', 'success', 100);
                         // Download the file
-                        window.location.href = data.download_url;
+                        setTimeout(() => {
+                            window.location.href = data.download_url;
+                        }, 500);
+                    } else {
+                        this.updateStatus('Support dump generated successfully!', 'success', 100);
                     }
-                    // Show success notification (will be handled by SSE)
+                    
+                    // Clear status after 10 seconds
+                    setTimeout(() => {
+                        this.statusMessage = '';
+                        this.statusType = '';
+                        this.progressPercent = 0;
+                    }, 10000);
                 } else {
-                    alert('Failed to generate support dump: ' + data.message);
+                    this.updateStatus('Failed to generate support dump: ' + (data.message || 'Unknown error'), 'error', 0);
                 }
             })
             .catch(error => {
                 this.generating = false;
-                alert('Error generating support dump: ' + error);
+                this.updateStatus('Error: ' + error.message, 'error', 0);
             });
+        },
+        updateStatus(message, type, percent) {
+            this.statusMessage = message;
+            this.statusType = type;
+            this.progressPercent = percent;
+            
+            // Simulate progress for long operations
+            if (type === 'info' && percent < 90) {
+                setTimeout(() => {
+                    if (this.generating && this.progressPercent < 90) {
+                        this.progressPercent = Math.min(this.progressPercent + 10, 90);
+                    }
+                }, 1000);
+            }
         }
     }">
 
@@ -266,12 +311,36 @@
                     </div>
                 </div>
 
+                <!-- Status Message -->
+                <div x-show="statusMessage" x-transition class="mt-4">
+                    <div class="alert" 
+                         :class="{
+                            'alert-info': statusType === 'info',
+                            'alert-success': statusType === 'success',
+                            'alert-error': statusType === 'error'
+                         }">
+                        <svg x-show="statusType === 'info'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <svg x-show="statusType === 'success'" xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg x-show="statusType === 'error'" xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span x-text="statusMessage"></span>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div x-show="generating && progressPercent > 0" class="mt-2">
+                        <div class="w-full bg-base-300 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full transition-all duration-500" 
+                                 :style="`width: ${progressPercent}%`"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Generate Button -->
                 <div class="card-actions justify-end mt-6">
                     <button 
                         @click="generateSupportDump()"
                         :disabled="generating || (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo)"
-                        class="btn btn-primary">
+                        class="btn btn-primary"
+                        :class="{'btn-disabled': generating || (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo)}">
                         <span x-show="!generating" class="flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />

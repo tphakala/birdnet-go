@@ -6906,6 +6906,10 @@ html:has(.drawer-toggle:checked) {
   transition-duration: 300ms;
 }
 
+.duration-500 {
+  transition-duration: 500ms;
+}
+
 .duration-75 {
   transition-duration: 75ms;
 }
