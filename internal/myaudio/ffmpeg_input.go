@@ -808,6 +808,12 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 			// Check if it's an actual running process
 			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 				log.Printf("⚠️ FFmpeg process already exists during retry for URL %s (PID: %d)", lm.config.URL, p.cmd.Process.Pid)
+				// Apply backoff delay before returning error to prevent flooding
+				delay, _ := lm.backoff.nextDelay()
+				log.Printf("🕐 Waiting %v before next check due to existing process", delay)
+				if waitErr := lm.waitWithInterrupts(ctx, delay); waitErr != nil {
+					return nil, waitErr
+				}
 				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
 			}
 			// Note: We skip placeholder checks here because this function is called by the same
@@ -970,6 +976,16 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return err
+			}
+			// If process already exists, wait with backoff to prevent flooding
+			if strings.Contains(err.Error(), "FFmpeg process already running") {
+				delay := 5 * time.Second
+				log.Printf("🕐 Process already exists, waiting %v before retry", delay)
+				if delayErr := manager.waitWithInterrupts(ctx, delay); delayErr != nil {
+					if errors.Is(delayErr, context.Canceled) {
+						return delayErr
+					}
+				}
 			}
 			// For non-context errors, continue the lifecycle loop
 			continue
