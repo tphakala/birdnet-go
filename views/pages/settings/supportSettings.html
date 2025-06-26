@@ -73,14 +73,14 @@
                 </div>
             </label>
             <div class="join">
-                <input type="text" id="systemID" value="{{.Settings.SystemID}}" class="input input-bordered join-item w-full font-mono" readonly />
-                <button type="button" class="btn join-item" onclick="navigator.clipboard.writeText('{{.Settings.SystemID}}').then(() => { 
-                    const btn = event.target;
-                    const originalText = btn.innerHTML;
-                    btn.innerHTML = 'Copied!';
+                <input type="text" id="systemID" value="{{.Settings.SystemID}}" class="input input-sm input-bordered join-item w-full font-mono text-base-content" readonly />
+                <button type="button" class="btn btn-sm join-item" onclick="navigator.clipboard.writeText('{{.Settings.SystemID}}').then(() => { 
+                    const btn = event.currentTarget;
+                    const originalContent = btn.innerHTML;
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>Copied!';
                     btn.classList.add('btn-success');
                     setTimeout(() => {
-                        btn.innerHTML = originalText;
+                        btn.innerHTML = originalContent;
                         btn.classList.remove('btn-success');
                     }, 2000);
                 })">
@@ -91,7 +91,7 @@
                 </button>
             </div>
             <label class="label">
-                <span class="label-text-alt text-neutral-content">Include this ID when reporting issues if you want developers to identify your error reports</span>
+                <span class="label-text-alt text-base-content/60">Include this ID when reporting issues if you want developers to identify your error reports</span>
             </label>
         </div>
 
@@ -125,12 +125,21 @@
         supportOpen: false,
         generating: false,
         uploadProgress: false,
+        showTooltip: null,
         supportDump: {
             includeLogs: true,
             includeConfig: true,
             includeSystemInfo: true,
             userMessage: '',
             uploadToSentry: false
+        },
+        checkbox(id, label, model, name) {
+            return {
+                id,
+                label,
+                model,
+                name: name || model
+            }
         },
         generateSupportDump() {
             this.generating = true;
@@ -194,49 +203,65 @@
                 </p>
 
                 <!-- Options -->
-                <div class="space-y-4">
-                    <div class="form-control">
-                        <label class="label cursor-pointer justify-start gap-4">
-                            <input type="checkbox" x-model="supportDump.includeLogs" class="checkbox checkbox-primary" />
-                            <span class="label-text">Include recent logs</span>
-                        </label>
-                    </div>
+                <div class="space-y-2">
+                    {{template "checkbox" dict
+                        "id" "includeLogs"
+                        "model" "supportDump.includeLogs"
+                        "name" "support.includeLogs"
+                        "label" "Include recent logs"
+                        "tooltip" "Include application logs from the last 24 hours to help diagnose issues"}}
 
-                    <div class="form-control">
-                        <label class="label cursor-pointer justify-start gap-4">
-                            <input type="checkbox" x-model="supportDump.includeConfig" class="checkbox checkbox-primary" />
-                            <span class="label-text">Include configuration (sensitive data removed)</span>
-                        </label>
-                    </div>
+                    {{template "checkbox" dict
+                        "id" "includeConfig"
+                        "model" "supportDump.includeConfig"
+                        "name" "support.includeConfig"
+                        "label" "Include configuration (sensitive data removed)"
+                        "tooltip" "Include your configuration file with all sensitive information automatically removed"}}
 
-                    <div class="form-control">
-                        <label class="label cursor-pointer justify-start gap-4">
-                            <input type="checkbox" x-model="supportDump.includeSystemInfo" class="checkbox checkbox-primary" />
-                            <span class="label-text">Include system information</span>
-                        </label>
-                    </div>
+                    {{template "checkbox" dict
+                        "id" "includeSystemInfo"
+                        "model" "supportDump.includeSystemInfo"
+                        "name" "support.includeSystemInfo"
+                        "label" "Include system information"
+                        "tooltip" "Include basic system information like OS version, memory, and disk usage"}}
 
                     <!-- User Message -->
-                    <div class="form-control">
+                    <div class="form-control mt-4">
                         <label class="label" for="userMessage">
                             <span class="label-text">Describe the issue (optional)</span>
+                            <span class="help-icon" @mouseenter="showTooltip = 'userMessage'"
+                                @mouseleave="showTooltip = null">ⓘ</span>
                         </label>
                         <textarea 
                             id="userMessage"
                             x-model="supportDump.userMessage" 
-                            class="textarea textarea-bordered h-24" 
-                            placeholder="Please describe what issue you're experiencing..."></textarea>
+                            class="textarea textarea-bordered textarea-sm h-24 text-base-content" 
+                            placeholder="Please describe what issue you're experiencing..."
+                            rows="4"></textarea>
+                        
+                        <!-- Tooltip -->
+                        <div x-show="showTooltip === 'userMessage'" x-cloak
+                            class="tooltip">
+                            Provide details about the problem to help developers understand and fix the issue
+                        </div>
                     </div>
 
                     <!-- Upload Option (only shown if telemetry is enabled) -->
-                    <div x-show="{{.Settings.Sentry.Enabled}}" class="form-control">
-                        <label class="label cursor-pointer justify-start gap-4">
-                            <input type="checkbox" x-model="supportDump.uploadToSentry" class="checkbox checkbox-primary" />
-                            <span class="label-text">Upload to developers (via secure telemetry)</span>
-                        </label>
-                        <label class="label">
-                            <span class="label-text-alt text-warning">⚠️ Only enable if you want to share this data with developers</span>
-                        </label>
+                    <div x-show="{{.Settings.Sentry.Enabled}}" class="mt-4">
+                        {{template "checkbox" dict
+                            "id" "uploadToSentry"
+                            "model" "supportDump.uploadToSentry"
+                            "name" "support.uploadToSentry"
+                            "label" "Upload to developers (via secure telemetry)"
+                            "tooltip" "Automatically upload the support report to developers for analysis. Only enable if you want to share this data."}}
+                        <div class="pl-6 mt-1">
+                            <span class="text-xs text-warning/80 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                Only enable if you want to share this data with developers
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -252,7 +277,7 @@
                             </svg>
                             <span x-text="supportDump.uploadToSentry ? 'Generate & Upload' : 'Generate & Download'"></span>
                         </span>
-                        <span x-show="generating" class="loading loading-spinner"></span>
+                        <span x-show="generating" class="loading loading-spinner loading-sm"></span>
                     </button>
                 </div>
             </div>
