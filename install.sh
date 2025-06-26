@@ -102,6 +102,7 @@ check_network() {
 
     # First do a basic ping test to check general connectivity
     if ! ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+        send_telemetry_event "error" "Network connectivity failed" "error" "step=network_check,error=ping_failed"
         print_message "❌ No network connectivity (ping test failed)" "$RED"
         print_message "Please check your internet connection and try again" "$YELLOW"
         exit 1
@@ -161,6 +162,7 @@ check_prerequisites() {
         "x86_64")
             # Check CPU flags for AVX2 (Haswell and newer)
             if ! grep -q "avx2" /proc/cpuinfo; then
+                send_telemetry_event "error" "CPU requirements not met" "error" "step=check_prerequisites,error=no_avx2"
                 print_message "❌ Your Intel CPU is too old. BirdNET-Go requires Intel Haswell (2013) or newer CPU with AVX2 support" "$RED"
                 exit 1
             else
@@ -171,10 +173,12 @@ check_prerequisites() {
             print_message "✅ ARM 64-bit architecture detected, continuing with installation" "$GREEN"
             ;;
         "armv7l"|"armv6l"|"arm")
+            send_telemetry_event "error" "Architecture requirements not met" "error" "step=check_prerequisites,error=32bit_arm"
             print_message "❌ 32-bit ARM architecture detected. BirdNET-Go requires 64-bit ARM processor and OS" "$RED"
             exit 1
             ;;
         *)
+            send_telemetry_event "error" "Unsupported CPU architecture" "error" "step=check_prerequisites,error=unsupported_arch,arch=$(uname -m)"
             print_message "❌ Unsupported CPU architecture: $(uname -m)" "$RED"
             exit 1
             ;;
@@ -343,6 +347,174 @@ check_directory() {
     fi
 }
 
+# Telemetry Configuration
+TELEMETRY_ENABLED=false
+TELEMETRY_INSTALL_ID=""
+SENTRY_DSN="https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
+
+# Function to generate anonymous install ID
+generate_install_id() {
+    # Generate a UUID-like ID using /dev/urandom
+    local id=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | od -x -An | tr -d ' \n' | cut -c1-32)
+    # Format as UUID: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+    echo "${id:0:8}-${id:8:4}-${id:12:4}-${id:16:4}-${id:20:12}"
+}
+
+# Function to load or create telemetry config
+load_telemetry_config() {
+    local telemetry_file="$CONFIG_DIR/.telemetry"
+    
+    if [ -f "$telemetry_file" ]; then
+        # Load existing config
+        TELEMETRY_ENABLED=$(grep "^enabled=" "$telemetry_file" 2>/dev/null | cut -d'=' -f2 || echo "false")
+        TELEMETRY_INSTALL_ID=$(grep "^install_id=" "$telemetry_file" 2>/dev/null | cut -d'=' -f2 || echo "")
+    fi
+    
+    # Generate install ID if missing
+    if [ -z "$TELEMETRY_INSTALL_ID" ]; then
+        TELEMETRY_INSTALL_ID=$(generate_install_id)
+    fi
+}
+
+# Function to save telemetry config
+save_telemetry_config() {
+    local telemetry_file="$CONFIG_DIR/.telemetry"
+    
+    # Ensure directory exists
+    mkdir -p "$CONFIG_DIR"
+    
+    # Save config
+    cat > "$telemetry_file" << EOF
+# BirdNET-Go telemetry configuration
+# This file stores your telemetry preferences
+enabled=$TELEMETRY_ENABLED
+install_id=$TELEMETRY_INSTALL_ID
+EOF
+}
+
+# Function to configure telemetry
+configure_telemetry() {
+    print_message "\n📊 Telemetry Configuration" "$GREEN"
+    print_message "BirdNET-Go can send anonymous usage data to help improve the software." "$YELLOW"
+    print_message "This includes:" "$YELLOW"
+    print_message "  • Installation success/failure events" "$YELLOW"
+    print_message "  • Anonymous system information (OS, architecture)" "$YELLOW"  
+    print_message "  • Error diagnostics (no personal data)" "$YELLOW"
+    print_message "\nNo audio data or bird detections are ever collected." "$GREEN"
+    print_message "You can disable this at any time in the web interface." "$GREEN"
+    
+    print_message "\n❓ Enable anonymous telemetry? (y/n): " "$YELLOW" "nonewline"
+    read -r enable_telemetry
+    
+    if [[ $enable_telemetry == "y" ]]; then
+        TELEMETRY_ENABLED=true
+        print_message "✅ Telemetry enabled. Thank you for helping improve BirdNET-Go!" "$GREEN"
+        
+        # Update config.yaml to enable Sentry
+        if [ -f "$CONFIG_FILE" ]; then
+            sed -i 's/enabled: false  # true to enable Sentry error tracking/enabled: true  # true to enable Sentry error tracking/' "$CONFIG_FILE"
+        fi
+    else
+        TELEMETRY_ENABLED=false
+        print_message "✅ Telemetry disabled. You can enable it later in settings if you wish." "$GREEN"
+    fi
+    
+    # Save telemetry config
+    save_telemetry_config
+}
+
+# Function to collect anonymous system information
+collect_system_info() {
+    local os_name="${ID:-unknown}"
+    local os_version="${VERSION_ID:-unknown}"
+    local cpu_arch=$(uname -m)
+    local docker_version="unknown"
+    local pi_model="none"
+    
+    # Get Docker version if available
+    if command_exists docker; then
+        docker_version=$(docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+    fi
+    
+    # Detect Raspberry Pi model
+    if [ -f /proc/device-tree/model ]; then
+        pi_model=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | sed 's/Raspberry Pi/RPi/g' || echo "none")
+    fi
+    
+    # Output as JSON
+    echo "{\"os_name\":\"$os_name\",\"os_version\":\"$os_version\",\"cpu_arch\":\"$cpu_arch\",\"docker_version\":\"$docker_version\",\"pi_model\":\"$pi_model\",\"install_id\":\"$TELEMETRY_INSTALL_ID\"}"
+}
+
+# Function to send telemetry event
+send_telemetry_event() {
+    # Check if telemetry is enabled
+    if [ "$TELEMETRY_ENABLED" != "true" ]; then
+        return 0
+    fi
+    
+    local event_type="$1"
+    local message="$2"
+    local level="${3:-info}"
+    local context="${4:-}"
+    
+    # Run in background to not block installation
+    {
+        # Collect system info
+        local system_info
+        system_info=$(collect_system_info)
+        
+        # Build JSON payload
+        local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        local payload=$(cat <<EOF
+{
+    "timestamp": "$timestamp",
+    "level": "$level",
+    "message": "$message",
+    "platform": "other",
+    "environment": "production",
+    "release": "install-script@1.0.0",
+    "tags": {
+        "event_type": "$event_type",
+        "script_version": "1.0.0"
+    },
+    "contexts": {
+        "os": {
+            "name": "$(echo "$system_info" | jq -r .os_name)",
+            "version": "$(echo "$system_info" | jq -r .os_version)"
+        },
+        "device": {
+            "arch": "$(echo "$system_info" | jq -r .cpu_arch)",
+            "model": "$(echo "$system_info" | jq -r .pi_model)"
+        }
+    },
+    "extra": {
+        "docker_version": "$(echo "$system_info" | jq -r .docker_version)",
+        "install_id": "$(echo "$system_info" | jq -r .install_id)",
+        "context": "$context"
+    }
+}
+EOF
+)
+        
+        # Extract DSN components
+        local sentry_key=$(echo "$SENTRY_DSN" | grep -oE 'https://[a-f0-9]+' | sed 's/https:\/\///')
+        local sentry_project=$(echo "$SENTRY_DSN" | grep -oE '[0-9]+$')
+        local sentry_host=$(echo "$SENTRY_DSN" | grep -oE '@[^/]+' | sed 's/@//')
+        
+        # Send to Sentry (timeout after 5 seconds, silent failure)
+        curl -s -m 5 \
+            -X POST \
+            "https://${sentry_host}/api/${sentry_project}/store/" \
+            -H "Content-Type: application/json" \
+            -H "X-Sentry-Auth: Sentry sentry_key=${sentry_key}, sentry_version=7" \
+            -d "$payload" \
+            >/dev/null 2>&1 || true
+    } &
+    
+    # Return immediately
+    return 0
+}
+
 # Function to check if there is enough disk space for Docker image
 check_docker_space() {
     local required_space=2000000  # 2GB in KB
@@ -373,6 +545,7 @@ pull_docker_image() {
     if docker pull "${BIRDNET_GO_IMAGE}"; then
         print_message "✅ Docker image pulled successfully" "$GREEN"
     else
+        send_telemetry_event "error" "Docker image pull failed" "error" "step=pull_docker_image,image=${BIRDNET_GO_IMAGE}"
         print_message "❌ Failed to pull Docker image" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "- No internet connection" "$YELLOW"
@@ -633,6 +806,7 @@ download_base_config() {
     # Download new config to temporary file first
     local temp_config="/tmp/config.yaml.new"
     if ! curl -s --fail https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf/config.yaml > "$temp_config"; then
+        send_telemetry_event "error" "Configuration download failed" "error" "step=download_base_config"
         print_message "❌ Failed to download configuration template" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "- No internet connection or DNS resolution failed" "$YELLOW"
@@ -768,6 +942,7 @@ validate_audio_device() {
 
     # Test audio device access - using LC_ALL=C to force English output
     if ! LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
+        send_telemetry_event "error" "Audio device validation failed" "error" "step=validate_audio_device,device=$device"
         print_message "❌ Failed to access audio device" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "  • Device is busy" "$YELLOW"
@@ -1558,6 +1733,7 @@ start_birdnet_go() {
     
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
+        send_telemetry_event "error" "Service startup failed" "error" "step=start_birdnet_go"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
         
         # Get and display journald logs for troubleshooting
@@ -1574,6 +1750,7 @@ start_birdnet_go() {
         exit 1
     fi
     print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
+    send_telemetry_event "info" "Installation completed successfully" "info" "step=start_birdnet_go"
 
     print_message "\n🐳 Waiting for container to start..." "$YELLOW"
     
@@ -1764,6 +1941,9 @@ WEB_PORT=8080  # Default web port
 AUDIO_ENV="--device /dev/snd"
 # Flag for fresh installation
 FRESH_INSTALL="false"
+
+# Load telemetry configuration if it exists
+load_telemetry_config
 
 # Installation status check
 INSTALLATION_TYPE=$(check_birdnet_installation)
@@ -2172,6 +2352,9 @@ configure_location
 
 # Configure security
 configure_auth
+
+# Configure telemetry
+configure_telemetry
 
 # Optimize settings
 optimize_settings
