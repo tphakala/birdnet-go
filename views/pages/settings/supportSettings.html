@@ -147,7 +147,9 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF_TOKEN
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     include_logs: this.supportDump.includeLogs,
                     include_config: this.supportDump.includeConfig,
