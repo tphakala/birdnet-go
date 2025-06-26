@@ -494,9 +494,12 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 			if n > 0 {
 				watchdog.update() // Update the watchdog timestamp
 
-				_, err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
+				shouldContinue, err := p.processAudioData(url, buf[:n], &bufferErrorCount, &lastBufferErrorTime, restartChan, audioLevelChan)
 				if err != nil {
 					return err
+				}
+				if !shouldContinue {
+					return nil
 				}
 			}
 		}
