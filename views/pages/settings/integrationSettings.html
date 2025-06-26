@@ -461,6 +461,20 @@
                     "tooltip" "Language code for the API response (e.g., 'en' for English)."}}
             </div>
 
+            <!-- Multi-Stage Operation Component for Weather Provider Test -->
+            <div x-show="weather.provider !== 'none'" class="mt-4">
+                {{template "multiStageOperation" dict
+                    "operationName" "Weather Provider Test"
+                    "apiEndpoint" "/api/v1/weather/test"
+                    "stageOrder" "['Starting Test', 'API Connectivity', 'Authentication', 'Weather Data Fetch', 'Data Parsing']"
+                    "buttonText" "Test Weather Provider"
+                    "buttonLoadingText" "Testing..."
+                    "buttonDisabledCondition" "weather.provider === 'none' || (weather.provider === 'openweather' && !weather.openWeather.apiKey) || isRunning"
+                    "buttonTooltipMap" "weather.provider === 'none' ? 'No weather provider selected' : weather.provider === 'openweather' && !weather.openWeather.apiKey ? 'OpenWeather API key must be specified' : isRunning ? 'Test in progress...' : 'Test weather provider connection'"
+                    "payload" "{provider: weather.provider, debug: weather.debug, pollInterval: weather.pollInterval, openWeather: weather.openWeather}"
+                    "completionMessage" "Please remember to save settings to apply the changes permanently."
+                }}
+            </div>
         </div>
     </div>
 </div>
