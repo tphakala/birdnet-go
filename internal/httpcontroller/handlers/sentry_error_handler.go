@@ -99,8 +99,8 @@ func (h *Handlers) ExampleHandler(c echo.Context) error {
 		// Your handler logic here
 		data, err := h.DS.GetAllDetections(nil, nil) // Example database call
 		if err != nil {
-			// Use the privacy-compliant error handler
-			return HandleErrorWithSentry(c, err, "example", "Failed to retrieve detections", 500)
+			// Use the privacy-compliant error handler with automatic status code determination
+			return HandleErrorWithSentryAuto(c, err, "example", "Failed to retrieve detections")
 		}
 
 		return c.JSON(200, data)
