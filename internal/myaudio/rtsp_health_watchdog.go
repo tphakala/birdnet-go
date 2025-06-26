@@ -321,14 +321,27 @@ func (w *RTSPHealthWatchdog) handleDeadProcess(url string, stats *StreamHealthSt
 			sentry.LevelWarning, "rtsp-health-dead-process")
 
 		// Clean up the dead process first
-		if process, exists := ffmpegProcesses.Load(url); exists {
+		if process, exists := ffmpegProcesses.LoadAndDelete(url); exists {
 			if p, ok := process.(*FFmpegProcess); ok {
-				p.Cleanup(url)
+				// Use CleanupWithDelete(false) since we already removed it with LoadAndDelete
+				p.CleanupWithDelete(url, false)
 			}
 		}
 
-		// Wait a moment for cleanup
-		time.Sleep(500 * time.Millisecond)
+		// Wait a moment for cleanup to complete
+		time.Sleep(1 * time.Second)
+
+		// Ensure the process is truly removed before starting new one
+		if _, stillExists := ffmpegProcesses.Load(url); stillExists {
+			logging.Warn("RTSP health watchdog: Process still exists after cleanup, skipping restart",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "restart_dead_process")
+			stats.mu.Lock()
+			stats.RestartInProgress = false
+			stats.mu.Unlock()
+			return
+		}
 
 		// Start a new process
 		w.startNewProcess(url, stats)
