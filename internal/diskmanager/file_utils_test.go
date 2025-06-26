@@ -16,7 +16,7 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 		expectedErrText string
 	}{
 		// Too few parts
-		{"bubo_bubo.wav", "invalid file name format: bubo_bubo.wav (has 2 parts, expected at least 3)"},
+		{"bubo_bubo.wav", "diskmanager: invalid audio filename format 'bubo_bubo.wav' (has 2 parts, expected at least 3)"},
 		// This actually gets parsed as species="bubo", confidence="bubo_80p", which fails at the confidence parsing step
 		{"bubo_bubo_80p.wav", "strconv.Atoi: parsing \"bubo\": invalid syntax"},
 
@@ -132,7 +132,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 
 	// Should return an error when all files are invalid
 	assert.Error(t, err, "Should return an error when all files are invalid")
-	assert.Contains(t, err.Error(), "failed to parse any files", "Error should indicate no valid files were found")
+	assert.Contains(t, err.Error(), "diskmanager: failed to parse any audio files", "Error should indicate no valid files were found")
 	assert.Len(t, files, 0, "Should return no files when all are invalid")
 }
 
