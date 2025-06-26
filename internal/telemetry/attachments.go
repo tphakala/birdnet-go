@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // AttachmentUploader handles uploading support dumps as Sentry attachments
@@ -23,7 +24,11 @@ func NewAttachmentUploader(enabled bool) *AttachmentUploader {
 // UploadSupportDump uploads a support dump to Sentry as an event with attachment
 func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []byte, systemID string, userMessage string) error {
 	if !au.enabled {
-		return fmt.Errorf("telemetry is not enabled")
+		return errors.Newf("telemetry is not enabled - cannot upload support dump").
+			Component("telemetry").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "upload_support_dump").
+			Build()
 	}
 
 	// Create a new event specifically for support dumps
@@ -78,7 +83,13 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	})
 	
 	if eventID == nil {
-		return fmt.Errorf("failed to capture event")
+		return errors.Newf("failed to capture support dump event in Sentry").
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", "capture_support_event").
+			Context("system_id", systemID).
+			Context("dump_size", len(dumpData)).
+			Build()
 	}
 	
 	// Flush to ensure the event is sent
@@ -90,7 +101,11 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 // CreateSupportEvent creates a support request event without an attachment
 func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID string, message string, metadata map[string]interface{}) error {
 	if !au.enabled {
-		return fmt.Errorf("telemetry is not enabled")
+		return errors.Newf("telemetry is not enabled - cannot create support event").
+			Component("telemetry").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "create_support_event").
+			Build()
 	}
 
 	// Create event
@@ -118,7 +133,12 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID s
 	// Capture event
 	eventID := sentry.CaptureEvent(event)
 	if eventID == nil {
-		return fmt.Errorf("failed to capture event")
+		return errors.Newf("failed to capture support event in Sentry").
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", "capture_support_event").
+			Context("system_id", systemID).
+			Build()
 	}
 	
 	sentry.Flush(5 * time.Second)

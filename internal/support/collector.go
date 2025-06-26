@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,6 +30,14 @@ type Collector struct {
 
 // NewCollector creates a new support data collector
 func NewCollector(configPath, dataPath, systemID, version string) *Collector {
+	// Set defaults for empty paths
+	if configPath == "" {
+		configPath = "."
+	}
+	if dataPath == "" {
+		dataPath = "."
+	}
+	
 	return &Collector{
 		configPath: configPath,
 		dataPath:   dataPath,
@@ -40,6 +48,15 @@ func NewCollector(configPath, dataPath, systemID, version string) *Collector {
 
 // Collect gathers support data based on the provided options
 func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*SupportDump, error) {
+	// Validate options
+	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo {
+		return nil, errors.Newf("at least one data type must be included in support dump").
+			Component("support").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_collect_options").
+			Build()
+	}
+
 	dump := &SupportDump{
 		ID:        uuid.New().String(),
 		Timestamp: time.Now().UTC(),
@@ -56,7 +73,12 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	if opts.IncludeConfig {
 		config, err := c.collectConfig(opts.ScrubSensitive)
 		if err != nil {
-			return nil, fmt.Errorf("failed to collect config: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "collect_config").
+				Context("scrub_sensitive", opts.ScrubSensitive).
+				Build()
 		}
 		dump.Config = config
 	}
@@ -65,7 +87,13 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	if opts.IncludeLogs {
 		logs, err := c.collectLogs(opts.LogDuration, opts.MaxLogSize)
 		if err != nil {
-			return nil, fmt.Errorf("failed to collect logs: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "collect_logs").
+				Context("log_duration", opts.LogDuration.String()).
+				Context("max_log_size", opts.MaxLogSize).
+				Build()
 		}
 		dump.Logs = logs
 	}
@@ -81,20 +109,40 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	// Add metadata
 	metadataFile, err := w.Create("metadata.json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metadata file: %w", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_metadata_file").
+			Context("archive_action", "create_file").
+			Build()
 	}
 	if err := json.NewEncoder(metadataFile).Encode(dump); err != nil {
-		return nil, fmt.Errorf("failed to write metadata: %w", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_metadata").
+			Context("dump_id", dump.ID).
+			Build()
 	}
 
 	// Add logs as separate file
 	if opts.IncludeLogs && len(dump.Logs) > 0 {
 		logsFile, err := w.Create("logs.json")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create logs file: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_logs_file").
+				Context("log_count", len(dump.Logs)).
+				Build()
 		}
 		if err := json.NewEncoder(logsFile).Encode(dump.Logs); err != nil {
-			return nil, fmt.Errorf("failed to write logs: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_logs").
+				Context("log_count", len(dump.Logs)).
+				Build()
 		}
 	}
 
@@ -102,10 +150,18 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	if opts.IncludeConfig && dump.Config != nil {
 		configFile, err := w.Create("config.json")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create config file: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_config_file").
+				Build()
 		}
 		if err := json.NewEncoder(configFile).Encode(dump.Config); err != nil {
-			return nil, fmt.Errorf("failed to write config: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_config").
+				Build()
 		}
 	}
 
@@ -113,15 +169,28 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	if opts.IncludeSystemInfo {
 		sysInfoFile, err := w.Create("system_info.json")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create system info file: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_system_info_file").
+				Build()
 		}
 		if err := json.NewEncoder(sysInfoFile).Encode(dump.SystemInfo); err != nil {
-			return nil, fmt.Errorf("failed to write system info: %w", err)
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_system_info").
+				Build()
 		}
 	}
 
 	if err := w.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close archive: %w", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "close_archive").
+			Context("archive_size", buf.Len()).
+			Build()
 	}
 
 	return buf.Bytes(), nil
@@ -180,12 +249,22 @@ func (c *Collector) collectConfig(scrub bool) (map[string]any, error) {
 	configPath := filepath.Join(c.configPath, "config.yaml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_config_file").
+			Context("config_path", configPath).
+			Build()
 	}
 
 	var config map[string]any
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "parse_config_yaml").
+			Context("file_size", len(data)).
+			Build()
 	}
 
 	if scrub {
@@ -282,6 +361,7 @@ func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, erro
 	output, err := cmd.Output()
 	if err != nil {
 		// journalctl might not be available or service might not exist
+		// This is not a fatal error, just means no journald logs available
 		return logs, nil
 	}
 
@@ -294,6 +374,7 @@ func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, erro
 
 		var entry map[string]interface{}
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Skip malformed JSON lines silently
 			continue
 		}
 
@@ -396,6 +477,7 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 
 	file, err := os.Open(path)
 	if err != nil {
+		// Log file might not exist or be inaccessible, which is fine
 		return logs, 0
 	}
 	defer file.Close()
