@@ -30,7 +30,7 @@ func NewAttachmentUploader(enabled bool) *AttachmentUploader {
 func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []byte, systemID, userMessage string) error {
 	// Extract trace ID early for use in error messages
 	traceID := extractTraceID(ctx)
-	
+
 	if !au.enabled {
 		err := errors.Newf("telemetry is not enabled - cannot upload support dump").
 			Component("telemetry").
@@ -158,7 +158,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 			Context("operation", "create_support_event").
 			Build()
 	}
-	
+
 	if message == "" {
 		return errors.Newf("message cannot be empty").
 			Component("telemetry").
@@ -201,7 +201,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	if traceID != "" {
 		supportContext["trace_id"] = traceID
 	}
-	
+
 	// Add contexts
 	event.Contexts["support"] = supportContext
 
@@ -248,7 +248,6 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	}
 }
 
-
 // extractTraceID attempts to extract a trace ID from the context
 // It looks for common trace ID keys used by various tracing systems
 func extractTraceID(ctx context.Context) string {
@@ -258,20 +257,20 @@ func extractTraceID(ctx context.Context) string {
 			return id
 		}
 	}
-	
+
 	// Check for X-Trace-ID (common HTTP header)
 	if traceID := ctx.Value("x-trace-id"); traceID != nil {
 		if id, ok := traceID.(string); ok {
 			return id
 		}
 	}
-	
+
 	// Check for request ID
 	if reqID := ctx.Value("request-id"); reqID != nil {
 		if id, ok := reqID.(string); ok {
 			return id
 		}
 	}
-	
+
 	return ""
 }
