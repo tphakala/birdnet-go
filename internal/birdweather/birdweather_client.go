@@ -612,7 +612,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	serviceLogger.Debug("Received soundscape upload response", "url", maskedURL, "status_code", resp.StatusCode)
 
 	// Process the response using the new handler
-	responseBody, err := handleHTTPResponse(resp, http.StatusOK, "soundscape upload", maskedURL)
+	responseBody, err := handleHTTPResponse(resp, http.StatusCreated, "soundscape upload", maskedURL)
 	if err != nil {
 		return "", err
 	}
