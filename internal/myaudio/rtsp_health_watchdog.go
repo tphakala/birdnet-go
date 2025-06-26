@@ -1,7 +1,6 @@
 package myaudio
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -289,15 +287,24 @@ func (w *RTSPHealthWatchdog) handleMissingProcess(url string, stats *StreamHealt
 	stats.mu.Unlock()
 
 	if shouldRestart {
-		logging.Info("RTSP health watchdog: Starting missing FFmpeg process",
+		logging.Info("RTSP health watchdog: Detected missing FFmpeg process",
 			"service", "rtsp-health-watchdog",
 			"url", url,
-			"operation", "start_missing_process")
-		telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog starting missing process: %s", categorizeStreamURL(url)),
+			"operation", "detected_missing_process")
+		telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog detected missing process: %s", categorizeStreamURL(url)),
 			sentry.LevelWarning, "rtsp-health-missing-process")
 
-		// Start a new FFmpeg process
-		w.startNewProcess(url, stats)
+		// For missing processes, we should not start a new lifecycle manager
+		// The original lifecycle manager from CaptureAudioRTSP should handle restarts
+		// Just reset the restart flag since there's nothing to restart
+		stats.mu.Lock()
+		stats.RestartInProgress = false
+		stats.mu.Unlock()
+
+		logging.Warn("RTSP health watchdog: Missing process detected but no action taken - lifecycle manager should handle it",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "missing_process_no_action")
 	}
 }
 
@@ -331,20 +338,38 @@ func (w *RTSPHealthWatchdog) handleDeadProcess(url string, stats *StreamHealthSt
 		// Wait a moment for cleanup to complete
 		time.Sleep(1 * time.Second)
 
-		// Ensure the process is truly removed before starting new one
-		if _, stillExists := ffmpegProcesses.Load(url); stillExists {
-			logging.Warn("RTSP health watchdog: Process still exists after cleanup, skipping restart",
+		// Send restart signal through the existing restart channel
+		// This ensures coordination with the main lifecycle manager
+		restartChan := getRestartChannelForURL(url)
+		if restartChan != nil {
+			select {
+			case restartChan <- struct{}{}:
+				logging.Info("RTSP health watchdog: Sent restart signal for dead process",
+					"service", "rtsp-health-watchdog",
+					"url", url,
+					"operation", "send_restart_signal_dead_process")
+				telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog sent restart for dead process: %s", categorizeStreamURL(url)),
+					sentry.LevelWarning, "rtsp-health-restart-dead")
+			default:
+				logging.Warn("RTSP health watchdog: Restart channel full for dead process",
+					"service", "rtsp-health-watchdog",
+					"url", url,
+					"operation", "restart_channel_full_dead_process")
+			}
+		} else {
+			logging.Error("RTSP health watchdog: No restart channel found for dead process",
 				"service", "rtsp-health-watchdog",
 				"url", url,
-				"operation", "restart_dead_process")
+				"operation", "find_restart_channel_dead_process")
+		}
+
+		// Reset restart flag after a delay
+		go func() {
+			time.Sleep(10 * time.Second)
 			stats.mu.Lock()
 			stats.RestartInProgress = false
 			stats.mu.Unlock()
-			return
-		}
-
-		// Start a new process
-		w.startNewProcess(url, stats)
+		}()
 	}
 }
 
@@ -388,79 +413,6 @@ func (w *RTSPHealthWatchdog) handleUnhealthyStream(url string, stats *StreamHeal
 		stats.mu.Lock()
 		stats.RestartInProgress = false
 		stats.mu.Unlock()
-	}()
-}
-
-// startNewProcess starts a new FFmpeg process for a URL
-func (w *RTSPHealthWatchdog) startNewProcess(url string, stats *StreamHealthStats) {
-	settings := conf.Setting()
-	if settings == nil {
-		stats.mu.Lock()
-		stats.RestartInProgress = false
-		stats.mu.Unlock()
-		return
-	}
-
-	// Find the restart channel for this URL
-	restartChan := getRestartChannelForURL(url)
-	if restartChan == nil {
-		logging.Warn("RTSP health watchdog: No restart channel found",
-			"service", "rtsp-health-watchdog",
-			"url", url,
-			"operation", "find_restart_channel")
-		stats.mu.Lock()
-		stats.RestartInProgress = false
-		stats.mu.Unlock()
-		return
-	}
-
-	// Create a context for the new process
-	ctx := context.Background()
-	config := FFmpegConfig{
-		URL:       url,
-		Transport: settings.Realtime.RTSP.Transport,
-	}
-
-	// Start the FFmpeg lifecycle manager
-	go func() {
-		defer func() {
-			stats.mu.Lock()
-			stats.RestartInProgress = false
-			stats.mu.Unlock()
-		}()
-
-		// For health watchdog, create a dummy unified audio channel since it's not used for actual data processing
-		unifiedAudioChan := make(chan UnifiedAudioData, 10)
-		go func() {
-			// Drain the unified audio channel to prevent blocking
-			for {
-				select {
-				case <-ctx.Done():
-					// Exit when context is cancelled
-					return
-				case _, ok := <-unifiedAudioChan:
-					if !ok {
-						// Channel closed, exit
-						return
-					}
-					// Discard audio data in health watchdog context
-				}
-			}
-		}()
-		if err := manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan); err != nil {
-			enhancedErr := errors.New(err).
-				Component("rtsp-health-watchdog").
-				Category(errors.CategoryRTSP).
-				Context("operation", "start_ffmpeg_lifecycle").
-				Context("url", url).
-				Build()
-			telemetry.CaptureError(enhancedErr, "rtsp-health-start-failure")
-			logging.Error("RTSP health watchdog: Failed to start FFmpeg",
-				"service", "rtsp-health-watchdog",
-				"url", url,
-				"operation", "start_ffmpeg_lifecycle",
-				"error", err)
-		}
 	}()
 }
 
