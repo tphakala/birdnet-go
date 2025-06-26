@@ -3,6 +3,7 @@ package support
 import (
 	"archive/zip"
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -183,25 +184,30 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 	// Look for README.txt
 	found := false
 	for _, f := range r.File {
-		if f.Name == "logs/README.txt" {
-			found = true
-
-			// Check content
-			rc, err := f.Open()
-			if err != nil {
-				t.Fatalf("Failed to open README: %v", err)
-			}
-			defer rc.Close()
-
-			content := make([]byte, f.UncompressedSize64)
-			rc.Read(content)
-
-			expected := "No log files were found or all logs were older than the specified duration."
-			if string(content) != expected {
-				t.Errorf("README content = %q, want %q", string(content), expected)
-			}
-			break
+		if f.Name != "logs/README.txt" {
+			continue
 		}
+
+		found = true
+
+		// Check content
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("Failed to open README: %v", err)
+		}
+
+		content, err := io.ReadAll(rc)
+		rc.Close() // Close immediately after reading, not deferred
+
+		if err != nil {
+			t.Fatalf("Failed to read README: %v", err)
+		}
+
+		expected := "No log files were found or all logs were older than the specified duration."
+		if string(content) != expected {
+			t.Errorf("README content = %q, want %q", string(content), expected)
+		}
+		break
 	}
 
 	if !found {
