@@ -74,16 +74,15 @@
             </label>
             <div class="join">
                 <input type="text" id="systemID" value="{{.Settings.SystemID}}" class="input input-sm input-bordered join-item w-full font-mono text-base-content" readonly />
-                <button type="button" class="btn btn-sm join-item" onclick="navigator.clipboard.writeText('{{.Settings.SystemID}}').then(() => { 
-                    const btn = event.currentTarget;
-                    const originalContent = btn.innerHTML;
-                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>Copied!';
-                    btn.classList.add('btn-success');
-                    setTimeout(() => {
-                        btn.innerHTML = originalContent;
-                        btn.classList.remove('btn-success');
-                    }, 2000);
-                })">
+                <button type="button" class="btn btn-sm join-item" 
+                        @click="navigator.clipboard.writeText('{{.Settings.SystemID}}').then(() => { 
+                            $el.innerHTML = '✓ Copied!';
+                            $el.classList.add('btn-success');
+                            setTimeout(() => {
+                                $el.innerHTML = '<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; class=&quot;h-5 w-5&quot; fill=&quot;none&quot; viewBox=&quot;0 0 24 24&quot; stroke=&quot;currentColor&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z&quot; /></svg>Copy';
+                                $el.classList.remove('btn-success');
+                            }, 2000);
+                        })">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
