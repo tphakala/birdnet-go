@@ -3,13 +3,14 @@ package myaudio
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -48,14 +49,17 @@ func NewRTSPHealthWatchdog(checkInterval, dataTimeout time.Duration) *RTSPHealth
 // Start begins the health monitoring process
 func (w *RTSPHealthWatchdog) Start() {
 	if w.running.Load() {
-		log.Println("🔍 RTSP health watchdog already running")
+		logging.Info("RTSP health watchdog already running",
+			"service", "rtsp-health-watchdog")
 		return
 	}
 
 	w.running.Store(true)
 	go w.monitorLoop()
-	log.Printf("🔍 RTSP health watchdog started (check interval: %v, data timeout: %v)",
-		w.checkInterval, w.dataTimeout)
+	logging.Info("RTSP health watchdog started",
+		"service", "rtsp-health-watchdog",
+		"check_interval", w.checkInterval,
+		"data_timeout", w.dataTimeout)
 }
 
 // Stop halts the health monitoring process
@@ -66,7 +70,8 @@ func (w *RTSPHealthWatchdog) Stop() {
 
 	close(w.done)
 	w.running.Store(false)
-	log.Println("🛑 RTSP health watchdog stopped")
+	logging.Info("RTSP health watchdog stopped",
+		"service", "rtsp-health-watchdog")
 }
 
 // monitorLoop is the main monitoring loop
@@ -122,7 +127,10 @@ func (w *RTSPHealthWatchdog) checkStreamHealth(url string) {
 	// Check if FFmpeg process exists
 	processInterface, exists := ffmpegProcesses.Load(url)
 	if !exists {
-		log.Printf("⚠️ RTSP health check: No FFmpeg process found for %s", url)
+		logging.Warn("RTSP health check: No FFmpeg process found",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "check_process_exists")
 		w.handleMissingProcess(url, stats)
 		return
 	}
@@ -130,13 +138,20 @@ func (w *RTSPHealthWatchdog) checkStreamHealth(url string) {
 	// Type assert to FFmpegProcess
 	process, ok := processInterface.(*FFmpegProcess)
 	if !ok {
-		log.Printf("⚠️ RTSP health check: Invalid process type for %s", url)
+		logging.Error("RTSP health check: Invalid process type",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "type_assertion",
+			"actual_type", fmt.Sprintf("%T", processInterface))
 		return
 	}
 
 	// Check if process is alive
 	if !w.isProcessAlive(process) {
-		log.Printf("⚠️ RTSP health check: FFmpeg process dead for %s", url)
+		logging.Warn("RTSP health check: FFmpeg process dead",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "check_process_alive")
 		w.handleDeadProcess(url, stats)
 		return
 	}
@@ -150,8 +165,11 @@ func (w *RTSPHealthWatchdog) checkStreamHealth(url string) {
 		stats.ConsecutiveTimeouts = 0
 		stats.IsHealthy = true
 		if !previouslyHealthy {
-			log.Printf("✅ RTSP health restored for %s", url)
-			telemetry.CaptureMessage(fmt.Sprintf("RTSP stream health restored: %s", url),
+			logging.Info("RTSP health restored",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "health_restored")
+			telemetry.CaptureMessage(fmt.Sprintf("RTSP stream health restored: %s", categorizeStreamURL(url)),
 				sentry.LevelInfo, "rtsp-health-restored")
 		}
 	} else {
@@ -159,8 +177,12 @@ func (w *RTSPHealthWatchdog) checkStreamHealth(url string) {
 		if timeSinceLastData > w.dataTimeout {
 			stats.ConsecutiveTimeouts++
 			stats.IsHealthy = false
-			log.Printf("⚠️ RTSP health check: No data from %s for %v (consecutive timeouts: %d)",
-				url, timeSinceLastData, stats.ConsecutiveTimeouts)
+			logging.Warn("RTSP health check: No data received",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "data_timeout_detected",
+				"time_since_last_data", timeSinceLastData,
+				"consecutive_timeouts", stats.ConsecutiveTimeouts)
 
 			// Only attempt restart if not already in progress
 			if !stats.RestartInProgress {
@@ -238,8 +260,11 @@ func (w *RTSPHealthWatchdog) handleMissingProcess(url string, stats *StreamHealt
 	stats.mu.Unlock()
 
 	if shouldRestart {
-		log.Printf("🔄 RTSP health watchdog: Starting missing FFmpeg process for %s", url)
-		telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog starting missing process: %s", url),
+		logging.Info("RTSP health watchdog: Starting missing FFmpeg process",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "start_missing_process")
+		telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog starting missing process: %s", categorizeStreamURL(url)),
 			sentry.LevelWarning, "rtsp-health-missing-process")
 
 		// Start a new FFmpeg process
@@ -259,8 +284,11 @@ func (w *RTSPHealthWatchdog) handleDeadProcess(url string, stats *StreamHealthSt
 	stats.mu.Unlock()
 
 	if shouldRestart {
-		log.Printf("🔄 RTSP health watchdog: Restarting dead FFmpeg process for %s", url)
-		telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog restarting dead process: %s", url),
+		logging.Info("RTSP health watchdog: Restarting dead FFmpeg process",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "restart_dead_process")
+		telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog restarting dead process: %s", categorizeStreamURL(url)),
 			sentry.LevelWarning, "rtsp-health-dead-process")
 
 		// Clean up the dead process first
@@ -282,7 +310,10 @@ func (w *RTSPHealthWatchdog) handleDeadProcess(url string, stats *StreamHealthSt
 func (w *RTSPHealthWatchdog) handleUnhealthyStream(url string, stats *StreamHealthStats, process *FFmpegProcess) {
 	// Check if this is a restart storm
 	if process.isRestartStorm() {
-		log.Printf("⚠️ RTSP health watchdog: Restart storm detected for %s, skipping restart", url)
+		logging.Warn("RTSP health watchdog: Restart storm detected, skipping restart",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "restart_storm_detected")
 		stats.mu.Lock()
 		stats.RestartInProgress = false
 		stats.mu.Unlock()
@@ -295,11 +326,17 @@ func (w *RTSPHealthWatchdog) handleUnhealthyStream(url string, stats *StreamHeal
 	if restartChan != nil {
 		select {
 		case restartChan <- struct{}{}:
-			log.Printf("🔄 RTSP health watchdog: Sent restart signal for unhealthy stream %s", url)
-			telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog triggered restart: %s", url),
+			logging.Info("RTSP health watchdog: Sent restart signal for unhealthy stream",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "send_restart_signal")
+			telemetry.CaptureMessage(fmt.Sprintf("RTSP health watchdog triggered restart: %s", categorizeStreamURL(url)),
 				sentry.LevelWarning, "rtsp-health-triggered-restart")
 		default:
-			log.Printf("⚠️ RTSP health watchdog: Restart channel full for %s", url)
+			logging.Warn("RTSP health watchdog: Restart channel full",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "restart_channel_full")
 		}
 	}
 
@@ -325,7 +362,10 @@ func (w *RTSPHealthWatchdog) startNewProcess(url string, stats *StreamHealthStat
 	// Find the restart channel for this URL
 	restartChan := getRestartChannelForURL(url)
 	if restartChan == nil {
-		log.Printf("⚠️ RTSP health watchdog: No restart channel found for %s", url)
+		logging.Warn("RTSP health watchdog: No restart channel found",
+			"service", "rtsp-health-watchdog",
+			"url", url,
+			"operation", "find_restart_channel")
 		stats.mu.Lock()
 		stats.RestartInProgress = false
 		stats.mu.Unlock()
@@ -349,7 +389,18 @@ func (w *RTSPHealthWatchdog) startNewProcess(url string, stats *StreamHealthStat
 
 		audioLevelChan := getAudioLevelChannelForURL(url)
 		if err := manageFfmpegLifecycle(ctx, config, restartChan, audioLevelChan); err != nil {
-			log.Printf("❌ RTSP health watchdog: Failed to start FFmpeg for %s: %v", url, err)
+			enhancedErr := errors.New(err).
+				Component("rtsp-health-watchdog").
+				Category(errors.CategoryRTSP).
+				Context("operation", "start_ffmpeg_lifecycle").
+				Context("url", url).
+				Build()
+			telemetry.CaptureError(enhancedErr, "rtsp-health-start-failure")
+			logging.Error("RTSP health watchdog: Failed to start FFmpeg",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "start_ffmpeg_lifecycle",
+				"error", err)
 		}
 	}()
 }
@@ -381,7 +432,10 @@ func (w *RTSPHealthWatchdog) cleanupRemovedStreams(configuredURLs map[string]boo
 	for url := range w.healthStats {
 		if !configuredURLs[url] {
 			delete(w.healthStats, url)
-			log.Printf("🧹 RTSP health watchdog: Removed stats for %s", url)
+			logging.Info("RTSP health watchdog: Removed stats for unconfigured stream",
+				"service", "rtsp-health-watchdog",
+				"url", url,
+				"operation", "cleanup_removed_stream")
 		}
 	}
 }
