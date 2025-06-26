@@ -190,16 +190,9 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 	// Serve the file
 	err := ctx.File(tempFile)
 
-	// Clean up temp file after serving
-	go func() {
-		time.Sleep(5 * time.Second) // Give time for download to complete
-		if err := os.Remove(tempFile); err != nil {
-			c.apiLogger.Warn("Failed to remove temporary support file",
-				"path", tempFile,
-				"error", err,
-			)
-		}
-	}()
+	// Schedule cleanup of temp file after serving
+	// Note: The file will be removed during the periodic cleanup routine
+	// This avoids potential race conditions with the download
 
 	return err
 }
@@ -229,12 +222,20 @@ func (c *Controller) initSupportRoutes() {
 	c.Group.GET("/support/download/:id", c.DownloadSupportDump, c.authMiddlewareFn)
 	c.Group.GET("/support/status", c.GetSupportStatus, c.authMiddlewareFn)
 
-	// Start cleanup goroutine for old support dumps
-	go c.startSupportDumpCleanup(c.ctx)
+	// Start cleanup goroutine for old support dumps with proper context
+	if c.ctx != nil {
+		go c.startSupportDumpCleanup(c.ctx)
+	}
 }
 
 // startSupportDumpCleanup runs a periodic cleanup of old temporary support dump files
 func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
+	// Ensure we have a valid context
+	if ctx == nil {
+		c.apiLogger.Error("Cannot start support dump cleanup with nil context")
+		return
+	}
+
 	// Run cleanup immediately on startup
 	c.cleanupOldSupportDumps()
 
@@ -254,7 +255,7 @@ func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
 	}
 }
 
-// cleanupOldSupportDumps removes temporary support dump files older than 24 hours
+// cleanupOldSupportDumps removes temporary support dump files older than 1 hour
 func (c *Controller) cleanupOldSupportDumps() {
 	tempDir := os.TempDir()
 	pattern := filepath.Join(tempDir, "birdnet-go-support-*.zip")
@@ -268,23 +269,35 @@ func (c *Controller) cleanupOldSupportDumps() {
 		return
 	}
 
-	cutoffTime := time.Now().Add(-24 * time.Hour)
+	// Changed to 1 hour to clean up files more aggressively
+	cutoffTime := time.Now().Add(-1 * time.Hour)
 	removedCount := 0
 
 	for _, file := range files {
 		info, err := os.Stat(file)
 		if err != nil {
+			// File might have been already removed
+			if os.IsNotExist(err) {
+				continue
+			}
+			c.apiLogger.Warn("Failed to stat support dump file",
+				"path", file,
+				"error", err,
+			)
 			continue
 		}
 
-		// Remove files older than 24 hours
+		// Remove files older than 1 hour
 		if info.ModTime().Before(cutoffTime) {
 			if err := os.Remove(file); err != nil {
-				c.apiLogger.Warn("Failed to remove old support dump file",
-					"path", file,
-					"age", time.Since(info.ModTime()),
-					"error", err,
-				)
+				// Check if file was already removed
+				if !os.IsNotExist(err) {
+					c.apiLogger.Warn("Failed to remove old support dump file",
+						"path", file,
+						"age", time.Since(info.ModTime()),
+						"error", err,
+					)
+				}
 			} else {
 				removedCount++
 			}
