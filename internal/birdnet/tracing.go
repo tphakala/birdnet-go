@@ -4,6 +4,7 @@ package birdnet
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -169,9 +170,12 @@ func TracePrediction(ctx context.Context, sampleSize int, fn func() (interface{}
 		span.SetData("error_message", err.Error())
 	} else {
 		span.SetTag("error", "false")
-		// Add result metrics if available
-		if results, ok := result.([]interface{}); ok {
-			span.SetData("result_count", len(results))
+		// Add result metrics if available using reflection
+		if result != nil {
+			resultValue := reflect.ValueOf(result)
+			if resultValue.Kind() == reflect.Slice {
+				span.SetData("result_count", resultValue.Len())
+			}
 		}
 	}
 
