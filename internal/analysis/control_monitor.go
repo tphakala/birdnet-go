@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -26,21 +27,36 @@ type ControlMonitor struct {
 	bufferManager    *BufferManager
 	proc             *processor.Processor
 	audioLevelChan   chan myaudio.AudioLevelData
+	soundLevelChan   chan myaudio.SoundLevelData
 	bn               *birdnet.BirdNET
+	httpServer       *httpcontroller.Server
+
+	// Track unified audio channel and its done channel to prevent goroutine leaks
+	unifiedAudioChan     chan myaudio.UnifiedAudioData
+	unifiedAudioDoneChan chan struct{}
+	unifiedAudioMutex    sync.Mutex
+	unifiedAudioWg       sync.WaitGroup
+
+	// Track sound level publisher goroutines
+	soundLevelPublishersWg    *sync.WaitGroup
+	soundLevelPublishersDone  chan struct{}
+	soundLevelPublishersMutex sync.Mutex
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) *ControlMonitor {
 	return &ControlMonitor{
-		wg:               wg,
-		controlChan:      controlChan,
-		quitChan:         quitChan,
-		restartChan:      restartChan,
-		notificationChan: notificationChan,
-		bufferManager:    bufferManager,
-		proc:             proc,
-		audioLevelChan:   make(chan myaudio.AudioLevelData),
-		bn:               proc.Bn,
+		wg:                     wg,
+		controlChan:            controlChan,
+		quitChan:               quitChan,
+		restartChan:            restartChan,
+		notificationChan:       notificationChan,
+		bufferManager:          bufferManager,
+		audioLevelChan:         audioLevelChan,
+		soundLevelChan:         soundLevelChan,
+		proc:                   proc,
+		bn:                     proc.Bn,
+		soundLevelPublishersWg: &sync.WaitGroup{},
 	}
 }
 
@@ -76,6 +92,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureBirdWeather()
 	case "update_detection_intervals":
 		cm.handleUpdateDetectionIntervals()
+	case "reconfigure_sound_level":
+		cm.handleReconfigureSoundLevel()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -174,8 +192,70 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	// Update the analysis buffer monitors
 	cm.bufferManager.UpdateMonitors(sources)
 
-	// Reconfigure RTSP streams
-	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.audioLevelChan)
+	// Reconfigure RTSP streams with proper goroutine cleanup
+	cm.unifiedAudioMutex.Lock()
+
+	// Close previous goroutine if it exists
+	if cm.unifiedAudioDoneChan != nil {
+		close(cm.unifiedAudioDoneChan)
+		// Wait for the goroutine to fully exit using WaitGroup
+		cm.unifiedAudioMutex.Unlock()
+		cm.unifiedAudioWg.Wait()
+		cm.unifiedAudioMutex.Lock()
+	}
+
+	// Close previous channel if it exists
+	if cm.unifiedAudioChan != nil {
+		close(cm.unifiedAudioChan)
+	}
+
+	// Create new channels
+	cm.unifiedAudioChan = make(chan myaudio.UnifiedAudioData, 100)
+	cm.unifiedAudioDoneChan = make(chan struct{})
+
+	// Store references for cleanup
+	doneChan := cm.unifiedAudioDoneChan
+	unifiedChan := cm.unifiedAudioChan
+
+	// Add to WaitGroup before starting the goroutine
+	cm.unifiedAudioWg.Add(1)
+
+	cm.unifiedAudioMutex.Unlock()
+
+	go func() {
+		defer cm.unifiedAudioWg.Done()
+		// Convert unified audio data back to separate channels for existing handlers
+		for {
+			select {
+			case <-doneChan:
+				// Exit goroutine when done channel is closed
+				return
+			case unifiedData, ok := <-unifiedChan:
+				if !ok {
+					// Channel closed, exit goroutine
+					return
+				}
+
+				// Send audio level data to existing audio level channel
+				select {
+				case cm.audioLevelChan <- unifiedData.AudioLevel:
+				default:
+					// Channel full, drop data
+				}
+
+				// Send sound level data to existing sound level channel if present
+				if unifiedData.SoundLevel != nil {
+					select {
+					case cm.soundLevelChan <- *unifiedData.SoundLevel:
+					default:
+						// Channel full, drop data
+					}
+				}
+			}
+		}
+	}()
+
+	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
 
 	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
 	cm.notifySuccess("Audio capture reconfigured successfully")
@@ -266,5 +346,48 @@ func (cm *ControlMonitor) notifyError(message string, err error) {
 	cm.notificationChan <- handlers.Notification{
 		Message: fmt.Sprintf("%s: %v", message, err),
 		Type:    "error",
+	}
+}
+
+// handleReconfigureSoundLevel reconfigures sound level monitoring
+func (cm *ControlMonitor) handleReconfigureSoundLevel() {
+	log.Printf("🔄 Reconfiguring sound level monitoring...")
+	settings := conf.Setting()
+
+	// Lock the mutex to ensure thread-safe access
+	cm.soundLevelPublishersMutex.Lock()
+	defer cm.soundLevelPublishersMutex.Unlock()
+
+	// Check if we need to stop existing publishers
+	if cm.soundLevelPublishersDone != nil {
+		// Signal existing publishers to stop
+		close(cm.soundLevelPublishersDone)
+		// Wait for all publishers to finish
+		cm.soundLevelPublishersWg.Wait()
+		cm.soundLevelPublishersDone = nil
+	}
+
+	// If sound level monitoring is enabled, start new publishers
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		// Register sound level processors for active audio sources
+		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
+			log.Printf("⚠️ Warning: Failed to register some sound level processors: %v", err)
+			// Continue anyway, some sources might work
+		}
+
+		// Create a new done channel
+		cm.soundLevelPublishersDone = make(chan struct{})
+
+		// Start sound level publishers
+		startSoundLevelPublishers(cm.soundLevelPublishersWg, cm.soundLevelPublishersDone, cm.proc, cm.soundLevelChan, cm.httpServer)
+
+		log.Printf("✅ Sound level monitoring enabled")
+		cm.notifySuccess("Sound level monitoring enabled")
+	} else {
+		// Unregister all sound level processors
+		unregisterAllSoundLevelProcessors(settings)
+
+		log.Printf("✅ Sound level monitoring disabled")
+		cm.notifySuccess("Sound level monitoring disabled")
 	}
 }

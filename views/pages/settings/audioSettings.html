@@ -28,6 +28,10 @@
                 {{end}}
             ]
         },
+        soundlevel: {
+            enabled: {{.Settings.Realtime.Audio.SoundLevel.Enabled}},
+            interval: {{.Settings.Realtime.Audio.SoundLevel.Interval}}
+        },
         eqFilterConfig: {{.EqFilterConfig | toJSON}},
     },
     audioDevices: [],
@@ -320,6 +324,45 @@ x-init="
             </div>
         </div>
         <!-- Audio Filters end -->
+
+        <!-- Sound Level Monitoring start -->
+        <div class="text-lg font-medium pt-4 pb-2">Sound Level Monitoring</div>
+
+        <div class="form-control relative">
+            {{template "checkbox" dict
+                "id" "soundLevelEnabled"
+                "model" "audioCapture.soundlevel.enabled"
+                "name" "realtime.audio.soundlevel.enabled"
+                "label" "Enable Sound Level Monitoring"
+                "tooltip" "Enable monitoring of environmental sound levels in 1/3rd octave bands. This provides detailed acoustic measurements for research, environmental monitoring, or IoT integration."}}
+            
+            <div x-show="audioCapture.soundlevel.enabled" x-cloak>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {{template "numberField" dict
+                        "id" "soundLevelInterval"
+                        "model" "audioCapture.soundlevel.interval"
+                        "name" "realtime.audio.soundlevel.interval"
+                        "label" "Measurement Interval (seconds)"
+                        "min" "5"
+                        "max" "300"
+                        "tooltip" "How often to report sound level measurements in seconds. Lower values provide more frequent updates but increase CPU usage. Minimum 5 seconds is recommended for optimal performance."}}
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <div>
+                        <p class="font-semibold">Sound Level Data Output</p>
+                        <p class="text-sm">When enabled, sound level measurements are published via:</p>
+                        <ul class="text-sm list-disc list-inside mt-1">
+                            <li>MQTT topic: <code>{base_topic}/soundlevel</code></li>
+                            <li>SSE endpoint: <code>/api/v2/soundlevels/stream</code></li>
+                            <li>Prometheus metrics: <code>birdnet_sound_level_db</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Sound Level Monitoring end -->
 
     </div>
 </div>

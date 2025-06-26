@@ -245,6 +245,11 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
+	// Validate sound level settings
+	if err := validateSoundLevelSettings(&settings.Audio.SoundLevel); err != nil {
+		return err
+	}
+
 	// Add more realtime settings validation as needed
 	return nil
 }
@@ -297,6 +302,22 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 					Context("validation_type", "mqtt-backoff-multiplier").
 					Build()
 			}
+		}
+	}
+	return nil
+}
+
+// validateSoundLevelSettings validates the SoundLevel-specific settings
+func validateSoundLevelSettings(settings *SoundLevelSettings) error {
+	// Sound level settings are optional, only validate if enabled
+	if settings.Enabled {
+		// Check if interval is positive
+		if settings.Interval <= 0 {
+			return errors.New(fmt.Errorf("sound level interval must be greater than zero")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "sound-level-interval").
+				Context("interval", settings.Interval).
+				Build()
 		}
 	}
 	return nil

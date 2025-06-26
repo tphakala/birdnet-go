@@ -46,6 +46,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.source", "sysdefault")
 	viper.SetDefault("realtime.audio.streamtransport", "sse")
 
+	// Sound level monitoring configuration
+	viper.SetDefault("realtime.audio.soundlevel.enabled", false)
+	viper.SetDefault("realtime.audio.soundlevel.interval", 10)
+
 	// Audio export configuration
 	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
