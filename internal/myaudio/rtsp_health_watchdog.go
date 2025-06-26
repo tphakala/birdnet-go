@@ -613,7 +613,7 @@ func getAudioLevelChannelForURL(url string) chan AudioLevelData {
 	if unifiedCh, ok := unifiedAudioChannels.Load(url); ok {
 		// Create a converter channel
 		audioLevelCh := make(chan AudioLevelData, 10)
-		
+
 		// Try to store it atomically
 		if actual, loaded := audioLevelConverters.LoadOrStore(url, audioLevelCh); loaded {
 			// Another goroutine created one already, use that instead
@@ -642,7 +642,7 @@ func getAudioLevelChannelForURL(url string) chan AudioLevelData {
 		}()
 		return audioLevelCh
 	}
-	
+
 	// Log missing channel registration to help diagnose configuration issues
 	logging.Debug("No unified audio channel registered for URL, returning fallback channel",
 		"service", "rtsp-health-watchdog",

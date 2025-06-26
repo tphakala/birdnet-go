@@ -11,8 +11,8 @@ import (
 
 // getSoundLevelMetrics is a helper function to safely retrieve the SoundLevel metrics object
 func getSoundLevelMetrics(apiController *api.Controller) *metrics.SoundLevelMetrics {
-	if apiController == nil || apiController.Processor == nil || 
-	   apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
+	if apiController == nil || apiController.Processor == nil ||
+		apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
 		return nil
 	}
 	return apiController.Processor.Metrics.SoundLevel
