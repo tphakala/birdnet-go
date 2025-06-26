@@ -787,19 +787,13 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 
 		// Double-check if a process already exists (race condition protection)
 		if existing, exists := ffmpegProcesses.Load(lm.config.URL); exists {
-			// Skip if it's a placeholder (process is being started)
-			if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
-				// Wait a short time and continue retry loop instead of flooding logs
-				if waitErr := lm.waitWithInterrupts(ctx, 500*time.Millisecond); waitErr != nil {
-					return nil, waitErr
-				}
-				continue // Try again after short wait
-			}
 			// Check if it's an actual running process
 			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 				log.Printf("⚠️ FFmpeg process already exists during retry for URL %s (PID: %d)", lm.config.URL, p.cmd.Process.Pid)
 				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
 			}
+			// Note: We skip placeholder checks here because this function is called by the same
+			// goroutine that created the placeholder, and needs to proceed to replace it with the actual process
 		}
 
 		// Attempt to start FFmpeg process
