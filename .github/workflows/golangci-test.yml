@@ -17,11 +17,6 @@ jobs:
         image: eclipse-mosquitto:1.6
         ports:
           - 1883:1883
-        options: >-
-          --health-cmd "mosquitto_sub -t '$$SYS/#' -C 1 | grep -v Error || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -45,8 +40,17 @@ jobs:
 
       - name: Wait for Mosquitto
         run: |
-          timeout 30s bash -c 'until nc -z localhost 1883; do sleep 1; done'
-          echo "Mosquitto is ready"
+          echo "Waiting for Mosquitto to be ready..."
+          for i in {1..30}; do
+            if nc -zv localhost 1883 2>/dev/null; then
+              echo "Mosquitto is ready!"
+              break
+            fi
+            echo "Attempt $i: Mosquitto not ready yet, waiting..."
+            sleep 1
+          done
+          # Final check
+          nc -zv localhost 1883 || { echo "Mosquitto failed to start"; exit 1; }
 
       - name: Run unit tests
         env:
