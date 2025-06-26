@@ -420,8 +420,18 @@ func (w *RTSPHealthWatchdog) startNewProcess(url string, stats *StreamHealthStat
 		unifiedAudioChan := make(chan UnifiedAudioData, 10)
 		go func() {
 			// Drain the unified audio channel to prevent blocking
-			for range unifiedAudioChan {
-				// Discard audio data in health watchdog context
+			for {
+				select {
+				case <-ctx.Done():
+					// Exit when context is cancelled
+					return
+				case _, ok := <-unifiedAudioChan:
+					if !ok {
+						// Channel closed, exit
+						return
+					}
+					// Discard audio data in health watchdog context
+				}
 			}
 		}()
 		if err := manageFfmpegLifecycle(ctx, config, restartChan, unifiedAudioChan); err != nil {
