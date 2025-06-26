@@ -55,7 +55,7 @@ type Server struct {
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor, metrics *observability.Metrics) *Server {
+func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor, observabilityMetrics *observability.Metrics) *Server {
 	configureDefaultSettings(settings)
 
 	s := &Server{
@@ -79,10 +79,10 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 
 	// Initialize handlers with metrics
 	var httpMetrics *obsmetrics.HTTPMetrics
-	if metricsInstance := metrics; metricsInstance != nil {
-		httpMetrics = metricsInstance.HTTP
+	if observabilityMetrics != nil {
+		httpMetrics = observabilityMetrics.HTTP
 	}
-	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s, httpMetrics, metrics)
+	s.Handlers = handlers.New(s.DS, s.Settings, s.DashboardSettings, s.BirdImageCache, nil, s.SunCalc, s.AudioLevelChan, s.OAuth2Server, s.controlChan, s.notificationChan, s, httpMetrics, observabilityMetrics)
 
 	// Add processor middleware
 	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
