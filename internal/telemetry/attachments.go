@@ -129,11 +129,38 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 
 // CreateSupportEvent creates a support request event without an attachment
 func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, message string, metadata map[string]interface{}) error {
+	// Input validation
+	if systemID == "" {
+		return errors.Newf("systemID cannot be empty").
+			Component("telemetry").
+			Category(errors.CategoryValidation).
+			Context("operation", "create_support_event").
+			Build()
+	}
+	
+	if message == "" {
+		return errors.Newf("message cannot be empty").
+			Component("telemetry").
+			Category(errors.CategoryValidation).
+			Context("operation", "create_support_event").
+			Build()
+	}
+
+	// Extract trace ID from context if available
+	traceID := extractTraceID(ctx)
+	if traceID != "" {
+		// Log trace ID for observability
+		sentry.ConfigureScope(func(scope *sentry.Scope) {
+			scope.SetTag("trace_id", traceID)
+		})
+	}
+
 	if !au.enabled {
 		return errors.Newf("telemetry is not enabled - cannot create support event").
 			Component("telemetry").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "create_support_event").
+			Context("trace_id", traceID).
 			Build()
 	}
 
@@ -150,6 +177,9 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	}
 	supportContext["system_id"] = systemID
 	supportContext["message"] = message
+	if traceID != "" {
+		supportContext["trace_id"] = traceID
+	}
 	
 	// Add contexts
 	event.Contexts["support"] = supportContext
@@ -195,4 +225,32 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	case <-flushDone:
 		return nil
 	}
+}
+
+
+// extractTraceID attempts to extract a trace ID from the context
+// It looks for common trace ID keys used by various tracing systems
+func extractTraceID(ctx context.Context) string {
+	// Check for OpenTelemetry trace ID
+	if traceID := ctx.Value("trace-id"); traceID != nil {
+		if id, ok := traceID.(string); ok {
+			return id
+		}
+	}
+	
+	// Check for X-Trace-ID (common HTTP header)
+	if traceID := ctx.Value("x-trace-id"); traceID != nil {
+		if id, ok := traceID.(string); ok {
+			return id
+		}
+	}
+	
+	// Check for request ID
+	if reqID := ctx.Value("request-id"); reqID != nil {
+		if id, ok := reqID.(string); ok {
+			return id
+		}
+	}
+	
+	return ""
 }
