@@ -522,12 +522,14 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 		Timestamp:  time.Now(),
 	}
 
-	// Process sound level data - this may be nil if 10-second window isn't complete
-	if soundLevelData, err := ProcessSoundLevelData(url, data); err != nil {
-		log.Printf("❌ Error processing sound level data for RTSP source %s: %v", url, err)
-	} else if soundLevelData != nil {
-		// Attach sound level data when available
-		unifiedData.SoundLevel = soundLevelData
+	// Process sound level data if enabled - this may be nil if 10-second window isn't complete
+	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+		if soundLevelData, err := ProcessSoundLevelData(url, data); err != nil {
+			log.Printf("❌ Error processing sound level data for RTSP source %s: %v", url, err)
+		} else if soundLevelData != nil {
+			// Attach sound level data when available
+			unifiedData.SoundLevel = soundLevelData
+		}
 	}
 
 	// Send unified data to channel (non-blocking)
@@ -1025,12 +1027,15 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	RegisterStreamChannels(url, restartChan, unifiedAudioChan)
 	defer UnregisterStreamChannels(url)
 
-	// Initialize sound level processor for this RTSP source
+	// Initialize sound level processor for this RTSP source if enabled
+	settings := conf.Setting()
 	displayName := conf.SanitizeRTSPUrl(url)
-	if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
-		log.Printf("❌ Error initializing sound level processor for RTSP source %s: %v", url, err)
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
+			log.Printf("❌ Error initializing sound level processor for RTSP source %s: %v", url, err)
+		}
+		defer UnregisterSoundLevelProcessor(url)
 	}
-	defer UnregisterSoundLevelProcessor(url)
 
 	// Return with error if FFmpeg path is not set
 	if conf.GetFfmpegBinaryName() == "" {

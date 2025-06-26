@@ -36,6 +36,9 @@ realtime:
   
   audio:
     source: "sysdefault"  # audio source to use for analysis
+    soundlevel:
+      enabled: false      # true to enable sound level monitoring
+      interval: 10        # measurement interval in seconds
     equalizer:
       enabled: false
       filters:
