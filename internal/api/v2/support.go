@@ -228,4 +228,65 @@ func (c *Controller) initSupportRoutes() {
 	c.Group.POST("/support/generate", c.GenerateSupportDump, c.authMiddlewareFn)
 	c.Group.GET("/support/download/:id", c.DownloadSupportDump, c.authMiddlewareFn)
 	c.Group.GET("/support/status", c.GetSupportStatus, c.authMiddlewareFn)
+
+	// Start cleanup goroutine for old support dumps
+	go c.startSupportDumpCleanup()
+}
+
+// startSupportDumpCleanup runs a periodic cleanup of old temporary support dump files
+func (c *Controller) startSupportDumpCleanup() {
+	// Run cleanup immediately on startup
+	c.cleanupOldSupportDumps()
+
+	// Then run every hour
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		c.cleanupOldSupportDumps()
+	}
+}
+
+// cleanupOldSupportDumps removes temporary support dump files older than 24 hours
+func (c *Controller) cleanupOldSupportDumps() {
+	tempDir := os.TempDir()
+	pattern := filepath.Join(tempDir, "birdnet-go-support-*.zip")
+
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		c.apiLogger.Error("Failed to list support dump files for cleanup",
+			"pattern", pattern,
+			"error", err,
+		)
+		return
+	}
+
+	cutoffTime := time.Now().Add(-24 * time.Hour)
+	removedCount := 0
+
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if err != nil {
+			continue
+		}
+
+		// Remove files older than 24 hours
+		if info.ModTime().Before(cutoffTime) {
+			if err := os.Remove(file); err != nil {
+				c.apiLogger.Warn("Failed to remove old support dump file",
+					"path", file,
+					"age", time.Since(info.ModTime()),
+					"error", err,
+				)
+			} else {
+				removedCount++
+			}
+		}
+	}
+
+	if removedCount > 0 {
+		c.apiLogger.Info("Cleaned up old support dump files",
+			"count", removedCount,
+		)
+	}
 }
