@@ -44,6 +44,7 @@ type Server struct {
 	notificationChan  chan handlers.Notification
 	Processor         *processor.Processor
 	APIV2             *api.Controller // Our new JSON API
+	metrics           *observability.Metrics
 
 	// Page and partial routes
 	pageRoutes    map[string]PageRouteConfig
@@ -69,6 +70,7 @@ func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache 
 		controlChan:       controlChan,
 		notificationChan:  make(chan handlers.Notification, 10),
 		Processor:         proc,
+		metrics:           observabilityMetrics,
 	}
 
 	// Configure an IP extractor
@@ -186,6 +188,7 @@ func (s *Server) initializeServer() {
 		log.Default(),
 		s.Processor,
 		s.OAuth2Server, // Pass OAuth2Server instance
+		s.metrics,      // Pass observability metrics
 	)
 
 	// Connect the processor's SSE broadcaster to the API controller's SSE manager
