@@ -224,6 +224,10 @@ func (s *Server) initRoutes() {
 	s.Echo.GET("/api/v1/birdweather/test", h.WithErrorHandling(h.TestBirdWeather), s.AuthMiddleware)
 	s.Echo.POST("/api/v1/birdweather/test", h.WithErrorHandling(h.TestBirdWeather), s.AuthMiddleware)
 
+	// Add GET and POST methods for testing Weather provider connection
+	s.Echo.GET("/api/v1/weather/test", h.WithErrorHandling(h.TestWeather), s.AuthMiddleware)
+	s.Echo.POST("/api/v1/weather/test", h.WithErrorHandling(h.TestWeather), s.AuthMiddleware)
+
 	// Setup Error handler
 	s.Echo.HTTPErrorHandler = func(err error, c echo.Context) {
 		if handleErr := s.Handlers.HandleError(err, c); handleErr != nil {
