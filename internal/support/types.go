@@ -32,13 +32,23 @@ type LogEntry struct {
 // is running, including OS details, hardware specifications, and runtime information.
 // This helps developers understand the deployment context when debugging issues.
 type SystemInfo struct {
-	OS           string            `json:"os"`
-	Architecture string            `json:"architecture"`
-	GoVersion    string            `json:"go_version"`
-	CPUCount     int               `json:"cpu_count"`
-	MemoryMB     uint64            `json:"memory_mb"`
-	DiskInfo     map[string]uint64 `json:"disk_info"`
-	DockerInfo   *DockerInfo       `json:"docker_info,omitempty"`
+	OS           string      `json:"os"`
+	Architecture string      `json:"architecture"`
+	GoVersion    string      `json:"go_version"`
+	CPUCount     int         `json:"cpu_count"`
+	MemoryMB     uint64      `json:"memory_mb"`
+	DiskInfo     []DiskInfo  `json:"disk_info"`
+	DockerInfo   *DockerInfo `json:"docker_info,omitempty"`
+}
+
+// DiskInfo represents information about a disk or filesystem mount point.
+// It includes usage statistics that help diagnose storage-related issues.
+type DiskInfo struct {
+	Mountpoint string  `json:"mountpoint"`
+	Total      uint64  `json:"total"`
+	Used       uint64  `json:"used"`
+	Free       uint64  `json:"free"`
+	UsagePerc  float64 `json:"usage_percent"`
 }
 
 // DockerInfo contains Docker-specific information when BirdNET-Go is running in a container.
