@@ -13,6 +13,12 @@ import (
 // ErrorCategory represents the type of error for better categorization
 type ErrorCategory string
 
+// CategorizedError is an interface for errors that can specify their own category
+type CategorizedError interface {
+	error
+	ErrorCategory() ErrorCategory
+}
+
 const (
 	CategoryModelInit      ErrorCategory = "model-initialization"
 	CategoryModelLoad      ErrorCategory = "model-loading"
@@ -286,6 +292,19 @@ func lookupComponent(funcName string) string {
 
 // detectCategory automatically detects error category based on error message and component
 func detectCategory(err error, component string) ErrorCategory {
+	// First check if the error implements CategorizedError interface
+	var catErr CategorizedError
+	if stderrors.As(err, &catErr) {
+		return catErr.ErrorCategory()
+	}
+
+	// Check if it's already an EnhancedError with a category
+	var enhErr *EnhancedError
+	if stderrors.As(err, &enhErr) && enhErr.Category != "" {
+		return enhErr.Category
+	}
+
+	// Fall back to string-based heuristics
 	errorMsg := strings.ToLower(err.Error())
 
 	// Model-related errors
