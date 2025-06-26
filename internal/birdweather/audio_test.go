@@ -25,8 +25,8 @@ func TestEncodePCMtoWAV_EmptyInput(t *testing.T) {
 		t.Error("EncodePCMtoWAVWithContext should return an error with empty PCM data")
 	}
 
-	if err != nil && err.Error() != "PCM data is empty" {
-		t.Errorf("Expected error message 'PCM data is empty', got: %v", err)
+	if err != nil && err.Error() != "PCM data is empty for WAV encoding" {
+		t.Errorf("Expected error message 'PCM data is empty for WAV encoding', got: %v", err)
 	}
 }
 
