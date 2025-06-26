@@ -1023,7 +1023,7 @@ func getHTTPServer() *httpcontroller.Server {
 // registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources
 func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error {
 	var errs []error
-	
+
 	// Register for malgo source if active
 	if settings.Realtime.Audio.Source != "" {
 		if err := myaudio.RegisterSoundLevelProcessor("malgo", settings.Realtime.Audio.Source); err != nil {
@@ -1038,7 +1038,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 			log.Printf("🔊 Registered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
 		}
 	}
-	
+
 	// Register for each RTSP source
 	for _, url := range settings.Realtime.RTSP.URLs {
 		displayName := conf.SanitizeRTSPUrl(url)
@@ -1054,7 +1054,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 			log.Printf("🔊 Registered sound level processor for RTSP source: %s", displayName)
 		}
 	}
-	
+
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
@@ -1068,7 +1068,7 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 		myaudio.UnregisterSoundLevelProcessor("malgo")
 		log.Printf("🔇 Unregistered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
 	}
-	
+
 	// Unregister all RTSP sources
 	for _, url := range settings.Realtime.RTSP.URLs {
 		myaudio.UnregisterSoundLevelProcessor(url)

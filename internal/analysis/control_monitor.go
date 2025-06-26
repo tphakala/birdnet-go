@@ -377,7 +377,7 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	} else {
 		// Unregister all sound level processors
 		unregisterAllSoundLevelProcessors(settings)
-		
+
 		log.Printf("✅ Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
 	}
