@@ -360,6 +360,12 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 
 	// If sound level monitoring is enabled, start new publishers
 	if settings.Realtime.Audio.SoundLevel.Enabled {
+		// Register sound level processors for active audio sources
+		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
+			log.Printf("⚠️ Warning: Failed to register some sound level processors: %v", err)
+			// Continue anyway, some sources might work
+		}
+
 		// Create a new done channel
 		cm.soundLevelPublishersDone = make(chan struct{})
 
@@ -369,6 +375,9 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		log.Printf("✅ Sound level monitoring enabled")
 		cm.notifySuccess("Sound level monitoring enabled")
 	} else {
+		// Unregister all sound level processors
+		unregisterAllSoundLevelProcessors(settings)
+		
 		log.Printf("✅ Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
 	}

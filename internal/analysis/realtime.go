@@ -1019,3 +1019,59 @@ var httpServerRefForSoundLevel *httpcontroller.Server
 func getHTTPServer() *httpcontroller.Server {
 	return httpServerRefForSoundLevel
 }
+
+// registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources
+func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error {
+	var errs []error
+	
+	// Register for malgo source if active
+	if settings.Realtime.Audio.Source != "" {
+		if err := myaudio.RegisterSoundLevelProcessor("malgo", settings.Realtime.Audio.Source); err != nil {
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "register_sound_level_processor").
+				Context("source_type", "malgo").
+				Context("source_name", settings.Realtime.Audio.Source).
+				Build())
+		} else {
+			log.Printf("🔊 Registered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
+		}
+	}
+	
+	// Register for each RTSP source
+	for _, url := range settings.Realtime.RTSP.URLs {
+		displayName := conf.SanitizeRTSPUrl(url)
+		if err := myaudio.RegisterSoundLevelProcessor(url, displayName); err != nil {
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "register_sound_level_processor").
+				Context("source_type", "rtsp").
+				Context("source_url", url).
+				Build())
+		} else {
+			log.Printf("🔊 Registered sound level processor for RTSP source: %s", displayName)
+		}
+	}
+	
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+// unregisterAllSoundLevelProcessors unregisters all sound level processors
+func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
+	// Unregister malgo source
+	if settings.Realtime.Audio.Source != "" {
+		myaudio.UnregisterSoundLevelProcessor("malgo")
+		log.Printf("🔇 Unregistered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
+	}
+	
+	// Unregister all RTSP sources
+	for _, url := range settings.Realtime.RTSP.URLs {
+		myaudio.UnregisterSoundLevelProcessor(url)
+		log.Printf("🔇 Unregistered sound level processor for RTSP source: %s", conf.SanitizeRTSPUrl(url))
+	}
+}
