@@ -420,10 +420,14 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]Lo
 	// Look for log files in common locations
 	// The logging package creates logs in a "logs" directory
 	logPaths := []string{
-		"logs",                                   // Default logs directory from logging package
-		filepath.Join(c.dataPath, "logs"),        // Legacy location
-		filepath.Join(c.dataPath, "birdnet.log"), // Legacy location
-		filepath.Join(c.configPath, "logs"),      // Config directory logs
+		"logs",                              // Default logs directory from logging package
+		filepath.Join(c.dataPath, "logs"),   // Data directory logs
+		filepath.Join(c.configPath, "logs"), // Config directory logs
+	}
+
+	// Also try to find logs relative to current working directory
+	if cwd, err := os.Getwd(); err == nil {
+		logPaths = append(logPaths, filepath.Join(cwd, "logs"))
 	}
 
 	cutoffTime := time.Now().Add(-duration)
@@ -635,13 +639,29 @@ func (c *Collector) addLogFilesToArchive(w *zip.Writer, duration time.Duration, 
 
 	// Look for log files in common locations
 	logPaths := []string{
-		"logs",                                   // Default logs directory from logging package
-		filepath.Join(c.dataPath, "logs"),        // Legacy location
-		filepath.Join(c.dataPath, "birdnet.log"), // Legacy location
-		filepath.Join(c.configPath, "logs"),      // Config directory logs
+		"logs",                              // Default logs directory from logging package
+		filepath.Join(c.dataPath, "logs"),   // Data directory logs
+		filepath.Join(c.configPath, "logs"), // Config directory logs
 	}
 
-	for _, logPath := range logPaths {
+	// Also try to find logs relative to current working directory
+	if cwd, err := os.Getwd(); err == nil {
+		logPaths = append(logPaths, filepath.Join(cwd, "logs"))
+	}
+
+	// Remove duplicates
+	seen := make(map[string]bool)
+	uniquePaths := []string{}
+	for _, path := range logPaths {
+		if absPath, err := filepath.Abs(path); err == nil {
+			if !seen[absPath] {
+				seen[absPath] = true
+				uniquePaths = append(uniquePaths, absPath)
+			}
+		}
+	}
+
+	for _, logPath := range uniquePaths {
 		info, err := os.Stat(logPath)
 		if err != nil {
 			continue
@@ -667,6 +687,7 @@ func (c *Collector) addLogFilesToArchive(w *zip.Writer, duration time.Duration, 
 
 				// Skip old files
 				if fileInfo.ModTime().Before(cutoffTime) {
+					// Log skipped file for debugging
 					continue
 				}
 

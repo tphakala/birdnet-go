@@ -78,8 +78,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		IncludeLogs:       req.IncludeLogs,
 		IncludeConfig:     req.IncludeConfig,
 		IncludeSystemInfo: req.IncludeSystemInfo,
-		LogDuration:       24 * time.Hour,
-		MaxLogSize:        10 * 1024 * 1024, // 10MB
+		LogDuration:       4 * 7 * 24 * time.Hour, // 4 weeks
+		MaxLogSize:        50 * 1024 * 1024, // 50MB to accommodate more logs
 		ScrubSensitive:    true,
 	}
 
