@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
+
+// UUID regex pattern for strict UUID validation
+var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 // TelemetryMiddleware provides HTTP request telemetry and enhanced error handling
 type TelemetryMiddleware struct {
@@ -82,8 +86,8 @@ func (tm *TelemetryMiddleware) isID(segment string) bool {
 		return true
 	}
 
-	// Check for UUID-like pattern (basic check)
-	if len(segment) == 36 && strings.Count(segment, "-") == 4 {
+	// Check for UUID pattern using strict regex validation
+	if uuidRegex.MatchString(segment) {
 		return true
 	}
 
