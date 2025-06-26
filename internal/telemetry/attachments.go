@@ -28,23 +28,32 @@ func NewAttachmentUploader(enabled bool) *AttachmentUploader {
 
 // UploadSupportDump uploads a support dump to Sentry as an event with attachment
 func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []byte, systemID, userMessage string) error {
+	// Extract trace ID early for use in error messages
+	traceID := extractTraceID(ctx)
+	
 	if !au.enabled {
-		return errors.Newf("telemetry is not enabled - cannot upload support dump").
+		err := errors.Newf("telemetry is not enabled - cannot upload support dump").
 			Component("telemetry").
 			Category(errors.CategoryConfiguration).
-			Context("operation", "upload_support_dump").
-			Build()
+			Context("operation", "upload_support_dump")
+		if traceID != "" {
+			err = err.Context("trace_id", traceID)
+		}
+		return err.Build()
 	}
 
 	// Check if context is already cancelled
 	select {
 	case <-ctx.Done():
-		return errors.New(ctx.Err()).
+		err := errors.New(ctx.Err()).
 			Component("telemetry").
 			Category(errors.CategoryNetwork).
 			Context("operation", "upload_support_dump").
-			Context("reason", "context_cancelled_before_upload").
-			Build()
+			Context("reason", "context_cancelled_before_upload")
+		if traceID != "" {
+			err = err.Context("trace_id", traceID)
+		}
+		return err.Build()
 	default:
 		// Continue with upload
 	}
@@ -57,12 +66,16 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	event.Timestamp = now
 
 	// Add custom context
-	event.Contexts["support"] = map[string]interface{}{
+	supportContext := map[string]interface{}{
 		"system_id":    systemID,
 		"user_message": userMessage,
 		"dump_size":    len(dumpData),
 		"upload_time":  now.Format(time.RFC3339),
 	}
+	if traceID != "" {
+		supportContext["trace_id"] = traceID
+	}
+	event.Contexts["support"] = supportContext
 
 	// Set user context with system ID
 	event.User = sentry.User{
@@ -73,6 +86,9 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	event.Tags = map[string]string{
 		"type":      "support_dump",
 		"system_id": systemID,
+	}
+	if traceID != "" {
+		event.Tags["trace_id"] = traceID
 	}
 
 	// Capture the event with attachment using WithScope
