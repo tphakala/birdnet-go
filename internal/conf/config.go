@@ -59,8 +59,8 @@ type RetentionSettings struct {
 // AudioSettings contains settings for audio processing and export.
 // SoundLevelSettings contains settings for sound level monitoring
 type SoundLevelSettings struct {
-	Enabled  bool // true to enable sound level monitoring
-	Interval int  // measurement interval in seconds (default: 10)
+	Enabled  bool `yaml:"enabled" mapstructure:"enabled"`   // true to enable sound level monitoring
+	Interval int  `yaml:"interval" mapstructure:"interval"` // measurement interval in seconds (default: 10)
 }
 
 type AudioSettings struct {
