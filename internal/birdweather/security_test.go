@@ -186,4 +186,3 @@ type timeoutError struct {
 func (e *timeoutError) Error() string   { return e.msg }
 func (e *timeoutError) Timeout() bool   { return true }
 func (e *timeoutError) Temporary() bool { return true }
-
