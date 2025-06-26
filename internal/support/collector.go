@@ -2,13 +2,17 @@ package support
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -229,23 +233,208 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 func (c *Collector) collectLogs(duration time.Duration, maxSize int64) ([]LogEntry, error) {
 	var logs []LogEntry
 
-	// For now, we'll collect journald logs if available
-	// In a real implementation, this would also collect application logs
-	
-	// This is a placeholder - actual implementation would:
-	// 1. Read from journald if available
-	// 2. Read from log files in the data directory
-	// 3. Parse and filter log entries
-	
-	// Example log entry
-	logs = append(logs, LogEntry{
-		Timestamp: time.Now().Add(-1 * time.Hour),
-		Level:     "INFO",
-		Message:   "BirdNET-Go started successfully",
-		Source:    "main",
-	})
+	// Try to collect from journald first (systemd systems)
+	journalLogs, err := c.collectJournalLogs(duration)
+	if err == nil && len(journalLogs) > 0 {
+		logs = append(logs, journalLogs...)
+	}
+
+	// Also check for log files in the data directory
+	logFiles, err := c.collectLogFiles(duration, maxSize)
+	if err == nil && len(logFiles) > 0 {
+		logs = append(logs, logFiles...)
+	}
+
+	// Sort logs by timestamp
+	sortLogsByTime(logs)
 
 	return logs, nil
+}
+
+// collectJournalLogs collects logs from systemd journal
+func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, error) {
+	var logs []LogEntry
+
+	// Calculate since time
+	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	
+	// Run journalctl command
+	cmd := exec.Command("journalctl", 
+		"-u", "birdnet-go.service",
+		"--since", since,
+		"--no-pager",
+		"-o", "json",
+		"--no-hostname")
+	
+	output, err := cmd.Output()
+	if err != nil {
+		// journalctl might not be available or service might not exist
+		return logs, nil
+	}
+
+	// Parse JSON output line by line
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		var entry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		// Extract fields
+		message, _ := entry["MESSAGE"].(string)
+		priority, _ := entry["PRIORITY"].(string)
+		timestamp, _ := entry["__REALTIME_TIMESTAMP"].(string)
+		
+		// Convert timestamp (microseconds since epoch)
+		var ts time.Time
+		if timestamp != "" {
+			if usec, err := strconv.ParseInt(timestamp, 10, 64); err == nil {
+				ts = time.Unix(0, usec*1000)
+			}
+		}
+
+		// Map priority to log level
+		level := "INFO"
+		switch priority {
+		case "0", "1", "2", "3":
+			level = "ERROR"
+		case "4":
+			level = "WARNING"
+		case "5", "6":
+			level = "INFO"
+		case "7":
+			level = "DEBUG"
+		}
+
+		logs = append(logs, LogEntry{
+			Timestamp: ts,
+			Level:     level,
+			Message:   message,
+			Source:    "journald",
+		})
+	}
+
+	return logs, nil
+}
+
+// collectLogFiles collects logs from files in the data directory
+func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]LogEntry, error) {
+	var logs []LogEntry
+	
+	// Look for log files in common locations
+	logPaths := []string{
+		filepath.Join(c.dataPath, "logs"),
+		filepath.Join(c.dataPath, "birdnet-go.log"),
+		filepath.Join(c.configPath, "birdnet-go.log"),
+	}
+
+	cutoffTime := time.Now().Add(-duration)
+	totalSize := int64(0)
+
+	for _, logPath := range logPaths {
+		// Check if path exists
+		info, err := os.Stat(logPath)
+		if err != nil {
+			continue
+		}
+
+		// If it's a directory, look for log files
+		if info.IsDir() {
+			files, err := os.ReadDir(logPath)
+			if err != nil {
+				continue
+			}
+
+			for _, file := range files {
+				if strings.HasSuffix(file.Name(), ".log") {
+					fileLogs, size := c.parseLogFile(filepath.Join(logPath, file.Name()), cutoffTime, maxSize-totalSize)
+					logs = append(logs, fileLogs...)
+					totalSize += size
+					if totalSize >= maxSize {
+						break
+					}
+				}
+			}
+		} else {
+			// It's a file
+			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize)
+			logs = append(logs, fileLogs...)
+			totalSize += size
+		}
+
+		if totalSize >= maxSize {
+			break
+		}
+	}
+
+	return logs, nil
+}
+
+// parseLogFile parses a log file and extracts entries
+func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64) ([]LogEntry, int64) {
+	var logs []LogEntry
+	var totalSize int64
+
+	file, err := os.Open(path)
+	if err != nil {
+		return logs, 0
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		totalSize += int64(len(line))
+		
+		if totalSize > maxSize {
+			break
+		}
+
+		// Simple log parsing - adjust based on actual log format
+		entry := c.parseLogLine(line)
+		if entry != nil && entry.Timestamp.After(cutoffTime) {
+			logs = append(logs, *entry)
+		}
+	}
+
+	return logs, totalSize
+}
+
+// parseLogLine parses a single log line
+func (c *Collector) parseLogLine(line string) *LogEntry {
+	// Try to parse common log formats
+	// Format: 2024-01-20 15:04:05 [LEVEL] message
+	parts := strings.SplitN(line, " ", 4)
+	if len(parts) < 4 {
+		return nil
+	}
+
+	// Parse timestamp
+	timestamp, err := time.Parse("2006-01-02 15:04:05", parts[0]+" "+parts[1])
+	if err != nil {
+		return nil
+	}
+
+	// Extract level
+	level := strings.Trim(parts[2], "[]")
+	
+	return &LogEntry{
+		Timestamp: timestamp,
+		Level:     level,
+		Message:   parts[3],
+		Source:    "file",
+	}
+}
+
+// sortLogsByTime sorts log entries by timestamp
+func sortLogsByTime(logs []LogEntry) {
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].Timestamp.Before(logs[j].Timestamp)
+	})
 }
 
 // SanitizeFilename ensures the filename is safe for use
