@@ -123,7 +123,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 
 	// Collect logs
 	if opts.IncludeLogs {
-		logs, err := c.collectLogs(opts.LogDuration, opts.MaxLogSize)
+		logs, err := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize)
 		if err != nil {
 			return nil, errors.New(err).
 				Component("support").
@@ -173,7 +173,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 
 	// Add log files in original format
 	if opts.IncludeLogs {
-		if err := c.addLogFilesToArchive(w, opts.LogDuration, opts.MaxLogSize); err != nil {
+		if err := c.addLogFilesToArchive(ctx, w, opts.LogDuration, opts.MaxLogSize); err != nil {
 			return nil, err
 		}
 	}
@@ -348,11 +348,11 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 }
 
 // collectLogs collects recent log entries
-func (c *Collector) collectLogs(duration time.Duration, maxSize int64) ([]LogEntry, error) {
+func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64) ([]LogEntry, error) {
 	var logs []LogEntry
 
 	// Try to collect from journald first (systemd systems)
-	journalLogs, err := c.collectJournalLogs(duration)
+	journalLogs, err := c.collectJournalLogs(ctx, duration)
 	if err == nil && len(journalLogs) > 0 {
 		logs = append(logs, journalLogs...)
 	}
@@ -370,14 +370,14 @@ func (c *Collector) collectLogs(duration time.Duration, maxSize int64) ([]LogEnt
 }
 
 // collectJournalLogs collects logs from systemd journal
-func (c *Collector) collectJournalLogs(duration time.Duration) ([]LogEntry, error) {
+func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration) ([]LogEntry, error) {
 	var logs []LogEntry
 
 	// Calculate since time
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
 
 	// Run journalctl command
-	cmd := exec.Command("journalctl",
+	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",
@@ -659,6 +659,7 @@ func (c *Collector) addConfigToArchive(w *zip.Writer, scrubSensitive bool) error
 
 // logFileCollector encapsulates the state for collecting log files
 type logFileCollector struct {
+	ctx        context.Context
 	collector  *Collector
 	cutoffTime time.Time
 	maxSize    int64
@@ -667,8 +668,9 @@ type logFileCollector struct {
 }
 
 // addLogFilesToArchive adds log files to the archive in their original format
-func (c *Collector) addLogFilesToArchive(w *zip.Writer, duration time.Duration, maxSize int64) error {
+func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, duration time.Duration, maxSize int64) error {
 	lfc := &logFileCollector{
+		ctx:        ctx,
 		collector:  c,
 		cutoffTime: time.Now().Add(-duration),
 		maxSize:    maxSize,
@@ -725,15 +727,40 @@ func (c *Collector) getUniqueLogPaths() []string {
 
 // getLogSearchPaths returns all paths where logs might be located
 func (c *Collector) getLogSearchPaths() []string {
-	paths := []string{
-		"logs",                              // Default logs directory
-		filepath.Join(c.dataPath, "logs"),   // Data directory logs
-		filepath.Join(c.configPath, "logs"), // Config directory logs
+	var paths []string
+
+	// Validate and add paths safely
+	addPathIfValid := func(basePath, subPath string) {
+		// Ensure basePath is not empty and doesn't contain path traversal attempts
+		if basePath == "" || strings.Contains(basePath, "..") {
+			return
+		}
+
+		// Clean the path to resolve any relative components
+		cleanBase := filepath.Clean(basePath)
+		fullPath := filepath.Join(cleanBase, subPath)
+
+		// Ensure the final path doesn't escape the base directory
+		if absBase, err := filepath.Abs(cleanBase); err == nil {
+			if absPath, err := filepath.Abs(fullPath); err == nil {
+				// Verify the absolute path starts with the absolute base path
+				if strings.HasPrefix(absPath, absBase) {
+					paths = append(paths, fullPath)
+				}
+			}
+		}
 	}
+
+	// Add default logs directory
+	paths = append(paths, "logs")
+
+	// Add validated paths
+	addPathIfValid(c.dataPath, "logs")
+	addPathIfValid(c.configPath, "logs")
 
 	// Add current working directory logs
 	if cwd, err := os.Getwd(); err == nil {
-		paths = append(paths, filepath.Join(cwd, "logs"))
+		addPathIfValid(cwd, "logs")
 	}
 
 	return paths
@@ -866,7 +893,7 @@ func (lfc *logFileCollector) canAddFile(fileSize int64) bool {
 
 // addJournaldLogs adds systemd journal logs to the archive
 func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Duration) error {
-	journalLogs := lfc.collector.getJournaldLogs(duration)
+	journalLogs := lfc.collector.getJournaldLogs(lfc.ctx, duration)
 	if journalLogs == "" {
 		return errors.Newf("no journald logs available").
 			Component("support").
@@ -937,9 +964,9 @@ func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath stri
 }
 
 // getJournaldLogs retrieves logs from journald as a string
-func (c *Collector) getJournaldLogs(duration time.Duration) string {
+func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
-	cmd := exec.Command("journalctl",
+	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager")

@@ -8,10 +8,14 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestLogFileCollector_isLogFile tests the log file detection
 func TestLogFileCollector_isLogFile(t *testing.T) {
+	t.Parallel()
+
 	lfc := &logFileCollector{}
 
 	tests := []struct {
@@ -34,6 +38,8 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := lfc.isLogFile(tt.filename); got != tt.want {
 				t.Errorf("isLogFile(%q) = %v, want %v", tt.filename, got, tt.want)
 			}
@@ -101,6 +107,8 @@ func TestLogFileCollector_canAddFile(t *testing.T) {
 
 // TestCollector_getLogSearchPaths tests log path generation
 func TestCollector_getLogSearchPaths(t *testing.T) {
+	t.Parallel()
+
 	c := &Collector{
 		configPath: "/etc/birdnet",
 		dataPath:   "/var/lib/birdnet",
@@ -115,22 +123,11 @@ func TestCollector_getLogSearchPaths(t *testing.T) {
 		"/etc/birdnet/logs",
 	}
 
-	if len(paths) < len(expectedPaths) {
-		t.Errorf("Expected at least %d paths, got %d", len(expectedPaths), len(paths))
-	}
+	assert.GreaterOrEqual(t, len(paths), len(expectedPaths), "Expected at least %d paths", len(expectedPaths))
 
 	// Check that expected paths are present
 	for _, expected := range expectedPaths {
-		found := false
-		for _, path := range paths {
-			if path == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected path %q not found in result", expected)
-		}
+		assert.Contains(t, paths, expected, "Expected path %q not found in result", expected)
 	}
 }
 
@@ -148,7 +145,9 @@ func TestCollector_getUniqueLogPaths(t *testing.T) {
 	// Change to temp directory to test relative path resolution
 	oldWd, _ := os.Getwd()
 	os.Chdir(tempDir)
-	defer os.Chdir(oldWd)
+	t.Cleanup(func() {
+		os.Chdir(oldWd)
+	})
 
 	uniquePaths := c.getUniqueLogPaths()
 
