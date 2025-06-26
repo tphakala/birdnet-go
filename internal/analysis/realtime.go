@@ -90,7 +90,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
 	// Initialize the restart channel for capture restart control.
-	restartChan := make(chan struct{}, 3)
+	restartChan := make(chan struct{}, 10) // Increased buffer to prevent dropped restart signals
 	// quitChannel is used to signal the goroutines to stop.
 	quitChan := make(chan struct{})
 
