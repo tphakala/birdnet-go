@@ -513,15 +513,23 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 	if _, ok := registry.GetCache("wikimedia"); !ok {
 		wikiCache, err := imageprovider.CreateDefaultCache(metrics, ds)
 		if err != nil {
-			errMsg := fmt.Sprintf("Failed to create WikiMedia image cache: %v", err)
-			log.Println(errMsg)
-			errs = append(errs, fmt.Errorf(errMsg))
+			log.Printf("Failed to create WikiMedia image cache: %v", err)
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategoryImageProvider).
+				Context("operation", "create_wikimedia_cache").
+				Context("provider", "wikimedia").
+				Build())
 			// Continue even if one provider fails
 		} else {
 			if err := registry.Register("wikimedia", wikiCache); err != nil {
-				errMsg := fmt.Sprintf("Failed to register WikiMedia image provider: %v", err)
-				log.Println(errMsg)
-				errs = append(errs, fmt.Errorf(errMsg))
+				log.Printf("Failed to register WikiMedia image provider: %v", err)
+				errs = append(errs, errors.New(err).
+					Component("realtime-analysis").
+					Category(errors.CategoryImageProvider).
+					Context("operation", "register_wikimedia_provider").
+					Context("provider", "wikimedia").
+					Build())
 			} else {
 				log.Println("Registered WikiMedia image provider")
 			}
@@ -550,9 +558,13 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		}
 
 		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
-			errMsg := fmt.Sprintf("Failed to register AviCommons provider: %v", err)
-			log.Println(errMsg)
-			errs = append(errs, fmt.Errorf(errMsg))
+			log.Printf("Failed to register AviCommons provider: %v", err)
+			errs = append(errs, errors.New(err).
+				Component("realtime-analysis").
+				Category(errors.CategoryImageProvider).
+				Context("operation", "register_avicommons_provider").
+				Context("provider", "avicommons").
+				Build())
 			// Check if we can read the data file for debugging
 			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
 				log.Printf("Error reading AviCommons data file: %v", errRead)
