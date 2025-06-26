@@ -112,18 +112,6 @@ func (h *Handlers) Detections(c echo.Context) error {
 	// Yield CPU to other goroutines
 	runtime.Gosched()
 
-	// This check is now redundant as we handle errors in each case above
-	// but keeping for safety in case of unexpected flow
-	if err != nil {
-		enhancedErr := errors.New(err).
-			Component("http-controller").
-			Category(errors.CategoryDatabase).
-			Context("operation", "fallback_error_handler").
-			Context("handler", handlerName).
-			Build()
-		return h.NewHandlerError(enhancedErr, "Failed to get detections", http.StatusInternalServerError)
-	}
-
 	// Check if weather provider is set, used to show weather data in the UI if enabled
 	weatherEnabled := h.Settings.Realtime.Weather.Provider != "none"
 
