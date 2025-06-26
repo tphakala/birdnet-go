@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,8 +22,35 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"gopkg.in/yaml.v3"
 )
+
+// Package-level logger specific to support service
+var (
+	serviceLogger   *slog.Logger
+	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
+	closeLogger     func() error
+)
+
+func init() {
+	var err error
+	// Define log file path relative to working directory
+	logFilePath := filepath.Join("logs", "support.log")
+	initialLevel := slog.LevelDebug // Set desired initial level
+	serviceLevelVar.Set(initialLevel)
+
+	// Initialize the service-specific file logger
+	serviceLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "support", serviceLevelVar)
+	if err != nil {
+		// Fallback: Log error to standard log and potentially disable service logging
+		log.Printf("FATAL: Failed to initialize support file logger at %s: %v. Service logging disabled.", logFilePath, err)
+		// Set logger to a disabled handler to prevent nil panics, but respects level var
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
+		serviceLogger = slog.New(fbHandler).With("service", "support")
+		closeLogger = func() error { return nil } // No-op closer
+	}
+}
 
 // Collector collects support data for troubleshooting
 type Collector struct {
@@ -89,6 +118,7 @@ func NewCollectorWithOptions(configPath, dataPath, systemID, version string, sen
 func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*SupportDump, error) {
 	// Validate options
 	if !opts.IncludeLogs && !opts.IncludeConfig && !opts.IncludeSystemInfo {
+		serviceLogger.Error("support: collection validation failed: at least one data type must be included")
 		return nil, errors.Newf("at least one data type must be included in support dump").
 			Component("support").
 			Category(errors.CategoryValidation).
@@ -103,15 +133,31 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		Version:   c.version,
 	}
 
+	serviceLogger.Info("support: starting collection",
+		"dump_id", dump.ID,
+		"include_logs", opts.IncludeLogs,
+		"include_config", opts.IncludeConfig,
+		"include_system_info", opts.IncludeSystemInfo,
+		"log_duration", opts.LogDuration,
+		"max_log_size", opts.MaxLogSize)
+
 	// Collect system information
 	if opts.IncludeSystemInfo {
+		serviceLogger.Debug("support: collecting system information")
 		dump.SystemInfo = c.collectSystemInfo()
+		serviceLogger.Debug("support: system information collected",
+			"os", dump.SystemInfo.OS,
+			"arch", dump.SystemInfo.Architecture,
+			"cpu_count", dump.SystemInfo.CPUCount,
+			"memory_mb", dump.SystemInfo.MemoryMB)
 	}
 
 	// Collect configuration (scrubbed)
 	if opts.IncludeConfig {
+		serviceLogger.Debug("support: collecting configuration", "scrub_sensitive", opts.ScrubSensitive)
 		config, err := c.collectConfig(opts.ScrubSensitive)
 		if err != nil {
+			serviceLogger.Error("support: failed to collect configuration", "error", err)
 			return nil, errors.New(err).
 				Component("support").
 				Category(errors.CategoryConfiguration).
@@ -120,12 +166,15 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 				Build()
 		}
 		dump.Config = config
+		serviceLogger.Debug("support: configuration collected successfully")
 	}
 
 	// Collect logs
 	if opts.IncludeLogs {
+		serviceLogger.Debug("support: collecting logs", "duration", opts.LogDuration, "max_size", opts.MaxLogSize)
 		logs, err := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize)
 		if err != nil {
+			serviceLogger.Error("support: failed to collect logs", "error", err)
 			return nil, errors.New(err).
 				Component("support").
 				Category(errors.CategoryFileIO).
@@ -135,19 +184,28 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 				Build()
 		}
 		dump.Logs = logs
+		serviceLogger.Debug("support: logs collected", "log_count", len(logs))
 	}
+
+	serviceLogger.Info("support: collection completed successfully",
+		"dump_id", dump.ID,
+		"log_count", len(dump.Logs))
 
 	return dump, nil
 }
 
 // CreateArchive creates a zip archive containing the support dump
 func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts CollectorOptions) ([]byte, error) {
+	serviceLogger.Info("support: creating archive", "dump_id", dump.ID)
+
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
 	// Add metadata (keep this as JSON for easy parsing)
+	serviceLogger.Debug("support: adding metadata to archive")
 	metadataFile, err := w.Create("metadata.json")
 	if err != nil {
+		serviceLogger.Error("support: failed to create metadata file in archive", "error", err)
 		return nil, errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -164,6 +222,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 		"log_count": len(dump.Logs),
 	}
 	if err := json.NewEncoder(metadataFile).Encode(metadata); err != nil {
+		serviceLogger.Error("support: failed to write metadata to archive", "error", err)
 		return nil, errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -174,22 +233,28 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 
 	// Add log files in original format
 	if opts.IncludeLogs {
+		serviceLogger.Debug("support: adding log files to archive")
 		if err := c.addLogFilesToArchive(ctx, w, opts.LogDuration, opts.MaxLogSize); err != nil {
+			serviceLogger.Error("support: failed to add log files to archive", "error", err)
 			return nil, err
 		}
 	}
 
 	// Add config file in original YAML format (scrubbed)
 	if opts.IncludeConfig {
+		serviceLogger.Debug("support: adding config file to archive", "scrub_sensitive", opts.ScrubSensitive)
 		if err := c.addConfigToArchive(w, opts.ScrubSensitive); err != nil {
+			serviceLogger.Error("support: failed to add config to archive", "error", err)
 			return nil, err
 		}
 	}
 
 	// Add system info
 	if opts.IncludeSystemInfo {
+		serviceLogger.Debug("support: adding system info to archive")
 		sysInfoFile, err := w.Create("system_info.json")
 		if err != nil {
+			serviceLogger.Error("support: failed to create system info file in archive", "error", err)
 			return nil, errors.New(err).
 				Component("support").
 				Category(errors.CategoryFileIO).
@@ -197,6 +262,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Build()
 		}
 		if err := json.NewEncoder(sysInfoFile).Encode(dump.SystemInfo); err != nil {
+			serviceLogger.Error("support: failed to write system info to archive", "error", err)
 			return nil, errors.New(err).
 				Component("support").
 				Category(errors.CategoryFileIO).
@@ -206,6 +272,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	}
 
 	if err := w.Close(); err != nil {
+		serviceLogger.Error("support: failed to close archive", "error", err)
 		return nil, errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -213,6 +280,11 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Context("archive_size", buf.Len()).
 			Build()
 	}
+
+	archiveSize := buf.Len()
+	serviceLogger.Info("support: archive created successfully",
+		"dump_id", dump.ID,
+		"archive_size", archiveSize)
 
 	return buf.Bytes(), nil
 }
