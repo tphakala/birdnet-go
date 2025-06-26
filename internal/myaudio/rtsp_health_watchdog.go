@@ -567,6 +567,9 @@ var restartChannels sync.Map
 // unifiedAudioChannels stores unified audio channels for each URL
 var unifiedAudioChannels sync.Map
 
+// audioLevelConverters stores converter channels for each URL to prevent goroutine leaks
+var audioLevelConverters sync.Map
+
 // RegisterStreamChannels registers the restart and audio level channels for a URL
 func RegisterStreamChannels(url string, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	if restartChan != nil {
@@ -581,6 +584,13 @@ func RegisterStreamChannels(url string, restartChan chan struct{}, unifiedAudioC
 func UnregisterStreamChannels(url string) {
 	restartChannels.Delete(url)
 	unifiedAudioChannels.Delete(url)
+	// Also delete the converter channel to prevent leaks
+	if ch, ok := audioLevelConverters.Load(url); ok {
+		audioLevelConverters.Delete(url)
+		// The goroutine will exit when the unified channel closes
+		// We don't close the converter channel here as the goroutine handles that
+		_ = ch // Avoid unused variable warning
+	}
 }
 
 // getRestartChannelForURL retrieves the restart channel for a URL
@@ -592,12 +602,33 @@ func getRestartChannelForURL(url string) chan struct{} {
 }
 
 // getAudioLevelChannelForURL retrieves a simple audio level channel for a URL
-// This creates a dummy channel for health watchdog use since it only needs basic monitoring
+// This creates a converter channel only once per URL to prevent goroutine leaks
 func getAudioLevelChannelForURL(url string) chan AudioLevelData {
+	// Check if we already have a converter for this URL
+	if existingCh, ok := audioLevelConverters.Load(url); ok {
+		return existingCh.(chan AudioLevelData)
+	}
+
+	// Check if we have a unified channel for this URL
 	if unifiedCh, ok := unifiedAudioChannels.Load(url); ok {
-		// Create a dummy audio level channel that discards data for health monitoring
+		// Create a converter channel
 		audioLevelCh := make(chan AudioLevelData, 10)
+		
+		// Try to store it atomically
+		if actual, loaded := audioLevelConverters.LoadOrStore(url, audioLevelCh); loaded {
+			// Another goroutine created one already, use that instead
+			close(audioLevelCh)
+			return actual.(chan AudioLevelData)
+		}
+
+		// Start the converter goroutine only once
 		go func() {
+			defer func() {
+				// Clean up when unified channel closes
+				audioLevelConverters.Delete(url)
+				close(audioLevelCh)
+			}()
+
 			// Convert unified audio data to simple audio level data for health monitoring
 			unifiedChannel := unifiedCh.(chan UnifiedAudioData)
 			for unifiedData := range unifiedChannel {
@@ -611,6 +642,7 @@ func getAudioLevelChannelForURL(url string) chan AudioLevelData {
 		}()
 		return audioLevelCh
 	}
+	
 	// Log missing channel registration to help diagnose configuration issues
 	logging.Debug("No unified audio channel registered for URL, returning fallback channel",
 		"service", "rtsp-health-watchdog",
