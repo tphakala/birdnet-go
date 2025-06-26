@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,7 +107,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	// Add metadata
+	// Add metadata (keep this as JSON for easy parsing)
 	metadataFile, err := w.Create("metadata.json")
 	if err != nil {
 		return nil, errors.New(err).
@@ -116,7 +117,15 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Context("archive_action", "create_file").
 			Build()
 	}
-	if err := json.NewEncoder(metadataFile).Encode(dump); err != nil {
+	// Only include basic metadata, not the full dump content
+	metadata := map[string]interface{}{
+		"id":        dump.ID,
+		"timestamp": dump.Timestamp,
+		"system_id": dump.SystemID,
+		"version":   dump.Version,
+		"log_count": len(dump.Logs),
+	}
+	if err := json.NewEncoder(metadataFile).Encode(metadata); err != nil {
 		return nil, errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -125,43 +134,17 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Build()
 	}
 
-	// Add logs as separate file
-	if opts.IncludeLogs && len(dump.Logs) > 0 {
-		logsFile, err := w.Create("logs.json")
-		if err != nil {
-			return nil, errors.New(err).
-				Component("support").
-				Category(errors.CategoryFileIO).
-				Context("operation", "create_logs_file").
-				Context("log_count", len(dump.Logs)).
-				Build()
-		}
-		if err := json.NewEncoder(logsFile).Encode(dump.Logs); err != nil {
-			return nil, errors.New(err).
-				Component("support").
-				Category(errors.CategoryFileIO).
-				Context("operation", "write_logs").
-				Context("log_count", len(dump.Logs)).
-				Build()
+	// Add log files in original format
+	if opts.IncludeLogs {
+		if err := c.addLogFilesToArchive(w, opts.LogDuration, opts.MaxLogSize); err != nil {
+			return nil, err
 		}
 	}
 
-	// Add config as separate file
-	if opts.IncludeConfig && dump.Config != nil {
-		configFile, err := w.Create("config.json")
-		if err != nil {
-			return nil, errors.New(err).
-				Component("support").
-				Category(errors.CategoryFileIO).
-				Context("operation", "create_config_file").
-				Build()
-		}
-		if err := json.NewEncoder(configFile).Encode(dump.Config); err != nil {
-			return nil, errors.New(err).
-				Component("support").
-				Category(errors.CategoryFileIO).
-				Context("operation", "write_config").
-				Build()
+	// Add config file in original YAML format (scrubbed)
+	if opts.IncludeConfig {
+		if err := c.addConfigToArchive(w, opts.ScrubSensitive); err != nil {
+			return nil, err
 		}
 	}
 
@@ -565,6 +548,201 @@ func sortLogsByTime(logs []LogEntry) {
 	sort.Slice(logs, func(i, j int) bool {
 		return logs[i].Timestamp.Before(logs[j].Timestamp)
 	})
+}
+
+// addConfigToArchive adds the config file to the archive in YAML format with scrubbing
+func (c *Collector) addConfigToArchive(w *zip.Writer, scrubSensitive bool) error {
+	configPath := filepath.Join(c.configPath, "config.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_config_for_archive").
+			Context("config_path", configPath).
+			Build()
+	}
+
+	// If scrubbing is enabled, parse and re-serialize the config
+	if scrubSensitive {
+		var config map[string]any
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return errors.New(err).
+				Component("support").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "parse_config_for_scrubbing").
+				Build()
+		}
+
+		// Scrub sensitive data
+		config = c.scrubConfig(config)
+
+		// Re-serialize to YAML
+		scrubbedData, err := yaml.Marshal(config)
+		if err != nil {
+			return errors.New(err).
+				Component("support").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "marshal_scrubbed_config").
+				Build()
+		}
+		data = scrubbedData
+	}
+
+	// Add to archive
+	configFile, err := w.Create("config.yaml")
+	if err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_config_in_archive").
+			Build()
+	}
+
+	if _, err := configFile.Write(data); err != nil {
+		return errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_config_to_archive").
+			Build()
+	}
+
+	return nil
+}
+
+// addLogFilesToArchive adds log files to the archive in their original format
+func (c *Collector) addLogFilesToArchive(w *zip.Writer, duration time.Duration, maxSize int64) error {
+	cutoffTime := time.Now().Add(-duration)
+	totalSize := int64(0)
+
+	// Create logs directory in archive
+	logsAdded := 0
+
+	// Look for log files in common locations
+	logPaths := []string{
+		"logs",                                   // Default logs directory from logging package
+		filepath.Join(c.dataPath, "logs"),        // Legacy location
+		filepath.Join(c.dataPath, "birdnet.log"), // Legacy location
+		filepath.Join(c.configPath, "logs"),      // Config directory logs
+	}
+
+	for _, logPath := range logPaths {
+		info, err := os.Stat(logPath)
+		if err != nil {
+			continue
+		}
+
+		if info.IsDir() {
+			// Add all log files from directory
+			files, err := os.ReadDir(logPath)
+			if err != nil {
+				continue
+			}
+
+			for _, file := range files {
+				if !strings.HasSuffix(file.Name(), ".log") {
+					continue
+				}
+
+				filePath := filepath.Join(logPath, file.Name())
+				fileInfo, err := file.Info()
+				if err != nil {
+					continue
+				}
+
+				// Skip old files
+				if fileInfo.ModTime().Before(cutoffTime) {
+					continue
+				}
+
+				// Check size limit
+				if totalSize+fileInfo.Size() > maxSize {
+					break
+				}
+
+				// Add file to archive
+				if err := c.addFileToArchive(w, filePath, filepath.Join("logs", file.Name())); err == nil {
+					totalSize += fileInfo.Size()
+					logsAdded++
+				}
+			}
+		} else if totalSize+info.Size() <= maxSize {
+			// Single log file
+			if err := c.addFileToArchive(w, logPath, filepath.Join("logs", filepath.Base(logPath))); err == nil {
+				totalSize += info.Size()
+				logsAdded++
+			}
+		}
+
+		if totalSize >= maxSize {
+			break
+		}
+	}
+
+	// Add journald logs if available
+	if journalLogs := c.getJournaldLogs(duration); journalLogs != "" {
+		journalFile, err := w.Create("logs/journald.log")
+		if err == nil {
+			if _, err := journalFile.Write([]byte(journalLogs)); err == nil {
+				logsAdded++
+			}
+		}
+	}
+
+	if logsAdded == 0 {
+		// Add a note if no logs were found
+		noteFile, _ := w.Create("logs/README.txt")
+		if noteFile != nil {
+			_, _ = noteFile.Write([]byte("No log files were found or all logs were older than the specified duration."))
+		}
+	}
+
+	return nil
+}
+
+// addFileToArchive adds a single file to the zip archive
+func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath string) error {
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(fileInfo)
+	if err != nil {
+		return err
+	}
+	header.Name = archivePath
+	header.Method = zip.Deflate
+
+	writer, err := w.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, file)
+	return err
+}
+
+// getJournaldLogs retrieves logs from journald as a string
+func (c *Collector) getJournaldLogs(duration time.Duration) string {
+	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	cmd := exec.Command("journalctl",
+		"-u", "birdnet-go.service",
+		"--since", since,
+		"--no-pager")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	return string(output)
 }
 
 // SanitizeFilename ensures the filename is safe for use
