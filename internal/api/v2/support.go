@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/support"
@@ -170,6 +171,13 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 	if dumpID == "" {
 		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
 			Error: "Missing dump ID",
+		})
+	}
+
+	// Validate dumpID is a valid UUID to prevent path traversal
+	if _, err := uuid.Parse(dumpID); err != nil {
+		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Invalid dump ID format",
 		})
 	}
 
