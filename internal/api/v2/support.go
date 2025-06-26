@@ -230,11 +230,11 @@ func (c *Controller) initSupportRoutes() {
 	c.Group.GET("/support/status", c.GetSupportStatus, c.authMiddlewareFn)
 
 	// Start cleanup goroutine for old support dumps
-	go c.startSupportDumpCleanup()
+	go c.startSupportDumpCleanup(c.ctx)
 }
 
 // startSupportDumpCleanup runs a periodic cleanup of old temporary support dump files
-func (c *Controller) startSupportDumpCleanup() {
+func (c *Controller) startSupportDumpCleanup(ctx context.Context) {
 	// Run cleanup immediately on startup
 	c.cleanupOldSupportDumps()
 
@@ -242,8 +242,15 @@ func (c *Controller) startSupportDumpCleanup() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.cleanupOldSupportDumps()
+	for {
+		select {
+		case <-ctx.Done():
+			// Context cancelled, exit gracefully
+			c.apiLogger.Info("Support dump cleanup goroutine stopping due to context cancellation")
+			return
+		case <-ticker.C:
+			c.cleanupOldSupportDumps()
+		}
 	}
 }
 

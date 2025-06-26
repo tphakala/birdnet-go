@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -64,6 +65,10 @@ type Controller struct {
 
 	// SSE related fields
 	sseManager *SSEManager // Manager for Server-Sent Events connections
+
+	// Cleanup related fields
+	ctx    context.Context    // Context for managing goroutines
+	cancel context.CancelFunc // Cancel function for graceful shutdown
 }
 
 // Define specific errors for token handling failures
@@ -214,6 +219,9 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		return nil, fmt.Errorf("failed to initialize secure filesystem for media: %w", err)
 	}
 
+	// Create context for managing goroutines
+	ctx, cancel := context.WithCancel(context.Background())
+
 	c := &Controller{
 		Echo:           e,
 		DS:             ds,
@@ -225,6 +233,8 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		detectionCache: cache.New(5*time.Minute, 10*time.Minute),
 		SFS:            sfs, // Assign SecureFS instance
 		metrics:        metrics,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 
 	// Initialize structured logger for API requests
@@ -452,6 +462,11 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
+	// Cancel context to stop all goroutines
+	if c.cancel != nil {
+		c.cancel()
+	}
+
 	// Close the API logger if it was initialized
 	if c.apiLoggerClose != nil {
 		if err := c.apiLoggerClose(); err != nil {
