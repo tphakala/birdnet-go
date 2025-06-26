@@ -26,9 +26,10 @@ type DeferredMessage struct {
 
 // sentryInitialized tracks whether Sentry has been initialized
 var (
-	sentryInitialized bool
-	deferredMessages  []DeferredMessage
-	deferredMutex     sync.Mutex
+	sentryInitialized   bool
+	deferredMessages    []DeferredMessage
+	deferredMutex       sync.Mutex
+	attachmentUploader  *AttachmentUploader
 )
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -158,6 +159,9 @@ func InitSentry(settings *conf.Settings) error {
 			"go_version":   platformInfo.GoVersion,
 		})
 	})
+
+	// Initialize attachment uploader
+	attachmentUploader = NewAttachmentUploader(true)
 
 	// Mark Sentry as initialized and process any deferred messages
 	deferredMutex.Lock()
@@ -419,6 +423,19 @@ func isNumeric(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// GetAttachmentUploader returns the global attachment uploader instance
+func GetAttachmentUploader() *AttachmentUploader {
+	deferredMutex.Lock()
+	defer deferredMutex.Unlock()
+	
+	if attachmentUploader == nil {
+		// Create a disabled uploader if Sentry is not initialized
+		attachmentUploader = NewAttachmentUploader(false)
+	}
+	
+	return attachmentUploader
 }
 
 // ScrubMessage removes or anonymizes sensitive information from telemetry messages
