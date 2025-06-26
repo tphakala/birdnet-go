@@ -161,6 +161,12 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan)
 
+	// Start RTSP health watchdog if we have RTSP streams
+	if len(settings.Realtime.RTSP.URLs) > 0 {
+		myaudio.StartRTSPHealthWatchdog()
+		log.Println("🔍 Started RTSP health monitoring watchdog")
+	}
+
 	// start cleanup of clips
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
 		startClipCleanupMonitor(&wg, quitChan, dataStore)
@@ -189,6 +195,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		case <-quitChan:
 			// Close controlChan to signal that no restart attempts should be made.
 			close(controlChan)
+			// Stop RTSP health watchdog
+			myaudio.StopRTSPHealthWatchdog()
 			// Stop all analysis buffer monitors
 			bufferManager.RemoveAllMonitors()
 			// Perform HLS resources cleanup
