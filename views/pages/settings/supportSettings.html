@@ -135,17 +135,18 @@
         generateSupportDump() {
             this.generating = true;
             
-            // Build form data
-            const formData = new FormData();
-            formData.append('include_logs', this.supportDump.includeLogs);
-            formData.append('include_config', this.supportDump.includeConfig);
-            formData.append('include_system_info', this.supportDump.includeSystemInfo);
-            formData.append('user_message', this.supportDump.userMessage);
-            formData.append('upload_to_sentry', this.supportDump.uploadToSentry);
-            
-            fetch('/api/v1/support/generate', {
+            fetch('/api/v2/support/generate', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    include_logs: this.supportDump.includeLogs,
+                    include_config: this.supportDump.includeConfig,
+                    include_system_info: this.supportDump.includeSystemInfo,
+                    user_message: this.supportDump.userMessage,
+                    upload_to_sentry: this.supportDump.uploadToSentry
+                })
             })
             .then(response => response.json())
             .then(data => {
