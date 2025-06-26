@@ -16,6 +16,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -26,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
@@ -891,84 +893,124 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 
 	// Start MQTT publisher if enabled
 	if settings.Realtime.MQTT.Enabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-mergedQuitChan:
-					return
-				case soundData := <-soundLevelChan:
-					// Publish sound level data to MQTT
-					if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
-						log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
-					}
-				}
-			}
-		}()
+		startSoundLevelMQTTPublisherWithDone(wg, mergedQuitChan, proc, soundLevelChan)
 	}
 
 	// Start SSE publisher if API is available
 	httpServer := getHTTPServer()
 	if httpServer != nil && httpServer.APIV2 != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			log.Println("📡 Started sound level SSE publisher")
-			for {
-				select {
-				case <-mergedQuitChan:
-					log.Println("🔌 Stopping sound level SSE publisher")
-					return
-				case soundData := <-soundLevelChan:
-					// Publish sound level data via SSE
-					if err := httpServer.APIV2.BroadcastSoundLevel(&soundData); err != nil {
-						// Record error metric
-						if httpServer.APIV2.Processor != nil && httpServer.APIV2.Processor.Metrics != nil &&
-							httpServer.APIV2.Processor.Metrics.SoundLevel != nil {
-							httpServer.APIV2.Processor.Metrics.SoundLevel.RecordSoundLevelPublishingError(
-								soundData.Source, soundData.Name, "sse", "broadcast_error")
-							httpServer.APIV2.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(
-								soundData.Source, soundData.Name, "sse", "error")
-						}
-						// Only log errors occasionally to avoid spam
-						if time.Now().Unix()%60 == 0 { // Log once per minute at most
-							log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
-						}
-					} else {
-						// Record success metric
-						if httpServer.APIV2.Processor != nil && httpServer.APIV2.Processor.Metrics != nil &&
-							httpServer.APIV2.Processor.Metrics.SoundLevel != nil {
-							httpServer.APIV2.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(
-								soundData.Source, soundData.Name, "sse", "success")
-						}
-					}
-				}
-			}
-		}()
+		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, httpServer.APIV2, soundLevelChan)
 	}
 
 	// Start metrics publisher
 	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			log.Println("📊 Started sound level metrics publisher")
-			for {
-				select {
-				case <-mergedQuitChan:
-					log.Println("🔌 Stopping sound level metrics publisher")
-					return
-				case soundData := <-soundLevelChan:
-					// Update Prometheus metrics
-					if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
-						// Use the existing updateSoundLevelMetrics function
-						updateSoundLevelMetrics(soundData, proc.Metrics)
+		startSoundLevelMetricsPublisherWithDone(wg, mergedQuitChan, proc.Metrics, soundLevelChan)
+	}
+}
+
+// startSoundLevelMQTTPublisherWithDone starts MQTT publisher with a custom done channel
+func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Println("📡 Started sound level MQTT publisher")
+
+		for {
+			select {
+			case <-doneChan:
+				log.Println("🔌 Stopping sound level MQTT publisher")
+				return
+			case soundData := <-soundLevelChan:
+				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
+					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
+					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+// startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
+func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Println("📡 Started sound level SSE publisher")
+
+		for {
+			select {
+			case <-doneChan:
+				log.Println("🔌 Stopping sound level SSE publisher")
+				return
+			case soundData := <-soundLevelChan:
+				if err := broadcastSoundLevelSSE(apiController, soundData); err != nil {
+					// Only log errors occasionally to avoid spam
+					if time.Now().Unix()%60 == 0 {
+						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
 					}
 				}
 			}
-		}()
+		}
+	}()
+}
+
+// broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics
+func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.SoundLevelData) error {
+	if err := apiController.BroadcastSoundLevel(&soundData); err != nil {
+		// Record error metric
+		if metrics := getSoundLevelMetricsFromAPI(apiController); metrics != nil {
+			metrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
+			metrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
+		}
+
+		// Return enhanced error
+		return errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryNetwork).
+			Context("operation", "broadcast_sound_level_sse").
+			Context("source", soundData.Source).
+			Context("name", soundData.Name).
+			Context("bands_count", len(soundData.OctaveBands)).
+			Build()
 	}
+
+	// Record success metric
+	if metrics := getSoundLevelMetricsFromAPI(apiController); metrics != nil {
+		metrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
+	}
+
+	return nil
+}
+
+// getSoundLevelMetricsFromAPI safely retrieves sound level metrics from API controller
+func getSoundLevelMetricsFromAPI(apiController *api.Controller) *metrics.SoundLevelMetrics {
+	if apiController == nil || apiController.Processor == nil ||
+		apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
+		return nil
+	}
+	return apiController.Processor.Metrics.SoundLevel
+}
+
+// startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
+func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metrics *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Println("📊 Started sound level metrics publisher")
+
+		for {
+			select {
+			case <-doneChan:
+				log.Println("🔌 Stopping sound level metrics publisher")
+				return
+			case soundData := <-soundLevelChan:
+				// Update Prometheus metrics
+				if metrics != nil && metrics.SoundLevel != nil {
+					updateSoundLevelMetrics(soundData, metrics)
+				}
+			}
+		}
+	}()
 }
 
 // getHTTPServer returns a reference to the HTTP server (if available)
