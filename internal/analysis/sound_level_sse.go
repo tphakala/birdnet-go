@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // startSoundLevelSSEPublisher starts a goroutine to consume sound level data and publish via SSE
@@ -39,11 +38,9 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, quitChan chan struct{}, api
 					if time.Now().Unix()%60 == 0 { // Log once per minute at most
 						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
 					}
-				} else {
+				} else if apiController.Processor != nil && apiController.Processor.Metrics != nil && apiController.Processor.Metrics.SoundLevel != nil {
 					// Record success metric
-					if apiController.Processor != nil && apiController.Processor.Metrics != nil && apiController.Processor.Metrics.SoundLevel != nil {
-						apiController.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
-					}
+					apiController.Processor.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
 				}
 			}
 		}
