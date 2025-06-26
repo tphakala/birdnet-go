@@ -47,6 +47,7 @@ type EnhancedError struct {
 	Context   map[string]interface{} // Additional context data
 	Timestamp time.Time              // When the error occurred
 	reported  bool                   // Whether telemetry has been sent
+	mu        sync.RWMutex           // Mutex to protect concurrent access to reported field
 }
 
 // Error implements the error interface
@@ -89,11 +90,15 @@ func (ee *EnhancedError) GetTimestamp() time.Time {
 
 // MarkReported marks this error as reported to telemetry
 func (ee *EnhancedError) MarkReported() {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
 	ee.reported = true
 }
 
 // IsReported returns whether this error has been reported
 func (ee *EnhancedError) IsReported() bool {
+	ee.mu.RLock()
+	defer ee.mu.RUnlock()
 	return ee.reported
 }
 
