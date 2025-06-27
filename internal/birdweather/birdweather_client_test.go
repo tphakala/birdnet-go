@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -47,13 +46,13 @@ func TestMain(m *testing.M) {
 // cleanupTestArtifacts removes directories created during tests
 func cleanupTestArtifacts() {
 	// Clean up debug directory if it exists
-	debugDir := filepath.Join("debug")
+	debugDir := "debug"
 	if _, err := os.Stat(debugDir); err == nil {
 		os.RemoveAll(debugDir)
 	}
 
 	// Clean up logs directory if it exists
-	logsDir := filepath.Join("logs")
+	logsDir := "logs"
 	if _, err := os.Stat(logsDir); err == nil {
 		os.RemoveAll(logsDir)
 	}
