@@ -240,6 +240,7 @@ func init() {
 	RegisterComponent("conf", "configuration")
 	RegisterComponent("telemetry", "telemetry")
 	RegisterComponent("birdweather", "birdweather")
+	RegisterComponent("backup", "backup")
 }
 
 // Helper functions for auto-detection and categorization

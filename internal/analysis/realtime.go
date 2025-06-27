@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -25,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -189,6 +192,24 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Initialize processor
 	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
+
+	// Initialize Backup system
+	backupLogger := logging.ForService("backup") // Get logger first
+	if backupLogger == nil {
+		log.Println("Error: Backup logger is nil. Logging may not be initialized.")
+		backupLogger = slog.Default() // Use default as fallback
+	}
+	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLogger)
+	if err != nil {
+		// Log the specific error from initialization
+		backupLogger.Error("Failed to initialize backup system", "error", err)
+		// Don't make this fatal - continue without backup system
+		log.Printf("Warning: Backup system initialization failed: %v", err)
+	} else {
+		// Store backup manager and scheduler in the processor for access by control monitor
+		proc.SetBackupManager(backupManager)
+		proc.SetBackupScheduler(backupScheduler)
+	}
 
 	// Initialize and start the HTTP server
 	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
@@ -1113,4 +1134,54 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 		myaudio.UnregisterSoundLevelProcessor(url)
 		log.Printf("🔇 Unregistered sound level processor for RTSP source: %s", conf.SanitizeRTSPUrl(url))
 	}
+}
+
+// initializeBackupSystem sets up the backup manager and scheduler.
+func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) (*backup.Manager, *backup.Scheduler, error) {
+	backupLogger.Info("Initializing backup system...")
+
+	stateManager, err := backup.NewStateManager(backupLogger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize backup state manager: %w", err)
+	}
+
+	// Use settings.Version for the app version
+	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize backup manager: %w", err)
+	}
+	backupScheduler, err := backup.NewScheduler(backupManager, backupLogger, stateManager)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize backup scheduler: %w", err)
+	}
+
+	// Load schedule for backupScheduler if backup is enabled
+	switch {
+	case settings.Backup.Enabled && len(settings.Backup.Schedules) > 0:
+		backupLogger.Info("Loading backup schedule from configuration")
+		if err := backupScheduler.LoadFromConfig(&settings.Backup); err != nil {
+			// Log the error but don't necessarily stop initialization
+			backupLogger.Error("Failed to load backup schedule from config", "error", err)
+		}
+	case settings.Backup.Enabled:
+		// This case is reached if backup is enabled but no schedules are defined.
+		backupLogger.Info("Backup enabled, but no schedules configured.")
+	default:
+		// This case is reached if backup is disabled.
+		backupLogger.Info("Backup system is disabled.")
+	}
+
+	// Start backupManager and backupScheduler if backup is enabled
+	if settings.Backup.Enabled {
+		backupLogger.Info("Starting backup manager")
+		if err := backupManager.Start(); err != nil {
+			// Log the error but don't necessarily stop initialization
+			backupLogger.Error("Failed to start backup manager", "error", err)
+		}
+		backupLogger.Info("Starting backup scheduler")
+		backupScheduler.Start() // Start the scheduler
+	}
+
+	backupLogger.Info("Backup system initialized.")
+	return backupManager, backupScheduler, nil
 }
