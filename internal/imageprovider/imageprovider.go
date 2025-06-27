@@ -381,6 +381,54 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	return birdImage, nil
 }
 
+// batchLoadFromDB loads multiple BirdImages from the database cache in a single query
+func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]BirdImage, error) {
+	logger := imageProviderLogger.With("provider", c.providerName, "batch_size", len(scientificNames))
+	logger.Debug("Attempting batch load from DB cache")
+
+	if c.store == nil {
+		logger.Warn("Cannot batch load from DB cache: DB store is nil")
+		return nil, nil
+	}
+
+	// Get all image caches for these scientific names
+	// Note: This assumes the datastore has or can implement a batch query method
+	result := make(map[string]BirdImage)
+
+	// For now, we'll query individually but in a tight loop
+	// TODO: Implement actual batch query in datastore
+	for _, name := range scientificNames {
+		query := datastore.ImageCacheQuery{
+			ScientificName: name,
+			ProviderName:   c.providerName,
+		}
+
+		cachedImage, err := c.store.GetImageCache(query)
+		if err != nil {
+			// Log but continue with other items
+			logger.Debug("Failed to get image from DB cache", "scientific_name", name, "error", err)
+			continue
+		}
+
+		if cachedImage != nil {
+			birdImage := BirdImage{
+				URL:            cachedImage.URL,
+				ScientificName: cachedImage.ScientificName,
+				LicenseName:    cachedImage.LicenseName,
+				LicenseURL:     cachedImage.LicenseURL,
+				AuthorName:     cachedImage.AuthorName,
+				AuthorURL:      cachedImage.AuthorURL,
+				CachedAt:       cachedImage.CachedAt,
+				SourceProvider: cachedImage.ProviderName,
+			}
+			result[name] = birdImage
+		}
+	}
+
+	logger.Debug("Batch DB load completed", "found", len(result), "requested", len(scientificNames))
+	return result, nil
+}
+
 // saveToDB saves a BirdImage to the database cache
 func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", image.ScientificName)
@@ -1060,35 +1108,70 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 		return result
 	}
 
-	// For each missing name, fetch individually
-	// We could potentially parallelize this in the future
-	log.Printf("GetBatch: Need to fetch %d missing images", len(missingNames))
-	fetchStart := time.Now()
+	// Try batch loading from DB cache
+	if c.store != nil && len(missingNames) > 0 {
+		dbBatchStart := time.Now()
+		log.Printf("GetBatch: Attempting batch DB cache lookup for %d items", len(missingNames))
 
-	for i, name := range missingNames {
-		singleFetchStart := time.Now()
-
-		if i%10 == 0 && i > 0 {
-			log.Printf("GetBatch: Progress %d/%d images fetched", i, len(missingNames))
-		}
-
-		image, err := c.Get(name)
-		singleFetchDuration := time.Since(singleFetchStart)
-
-		if err == nil {
-			result[name] = image
-			if singleFetchDuration > 100*time.Millisecond {
-				log.Printf("GetBatch: Slow fetch for %s took %v", name, singleFetchDuration)
-			}
+		dbImages, err := c.batchLoadFromDB(missingNames)
+		if err != nil {
+			log.Printf("GetBatch: Batch DB load error: %v", err)
 		} else {
-			log.Printf("GetBatch: Failed to get image for %s: %v (took %v)", name, err, singleFetchDuration)
+			// Process DB results
+			stillMissing := make([]string, 0, len(missingNames))
+			for _, name := range missingNames {
+				if img, found := dbImages[name]; found {
+					result[name] = img
+					// Store in memory cache for future requests
+					c.dataMap.Store(name, &img)
+					if c.metrics != nil {
+						c.metrics.IncrementCacheMisses() // Memory miss but DB hit
+					}
+				} else {
+					stillMissing = append(stillMissing, name)
+				}
+			}
+			missingNames = stillMissing
+			dbBatchDuration := time.Since(dbBatchStart)
+			log.Printf("GetBatch: Batch DB lookup completed in %v - found %d more images, %d still missing",
+				dbBatchDuration, len(dbImages), len(missingNames))
 		}
 	}
 
-	fetchDuration := time.Since(fetchStart)
+	// If still missing after DB batch lookup, fetch individually from provider
+	// TODO: In future, implement batch provider fetch if provider supports it
+	if len(missingNames) > 0 {
+		log.Printf("GetBatch: Need to fetch %d images from provider", len(missingNames))
+		fetchStart := time.Now()
+
+		for i, name := range missingNames {
+			singleFetchStart := time.Now()
+
+			if i%10 == 0 && i > 0 {
+				log.Printf("GetBatch: Progress %d/%d images fetched from provider", i, len(missingNames))
+			}
+
+			// Use fetchAndStore directly to avoid the full Get() overhead
+			image, err := c.fetchAndStore(name)
+			singleFetchDuration := time.Since(singleFetchStart)
+
+			if err == nil {
+				result[name] = image
+				if singleFetchDuration > 100*time.Millisecond {
+					log.Printf("GetBatch: Slow provider fetch for %s took %v", name, singleFetchDuration)
+				}
+			} else {
+				log.Printf("GetBatch: Failed to fetch %s from provider: %v (took %v)", name, err, singleFetchDuration)
+			}
+		}
+
+		fetchDuration := time.Since(fetchStart)
+		log.Printf("GetBatch: Provider fetch phase completed in %v", fetchDuration)
+	}
+
 	totalDuration := time.Since(batchStart)
-	log.Printf("GetBatch: Completed fetching %d images in %v (total batch time: %v)",
-		len(missingNames), fetchDuration, totalDuration)
+	log.Printf("GetBatch: Completed batch operation - returned %d/%d images in %v",
+		len(result), len(scientificNames), totalDuration)
 
 	return result
 }
