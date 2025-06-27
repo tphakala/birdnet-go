@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -52,6 +53,7 @@ type SFTPTarget struct {
 	mu          sync.Mutex // Protects connPool operations
 	tempFiles   map[string]bool
 	tempFilesMu sync.Mutex // Protects tempFiles map
+	logger      *slog.Logger
 }
 
 // ProgressReader wraps an io.Reader to track progress
@@ -69,7 +71,7 @@ func (r *SFTPProgressReader) Read(p []byte) (n int, err error) {
 }
 
 // NewSFTPTarget creates a new SFTP target with the given configuration
-func NewSFTPTarget(settings map[string]interface{}) (*SFTPTarget, error) {
+func NewSFTPTarget(settings map[string]interface{}, logger *slog.Logger) (*SFTPTarget, error) {
 	config := SFTPTargetConfig{}
 
 	// Required settings
@@ -136,6 +138,7 @@ func NewSFTPTarget(settings map[string]interface{}) (*SFTPTarget, error) {
 		config:    config,
 		connPool:  make(chan *sftp.Client, config.MaxConns),
 		tempFiles: make(map[string]bool),
+		logger:    logger,
 	}
 
 	return target, nil

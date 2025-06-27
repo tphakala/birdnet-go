@@ -4,7 +4,6 @@ package sources
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +17,7 @@ import (
 	"github.com/mattn/go-sqlite3"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // SQLiteSource implements the backup.Source interface for SQLite databases
