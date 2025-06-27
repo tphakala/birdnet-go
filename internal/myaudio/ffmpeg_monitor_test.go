@@ -112,6 +112,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"runtime"
 	"sync"
 	"testing"
@@ -1059,6 +1060,7 @@ func TestProcessCleanupOnConfigChange(t *testing.T) {
 func TestBackoffDelayForProcessRestarts(t *testing.T) {
 	// Create a process with a restart tracker
 	proc := &FFmpegProcess{
+		cmd: &exec.Cmd{}, // Add mock command
 		restartTracker: &FFmpegRestartTracker{
 			restartCount:  0,
 			lastRestartAt: time.Now().Add(-2 * time.Minute), // Old restart
@@ -1075,10 +1077,18 @@ func TestBackoffDelayForProcessRestarts(t *testing.T) {
 	delay = proc.getRestartDelay()
 	assert.Equal(t, 10*time.Second, delay, "Second restart should have 10s delay")
 
-	// Multiple rapid restarts should increase up to cap
-	for i := 0; i < 30; i++ {
+	// Test up to 4 restarts to avoid triggering restart storm protection (>5 in 1 minute)
+	// We already have 2 restarts, so we'll add 2 more for a total of 4
+	for i := 0; i < 2; i++ {
 		proc.updateRestartInfo()
 	}
+	delay = proc.getRestartDelay()
+	assert.Equal(t, 20*time.Second, delay, "Fourth restart should have 20s delay")
+
+	// Now test the cap by simulating many restarts but with proper timing
+	// to avoid restart storm protection
+	proc.restartTracker.restartCount = 24              // 24 * 5 = 120 seconds = 2 minutes
+	proc.restartTracker.recentRestarts = []time.Time{} // Clear recent restarts
 	delay = proc.getRestartDelay()
 	assert.Equal(t, 2*time.Minute, delay, "Delay should be capped at 2 minutes")
 }
