@@ -3,7 +3,6 @@ package datastore
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -53,9 +52,9 @@ type NewSpeciesData struct {
 func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
 	var summaries []SpeciesSummaryData
 
-	// Log query start time for debugging
-	queryStart := time.Now()
-	log.Printf("GetSpeciesSummaryData: Starting query with startDate=%s, endDate=%s", startDate, endDate)
+	// Track query time for performance monitoring
+	// queryStart := time.Now()
+	// log.Printf("GetSpeciesSummaryData: Starting query with startDate=%s, endDate=%s", startDate, endDate)
 
 	// Start building query
 	queryStr := `
@@ -94,7 +93,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	`
 
 	// Execute the query
-	log.Printf("GetSpeciesSummaryData: Executing query: %s with args: %v", queryStr, args)
+	// log.Printf("GetSpeciesSummaryData: Executing query: %s with args: %v", queryStr, args)
 	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, errors.New(err).
@@ -107,7 +106,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 	defer rows.Close()
 
-	log.Printf("GetSpeciesSummaryData: Query executed in %v, now scanning rows", time.Since(queryStart))
+	// log.Printf("GetSpeciesSummaryData: Query executed in %v, now scanning rows", time.Since(queryStart))
 	rowCount := 0
 
 	for rows.Next() {
@@ -150,7 +149,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		summaries = append(summaries, summary)
 	}
 
-	log.Printf("GetSpeciesSummaryData: Completed in %v, processed %d rows", time.Since(queryStart), rowCount)
+	// log.Printf("GetSpeciesSummaryData: Completed in %v, processed %d rows", time.Since(queryStart), rowCount)
 
 	return summaries, nil
 }
@@ -479,10 +478,11 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
 				CountInPeriod:  raw.CountInPeriod,
 			})
-		} else {
-			// Log if a record surprisingly had an empty date after SQL filtering
-			log.Printf("WARN: GetNewSpeciesDetections - Skipped record for %s due to empty first_detection_date after SQL query.", raw.ScientificName)
 		}
+		// else {
+		//	// Log if a record surprisingly had an empty date after SQL filtering
+		//	// log.Printf("WARN: GetNewSpeciesDetections - Skipped record for %s due to empty first_detection_date after SQL query.", raw.ScientificName)
+		// }
 	}
 
 	return finalResults, nil

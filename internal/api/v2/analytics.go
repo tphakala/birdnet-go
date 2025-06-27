@@ -363,7 +363,7 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
 // This provides an overall summary of species detections
 func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
-	apiStart := time.Now()
+	// apiStart := time.Now()
 
 	// Get query parameters
 	startDate := ctx.QueryParam("start_date")
@@ -411,7 +411,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
 	dbDuration := time.Since(dbStart)
 
-	log.Printf("GetSpeciesSummary: Database query completed in %v, got %d records", dbDuration, len(summaryData))
+	// log.Printf("GetSpeciesSummary: Database query completed in %v, got %d records", dbDuration, len(summaryData))
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Database query completed",
@@ -451,7 +451,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	var thumbnailURLs map[string]imageprovider.BirdImage
 	if c.BirdImageCache != nil && len(scientificNames) > 0 && !skipThumbnails {
 		thumbStart := time.Now()
-		log.Printf("GetSpeciesSummary: Starting batch fetch of %d thumbnails", len(scientificNames))
+		// log.Printf("GetSpeciesSummary: Starting batch fetch of %d thumbnails", len(scientificNames))
 		if c.apiLogger != nil {
 			c.apiLogger.Debug("Batch fetching thumbnails",
 				"count", len(scientificNames),
@@ -461,7 +461,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		}
 		thumbnailURLs = c.BirdImageCache.GetBatch(scientificNames)
 		thumbDuration := time.Since(thumbStart)
-		log.Printf("GetSpeciesSummary: Thumbnail batch fetch completed in %v", thumbDuration)
+		// log.Printf("GetSpeciesSummary: Thumbnail batch fetch completed in %v", thumbDuration)
 		if c.apiLogger != nil {
 			c.apiLogger.Info("Thumbnail batch fetch completed",
 				"duration_ms", thumbDuration.Milliseconds(),
@@ -470,9 +470,10 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 				"path", ctx.Request().URL.Path,
 			)
 		}
-	} else if skipThumbnails {
-		log.Printf("GetSpeciesSummary: Skipping thumbnail fetch as requested")
 	}
+	// else if skipThumbnails {
+	//	log.Printf("GetSpeciesSummary: Skipping thumbnail fetch as requested")
+	// }
 
 	for i := range summaryData {
 		data := &summaryData[i]
@@ -541,8 +542,8 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		)
 	}
 
-	totalAPITime := time.Since(apiStart)
-	log.Printf("GetSpeciesSummary: Total API execution time: %v", totalAPITime)
+	// totalAPITime := time.Since(apiStart)
+	// log.Printf("GetSpeciesSummary: Total API execution time: %v", totalAPITime)
 
 	return ctx.JSON(http.StatusOK, response)
 }
