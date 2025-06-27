@@ -45,6 +45,19 @@ type BirdImage struct {
 	SourceProvider string // The actual provider that supplied the image
 }
 
+// IsNegativeEntry checks if this is a negative cache entry (not found)
+func (b *BirdImage) IsNegativeEntry() bool {
+	return b.URL == negativeEntryMarker
+}
+
+// GetTTL returns the appropriate TTL for this cache entry
+func (b *BirdImage) GetTTL() time.Duration {
+	if b.IsNegativeEntry() {
+		return negativeCacheTTL
+	}
+	return defaultCacheTTL
+}
+
 // BirdImageCache represents a cache for storing and retrieving bird images.
 type BirdImageCache struct {
 	provider     ImageProvider
@@ -108,10 +121,12 @@ func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 }
 
 const (
-	defaultCacheTTL  = 14 * 24 * time.Hour    // 14 days
-	refreshInterval  = 1 * time.Second        // How often to check for stale entries (shortened for testing)
-	refreshBatchSize = 10                     // Number of entries to refresh in one batch
-	refreshDelay     = 100 * time.Millisecond // Delay between refreshing individual entries (shortened for testing)
+	defaultCacheTTL     = 14 * 24 * time.Hour // 14 days for positive entries
+	negativeCacheTTL    = 15 * time.Minute    // 15 minutes for negative entries
+	refreshInterval     = 1 * time.Hour       // Check for stale entries every hour in production
+	refreshBatchSize    = 10                  // Number of entries to refresh in one batch
+	refreshDelay        = 2 * time.Second     // Delay between refreshing individual entries
+	negativeEntryMarker = "__NOT_FOUND__"     // Special URL marker for negative cache entries
 )
 
 // startCacheRefresh starts the background cache refresh routine
@@ -177,13 +192,20 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	// Find stale entries
 	var staleEntries []string // Store only scientific names instead of full entries
-	cutoff := time.Now().Add(-defaultCacheTTL)
+	now := time.Now()
+
 	for i := range entries {
+		// Check if it's a negative entry - use shorter TTL
+		var cutoff time.Time
+		if entries[i].URL == negativeEntryMarker {
+			cutoff = now.Add(-negativeCacheTTL)
+			logger.Debug("Checking negative entry staleness", "scientific_name", entries[i].ScientificName, "cached_at", entries[i].CachedAt, "ttl", negativeCacheTTL)
+		} else {
+			cutoff = now.Add(-defaultCacheTTL)
+		}
+
 		if entries[i].CachedAt.Before(cutoff) {
-			logger.Debug("Found stale entry", "scientific_name", entries[i].ScientificName, "cached_at", entries[i].CachedAt, "cutoff", cutoff)
-			// if c.debug {
-			// 	log.Printf("Debug: [%s] Found stale entry: %s (CachedAt: %v)", c.providerName, entries[i].ScientificName, entries[i].CachedAt)
-			// }
+			logger.Debug("Found stale entry", "scientific_name", entries[i].ScientificName, "cached_at", entries[i].CachedAt, "cutoff", cutoff, "is_negative", entries[i].URL == negativeEntryMarker)
 			staleEntries = append(staleEntries, entries[i].ScientificName)
 		}
 	}
@@ -417,6 +439,12 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 		return
 	}
 
+	// For negative cache entries, we'll save them to DB with the special marker
+	// This allows them to be loaded on restart (though they'll likely be expired)
+	if image.IsNegativeEntry() {
+		logger.Debug("Saving negative cache entry to DB")
+	}
+
 	logger.Debug("Saving image to DB cache", "url", image.URL, "source_provider", image.SourceProvider)
 
 	// Ensure provider name is not empty, falling back to the cache's own name if needed
@@ -484,27 +512,36 @@ func (c *BirdImageCache) loadCachedImages() error {
 
 	loadedCount := 0
 	now := time.Now()
-	cutoff := now.Add(-defaultCacheTTL)
 
 	for i := range entries {
+		birdImage := &BirdImage{
+			URL:            entries[i].URL,
+			ScientificName: entries[i].ScientificName,
+			LicenseName:    entries[i].LicenseName,
+			LicenseURL:     entries[i].LicenseURL,
+			AuthorName:     entries[i].AuthorName,
+			AuthorURL:      entries[i].AuthorURL,
+			CachedAt:       entries[i].CachedAt,
+			SourceProvider: entries[i].ProviderName,
+		}
+
+		// Check if entry is still valid based on its TTL
+		cutoff := now.Add(-birdImage.GetTTL())
+
 		// Only load non-stale entries into memory
 		if entries[i].CachedAt.After(cutoff) {
-			birdImage := &BirdImage{
-				URL:            entries[i].URL,
-				ScientificName: entries[i].ScientificName,
-				LicenseName:    entries[i].LicenseName,
-				LicenseURL:     entries[i].LicenseURL,
-				AuthorName:     entries[i].AuthorName,
-				AuthorURL:      entries[i].AuthorURL,
-				CachedAt:       entries[i].CachedAt,
-				SourceProvider: entries[i].ProviderName,
-			}
 			c.dataMap.Store(birdImage.ScientificName, birdImage)
 			loadedCount++
+			if birdImage.IsNegativeEntry() {
+				logger.Debug("Loaded negative cache entry from DB",
+					"scientific_name", entries[i].ScientificName,
+					"cached_at", entries[i].CachedAt)
+			}
 		} else {
 			logger.Debug("Skipping load of stale DB entry into memory cache",
 				"scientific_name", entries[i].ScientificName,
-				"cached_at", entries[i].CachedAt)
+				"cached_at", entries[i].CachedAt,
+				"is_negative", birdImage.IsNegativeEntry())
 		}
 	}
 
@@ -519,9 +556,25 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 
 	// Fast path: check if already loaded
 	if val, ok := c.dataMap.Load(scientificName); ok {
-		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
-			logger.Debug("Initialization check: already in memory cache (fast path)")
-			return *imgPtr, true, nil
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
+			// Check if it's a valid entry (including negative cache entries)
+			if imgPtr.URL != "" {
+				// Check if negative entry is still valid
+				if imgPtr.IsNegativeEntry() {
+					cutoff := time.Now().Add(-imgPtr.GetTTL())
+					if imgPtr.CachedAt.Before(cutoff) {
+						logger.Debug("Negative cache entry expired, removing from memory")
+						c.dataMap.Delete(scientificName)
+						// Continue to re-fetch
+					} else {
+						logger.Debug("Returning valid negative cache entry")
+						return BirdImage{}, true, ErrImageNotFound
+					}
+				} else {
+					logger.Debug("Initialization check: already in memory cache (fast path)")
+					return *imgPtr, true, nil
+				}
+			}
 		}
 	}
 
@@ -543,8 +596,18 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 	// in case another goroutine finished initializing while we were waiting.
 	if val, ok := c.dataMap.Load(scientificName); ok {
 		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
-			logger.Debug("Initialization check: found in memory cache after acquiring lock")
-			return *imgPtr, true, nil // Indicate it was found in cache
+			// Handle negative cache entries
+			if imgPtr.IsNegativeEntry() {
+				cutoff := time.Now().Add(-imgPtr.GetTTL())
+				if imgPtr.CachedAt.After(cutoff) {
+					logger.Debug("Returning valid negative cache entry after lock")
+					return BirdImage{}, true, ErrImageNotFound
+				}
+				// Expired, continue to re-fetch
+			} else {
+				logger.Debug("Initialization check: found in memory cache after acquiring lock")
+				return *imgPtr, true, nil // Indicate it was found in cache
+			}
 		}
 	}
 
@@ -621,22 +684,38 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		logger.Warn("Error loading from DB cache, proceeding to fetch from provider", "db_error", err)
 	}
 	if dbImage != nil {
-		// Check if the DB entry is stale - if so, trigger refresh but return stale data for now
-		// Or should we block and wait for refresh? For now, return stale and let background refresh handle it.
-		cutoff := time.Now().Add(-defaultCacheTTL)
-		if dbImage.CachedAt.Before(cutoff) {
-			logger.Info("DB cache entry is stale, returning stale data and triggering background refresh", "cached_at", dbImage.CachedAt)
-			// Trigger background refresh non-blockingly
-			go c.refreshEntry(scientificName)
+		// Check if it's a negative cache entry
+		if dbImage.IsNegativeEntry() {
+			cutoff := time.Now().Add(-dbImage.GetTTL())
+			if dbImage.CachedAt.Before(cutoff) {
+				logger.Debug("Negative cache entry from DB is expired, will re-fetch")
+				// Don't return the expired negative entry, continue to fetch
+			} else {
+				logger.Info("Valid negative cache entry loaded from DB")
+				// Store in memory cache
+				c.dataMap.Store(scientificName, dbImage)
+				if c.metrics != nil {
+					c.metrics.IncrementCacheMisses() // It was a memory miss, but DB hit
+				}
+				return BirdImage{}, ErrImageNotFound
+			}
 		} else {
-			logger.Info("Image loaded from DB cache")
+			// Regular positive entry - check staleness with regular TTL
+			cutoff := time.Now().Add(-defaultCacheTTL)
+			if dbImage.CachedAt.Before(cutoff) {
+				logger.Info("DB cache entry is stale, returning stale data and triggering background refresh", "cached_at", dbImage.CachedAt)
+				// Trigger background refresh non-blockingly
+				go c.refreshEntry(scientificName)
+			} else {
+				logger.Info("Image loaded from DB cache")
+			}
+			// Store in memory cache and return
+			c.dataMap.Store(scientificName, dbImage)
+			if c.metrics != nil {
+				c.metrics.IncrementCacheMisses() // It was a memory miss, but DB hit
+			}
+			return *dbImage, nil
 		}
-		// Store in memory cache and return
-		c.dataMap.Store(scientificName, dbImage)
-		if c.metrics != nil {
-			c.metrics.IncrementCacheMisses() // It was a memory miss, but DB hit
-		}
-		return *dbImage, nil
 	}
 
 	// 2. Not in DB or DB load failed, fetch from the actual provider
@@ -674,15 +753,32 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "provider_fetch")
 		}
-		// Store a negative cache entry? For now, just return error.
 		// Check if it's a 'not found' error vs a transient error
 		if errors.Is(fetchErr, ErrImageNotFound) {
-			// Store negative cache result to avoid refetching known misses?
-			// Maybe store an empty BirdImage with a timestamp?
-			logger.Warn("Image explicitly not found by provider")
+			// Store negative cache entry to avoid refetching known misses
+			logger.Info("Image not found by provider, storing negative cache entry")
+
+			negativeEntry := BirdImage{
+				URL:            negativeEntryMarker,
+				ScientificName: scientificName,
+				CachedAt:       time.Now(),
+				SourceProvider: c.providerName,
+			}
+
+			// Store in memory cache
+			c.dataMap.Store(scientificName, &negativeEntry)
+
+			// Store in DB cache with negative marker
+			c.saveToDB(&negativeEntry)
+
+			if c.metrics != nil {
+				c.metrics.IncrementCacheMisses() // It's still a cache miss
+			}
+
 			return BirdImage{}, fetchErr // Return the specific ErrImageNotFound
 		}
-		// For other errors, don't store anything and return the error
+		// For other errors (network, etc), don't cache and return the error
+		logger.Warn("Provider error (not caching)", "error", enhancedErr)
 		return BirdImage{}, enhancedErr
 	}
 

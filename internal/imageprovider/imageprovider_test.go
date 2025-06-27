@@ -71,6 +71,18 @@ func newMockStore() *mockStore {
 	}
 }
 
+// GetAllTestEntries returns all entries for testing purposes
+func (m *mockStore) GetAllTestEntries() []*datastore.ImageCache {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entries := make([]*datastore.ImageCache, 0, len(m.images))
+	for _, v := range m.images {
+		entries = append(entries, v)
+	}
+	return entries
+}
+
 // Implement only the methods we need for testing
 func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	m.mu.RLock()
