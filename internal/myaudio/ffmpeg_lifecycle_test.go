@@ -251,6 +251,7 @@ func TestRestartTrackerBehavior(t *testing.T) {
 
 	// Create a mock FFmpeg process
 	process := &FFmpegProcess{
+		cmd:            cmd,
 		restartTracker: tracker,
 	}
 
@@ -649,16 +650,19 @@ func TestRestartTrackerResetLogic(t *testing.T) {
 	delay1 := process.getRestartDelay()
 	assert.Equal(t, 5*time.Second, delay1, "First restart delay should be 5 seconds")
 
-	// Test 3: Multiple restarts within a minute
+	// Test 3: Multiple restarts within a minute (triggers restart storm protection)
 	for i := 0; i < 5; i++ {
 		process.updateRestartInfo()
 	}
 	assert.Equal(t, 6, tracker.restartCount, "Restart count should be 6")
 
 	delay6 := process.getRestartDelay()
-	assert.Equal(t, 30*time.Second, delay6, "Sixth restart delay should be 30 seconds")
+	// After 6 rapid restarts, restart storm protection activates (5 minute delay)
+	assert.Equal(t, 5*time.Minute, delay6, "Sixth restart delay should be 5 minutes due to restart storm protection")
 
 	// Test 4: Reset after more than a minute
+	// Clear recent restarts to avoid restart storm protection
+	tracker.recentRestarts = []time.Time{}
 	tracker.lastRestartAt = time.Now().Add(-2 * time.Minute)
 	process.updateRestartInfo()
 	assert.Equal(t, 1, tracker.restartCount, "Restart count should reset after a minute")
