@@ -213,6 +213,13 @@ func (f *octaveBandFilter) processAudioSample(input float64) float64 {
 	// Apply filter equation: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
 	output := f.b0*input + f.b1*f.x1 + f.b2*f.x2 - f.a1*f.y1 - f.a2*f.y2
 
+	// Prevent numerical instability: if output is NaN or Inf, reset to input
+	if math.IsNaN(output) || math.IsInf(output, 0) {
+		output = input
+		// Reset filter state to prevent instability propagation
+		f.x1, f.x2, f.y1, f.y2 = 0, 0, 0, 0
+	}
+
 	// Update state variables
 	f.x2 = f.x1
 	f.x1 = input
@@ -265,7 +272,13 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 		if buffer.sampleCount >= buffer.targetSampleCount {
 			// Calculate RMS for this 1-second window
 			rms := calculateRMS(buffer.samples[:buffer.targetSampleCount])
-			levelDB := 20 * math.Log10(math.Max(rms, 1e-10)) // Avoid log(0)
+			// Ensure we have a valid RMS value before calculating dB level
+			// Use a minimum threshold to avoid extreme negative values
+			// 1e-10 corresponds to -200 dB, which is effectively silence
+			if rms < 1e-10 {
+				rms = 1e-10
+			}
+			levelDB := 20 * math.Log10(rms)
 
 			// Store 1-second measurement in 10-second aggregator
 			currentIdx := p.tenSecondBuffer.currentIndex
