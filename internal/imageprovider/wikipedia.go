@@ -24,7 +24,6 @@ const wikiProviderName = "wikipedia"
 type wikiMediaProvider struct {
 	client            *mwclient.Client
 	debug             bool
-	limiter           *rate.Limiter // For user-initiated requests
 	backgroundLimiter *rate.Limiter // For background refresh operations
 	maxRetries        int
 }
@@ -60,13 +59,11 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	// Rate limiting is only applied to background cache refresh operations
 	// User requests are not rate limited to ensure UI responsiveness
 	// Background operations: 2 requests per second to respect Wikipedia's rate limits
-	limiter := rate.NewLimiter(rate.Limit(10), 10) // Kept for backward compatibility but not used
 	backgroundLimiter := rate.NewLimiter(rate.Limit(2), 2)
 	logger.Info("WikiMedia provider initialized", "user_rate_limit", "none", "background_rate_limit_rps", 2)
 	return &wikiMediaProvider{
 		client:            client,
 		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
-		limiter:           limiter,
 		backgroundLimiter: backgroundLimiter,
 		maxRetries:        3,
 	}, nil
