@@ -475,15 +475,12 @@
                     return;
                 }
                 
-                // console.log('Loading thumbnails asynchronously...');
-                
                 // Get scientific names that need thumbnails
                 const scientificNames = this.speciesData
                     .filter(species => !species.thumbnail_url)
                     .map(species => species.scientific_name);
                 
                 if (scientificNames.length === 0) {
-                    // console.log('All species already have thumbnails');
                     return;
                 }
                 
