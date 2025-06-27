@@ -2,7 +2,7 @@
 package metrics
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -749,7 +749,7 @@ func (m *MyAudioMetrics) RecordAudioProcessingError(operation, source, errorType
 
 // RecordAudioConversion records an audio format conversion
 func (m *MyAudioMetrics) RecordAudioConversion(conversionType string, bitDepth int, status string) {
-	m.audioConversionsTotal.WithLabelValues(conversionType, fmt.Sprintf("%d", bitDepth), status).Inc()
+	m.audioConversionsTotal.WithLabelValues(conversionType, strconv.Itoa(bitDepth), status).Inc()
 }
 
 // RecordAudioConversionDuration records the duration of an audio conversion
@@ -759,7 +759,7 @@ func (m *MyAudioMetrics) RecordAudioConversionDuration(source, conversionType st
 
 // RecordAudioConversionError records an audio conversion error
 func (m *MyAudioMetrics) RecordAudioConversionError(conversionType string, bitDepth int, errorType string) {
-	m.audioConversionErrors.WithLabelValues(conversionType, fmt.Sprintf("%d", bitDepth), errorType).Inc()
+	m.audioConversionErrors.WithLabelValues(conversionType, strconv.Itoa(bitDepth), errorType).Inc()
 }
 
 // RecordAudioInferenceDuration records the duration of BirdNET inference
