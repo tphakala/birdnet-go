@@ -1158,12 +1158,19 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 
 	// For each missing name, fetch individually
 	// We could potentially parallelize this in the future
-	for _, name := range missingNames {
+	log.Printf("GetBatch: Need to fetch %d missing images", len(missingNames))
+	for i, name := range missingNames {
+		if i%10 == 0 && i > 0 {
+			log.Printf("GetBatch: Progress %d/%d images fetched", i, len(missingNames))
+		}
 		image, err := c.Get(name)
 		if err == nil {
 			result[name] = image
+		} else {
+			log.Printf("GetBatch: Failed to get image for %s: %v", name, err)
 		}
 	}
+	log.Printf("GetBatch: Completed fetching %d images", len(missingNames))
 
 	return result
 }
