@@ -401,8 +401,8 @@
                     const params = new URLSearchParams();
                     if (startDate) params.set('start_date', startDate);
                     if (endDate) params.set('end_date', endDate);
-                    // Temporarily disabled to debug performance
-                    // params.set('skip_thumbnails', 'true');
+                    // Re-enable skip_thumbnails for better performance
+                    params.set('skip_thumbnails', 'true');
                     
                     // Fetch species summary data
                     const response = await fetch(`/api/v2/analytics/species/summary?${params.toString()}`);
@@ -413,6 +413,9 @@
                     
                     this.speciesData = await response.json();
                     this.applyFilters();
+                    
+                    // Load thumbnails asynchronously after main data is displayed
+                    this.loadThumbnailsAsync();
                     
                 } catch (error) {
                     console.error('Error fetching species data:', error);
@@ -488,6 +491,61 @@
             showSpeciesDetails(species) {
                 this.selectedSpecies = species;
                 document.getElementById('speciesDetailsModal').showModal();
+            },
+            
+            async loadThumbnailsAsync() {
+                // Skip if we don't have species data
+                if (!this.speciesData || this.speciesData.length === 0) {
+                    return;
+                }
+                
+                console.log('Loading thumbnails asynchronously...');
+                
+                // Get scientific names that need thumbnails
+                const scientificNames = this.speciesData
+                    .filter(species => !species.thumbnail_url || species.thumbnail_url === '/assets/images/bird-placeholder.svg')
+                    .map(species => species.scientific_name);
+                
+                if (scientificNames.length === 0) {
+                    console.log('All species already have thumbnails');
+                    return;
+                }
+                
+                try {
+                    // Fetch thumbnails in batches to avoid overwhelming the server
+                    const batchSize = 20;
+                    for (let i = 0; i < scientificNames.length; i += batchSize) {
+                        const batch = scientificNames.slice(i, i + batchSize);
+                        
+                        // Create query parameters for this batch
+                        const params = new URLSearchParams();
+                        batch.forEach(name => params.append('species', name));
+                        
+                        // Fetch thumbnails for this batch
+                        const response = await fetch(`/api/v2/analytics/species/thumbnails?${params.toString()}`);
+                        if (response.ok) {
+                            const thumbnails = await response.json();
+                            
+                            // Update species data with fetched thumbnails
+                            this.speciesData.forEach(species => {
+                                if (thumbnails[species.scientific_name]) {
+                                    species.thumbnail_url = thumbnails[species.scientific_name];
+                                }
+                            });
+                            
+                            // Re-apply filters to update the view
+                            this.applyFilters();
+                        }
+                        
+                        // Small delay between batches
+                        if (i + batchSize < scientificNames.length) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading thumbnails:', error);
+                    // Continue without thumbnails - don't break the UI
+                }
             },
             
             exportData() {

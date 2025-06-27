@@ -92,6 +92,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
 	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
+	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
@@ -1139,4 +1140,64 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 	}
 
 	return nil // Dates are valid
+}
+
+// GetSpeciesThumbnails handles GET /api/v2/analytics/species/thumbnails
+// Returns thumbnail URLs for multiple species in a single request
+func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
+	// Get species list from query parameters
+	species := ctx.QueryParams()["species"]
+
+	if len(species) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "No species provided")
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving thumbnails for species",
+			"count", len(species),
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	// Create result map
+	result := make(map[string]string)
+
+	// Use the image cache if available
+	if c.BirdImageCache != nil {
+		// Get thumbnails in batch
+		images := c.BirdImageCache.GetBatch(species)
+
+		// Convert to simple map of scientific name -> URL
+		for name := range images {
+			if images[name].URL != "" {
+				result[name] = images[name].URL
+			} else {
+				result[name] = placeholderImageURL
+			}
+		}
+
+		// Add placeholder for any missing species
+		for _, name := range species {
+			if _, exists := result[name]; !exists {
+				result[name] = placeholderImageURL
+			}
+		}
+	} else {
+		// No image cache, return placeholders for all
+		for _, name := range species {
+			result[name] = placeholderImageURL
+		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Thumbnails retrieved",
+			"requested", len(species),
+			"found", len(result),
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, result)
 }
