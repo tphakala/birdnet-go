@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -889,6 +890,42 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, pr
 	}()
 }
 
+// sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
+// to ensure JSON marshaling succeeds. This prevents errors when publishing to MQTT, SSE, or other
+// systems that require valid JSON.
+func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData {
+	// Create a copy to avoid modifying the original
+	sanitized := myaudio.SoundLevelData{
+		Timestamp:   data.Timestamp,
+		Source:      data.Source,
+		Name:        data.Name,
+		Duration:    data.Duration,
+		OctaveBands: make(map[string]myaudio.OctaveBandData),
+	}
+
+	// Sanitize each octave band
+	for key, band := range data.OctaveBands {
+		sanitizedBand := myaudio.OctaveBandData{
+			CenterFreq:  band.CenterFreq,
+			Min:         sanitizeFloat64(band.Min, -200.0),  // Use -200 dB as minimum (effectively silence)
+			Max:         sanitizeFloat64(band.Max, -200.0),  // Use -200 dB as maximum fallback
+			Mean:        sanitizeFloat64(band.Mean, -200.0), // Use -200 dB as mean fallback
+			SampleCount: band.SampleCount,
+		}
+		sanitized.OctaveBands[key] = sanitizedBand
+	}
+
+	return sanitized
+}
+
+// sanitizeFloat64 replaces non-finite float values with a default value
+func sanitizeFloat64(value, defaultValue float64) float64 {
+	if math.IsInf(value, 0) || math.IsNaN(value) {
+		return defaultValue
+	}
+	return value
+}
+
 // publishSoundLevelToMQTT publishes sound level data to MQTT
 func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.Processor) error {
 	// Get current settings to determine MQTT topic
@@ -900,8 +937,11 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 	// Create MQTT topic for sound level data
 	topic := fmt.Sprintf("%s/soundlevel", strings.TrimSuffix(settings.Realtime.MQTT.Topic, "/"))
 
+	// Sanitize sound level data before JSON marshaling
+	sanitizedData := sanitizeSoundLevelData(soundData)
+
 	// Marshal sound level data to JSON
-	jsonData, err := json.Marshal(soundData)
+	jsonData, err := json.Marshal(sanitizedData)
 	if err != nil {
 		// Record error metric
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
