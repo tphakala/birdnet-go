@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -438,37 +439,49 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 		return nil, nil
 	}
 
-	// Get all image caches for these scientific names
-	// Note: This assumes the datastore has or can implement a batch query method
+	// Use the new batch query method for efficient loading
+	dbImages, err := c.store.GetImageCacheBatch(c.providerName, scientificNames)
+	if err != nil {
+		logger.Error("Failed to batch load from DB cache", "error", err)
+		return nil, err
+	}
+
+	// Convert to BirdImage map
 	result := make(map[string]BirdImage)
+	now := time.Now()
 
-	// For now, we'll query individually but in a tight loop
-	// TODO: Implement actual batch query in datastore
-	for _, name := range scientificNames {
-		query := datastore.ImageCacheQuery{
-			ScientificName: name,
-			ProviderName:   c.providerName,
-		}
-
-		cachedImage, err := c.store.GetImageCache(query)
-		if err != nil {
-			// Log but continue with other items
-			logger.Debug("Failed to get image from DB cache", "scientific_name", name, "error", err)
+	for name, dbImage := range dbImages {
+		if dbImage == nil {
 			continue
 		}
 
-		if cachedImage != nil {
-			birdImage := BirdImage{
-				URL:            cachedImage.URL,
-				ScientificName: cachedImage.ScientificName,
-				LicenseName:    cachedImage.LicenseName,
-				LicenseURL:     cachedImage.LicenseURL,
-				AuthorName:     cachedImage.AuthorName,
-				AuthorURL:      cachedImage.AuthorURL,
-				CachedAt:       cachedImage.CachedAt,
-				SourceProvider: cachedImage.ProviderName,
-			}
+		birdImage := BirdImage{
+			URL:            dbImage.URL,
+			ScientificName: dbImage.ScientificName,
+			LicenseName:    dbImage.LicenseName,
+			LicenseURL:     dbImage.LicenseURL,
+			AuthorName:     dbImage.AuthorName,
+			AuthorURL:      dbImage.AuthorURL,
+			CachedAt:       dbImage.CachedAt,
+			SourceProvider: dbImage.ProviderName,
+		}
+
+		// Check if entry is still valid based on its TTL
+		cutoff := now.Add(-birdImage.GetTTL())
+
+		// Only include non-stale entries
+		if dbImage.CachedAt.After(cutoff) {
 			result[name] = birdImage
+			if birdImage.IsNegativeEntry() {
+				logger.Debug("Loaded negative cache entry from DB batch",
+					"scientific_name", name,
+					"cached_at", dbImage.CachedAt)
+			}
+		} else {
+			logger.Debug("Skipping stale DB entry from batch",
+				"scientific_name", name,
+				"cached_at", dbImage.CachedAt,
+				"is_negative", birdImage.IsNegativeEntry())
 		}
 	}
 
@@ -1244,22 +1257,25 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 		} else {
 			// Process DB results
 			stillMissing := make([]string, 0, len(missingNames))
+			dbHitCount := 0
 			for _, name := range missingNames {
 				if img, found := dbImages[name]; found {
 					result[name] = img
 					// Store in memory cache for future requests
-					c.dataMap.Store(name, &img)
+					copyImg := img // Make a copy to store pointer to
+					c.dataMap.Store(name, &copyImg)
 					if c.metrics != nil {
 						c.metrics.IncrementCacheMisses() // Memory miss but DB hit
 					}
+					dbHitCount++
 				} else {
 					stillMissing = append(stillMissing, name)
 				}
 			}
 			missingNames = stillMissing
 			dbBatchDuration := time.Since(dbBatchStart)
-			log.Printf("GetBatch: Batch DB lookup completed in %v - found %d more images, %d still missing",
-				dbBatchDuration, len(dbImages), len(missingNames))
+			log.Printf("GetBatch: Batch DB lookup completed in %v - found %d images in DB (hit rate: %.1f%%), %d still need provider fetch",
+				dbBatchDuration, dbHitCount, float64(dbHitCount)/float64(len(missingNames)+dbHitCount)*100, len(missingNames))
 		}
 	}
 
