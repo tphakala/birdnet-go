@@ -37,4 +37,56 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
         Build()
     ```
 
+### Testing Guidelines
+- **Use modern Go testing patterns** for better test reliability and performance
+- **Always use t.Parallel()** in tests when they can run concurrently:
+  - Call `t.Parallel()` at the beginning of test functions that don't mutate global state
+  - For table-driven tests, call `t.Parallel()` within subtests if test cases are independent
+  - Avoid `t.Parallel()` when tests mutate global state or shared resources
+  - Example:
+    ```go
+    func TestSomething(t *testing.T) {
+        t.Parallel() // Enable parallel execution at top level
+        
+        testCases := []struct{
+            name string
+            // test case fields
+        }{
+            // test cases
+        }
+        
+        for _, tc := range testCases {
+            t.Run(tc.name, func(t *testing.T) {
+                t.Parallel() // Enable parallel execution for subtests
+                // test logic
+            })
+        }
+    }
+    ```
+- **Use table-driven tests** with subtests (`t.Run()`) for comprehensive test coverage
+- **Use modern testing utilities**:
+  - `t.Cleanup()` instead of manual defer cleanup for resource management
+  - `t.TempDir()` for temporary directories in tests
+  - `t.Setenv()` for setting environment variables in tests
+  - `b.Loop()` for Go 1.24+ benchmark tests instead of manual loops
+- **Use testify for assertions**:
+  - Import `github.com/stretchr/testify/assert` and `github.com/stretchr/testify/require`
+  - Use `assert` for readable assertions that continue on failure
+  - Use `require` for critical assertions that should abort the test on failure
+  - Use `testify/mock` for dependency mocking
+- **Follow Go test naming conventions**:
+  - Unit tests: `func TestXxx(t *testing.T)`
+  - Benchmark tests: `func BenchmarkXxx(b *testing.B)`
+  - Fuzz tests: `func FuzzXxx(f *testing.F)`
+- **Use proper error handling in tests**:
+  - Use `t.Fatal`, `t.Error`, `t.Fatalf`, or `t.Errorf` for reporting failures
+  - Avoid panics in test code
+  - Format error messages clearly: `t.Errorf("expected %v, got %v", want, got)`
+- **Use test-specific logging**:
+  - Use `t.Log()` and `t.Logf()` for test-local logging
+  - Avoid `fmt.Println()` as it's not tied to test output
+- **Run tests with race detection**: Use `go test -race` for concurrent test suites
+- **Keep tests organized**: Place test files in the same package as the code they test (`*_test.go` files)
+
+
 ### Common Linter Issues to Avoid
