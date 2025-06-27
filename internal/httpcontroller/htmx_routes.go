@@ -67,12 +67,13 @@ func (s *Server) initRoutes() {
 
 	// Full page routes
 	s.pageRoutes = map[string]PageRouteConfig{
-		"/":          {Path: "/", TemplateName: "dashboard", Title: "Dashboard"},
-		"/dashboard": {Path: "/dashboard", TemplateName: "dashboard", Title: "Dashboard"},
-		"/logs":      {Path: "/logs", TemplateName: "logs", Title: "Logs"},
-		"/analytics": {Path: "/analytics", TemplateName: "analytics", Title: "Analytics"},
-		"/search":    {Path: "/search", TemplateName: "search", Title: "Search Detections"},
-		"/about":     {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
+		"/":                  {Path: "/", TemplateName: "dashboard", Title: "Dashboard"},
+		"/dashboard":         {Path: "/dashboard", TemplateName: "dashboard", Title: "Dashboard"},
+		"/logs":              {Path: "/logs", TemplateName: "logs", Title: "Logs"},
+		"/analytics":         {Path: "/analytics", TemplateName: "analytics", Title: "Analytics"},
+		"/analytics/species": {Path: "/analytics/species", TemplateName: "allspecies", Title: "All Species"},
+		"/search":            {Path: "/search", TemplateName: "search", Title: "Search Detections"},
+		"/about":             {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
 		// System route is protected by auth middleware
 		"/system": {Path: "/system", TemplateName: "system", Title: "System Dashboard", Authorized: true},
 		// Settings Routes are managed by settingsBase template
