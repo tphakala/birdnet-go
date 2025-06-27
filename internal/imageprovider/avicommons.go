@@ -59,13 +59,14 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 		// If that fails, try with the internal/imageprovider prefix
 		jsonData, err = fs.ReadFile(dataFs, altFilePath)
 		if err != nil {
-			enhancedErr := errors.New(err).
+			enhancedErr := errors.Newf("failed to read Avicommons data file from embedded filesystem: %v", err).
 				Component("imageprovider").
 				Category(errors.CategoryFileIO).
 				Context("provider", aviCommonsProviderName).
 				Context("primary_path", filePath).
 				Context("alternative_path", altFilePath).
 				Context("operation", "read_avicommons_data_file").
+				Context("error_detail", err.Error()).
 				Build()
 			logger.Error("Failed to read Avicommons data file from both paths", "primary_path", filePath, "alternative_path", altFilePath, "error", enhancedErr)
 			return nil, enhancedErr
@@ -87,12 +88,13 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 	logger.Debug("Unmarshalling Avicommons JSON data")
 	var data []aviCommonsEntry
 	if err := json.Unmarshal(jsonData, &data); err != nil {
-		enhancedErr := errors.New(err).
+		enhancedErr := errors.Newf("failed to parse Avicommons JSON data: %v", err).
 			Component("imageprovider").
 			Category(errors.CategoryFileParsing).
 			Context("provider", aviCommonsProviderName).
 			Context("data_size_bytes", len(jsonData)).
 			Context("operation", "unmarshal_json_data").
+			Context("error_detail", err.Error()).
 			Build()
 		logger.Error("Failed to unmarshal Avicommons JSON data", "error", enhancedErr)
 		return nil, enhancedErr
@@ -244,11 +246,12 @@ func RegisterAviCommonsProvider(registry *ImageProviderRegistry, dataFs fs.FS, m
 		// Check if it's already an enhanced error from Register method
 		var enhancedErr *errors.EnhancedError
 		if !errors.As(err, &enhancedErr) {
-			enhancedErr = errors.New(err).
+			enhancedErr = errors.Newf("failed to register Avicommons provider with registry: %v", err).
 				Component("imageprovider").
 				Category(errors.CategoryImageProvider).
 				Context("provider", aviCommonsProviderName).
 				Context("operation", "register_avicommons_provider").
+				Context("error_detail", err.Error()).
 				Build()
 		}
 		logger.Error("Failed to register AviCommons provider cache with registry", "error", enhancedErr)

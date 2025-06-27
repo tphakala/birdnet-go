@@ -20,7 +20,11 @@ import (
 )
 
 // ErrImageNotFound indicates that the image provider could not find an image for the requested species.
-var ErrImageNotFound = errors.NewStd("image not found by provider")
+var ErrImageNotFound = errors.Newf("image not found by provider").
+	Component("imageprovider").
+	Category(errors.CategoryImageFetch).
+	Context("error_type", "not_found").
+	Build()
 
 // contextKey is a type used for context keys to avoid collisions
 type contextKey string
@@ -87,7 +91,7 @@ func init() {
 	// Default level is Info. Set to Debug for more detailed cache/provider info.
 	imageProviderLogger, _, err = logging.NewFileLogger("logs/imageprovider.log", "imageprovider", imageProviderLevelVar)
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("imageprovider: failed to initialize file logger: %w", err)).
+		descriptiveErr := errors.Newf("imageprovider: failed to initialize file logger: %v", err).
 			Component("imageprovider").
 			Category(errors.CategoryFileIO).
 			Context("log_file", "logs/imageprovider.log").
@@ -1066,7 +1070,13 @@ func (r *ImageProviderRegistry) CloseAll() error {
 	var errs []error
 	for name, cache := range r.caches {
 		if err := cache.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close cache '%s': %w", name, err))
+			enhancedErr := errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategorySystem).
+				Context("operation", "close_cache").
+				Context("cache_name", name).
+				Build()
+			errs = append(errs, enhancedErr)
 		}
 	}
 	return errors.Join(errs...)
