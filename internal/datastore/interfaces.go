@@ -1340,9 +1340,6 @@ func (ds *DataStore) GetImageCacheBatch(providerName string, scientificNames []s
 	// Debug logging (controlled by thumbnails debug setting)
 	settings := conf.Setting()
 	if settings.Realtime.Dashboard.Thumbnails.Debug {
-		var allProviders []string
-		ds.DB.Model(&ImageCache{}).Distinct("provider_name").Pluck("provider_name", &allProviders)
-		log.Printf("GetImageCacheBatch: Debug - Existing providers in DB: %v", allProviders)
 		log.Printf("GetImageCacheBatch: Querying for provider=%s, species=%v", providerName, scientificNames)
 	}
 
