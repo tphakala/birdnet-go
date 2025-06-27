@@ -76,7 +76,7 @@ type Target interface {
 
 ### `Manager`
 
-*   **Initialization:** `NewManager(config *conf.BackupConfig, logger *log.Logger)`
+*   **Initialization:** `NewManager(fullConfig *conf.Settings, logger *slog.Logger, stateManager *StateManager, appVersion string) (*Manager, error)`
 *   **Registration:** `RegisterSource(source Source)`, `RegisterTarget(target Target)`
 *   **Execution:** `RunBackup(ctx context.Context)` performs an immediate backup of all registered sources to all registered targets.
 *   **Listing:** `ListBackups(ctx context.Context)` lists backups across all targets.
@@ -203,6 +203,7 @@ package main
 import (
     "context"
     "log"
+    "log/slog"
     "os"
     "time"
 
@@ -226,10 +227,19 @@ func main() {
     }
 
     // Setup logger
-    logger := log.New(os.Stdout, "BACKUP: ", log.LstdFlags)
+    logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+    // Initialize state manager
+    stateManager, err := backup.NewStateManager(logger)
+    if err != nil {
+        log.Fatalf("Failed to initialize state manager: %v", err)
+    }
 
     // Create Backup Manager
-    backupManager := backup.NewManager(&config.Backup, logger)
+    backupManager, err := backup.NewManager(config, logger, stateManager, "1.0.0")
+    if err != nil {
+        log.Fatalf("Failed to create backup manager: %v", err)
+    }
 
     // --- Register Sources (Example: SQLite) ---
     if config.Output.SQLite.Enabled {

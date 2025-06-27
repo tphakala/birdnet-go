@@ -132,15 +132,13 @@ type Manager struct {
 }
 
 // NewManager creates a new backup manager
-func NewManager(fullConfig *conf.Settings, logger *slog.Logger, stateManager *StateManager, appVersion string) *Manager {
+func NewManager(fullConfig *conf.Settings, logger *slog.Logger, stateManager *StateManager, appVersion string) (*Manager, error) {
 	if logger == nil {
 		// Fallback to default slog logger if none provided, although specific logger is preferred
 		logger = slog.Default()
 	}
 	if stateManager == nil {
-		// Handle nil state manager if necessary, perhaps log a warning or error
-		logger.Warn("StateManager provided to NewManager is nil")
-		// Depending on requirements, you might want to return an error or panic
+		return nil, fmt.Errorf("StateManager cannot be nil")
 	}
 
 	return &Manager{
@@ -151,7 +149,7 @@ func NewManager(fullConfig *conf.Settings, logger *slog.Logger, stateManager *St
 		logger:       logger.With("service", "backup_manager"), // Add service context
 		stateManager: stateManager,
 		appVersion:   appVersion,
-	}
+	}, nil
 }
 
 // RegisterSource registers a backup source

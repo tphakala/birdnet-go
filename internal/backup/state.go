@@ -117,10 +117,10 @@ func (sm *StateManager) loadState() error {
 
 // saveState saves the current backup state to disk
 func (sm *StateManager) saveState() error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	start := time.Now()
+
+	// Copy state under lock
+	sm.mu.Lock()
 	stateSnapshot := *sm.state
 	sm.mu.Unlock()
 
