@@ -37,7 +37,27 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
         Build()
     ```
 
+### Testing Best Practices
+- **Always use `t.Parallel()`** in test functions and subtests to enable concurrent execution
+  - Add `t.Parallel()` as the first line in test functions
+  - Also add `t.Parallel()` inside each `t.Run()` subtest
+  - This improves test suite performance by running tests concurrently
+- **Avoid time-dependent tests** that rely on `time.Sleep()` or real-time delays
+  - Use channels, mocks, or other deterministic approaches instead
+  - Time-based tests can be flaky in CI environments
+- **Use descriptive test names** that accurately reflect what is being tested
+  - Avoid misleading names that don't match the test implementation
+- **Benchmark setup considerations**:
+  - Always call `b.ResetTimer()` after any setup code and before the benchmark loop
+  - Pre-population or setup code should be done before `b.ReportAllocs()` and `b.ResetTimer()`
+  - This ensures benchmarks only measure the intended code execution time
+
 ### Common Linter Issues to Avoid
+- **Remove unused variables** even if kept for "backward compatibility"
+- **Format code with gofmt** - linter will fail on improperly formatted files
+- **Modern Go patterns**:
+  - Replace `interface{}` with `any` (Go 1.18+)
+  - Use modern loop patterns (see below)
 
 ### Modern Go Loop Patterns (Go 1.22+)
 - **Use modern range syntax** instead of traditional for loops where applicable:
@@ -48,17 +68,21 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
   ```go
   // Preferred (Go 1.24+)
   func BenchmarkExample(b *testing.B) {
+      // Setup code here (e.g., pre-populate cache)
+      cache.Get("example")
+      
       b.ReportAllocs()
-      b.ResetTimer()
+      b.ResetTimer() // Reset timer AFTER setup
       for range b.Loop() {
           // benchmark code
       }
   }
   
-  // Avoid
+  // Avoid - setup inside measurement
   func BenchmarkExample(b *testing.B) {
-      b.ResetTimer()
+      b.ReportAllocs()
       for i := 0; i < b.N; i++ {
+          cache.Get("example") // Setup mixed with measurement
           // benchmark code
       }
   }
