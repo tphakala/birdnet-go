@@ -440,10 +440,39 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 	}
 
 	// Use the new batch query method for efficient loading
+	settings := conf.Setting()
+	if settings.Realtime.Dashboard.Thumbnails.Debug {
+		logger.Debug("Calling GetImageCacheBatch", "provider_name", c.providerName, "species_count", len(scientificNames), "first_species", scientificNames[0])
+	}
 	dbImages, err := c.store.GetImageCacheBatch(c.providerName, scientificNames)
 	if err != nil {
 		logger.Error("Failed to batch load from DB cache", "error", err)
 		return nil, err
+	}
+	if settings.Realtime.Dashboard.Thumbnails.Debug {
+		logger.Debug("GetImageCacheBatch completed", "provider_name", c.providerName, "found_count", len(dbImages))
+	}
+
+	// If no images found with this provider, try fallback to other providers
+	if len(dbImages) == 0 && len(scientificNames) > 0 {
+		if settings.Realtime.Dashboard.Thumbnails.Debug {
+			logger.Debug("No images found with primary provider, trying fallback providers")
+		}
+		// Try common provider names as fallback
+		fallbackProviders := []string{"avicommons", "wikimedia", "wikipedia"}
+		for _, fallbackProvider := range fallbackProviders {
+			if fallbackProvider == c.providerName {
+				continue // Skip our own provider name
+			}
+			fallbackImages, fallbackErr := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
+			if fallbackErr == nil && len(fallbackImages) > 0 {
+				if settings.Realtime.Dashboard.Thumbnails.Debug {
+					logger.Info("Found images using fallback provider", "fallback_provider", fallbackProvider, "found_count", len(fallbackImages))
+				}
+				dbImages = fallbackImages
+				break
+			}
+		}
 	}
 
 	// Convert to BirdImage map
@@ -595,7 +624,7 @@ func (c *BirdImageCache) loadCachedImages() error {
 
 		// Only load non-stale entries into memory
 		if entries[i].CachedAt.After(cutoff) {
-			c.dataMap.Store(birdImage.ScientificName, birdImage)
+			c.dataMap.Store(birdImage.ScientificName, &birdImage)
 			loadedCount++
 			if birdImage.IsNegativeEntry() {
 				logger.Debug("Loaded negative cache entry from DB",
@@ -766,7 +795,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 			} else {
 				logger.Info("Valid negative cache entry loaded from DB")
 				// Store in memory cache
-				c.dataMap.Store(scientificName, dbImage)
+				c.dataMap.Store(scientificName, &dbImage)
 				if c.metrics != nil {
 					c.metrics.IncrementCacheMisses() // It was a memory miss, but DB hit
 				}
@@ -783,7 +812,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 				logger.Info("Image loaded from DB cache")
 			}
 			// Store in memory cache and return
-			c.dataMap.Store(scientificName, dbImage)
+			c.dataMap.Store(scientificName, &dbImage)
 			if c.metrics != nil {
 				c.metrics.IncrementCacheMisses() // It was a memory miss, but DB hit
 			}
