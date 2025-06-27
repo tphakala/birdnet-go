@@ -408,6 +408,8 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
 	dbDuration := time.Since(dbStart)
 
+	log.Printf("GetSpeciesSummary: Database query completed in %v, got %d records", dbDuration, len(summaryData))
+
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Database query completed",
 			"duration_ms", dbDuration.Milliseconds(),
@@ -439,10 +441,14 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		scientificNames = append(scientificNames, summaryData[i].ScientificName)
 	}
 
+	// Check if we should skip thumbnails (for performance)
+	skipThumbnails := ctx.QueryParam("skip_thumbnails") == "true"
+
 	// Batch fetch thumbnail URLs
 	var thumbnailURLs map[string]imageprovider.BirdImage
-	if c.BirdImageCache != nil && len(scientificNames) > 0 {
+	if c.BirdImageCache != nil && len(scientificNames) > 0 && !skipThumbnails {
 		thumbStart := time.Now()
+		log.Printf("GetSpeciesSummary: Starting batch fetch of %d thumbnails", len(scientificNames))
 		if c.apiLogger != nil {
 			c.apiLogger.Debug("Batch fetching thumbnails",
 				"count", len(scientificNames),
@@ -452,6 +458,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		}
 		thumbnailURLs = c.BirdImageCache.GetBatch(scientificNames)
 		thumbDuration := time.Since(thumbStart)
+		log.Printf("GetSpeciesSummary: Thumbnail batch fetch completed in %v", thumbDuration)
 		if c.apiLogger != nil {
 			c.apiLogger.Info("Thumbnail batch fetch completed",
 				"duration_ms", thumbDuration.Milliseconds(),
@@ -460,6 +467,8 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 				"path", ctx.Request().URL.Path,
 			)
 		}
+	} else if skipThumbnails {
+		log.Printf("GetSpeciesSummary: Skipping thumbnail fetch as requested")
 	}
 
 	for i := range summaryData {

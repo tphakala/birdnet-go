@@ -401,6 +401,8 @@
                     const params = new URLSearchParams();
                     if (startDate) params.set('start_date', startDate);
                     if (endDate) params.set('end_date', endDate);
+                    // Skip thumbnails for initial load to improve performance
+                    params.set('skip_thumbnails', 'true');
                     
                     // Fetch species summary data
                     const response = await fetch(`/api/v2/analytics/species/summary?${params.toString()}`);
