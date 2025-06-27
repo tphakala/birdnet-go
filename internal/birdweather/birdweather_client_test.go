@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -27,6 +29,33 @@ func MockSettings() *conf.Settings {
 				Debug:            true,
 			},
 		},
+	}
+}
+
+// TestMain runs setup/teardown for all tests in this package
+func TestMain(m *testing.M) {
+	// Run tests
+	code := m.Run()
+
+	// Cleanup after all tests
+	cleanupTestArtifacts()
+
+	// Exit with test result code
+	os.Exit(code)
+}
+
+// cleanupTestArtifacts removes directories created during tests
+func cleanupTestArtifacts() {
+	// Clean up debug directory if it exists
+	debugDir := filepath.Join("debug")
+	if _, err := os.Stat(debugDir); err == nil {
+		os.RemoveAll(debugDir)
+	}
+
+	// Clean up logs directory if it exists
+	logsDir := filepath.Join("logs")
+	if _, err := os.Stat(logsDir); err == nil {
+		os.RemoveAll(logsDir)
 	}
 }
 
