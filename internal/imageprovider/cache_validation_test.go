@@ -15,6 +15,7 @@ import (
 
 // TestCacheEffectiveness validates that caching effectively reduces external API calls
 func TestCacheEffectiveness(t *testing.T) {
+	t.Parallel()
 	// Create a mock provider that counts API calls
 	mockProvider := &mockProviderWithAPICounter{
 		mockImageProvider: mockImageProvider{
@@ -36,6 +37,7 @@ func TestCacheEffectiveness(t *testing.T) {
 
 	// Test 1: Multiple requests for same species should only trigger one API call
 	t.Run("DeduplicationTest", func(t *testing.T) {
+		t.Parallel()
 		mockProvider.resetCounters()
 		species := "Parus major"
 
@@ -61,6 +63,7 @@ func TestCacheEffectiveness(t *testing.T) {
 
 	// Test 2: Subsequent requests should use cache
 	t.Run("CacheHitTest", func(t *testing.T) {
+		t.Parallel()
 		mockProvider.resetCounters()
 		species := "Carduelis carduelis"
 
@@ -91,6 +94,7 @@ func TestCacheEffectiveness(t *testing.T) {
 
 	// Test 3: DB cache persistence
 	t.Run("DBCachePersistenceTest", func(t *testing.T) {
+		t.Parallel()
 		mockProvider.resetCounters()
 		species := "Sturnus vulgaris"
 
@@ -126,6 +130,7 @@ func TestCacheEffectiveness(t *testing.T) {
 
 // TestNegativeCaching validates behavior for non-existent species
 func TestNegativeCaching(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockProviderWithAPICounter{
 		mockImageProvider: mockImageProvider{
 			shouldFail: false, // Will return not found for specific species
@@ -146,6 +151,7 @@ func TestNegativeCaching(t *testing.T) {
 
 	// Test repeated requests for non-existent species
 	t.Run("RepeatedNotFoundRequests", func(t *testing.T) {
+		t.Parallel()
 		mockProvider.resetCounters()
 		mockProvider.setNotFoundSpecies("Imaginary species")
 
@@ -173,6 +179,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping background refresh test in short mode")
 	}
+	t.Parallel()
 
 	mockProvider := &mockProviderWithContextTracking{
 		mockProviderWithAPICounter: mockProviderWithAPICounter{
@@ -240,6 +247,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 
 // TestCacheMetrics validates that metrics accurately reflect cache behavior
 func TestCacheMetrics(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockProviderWithAPICounter{
 		mockImageProvider: mockImageProvider{},
 	}
