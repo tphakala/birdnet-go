@@ -1146,7 +1146,10 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	}
 
 	// Use settings.Version for the app version
-	backupManager := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
+	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize backup manager: %w", err)
+	}
 	backupScheduler, err := backup.NewScheduler(backupManager, backupLogger, stateManager)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize backup scheduler: %w", err)
