@@ -37,8 +37,10 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, quitChan chan struct{}, api
 				log.Println("🔌 Stopping sound level SSE publisher")
 				return
 			case soundData := <-soundLevelChan:
+				// Sanitize sound level data before SSE publishing
+				sanitizedData := sanitizeSoundLevelData(soundData)
 				// Publish sound level data via SSE
-				if err := apiController.BroadcastSoundLevel(&soundData); err != nil {
+				if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 					// Record error metric
 					if soundLevelMetrics := getSoundLevelMetrics(apiController); soundLevelMetrics != nil {
 						soundLevelMetrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
