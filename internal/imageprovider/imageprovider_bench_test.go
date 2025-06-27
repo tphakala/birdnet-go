@@ -39,6 +39,7 @@ func BenchmarkCacheHit(b *testing.B) {
 	cache.Get("Turdus merula")
 
 	b.ReportAllocs()
+	b.ResetTimer()
 
 	for b.Loop() {
 		_, err := cache.Get("Turdus merula")
@@ -226,6 +227,7 @@ func BenchmarkGetBatch(b *testing.B) {
 			}
 
 			b.ReportAllocs()
+			b.ResetTimer()
 
 			for b.Loop() {
 				results := cache.GetBatch(species)

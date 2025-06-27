@@ -12,6 +12,7 @@ import (
 
 // TestErrorHandlingEnhancement tests that errors are properly enhanced with telemetry context
 func TestErrorHandlingEnhancement(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		testFunc       func() error
@@ -29,10 +30,9 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 			},
 		},
 		{
-			name: "Wikipedia provider initialization error",
+			name: "Generic test initialization error",
 			testFunc: func() error {
-				// This will fail because we're using an invalid URL
-				// Just to test error enhancement
+				// Generic error for testing error enhancement
 				return fmt.Errorf("test initialization error")
 			},
 			expectCategory: errors.CategoryNetwork,
@@ -64,6 +64,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := tt.testFunc()
 			if err == nil {
 				// Some tests might not return errors
@@ -97,6 +98,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 
 // TestErrorContextData tests that errors have appropriate context data
 func TestErrorContextData(t *testing.T) {
+	t.Parallel()
 	// Test that errors include operation context
 	mockProvider := &mockImageProvider{shouldFail: true}
 	mockStore := newMockStore()
@@ -122,6 +124,7 @@ func TestErrorContextData(t *testing.T) {
 
 // TestDescriptiveErrorMessages tests that errors have descriptive messages
 func TestDescriptiveErrorMessages(t *testing.T) {
+	t.Parallel()
 	// Test ErrImageNotFound has a descriptive message
 	if imageprovider.ErrImageNotFound.Error() == "" {
 		t.Error("ErrImageNotFound should have a non-empty error message")
