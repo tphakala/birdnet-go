@@ -35,6 +35,17 @@ func GetDiskUsage(path string) (float64, error) {
 	return usagePercent, nil
 }
 
+// GetAvailableSpace returns the available disk space in bytes
+func GetAvailableSpace(baseDir string) (uint64, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(baseDir, &stat)
+	if err != nil {
+		return 0, err
+	}
+
+	return stat.Bavail * uint64(stat.Bsize), nil
+}
+
 // GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
 func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	startTime := time.Now()
