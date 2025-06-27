@@ -876,11 +876,14 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 	// Convert to duration
 	switch unit {
 	case "d":
-		return time.Duration(num) * 24 * time.Hour, nil
+		hours := num * 24
+		return time.Duration(hours) * time.Hour, nil
 	case "m":
-		return time.Duration(num) * 30 * 24 * time.Hour, nil // approximate
+		hours := num * 30 * 24 // approximate
+		return time.Duration(hours) * time.Hour, nil
 	case "y":
-		return time.Duration(num) * 365 * 24 * time.Hour, nil // approximate
+		hours := num * 365 * 24 // approximate
+		return time.Duration(hours) * time.Hour, nil
 	default:
 		return 0, errors.Newf("invalid retention age unit: %s", unit).
 			Component("backup").
@@ -895,18 +898,17 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 func (m *Manager) groupBackupsByTargetAndType(backups []BackupInfo) map[string]map[string][]BackupInfo {
 	grouped := make(map[string]map[string][]BackupInfo)
 
-	for i := range backups { // Iterate by index
-		b := backups[i] // Access element by index
+	for i := range backups {
 		// Ensure target map exists
-		if _, ok := grouped[b.Target]; !ok {
-			grouped[b.Target] = make(map[string][]BackupInfo)
+		if _, ok := grouped[backups[i].Target]; !ok {
+			grouped[backups[i].Target] = make(map[string][]BackupInfo)
 		}
 		// Ensure source type map exists within the target map
-		if _, ok := grouped[b.Target][b.Source]; !ok {
-			grouped[b.Target][b.Source] = make([]BackupInfo, 0)
+		if _, ok := grouped[backups[i].Target][backups[i].Source]; !ok {
+			grouped[backups[i].Target][backups[i].Source] = make([]BackupInfo, 0)
 		}
 		// Append backup
-		grouped[b.Target][b.Source] = append(grouped[b.Target][b.Source], b)
+		grouped[backups[i].Target][backups[i].Source] = append(grouped[backups[i].Target][backups[i].Source], backups[i])
 	}
 
 	// Sort backups within each group by timestamp (newest first)
@@ -926,7 +928,7 @@ func (m *Manager) groupBackupsByTargetAndType(backups []BackupInfo) map[string]m
 // Assuming IsDaily flag is reliable.
 func (m *Manager) getDailyBackups(backups []BackupInfo) []BackupInfo {
 	var daily []BackupInfo
-	for i := range backups { // Iterate by index
+	for i := range backups {
 		if backups[i].IsDaily {
 			daily = append(daily, backups[i])
 		}
@@ -938,7 +940,7 @@ func (m *Manager) getDailyBackups(backups []BackupInfo) []BackupInfo {
 // Assuming IsWeekly flag is reliable.
 func (m *Manager) getWeeklyBackups(backups []BackupInfo) []BackupInfo {
 	var weekly []BackupInfo
-	for i := range backups { // Iterate by index
+	for i := range backups {
 		if backups[i].IsWeekly {
 			weekly = append(weekly, backups[i])
 		}
