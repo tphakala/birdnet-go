@@ -23,13 +23,14 @@ type BackupSchedule struct {
 
 // Scheduler manages backup schedules and their execution
 type Scheduler struct {
-	manager   *Manager
-	schedules []BackupSchedule
-	isRunning bool
-	cancel    context.CancelFunc
-	mu        sync.RWMutex
-	logger    *slog.Logger
-	state     *StateManager
+	manager       *Manager
+	schedules     []BackupSchedule
+	isRunning     bool
+	cancel        context.CancelFunc
+	mu            sync.RWMutex
+	runningBackup sync.Mutex
+	logger        *slog.Logger
+	state         *StateManager
 }
 
 // NewScheduler creates a new backup scheduler
@@ -133,9 +134,9 @@ func (s *Scheduler) GetMissedRuns() []time.Time {
 
 // ClearMissedRuns clears the list of missed runs
 func (s *Scheduler) ClearMissedRuns() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.schedules = nil
+	if err := s.state.ClearMissedBackups(); err != nil {
+		s.logger.Error("Failed to clear missed backups", "error", err)
+	}
 }
 
 // run is the main scheduler loop
@@ -175,8 +176,15 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 				}
 				s.logger.Warn("Missed backup schedule", "scheduled_time", scheduleTime, "current_time", now, "reason", reason)
 			} else {
-				// Run the backup
-				go s.runBackup(schedule)
+				// Try to acquire the lock to prevent concurrent backups
+				if s.runningBackup.TryLock() {
+					// Run the backup
+					go s.runBackup(schedule)
+				} else {
+					s.logger.Warn("Skipping backup - another backup is already running",
+						"scheduled_time", scheduleTime,
+						"schedule_type", s.getScheduleType(schedule))
+				}
 			}
 
 			// Calculate next run time
@@ -189,6 +197,9 @@ func (s *Scheduler) checkSchedules(now time.Time) {
 
 // runBackup executes a backup task
 func (s *Scheduler) runBackup(schedule *BackupSchedule) {
+	// Ensure the mutex is unlocked when we're done
+	defer s.runningBackup.Unlock()
+
 	scheduleType := s.getScheduleType(schedule)
 	s.logger.Info("Running scheduled backup", "schedule_type", scheduleType)
 	start := time.Now()
@@ -283,8 +294,16 @@ func (s *Scheduler) calculateNextRun(now time.Time, hour, minute int, weekday ti
 
 		// Adjust to next occurrence of weekday
 		daysUntilWeekday := int(weekday - next.Weekday())
-		if daysUntilWeekday <= 0 {
+		if daysUntilWeekday < 0 {
+			// We're past the target weekday, so add days to get to next week
 			daysUntilWeekday += 7
+		} else if daysUntilWeekday == 0 {
+			// We're on the target weekday
+			if now.After(next) {
+				// The scheduled time has passed today, so schedule for next week
+				daysUntilWeekday = 7
+			}
+			// Otherwise, daysUntilWeekday remains 0 (today)
 		}
 		next = next.AddDate(0, 0, daysUntilWeekday)
 	} else {
@@ -456,6 +475,13 @@ func (s *Scheduler) GetBackupStats() map[string]BackupStats {
 
 // TriggerBackup initiates an immediate backup operation
 func (s *Scheduler) TriggerBackup(ctx context.Context) error {
+	// Try to acquire the lock to prevent concurrent backups
+	if !s.runningBackup.TryLock() {
+		s.logger.Warn("Cannot trigger manual backup - another backup is already running")
+		return fmt.Errorf("another backup is already in progress")
+	}
+	defer s.runningBackup.Unlock()
+
 	s.logger.Info("Manually triggering backup run...")
 	// Run the backup process directly (might block depending on implementation)
 	if err := s.manager.RunBackup(ctx); err != nil {

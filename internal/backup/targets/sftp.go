@@ -497,7 +497,7 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 
 	// Create a pipe for streaming with context cancellation
 	pr, pw := io.Pipe()
-	errChan := make(chan error, 1)
+	errChan := make(chan error, 2)
 
 	go func() {
 		defer pw.Close()
