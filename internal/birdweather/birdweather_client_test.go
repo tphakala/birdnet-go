@@ -200,7 +200,7 @@ func TestUploadSoundscape(t *testing.T) {
 
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusCreated)
 		fmt.Fprint(w, `{
 			"success": true,
 			"soundscape": {
@@ -457,7 +457,7 @@ func TestPublish(t *testing.T) {
 		case "application/octet-stream":
 			// This is a soundscape upload
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusCreated)
 			fmt.Fprint(w, `{
 				"success": true,
 				"soundscape": {
