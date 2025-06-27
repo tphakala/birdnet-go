@@ -445,13 +445,14 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string, lim
 		// Check if it's already an enhanced error from queryAndGetFirstPage
 		var enhancedErr *errors.EnhancedError
 		if !errors.As(err, &enhancedErr) {
-			enhancedErr = errors.New(err).
+			enhancedErr = errors.Newf("failed to query Wikipedia for image author information: %v", err).
 				Component("imageprovider").
 				Category(errors.CategoryImageFetch).
 				Context("provider", wikiProviderName).
 				Context("request_id", reqID).
 				Context("thumbnail_filename", thumbnailFileName).
 				Context("operation", "query_author_info").
+				Context("error_detail", err.Error()).
 				Build()
 		}
 		return nil, enhancedErr
@@ -522,12 +523,13 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
 		logger.Error("Failed to parse artist HTML", "error", err)
-		enhancedErr := errors.New(err).
+		enhancedErr := errors.Newf("failed to parse Wikipedia artist attribution HTML: %v", err).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("html_length", len(htmlStr)).
 			Context("operation", "parse_artist_html").
+			Context("error_detail", err.Error()).
 			Build()
 		return "", "", enhancedErr
 	}
