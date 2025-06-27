@@ -1668,6 +1668,7 @@ func TestProcessTrackerConcurrentAccess(t *testing.T) {
 
 				// Create a mock process and update restart info
 				process := &FFmpegProcess{
+					cmd:            cmd,
 					restartTracker: tracker,
 				}
 				process.updateRestartInfo()
