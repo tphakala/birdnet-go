@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // getEncryptionKeyPath returns the path to the encryption key file
@@ -18,10 +19,18 @@ func (m *Manager) getEncryptionKeyPath() (string, error) {
 	// Get the config directory
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
-		return "", NewError(ErrConfig, "failed to get config paths", err)
+		return "", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_encryption_key_path").
+			Build()
 	}
 	if len(configPaths) == 0 {
-		return "", NewError(ErrConfig, "no config paths available", nil)
+		return "", errors.Newf("no config paths available").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_encryption_key_path").
+			Build()
 	}
 
 	// Use the first config path (which should be the active one)
@@ -31,7 +40,11 @@ func (m *Manager) getEncryptionKeyPath() (string, error) {
 // getEncryptionKey returns the encryption key, generating it if necessary
 func (m *Manager) getEncryptionKey() ([]byte, error) {
 	if !m.config.Encryption {
-		return nil, NewError(ErrConfig, "encryption is not enabled", nil)
+		return nil, errors.Newf("encryption is not enabled").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_encryption_key").
+			Build()
 	}
 
 	// Get the encryption key file path
@@ -44,13 +57,22 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 	keyBytes, err := os.ReadFile(keyPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return nil, NewError(ErrIO, "failed to read encryption key file", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "read_encryption_key").
+				Context("key_path", keyPath).
+				Build()
 		}
 
 		// Generate a new key if the file doesn't exist
 		key := make([]byte, 32) // 256 bits
 		if _, err := rand.Read(key); err != nil {
-			return nil, NewError(ErrEncryption, "failed to generate encryption key", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "generate_encryption_key").
+				Build()
 		}
 
 		// Encode the key as hex
@@ -58,12 +80,22 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 
 		// Create the config directory if it doesn't exist
 		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
-			return nil, NewError(ErrIO, "failed to create config directory", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_config_directory").
+				Context("dir_path", filepath.Dir(keyPath)).
+				Build()
 		}
 
 		// Write the key to the file with secure permissions
 		if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
-			return nil, NewError(ErrIO, "failed to write encryption key file", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_encryption_key").
+				Context("key_path", keyPath).
+				Build()
 		}
 
 		return key, nil
@@ -73,12 +105,20 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 	keyStr := strings.TrimSpace(string(keyBytes))
 	key, err := hex.DecodeString(keyStr)
 	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to decode encryption key", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "decode_encryption_key").
+			Build()
 	}
 
 	// Validate key length
 	if len(key) != 32 {
-		return nil, NewError(ErrEncryption, "invalid encryption key length", nil)
+		return nil, errors.Newf("invalid encryption key length: expected 32 bytes, got %d", len(key)).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_encryption_key").
+			Build()
 	}
 
 	return key, nil
@@ -88,18 +128,30 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 func encryptData(data, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create cipher", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "create_cipher_for_encryption").
+			Build()
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create GCM", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "create_gcm_for_encryption").
+			Build()
 	}
 
 	// Generate a random nonce
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, NewError(ErrEncryption, "failed to generate nonce", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "generate_nonce").
+			Build()
 	}
 
 	// Encrypt the data
@@ -111,16 +163,28 @@ func encryptData(data, key []byte) ([]byte, error) {
 func decryptData(encryptedData, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create cipher", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "create_cipher_for_decryption").
+			Build()
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to create GCM", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "create_gcm_for_decryption").
+			Build()
 	}
 
 	if len(encryptedData) < gcm.NonceSize() {
-		return nil, NewError(ErrEncryption, "encrypted data too short", nil)
+		return nil, errors.Newf("encrypted data too short: expected at least %d bytes, got %d", gcm.NonceSize(), len(encryptedData)).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_encrypted_data_size").
+			Build()
 	}
 
 	nonce := encryptedData[:gcm.NonceSize()]
@@ -128,7 +192,11 @@ func decryptData(encryptedData, key []byte) ([]byte, error) {
 
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, NewError(ErrEncryption, "failed to decrypt data", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "decrypt_data").
+			Build()
 	}
 
 	return plaintext, nil
@@ -142,7 +210,11 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 	// Generate a new 256-bit key
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
-		return "", NewError(ErrEncryption, "failed to generate random key", err)
+		return "", errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "generate_random_key").
+			Build()
 	}
 
 	// Convert key to hex string
@@ -156,12 +228,22 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 
 	// Create the config directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
-		return "", NewError(ErrIO, "failed to create config directory", err)
+		return "", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_config_directory_for_key").
+			Context("dir_path", filepath.Dir(keyPath)).
+			Build()
 	}
 
 	// Write the key to file with secure permissions
 	if err := os.WriteFile(keyPath, []byte(keyHex), 0o600); err != nil {
-		return "", NewError(ErrIO, "failed to write encryption key file", err)
+		return "", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_new_encryption_key").
+			Context("key_path", keyPath).
+			Build()
 	}
 
 	m.logger.Info("Encryption key generated and saved successfully",
@@ -181,14 +263,26 @@ func (m *Manager) ValidateEncryption() error {
 	key, err := m.getEncryptionKey()
 	if err != nil {
 		if os.IsNotExist(err) {
-			return NewError(ErrEncryption, "encryption is enabled but no key file found, please generate a key first", err)
+			return errors.Newf("encryption is enabled but no key file found, please generate a key first").
+				Component("backup").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "validate_encryption").
+				Build()
 		}
-		return NewError(ErrEncryption, "failed to read encryption key", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_encryption_key_for_validation").
+			Build()
 	}
 
 	// Validate key length
 	if len(key) != 32 {
-		return NewError(ErrEncryption, "invalid encryption key length", nil)
+		return errors.Newf("invalid encryption key length: expected 32 bytes, got %d", len(key)).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_encryption_key_length").
+			Build()
 	}
 
 	return nil
@@ -202,7 +296,11 @@ func (m *Manager) GetEncryptionKey() ([]byte, error) {
 // DecryptData decrypts the provided data using the configured encryption key
 func (m *Manager) DecryptData(encryptedData []byte) ([]byte, error) {
 	if !m.config.Encryption {
-		return nil, NewError(ErrEncryption, "encryption is not enabled", nil)
+		return nil, errors.Newf("encryption is not enabled").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "decrypt_data").
+			Build()
 	}
 
 	key, err := m.getEncryptionKey()
@@ -230,12 +328,21 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	// Parse the key file content
 	lines := strings.Split(string(content), "\n")
 	if len(lines) < 3 {
-		return NewError(ErrValidation, "invalid key file format", nil)
+		return errors.Newf("invalid key file format: expected at least 3 lines, got %d", len(lines)).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "import_encryption_key").
+			Build()
 	}
 
 	// Verify the header
 	if !strings.HasPrefix(lines[0], "BirdNET-Go Backup Encryption Key") {
-		return NewError(ErrValidation, "invalid key file format: missing header", nil)
+		return errors.Newf("invalid key file format: missing 'BirdNET-Go Backup Encryption Key' header").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "import_encryption_key").
+			Context("expected_header", "BirdNET-Go Backup Encryption Key").
+			Build()
 	}
 
 	// Extract the key
@@ -249,12 +356,21 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	}
 
 	if key == "" {
-		return NewError(ErrValidation, "invalid key file format: key not found", nil)
+		return errors.Newf("invalid key file format: 'Key: ' line not found").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "import_encryption_key").
+			Build()
 	}
 
 	// Validate key format (should be hex-encoded)
 	if _, err := hex.DecodeString(key); err != nil {
-		return NewError(ErrValidation, "invalid key format: not hex-encoded", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_imported_key_format").
+			Context("error_detail", "key must be hex-encoded").
+			Build()
 	}
 
 	// Get the key file path FIRST
@@ -269,13 +385,23 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	// Create the config directory if it doesn't exist
 	err = os.MkdirAll(filepath.Dir(keyPath), 0o700)
 	if err != nil {
-		return NewError(ErrIO, "failed to create config directory for key import", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_config_directory_for_import").
+			Context("dir_path", filepath.Dir(keyPath)).
+			Build()
 	}
 
 	// Write the key to file with secure permissions
 	err = os.WriteFile(keyPath, []byte(key), 0o600)
 	if err != nil {
-		return NewError(ErrIO, "failed to write imported encryption key file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_imported_encryption_key").
+			Context("key_path", keyPath).
+			Build()
 	}
 
 	m.logger.Info("Encryption key imported successfully",

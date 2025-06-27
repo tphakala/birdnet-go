@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Constants for file operations
@@ -137,7 +138,12 @@ func (t *LocalTarget) withRetry(op func() error) error {
 		}
 		time.Sleep(backoffDuration(i))
 	}
-	return backup.NewError(backup.ErrIO, "operation failed after retries", lastErr)
+	return errors.New(lastErr).
+		Component("backup").
+		Category(errors.CategoryFileIO).
+		Context("operation", "retry_operation").
+		Context("max_retries", maxRetries).
+		Build()
 }
 
 // copyFile performs an optimized file copy operation
@@ -150,14 +156,22 @@ func copyFile(dst, src *os.File) error {
 // validatePath performs comprehensive path validation
 func validatePath(path string) error {
 	if path == "" {
-		return backup.NewError(backup.ErrValidation, "path is required for local target", nil)
+		return errors.Newf("path is required for local target").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Build()
 	}
 
 	// Check path length
 	if len(path) > maxPathLength {
-		return backup.NewError(backup.ErrValidation,
-			fmt.Sprintf("path length exceeds maximum allowed (%d characters)", maxPathLength),
-			nil)
+		return errors.Newf("path length exceeds maximum allowed (%d characters)", maxPathLength).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Context("path_length", len(path)).
+			Context("max_length", maxPathLength).
+			Build()
 	}
 
 	// Clean and normalize the path
@@ -165,19 +179,34 @@ func validatePath(path string) error {
 
 	// Check for directory traversal attempts
 	if strings.Contains(cleanPath, "..") {
-		return backup.NewError(backup.ErrValidation, "path must not contain directory traversal sequences", nil)
+		return errors.Newf("path must not contain directory traversal sequences").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Context("path", cleanPath).
+			Build()
 	}
 
 	// Convert to absolute path for validation
 	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
-		return backup.NewError(backup.ErrValidation, "failed to resolve absolute path", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "resolve_absolute_path").
+			Context("path", cleanPath).
+			Build()
 	}
 
 	// Check for symlinks
 	fi, err := os.Lstat(absPath)
 	if err == nil && (fi.Mode()&os.ModeSymlink) != 0 {
-		return backup.NewError(backup.ErrValidation, "symlinks are not allowed in backup path", nil)
+		return errors.Newf("symlinks are not allowed in backup path").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Context("path", absPath).
+			Build()
 	}
 
 	// Windows-specific checks
@@ -187,9 +216,12 @@ func validatePath(path string) error {
 		for _, part := range parts {
 			baseName := strings.ToUpper(strings.Split(part, ".")[0])
 			if windowsReservedNames[baseName] {
-				return backup.NewError(backup.ErrValidation,
-					fmt.Sprintf("path contains reserved name: %s", part),
-					nil)
+				return errors.Newf("path contains reserved name: %s", part).
+					Component("backup").
+					Category(errors.CategoryValidation).
+					Context("operation", "validate_path").
+					Context("reserved_name", part).
+					Build()
 			}
 		}
 
@@ -202,9 +234,13 @@ func validatePath(path string) error {
 		}
 		for _, r := range restricted {
 			if strings.HasPrefix(strings.ToLower(absPath), strings.ToLower(r)) {
-				return backup.NewError(backup.ErrValidation,
-					fmt.Sprintf("path is within restricted directory: %s", r),
-					nil)
+				return errors.Newf("path is within restricted directory: %s", r).
+					Component("backup").
+					Category(errors.CategoryValidation).
+					Context("operation", "validate_path").
+					Context("restricted_directory", r).
+					Context("path", absPath).
+					Build()
 			}
 		}
 	}
@@ -227,17 +263,33 @@ func NewLocalTarget(config LocalTargetConfig, logger backup.Logger) (*LocalTarge
 	// Convert to absolute path
 	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
-		return nil, backup.NewError(backup.ErrValidation, "failed to resolve absolute path", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "create_local_target").
+			Context("path", cleanPath).
+			Build()
 	}
 
 	// Create backup directory if it doesn't exist with restrictive permissions
 	if err := os.MkdirAll(absPath, dirPermissions); err != nil {
-		return nil, backup.NewError(backup.ErrIO, "failed to create backup directory", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_backup_directory").
+			Context("path", absPath).
+			Build()
 	}
 
 	// Ensure directory has correct permissions even if it already existed
 	if err := os.Chmod(absPath, dirPermissions); err != nil {
-		return nil, backup.NewError(backup.ErrIO, "failed to set directory permissions", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "set_directory_permissions").
+			Context("path", absPath).
+			Context("permissions", fmt.Sprintf("%o", dirPermissions)).
+			Build()
 	}
 
 	return &LocalTarget{
@@ -256,7 +308,12 @@ func (t *LocalTarget) Name() string {
 func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	// Check context cancellation
 	if err := ctx.Err(); err != nil {
-		return backup.NewError(backup.ErrCanceled, "backup operation cancelled", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "store_backup").
+			Context("error_type", "cancelled").
+			Build()
 	}
 
 	if t.debug {
@@ -266,34 +323,56 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	// Validate source file
 	srcInfo, err := os.Stat(sourcePath)
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "failed to stat source file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "stat_source_file").
+			Context("source_path", sourcePath).
+			Build()
 	}
 
 	// Check file size limit
 	if srcInfo.Size() > maxBackupSize {
-		return backup.NewError(backup.ErrValidation,
-			fmt.Sprintf("backup file too large: %d bytes (max %d bytes)", srcInfo.Size(), maxBackupSize),
-			nil)
+		return errors.Newf("backup file too large: %d bytes (max %d bytes)", srcInfo.Size(), maxBackupSize).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_file_size").
+			Context("file_size", srcInfo.Size()).
+			Context("max_size", maxBackupSize).
+			Build()
 	}
 
 	// Check available space
 	availableBytes, err := diskmanager.GetAvailableSpace(t.path)
 	if err != nil {
-		return backup.NewError(backup.ErrMedia, "failed to check available space", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDiskUsage).
+			Context("operation", "check_available_space").
+			Context("path", t.path).
+			Build()
 	}
 
 	// Ensure we have enough space (file size + 10% buffer)
 	requiredSpace := uint64(float64(srcInfo.Size()) * 1.1)
 	if availableBytes < requiredSpace {
-		return backup.NewError(backup.ErrInsufficientSpace,
-			fmt.Sprintf("insufficient disk space: need %d bytes, have %d bytes", requiredSpace, availableBytes),
-			nil)
+		return errors.Newf("insufficient disk space: need %d bytes, have %d bytes", requiredSpace, availableBytes).
+			Component("backup").
+			Category(errors.CategoryDiskUsage).
+			Context("operation", "check_disk_space").
+			Context("required_bytes", requiredSpace).
+			Context("available_bytes", availableBytes).
+			Build()
 	}
 
 	// Marshal metadata
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "failed to marshal metadata", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "marshal_metadata").
+			Build()
 	}
 
 	// Copy the backup file with retries and atomic operations
@@ -302,7 +381,12 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 		return atomicWriteFile(dstPath, "backup-*.tmp", filePermissions, func(tempFile *os.File) error {
 			srcFile, err := os.Open(sourcePath)
 			if err != nil {
-				return backup.NewError(backup.ErrIO, "failed to open source file", err)
+				return errors.New(err).
+					Component("backup").
+					Category(errors.CategoryFileIO).
+					Context("operation", "open_source_file").
+					Context("source_path", sourcePath).
+					Build()
 			}
 			defer srcFile.Close()
 
@@ -314,10 +398,21 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 
 			select {
 			case <-ctx.Done():
-				return backup.NewError(backup.ErrCanceled, "backup operation cancelled during file copy", ctx.Err())
+				return errors.New(ctx.Err()).
+					Component("backup").
+					Category(errors.CategorySystem).
+					Context("operation", "copy_backup_file").
+					Context("error_type", "cancelled").
+					Build()
 			case err := <-copyDone:
 				if err != nil {
-					return backup.NewError(backup.ErrIO, "failed to copy backup file", err)
+					return errors.New(err).
+						Component("backup").
+						Category(errors.CategoryFileIO).
+						Context("operation", "copy_backup_file").
+						Context("source_path", sourcePath).
+						Context("dest_path", dstPath).
+						Build()
 				}
 			}
 
@@ -358,19 +453,33 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 func (t *LocalTarget) verifyBackup(ctx context.Context, backupPath string, expectedSize int64) error {
 	// Check context cancellation
 	if err := ctx.Err(); err != nil {
-		return backup.NewError(backup.ErrCanceled, "backup verification cancelled", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "verify_backup").
+			Context("error_type", "cancelled").
+			Build()
 	}
 
 	// Verify file exists and has correct size
 	info, err := os.Stat(backupPath)
 	if err != nil {
-		return backup.NewError(backup.ErrCorruption, "failed to verify backup file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "verify_backup_file").
+			Context("backup_path", backupPath).
+			Build()
 	}
 
 	if info.Size() != expectedSize {
-		return backup.NewError(backup.ErrCorruption,
-			fmt.Sprintf("backup file size mismatch: expected %d, got %d", expectedSize, info.Size()),
-			nil)
+		return errors.Newf("backup file size mismatch: expected %d, got %d", expectedSize, info.Size()).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "verify_backup_size").
+			Context("expected_size", expectedSize).
+			Context("actual_size", info.Size()).
+			Build()
 	}
 
 	return nil
@@ -384,7 +493,12 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 
 	entries, err := os.ReadDir(t.path)
 	if err != nil {
-		return nil, backup.NewError(backup.ErrIO, "failed to read backup directory", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "list_backups").
+			Context("path", t.path).
+			Build()
 	}
 
 	var backups []backup.BackupInfo
@@ -449,12 +563,24 @@ func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 
 	// Delete backup file
 	if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
-		return backup.NewError(backup.ErrIO, "failed to delete backup file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "delete_backup_file").
+			Context("backup_id", backupID).
+			Context("path", backupPath).
+			Build()
 	}
 
 	// Delete metadata file
 	if err := os.Remove(metadataPath); err != nil && !os.IsNotExist(err) {
-		return backup.NewError(backup.ErrIO, "failed to delete metadata file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "delete_metadata_file").
+			Context("backup_id", backupID).
+			Context("path", metadataPath).
+			Build()
 	}
 
 	if t.debug {
@@ -470,7 +596,12 @@ func (t *LocalTarget) Validate() error {
 	if !filepath.IsAbs(t.path) {
 		absPath, err := filepath.Abs(t.path)
 		if err != nil {
-			return backup.NewError(backup.ErrValidation, "failed to resolve absolute path", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_target").
+				Context("path", t.path).
+				Build()
 		}
 		t.path = absPath
 	}
@@ -478,18 +609,38 @@ func (t *LocalTarget) Validate() error {
 	// Check if path exists and is a directory
 	if info, err := os.Stat(t.path); err != nil {
 		if os.IsNotExist(err) {
-			return backup.NewError(backup.ErrValidation, "backup path does not exist", err)
+			return errors.Newf("backup path does not exist: %s", t.path).
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_target").
+				Context("path", t.path).
+				Build()
 		}
-		return backup.NewError(backup.ErrValidation, "failed to check backup path", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_target_stat").
+			Context("path", t.path).
+			Build()
 	} else if !info.IsDir() {
-		return backup.NewError(backup.ErrValidation, "backup path is not a directory", nil)
+		return errors.Newf("backup path is not a directory: %s", t.path).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_target").
+			Context("path", t.path).
+			Build()
 	}
 
 	// Check if path is writable
 	tmpFile := filepath.Join(t.path, "write_test")
 	f, err := os.Create(tmpFile)
 	if err != nil {
-		return backup.NewError(backup.ErrValidation, "backup path is not writable", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_target_writable").
+			Context("path", t.path).
+			Build()
 	}
 	f.Close()
 	os.Remove(tmpFile)
@@ -497,7 +648,12 @@ func (t *LocalTarget) Validate() error {
 	// Check available disk space
 	availableBytes, err := diskmanager.GetAvailableSpace(t.path)
 	if err != nil {
-		return backup.NewError(backup.ErrMedia, "failed to check disk space", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDiskUsage).
+			Context("operation", "check_disk_space_validation").
+			Context("path", t.path).
+			Build()
 	}
 
 	// Convert available bytes to gigabytes
@@ -505,7 +661,13 @@ func (t *LocalTarget) Validate() error {
 
 	// Ensure at least 1GB free space is available
 	if availableGB < 1.0 {
-		return backup.NewError(backup.ErrInsufficientSpace, fmt.Sprintf("insufficient disk space: %.1f GB available, minimum 1 GB required", availableGB), nil)
+		return errors.Newf("insufficient disk space: %.1f GB available, minimum 1 GB required", availableGB).
+			Component("backup").
+			Category(errors.CategoryDiskUsage).
+			Context("operation", "validate_disk_space").
+			Context("available_gb", availableGB).
+			Context("required_gb", 1.0).
+			Build()
 	}
 
 	if t.logger != nil {

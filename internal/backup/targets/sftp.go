@@ -15,6 +15,7 @@ import (
 
 	"github.com/pkg/sftp"
 	"github.com/tphakala/birdnet-go/internal/backup"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -71,19 +72,27 @@ func (r *SFTPProgressReader) Read(p []byte) (n int, err error) {
 }
 
 // NewSFTPTarget creates a new SFTP target with the given configuration
-func NewSFTPTarget(settings map[string]interface{}, logger *slog.Logger) (*SFTPTarget, error) {
+func NewSFTPTarget(settings map[string]any, logger *slog.Logger) (*SFTPTarget, error) {
 	config := SFTPTargetConfig{}
 
 	// Required settings
 	host, ok := settings["host"].(string)
 	if !ok {
-		return nil, backup.NewError(backup.ErrConfig, "sftp: host is required", nil)
+		return nil, errors.Newf("sftp: host is required").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "create_sftp_target").
+			Build()
 	}
 	config.Host = host
 
 	path, ok := settings["path"].(string)
 	if !ok {
-		return nil, backup.NewError(backup.ErrConfig, "sftp: path is required", nil)
+		return nil, errors.Newf("sftp: path is required").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "create_sftp_target").
+			Build()
 	}
 	config.BasePath = strings.TrimRight(path, "/")
 
@@ -119,7 +128,11 @@ func NewSFTPTarget(settings map[string]interface{}, logger *slog.Logger) (*SFTPT
 	if timeout, ok := settings["timeout"].(string); ok {
 		duration, err := time.ParseDuration(timeout)
 		if err != nil {
-			return nil, backup.NewError(backup.ErrValidation, "sftp: invalid timeout format", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "parse_timeout").
+				Build()
 		}
 		config.Timeout = duration
 	} else {
@@ -213,7 +226,12 @@ func (t *SFTPTarget) withRetry(ctx context.Context, op func(*sftp.Client) error)
 	for i := 0; i < t.config.MaxRetries; i++ {
 		select {
 		case <-ctx.Done():
-			return backup.NewError(backup.ErrCanceled, "sftp: operation canceled", ctx.Err())
+			return errors.New(ctx.Err()).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "sftp_retry").
+				Context("error_type", "cancelled").
+				Build()
 		default:
 		}
 
@@ -241,12 +259,20 @@ func (t *SFTPTarget) withRetry(ctx context.Context, op func(*sftp.Client) error)
 		}
 
 		if t.config.Debug {
-			fmt.Printf("SFTP: Retrying operation after error: %v (attempt %d/%d)\n", err, i+1, t.config.MaxRetries)
+			t.logger.Debug("SFTP: Retrying operation after error",
+				"error", err,
+				"attempt", i+1,
+				"max_retries", t.config.MaxRetries)
 		}
 		time.Sleep(t.config.RetryBackoff * time.Duration(i+1))
 	}
 
-	return backup.NewError(backup.ErrIO, "sftp: operation failed after retries", lastErr)
+	return errors.New(lastErr).
+		Component("backup").
+		Category(errors.CategoryNetwork).
+		Context("operation", "sftp_retry").
+		Context("max_retries", t.config.MaxRetries).
+		Build()
 }
 
 // connect establishes an SFTP connection
@@ -270,12 +296,20 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		if t.config.KnownHostFile != "" {
 			callback, err := knownHostsCallback(t.config.KnownHostFile)
 			if err != nil {
-				resultChan <- connResult{nil, backup.NewError(backup.ErrValidation, "sftp: failed to setup known hosts", err)}
+				resultChan <- connResult{nil, errors.New(err).
+					Component("backup").
+					Category(errors.CategoryValidation).
+					Context("operation", "setup_known_hosts").
+					Build()}
 				return
 			}
 			config.HostKeyCallback = callback
 		} else {
-			resultChan <- connResult{nil, backup.NewError(backup.ErrValidation, "sftp: known_hosts file is required for secure host key verification", nil)}
+			resultChan <- connResult{nil, errors.Newf("sftp: known_hosts file is required for secure host key verification").
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "verify_known_hosts").
+				Build()}
 			return
 		}
 
@@ -284,20 +318,32 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		case t.config.KeyFile != "":
 			key, err := os.ReadFile(t.config.KeyFile)
 			if err != nil {
-				resultChan <- connResult{nil, backup.NewError(backup.ErrIO, "sftp: failed to read private key", err)}
+				resultChan <- connResult{nil, errors.New(err).
+					Component("backup").
+					Category(errors.CategoryFileIO).
+					Context("operation", "read_private_key").
+					Build()}
 				return
 			}
 
 			signer, err := ssh.ParsePrivateKey(key)
 			if err != nil {
-				resultChan <- connResult{nil, backup.NewError(backup.ErrValidation, "sftp: failed to parse private key", err)}
+				resultChan <- connResult{nil, errors.New(err).
+					Component("backup").
+					Category(errors.CategoryValidation).
+					Context("operation", "parse_private_key").
+					Build()}
 				return
 			}
 			config.Auth = []ssh.AuthMethod{ssh.PublicKeys(signer)}
 		case t.config.Password != "":
 			config.Auth = []ssh.AuthMethod{ssh.Password(t.config.Password)}
 		default:
-			resultChan <- connResult{nil, backup.NewError(backup.ErrValidation, "sftp: no authentication method provided", nil)}
+			resultChan <- connResult{nil, errors.Newf("sftp: no authentication method provided").
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "verify_auth_method").
+				Build()}
 			return
 		}
 
@@ -305,7 +351,12 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		addr := fmt.Sprintf("%s:%d", t.config.Host, t.config.Port)
 		sshConn, err := ssh.Dial("tcp", addr, config)
 		if err != nil {
-			resultChan <- connResult{nil, backup.NewError(backup.ErrIO, "sftp: failed to connect", err)}
+			resultChan <- connResult{nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "sftp_connect").
+				Context("host", t.config.Host).
+				Build()}
 			return
 		}
 
@@ -313,7 +364,11 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		client, err := sftp.NewClient(sshConn)
 		if err != nil {
 			sshConn.Close()
-			resultChan <- connResult{nil, backup.NewError(backup.ErrIO, "sftp: failed to create client", err)}
+			resultChan <- connResult{nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "create_sftp_client").
+				Build()}
 			return
 		}
 
@@ -323,7 +378,12 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 	// Wait for either context cancellation or connection completion
 	select {
 	case <-ctx.Done():
-		return nil, backup.NewError(backup.ErrCanceled, "sftp: connection attempt canceled", ctx.Err())
+		return nil, errors.New(ctx.Err()).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "sftp_connect").
+			Context("error_type", "cancelled").
+			Build()
 	case result := <-resultChan:
 		return result.client, result.err
 	}
@@ -333,7 +393,11 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 // and ensure proper path formatting
 func (t *SFTPTarget) validatePath(pathToCheck string) error {
 	if pathToCheck == "" {
-		return backup.NewError(backup.ErrValidation, "path cannot be empty", nil)
+		return errors.Newf("path cannot be empty").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Build()
 	}
 
 	// Clean the path according to the current OS rules
@@ -341,7 +405,12 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 
 	// Check for directory traversal attempts
 	if strings.Contains(clean, "..") {
-		return backup.NewError(backup.ErrSecurity, "path contains directory traversal", nil)
+		return errors.Newf("path contains directory traversal").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Context("path", pathToCheck).
+			Build()
 	}
 
 	// Convert to forward slashes for SFTP (which uses Unix-style paths)
@@ -349,7 +418,12 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 
 	// Ensure path is relative (doesn't start with /)
 	if path.IsAbs(clean) {
-		return backup.NewError(backup.ErrSecurity, "absolute paths are not allowed", nil)
+		return errors.Newf("absolute paths are not allowed").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Context("path", clean).
+			Build()
 	}
 
 	// Check for suspicious path components
@@ -364,25 +438,46 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 		if strings.HasPrefix(component, ".") {
 			// Debug print offending component
 			if t.config.Debug {
-				fmt.Printf("SFTP: Hidden file/directory: %s\n", component)
+				t.logger.Debug("SFTP: Hidden file/directory detected",
+					"component", component)
 			}
-			return backup.NewError(backup.ErrSecurity, "hidden files/directories are not allowed", nil)
+			return errors.Newf("hidden files/directories are not allowed: %s", component).
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "sanitize_path").
+				Context("component", component).
+				Build()
 		}
 
 		// Check for suspicious characters
 		if strings.ContainsAny(component, "<>:\"\\|?*") {
-			return backup.NewError(backup.ErrSecurity, "path contains invalid characters", nil)
+			return errors.Newf("path contains invalid characters").
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_path").
+				Context("component", component).
+				Build()
 		}
 
 		// Check component length
 		if len(component) > 255 {
-			return backup.NewError(backup.ErrSecurity, "path component exceeds maximum length", nil)
+			return errors.Newf("path component exceeds maximum length").
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_path").
+				Context("component_length", len(component)).
+				Build()
 		}
 	}
 
 	// Validate total path length
 	if len(clean) > 4096 {
-		return backup.NewError(backup.ErrSecurity, "path exceeds maximum length", nil)
+		return errors.Newf("path exceeds maximum length").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path").
+			Context("path_length", len(clean)).
+			Build()
 	}
 
 	return nil
@@ -399,7 +494,11 @@ func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *bac
 	// Marshal metadata
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "sftp: failed to marshal metadata", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "marshal_metadata").
+			Build()
 	}
 
 	return t.withRetry(ctx, func(client *sftp.Client) error {
@@ -418,24 +517,44 @@ func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *bac
 		metadataPath := backupPath + sftpMetadataFileExt
 		tempMetadataFile, err := os.CreateTemp("", "sftp-metadata-*")
 		if err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to create temporary metadata file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_temp_metadata_file").
+				Build()
 		}
 		defer os.Remove(tempMetadataFile.Name())
 		defer tempMetadataFile.Close()
 
 		if _, err := tempMetadataFile.Write(metadataBytes); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to write metadata", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_metadata").
+				Build()
 		}
 		if err := tempMetadataFile.Sync(); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to sync metadata file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "sync_metadata_file").
+				Build()
 		}
 		if err := tempMetadataFile.Close(); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to close metadata file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "close_metadata_file").
+				Build()
 		}
 
 		// Upload metadata file atomically
 		if err := t.atomicUpload(ctx, client, tempMetadataFile.Name(), metadataPath); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to store metadata", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "store_metadata").
+				Build()
 		}
 
 		return nil
@@ -452,7 +571,11 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 	// Create a temporary filename
 	tempFile, err := os.CreateTemp(filepath.Dir(localPath), "sftp-upload-*")
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "sftp: failed to create temporary file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_temp_file").
+			Build()
 	}
 	tempName := tempFile.Name()
 	tempFile.Close()
@@ -478,7 +601,13 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 	if err := client.Rename(tempName, remotePath); err != nil {
 		// Try to clean up the temporary file
 		_ = client.Remove(tempName)
-		return backup.NewError(backup.ErrIO, "sftp: failed to rename temporary file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "rename_temp_file").
+			Context("temp_name", tempName).
+			Context("remote_path", remotePath).
+			Build()
 	}
 
 	return nil
@@ -488,13 +617,23 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localPath, remotePath string) error {
 	file, err := os.Open(localPath)
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "sftp: failed to open local file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "open_local_file").
+			Context("local_path", localPath).
+			Build()
 	}
 	defer file.Close()
 
 	dstFile, err := client.Create(remotePath)
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "sftp: failed to create remote file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_remote_file").
+			Context("remote_path", remotePath).
+			Build()
 	}
 	defer dstFile.Close()
 
@@ -520,10 +659,19 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 	select {
 	case <-ctx.Done():
 		pr.Close()
-		return backup.NewError(backup.ErrCanceled, "sftp: upload canceled", ctx.Err())
+		return errors.New(ctx.Err()).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "upload_file").
+			Context("error_type", "cancelled").
+			Build()
 	case err := <-errChan:
 		if err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to upload file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "upload_file").
+				Build()
 		}
 	}
 
@@ -533,7 +681,8 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 // List implements the backup.Target interface
 func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		fmt.Printf("🔄 SFTP: Listing backups from %s\n", t.config.Host)
+		t.logger.Debug("SFTP: Listing backups",
+			"host", t.config.Host)
 	}
 
 	var backups []backup.BackupInfo
@@ -543,7 +692,11 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			if strings.Contains(err.Error(), "no such file") {
 				return nil
 			}
-			return backup.NewError(backup.ErrIO, "sftp: failed to list backups", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "list_backups").
+				Build()
 		}
 
 		for _, entry := range entries {
@@ -564,7 +717,12 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 
 			select {
 			case <-ctx.Done():
-				return backup.NewError(backup.ErrCanceled, "sftp: listing operation canceled", ctx.Err())
+				return errors.New(ctx.Err()).
+					Component("backup").
+					Category(errors.CategorySystem).
+					Context("operation", "list_backups").
+					Context("error_type", "cancelled").
+					Build()
 			default:
 			}
 		}
@@ -581,7 +739,9 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface
 func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		fmt.Printf("🔄 SFTP: Deleting backup %s from %s\n", target, t.config.Host)
+		t.logger.Debug("SFTP: Deleting backup",
+			"target", target,
+			"host", t.config.Host)
 	}
 
 	// Validate the target path
@@ -593,7 +753,12 @@ func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 	return t.withRetry(ctx, func(client *sftp.Client) error {
 		backupPath := path.Join(t.config.BasePath, target)
 		if err := client.Remove(backupPath); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to delete backup", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "delete_backup").
+				Context("target", target).
+				Build()
 		}
 
 		// Try to delete metadata file if it exists
@@ -601,7 +766,8 @@ func (t *SFTPTarget) Delete(ctx context.Context, target string) error {
 		_ = client.Remove(metadataPath)
 
 		if t.config.Debug {
-			fmt.Printf("✅ SFTP: Successfully deleted backup %s\n", target)
+			t.logger.Debug("SFTP: Successfully deleted backup",
+				"target", target)
 		}
 
 		return nil
@@ -617,7 +783,11 @@ func (t *SFTPTarget) Validate() error {
 		// Try to create and remove a test directory
 		testDir := path.Join(t.config.BasePath, "write_test_dir")
 		if err := t.createDirectory(client, testDir); err != nil {
-			return backup.NewError(backup.ErrValidation, "sftp: failed to create test directory", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_create_test_dir").
+				Build()
 		}
 
 		// Create a test file
@@ -625,29 +795,49 @@ func (t *SFTPTarget) Validate() error {
 		testData := []byte("test")
 		tempFile, err := os.CreateTemp("", "sftp-test-*")
 		if err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to create temporary test file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "validate_create_test_file").
+				Build()
 		}
 		defer os.Remove(tempFile.Name())
 		if _, err := tempFile.Write(testData); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to write test data", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "validate_write_test_data").
+				Build()
 		}
 		if err := tempFile.Close(); err != nil {
-			return backup.NewError(backup.ErrIO, "sftp: failed to close test file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "validate_close_test_file").
+				Build()
 		}
 
 		// Test atomic upload
 		if err := t.atomicUpload(ctx, client, tempFile.Name(), testFile); err != nil {
-			return backup.NewError(backup.ErrValidation, "sftp: failed to upload test file", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_upload_test_file").
+				Build()
 		}
 
 		// Test file deletion
 		if err := client.Remove(testFile); err != nil {
-			fmt.Printf("⚠️ SFTP: Failed to delete test file %s: %v\n", testFile, err)
+			t.logger.Warn("SFTP: Failed to delete test file",
+				"test_file", testFile,
+				"error", err)
 		}
 
 		// Test directory deletion
 		if err := client.RemoveDirectory(testDir); err != nil {
-			fmt.Printf("⚠️ SFTP: Failed to remove test directory %s: %v\n", testDir, err)
+			t.logger.Warn("SFTP: Failed to remove test directory",
+				"test_dir", testDir,
+				"error", err)
 		}
 
 		return nil
@@ -680,7 +870,8 @@ func (t *SFTPTarget) Close() error {
 			if err := client.Close(); err != nil {
 				lastErr = err
 				if t.config.Debug {
-					fmt.Printf("Warning: failed to close SFTP connection: %v\n", err)
+					t.logger.Warn("Failed to close SFTP connection",
+						"error", err)
 				}
 			}
 		default:
@@ -693,7 +884,12 @@ func (t *SFTPTarget) Close() error {
 
 func (t *SFTPTarget) createDirectory(client *sftp.Client, dirPath string) error {
 	if err := client.MkdirAll(dirPath); err != nil {
-		return backup.NewError(backup.ErrIO, fmt.Sprintf("sftp: failed to create directory %s", dirPath), err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_directory").
+			Context("dir_path", dirPath).
+			Build()
 	}
 	return nil
 }
@@ -724,7 +920,9 @@ func (t *SFTPTarget) cleanupTempFiles(client *sftp.Client) {
 	for _, path := range tempFiles {
 		if err := client.Remove(path); err != nil {
 			if t.config.Debug {
-				fmt.Printf("⚠️ SFTP: Failed to clean up temporary file %s: %v\n", path, err)
+				t.logger.Warn("SFTP: Failed to clean up temporary file",
+					"path", path,
+					"error", err)
 			}
 		} else {
 			t.untrackTempFile(path)
@@ -739,17 +937,29 @@ func knownHostsCallback(knownHostsFile string) (ssh.HostKeyCallback, error) {
 		// Create the .ssh directory if it doesn't exist
 		sshDir := filepath.Dir(knownHostsFile)
 		if err := os.MkdirAll(sshDir, 0o700); err != nil {
-			return nil, backup.NewError(backup.ErrIO, "failed to create .ssh directory", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_ssh_directory").
+				Build()
 		}
 		// Create an empty known_hosts file
 		if err := os.WriteFile(knownHostsFile, []byte{}, 0o600); err != nil {
-			return nil, backup.NewError(backup.ErrIO, "failed to create known_hosts file", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_known_hosts_file").
+				Build()
 		}
 	}
 
 	callback, err := knownhosts.New(knownHostsFile)
 	if err != nil {
-		return nil, backup.NewError(backup.ErrValidation, "failed to parse known_hosts file", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "parse_known_hosts_file").
+			Build()
 	}
 	return callback, nil
 }

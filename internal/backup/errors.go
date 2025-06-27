@@ -1,6 +1,10 @@
 // Package backup provides functionality for backing up application data
 package backup
 
+// Deprecated: This custom error system is being phased out in favor of the
+// enhanced error system in github.com/tphakala/birdnet-go/internal/errors.
+// Once all files (ftp.go, gdrive.go, rsync.go) are migrated, this file should be removed.
+
 import (
 	"fmt"
 

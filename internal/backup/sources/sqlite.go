@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/mattn/go-sqlite3"
-	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -79,18 +78,40 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		if isMediaError(err) {
-			return nil, backup.NewError(backup.ErrMedia, "failed to open database", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "open_database").
+				Context("db_path", dbPath).
+				Context("error_type", "media_error").
+				Build()
 		}
-		return nil, backup.NewError(backup.ErrDatabase, "failed to open database", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "open_database").
+			Context("db_path", dbPath).
+			Build()
 	}
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
 		db.Close()
 		if isMediaError(err) {
-			return nil, backup.NewError(backup.ErrMedia, "failed to verify database connection", err)
+			return nil, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "verify_database_connection").
+				Context("db_path", dbPath).
+				Context("error_type", "media_error").
+				Build()
 		}
-		return nil, backup.NewError(backup.ErrDatabase, "failed to verify database connection", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "verify_database_connection").
+			Context("db_path", dbPath).
+			Build()
 	}
 
 	return &DatabaseConnection{
@@ -103,13 +124,27 @@ func (s *SQLiteSource) verifyDatabaseIntegrity(db *sql.DB) error {
 	var result string
 	if err := db.QueryRow("PRAGMA integrity_check").Scan(&result); err != nil {
 		if isMediaError(err) {
-			return backup.NewError(backup.ErrMedia, "integrity check failed", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "integrity_check").
+				Context("error_type", "media_error").
+				Build()
 		}
-		return backup.NewError(backup.ErrDatabase, "integrity check failed", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "integrity_check").
+			Build()
 	}
 
 	if result != "ok" {
-		return backup.NewError(backup.ErrCorruption, fmt.Sprintf("integrity check failed: %s", result), nil)
+		return errors.Newf("integrity check failed: %s", result).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "integrity_check").
+			Context("result", result).
+			Build()
 	}
 
 	return nil
@@ -223,9 +258,18 @@ func (s *SQLiteSource) getDatabaseInfo(db *sql.DB) (pageSize, pageCount int, jou
 	err = db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount)
 	if err != nil {
 		if isMediaError(err) {
-			err = backup.NewError(backup.ErrMedia, "failed to get page count", err)
+			err = errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "get_page_count").
+				Context("error_type", "media_error").
+				Build()
 		} else {
-			err = backup.NewError(backup.ErrDatabase, "failed to get page count", err)
+			err = errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_page_count").
+				Build()
 		}
 		return
 	}
@@ -233,9 +277,18 @@ func (s *SQLiteSource) getDatabaseInfo(db *sql.DB) (pageSize, pageCount int, jou
 	err = db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize)
 	if err != nil {
 		if isMediaError(err) {
-			err = backup.NewError(backup.ErrMedia, "failed to get page size", err)
+			err = errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "get_page_size").
+				Context("error_type", "media_error").
+				Build()
 		} else {
-			err = backup.NewError(backup.ErrDatabase, "failed to get page size", err)
+			err = errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_page_size").
+				Build()
 		}
 		return
 	}
@@ -243,9 +296,18 @@ func (s *SQLiteSource) getDatabaseInfo(db *sql.DB) (pageSize, pageCount int, jou
 	err = db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode)
 	if err != nil {
 		if isMediaError(err) {
-			err = backup.NewError(backup.ErrMedia, "failed to get journal mode", err)
+			err = errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "get_journal_mode").
+				Context("error_type", "media_error").
+				Build()
 		} else {
-			err = backup.NewError(backup.ErrDatabase, "failed to get journal mode", err)
+			err = errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_journal_mode").
+				Build()
 		}
 		return
 	}
@@ -263,7 +325,11 @@ func (s *SQLiteSource) initializeBackupConnection(srcDb, dstDb *sqlite3.SQLiteCo
 	// Start the backup
 	backupConn, err := dstDb.Backup("main", srcDb, "main")
 	if err != nil {
-		return nil, 0, backup.NewError(backup.ErrDatabase, "failed to initialize backup", err)
+		return nil, 0, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "initialize_backup").
+			Build()
 	}
 
 	// Get the initial page count
@@ -279,7 +345,11 @@ func (s *SQLiteSource) validatePageCount(total, sourcePages int) (totalPages, re
 		if sourcePages > 0 {
 			return sourcePages, sourcePages, nil
 		} else {
-			return 0, 0, backup.NewError(backup.ErrDatabase, "invalid page count", nil)
+			return 0, 0, errors.Newf("invalid page count").
+				Component("backup").
+				Category(errors.CategoryDatabase).
+				Context("operation", "validate_page_count").
+				Build()
 		}
 	}
 
@@ -294,7 +364,12 @@ func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlit
 	for remaining > 0 {
 		select {
 		case <-ctx.Done():
-			return backup.NewError(backup.ErrCanceled, "backup operation cancelled", ctx.Err())
+			return errors.New(ctx.Err()).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "backup_steps").
+				Context("error_type", "cancelled").
+				Build()
 		default:
 		}
 
@@ -302,9 +377,18 @@ func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlit
 		done, err := backupConn.Step(pagesPerStep)
 		if err != nil {
 			if isMediaError(err) {
-				return backup.NewError(backup.ErrMedia, "failed during backup step", err)
+				return errors.New(err).
+					Component("backup").
+					Category(errors.CategoryDiskUsage).
+					Context("operation", "backup_step").
+					Context("error_type", "media_error").
+					Build()
 			}
-			return backup.NewError(backup.ErrDatabase, "failed during backup step", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDatabase).
+				Context("operation", "backup_step").
+				Build()
 		}
 
 		if done {
@@ -319,15 +403,28 @@ func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlit
 func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
 	backupFile, err := os.Open(tempPath)
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "failed to open backup file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "open_backup_file").
+			Build()
 	}
 	defer backupFile.Close()
 
 	if _, err := io.Copy(w, backupFile); err != nil {
 		if isMediaError(err) {
-			return backup.NewError(backup.ErrMedia, "failed to write backup", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "write_backup").
+				Context("error_type", "media_error").
+				Build()
 		}
-		return backup.NewError(backup.ErrIO, "failed to write backup", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_backup").
+			Build()
 	}
 
 	return nil
@@ -351,7 +448,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	// Create a temporary file for the backup
 	tempFile, err := os.CreateTemp("", "birdnet-go-backup-*.db")
 	if err != nil {
-		return backup.NewError(backup.ErrIO, "failed to create temporary file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_temp_file").
+			Build()
 	}
 	tempPath := tempFile.Name()
 	s.logger.Debug("Created temporary backup file", "temp_path", tempPath)
@@ -369,20 +470,32 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	// Open the destination database (using the temp path)
 	destDB, err := sql.Open("sqlite3", tempPath+"?_journal_mode=WAL&_sync=OFF") // Turn off sync for backup target
 	if err != nil {
-		return backup.NewError(backup.ErrDatabase, "failed to open temporary destination database", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "open_temp_database").
+			Build()
 	}
 	defer destDB.Close()
 
 	// Get the SQLite connection objects using the internal driver connection
 	srcConn, err := db.Conn(ctx)
 	if err != nil {
-		return backup.NewError(backup.ErrDatabase, "failed to get source connection", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_source_connection").
+			Build()
 	}
 	defer srcConn.Close()
 
 	dstConn, err := destDB.Conn(ctx)
 	if err != nil {
-		return backup.NewError(backup.ErrDatabase, "failed to get destination connection", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_destination_connection").
+			Build()
 	}
 	defer dstConn.Close()
 
@@ -393,23 +506,39 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 		return nil
 	})
 	if err != nil {
-		return backup.NewError(backup.ErrDatabase, "failed to get raw source connection", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_raw_source_connection").
+			Build()
 	}
 	err = dstConn.Raw(func(driverConn any) error {
 		rawDstConn = driverConn
 		return nil
 	})
 	if err != nil {
-		return backup.NewError(backup.ErrDatabase, "failed to get raw destination connection", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_raw_destination_connection").
+			Build()
 	}
 
 	sqliteSrcConn, ok := rawSrcConn.(*sqlite3.SQLiteConn)
 	if !ok {
-		return backup.NewError(backup.ErrDatabase, "source connection is not *sqlite3.SQLiteConn", nil)
+		return errors.Newf("source connection is not *sqlite3.SQLiteConn").
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "validate_source_connection").
+			Build()
 	}
 	sqliteDstConn, ok := rawDstConn.(*sqlite3.SQLiteConn)
 	if !ok {
-		return backup.NewError(backup.ErrDatabase, "destination connection is not *sqlite3.SQLiteConn", nil)
+		return errors.Newf("destination connection is not *sqlite3.SQLiteConn").
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "validate_destination_connection").
+			Build()
 	}
 
 	// Initialize backup connection
@@ -505,12 +634,26 @@ func (s *SQLiteSource) Validate() error {
 func (s *SQLiteSource) verifySourceDatabase(dbPath string) error {
 	if _, err := os.Stat(dbPath); err != nil {
 		if os.IsNotExist(err) {
-			return backup.NewError(backup.ErrNotFound, "database file not found", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "verify_source_database").
+				Context("error_type", "not_found").
+				Build()
 		}
 		if isMediaError(err) {
-			return backup.NewError(backup.ErrMedia, "database file not accessible", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDiskUsage).
+				Context("operation", "verify_source_database").
+				Context("error_type", "media_error").
+				Build()
 		}
-		return backup.NewError(backup.ErrIO, "database file not accessible", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "verify_source_database").
+			Build()
 	}
 
 	return nil
@@ -519,19 +662,32 @@ func (s *SQLiteSource) verifySourceDatabase(dbPath string) error {
 // validateConfig checks if SQLite backup is enabled and properly configured
 func (s *SQLiteSource) validateConfig() (string, error) {
 	if !s.config.Output.SQLite.Enabled {
-		return "", backup.NewError(backup.ErrConfig, "sqlite is not enabled", nil)
+		return "", errors.Newf("sqlite is not enabled").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_config").
+			Build()
 	}
 
 	dbPath := s.config.Output.SQLite.Path
 	if dbPath == "" {
-		return "", backup.NewError(backup.ErrConfig, "sqlite path is not configured", nil)
+		return "", errors.Newf("sqlite path is not configured").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_config").
+			Build()
 	}
 
 	// Convert to absolute path if necessary
 	if !filepath.IsAbs(dbPath) {
 		absPath, err := filepath.Abs(dbPath)
 		if err != nil {
-			return "", backup.NewError(backup.ErrConfig, "failed to resolve absolute database path", err)
+			return "", errors.New(err).
+				Component("backup").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "validate_config").
+				Context("path", dbPath).
+				Build()
 		}
 		dbPath = absPath
 	}
