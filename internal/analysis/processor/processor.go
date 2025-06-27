@@ -50,6 +50,11 @@ type Processor struct {
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
+
+	// Backup system fields (optional)
+	backupManager   interface{} // Use interface{} to avoid import cycle
+	backupScheduler interface{} // Use interface{} to avoid import cycle
+	backupMutex     sync.RWMutex
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -714,6 +719,34 @@ func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *im
 	p.sseBroadcasterMutex.RLock()
 	defer p.sseBroadcasterMutex.RUnlock()
 	return p.SSEBroadcaster
+}
+
+// SetBackupManager safely sets the backup manager
+func (p *Processor) SetBackupManager(manager interface{}) {
+	p.backupMutex.Lock()
+	defer p.backupMutex.Unlock()
+	p.backupManager = manager
+}
+
+// GetBackupManager safely returns the backup manager
+func (p *Processor) GetBackupManager() interface{} {
+	p.backupMutex.RLock()
+	defer p.backupMutex.RUnlock()
+	return p.backupManager
+}
+
+// SetBackupScheduler safely sets the backup scheduler
+func (p *Processor) SetBackupScheduler(scheduler interface{}) {
+	p.backupMutex.Lock()
+	defer p.backupMutex.Unlock()
+	p.backupScheduler = scheduler
+}
+
+// GetBackupScheduler safely returns the backup scheduler
+func (p *Processor) GetBackupScheduler() interface{} {
+	p.backupMutex.RLock()
+	defer p.backupMutex.RUnlock()
+	return p.backupScheduler
 }
 
 // Shutdown gracefully stops all processor components

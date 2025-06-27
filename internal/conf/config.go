@@ -324,6 +324,169 @@ type LiveStreamSettings struct {
 	FfmpegLogLevel string // log level for ffmpeg
 }
 
+// BackupRetention defines backup retention policy
+type BackupRetention struct {
+	MaxAge     string `yaml:"maxage"`     // Duration string for the maximum age of backups to keep (e.g., "30d" for 30 days, "6m" for 6 months, "1y" for 1 year). Backups older than this may be deleted.
+	MaxBackups int    `yaml:"maxbackups"` // Maximum total number of backups to keep for a given source. If 0, no limit by count (only by age or MinBackups).
+	MinBackups int    `yaml:"minbackups"` // Minimum number of recent backups to keep for a given source, regardless of their age. This ensures a baseline number of backups are always available.
+}
+
+// BackupTargetSettings is an interface for type-safe backup target configuration
+type BackupTargetSettings interface {
+	Validate() error
+}
+
+// LocalBackupSettings defines settings for local filesystem backup target
+type LocalBackupSettings struct {
+	Path string `yaml:"path"` // Local filesystem path where backups will be stored
+}
+
+// Validate validates local backup settings
+func (s *LocalBackupSettings) Validate() error {
+	if s.Path == "" {
+		return fmt.Errorf("local backup path cannot be empty")
+	}
+	return nil
+}
+
+// FTPBackupSettings defines settings for FTP backup target
+type FTPBackupSettings struct {
+	Host     string `yaml:"host"`     // FTP server hostname or IP address
+	Port     int    `yaml:"port"`     // FTP server port (default: 21)
+	Username string `yaml:"username"` // FTP username
+	Password string `yaml:"password"` // FTP password
+	Path     string `yaml:"path"`     // Remote path on FTP server
+	UseTLS   bool   `yaml:"usetls"`   // Use FTPS (FTP over TLS)
+}
+
+// Validate validates FTP backup settings
+func (s *FTPBackupSettings) Validate() error {
+	if s.Host == "" {
+		return fmt.Errorf("FTP host cannot be empty")
+	}
+	if s.Port == 0 {
+		s.Port = 21 // Set default port
+	}
+	return nil
+}
+
+// SFTPBackupSettings defines settings for SFTP backup target
+type SFTPBackupSettings struct {
+	Host           string `yaml:"host"`           // SFTP server hostname or IP address
+	Port           int    `yaml:"port"`           // SFTP server port (default: 22)
+	Username       string `yaml:"username"`       // SFTP username
+	Password       string `yaml:"password"`       // SFTP password (optional if using key)
+	PrivateKeyPath string `yaml:"privatekeypath"` // Path to private key file (optional)
+	Path           string `yaml:"path"`           // Remote path on SFTP server
+}
+
+// Validate validates SFTP backup settings
+func (s *SFTPBackupSettings) Validate() error {
+	if s.Host == "" {
+		return fmt.Errorf("SFTP host cannot be empty")
+	}
+	if s.Port == 0 {
+		s.Port = 22 // Set default port
+	}
+	if s.Username == "" {
+		return fmt.Errorf("SFTP username cannot be empty")
+	}
+	return nil
+}
+
+// S3BackupSettings defines settings for S3-compatible backup target
+type S3BackupSettings struct {
+	Endpoint        string `yaml:"endpoint"`        // S3 endpoint URL
+	Region          string `yaml:"region"`          // AWS region
+	Bucket          string `yaml:"bucket"`          // S3 bucket name
+	AccessKeyID     string `yaml:"accesskeyid"`     // AWS access key ID
+	SecretAccessKey string `yaml:"secretaccesskey"` // AWS secret access key
+	Prefix          string `yaml:"prefix"`          // Object key prefix
+	UseSSL          bool   `yaml:"usessl"`          // Use SSL/TLS (default: true)
+}
+
+// Validate validates S3 backup settings
+func (s *S3BackupSettings) Validate() error {
+	if s.Bucket == "" {
+		return fmt.Errorf("S3 bucket name cannot be empty")
+	}
+	if s.Region == "" {
+		return fmt.Errorf("S3 region cannot be empty")
+	}
+	return nil
+}
+
+// RsyncBackupSettings defines settings for rsync backup target
+type RsyncBackupSettings struct {
+	Host       string   `yaml:"host"`       // Remote host (optional for local rsync)
+	Port       int      `yaml:"port"`       // SSH port for remote rsync (default: 22)
+	Username   string   `yaml:"username"`   // SSH username for remote rsync
+	Path       string   `yaml:"path"`       // Destination path
+	SSHKeyPath string   `yaml:"sshkeypath"` // Path to SSH private key
+	Options    []string `yaml:"options"`    // Additional rsync options
+}
+
+// Validate validates rsync backup settings
+func (s *RsyncBackupSettings) Validate() error {
+	if s.Path == "" {
+		return fmt.Errorf("rsync path cannot be empty")
+	}
+	if s.Host != "" && s.Port == 0 {
+		s.Port = 22 // Set default SSH port for remote rsync
+	}
+	return nil
+}
+
+// GoogleDriveBackupSettings defines settings for Google Drive backup target
+type GoogleDriveBackupSettings struct {
+	CredentialsPath string `yaml:"credentialspath"` // Path to Google service account credentials JSON
+	FolderID        string `yaml:"folderid"`        // Google Drive folder ID where backups will be stored
+}
+
+// Validate validates Google Drive backup settings
+func (s *GoogleDriveBackupSettings) Validate() error {
+	if s.CredentialsPath == "" {
+		return fmt.Errorf("Google Drive credentials path cannot be empty")
+	}
+	return nil
+}
+
+// BackupTarget defines settings for a backup target
+type BackupTarget struct {
+	Type     string                 `yaml:"type"`     // Specifies the type of the backup target (e.g., "local", "s3", "ftp", "sftp"). This determines the storage mechanism.
+	Enabled  bool                   `yaml:"enabled"`  // If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored.
+	Settings map[string]interface{} `yaml:"settings"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
+}
+
+// BackupScheduleConfig defines a single backup schedule
+type BackupScheduleConfig struct {
+	Enabled  bool   `yaml:"enabled"`  // If true, this specific schedule is active and backups will be attempted at the defined interval. (Valid: true or false)
+	Hour     int    `yaml:"hour"`     // The hour of the day when the backup is scheduled to run. (Valid range: 0-23, where 0 is midnight and 23 is 11 PM)
+	Minute   int    `yaml:"minute"`   // The minute of the hour when the backup is scheduled to run. (Valid range: 0-59)
+	Weekday  string `yaml:"weekday"`  // For weekly schedules, the day of the week. Accepts: "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" (case-insensitive), or numeric: "0" (Sunday) through "6" (Saturday). Empty or ignored for daily schedules.
+	IsWeekly bool   `yaml:"isweekly"` // If true, this schedule is weekly (runs on the specified Weekday at Hour:Minute). If false, it's a daily schedule (runs every day at Hour:Minute). (Valid: true or false)
+}
+
+// BackupConfig contains backup-related configuration
+type BackupConfig struct {
+	Enabled        bool                   `yaml:"enabled"`         // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
+	Debug          bool                   `yaml:"debug"`           // If true, enables detailed debug logging for backup operations.
+	Encryption     bool                   `yaml:"encryption"`      // If true, enables encryption for backup archives. Requires EncryptionKey to be set.
+	EncryptionKey  string                 `yaml:"encryption_key"`  // Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe.
+	SanitizeConfig bool                   `yaml:"sanitize_config"` // If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive.
+	Retention      BackupRetention        `yaml:"retention"`       // Defines policies for how long and how many backups are kept.
+	Targets        []BackupTarget         `yaml:"targets"`         // A list of configured backup targets (destinations) where backup archives will be stored.
+	Schedules      []BackupScheduleConfig `yaml:"schedules"`       // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
+
+	// OperationTimeouts defines timeouts for various backup operations
+	OperationTimeouts struct {
+		Backup  time.Duration `yaml:"backup"`  // Maximum duration allowed for the entire backup operation for a single source (including data extraction, archiving, compression, encryption). Default: 2h.
+		Store   time.Duration `yaml:"store"`   // Maximum duration allowed for storing a single backup archive to one target. Default: 15m.
+		Cleanup time.Duration `yaml:"cleanup"` // Maximum duration allowed for the backup cleanup process (deleting old backups based on retention policy). Default: 10m.
+		Delete  time.Duration `yaml:"delete"`  // Maximum duration allowed for deleting a single backup archive from a target. Default: 2m.
+	}
+}
+
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool // true to enable debug mode
@@ -370,6 +533,8 @@ type Settings struct {
 			Port     string // port for mysql database
 		}
 	}
+
+	Backup BackupConfig // Backup configuration
 }
 
 // LogConfig defines the configuration for a log file
