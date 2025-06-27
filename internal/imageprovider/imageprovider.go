@@ -677,11 +677,19 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 
 // fetchAndStore tries to load from DB, then fetches from the provider if necessary, and stores the result.
 func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error) {
+	fetchStart := time.Now()
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Fetching and storing image (memory cache miss)")
 
 	// 1. Try loading from DB cache first
+	dbStart := time.Now()
 	dbImage, err := c.loadFromDBCache(scientificName)
+	dbDuration := time.Since(dbStart)
+
+	if dbDuration > 50*time.Millisecond {
+		log.Printf("fetchAndStore: DB cache lookup for %s took %v", scientificName, dbDuration)
+	}
+
 	if err != nil {
 		// Logged within loadFromDBCache
 		// Continue to provider fetch, but log this DB error
@@ -740,7 +748,14 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	// This requires access to the main settings, maybe pass relevant part to InitCache?
 	// For now, assume provider passed to InitCache is enabled.
 
+	providerStart := time.Now()
 	fetchedImage, fetchErr := c.provider.Fetch(scientificName)
+	providerDuration := time.Since(providerStart)
+
+	if providerDuration > 100*time.Millisecond {
+		log.Printf("fetchAndStore: Provider fetch for %s took %v", scientificName, providerDuration)
+	}
+
 	if fetchErr != nil {
 		// Check if it's already an enhanced error, if not enhance it
 		var enhancedErr *errors.EnhancedError
@@ -805,6 +820,12 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	if c.metrics != nil {
 		c.metrics.IncrementCacheMisses()    // Memory miss
 		c.metrics.IncrementImageDownloads() // Fetched from external provider
+	}
+
+	totalDuration := time.Since(fetchStart)
+	if totalDuration > 200*time.Millisecond {
+		log.Printf("fetchAndStore: Total time for %s was %v (DB: %v, Provider: %v)",
+			scientificName, totalDuration, dbDuration, providerDuration)
 	}
 
 	return fetchedImage, nil
@@ -1125,10 +1146,12 @@ func (r *ImageProviderRegistry) GetCaches() map[string]*BirdImageCache {
 // GetBatch fetches multiple bird images at once and returns them as a map
 // This is more efficient than multiple individual Get calls when many images are needed
 func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage {
+	batchStart := time.Now()
 	result := make(map[string]BirdImage, len(scientificNames))
 
 	// First check memory cache for all items (fast path)
 	missingNames := make([]string, 0, len(scientificNames))
+	memoryCacheStart := time.Now()
 
 	for _, name := range scientificNames {
 		if name == "" {
@@ -1151,26 +1174,46 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 		missingNames = append(missingNames, name)
 	}
 
+	memoryCacheDuration := time.Since(memoryCacheStart)
+	log.Printf("GetBatch: Memory cache check completed in %v - found %d/%d in cache",
+		memoryCacheDuration, len(result), len(scientificNames))
+
 	// If all were in memory cache, return early
 	if len(missingNames) == 0 {
+		totalDuration := time.Since(batchStart)
+		log.Printf("GetBatch: All images found in memory cache, total time: %v", totalDuration)
 		return result
 	}
 
 	// For each missing name, fetch individually
 	// We could potentially parallelize this in the future
 	log.Printf("GetBatch: Need to fetch %d missing images", len(missingNames))
+	fetchStart := time.Now()
+
 	for i, name := range missingNames {
+		singleFetchStart := time.Now()
+
 		if i%10 == 0 && i > 0 {
 			log.Printf("GetBatch: Progress %d/%d images fetched", i, len(missingNames))
 		}
+
 		image, err := c.Get(name)
+		singleFetchDuration := time.Since(singleFetchStart)
+
 		if err == nil {
 			result[name] = image
+			if singleFetchDuration > 100*time.Millisecond {
+				log.Printf("GetBatch: Slow fetch for %s took %v", name, singleFetchDuration)
+			}
 		} else {
-			log.Printf("GetBatch: Failed to get image for %s: %v", name, err)
+			log.Printf("GetBatch: Failed to get image for %s: %v (took %v)", name, err, singleFetchDuration)
 		}
 	}
-	log.Printf("GetBatch: Completed fetching %d images", len(missingNames))
+
+	fetchDuration := time.Since(fetchStart)
+	totalDuration := time.Since(batchStart)
+	log.Printf("GetBatch: Completed fetching %d images in %v (total batch time: %v)",
+		len(missingNames), fetchDuration, totalDuration)
 
 	return result
 }

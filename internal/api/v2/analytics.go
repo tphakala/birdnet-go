@@ -362,6 +362,8 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
 // This provides an overall summary of species detections
 func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
+	apiStart := time.Now()
+
 	// Get query parameters
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
@@ -537,6 +539,9 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 			"path", ctx.Request().URL.Path,
 		)
 	}
+
+	totalAPITime := time.Since(apiStart)
+	log.Printf("GetSpeciesSummary: Total API execution time: %v", totalAPITime)
 
 	return ctx.JSON(http.StatusOK, response)
 }
