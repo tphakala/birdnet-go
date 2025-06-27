@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 const placeholderImageURL = "/assets/images/bird-placeholder.svg"
@@ -403,7 +404,19 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
+	dbStart := time.Now()
 	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
+	dbDuration := time.Since(dbStart)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Database query completed",
+			"duration_ms", dbDuration.Milliseconds(),
+			"record_count", len(summaryData),
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get species summary data",
@@ -419,6 +432,36 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 
 	// Convert datastore model to API response model
 	response := make([]SpeciesSummary, 0, len(summaryData))
+
+	// Collect scientific names for batch thumbnail fetching
+	scientificNames := make([]string, 0, len(summaryData))
+	for i := range summaryData {
+		scientificNames = append(scientificNames, summaryData[i].ScientificName)
+	}
+
+	// Batch fetch thumbnail URLs
+	var thumbnailURLs map[string]imageprovider.BirdImage
+	if c.BirdImageCache != nil && len(scientificNames) > 0 {
+		thumbStart := time.Now()
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Batch fetching thumbnails",
+				"count", len(scientificNames),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+		thumbnailURLs = c.BirdImageCache.GetBatch(scientificNames)
+		thumbDuration := time.Since(thumbStart)
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Thumbnail batch fetch completed",
+				"duration_ms", thumbDuration.Milliseconds(),
+				"count", len(scientificNames),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+	}
+
 	for i := range summaryData {
 		data := &summaryData[i]
 		// Format the times as strings
@@ -433,11 +476,10 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 			lastHeard = data.LastSeen.Format("2006-01-02 15:04:05")
 		}
 
-		// Get bird thumbnail URL if available
+		// Get bird thumbnail URL from batch results
 		var thumbnailURL string
-		if c.BirdImageCache != nil {
-			birdImage, err := c.BirdImageCache.Get(data.ScientificName)
-			if err == nil {
+		if thumbnailURLs != nil {
+			if birdImage, ok := thumbnailURLs[data.ScientificName]; ok {
 				thumbnailURL = birdImage.URL
 			}
 		}

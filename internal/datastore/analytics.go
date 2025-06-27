@@ -53,6 +53,10 @@ type NewSpeciesData struct {
 func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
 	var summaries []SpeciesSummaryData
 
+	// Log query start time for debugging
+	queryStart := time.Now()
+	log.Printf("GetSpeciesSummaryData: Starting query with startDate=%s, endDate=%s", startDate, endDate)
+
 	// Start building query
 	queryStr := `
 		SELECT 
@@ -90,6 +94,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	`
 
 	// Execute the query
+	log.Printf("GetSpeciesSummaryData: Executing query: %s with args: %v", queryStr, args)
 	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, errors.New(err).
@@ -102,7 +107,11 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 	defer rows.Close()
 
+	log.Printf("GetSpeciesSummaryData: Query executed in %v, now scanning rows", time.Since(queryStart))
+	rowCount := 0
+
 	for rows.Next() {
+		rowCount++
 		var summary SpeciesSummaryData
 		var firstSeenStr, lastSeenStr string
 
@@ -140,6 +149,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 		summaries = append(summaries, summary)
 	}
+
+	log.Printf("GetSpeciesSummaryData: Completed in %v, processed %d rows", time.Since(queryStart), rowCount)
 
 	return summaries, nil
 }
