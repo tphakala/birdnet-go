@@ -558,7 +558,35 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	s.logger.Debug("Validated page count for backup", "validated_total_pages", validatedTotal)
 
 	// Perform the backup in chunks
-	return s.performBackupSteps(ctx, backupConn, validatedTotal)
+	if err := s.performBackupSteps(ctx, backupConn, validatedTotal); err != nil {
+		return err
+	}
+
+	// Open the temporary backup file for reading
+	backupFile, err := os.Open(tempPath)
+	if err != nil {
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "open_backup_file_for_reading").
+			Context("temp_path", tempPath).
+			Build()
+	}
+	defer backupFile.Close()
+
+	// Copy the backup data to the writer
+	copiedBytes, err := io.Copy(w, backupFile)
+	if err != nil {
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "copy_backup_to_writer").
+			Context("bytes_copied", copiedBytes).
+			Build()
+	}
+
+	s.logger.Debug("Successfully copied backup data to writer", "bytes_copied", copiedBytes)
+	return nil
 }
 
 // Backup performs a streaming backup of the SQLite database
