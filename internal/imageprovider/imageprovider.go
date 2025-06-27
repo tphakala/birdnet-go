@@ -1269,29 +1269,54 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 		log.Printf("GetBatch: Need to fetch %d images from provider", len(missingNames))
 		fetchStart := time.Now()
 
-		for i, name := range missingNames {
-			singleFetchStart := time.Now()
+		// Use goroutines for parallel fetching with a worker pool
+		const maxWorkers = 5 // Limit concurrent requests to avoid overwhelming the provider
+		sem := make(chan struct{}, maxWorkers)
+		resultChan := make(chan struct {
+			name  string
+			image BirdImage
+			err   error
+		}, len(missingNames))
 
-			if i%10 == 0 && i > 0 {
-				log.Printf("GetBatch: Progress %d/%d images fetched from provider", i, len(missingNames))
-			}
+		// Launch goroutines for parallel fetching
+		for _, name := range missingNames {
+			go func(scientificName string) {
+				sem <- struct{}{}        // Acquire semaphore
+				defer func() { <-sem }() // Release semaphore
 
-			// Use fetchAndStore directly to avoid the full Get() overhead
-			image, err := c.fetchAndStore(name)
-			singleFetchDuration := time.Since(singleFetchStart)
+				singleFetchStart := time.Now()
+				image, err := c.fetchAndStore(scientificName)
+				singleFetchDuration := time.Since(singleFetchStart)
 
-			if err == nil {
-				result[name] = image
 				if singleFetchDuration > 100*time.Millisecond {
-					log.Printf("GetBatch: Slow provider fetch for %s took %v", name, singleFetchDuration)
+					log.Printf("GetBatch: Slow provider fetch for %s took %v", scientificName, singleFetchDuration)
 				}
-			} else {
-				log.Printf("GetBatch: Failed to fetch %s from provider: %v (took %v)", name, err, singleFetchDuration)
-			}
+
+				resultChan <- struct {
+					name  string
+					image BirdImage
+					err   error
+				}{scientificName, image, err}
+			}(name)
 		}
 
+		// Collect results
+		for i := 0; i < len(missingNames); i++ {
+			res := <-resultChan
+			if res.err == nil {
+				result[res.name] = res.image
+			} else {
+				log.Printf("GetBatch: Failed to fetch %s from provider: %v", res.name, res.err)
+			}
+
+			if (i+1)%10 == 0 {
+				log.Printf("GetBatch: Progress %d/%d images fetched from provider", i+1, len(missingNames))
+			}
+		}
+		close(resultChan)
+
 		fetchDuration := time.Since(fetchStart)
-		log.Printf("GetBatch: Provider fetch phase completed in %v", fetchDuration)
+		log.Printf("GetBatch: Provider fetch phase completed in %v (parallel with %d workers)", fetchDuration, maxWorkers)
 	}
 
 	totalDuration := time.Since(batchStart)
