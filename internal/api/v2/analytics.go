@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 const placeholderImageURL = "/assets/images/bird-placeholder.svg"
@@ -91,6 +92,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
 	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
+	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint
 
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
@@ -361,6 +363,8 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 // GetSpeciesSummary handles GET /api/v2/analytics/species/summary
 // This provides an overall summary of species detections
 func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
+	// apiStart := time.Now()
+
 	// Get query parameters
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
@@ -403,7 +407,21 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
+	dbStart := time.Now()
 	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
+	dbDuration := time.Since(dbStart)
+
+	// log.Printf("GetSpeciesSummary: Database query completed in %v, got %d records", dbDuration, len(summaryData))
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Database query completed",
+			"duration_ms", dbDuration.Milliseconds(),
+			"record_count", len(summaryData),
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get species summary data",
@@ -419,6 +437,44 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 
 	// Convert datastore model to API response model
 	response := make([]SpeciesSummary, 0, len(summaryData))
+
+	// Collect scientific names for batch thumbnail fetching
+	scientificNames := make([]string, 0, len(summaryData))
+	for i := range summaryData {
+		scientificNames = append(scientificNames, summaryData[i].ScientificName)
+	}
+
+	// Check if we should skip thumbnails (for performance)
+	skipThumbnails := ctx.QueryParam("skip_thumbnails") == "true"
+
+	// Batch fetch thumbnail URLs
+	var thumbnailURLs map[string]imageprovider.BirdImage
+	if c.BirdImageCache != nil && len(scientificNames) > 0 && !skipThumbnails {
+		thumbStart := time.Now()
+		// log.Printf("GetSpeciesSummary: Starting batch fetch of %d thumbnails", len(scientificNames))
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Batch fetching thumbnails",
+				"count", len(scientificNames),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+		thumbnailURLs = c.BirdImageCache.GetBatch(scientificNames)
+		thumbDuration := time.Since(thumbStart)
+		// log.Printf("GetSpeciesSummary: Thumbnail batch fetch completed in %v", thumbDuration)
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Thumbnail batch fetch completed",
+				"duration_ms", thumbDuration.Milliseconds(),
+				"count", len(scientificNames),
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+	}
+	// else if skipThumbnails {
+	//	log.Printf("GetSpeciesSummary: Skipping thumbnail fetch as requested")
+	// }
+
 	for i := range summaryData {
 		data := &summaryData[i]
 		// Format the times as strings
@@ -433,11 +489,10 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 			lastHeard = data.LastSeen.Format("2006-01-02 15:04:05")
 		}
 
-		// Get bird thumbnail URL if available
+		// Get bird thumbnail URL from batch results
 		var thumbnailURL string
-		if c.BirdImageCache != nil {
-			birdImage, err := c.BirdImageCache.Get(data.ScientificName)
-			if err == nil {
+		if thumbnailURLs != nil {
+			if birdImage, ok := thumbnailURLs[data.ScientificName]; ok {
 				thumbnailURL = birdImage.URL
 			}
 		}
@@ -486,6 +541,9 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 			"path", ctx.Request().URL.Path,
 		)
 	}
+
+	// totalAPITime := time.Since(apiStart)
+	// log.Printf("GetSpeciesSummary: Total API execution time: %v", totalAPITime)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -1083,4 +1141,64 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 	}
 
 	return nil // Dates are valid
+}
+
+// GetSpeciesThumbnails handles GET /api/v2/analytics/species/thumbnails
+// Returns thumbnail URLs for multiple species in a single request
+func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
+	// Get species list from query parameters
+	species := ctx.QueryParams()["species"]
+
+	if len(species) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "No species provided")
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving thumbnails for species",
+			"count", len(species),
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	// Create result map
+	result := make(map[string]string)
+
+	// Use the image cache if available
+	if c.BirdImageCache != nil {
+		// Get thumbnails in batch
+		images := c.BirdImageCache.GetBatch(species)
+
+		// Convert to simple map of scientific name -> URL
+		for name := range images {
+			if images[name].URL != "" {
+				result[name] = images[name].URL
+			} else {
+				result[name] = placeholderImageURL
+			}
+		}
+
+		// Add placeholder for any missing species
+		for _, name := range species {
+			if _, exists := result[name]; !exists {
+				result[name] = placeholderImageURL
+			}
+		}
+	} else {
+		// No image cache, return placeholders for all
+		for _, name := range species {
+			result[name] = placeholderImageURL
+		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Thumbnails retrieved",
+			"requested", len(species),
+			"found", len(result),
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, result)
 }
