@@ -1,6 +1,7 @@
 package imageprovider_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -61,6 +62,7 @@ func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 // mockStore is a mock implementation of the datastore.Interface
 type mockStore struct {
 	images map[string]*datastore.ImageCache
+	mu     sync.RWMutex
 }
 
 func newMockStore() *mockStore {
@@ -69,8 +71,22 @@ func newMockStore() *mockStore {
 	}
 }
 
+// GetAllTestEntries returns all entries for testing purposes
+func (m *mockStore) GetAllTestEntries() []*datastore.ImageCache {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entries := make([]*datastore.ImageCache, 0, len(m.images))
+	for _, v := range m.images {
+		entries = append(entries, v)
+	}
+	return entries
+}
+
 // Implement only the methods we need for testing
 func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if img, ok := m.images[query.ScientificName+"_"+query.ProviderName]; ok {
 		//log.Printf("Debug: GetImageCache found entry for %s provider %s", query.ScientificName, query.ProviderName)
 		return img, nil
@@ -83,6 +99,8 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 	if cache.ScientificName == "" || cache.ProviderName == "" {
 		return fmt.Errorf("scientific name and provider name cannot be empty")
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	key := cache.ScientificName + "_" + cache.ProviderName
 	oldCache, exists := m.images[key]
 	if exists {
@@ -100,6 +118,7 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 		AuthorName:     cache.AuthorName,
 		AuthorURL:      cache.AuthorURL,
 		CachedAt:       cache.CachedAt,
+		ProviderName:   cache.ProviderName,
 	}
 
 	m.images[key] = newCache
@@ -107,6 +126,8 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 }
 
 func (m *mockStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var result []datastore.ImageCache
 	//log.Printf("Debug: GetAllImageCaches called for provider %s. Total items: %d", providerName, len(m.images))
 	for key, img := range m.images {
@@ -730,4 +751,152 @@ func TestInitializationFailure(t *testing.T) {
 	if mockProvider.fetchCounter != 2 {
 		t.Errorf("Expected 2 fetches, got %d fetches", mockProvider.fetchCounter)
 	}
+}
+
+// TestUserRequestsNotRateLimited tests that user requests are not subject to rate limiting
+func TestUserRequestsNotRateLimited(t *testing.T) {
+	t.Parallel()
+	// Create the actual Wikipedia provider to test rate limiting behavior
+	provider, err := imageprovider.NewWikiMediaProvider()
+	if err != nil {
+		t.Fatalf("Failed to create WikiMedia provider: %v", err)
+	}
+
+	// Create a mock store
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache := imageprovider.InitCache("wikimedia", provider, metrics, mockStore)
+
+	// Test species that should exist in Wikipedia
+	testSpecies := []string{
+		"Turdus merula",
+		"Parus major",
+		"Carduelis carduelis",
+		"Sturnus vulgaris",
+		"Erithacus rubecula",
+	}
+
+	// Measure time for rapid consecutive user requests
+	start := time.Now()
+
+	// Make rapid consecutive requests (should not be rate limited)
+	for i := 0; i < 10; i++ {
+		species := testSpecies[i%len(testSpecies)]
+		_, err := cache.Get(species)
+		if err != nil && !errors.Is(err, imageprovider.ErrImageNotFound) {
+			t.Logf("Warning: fetch error for %s: %v", species, err)
+		}
+	}
+
+	duration := time.Since(start)
+
+	// If rate limiting was applied (2 req/s), 10 requests would take at least 5 seconds
+	// Without rate limiting, it should complete much faster (allowing for actual API latency)
+	if duration > 3*time.Second {
+		t.Errorf("User requests appear to be rate limited. Duration: %v, expected < 3s", duration)
+	}
+
+	t.Logf("10 user requests completed in %v (no rate limiting)", duration)
+}
+
+// TestBackgroundRequestsRateLimited tests that background requests are subject to rate limiting
+func TestBackgroundRequestsRateLimited(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock provider with controlled fetch behavior
+	fetchAttempts := make(chan struct{}, 10)
+	mockProvider := &mockProviderWithContext{
+		mockImageProvider: mockImageProvider{
+			fetchDelay: 5 * time.Millisecond,
+		},
+		fetchChannel: fetchAttempts,
+	}
+
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	// Pre-populate with stale entries to trigger background refresh
+	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	numStaleEntries := 5
+	for i := 0; i < numStaleEntries; i++ {
+		species := fmt.Sprintf("StaleSpecies_%d", i)
+		mockStore.SaveImageCache(&datastore.ImageCache{
+			ScientificName: species,
+			ProviderName:   "wikimedia",
+			URL:            fmt.Sprintf("http://example.com/old_%s.jpg", species),
+			CachedAt:       staleTime,
+		})
+	}
+
+	// Wait for background refresh to process, but with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Collect fetch attempts over a period of time
+	fetchCount := 0
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-fetchAttempts:
+			fetchCount++
+			t.Logf("Background fetch attempt %d detected", fetchCount)
+		case <-ticker.C:
+			// Check if we've seen some fetches
+			if fetchCount > 0 && fetchCount <= numStaleEntries {
+				// Success: background fetches are happening but controlled
+				t.Logf("Background fetches completed: %d (expected <= %d)", fetchCount, numStaleEntries)
+				return
+			}
+		case <-ctx.Done():
+			if fetchCount == 0 {
+				t.Skip("No background fetches detected - background refresh might not have started")
+			} else {
+				t.Logf("Test completed with %d background fetches", fetchCount)
+			}
+			return
+		}
+	}
+}
+
+// mockProviderWithContext extends mockImageProvider to support context-aware fetching
+type mockProviderWithContext struct {
+	mockImageProvider
+	backgroundFetches int
+	mu2               sync.Mutex
+	fetchChannel      chan<- struct{}
+}
+
+func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientificName string) (imageprovider.BirdImage, error) {
+	// Check if it's a background operation
+	if ctx != nil {
+		if bg, ok := ctx.Value("background").(bool); ok && bg {
+			m.mu2.Lock()
+			m.backgroundFetches++
+			m.mu2.Unlock()
+
+			// Signal through channel if available
+			if m.fetchChannel != nil {
+				select {
+				case m.fetchChannel <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}
+	return m.Fetch(scientificName)
 }

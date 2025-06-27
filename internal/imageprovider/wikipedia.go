@@ -22,10 +22,10 @@ const wikiProviderName = "wikipedia"
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
-	client     *mwclient.Client
-	debug      bool
-	limiter    *rate.Limiter
-	maxRetries int
+	client            *mwclient.Client
+	debug             bool
+	backgroundLimiter *rate.Limiter // For background refresh operations
+	maxRetries        int
 }
 
 // wikiMediaAuthor represents the author information for a Wikipedia image.
@@ -56,20 +56,21 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		return nil, enhancedErr
 	}
 
-	// Rate limit: 10 requests per second with burst of 10
-	limiter := rate.NewLimiter(rate.Limit(10), 10)
-	logger.Info("WikiMedia provider initialized", "rate_limit_rps", 10, "rate_limit_burst", 10)
+	// Rate limiting is only applied to background cache refresh operations
+	// User requests are not rate limited to ensure UI responsiveness
+	// Background operations: 2 requests per second to respect Wikipedia's rate limits
+	backgroundLimiter := rate.NewLimiter(rate.Limit(2), 2)
+	logger.Info("WikiMedia provider initialized", "user_rate_limit", "none", "background_rate_limit_rps", 2)
 	return &wikiMediaProvider{
-		client:     client,
-		debug:      settings.Realtime.Dashboard.Thumbnails.Debug,
-		limiter:    limiter,
-		maxRetries: 3,
+		client:            client,
+		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
+		backgroundLimiter: backgroundLimiter,
+		maxRetries:        3,
 	}, nil
 }
 
-// queryWithRetry performs a query with retry logic.
-// It waits for rate limiter, retries on error, and waits before retrying.
-func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]string) (*jason.Object, error) {
+// queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
+func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"])
 	var lastErr error
 	for attempt := 0; attempt < l.maxRetries; attempt++ {
@@ -78,20 +79,24 @@ func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]strin
 		// if l.debug {
 		// 	log.Printf("[%s] Debug: API request attempt %d", reqID, attempt+1)
 		// }
-		// Wait for rate limiter
-		attemptLogger.Debug("Waiting for rate limiter")
-		err := l.limiter.Wait(context.Background()) // Using Background context for limiter wait
-		if err != nil {
-			enhancedErr := errors.New(err).
-				Component("imageprovider").
-				Category(errors.CategoryNetwork).
-				Context("provider", wikiProviderName).
-				Context("request_id", reqID).
-				Context("operation", "rate_limiter_wait").
-				Build()
-			attemptLogger.Error("Rate limiter error", "error", enhancedErr)
-			// Don't retry on limiter error, return immediately
-			return nil, enhancedErr
+		// Wait for rate limiter if one is provided (only for background operations)
+		if limiter != nil {
+			attemptLogger.Debug("Waiting for rate limiter")
+			err := limiter.Wait(context.Background()) // Using Background context for limiter wait
+			if err != nil {
+				enhancedErr := errors.New(err).
+					Component("imageprovider").
+					Category(errors.CategoryNetwork).
+					Context("provider", wikiProviderName).
+					Context("request_id", reqID).
+					Context("operation", "rate_limiter_wait").
+					Build()
+				attemptLogger.Error("Rate limiter error", "error", enhancedErr)
+				// Don't retry on limiter error, return immediately
+				return nil, enhancedErr
+			}
+		} else {
+			attemptLogger.Debug("No rate limiting applied (user request)")
 		}
 
 		attemptLogger.Debug("Sending GET request to Wikipedia API")
@@ -125,16 +130,15 @@ func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]strin
 	return nil, enhancedErr
 }
 
-// queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit.
-// It handles the API request and response parsing.
-func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string]string) (*jason.Object, error) {
+// queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
+func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"], "titles", params["titles"])
 	logger.Info("Querying Wikipedia API")
 	// if l.debug {
 	// 	log.Printf("[%s] Debug: Querying Wikipedia API with params: %v", reqID, params)
 	// }
 
-	resp, err := l.queryWithRetry(reqID, params)
+	resp, err := l.queryWithRetryAndLimiter(reqID, params, limiter)
 	if err != nil {
 		// Error already logged in queryWithRetry
 		// if l.debug {
@@ -236,9 +240,37 @@ func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string
 	return pages[0], nil
 }
 
-// fetch retrieves the bird image for a given scientific name.
+// FetchWithContext retrieves the bird image for a given scientific name using a context.
+// If the context indicates a background operation, it uses the background rate limiter.
+// User requests are not rate limited.
+func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
+	// Check if this is a background operation
+	isBackground := false
+	if ctx != nil {
+		if bg, ok := ctx.Value(backgroundOperationKey).(bool); ok && bg {
+			isBackground = true
+		}
+	}
+
+	// Only use rate limiter for background operations
+	var limiter *rate.Limiter
+	if isBackground {
+		limiter = l.backgroundLimiter
+	}
+	// For user requests, limiter remains nil (no rate limiting)
+
+	return l.fetchWithLimiter(scientificName, limiter)
+}
+
+// Fetch retrieves the bird image for a given scientific name.
 // It queries for the thumbnail and author information, then constructs a BirdImage.
+// User requests through this method are not rate limited.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
+	return l.fetchWithLimiter(scientificName, nil) // No rate limiting for user requests
+}
+
+// fetchWithLimiter retrieves the bird image using the specified rate limiter.
+func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rate.Limiter) (BirdImage, error) {
 	reqID := uuid.New().String()[:8] // Using first 8 chars for brevity
 	logger := imageProviderLogger.With("provider", wikiProviderName, "scientific_name", scientificName, "request_id", reqID)
 	logger.Info("Fetching image from Wikipedia")
@@ -246,7 +278,7 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 	// 	log.Printf("[%s] Debug: Starting Wikipedia fetch for species: %s", reqID, scientificName)
 	// }
 
-	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(reqID, scientificName)
+	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(reqID, scientificName, limiter)
 	if err != nil {
 		// Error already logged in queryThumbnail
 		// if l.debug {
@@ -261,7 +293,7 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 	// 	log.Printf("[%s] Debug: Thumbnail source file: %s", reqID, thumbnailSourceFile)
 	// }
 
-	authorInfo, err := l.queryAuthorInfo(reqID, thumbnailSourceFile)
+	authorInfo, err := l.queryAuthorInfo(reqID, thumbnailSourceFile, limiter)
 	if err != nil {
 		// If it's just a "not found" error, continue with default author info
 		// Only fail for actual errors (network issues, parsing failures)
@@ -308,7 +340,7 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 
 // queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name.
 // It returns the URL and file name of the thumbnail.
-func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, fileName string, err error) {
+func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string, limiter *rate.Limiter) (url, fileName string, err error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "scientific_name", scientificName, "request_id", reqID)
 	logger.Debug("Querying thumbnail")
 	// if l.debug {
@@ -325,7 +357,7 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 		"redirects":   "",
 	}
 
-	page, err := l.queryAndGetFirstPage(reqID, params)
+	page, err := l.queryAndGetFirstPageWithLimiter(reqID, params, limiter)
 	if err != nil {
 		// Log based on error type
 		if errors.Is(err, ErrImageNotFound) {
@@ -380,7 +412,7 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string) (url, f
 
 // queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL.
 // It returns a wikiMediaAuthor struct containing the author and license information.
-func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*wikiMediaAuthor, error) {
+func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string, limiter *rate.Limiter) (*wikiMediaAuthor, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "filename", thumbnailFileName)
 	logger.Debug("Querying author info for file")
 	// if l.debug {
@@ -395,7 +427,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 		"redirects": "",
 	}
 
-	page, err := l.queryAndGetFirstPage(reqID, params)
+	page, err := l.queryAndGetFirstPageWithLimiter(reqID, params, limiter)
 	if err != nil {
 		// Log based on error type
 		if errors.Is(err, ErrImageNotFound) {
@@ -410,13 +442,14 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string) (*w
 		// Check if it's already an enhanced error from queryAndGetFirstPage
 		var enhancedErr *errors.EnhancedError
 		if !errors.As(err, &enhancedErr) {
-			enhancedErr = errors.New(err).
+			enhancedErr = errors.Newf("failed to query Wikipedia for image author information: %v", err).
 				Component("imageprovider").
 				Category(errors.CategoryImageFetch).
 				Context("provider", wikiProviderName).
 				Context("request_id", reqID).
 				Context("thumbnail_filename", thumbnailFileName).
 				Context("operation", "query_author_info").
+				Context("error_detail", err.Error()).
 				Build()
 		}
 		return nil, enhancedErr
@@ -487,12 +520,13 @@ func extractArtistInfo(htmlStr string) (href, text string, err error) {
 	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
 		logger.Error("Failed to parse artist HTML", "error", err)
-		enhancedErr := errors.New(err).
+		enhancedErr := errors.Newf("failed to parse Wikipedia artist attribution HTML: %v", err).
 			Component("imageprovider").
 			Category(errors.CategoryImageFetch).
 			Context("provider", wikiProviderName).
 			Context("html_length", len(htmlStr)).
 			Context("operation", "parse_artist_html").
+			Context("error_detail", err.Error()).
 			Build()
 		return "", "", enhancedErr
 	}
