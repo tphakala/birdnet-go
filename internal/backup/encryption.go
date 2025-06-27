@@ -267,13 +267,13 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	start = time.Now()
 
 	// Create the config directory if it doesn't exist
-	err = os.MkdirAll(filepath.Dir(keyPath), 0o700) // Use = for err
+	err = os.MkdirAll(filepath.Dir(keyPath), 0o700)
 	if err != nil {
 		return NewError(ErrIO, "failed to create config directory for key import", err)
 	}
 
 	// Write the key to file with secure permissions
-	err = os.WriteFile(keyPath, []byte(key), 0o600) // Use = for err
+	err = os.WriteFile(keyPath, []byte(key), 0o600)
 	if err != nil {
 		return NewError(ErrIO, "failed to write imported encryption key file", err)
 	}
