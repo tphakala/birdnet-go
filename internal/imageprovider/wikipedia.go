@@ -57,11 +57,12 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		return nil, enhancedErr
 	}
 
-	// Rate limit: 10 requests per second with burst of 10 for user requests
-	// More restrictive rate limit for background operations: 2 requests per second
-	limiter := rate.NewLimiter(rate.Limit(10), 10)
+	// Rate limiting is only applied to background cache refresh operations
+	// User requests are not rate limited to ensure UI responsiveness
+	// Background operations: 2 requests per second to respect Wikipedia's rate limits
+	limiter := rate.NewLimiter(rate.Limit(10), 10) // Kept for backward compatibility but not used
 	backgroundLimiter := rate.NewLimiter(rate.Limit(2), 2)
-	logger.Info("WikiMedia provider initialized", "user_rate_limit_rps", 10, "background_rate_limit_rps", 2)
+	logger.Info("WikiMedia provider initialized", "user_rate_limit", "none", "background_rate_limit_rps", 2)
 	return &wikiMediaProvider{
 		client:            client,
 		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
@@ -69,12 +70,6 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		backgroundLimiter: backgroundLimiter,
 		maxRetries:        3,
 	}, nil
-}
-
-// queryWithRetry performs a query with retry logic.
-// It waits for rate limiter, retries on error, and waits before retrying.
-func (l *wikiMediaProvider) queryWithRetry(reqID string, params map[string]string) (*jason.Object, error) {
-	return l.queryWithRetryAndLimiter(reqID, params, l.limiter)
 }
 
 // queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
@@ -87,20 +82,24 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 		// if l.debug {
 		// 	log.Printf("[%s] Debug: API request attempt %d", reqID, attempt+1)
 		// }
-		// Wait for rate limiter
-		attemptLogger.Debug("Waiting for rate limiter")
-		err := limiter.Wait(context.Background()) // Using Background context for limiter wait
-		if err != nil {
-			enhancedErr := errors.New(err).
-				Component("imageprovider").
-				Category(errors.CategoryNetwork).
-				Context("provider", wikiProviderName).
-				Context("request_id", reqID).
-				Context("operation", "rate_limiter_wait").
-				Build()
-			attemptLogger.Error("Rate limiter error", "error", enhancedErr)
-			// Don't retry on limiter error, return immediately
-			return nil, enhancedErr
+		// Wait for rate limiter if one is provided (only for background operations)
+		if limiter != nil {
+			attemptLogger.Debug("Waiting for rate limiter")
+			err := limiter.Wait(context.Background()) // Using Background context for limiter wait
+			if err != nil {
+				enhancedErr := errors.New(err).
+					Component("imageprovider").
+					Category(errors.CategoryNetwork).
+					Context("provider", wikiProviderName).
+					Context("request_id", reqID).
+					Context("operation", "rate_limiter_wait").
+					Build()
+				attemptLogger.Error("Rate limiter error", "error", enhancedErr)
+				// Don't retry on limiter error, return immediately
+				return nil, enhancedErr
+			}
+		} else {
+			attemptLogger.Debug("No rate limiting applied (user request)")
 		}
 
 		attemptLogger.Debug("Sending GET request to Wikipedia API")
@@ -132,12 +131,6 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 		Context("operation", "query_with_retry").
 		Build()
 	return nil, enhancedErr
-}
-
-// queryAndGetFirstPage queries Wikipedia with given parameters and returns the first page hit.
-// It handles the API request and response parsing.
-func (l *wikiMediaProvider) queryAndGetFirstPage(reqID string, params map[string]string) (*jason.Object, error) {
-	return l.queryAndGetFirstPageWithLimiter(reqID, params, l.limiter)
 }
 
 // queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
@@ -251,7 +244,8 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 }
 
 // FetchWithContext retrieves the bird image for a given scientific name using a context.
-// If the context indicates a background operation, it uses the more restrictive background rate limiter.
+// If the context indicates a background operation, it uses the background rate limiter.
+// User requests are not rate limited.
 func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
 	// Check if this is a background operation
 	isBackground := false
@@ -261,21 +255,21 @@ func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName
 		}
 	}
 
-	// Use appropriate rate limiter
+	// Only use rate limiter for background operations
 	var limiter *rate.Limiter
 	if isBackground {
 		limiter = l.backgroundLimiter
-	} else {
-		limiter = l.limiter
 	}
+	// For user requests, limiter remains nil (no rate limiting)
 
 	return l.fetchWithLimiter(scientificName, limiter)
 }
 
-// fetch retrieves the bird image for a given scientific name.
+// Fetch retrieves the bird image for a given scientific name.
 // It queries for the thumbnail and author information, then constructs a BirdImage.
+// User requests through this method are not rate limited.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
-	return l.fetchWithLimiter(scientificName, l.limiter)
+	return l.fetchWithLimiter(scientificName, nil) // No rate limiting for user requests
 }
 
 // fetchWithLimiter retrieves the bird image using the specified rate limiter.

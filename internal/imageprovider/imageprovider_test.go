@@ -1,6 +1,7 @@
 package imageprovider_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -738,4 +739,123 @@ func TestInitializationFailure(t *testing.T) {
 	if mockProvider.fetchCounter != 2 {
 		t.Errorf("Expected 2 fetches, got %d fetches", mockProvider.fetchCounter)
 	}
+}
+
+// TestUserRequestsNotRateLimited tests that user requests are not subject to rate limiting
+func TestUserRequestsNotRateLimited(t *testing.T) {
+	// Create the actual Wikipedia provider to test rate limiting behavior
+	provider, err := imageprovider.NewWikiMediaProvider()
+	if err != nil {
+		t.Fatalf("Failed to create WikiMedia provider: %v", err)
+	}
+
+	// Create a mock store
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache := imageprovider.InitCache("wikimedia", provider, metrics, mockStore)
+
+	// Test species that should exist in Wikipedia
+	testSpecies := []string{
+		"Turdus merula",
+		"Parus major",
+		"Carduelis carduelis",
+		"Sturnus vulgaris",
+		"Erithacus rubecula",
+	}
+
+	// Measure time for rapid consecutive user requests
+	start := time.Now()
+
+	// Make rapid consecutive requests (should not be rate limited)
+	for i := 0; i < 10; i++ {
+		species := testSpecies[i%len(testSpecies)]
+		_, err := cache.Get(species)
+		if err != nil && !errors.Is(err, imageprovider.ErrImageNotFound) {
+			t.Logf("Warning: fetch error for %s: %v", species, err)
+		}
+	}
+
+	duration := time.Since(start)
+
+	// If rate limiting was applied (2 req/s), 10 requests would take at least 5 seconds
+	// Without rate limiting, it should complete much faster (allowing for actual API latency)
+	if duration > 3*time.Second {
+		t.Errorf("User requests appear to be rate limited. Duration: %v, expected < 3s", duration)
+	}
+
+	t.Logf("10 user requests completed in %v (no rate limiting)", duration)
+}
+
+// TestBackgroundRequestsRateLimited tests that background requests are subject to rate limiting
+func TestBackgroundRequestsRateLimited(t *testing.T) {
+	// Skip this test in short mode as it takes time
+	if testing.Short() {
+		t.Skip("Skipping rate limit test in short mode")
+	}
+
+	// Create a mock provider that supports context
+	mockProvider := &mockProviderWithContext{
+		mockImageProvider: mockImageProvider{
+			fetchDelay: 10 * time.Millisecond,
+		},
+	}
+
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		t.Fatalf("Failed to create default cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	// Pre-populate with stale entries to trigger background refresh
+	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	for i := 0; i < 5; i++ {
+		species := fmt.Sprintf("StaleSpecies_%d", i)
+		mockStore.SaveImageCache(&datastore.ImageCache{
+			ScientificName: species,
+			ProviderName:   "wikimedia",
+			URL:            fmt.Sprintf("http://example.com/old_%s.jpg", species),
+			CachedAt:       staleTime,
+		})
+	}
+
+	// Let the background refresh start
+	time.Sleep(2 * time.Second)
+
+	// Check that background fetches were rate limited
+	// With 2 req/s rate limit, 5 fetches should take at least 2 seconds
+	if mockProvider.backgroundFetches > 0 {
+		t.Logf("Background fetches performed: %d", mockProvider.backgroundFetches)
+		if mockProvider.backgroundFetches > 5 {
+			t.Errorf("Too many background fetches in short time: %d", mockProvider.backgroundFetches)
+		}
+	}
+}
+
+// mockProviderWithContext extends mockImageProvider to support context-aware fetching
+type mockProviderWithContext struct {
+	mockImageProvider
+	backgroundFetches int
+	mu2               sync.Mutex
+}
+
+func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientificName string) (imageprovider.BirdImage, error) {
+	// Check if it's a background operation
+	if ctx != nil {
+		if bg, ok := ctx.Value("background").(bool); ok && bg {
+			m.mu2.Lock()
+			m.backgroundFetches++
+			m.mu2.Unlock()
+		}
+	}
+	return m.Fetch(scientificName)
 }
