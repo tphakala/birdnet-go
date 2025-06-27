@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +19,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -201,7 +201,12 @@ func (m *Manager) RegisterSource(source Source) error {
 	defer m.mu.Unlock()
 
 	if err := source.Validate(); err != nil {
-		return NewError(ErrValidation, "invalid source configuration", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_source_config").
+			Context("source", source.Name()).
+			Build()
 	}
 
 	m.sources[source.Name()] = source
@@ -214,7 +219,12 @@ func (m *Manager) RegisterTarget(target Target) error {
 	defer m.mu.Unlock()
 
 	if err := target.Validate(); err != nil {
-		return NewError(ErrValidation, "invalid target configuration", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_target_config").
+			Context("target", target.Name()).
+			Build()
 	}
 
 	m.targets[target.Name()] = target
@@ -230,10 +240,18 @@ func (m *Manager) Start() error {
 
 	// Validate that we have at least one source and target
 	if len(m.sources) == 0 {
-		return NewError(ErrValidation, "no backup sources registered", nil)
+		return errors.Newf("no backup sources registered").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_config").
+			Build()
 	}
 	if len(m.targets) == 0 {
-		return NewError(ErrValidation, "no backup targets registered", nil)
+		return errors.Newf("no backup targets registered").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_config").
+			Build()
 	}
 
 	// Validate encryption configuration if enabled
@@ -258,7 +276,11 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 
 	// Validate that we have at least one target
 	if len(m.targets) == 0 {
-		return NewError(ErrValidation, "no backup targets registered, backup cannot proceed", nil)
+		return errors.Newf("no backup targets registered, backup cannot proceed").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "perform_backup").
+			Build()
 	}
 
 	// Get current timestamp in UTC
@@ -276,7 +298,12 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 		case <-ctx.Done():
 			// Clean up temp dirs before returning
 			m.cleanupTempDirectories(allTempDirs)
-			return NewError(ErrCanceled, "backup process cancelled", ctx.Err())
+			return errors.New(ctx.Err()).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "perform_backup").
+				Context("error_type", "cancelled").
+				Build()
 		default:
 		}
 		startSourceTime := time.Now()
@@ -330,7 +357,12 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	// 2. Create a temporary directory for staging the archive
 	tempDir, err := os.MkdirTemp("", fmt.Sprintf("birdnet-go-backup-%s-*", sourceName))
 	if err != nil {
-		return tempDirs, NewError(ErrIO, "failed to create temporary directory", err)
+		return tempDirs, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_temp_directory").
+			Context("source", source.Name()).
+			Build()
 	}
 	tempDirs = append(tempDirs, tempDir) // Add to cleanup list
 	m.logger.Debug("Created temporary directory", "source_name", sourceName, "temp_dir", tempDir)
@@ -396,7 +428,12 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	// 7. Update metadata with final size and checksum (of the final file, possibly encrypted)
 	fileInfo, err := os.Stat(finalArchivePath)
 	if err != nil {
-		return tempDirs, NewError(ErrIO, "failed to stat final archive file", err)
+		return tempDirs, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "stat_archive_file").
+			Context("archive_path", archivePath).
+			Build()
 	}
 	metadata.Size = fileInfo.Size()
 	m.logger.Debug("Updated metadata with final size", "source_name", sourceName, "size", metadata.Size)
@@ -425,7 +462,11 @@ func (m *Manager) hashConfig() (string, error) {
 	// Marshal the sanitized config to YAML (or JSON, ensure consistency)
 	yamlBytes, err := yaml.Marshal(sanitizedConf)
 	if err != nil {
-		return "", NewError(ErrConfig, "failed to marshal sanitized config for hashing", err)
+		return "", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "marshal_config_for_hash").
+			Build()
 	}
 
 	hash := sha256.Sum256(yamlBytes)
@@ -442,7 +483,11 @@ func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 	// Marshal the sanitized config to YAML
 	yamlBytes, err := yaml.Marshal(sanitizedConf)
 	if err != nil {
-		return NewError(ErrConfig, "failed to marshal sanitized config", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "marshal_config").
+			Build()
 	}
 
 	// Create TAR header
@@ -455,12 +500,20 @@ func (m *Manager) addConfigToArchive(tw *tar.Writer, metadata *Metadata) error {
 
 	// Write header
 	if err := tw.WriteHeader(hdr); err != nil {
-		return NewError(ErrIO, "failed to write config tar header", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_config_tar_header").
+			Build()
 	}
 
 	// Write config data
 	if _, err := tw.Write(yamlBytes); err != nil {
-		return NewError(ErrIO, "failed to write config data to tar", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_config_to_tar").
+			Build()
 	}
 	m.logger.Debug("Finished adding sanitized config to archive", "backup_id", metadata.ID, "duration_ms", time.Since(start).Milliseconds())
 	return nil
@@ -560,11 +613,11 @@ func combineErrors(errs []error) error {
 	if len(errs) == 0 {
 		return nil
 	}
-	var errMsgs []string
-	for _, err := range errs {
-		errMsgs = append(errMsgs, err.Error())
+	if len(errs) == 1 {
+		return errs[0]
 	}
-	return NewError(ErrUnknown, fmt.Sprintf("multiple errors occurred: %s", strings.Join(errMsgs, "; ")), nil)
+	// Use the standard library's Join for multiple errors
+	return errors.Join(errs...)
 }
 
 // createArchive creates a tar.gz archive containing metadata, config, and backup data.
@@ -576,7 +629,12 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	// Create the archive file
 	archiveFile, err := os.Create(archivePath)
 	if err != nil {
-		return NewError(ErrIO, "failed to create archive file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_archive_file").
+			Context("archive_path", archivePath).
+			Build()
 	}
 	defer archiveFile.Close()
 
@@ -617,15 +675,27 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 
 	// Ensure everything is written (Close writers)
 	if err := tarWriter.Close(); err != nil {
-		return NewError(ErrIO, "failed to close tar writer", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "close_tar_writer").
+			Build()
 	}
 	if closer, ok := fileWriter.(io.Closer); ok && closer != archiveFile { // Don't double-close archiveFile
 		if err := closer.Close(); err != nil {
-			return NewError(ErrIO, "failed to close intermediate writer (e.g., gzip)", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryFileIO).
+				Context("operation", "close_intermediate_writer").
+				Build()
 		}
 	}
 	if err := archiveFile.Close(); err != nil {
-		return NewError(ErrIO, "failed to close archive file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "close_archive_file").
+			Build()
 	}
 
 	// Update metadata size *before* potential encryption
@@ -646,7 +716,11 @@ func (m *Manager) addMetadataToArchive(ctx context.Context, tw *tar.Writer, meta
 	// Marshal metadata to JSON
 	jsonData, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
-		return NewError(ErrValidation, "failed to marshal metadata to JSON", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "write_metadata_to_tar").
+			Build()
 	}
 
 	// Create TAR header for metadata.json
@@ -659,12 +733,20 @@ func (m *Manager) addMetadataToArchive(ctx context.Context, tw *tar.Writer, meta
 
 	// Write header
 	if err := tw.WriteHeader(hdr); err != nil {
-		return NewError(ErrIO, "failed to write metadata tar header", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_metadata_tar_header").
+			Build()
 	}
 
 	// Write JSON data
 	if _, err := tw.Write(jsonData); err != nil {
-		return NewError(ErrIO, "failed to write metadata JSON to tar", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_metadata_to_tar").
+			Build()
 	}
 	m.logger.Debug("Added metadata.json", "backup_id", metadata.ID, "duration_ms", time.Since(start).Milliseconds())
 	return nil
@@ -689,7 +771,11 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 
 	// Write header
 	if err := tw.WriteHeader(hdr); err != nil {
-		return NewError(ErrIO, "failed to write backup data tar header", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_backup_data_tar_header").
+			Build()
 	}
 
 	// Copy data from source reader to tar writer
@@ -699,9 +785,19 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 	if err != nil {
 		// Check for context cancellation specifically if possible
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return NewError(ErrCanceled, "backup data streaming cancelled or timed out", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "stream_backup_data").
+				Context("error_type", "cancelled").
+				Build()
 		}
-		return NewError(ErrIO, "failed to stream backup data to tar", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "stream_backup_data_to_tar").
+			Context("bytes_copied", copiedBytes).
+			Build()
 	}
 
 	m.logger.Debug("Finished adding backup data stream",
@@ -721,7 +817,12 @@ func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath strin
 	// Consider streaming encryption for very large files if memory becomes an issue.
 	plaintext, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return NewError(ErrIO, "failed to read archive file for encryption", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_archive_for_encryption").
+			Context("source_path", sourcePath).
+			Build()
 	}
 
 	// Get encryption key
@@ -739,7 +840,12 @@ func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath strin
 	// Write encrypted data to destination file
 	err = os.WriteFile(destPath, ciphertext, 0o600) // Secure permissions
 	if err != nil {
-		return NewError(ErrIO, "failed to write encrypted archive file", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_encrypted_archive").
+			Context("dest_path", destPath).
+			Build()
 	}
 
 	m.logger.Debug("Encryption successful",
@@ -759,7 +865,12 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 	var num int
 	var unit string
 	if _, err := fmt.Sscanf(age, "%d%s", &num, &unit); err != nil {
-		return 0, NewError(ErrValidation, fmt.Sprintf("invalid retention age format: %s", age), err)
+		return 0, errors.Newf("invalid retention age format: %s - %v", age, err).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "parse_retention_age").
+			Context("age", age).
+			Build()
 	}
 
 	// Convert to duration
@@ -771,7 +882,12 @@ func (m *Manager) parseRetentionAge(age string) (time.Duration, error) {
 	case "y":
 		return time.Duration(num) * 365 * 24 * time.Hour, nil // approximate
 	default:
-		return 0, NewError(ErrValidation, fmt.Sprintf("invalid retention age unit: %s", unit), nil)
+		return 0, errors.Newf("invalid retention age unit: %s", unit).
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "parse_retention_age").
+			Context("unit", unit).
+			Build()
 	}
 }
 

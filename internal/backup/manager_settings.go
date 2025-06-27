@@ -2,9 +2,8 @@
 package backup
 
 import (
-	"fmt"
-
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // UpdateSettings updates the backup manager with new settings
@@ -19,7 +18,11 @@ func (m *Manager) UpdateSettings(config *conf.BackupConfig) error {
 	// Update encryption settings if enabled
 	if config.Encryption {
 		if config.EncryptionKey == "" {
-			return fmt.Errorf("encryption enabled but no encryption key provided")
+			return errors.Newf("encryption enabled but no encryption key provided").
+				Component("backup").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "update_settings").
+				Build()
 		}
 
 		// Optional: Update and validate encryption key if your Manager has an encryptionKey field

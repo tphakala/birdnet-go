@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // BackupSchedule represents a scheduled backup task
@@ -384,12 +385,22 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 		if scheduleConf.Hour < 0 || scheduleConf.Hour > 23 {
 			errMsg := fmt.Sprintf("invalid hour %d in schedule config", scheduleConf.Hour)
 			s.logger.Error(errMsg, "config", scheduleConf)
-			return NewError(ErrConfig, errMsg, nil)
+			return errors.Newf("%s", errMsg).
+				Component("backup").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "parse_schedule_config").
+				Context("hour", scheduleConf.Hour).
+				Build()
 		}
 		if scheduleConf.Minute < 0 || scheduleConf.Minute > 59 {
 			errMsg := fmt.Sprintf("invalid minute %d in schedule config", scheduleConf.Minute)
 			s.logger.Error(errMsg, "config", scheduleConf)
-			return NewError(ErrConfig, errMsg, nil)
+			return errors.Newf("%s", errMsg).
+				Component("backup").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "parse_schedule_config").
+				Context("minute", scheduleConf.Minute).
+				Build()
 		}
 
 		var weekday time.Weekday
@@ -409,7 +420,12 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 				if err != nil {
 					errMsg := fmt.Sprintf("invalid weekday '%s' in schedule config", scheduleConf.Weekday)
 					s.logger.Error(errMsg, "config", scheduleConf, "error", err)
-					return NewError(ErrConfig, errMsg, err)
+					return errors.New(err).
+						Component("backup").
+						Category(errors.CategoryConfiguration).
+						Context("operation", "parse_weekday_for_weekly_schedule").
+						Context("weekday", scheduleConf.Weekday).
+						Build()
 				}
 				weekday = parsedDay
 			}
@@ -420,7 +436,12 @@ func (s *Scheduler) LoadFromConfig(config *conf.BackupConfig) error {
 			if err != nil {
 				errMsg := fmt.Sprintf("invalid weekday '%s' in schedule config", scheduleConf.Weekday)
 				s.logger.Error(errMsg, "config", scheduleConf, "error", err)
-				return NewError(ErrConfig, errMsg, err)
+				return errors.New(err).
+					Component("backup").
+					Category(errors.CategoryConfiguration).
+					Context("operation", "parse_weekday_for_schedule").
+					Context("weekday", scheduleConf.Weekday).
+					Build()
 			}
 			weekday = parsedDay
 		default:
