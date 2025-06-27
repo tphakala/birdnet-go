@@ -71,7 +71,7 @@ func (s *Server) initRoutes() {
 		"/dashboard":         {Path: "/dashboard", TemplateName: "dashboard", Title: "Dashboard"},
 		"/logs":              {Path: "/logs", TemplateName: "logs", Title: "Logs"},
 		"/analytics":         {Path: "/analytics", TemplateName: "analytics", Title: "Analytics"},
-		"/analytics/species": {Path: "/analytics/species", TemplateName: "allspecies", Title: "All Species"},
+		"/analytics/species": {Path: "/analytics/species", TemplateName: "species", Title: "Species"},
 		"/search":            {Path: "/search", TemplateName: "search", Title: "Search Detections"},
 		"/about":             {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
 		// System route is protected by auth middleware

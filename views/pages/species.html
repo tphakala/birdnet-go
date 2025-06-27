@@ -1,11 +1,27 @@
-{{define "allspecies"}}
+{{define "species"}}
 
-<div class="col-span-12 space-y-4" x-cloak x-data="allSpeciesUI" role="region" aria-label="All Species Detected">
+<div class="col-span-12 space-y-4" x-cloak x-data="speciesUI" role="region" aria-label="Species">
     <!-- Page Header -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body card-padding">
-            <h1 class="card-title text-2xl">All Species Detected</h1>
-            <p class="text-base-content/60">Comprehensive list of all bird species that have been detected</p>
+            <div class="flex justify-between items-start">
+                <div>
+                    <h1 class="card-title text-2xl">Species</h1>
+                    <p class="text-base-content/60">Comprehensive list of all bird species that have been detected</p>
+                </div>
+                <div class="stats shadow">
+                    <div class="stat">
+                        <div class="stat-title">Total Species</div>
+                        <div class="stat-value text-2xl" x-text="getTotalSpeciesCount()"></div>
+                        <div class="stat-desc" x-text="getTotalDetectionsText()"></div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-title">Avg Confidence</div>
+                        <div class="stat-value text-2xl" x-text="getAverageConfidence()"></div>
+                        <div class="stat-desc">Overall average</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -142,14 +158,19 @@
             <!-- Grid View -->
             <div x-show="!isLoading && viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 <template x-for="species in filteredSpecies" :key="species.scientific_name">
-                    <div class="card bg-base-200 hover:shadow-md transition-shadow cursor-pointer" @click="showSpeciesDetails(species)">
+                    <div class="card bg-base-200">
                         <figure class="px-4 pt-4">
-                            <img 
-                                :src="species.thumbnail_url || '/assets/images/bird-placeholder.svg'" 
-                                :alt="species.common_name"
-                                class="rounded-xl h-32 w-full object-cover"
-                                @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
-                            />
+                            <template x-if="species.thumbnail_url">
+                                <img 
+                                    :src="species.thumbnail_url" 
+                                    :alt="species.common_name"
+                                    class="rounded-xl h-40 w-full object-cover"
+                                    @error="$event.target.style.display = 'none'; $event.target.parentElement.innerHTML = '<div class=\'rounded-xl h-40 w-full bg-base-300\'></div>';"
+                                />
+                            </template>
+                            <template x-if="!species.thumbnail_url">
+                                <div class="rounded-xl h-40 w-full bg-base-300"></div>
+                            </template>
                         </figure>
                         <div class="card-body p-4">
                             <h3 class="card-title text-base" x-text="species.common_name"></h3>
@@ -188,15 +209,16 @@
                     </thead>
                     <tbody>
                         <template x-for="(species, index) in filteredSpecies" :key="species.scientific_name">
-                            <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'" class="hover cursor-pointer" @click="showSpeciesDetails(species)">
+                            <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'">
                                 <td>
                                     <div class="flex items-center gap-3">
                                         <div class="avatar">
-                                            <div class="mask mask-squircle w-12 h-12">
+                                            <div class="mask mask-squircle w-12 h-12" :class="{'bg-base-300': !species.thumbnail_url}">
                                                 <img 
-                                                    :src="species.thumbnail_url || '/assets/images/bird-placeholder.svg'" 
+                                                    x-show="species.thumbnail_url"
+                                                    :src="species.thumbnail_url" 
                                                     :alt="species.common_name"
-                                                    @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
+                                                    @error="$event.target.style.display = 'none'; $event.target.parentElement.classList.add('bg-base-300');"
                                                 />
                                             </div>
                                         </div>
@@ -242,75 +264,12 @@
     </div>
 </div>
 
-<!-- Species Details Modal -->
-<dialog id="speciesDetailsModal" class="modal">
-    <div class="modal-box w-11/12 max-w-5xl">
-        <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
-        </form>
-        <div x-show="selectedSpecies">
-            <h3 class="font-bold text-lg" x-text="selectedSpecies?.common_name"></h3>
-            <p class="text-sm text-base-content/60 italic mb-4" x-text="selectedSpecies?.scientific_name"></p>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <img 
-                        :src="selectedSpecies?.thumbnail_url || '/assets/images/bird-placeholder.svg'" 
-                        :alt="selectedSpecies?.common_name"
-                        class="rounded-lg w-full"
-                        @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
-                    />
-                </div>
-                <div class="space-y-3">
-                    <div>
-                        <h4 class="font-semibold mb-2">Detection Statistics</h4>
-                        <dl class="space-y-1">
-                            <div class="flex justify-between">
-                                <dt class="text-base-content/60">Total Detections:</dt>
-                                <dd class="font-semibold" x-text="selectedSpecies?.count"></dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-base-content/60">Average Confidence:</dt>
-                                <dd class="font-semibold" x-text="formatPercentage(selectedSpecies?.avg_confidence)"></dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-base-content/60">Maximum Confidence:</dt>
-                                <dd class="font-semibold" x-text="formatPercentage(selectedSpecies?.max_confidence)"></dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-base-content/60">First Detected:</dt>
-                                <dd class="text-sm" x-text="formatDateTime(selectedSpecies?.first_heard)"></dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-base-content/60">Last Detected:</dt>
-                                <dd class="text-sm" x-text="formatDateTime(selectedSpecies?.last_heard)"></dd>
-                            </div>
-                        </dl>
-                    </div>
-                    <div class="pt-4">
-                        <a 
-                            :href="'/search?species=' + encodeURIComponent(selectedSpecies?.scientific_name)" 
-                            class="btn btn-primary btn-sm"
-                        >
-                            View All Detections
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
-</dialog>
-
 <script>
     document.addEventListener('alpine:init', () => {
-        Alpine.data('allSpeciesUI', () => ({
+        Alpine.data('speciesUI', () => ({
             isLoading: true,
             speciesData: [],
             filteredSpecies: [],
-            selectedSpecies: null,
             viewMode: 'grid', // 'grid' or 'list'
             filters: {
                 timePeriod: 'all',
@@ -473,6 +432,28 @@
                 return this.filteredSpecies.length;
             },
             
+            getTotalSpeciesCount() {
+                return this.speciesData.length;
+            },
+            
+            getTotalDetections() {
+                return this.speciesData.reduce((sum, species) => sum + species.count, 0);
+            },
+            
+            getTotalDetectionsText() {
+                const total = this.getTotalDetections();
+                return `${this.formatNumber(total)} total detections`;
+            },
+            
+            getAverageConfidence() {
+                if (this.speciesData.length === 0) return '0%';
+                const totalWeighted = this.speciesData.reduce((sum, species) => 
+                    sum + (species.avg_confidence * species.count), 0);
+                const totalCount = this.getTotalDetections();
+                if (totalCount === 0) return '0%';
+                return ((totalWeighted / totalCount) * 100).toFixed(1) + '%';
+            },
+            
             resetFilters() {
                 this.filters.timePeriod = 'all';
                 this.filters.sortOrder = 'count_desc';
@@ -488,11 +469,6 @@
                 this.fetchData();
             },
             
-            showSpeciesDetails(species) {
-                this.selectedSpecies = species;
-                document.getElementById('speciesDetailsModal').showModal();
-            },
-            
             async loadThumbnailsAsync() {
                 // Skip if we don't have species data
                 if (!this.speciesData || this.speciesData.length === 0) {
@@ -503,7 +479,7 @@
                 
                 // Get scientific names that need thumbnails
                 const scientificNames = this.speciesData
-                    .filter(species => !species.thumbnail_url || species.thumbnail_url === '/assets/images/bird-placeholder.svg')
+                    .filter(species => !species.thumbnail_url)
                     .map(species => species.scientific_name);
                 
                 if (scientificNames.length === 0) {
