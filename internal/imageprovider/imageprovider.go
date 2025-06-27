@@ -776,7 +776,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	dbImage, err := c.loadFromDBCache(scientificName)
 	dbDuration := time.Since(dbStart)
 
-	if dbDuration > 50*time.Millisecond {
+	if c.debug && dbDuration > 50*time.Millisecond {
 		log.Printf("fetchAndStore: DB cache lookup for %s took %v", scientificName, dbDuration)
 	}
 
@@ -842,7 +842,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	fetchedImage, fetchErr := c.provider.Fetch(scientificName)
 	providerDuration := time.Since(providerStart)
 
-	if providerDuration > 100*time.Millisecond {
+	if c.debug && providerDuration > 100*time.Millisecond {
 		log.Printf("fetchAndStore: Provider fetch for %s took %v", scientificName, providerDuration)
 	}
 
@@ -913,7 +913,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	}
 
 	totalDuration := time.Since(fetchStart)
-	if totalDuration > 200*time.Millisecond {
+	if c.debug && totalDuration > 200*time.Millisecond {
 		log.Printf("fetchAndStore: Total time for %s was %v (DB: %v, Provider: %v)",
 			scientificName, totalDuration, dbDuration, providerDuration)
 	}
@@ -1265,24 +1265,32 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 	}
 
 	memoryCacheDuration := time.Since(memoryCacheStart)
-	log.Printf("GetBatch: Memory cache check completed in %v - found %d/%d in cache",
-		memoryCacheDuration, len(result), len(scientificNames))
+	if c.debug {
+		log.Printf("GetBatch: Memory cache check completed in %v - found %d/%d in cache",
+			memoryCacheDuration, len(result), len(scientificNames))
+	}
 
 	// If all were in memory cache, return early
 	if len(missingNames) == 0 {
 		totalDuration := time.Since(batchStart)
-		log.Printf("GetBatch: All images found in memory cache, total time: %v", totalDuration)
+		if c.debug {
+			log.Printf("GetBatch: All images found in memory cache, total time: %v", totalDuration)
+		}
 		return result
 	}
 
 	// Try batch loading from DB cache
 	if c.store != nil && len(missingNames) > 0 {
 		dbBatchStart := time.Now()
-		log.Printf("GetBatch: Attempting batch DB cache lookup for %d items", len(missingNames))
+		if c.debug {
+			log.Printf("GetBatch: Attempting batch DB cache lookup for %d items", len(missingNames))
+		}
 
 		dbImages, err := c.batchLoadFromDB(missingNames)
 		if err != nil {
-			log.Printf("GetBatch: Batch DB load error: %v", err)
+			if c.debug {
+				log.Printf("GetBatch: Batch DB load error: %v", err)
+			}
 		} else {
 			// Process DB results
 			stillMissing := make([]string, 0, len(missingNames))
@@ -1303,15 +1311,19 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 			}
 			missingNames = stillMissing
 			dbBatchDuration := time.Since(dbBatchStart)
-			log.Printf("GetBatch: Batch DB lookup completed in %v - found %d images in DB (hit rate: %.1f%%), %d still need provider fetch",
-				dbBatchDuration, dbHitCount, float64(dbHitCount)/float64(len(missingNames)+dbHitCount)*100, len(missingNames))
+			if c.debug {
+				log.Printf("GetBatch: Batch DB lookup completed in %v - found %d images in DB (hit rate: %.1f%%), %d still need provider fetch",
+					dbBatchDuration, dbHitCount, float64(dbHitCount)/float64(len(missingNames)+dbHitCount)*100, len(missingNames))
+			}
 		}
 	}
 
 	// If still missing after DB batch lookup, fetch individually from provider
 	// TODO: In future, implement batch provider fetch if provider supports it
 	if len(missingNames) > 0 {
-		log.Printf("GetBatch: Need to fetch %d images from provider", len(missingNames))
+		if c.debug {
+			log.Printf("GetBatch: Need to fetch %d images from provider", len(missingNames))
+		}
 		fetchStart := time.Now()
 
 		// Use goroutines for parallel fetching with a worker pool
@@ -1333,7 +1345,7 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 				image, err := c.fetchAndStore(scientificName)
 				singleFetchDuration := time.Since(singleFetchStart)
 
-				if singleFetchDuration > 100*time.Millisecond {
+				if c.debug && singleFetchDuration > 100*time.Millisecond {
 					log.Printf("GetBatch: Slow provider fetch for %s took %v", scientificName, singleFetchDuration)
 				}
 
@@ -1350,23 +1362,27 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 			res := <-resultChan
 			if res.err == nil {
 				result[res.name] = res.image
-			} else {
+			} else if c.debug {
 				log.Printf("GetBatch: Failed to fetch %s from provider: %v", res.name, res.err)
 			}
 
-			if (i+1)%10 == 0 {
+			if c.debug && (i+1)%10 == 0 {
 				log.Printf("GetBatch: Progress %d/%d images fetched from provider", i+1, len(missingNames))
 			}
 		}
 		close(resultChan)
 
 		fetchDuration := time.Since(fetchStart)
-		log.Printf("GetBatch: Provider fetch phase completed in %v (parallel with %d workers)", fetchDuration, maxWorkers)
+		if c.debug {
+			log.Printf("GetBatch: Provider fetch phase completed in %v (parallel with %d workers)", fetchDuration, maxWorkers)
+		}
 	}
 
 	totalDuration := time.Since(batchStart)
-	log.Printf("GetBatch: Completed batch operation - returned %d/%d images in %v",
-		len(result), len(scientificNames), totalDuration)
+	if c.debug {
+		log.Printf("GetBatch: Completed batch operation - returned %d/%d images in %v",
+			len(result), len(scientificNames), totalDuration)
+	}
 
 	return result
 }
