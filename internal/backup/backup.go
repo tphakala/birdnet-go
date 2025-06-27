@@ -84,8 +84,8 @@ type BackupInfo struct {
 type BackupSet map[string]BackupInfo
 
 // Add adds a backup to the set
-func (bs BackupSet) Add(backup BackupInfo) {
-	bs[backup.ID] = backup
+func (bs BackupSet) Add(backup *BackupInfo) {
+	bs[backup.ID] = *backup
 }
 
 // Contains checks if a backup ID exists in the set
@@ -102,8 +102,8 @@ func (bs BackupSet) Size() int {
 // ToSlice returns all backups in the set as a slice
 func (bs BackupSet) ToSlice() []BackupInfo {
 	backups := make([]BackupInfo, 0, len(bs))
-	for _, backup := range bs {
-		backups = append(backups, backup)
+	for id := range bs {
+		backups = append(backups, bs[id])
 	}
 	return backups
 }
@@ -927,7 +927,7 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 			} else {
 				// Backup is older than max age, mark for deletion
 				m.logger.Debug("Marking backup for deletion (age exceeded)", "backup_id", backups[i].ID, "timestamp", backups[i].Timestamp, "cutoff_time", cutoffTime)
-				backupsToDelete.Add(backups[i])
+				backupsToDelete.Add(&backups[i])
 				continue // Move to next backup once marked for deletion by age
 			}
 		}
@@ -940,7 +940,7 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 			} else {
 				// Backup exceeds the max count limit, mark for deletion
 				m.logger.Debug("Marking backup for deletion (count exceeded)", "backup_id", backups[i].ID, "index", i, "max_count", retention.MaxBackups)
-				backupsToDelete.Add(backups[i])
+				backupsToDelete.Add(&backups[i])
 				continue // Move to next backup
 			}
 		}
@@ -954,20 +954,21 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 			// Backup was not explicitly kept by min_count, age, or max_count rules, mark for deletion
 			// This handles cases where MaxBackups is 0 (unlimited) but MaxAge exists.
 			m.logger.Debug("Marking backup for deletion (not kept by other rules)", "backup_id", backups[i].ID)
-			backupsToDelete.Add(backups[i])
+			backupsToDelete.Add(&backups[i])
 		}
 
 	}
 
 	// Perform deletions for unique IDs marked
-	for _, backup := range backupsToDelete {
+	for id := range backupsToDelete {
+		backup := backupsToDelete[id]
 		select {
 		case <-ctx.Done():
 			m.logger.Warn("Retention policy enforcement cancelled", "target_name", target.Name(), "source_type", sourceType)
 			deleteErrors = append(deleteErrors, ctx.Err())
 			return combineErrors(deleteErrors) // Return immediately
 		default:
-			// backup is already available from the range
+			// backup is retrieved from the map by ID
 			if err := m.deleteBackupWithTimeout(ctx, &backup, target); err != nil {
 				deleteErrors = append(deleteErrors, err)
 				// Continue trying to delete others even if one fails
