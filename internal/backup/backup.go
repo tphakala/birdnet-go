@@ -80,6 +80,34 @@ type BackupInfo struct {
 	Target string // Name of the target storing this backup
 }
 
+// BackupSet is a set of unique backups to track for deletion
+type BackupSet map[string]BackupInfo
+
+// Add adds a backup to the set
+func (bs BackupSet) Add(backup BackupInfo) {
+	bs[backup.ID] = backup
+}
+
+// Contains checks if a backup ID exists in the set
+func (bs BackupSet) Contains(id string) bool {
+	_, exists := bs[id]
+	return exists
+}
+
+// Size returns the number of backups in the set
+func (bs BackupSet) Size() int {
+	return len(bs)
+}
+
+// ToSlice returns all backups in the set as a slice
+func (bs BackupSet) ToSlice() []BackupInfo {
+	backups := make([]BackupInfo, 0, len(bs))
+	for _, backup := range bs {
+		backups = append(backups, backup)
+	}
+	return backups
+}
+
 // FileMetadata contains platform-specific file metadata
 type FileMetadata struct {
 	Mode   os.FileMode // File mode and permission bits
@@ -103,8 +131,23 @@ type BackupStats struct {
 
 // sanitizeConfig creates a copy of the configuration with sensitive data removed
 func sanitizeConfig(config *conf.Settings) *conf.Settings {
-	// Create a deep copy of the config
-	sanitized := *config
+	// Create a deep copy of the config using JSON serialization
+	// This ensures all nested structures are properly duplicated
+	jsonData, err := json.Marshal(config)
+	if err != nil {
+		// If marshaling fails, fall back to shallow copy
+		// This shouldn't happen with valid config
+		sanitized := *config
+		return &sanitized
+	}
+
+	var sanitized conf.Settings
+	if err := json.Unmarshal(jsonData, &sanitized); err != nil {
+		// If unmarshaling fails, fall back to shallow copy
+		// This shouldn't happen with valid JSON
+		sanitized := *config
+		return &sanitized
+	}
 
 	// Remove sensitive information
 	sanitized.Security.BasicAuth.Password = ""
@@ -864,7 +907,7 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 	now := time.Now()
 	deleteCount := 0
 	var deleteErrors []error
-	backupsToDelete := make(map[string]BackupInfo) // Use map to track unique backups for deletion
+	backupsToDelete := make(BackupSet) // Use BackupSet to track unique backups for deletion
 
 	// Iterate through backups (sorted newest first) to determine which to delete
 	for i := range backups {
@@ -884,7 +927,7 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 			} else {
 				// Backup is older than max age, mark for deletion
 				m.logger.Debug("Marking backup for deletion (age exceeded)", "backup_id", backups[i].ID, "timestamp", backups[i].Timestamp, "cutoff_time", cutoffTime)
-				backupsToDelete[backups[i].ID] = backups[i]
+				backupsToDelete.Add(backups[i])
 				continue // Move to next backup once marked for deletion by age
 			}
 		}
@@ -897,7 +940,7 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 			} else {
 				// Backup exceeds the max count limit, mark for deletion
 				m.logger.Debug("Marking backup for deletion (count exceeded)", "backup_id", backups[i].ID, "index", i, "max_count", retention.MaxBackups)
-				backupsToDelete[backups[i].ID] = backups[i]
+				backupsToDelete.Add(backups[i])
 				continue // Move to next backup
 			}
 		}
@@ -905,26 +948,26 @@ func (m *Manager) enforceRetentionPolicy(ctx context.Context, target Target, bac
 		// If no rule decided to keep OR delete it explicitly (e.g. age > max_age), default might be to delete or keep?
 		// Current logic implicitly keeps if not deleted by age or max count, AFTER the min count is satisfied.
 		// Let's assume if it wasn't marked for deletion, it's kept (respecting min count implicitly).
-		// Check if already marked for deletion by checking map existence
-		_, markedForDeletion := backupsToDelete[backups[i].ID]
+		// Check if already marked for deletion by checking set existence
+		markedForDeletion := backupsToDelete.Contains(backups[i].ID)
 		if !keep && !markedForDeletion {
 			// Backup was not explicitly kept by min_count, age, or max_count rules, mark for deletion
 			// This handles cases where MaxBackups is 0 (unlimited) but MaxAge exists.
 			m.logger.Debug("Marking backup for deletion (not kept by other rules)", "backup_id", backups[i].ID)
-			backupsToDelete[backups[i].ID] = backups[i]
+			backupsToDelete.Add(backups[i])
 		}
 
 	}
 
 	// Perform deletions for unique IDs marked
-	for id := range backupsToDelete {
+	for _, backup := range backupsToDelete {
 		select {
 		case <-ctx.Done():
 			m.logger.Warn("Retention policy enforcement cancelled", "target_name", target.Name(), "source_type", sourceType)
 			deleteErrors = append(deleteErrors, ctx.Err())
 			return combineErrors(deleteErrors) // Return immediately
 		default:
-			backup := backupsToDelete[id] // Get the backup by key
+			// backup is already available from the range
 			if err := m.deleteBackupWithTimeout(ctx, &backup, target); err != nil {
 				deleteErrors = append(deleteErrors, err)
 				// Continue trying to delete others even if one fails
