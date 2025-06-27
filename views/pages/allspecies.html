@@ -1,0 +1,533 @@
+{{define "allspecies"}}
+
+<div class="col-span-12 space-y-4" x-cloak x-data="allSpeciesUI" role="region" aria-label="All Species Detected">
+    <!-- Page Header -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h1 class="card-title text-2xl">All Species Detected</h1>
+            <p class="text-base-content/60">Comprehensive list of all bird species that have been detected</p>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <h2 class="card-title" id="species-filters-heading">Filter Data</h2>
+            
+            <form id="speciesFiltersForm" class="space-y-4" @submit.prevent="fetchData()" x-ref="filtersForm">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Time Period Filter -->
+                    <div class="form-control">
+                        <label class="label" for="timePeriod">
+                            <span class="label-text">Time Period</span>
+                        </label>
+                        <select id="timePeriod" x-model="filters.timePeriod" class="select select-bordered w-full">
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">Last 7 Days</option>
+                            <option value="month">Last 30 Days</option>
+                            <option value="90days">Last 90 Days</option>
+                            <option value="year">Last 12 Months</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Start Date (only visible when custom range selected) -->
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="startDate">
+                            <span class="label-text">From</span>
+                        </label>
+                        <input type="date" id="startDate" x-model="filters.startDate" class="input input-bordered w-full" />
+                    </div>
+                    
+                    <!-- End Date (only visible when custom range selected) -->
+                    <div class="form-control" x-show="filters.timePeriod === 'custom'">
+                        <label class="label" for="endDate">
+                            <span class="label-text">To</span>
+                        </label>
+                        <input type="date" id="endDate" x-model="filters.endDate" class="input input-bordered w-full" />
+                    </div>
+
+                    <!-- Sort Order -->
+                    <div class="form-control">
+                        <label class="label" for="sortOrder">
+                            <span class="label-text">Sort By</span>
+                        </label>
+                        <select id="sortOrder" x-model="filters.sortOrder" class="select select-bordered w-full">
+                            <option value="count_desc">Most Detections</option>
+                            <option value="count_asc">Fewest Detections</option>
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="first_seen_desc">Recently First Seen</option>
+                            <option value="first_seen_asc">Earliest First Seen</option>
+                            <option value="last_seen_desc">Recently Last Seen</option>
+                            <option value="confidence_desc">Highest Confidence</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Search Filter -->
+                    <div class="form-control">
+                        <label class="label" for="searchTerm">
+                            <span class="label-text">Search Species</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="searchTerm" 
+                            x-model="filters.searchTerm" 
+                            @input.debounce.300ms="applyFilters()"
+                            class="input input-bordered w-full" 
+                            placeholder="Search by name..."
+                        />
+                    </div>
+                </div>
+                
+                <div class="flex justify-between items-center">
+                    <div class="text-sm text-base-content/60">
+                        <span x-text="getFilteredCount()"></span> species
+                        <span x-show="filters.searchTerm">(filtered)</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="btn btn-ghost" @click="resetFilters()">Reset</button>
+                        <button type="button" class="btn btn-secondary" @click="exportData()">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Export CSV
+                        </button>
+                        <button type="submit" class="btn btn-primary" :disabled="isLoading">
+                            <template x-if="isLoading">
+                                <span class="loading loading-spinner loading-sm"></span>
+                            </template>
+                            Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Species Grid/List -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body card-padding">
+            <!-- View Toggle -->
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="card-title">Species List</h2>
+                <div class="btn-group">
+                    <button 
+                        class="btn btn-sm" 
+                        :class="viewMode === 'grid' ? 'btn-active' : ''"
+                        @click="viewMode = 'grid'"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM13 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2z" />
+                        </svg>
+                    </button>
+                    <button 
+                        class="btn btn-sm" 
+                        :class="viewMode === 'list' ? 'btn-active' : ''"
+                        @click="viewMode = 'list'"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div x-show="isLoading" class="flex justify-center items-center p-8">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+
+            <!-- Grid View -->
+            <div x-show="!isLoading && viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <template x-for="species in filteredSpecies" :key="species.scientific_name">
+                    <div class="card bg-base-200 hover:shadow-md transition-shadow cursor-pointer" @click="showSpeciesDetails(species)">
+                        <figure class="px-4 pt-4">
+                            <img 
+                                :src="species.thumbnail_url || '/assets/images/bird-placeholder.svg'" 
+                                :alt="species.common_name"
+                                class="rounded-xl h-32 w-full object-cover"
+                                @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
+                            />
+                        </figure>
+                        <div class="card-body p-4">
+                            <h3 class="card-title text-base" x-text="species.common_name"></h3>
+                            <p class="text-sm text-base-content/60 italic" x-text="species.scientific_name"></p>
+                            <div class="text-sm space-y-1 mt-2">
+                                <div class="flex justify-between">
+                                    <span class="text-base-content/60">Detections:</span>
+                                    <span class="font-semibold" x-text="species.count"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-base-content/60">Confidence:</span>
+                                    <span class="font-semibold" x-text="formatPercentage(species.avg_confidence)"></span>
+                                </div>
+                                <div class="flex justify-between" x-show="species.first_heard">
+                                    <span class="text-base-content/60">First:</span>
+                                    <span class="text-xs" x-text="formatDate(species.first_heard)"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- List View -->
+            <div x-show="!isLoading && viewMode === 'list'" class="overflow-x-auto">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th>Species</th>
+                            <th>Detections</th>
+                            <th>Avg Confidence</th>
+                            <th>Max Confidence</th>
+                            <th>First Detected</th>
+                            <th>Last Detected</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(species, index) in filteredSpecies" :key="species.scientific_name">
+                            <tr :class="index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'" class="hover cursor-pointer" @click="showSpeciesDetails(species)">
+                                <td>
+                                    <div class="flex items-center gap-3">
+                                        <div class="avatar">
+                                            <div class="mask mask-squircle w-12 h-12">
+                                                <img 
+                                                    :src="species.thumbnail_url || '/assets/images/bird-placeholder.svg'" 
+                                                    :alt="species.common_name"
+                                                    @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div class="font-bold" x-text="species.common_name"></div>
+                                            <div class="text-sm opacity-50 italic" x-text="species.scientific_name"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td x-text="species.count" class="font-semibold"></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <progress 
+                                            class="progress w-20" 
+                                            :class="{
+                                                'progress-success': species.avg_confidence >= 0.8,
+                                                'progress-warning': species.avg_confidence >= 0.4 && species.avg_confidence < 0.8,
+                                                'progress-error': species.avg_confidence < 0.4
+                                            }"
+                                            :value="species.avg_confidence" 
+                                            max="1"
+                                        ></progress>
+                                        <span class="text-sm" x-text="formatPercentage(species.avg_confidence)"></span>
+                                    </div>
+                                </td>
+                                <td x-text="formatPercentage(species.max_confidence)"></td>
+                                <td x-text="formatDateTime(species.first_heard)" class="text-sm"></td>
+                                <td x-text="formatDateTime(species.last_heard)" class="text-sm"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!isLoading && filteredSpecies.length === 0" class="text-center py-8 text-base-content/50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 opacity-20" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm9 4a1 1 0 10-2 0v6a1 1 0 102 0V7zm-3 2a1 1 0 10-2 0v4a1 1 0 102 0V9zm-3 3a1 1 0 10-2 0v1a1 1 0 102 0v-1z" clip-rule="evenodd" />
+                </svg>
+                <p>No species found matching your filters.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Species Details Modal -->
+<dialog id="speciesDetailsModal" class="modal">
+    <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <div x-show="selectedSpecies">
+            <h3 class="font-bold text-lg" x-text="selectedSpecies?.common_name"></h3>
+            <p class="text-sm text-base-content/60 italic mb-4" x-text="selectedSpecies?.scientific_name"></p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <img 
+                        :src="selectedSpecies?.thumbnail_url || '/assets/images/bird-placeholder.svg'" 
+                        :alt="selectedSpecies?.common_name"
+                        class="rounded-lg w-full"
+                        @error="$event.target.src = '/assets/images/bird-placeholder.svg';"
+                    />
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <h4 class="font-semibold mb-2">Detection Statistics</h4>
+                        <dl class="space-y-1">
+                            <div class="flex justify-between">
+                                <dt class="text-base-content/60">Total Detections:</dt>
+                                <dd class="font-semibold" x-text="selectedSpecies?.count"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-base-content/60">Average Confidence:</dt>
+                                <dd class="font-semibold" x-text="formatPercentage(selectedSpecies?.avg_confidence)"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-base-content/60">Maximum Confidence:</dt>
+                                <dd class="font-semibold" x-text="formatPercentage(selectedSpecies?.max_confidence)"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-base-content/60">First Detected:</dt>
+                                <dd class="text-sm" x-text="formatDateTime(selectedSpecies?.first_heard)"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-base-content/60">Last Detected:</dt>
+                                <dd class="text-sm" x-text="formatDateTime(selectedSpecies?.last_heard)"></dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="pt-4">
+                        <a 
+                            :href="'/search?species=' + encodeURIComponent(selectedSpecies?.scientific_name)" 
+                            class="btn btn-primary btn-sm"
+                        >
+                            View All Detections
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('allSpeciesUI', () => ({
+            isLoading: true,
+            speciesData: [],
+            filteredSpecies: [],
+            selectedSpecies: null,
+            viewMode: 'grid', // 'grid' or 'list'
+            filters: {
+                timePeriod: 'all',
+                startDate: '',
+                endDate: '',
+                sortOrder: 'count_desc',
+                searchTerm: ''
+            },
+            
+            init() {
+                // Set default dates for custom range
+                const today = new Date();
+                const lastMonth = new Date();
+                lastMonth.setDate(today.getDate() - 30);
+                
+                this.filters.endDate = this.formatDateForInput(today);
+                this.filters.startDate = this.formatDateForInput(lastMonth);
+                
+                // Fetch initial data
+                this.fetchData();
+            },
+            
+            formatDateForInput(date) {
+                return date.toISOString().split('T')[0];
+            },
+            
+            formatNumber(number) {
+                return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            },
+            
+            formatPercentage(value) {
+                return (value * 100).toFixed(1) + '%';
+            },
+            
+            formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleDateString();
+            },
+            
+            formatDateTime(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleString();
+            },
+            
+            async fetchData() {
+                this.isLoading = true;
+                
+                try {
+                    // Determine date range based on time period
+                    let startDate, endDate;
+                    const today = new Date();
+                    
+                    switch(this.filters.timePeriod) {
+                        case 'today':
+                            startDate = this.formatDateForInput(today);
+                            endDate = startDate;
+                            break;
+                        case 'week':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000));
+                            break;
+                        case 'month':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000));
+                            break;
+                        case '90days':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 89 * 24 * 60 * 60 * 1000));
+                            break;
+                        case 'year':
+                            endDate = this.formatDateForInput(today);
+                            startDate = this.formatDateForInput(new Date(today.getTime() - 364 * 24 * 60 * 60 * 1000));
+                            break;
+                        case 'custom':
+                            startDate = this.filters.startDate;
+                            endDate = this.filters.endDate;
+                            break;
+                        case 'all':
+                        default:
+                            startDate = null;
+                            endDate = null;
+                            break;
+                    }
+                    
+                    // Build query parameters
+                    const params = new URLSearchParams();
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+                    
+                    // Fetch species summary data
+                    const response = await fetch(`/api/v2/analytics/species/summary?${params.toString()}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    this.speciesData = await response.json();
+                    this.applyFilters();
+                    
+                } catch (error) {
+                    console.error('Error fetching species data:', error);
+                    this.speciesData = [];
+                    this.filteredSpecies = [];
+                } finally {
+                    this.isLoading = false;
+                }
+            },
+            
+            applyFilters() {
+                let filtered = [...this.speciesData];
+                
+                // Apply search filter
+                if (this.filters.searchTerm) {
+                    const searchLower = this.filters.searchTerm.toLowerCase();
+                    filtered = filtered.filter(species => 
+                        species.common_name.toLowerCase().includes(searchLower) ||
+                        species.scientific_name.toLowerCase().includes(searchLower)
+                    );
+                }
+                
+                // Apply sorting
+                switch(this.filters.sortOrder) {
+                    case 'count_desc':
+                        filtered.sort((a, b) => b.count - a.count);
+                        break;
+                    case 'count_asc':
+                        filtered.sort((a, b) => a.count - b.count);
+                        break;
+                    case 'name_asc':
+                        filtered.sort((a, b) => a.common_name.localeCompare(b.common_name));
+                        break;
+                    case 'name_desc':
+                        filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
+                        break;
+                    case 'first_seen_desc':
+                        filtered.sort((a, b) => new Date(b.first_heard) - new Date(a.first_heard));
+                        break;
+                    case 'first_seen_asc':
+                        filtered.sort((a, b) => new Date(a.first_heard) - new Date(b.first_heard));
+                        break;
+                    case 'last_seen_desc':
+                        filtered.sort((a, b) => new Date(b.last_heard) - new Date(a.last_heard));
+                        break;
+                    case 'confidence_desc':
+                        filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
+                        break;
+                }
+                
+                this.filteredSpecies = filtered;
+            },
+            
+            getFilteredCount() {
+                return this.filteredSpecies.length;
+            },
+            
+            resetFilters() {
+                this.filters.timePeriod = 'all';
+                this.filters.sortOrder = 'count_desc';
+                this.filters.searchTerm = '';
+                
+                const today = new Date();
+                const lastMonth = new Date();
+                lastMonth.setDate(today.getDate() - 30);
+                
+                this.filters.endDate = this.formatDateForInput(today);
+                this.filters.startDate = this.formatDateForInput(lastMonth);
+                
+                this.fetchData();
+            },
+            
+            showSpeciesDetails(species) {
+                this.selectedSpecies = species;
+                document.getElementById('speciesDetailsModal').showModal();
+            },
+            
+            exportData() {
+                // Generate CSV content
+                const headers = ['Common Name', 'Scientific Name', 'Count', 'Avg Confidence', 'Max Confidence', 'First Detected', 'Last Detected'];
+                const rows = this.filteredSpecies.map(species => [
+                    species.common_name,
+                    species.scientific_name,
+                    species.count,
+                    (species.avg_confidence * 100).toFixed(1) + '%',
+                    (species.max_confidence * 100).toFixed(1) + '%',
+                    species.first_heard ? new Date(species.first_heard).toLocaleString() : '',
+                    species.last_heard ? new Date(species.last_heard).toLocaleString() : ''
+                ]);
+                
+                // Create CSV string
+                const csvContent = [
+                    headers.join(','),
+                    ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+                ].join('\n');
+                
+                // Create and download file
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                
+                link.setAttribute('href', url);
+                link.setAttribute('download', `birdnet-species-${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }));
+    });
+</script>
+
+<style>
+    [x-cloak] {
+        display: none !important;
+    }
+</style>
+
+{{end}}
