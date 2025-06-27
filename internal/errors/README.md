@@ -192,6 +192,44 @@ Context("full_url", "https://api.example.com/secret")    // Will be scrubbed
 
 ## Component Guidelines
 
+### Component Registry
+
+Components must be registered in the error package's `init()` function to ensure proper telemetry tagging. When a component is not registered, the error system falls back to searching the entire call stack, which can lead to incorrect component attribution.
+
+#### How Component Detection Works
+
+1. **Explicit Component Setting**: When you use `.Component("name")`, this is the preferred method
+2. **Automatic Detection**: If no component is explicitly set, the system:
+   - First checks if the package name exists in the component registry
+   - If not found, searches the entire call stack for any registered pattern
+   - This can lead to incorrect tagging if another component appears in the call stack
+
+#### Registering New Components
+
+To register a new component, add it to the `init()` function in `/internal/errors/errors.go`:
+
+```go
+func init() {
+    RegisterComponent("birdnet", "birdnet")
+    RegisterComponent("myaudio", "myaudio")
+    RegisterComponent("httpcontroller", "http-controller")
+    RegisterComponent("datastore", "datastore")
+    RegisterComponent("imageprovider", "imageprovider")
+    RegisterComponent("diskmanager", "diskmanager")
+    RegisterComponent("mqtt", "mqtt")
+    RegisterComponent("weather", "weather")
+    RegisterComponent("conf", "configuration")
+    RegisterComponent("telemetry", "telemetry")
+    RegisterComponent("birdweather", "birdweather")  // Add new components here
+}
+```
+
+The `RegisterComponent` function takes two parameters:
+- `packagePattern`: The pattern to match in the call stack (usually the package name)
+- `componentName`: The name to use for telemetry (should match what you use with `.Component()`)
+
+### Available Components
+
 Components should match your package structure:
 
 - `datastore`: Database operations
@@ -201,6 +239,29 @@ Components should match your package structure:
 - `birdnet`: AI model operations
 - `myaudio`: Audio processing
 - `http-controller`: HTTP API operations
+- `birdweather`: BirdWeather integration
+- `diskmanager`: Disk space management
+- `mqtt`: MQTT messaging
+- `telemetry`: Telemetry reporting
+- `configuration`: Configuration management
+
+### Component Tagging Best Practices
+
+1. **Always explicitly set the component** when creating errors:
+   ```go
+   err := errors.New(originalErr).
+       Component("birdweather").  // Explicit is better than implicit
+       Category(errors.CategoryNetwork).
+       Build()
+   ```
+
+2. **Ensure your component is registered** if you rely on automatic detection:
+   - Check that your package name is in the registry
+   - Test that errors from your component are properly tagged
+
+3. **Avoid relying on automatic detection** in shared code:
+   - Handlers that process multiple components should always set component explicitly
+   - Utility functions should let callers set the component
 
 ## Advanced Usage
 
@@ -370,6 +431,38 @@ If you see generic titles like `*errors.errorString` or `*errors.SentryError`:
 2. Always specify `Component()` and `Category()`
 3. Add descriptive `Context("operation", "...")` data
 4. The system now automatically generates titles like "Imageprovider Image Fetch Error Parse Pages From Response"
+
+### Incorrect Component Attribution
+
+If errors are being attributed to the wrong component (e.g., birdweather errors tagged as imageprovider):
+1. **Check component registration**: Ensure your component is registered in the `init()` function
+2. **Use explicit component setting**: Always use `.Component("your-component")` instead of relying on auto-detection
+3. **Debug auto-detection**: The system searches the call stack when no component is set, which can pick up the wrong component if:
+   - Your component isn't registered
+   - The error passes through code from another registered component
+   - Shared handlers process errors from multiple components
+
+Example of the issue:
+```go
+// If "birdweather" is not registered, and this error passes through
+// code that contains "imageprovider", it will be incorrectly tagged
+err := errors.New(originalErr).
+    Component("birdweather").  // This won't work if not registered!
+    Category(errors.CategoryNetwork).
+    Build()
+```
+
+Solution:
+```go
+// 1. Add to init() in errors.go:
+RegisterComponent("birdweather", "birdweather")
+
+// 2. Always set component explicitly:
+err := errors.New(originalErr).
+    Component("birdweather").
+    Category(errors.CategoryNetwork).
+    Build()
+```
 
 ### Generic Error Messages
 
