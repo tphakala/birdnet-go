@@ -2,9 +2,9 @@
 package imageprovider
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -21,6 +21,12 @@ import (
 
 // ErrImageNotFound indicates that the image provider could not find an image for the requested species.
 var ErrImageNotFound = errors.NewStd("image not found by provider")
+
+// contextKey is a type used for context keys to avoid collisions
+type contextKey string
+
+// backgroundOperationKey is the context key for background operations
+const backgroundOperationKey contextKey = "background"
 
 // ImageProvider defines the interface for fetching bird images.
 type ImageProvider interface {
@@ -235,9 +241,24 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		return
 	}
 
-	// Fetch new image
-	logger.Debug("Fetching new image data from provider")
-	birdImage, err := c.provider.Fetch(scientificName)
+	// Fetch new image with background context to use more restrictive rate limiting
+	logger.Debug("Fetching new image data from provider (background refresh)")
+
+	// Check if provider supports context-aware fetching
+	var birdImage BirdImage
+	var err error
+
+	if ctxProvider, ok := c.provider.(interface {
+		FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error)
+	}); ok {
+		// Use background context for refresh operations
+		ctx := context.WithValue(context.Background(), backgroundOperationKey, true)
+		birdImage, err = ctxProvider.FetchWithContext(ctx, scientificName)
+	} else {
+		// Fallback to regular fetch
+		birdImage, err = c.provider.Fetch(scientificName)
+	}
+
 	if err != nil {
 		// Check if it's already an enhanced error, if not enhance it
 		var enhancedErr *errors.EnhancedError
@@ -1011,9 +1032,7 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 		// Check memory cache first
 		if value, ok := c.dataMap.Load(name); ok {
 			if image, ok := value.(*BirdImage); ok {
-				if c.debug {
-					log.Printf("Debug: Found image in batch memory cache for: %s", name)
-				}
+				// Removed debug logging from hot path
 				if c.metrics != nil {
 					c.metrics.IncrementCacheHits()
 				}

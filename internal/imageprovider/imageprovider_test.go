@@ -61,6 +61,7 @@ func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 // mockStore is a mock implementation of the datastore.Interface
 type mockStore struct {
 	images map[string]*datastore.ImageCache
+	mu     sync.RWMutex
 }
 
 func newMockStore() *mockStore {
@@ -71,6 +72,8 @@ func newMockStore() *mockStore {
 
 // Implement only the methods we need for testing
 func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if img, ok := m.images[query.ScientificName+"_"+query.ProviderName]; ok {
 		//log.Printf("Debug: GetImageCache found entry for %s provider %s", query.ScientificName, query.ProviderName)
 		return img, nil
@@ -83,6 +86,8 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 	if cache.ScientificName == "" || cache.ProviderName == "" {
 		return fmt.Errorf("scientific name and provider name cannot be empty")
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	key := cache.ScientificName + "_" + cache.ProviderName
 	oldCache, exists := m.images[key]
 	if exists {
@@ -100,6 +105,7 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 		AuthorName:     cache.AuthorName,
 		AuthorURL:      cache.AuthorURL,
 		CachedAt:       cache.CachedAt,
+		ProviderName:   cache.ProviderName,
 	}
 
 	m.images[key] = newCache
@@ -107,6 +113,8 @@ func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
 }
 
 func (m *mockStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var result []datastore.ImageCache
 	//log.Printf("Debug: GetAllImageCaches called for provider %s. Total items: %d", providerName, len(m.images))
 	for key, img := range m.images {
