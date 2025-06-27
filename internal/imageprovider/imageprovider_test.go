@@ -139,6 +139,21 @@ func (m *mockStore) GetAllImageCaches(providerName string) ([]datastore.ImageCac
 	return result, nil
 }
 
+func (m *mockStore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make(map[string]*datastore.ImageCache)
+
+	for _, name := range scientificNames {
+		key := name + "_" + providerName
+		if img, exists := m.images[key]; exists {
+			result[name] = img
+		}
+	}
+
+	return result, nil
+}
+
 // Implement other required interface methods with no-op implementations
 func (m *mockStore) Open() error                                                  { return nil }
 func (m *mockStore) Save(note *datastore.Note, results []datastore.Results) error { return nil }
@@ -257,6 +272,13 @@ func (m *mockFailingStore) GetAllImageCaches(providerName string) ([]datastore.I
 		return nil, fmt.Errorf("simulated database error")
 	}
 	return m.mockStore.GetAllImageCaches(providerName)
+}
+
+func (m *mockFailingStore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
+	if m.failGetCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetImageCacheBatch(providerName, scientificNames)
 }
 
 func (m *mockFailingStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {

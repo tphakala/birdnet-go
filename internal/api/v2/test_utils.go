@@ -241,6 +241,14 @@ func (m *MockDataStore) GetAllImageCaches(providerName string) ([]datastore.Imag
 	return safeSlice[datastore.ImageCache](args, 0), args.Error(1)
 }
 
+func (m *MockDataStore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
+	args := m.Called(providerName, scientificNames)
+	if result := args.Get(0); result != nil {
+		return result.(map[string]*datastore.ImageCache), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockDataStore) GetLockedNotesClipPaths() ([]string, error) {
 	args := m.Called()
 	return safeSlice[string](args, 0), args.Error(1)
@@ -509,6 +517,13 @@ func (m *MockDataStoreV2) SaveImageCache(cache *datastore.ImageCache) error {
 func (m *MockDataStoreV2) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
 	args := m.Called(providerName)
 	return safeSlice[datastore.ImageCache](args, 0), args.Error(1)
+}
+func (m *MockDataStoreV2) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
+	args := m.Called(providerName, scientificNames)
+	if result := args.Get(0); result != nil {
+		return result.(map[string]*datastore.ImageCache), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error) {
 	args := m.Called()

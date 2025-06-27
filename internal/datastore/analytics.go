@@ -3,10 +3,11 @@ package datastore
 
 import (
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // SpeciesSummaryData contains overall statistics for a bird species
@@ -53,6 +54,18 @@ type NewSpeciesData struct {
 func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
 	var summaries []SpeciesSummaryData
 
+	// Track query time for performance monitoring
+	queryStart := time.Now()
+
+	// Get logger and check debug setting
+	settings := conf.GetSettings()
+	logger := logging.ForService("datastore")
+	if settings != nil && settings.Debug {
+		logger.Debug("GetSpeciesSummaryData: Starting query",
+			"start_date", startDate,
+			"end_date", endDate)
+	}
+
 	// Start building query
 	queryStr := `
 		SELECT 
@@ -90,6 +103,11 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	`
 
 	// Execute the query
+	if settings != nil && settings.Debug {
+		logger.Debug("GetSpeciesSummaryData: Executing query",
+			"query", queryStr,
+			"args", args)
+	}
 	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, errors.New(err).
@@ -102,7 +120,15 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 	defer rows.Close()
 
+	queryExecutionTime := time.Since(queryStart)
+	if settings != nil && settings.Debug {
+		logger.Debug("GetSpeciesSummaryData: Query executed, scanning rows",
+			"query_duration_ms", queryExecutionTime.Milliseconds())
+	}
+	rowCount := 0
+
 	for rows.Next() {
+		rowCount++
 		var summary SpeciesSummaryData
 		var firstSeenStr, lastSeenStr string
 
@@ -139,6 +165,13 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		}
 
 		summaries = append(summaries, summary)
+	}
+
+	totalDuration := time.Since(queryStart)
+	if settings != nil && settings.Debug {
+		logger.Debug("GetSpeciesSummaryData: Completed",
+			"total_duration_ms", totalDuration.Milliseconds(),
+			"rows_processed", rowCount)
 	}
 
 	return summaries, nil
@@ -470,7 +503,10 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 			})
 		} else {
 			// Log if a record surprisingly had an empty date after SQL filtering
-			log.Printf("WARN: GetNewSpeciesDetections - Skipped record for %s due to empty first_detection_date after SQL query.", raw.ScientificName)
+			logger := logging.ForService("datastore")
+			logger.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
+				"scientific_name", raw.ScientificName,
+				"operation", "get_new_species_detections")
 		}
 	}
 

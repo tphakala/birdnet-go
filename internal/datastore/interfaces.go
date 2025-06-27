@@ -60,6 +60,7 @@ type Interface interface {
 	IsNoteLocked(noteID string) (bool, error)
 	// Image cache methods
 	GetImageCache(query ImageCacheQuery) (*ImageCache, error)
+	GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*ImageCache, error)
 	SaveImageCache(cache *ImageCache) error
 	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
@@ -1320,6 +1321,53 @@ func (ds *DataStore) GetAllImageCaches(providerName string) ([]ImageCache, error
 			Build()
 	}
 	return caches, nil
+}
+
+// GetImageCacheBatch retrieves multiple image cache entries for a provider in a single query
+func (ds *DataStore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*ImageCache, error) {
+	if providerName == "" {
+		return nil, errors.Newf("provider name must be provided").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_image_cache_batch").
+			Build()
+	}
+
+	if len(scientificNames) == 0 {
+		return make(map[string]*ImageCache), nil
+	}
+
+	// Debug logging (controlled by thumbnails debug setting)
+	settings := conf.Setting()
+	if settings.Realtime.Dashboard.Thumbnails.Debug {
+		log.Printf("GetImageCacheBatch: Querying for provider=%s, species=%v", providerName, scientificNames)
+	}
+
+	var caches []ImageCache
+	// Use Session to disable logging for this query and use IN clause for batch lookup
+	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
+		Where("provider_name = ? AND scientific_name IN ?", providerName, scientificNames).
+		Find(&caches).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_image_cache_batch").
+			Context("provider", providerName).
+			Context("batch_size", fmt.Sprintf("%d", len(scientificNames))).
+			Build()
+	}
+
+	if settings.Realtime.Dashboard.Thumbnails.Debug {
+		log.Printf("GetImageCacheBatch: Found %d entries for provider %s", len(caches), providerName)
+	}
+
+	// Convert to map for easy lookup
+	result := make(map[string]*ImageCache, len(caches))
+	for i := range caches {
+		result[caches[i].ScientificName] = &caches[i]
+	}
+
+	return result, nil
 }
 
 // GetLockedNotesClipPaths retrieves a list of clip paths from all locked notes
