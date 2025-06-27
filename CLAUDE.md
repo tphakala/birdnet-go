@@ -38,3 +38,30 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
     ```
 
 ### Common Linter Issues to Avoid
+
+### Modern Go Loop Patterns (Go 1.22+)
+- **Use modern range syntax** instead of traditional for loops where applicable:
+  - **Benchmarks**: Use `for range b.Loop()` instead of `for i := 0; i < b.N; i++` (Go 1.24+)
+  - **Integer ranges**: Use `for i := range n` instead of `for i := 0; i < n; i++` (Go 1.22+)
+  - **Function iteration**: Use `for range iteratorFunc` for custom iterators (Go 1.23+)
+- **Benchmark examples**:
+  ```go
+  // Preferred (Go 1.24+)
+  func BenchmarkExample(b *testing.B) {
+      b.ReportAllocs()
+      b.ResetTimer()
+      for range b.Loop() {
+          // benchmark code
+      }
+  }
+  
+  // Avoid
+  func BenchmarkExample(b *testing.B) {
+      b.ResetTimer()
+      for i := 0; i < b.N; i++ {
+          // benchmark code
+      }
+  }
+  ```
+- **Always use `b.ReportAllocs()`** in benchmarks to track memory allocations
+- **Benefits**: Better performance, cleaner code, leverages Go's modern iteration patterns
