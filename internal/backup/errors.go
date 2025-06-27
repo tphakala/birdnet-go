@@ -2,8 +2,9 @@
 package backup
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ErrorCode represents specific backup error types
