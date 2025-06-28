@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -228,13 +227,15 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	// Get notifications
 	notifications, err := service.List(filter)
 	if err != nil {
-		c.apiLogger.Error("failed to list notifications", "error", err)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to list notifications", "error", err)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notifications",
 		})
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]interface{}{
+	return ctx.JSON(http.StatusOK, map[string]any{
 		"notifications": notifications,
 		"count":         len(notifications),
 		"limit":         filter.Limit,
@@ -260,7 +261,9 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 	service := notification.GetService()
 	notif, err := service.Get(id)
 	if err != nil {
-		c.apiLogger.Error("failed to get notification", "error", err, "id", id)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to get notification", "error", err, "id", id)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notification",
 		})
@@ -292,9 +295,11 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 
 	service := notification.GetService()
 	if err := service.MarkAsRead(id); err != nil {
-		c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to mark notification as read: %v", err),
+			"error": "Failed to mark notification as read",
 		})
 	}
 
@@ -320,9 +325,11 @@ func (c *Controller) MarkNotificationAcknowledged(ctx echo.Context) error {
 
 	service := notification.GetService()
 	if err := service.MarkAsAcknowledged(id); err != nil {
-		c.apiLogger.Error("failed to mark notification as acknowledged", "error", err, "id", id)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to mark notification as acknowledged", "error", err, "id", id)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to mark notification as acknowledged: %v", err),
+			"error": "Failed to mark notification as acknowledged",
 		})
 	}
 
@@ -348,9 +355,11 @@ func (c *Controller) DeleteNotification(ctx echo.Context) error {
 
 	service := notification.GetService()
 	if err := service.Delete(id); err != nil {
-		c.apiLogger.Error("failed to delete notification", "error", err, "id", id)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to delete notification", "error", err, "id", id)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to delete notification: %v", err),
+			"error": "Failed to delete notification",
 		})
 	}
 
@@ -370,13 +379,15 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	service := notification.GetService()
 	count, err := service.GetUnreadCount()
 	if err != nil {
-		c.apiLogger.Error("failed to get unread count", "error", err)
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to get unread count", "error", err)
+		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to get unread count",
 		})
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]interface{}{
+	return ctx.JSON(http.StatusOK, map[string]any{
 		"unreadCount": count,
 	})
 }
