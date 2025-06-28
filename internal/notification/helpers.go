@@ -45,6 +45,13 @@ func NotifyDetection(species string, confidence float64, metadata map[string]int
 		return
 	}
 
+	// Validate confidence range
+	if confidence < 0 {
+		confidence = 0
+	} else if confidence > 1 {
+		confidence = 1
+	}
+
 	title := fmt.Sprintf("Detected: %s", species)
 	message := fmt.Sprintf("Confidence: %.1f%%", confidence*100)
 

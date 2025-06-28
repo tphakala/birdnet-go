@@ -40,7 +40,7 @@ Use the helper functions for common scenarios:
 
 ```go
 // Error notification from an error
-notification.NotifyError("database", err)
+notification.NotifyError(err)
 
 // System alert
 notification.NotifySystemAlert(notification.PriorityHigh, "High CPU Usage", "CPU usage is above 80%")
@@ -156,7 +156,7 @@ err := errors.New("database connection failed").
     Build()
 
 // This will automatically create an appropriate notification
-notification.NotifyError("database", err)
+notification.NotifyError(err)
 ```
 
 ## Best Practices
