@@ -4,6 +4,7 @@
 package notification
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -252,7 +253,7 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 		s.notifications[notification.ID] = notification
 		return nil
 	}
-	return nil
+	return fmt.Errorf("notification not found: %s", notification.ID)
 }
 
 // Delete removes a notification

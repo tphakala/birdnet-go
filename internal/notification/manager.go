@@ -13,10 +13,9 @@ var (
 
 // Initialize sets up the global notification service instance
 func Initialize(config *ServiceConfig) {
-	mu.Lock()
-	defer mu.Unlock()
-
 	once.Do(func() {
+		mu.Lock()
+		defer mu.Unlock()
 		instance = NewService(config)
 	})
 }

@@ -207,8 +207,38 @@ func (s *Service) Delete(id string) error {
 	return s.store.Delete(id)
 }
 
-// Subscribe creates a channel to receive real-time notifications
-// The returned context should be used to detect when the subscription is cancelled
+// Subscribe creates a channel to receive real-time notifications.
+//
+// Returns:
+//   - A read-only channel that will receive notifications
+//   - A context that is cancelled when the subscription is terminated
+//
+// The subscriber is responsible for:
+//  1. Monitoring the returned context's Done() channel to detect cancellation
+//  2. Stopping consumption of notifications when the context is cancelled
+//  3. NOT closing the returned channel (it's managed by the service)
+//
+// Example usage:
+//
+//	ch, ctx := service.Subscribe()
+//	go func() {
+//		for {
+//			select {
+//			case notif := <-ch:
+//				if notif == nil {
+//					return // Channel was closed by service shutdown
+//				}
+//				// Process notification
+//			case <-ctx.Done():
+//				return // Subscription was cancelled
+//			}
+//		}
+//	}()
+//
+// To unsubscribe, call service.Unsubscribe(ch)
+//
+// Note: The service automatically cleans up cancelled subscribers during
+// broadcast operations to prevent memory leaks.
 func (s *Service) Subscribe() (<-chan *Notification, context.Context) {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
