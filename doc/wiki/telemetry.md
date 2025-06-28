@@ -15,11 +15,11 @@ That's it! No additional configuration is required. Error reports will be automa
 
 Telemetry in BirdNET-Go refers to the automatic collection and transmission of technical error information to help developers:
 
-- **Identify common failure patterns** in RTSP stream connections
-- **Debug audio processing issues** that affect detection accuracy
-- **Understand system stability** across different hardware configurations
+- **Identify crashes and system errors** that affect application stability
+- **Debug issues** that occur across different configurations and environments
+- **Understand failures** across various hardware and software setups
 - **Prioritize bug fixes** based on real-world usage patterns
-- **Improve compatibility** with various audio sources and network setups
+- **Improve reliability** and compatibility with different systems
 
 ## Privacy-First Design
 
@@ -40,18 +40,20 @@ Telemetry in BirdNET-Go refers to the automatic collection and transmission of t
 The system only collects essential technical information needed for debugging:
 - Error types and categories
 - Component names where errors occur
-- Anonymous stream identifiers (not actual URLs)
+- Anonymous resource identifiers (not actual URLs or file paths)
 - System resource errors
-- Network connection patterns
+- Platform and compatibility information
+- Installation and update events
 
 ## Data Collection Details
 
 ### What IS Collected ✅
 - **Error messages** (with URLs and credentials anonymized)
-- **Error types and categories** (connection errors, buffer overflows, etc.)
-- **Component names** (ffmpeg, rtsp-connection, audio-buffer, etc.)
-- **Anonymous stream identifiers** (url-abc123def456 instead of actual URLs)
-- **Technical error context** (timeout values, retry counts, etc.)
+- **Error types and categories** (network errors, validation errors, system resource errors, etc.)
+- **Component names** (component where error occurred, such as datastore, audio processing, etc.)
+- **Anonymous identifiers** (hashed URLs and resource identifiers instead of actual values)
+- **Technical error context** (timeout values, retry counts, operation names, etc.)
+- **Platform information** (operating system, architecture, container status, hardware details for debugging compatibility issues)
 
 ### What is NOT Collected ❌
 - Audio recordings or sound files
@@ -63,41 +65,62 @@ The system only collects essential technical information needed for debugging:
 - Location data or GPS coordinates
 - Any sensitive application data
 
-### URL Anonymization Example
+### System Identification 🔑
 
-When an error occurs with an RTSP stream, the system automatically anonymizes the URL:
+BirdNET-Go uses a **unique system ID** for telemetry purposes:
 
-**Original URL (never sent):**
+**What**: A randomly generated identifier (format: XXXX-XXXX-XXXX)
+**Why**: Allows tracking errors from the same system without revealing identity
+**Example**: "A1B2-C3D4-E5F6"
+**Privacy protection**: 
+- Generated locally using cryptographically secure random numbers
+- No connection to hardware, network, or user information
+- Stored only in your local configuration directory
+- You control when and if to share this ID
+
+### Data Anonymization Example
+
+When an error occurs with sensitive information, the system automatically anonymizes it:
+
+**Original error (never sent):**
 ```
-rtsp://admin:password123@192.168.1.100:554/cam/stream1
+failed to connect to rtsp://admin:password123@192.168.1.100:554/cam/stream1
 ```
 
-**Anonymized identifier (what gets sent):**
+**Anonymized version (what gets sent):**
 ```
-url-b0c823d0454e766694949834
+failed to connect to url-b0c823d0454e766694949834
 ```
 
 The anonymized identifier:
-- ✅ **Allows tracking** of issues with the same stream
+- ✅ **Allows tracking** of issues with the same resource
 - ✅ **Preserves error patterns** for debugging
-- ❌ **Cannot be reverse-engineered** to reveal the original URL
+- ❌ **Cannot be reverse-engineered** to reveal the original data
 - ❌ **Contains no sensitive information**
 
 ## Technical Implementation
 
+### Enhanced Error System
+BirdNET-Go uses an advanced error handling system that automatically integrates with telemetry:
+
+1. **Component Detection**: Automatically identifies which part of the system generated the error
+2. **Error Categorization**: Classifies errors by type (network, validation, database, etc.) for better grouping
+3. **Context Enrichment**: Adds relevant technical context while preserving privacy
+4. **Meaningful Titles**: Generates descriptive error titles in telemetry instead of generic error types
+
 ### Automatic Privacy Protection
 All telemetry data is automatically processed through privacy filters before transmission:
 
-1. **URL Detection**: Regex patterns identify RTSP, HTTP, and other URLs in error messages
-2. **Anonymization**: URLs are replaced with consistent, privacy-safe identifiers
-3. **Credential Removal**: Any embedded usernames/passwords are completely stripped
-4. **Context Preservation**: Technical error context is maintained for debugging
+1. **URL Detection**: Regex patterns identify URLs, file paths, and other sensitive data in error messages
+2. **Anonymization**: Sensitive data is replaced with consistent, privacy-safe identifiers using SHA-256 hashing
+3. **Credential Removal**: Any embedded usernames, passwords, or API keys are completely stripped
+4. **Context Preservation**: Technical error context is maintained for debugging while removing personal information
 
 ### Consistent Identifiers
-The same URL always produces the same anonymized identifier, allowing developers to:
-- Track recurring issues with specific streams
-- Identify patterns in connection failures
-- Understand which stream configurations are most problematic
+The same sensitive data always produces the same anonymized identifier, allowing developers to:
+- Track recurring issues with the same resources without exposing sensitive information
+- Identify patterns in system failures across different installations
+- Understand which configurations are most problematic
 - Prioritize fixes for commonly affected setups
 
 ## Benefits
