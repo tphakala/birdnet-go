@@ -1,6 +1,12 @@
 # Error Tracking & Telemetry
 
-BirdNET-Go includes an optional, privacy-first error tracking system designed to help developers identify and fix issues that affect system reliability and performance. This system is **completely opt-in** and respects EU privacy laws including GDPR.
+## ⚠️ Important Notice: Volunteer-Maintained Project
+
+BirdNET-Go is a hobby project maintained by volunteers in their spare time. While we are committed to protecting your privacy and following best practices, our capacity to respond to requests and provide support is limited by volunteer availability.
+
+BirdNET-Go includes an optional, privacy-first error tracking system designed to help developers identify and fix issues that affect system reliability and performance. This system is **completely opt-in** and follows privacy-by-design principles.
+
+📋 **For comprehensive privacy information, please see our [Privacy Statement](../../PRIVACY.md)**
 
 ## Quick Start
 
@@ -12,6 +18,8 @@ BirdNET-Go includes an optional, privacy-first error tracking system designed to
 That's it! No additional configuration is required. Error reports will be automatically sent to the BirdNET-Go development team for analysis.
 
 ## What is Telemetry?
+
+**Note**: BirdNET-Go has multiple external integrations beyond telemetry. For complete information about all data collection and external services, see our [Privacy Statement](../../PRIVACY.md).
 
 Telemetry in BirdNET-Go refers to the automatic collection and transmission of technical error information to help developers:
 
@@ -56,14 +64,17 @@ The system only collects essential technical information needed for debugging:
 - **Platform information** (operating system, architecture, container status, hardware details for debugging compatibility issues)
 
 ### What is NOT Collected ❌
-- Audio recordings or sound files
-- Bird detection results or species data
-- Actual RTSP URLs, IP addresses, or hostnames
-- Usernames, passwords, or authentication credentials
-- Personal information or user data
-- File paths or directory structures
-- Location data or GPS coordinates
-- Any sensitive application data
+
+**Note**: The following applies specifically to telemetry. Other optional integrations (BirdWeather, MQTT, backups) may transmit different data when explicitly configured. See [Privacy Statement](../../PRIVACY.md) for complete details.
+
+- **Personal audio recordings** (except 3-second clips for BirdWeather when configured)
+- **Continuous bird detection results** (except when shared via configured integrations)
+- **Actual RTSP URLs, IP addresses, or hostnames** (anonymized in telemetry)
+- **Usernames, passwords, or authentication credentials**
+- **Personal information or user data**
+- **File paths or directory structures**
+- **Precise location data** (coordinates used only for weather/BirdWeather when configured)
+- **Any sensitive application data**
 
 ### System Identification 🔑
 
@@ -139,9 +150,12 @@ The same sensitive data always produces the same anonymized identifier, allowing
 
 ## Related Documentation
 
-- **[Privacy & Data Collection](telemetry-privacy.md)** - Detailed privacy information and data handling
+- **[Privacy Statement](../../PRIVACY.md)** - **⭐ COMPREHENSIVE** privacy information covering all data collection and external integrations
+- **[Privacy & Data Collection](telemetry-privacy.md)** - Detailed privacy information and data handling (telemetry-specific)
 - **[Setup & Configuration](telemetry-setup.md)** - Step-by-step configuration guide
 - **[Troubleshooting](telemetry-troubleshooting.md)** - Common issues and solutions
+
+**Important**: The main [Privacy Statement](../../PRIVACY.md) contains complete information about all external services including BirdWeather, MQTT, backup services, weather APIs, and image services in addition to telemetry.
 
 ## Frequently Asked Questions
 
@@ -155,14 +169,46 @@ The same sensitive data always produces the same anonymized identifier, allowing
 **A:** Go to Settings → Support and uncheck "Enable Error Tracking". Changes take effect immediately.
 
 ### Q: Where is the data sent?
-**A:** Error reports are sent to Sentry (a privacy-compliant error tracking service) operated by the BirdNET-Go development team.
+**A:** Error reports are sent to Sentry (SOC 2 Type II certified error tracking service) in Frankfurt, Germany. See our [Privacy Statement](../../PRIVACY.md) for complete information about all external services.
+
+### Q: What about other external services?
+**A:** BirdNET-Go may connect to other external services when explicitly configured (BirdWeather, MQTT brokers, backup services, weather APIs). All require user configuration and are disabled by default. See [Privacy Statement](../../PRIVACY.md) for details.
 
 ### Q: Does this affect performance?
 **A:** No. The telemetry system has minimal performance impact and only activates when errors occur.
 
 ### Q: Is this GDPR compliant?
-**A:** Yes. The system is designed to be fully compliant with GDPR and other privacy regulations through opt-in consent and data minimization.
+**A:** We strive to comply with GDPR and follow privacy-by-design principles. As a volunteer-maintained project, all privacy commitments are made on a best-effort basis. See our [Privacy Statement](../../PRIVACY.md) for detailed compliance information.
+
+## External Integrations Beyond Telemetry
+
+**Important**: This document focuses on telemetry (error tracking). BirdNET-Go has several other external integrations that may transmit data:
+
+### Default External Connections (No Personal Data)
+- **Weather Services**: YR.no for weather data (read-only)
+- **Image Services**: Wikimedia Commons & AviCommons for bird photos (read-only)
+
+### Optional External Integrations (Require User Configuration)
+- **BirdWeather**: Citizen science platform (audio clips, species data)
+- **MQTT Brokers**: Real-time detection publishing
+- **Backup Services**: External storage (FTP, SFTP, Google Drive, rsync)
+- **OpenWeather API**: Enhanced weather data (requires API key)
+
+📋 **For complete information about all external services and data collection, see our [Privacy Statement](../../PRIVACY.md)**
+
+## Volunteer Project Notice
+
+BirdNET-Go is provided as free, open-source software maintained by volunteers. While we implement strong privacy protections by design:
+
+- **Support capacity** depends on volunteer availability
+- **Privacy commitments** are made on a best-effort basis
+- **Response times** may vary significantly during busy periods
+- **No warranties** - software provided "as is"
+
+For immediate privacy protection, simply disable telemetry in Settings → Support.
 
 ---
 
 *Last updated: June 2025*
+
+*This document covers telemetry specifically. For comprehensive privacy information including all external integrations, see [Privacy Statement](../../PRIVACY.md). BirdNET-Go is provided "AS IS" without warranty of any kind.*
