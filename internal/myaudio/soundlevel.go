@@ -213,11 +213,14 @@ func (f *octaveBandFilter) processAudioSample(input float64) float64 {
 	// Apply filter equation: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
 	output := f.b0*input + f.b1*f.x1 + f.b2*f.x2 - f.a1*f.y1 - f.a2*f.y2
 
-	// Prevent numerical instability: if output is NaN or Inf, reset to input
-	if math.IsNaN(output) || math.IsInf(output, 0) {
-		output = input
+	// Prevent numerical instability: check for non-finite values or excessive amplitude
+	const maxAmplitude = 100.0 // Reasonable maximum amplitude for filtered output
+
+	if math.IsNaN(output) || math.IsInf(output, 0) || math.Abs(output) > maxAmplitude {
 		// Reset filter state to prevent instability propagation
 		f.x1, f.x2, f.y1, f.y2 = 0, 0, 0, 0
+		// Return attenuated input to maintain signal flow
+		output = input * 0.1
 	}
 
 	// Update state variables
@@ -273,12 +276,24 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 			// Calculate RMS for this 1-second window
 			rms := calculateRMS(buffer.samples[:buffer.targetSampleCount])
 			// Ensure we have a valid RMS value before calculating dB level
-			// Use a minimum threshold to avoid extreme negative values
-			// 1e-10 corresponds to -200 dB, which is effectively silence
-			if rms < 1e-10 {
-				rms = 1e-10
+			// Clamp RMS to a reasonable range to avoid +Inf/-Inf in dB calculation
+			// 1e-10 corresponds to -200 dB (effectively silence)
+			// 10.0 corresponds to +20 dB (very loud, but finite)
+			const minRMS = 1e-10
+			const maxRMS = 10.0
+
+			if rms < minRMS {
+				rms = minRMS
+			} else if rms > maxRMS {
+				rms = maxRMS
 			}
+
 			levelDB := 20 * math.Log10(rms)
+
+			// Additional safety check for non-finite values
+			if math.IsInf(levelDB, 0) || math.IsNaN(levelDB) {
+				levelDB = -200.0 // Default to silence
+			}
 
 			// Store 1-second measurement in 10-second aggregator
 			currentIdx := p.tenSecondBuffer.currentIndex
@@ -357,6 +372,10 @@ func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 			sum := 0.0
 
 			for _, val := range values {
+				// Skip non-finite values
+				if math.IsInf(val, 0) || math.IsNaN(val) {
+					continue
+				}
 				if val < minVal {
 					minVal = val
 				}
@@ -367,6 +386,17 @@ func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 			}
 
 			mean := sum / float64(len(values))
+
+			// Final safety check for all values
+			if math.IsInf(minVal, 0) || math.IsNaN(minVal) {
+				minVal = -200.0
+			}
+			if math.IsInf(maxVal, 0) || math.IsNaN(maxVal) {
+				maxVal = -200.0
+			}
+			if math.IsInf(mean, 0) || math.IsNaN(mean) {
+				mean = -200.0
+			}
 
 			octaveBands[bandKey] = OctaveBandData{
 				CenterFreq:  filter.centerFreq,
