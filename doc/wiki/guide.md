@@ -20,7 +20,7 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 * Privacy and dog bark filtering capabilities
 * Dynamic threshold adjustment for better detection
 * OAuth2 authentication options for security
-* Telemetry support with Prometheus-compatible endpoint
+* Optional privacy-first error tracking and telemetry with Prometheus-compatible endpoint
 * Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration and configurable debug logging
 
 ## Supported Platforms
@@ -63,6 +63,7 @@ The script will:
 - Guide you through configuration (audio input, location, language, etc.)
 - Create a systemd service for automatic start on boot
 - Set up directories for configuration and data persistence
+- Optionally configure privacy-first error tracking to help improve BirdNET-Go
 
 The installation script includes several features:
 - Support for both direct audio capture and RTSP stream sources
@@ -349,6 +350,10 @@ security:
   sessionsecret: ""  # Secret for session cookie
 
 # Output settings
+# Error tracking and telemetry (optional)
+sentry:
+  enabled: false  # true to enable privacy-first error tracking (opt-in)
+
 output:
   # SQLite database output settings
   sqlite:
