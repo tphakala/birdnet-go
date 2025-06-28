@@ -61,6 +61,7 @@ type RetentionSettings struct {
 type SoundLevelSettings struct {
 	Enabled  bool `yaml:"enabled" mapstructure:"enabled"`   // true to enable sound level monitoring
 	Interval int  `yaml:"interval" mapstructure:"interval"` // measurement interval in seconds (default: 10)
+	Debug    bool `yaml:"debug" mapstructure:"debug"`       // true to enable debug logging for sound level monitoring
 }
 
 type AudioSettings struct {
@@ -453,9 +454,9 @@ func (s *GoogleDriveBackupSettings) Validate() error {
 
 // BackupTarget defines settings for a backup target
 type BackupTarget struct {
-	Type     string                 `yaml:"type"`     // Specifies the type of the backup target (e.g., "local", "s3", "ftp", "sftp"). This determines the storage mechanism.
-	Enabled  bool                   `yaml:"enabled"`  // If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored.
-	Settings map[string]interface{} `yaml:"settings"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
+	Type     string         `yaml:"type"`     // Specifies the type of the backup target (e.g., "local", "s3", "ftp", "sftp"). This determines the storage mechanism.
+	Enabled  bool           `yaml:"enabled"`  // If true, this backup target will be used for storing backups. At least one target should be enabled for backups to be stored.
+	Settings map[string]any `yaml:"settings"` // A map of key-value pairs for target-specific settings. TODO: Consider using BackupTargetSettings interface for type safety after implementing custom YAML unmarshaling.
 }
 
 // BackupScheduleConfig defines a single backup schedule
