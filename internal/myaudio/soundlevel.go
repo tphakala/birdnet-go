@@ -280,8 +280,8 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 		sumSquares += audioSamples[i] * audioSamples[i]
 	}
 
-	// Log input signal statistics if debug is enabled
-	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+	// Log input signal statistics if debug is enabled and realtime logging is on
+	if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 		if logger := getSoundLevelLogger(); logger != nil {
 			inputRMS := math.Sqrt(sumSquares / float64(sampleCount))
 			inputDB := 20 * math.Log10(inputRMS+1e-10) // Add small value to avoid log(0)
@@ -335,8 +335,8 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 				levelDB = -100.0 // Default to noise floor
 			}
 
-			// Log band measurement if debug is enabled
-			if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			// Log band measurement if debug is enabled and realtime logging is on
+			if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 				if logger := getSoundLevelLogger(); logger != nil {
 					logger.Debug("calculated band level",
 						"source", p.source,
@@ -385,6 +385,7 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 		soundLevelData := p.generateSoundLevelData()
 
 		// Log 10-second measurement completion if debug is enabled
+		// This should always log when debug is enabled since it matches the configured interval
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 			if logger := getSoundLevelLogger(); logger != nil {
 				logger.Debug("completed 10-second sound level measurement",
