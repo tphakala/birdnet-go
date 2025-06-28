@@ -59,9 +59,10 @@ type RetentionSettings struct {
 // AudioSettings contains settings for audio processing and export.
 // SoundLevelSettings contains settings for sound level monitoring
 type SoundLevelSettings struct {
-	Enabled  bool `yaml:"enabled" mapstructure:"enabled"`   // true to enable sound level monitoring
-	Interval int  `yaml:"interval" mapstructure:"interval"` // measurement interval in seconds (default: 10)
-	Debug    bool `yaml:"debug" mapstructure:"debug"`       // true to enable debug logging for sound level monitoring
+	Enabled              bool `yaml:"enabled" mapstructure:"enabled"`                               // true to enable sound level monitoring
+	Interval             int  `yaml:"interval" mapstructure:"interval"`                             // measurement interval in seconds (default: 10)
+	Debug                bool `yaml:"debug" mapstructure:"debug"`                                   // true to enable debug logging for sound level monitoring
+	DebugRealtimeLogging bool `yaml:"debug_realtime_logging" mapstructure:"debug_realtime_logging"` // true to log debug messages for every realtime update, false to log only at configured interval
 }
 
 type AudioSettings struct {

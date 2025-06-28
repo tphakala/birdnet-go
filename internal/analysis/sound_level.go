@@ -103,8 +103,8 @@ func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData 
 		normalizedKey := normalizeBandKey(key)
 		sanitized.OctaveBands[normalizedKey] = sanitizedBand
 
-		// Log sanitization details if debug is enabled
-		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+		// Log sanitization details if debug is enabled and realtime logging is on
+		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 			if band.Min != sanitizedBand.Min || band.Max != sanitizedBand.Max ||
 				band.Mean != sanitizedBand.Mean || key != normalizedKey {
 				if logger := getSoundLevelLogger(); logger != nil {
@@ -309,6 +309,7 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, pr
 				return
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
+				// This is logged at interval rate, not realtime
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 					if logger := getSoundLevelLogger(); logger != nil {
 						logger.Debug("received sound level data",
@@ -401,6 +402,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 		topic, soundData.Source, len(soundData.OctaveBands))
 
 	// Log detailed sound level data if debug is enabled
+	// These logs are for publishing events, not realtime processing
 	if settings.Realtime.Audio.SoundLevel.Debug {
 		if logger := getSoundLevelLogger(); logger != nil {
 			logger.Debug("published sound level data to MQTT",
@@ -410,15 +412,17 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 				"json_size", len(jsonData),
 				"octave_bands", len(soundData.OctaveBands))
 
-			// Log each octave band's values
-			for band, data := range sanitizedData.OctaveBands {
-				logger.Debug("octave band values",
-					"band", band,
-					"center_freq", data.CenterFreq,
-					"min_db", data.Min,
-					"max_db", data.Max,
-					"mean_db", data.Mean,
-					"sample_count", data.SampleCount)
+			// Log each octave band's values only if realtime logging is enabled
+			if settings.Realtime.Audio.SoundLevel.DebugRealtimeLogging {
+				for band, data := range sanitizedData.OctaveBands {
+					logger.Debug("octave band values",
+						"band", band,
+						"center_freq", data.CenterFreq,
+						"min_db", data.Min,
+						"max_db", data.Max,
+						"mean_db", data.Mean,
+						"sample_count", data.SampleCount)
+				}
 			}
 		}
 	}

@@ -89,6 +89,7 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 	metrics.SoundLevel.RecordSoundLevelDuration(soundData.Source, soundData.Name, float64(soundData.Duration))
 
 	// Log metrics update if debug is enabled
+	// This is logged at interval rate, not realtime
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 		if logger := getMetricsLogger(); logger != nil {
 			logger.Debug("updating sound level metrics",
@@ -112,8 +113,8 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 			math.Round(bandData.Mean*100)/100,
 		)
 
-		// Log detailed band metrics if debug is enabled
-		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+		// Log detailed band metrics if debug is enabled and realtime logging is on
+		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 			if logger := getMetricsLogger(); logger != nil {
 				logger.Debug("updated octave band metrics",
 					"source", soundData.Source,
