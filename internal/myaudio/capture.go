@@ -335,7 +335,10 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			}
 
 			activeStreams.Store(url, true)
-			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
+			// Create a separate restart channel for each RTSP stream
+			// This prevents RTSP restarts from affecting sound card capture
+			rtspRestartChan := make(chan struct{}, 1)
+			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, rtspRestartChan, unifiedAudioChan)
 		}
 	}
 
@@ -360,7 +363,9 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		}
 
 		// Device audio capture
-		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, unifiedAudioChan)
+		// Pass nil for restartChan to prevent sound card capture from being restarted
+		// Sound card capture should be stable and not need restarts
+		go captureAudioMalgo(settings, selectedSource, wg, quitChan, nil, unifiedAudioChan)
 	}
 }
 
@@ -861,12 +866,19 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 			fmt.Println("🛑 Stopping audio capture due to quit signal.")
 			time.Sleep(100 * time.Millisecond) // Allow Stop() to execute
 			return
-		case <-restartChan:
-			if settings.Debug {
-				fmt.Println("🔄 Restarting audio capture.")
-			}
-			return
 		default:
+			// Check restart channel only if it's not nil
+			if restartChan != nil {
+				select {
+				case <-restartChan:
+					if settings.Debug {
+						fmt.Println("🔄 Restarting audio capture.")
+					}
+					return
+				default:
+					// Continue to sleep
+				}
+			}
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
