@@ -912,7 +912,25 @@ thead.sticky-header {
 }
 
 /* ========================================================================
- 12. Status Badges
+ 12. Notification Bell Animation
+ ======================================================================== */
+
+/* Wiggle animation for notification bell */
+@keyframes wiggle {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(-15deg); }
+  50% { transform: rotate(15deg); }
+  75% { transform: rotate(-10deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.animate-wiggle {
+  animation: wiggle 0.5s ease-in-out;
+  animation-iteration-count: 2;
+}
+
+/* ========================================================================
+ 13. Status Badges
  ======================================================================== */
 
 /* Base status badge style */
