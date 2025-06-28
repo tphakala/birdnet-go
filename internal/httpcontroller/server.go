@@ -7,15 +7,18 @@ import (
 	"log"
 	"log/slog"
 	"net"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	echolog "github.com/labstack/gommon/log"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -106,17 +109,44 @@ func (s *Server) Start() {
 		var err error
 
 		if s.Settings.Security.AutoTLS {
-			configPaths, configErr := conf.GetDefaultConfigPaths()
-			if configErr != nil {
-				errChan <- fmt.Errorf("failed to get config paths: %w", configErr)
-				return
+			// Validate AutoTLS environment before starting
+			if validationErr := s.validateAutoTLSEnvironment(); validationErr != nil {
+				s.LogError(nil, validationErr, "AutoTLS validation failed")
+				log.Printf("AutoTLS validation failed: %v", validationErr)
+				log.Println("AutoTLS has been disabled. Starting HTTP server on configured port.")
+				s.Settings.Security.AutoTLS = false
+				err = s.Echo.Start(":" + s.Settings.WebServer.Port)
+			} else {
+				// AutoTLS requires standard HTTPS ports
+				configPaths, configErr := conf.GetDefaultConfigPaths()
+				if configErr != nil {
+					errChan <- fmt.Errorf("failed to get config paths: %w", configErr)
+					return
+				}
+
+				// Start HTTP server on port 80 for ACME challenges in a separate goroutine
+				go func() {
+					httpServer := echo.New()
+					httpServer.HideBanner = true
+					// Redirect all HTTP traffic to HTTPS
+					httpServer.Pre(middleware.HTTPSRedirect())
+
+					s.Debug("Starting HTTP redirect server on port 80 for ACME challenges")
+					if httpErr := httpServer.Start(":80"); httpErr != nil {
+						log.Printf("Failed to start HTTP redirect server on port 80: %v", httpErr)
+						// This is not fatal - AutoTLS can work with DNS challenges
+					}
+				}()
+
+				// Configure AutoTLS manager
+				s.Echo.AutoTLSManager.Prompt = autocert.AcceptTOS
+				s.Echo.AutoTLSManager.Cache = autocert.DirCache(configPaths[0])
+				s.Echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(s.Settings.Security.Host)
+
+				// Start HTTPS server on port 443
+				s.Debug("Starting HTTPS server with AutoTLS on port 443")
+				err = s.Echo.StartAutoTLS(":443")
 			}
-
-			s.Echo.AutoTLSManager.Prompt = autocert.AcceptTOS
-			s.Echo.AutoTLSManager.Cache = autocert.DirCache(configPaths[0])
-			s.Echo.AutoTLSManager.HostPolicy = autocert.HostWhitelist(s.Settings.Security.Host)
-
-			err = s.Echo.StartAutoTLS(":" + s.Settings.WebServer.Port)
 		} else {
 			err = s.Echo.Start(":" + s.Settings.WebServer.Port)
 		}
@@ -128,7 +158,12 @@ func (s *Server) Start() {
 
 	go handleServerError(errChan)
 
-	fmt.Printf("HTTP server started on port %s (AutoTLS: %v)\n", s.Settings.WebServer.Port, s.Settings.Security.AutoTLS)
+	if s.Settings.Security.AutoTLS {
+		fmt.Printf("HTTPS server started with AutoTLS on ports 80 (redirect) and 443 (secure)\n")
+		fmt.Printf("Domain: %s\n", s.Settings.Security.Host)
+	} else {
+		fmt.Printf("HTTP server started on port %s\n", s.Settings.WebServer.Port)
+	}
 }
 
 func (s *Server) isAuthenticationEnabled(c echo.Context) bool {
@@ -447,4 +482,60 @@ func (s *Server) LoggingMiddleware() echo.MiddlewareFunc {
 // GetProcessor returns the processor instance
 func (s *Server) GetProcessor() serviceapi.BirdNETProvider {
 	return s.Processor
+}
+
+// validateAutoTLSEnvironment checks if the environment is suitable for AutoTLS
+func (s *Server) validateAutoTLSEnvironment() error {
+	// Check if host is set
+	if s.Settings.Security.Host == "" {
+		return errors.Newf("security.host must be set when AutoTLS is enabled").
+			Component("http-controller").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_autotls_host").
+			Build()
+	}
+
+	// Check if we can bind to privileged ports
+	if !canBindPrivilegedPorts() {
+		return errors.Newf("AutoTLS requires ability to bind to ports 80 and 443. Run as root or with CAP_NET_BIND_SERVICE capability").
+			Component("http-controller").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_autotls_ports").
+			Build()
+	}
+
+	// Warning about Docker port requirements
+	if conf.RunningInContainer() {
+		log.Println("WARNING: AutoTLS requires ports 80 and 443 to be exposed in your Docker configuration.")
+		log.Println("Ensure your docker-compose.yml maps these ports:")
+		log.Println("  ports:")
+		log.Println("    - \"80:80\"")
+		log.Println("    - \"443:443\"")
+	}
+
+	return nil
+}
+
+// canBindPrivilegedPorts checks if the process can bind to ports < 1024
+func canBindPrivilegedPorts() bool {
+	// Check if running as root
+	if os.Geteuid() == 0 {
+		return true
+	}
+
+	// Try to create a test listener on port 80
+	listener, err := net.Listen("tcp", ":80")
+	if err == nil {
+		listener.Close()
+		return true
+	}
+
+	// Try port 443 as well
+	listener, err = net.Listen("tcp", ":443")
+	if err == nil {
+		listener.Close()
+		return true
+	}
+
+	return false
 }

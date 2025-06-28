@@ -154,9 +154,22 @@ webserver:
     rotationday: 0        # day of the week for weekly rotation, 0 = Sunday
 
 security:
-  host: ""                   # host and port for autoTLS and authentication
-  autotls: false             # true to enable auto TLS, only host is whitelisted
-  redirecttohttps: false     # true to redirect http to https
+  # host is required for AutoTLS and OAuth providers
+  # Must be a fully qualified domain name (e.g., "birdnet.example.com")
+  # The domain must point to this server's public IP address
+  host: ""
+  
+  # AutoTLS enables automatic TLS certificate management via Let's Encrypt
+  # REQUIREMENTS:
+  # - host must be set to a valid domain name
+  # - Ports 80 and 443 must be accessible from the internet
+  # - Domain must point to this server's IP address
+  # - When using Docker, use docker-compose.autotls.yml instead of docker-compose.yml
+  autotls: false
+  
+  # redirecttohttps forces HTTP connections to redirect to HTTPS
+  # Only works when autotls is enabled or manual TLS certificates are configured
+  redirecttohttps: false
   allowsubnetbypass:
     enabled: false           # true to disable OAuth in subnet
     subnet: ""               # comma-separated list of CIDR ranges (e.g., "192.168.1.0/24,10.0.0.0/8")
