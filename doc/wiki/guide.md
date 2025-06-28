@@ -21,7 +21,7 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 * Dynamic threshold adjustment for better detection
 * OAuth2 authentication options for security
 * Telemetry support with Prometheus-compatible endpoint
-* Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration
+* Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration and configurable debug logging
 
 ## Supported Platforms
 
@@ -1102,8 +1102,10 @@ Enable sound level monitoring in your `config.yaml`:
 realtime:
   audio:
     soundlevel:
-      enabled: true   # Enable sound level monitoring (default: false)
-      interval: 10    # Measurement interval in seconds (default: 10)
+      enabled: true              # Enable sound level monitoring (default: false)
+      interval: 10               # Measurement interval in seconds (default: 10)
+      debug: false               # Enable debug logging (default: false)
+      debug_realtime_logging: false  # Enable per-sample debug logs (default: false)
 ```
 
 > **Note**: Sound level monitoring is disabled by default to avoid performance overhead. Enable it only if you need this functionality.
@@ -1172,6 +1174,93 @@ Sound level data is exposed as Prometheus metrics:
 2. **Smart Home Integration**: Trigger actions based on ambient noise levels
 3. **Research Applications**: Collect standardized acoustic measurements alongside bird detection data
 4. **System Diagnostics**: Monitor microphone performance and environmental conditions
+
+#### Technical Details for Advanced Users
+
+##### Digital Signal Processing
+
+The sound level monitoring system implements professional-grade signal processing:
+
+1. **1/3rd Octave Band Filtering**:
+   - Implements 30 frequency bands according to ISO 266 standard
+   - Center frequencies: 25 Hz to 20 kHz in standard 1/3rd octave steps
+   - Uses 2nd order IIR biquad filters based on Robert Bristow-Johnson's audio EQ cookbook
+   - Q factor calculation: `Q = f_center / (f_high - f_low)` ≈ 4.318 for 1/3rd octave bands
+   - Includes stability checks and numerical overflow protection
+
+2. **RMS and dB Calculation**:
+   - RMS (Root Mean Square) calculation over 1-second windows
+   - dB conversion: `20 * log10(RMS)` relative to digital full scale
+   - Range clamping: -200 dB to +20 dB
+   - Non-finite value protection (NaN/Inf handling)
+
+3. **Data Aggregation**:
+   - Two-stage aggregation: 1-second measurements → 10-second statistics
+   - Provides min/max/mean for each frequency band
+   - Continuous processing with sample overflow handling
+
+##### Implementation Architecture
+
+- **Modular Design**: Separate processor instances per audio source
+- **Non-blocking Architecture**: Audio processing never blocks capture
+- **Channel-based Communication**: 100-element buffered channels
+- **Concurrent Publishing**: MQTT, SSE, and metrics updated independently
+- **Comprehensive Error Handling**: Graceful degradation on errors
+
+##### Current Limitations
+
+> **Important**: The sound level monitoring system has several limitations that users should be aware of:
+
+1. **No Absolute Calibration**:
+   - Measurements are **relative only** (not calibrated to dB SPL)
+   - Cannot provide absolute sound pressure levels
+   - Useful for relative comparisons and trend analysis, not absolute measurements
+
+2. **No Frequency Weighting**:
+   - Provides unweighted (linear) frequency response
+   - No A-weighting or C-weighting curves implemented
+   - May not correlate directly with perceived loudness
+
+3. **Fixed Aggregation Windows**:
+   - Hardcoded 10-second measurement periods
+   - Cannot adjust for different temporal resolutions
+   - The `interval` setting validates but doesn't change window size
+
+4. **Limited Statistical Analysis**:
+   - Only provides min/max/mean values
+   - No percentiles (L10, L50, L90) commonly used in environmental noise assessment
+   - No peak detection or peak hold functionality
+
+5. **Hardware Dependencies**:
+   - Assumes 16-bit audio at system sample rate (typically 48 kHz)
+   - Frequency bands above Nyquist frequency (sample_rate/2) are automatically excluded
+   - No compensation for microphone frequency response
+
+##### Debug Options
+
+For troubleshooting or detailed analysis:
+
+```yaml
+realtime:
+  audio:
+    soundlevel:
+      debug: true                    # Enable debug logging
+      debug_realtime_logging: true   # Enable per-sample logging (very verbose!)
+```
+
+Debug logs are written to `logs/soundlevel.log`. Use `debug_realtime_logging` sparingly as it generates high log volume.
+
+##### Extending the System
+
+Advanced users interested in extending the sound level monitoring capabilities should note:
+
+1. **Adding Frequency Weighting**: Could be implemented as post-RMS filter curves
+2. **Calibration Support**: Would require known reference signals and microphone sensitivity data
+3. **Additional Statistics**: Percentile tracking could be added to the aggregation system
+4. **Variable Time Windows**: The 10-second window is currently hardcoded but could be made configurable
+5. **Peak Detection**: True peak tracking would require additional buffer management
+
+The implementation provides a solid foundation for environmental sound monitoring with robust signal processing and comprehensive error handling. While it cannot provide absolute SPL measurements, it excels at relative sound level monitoring and frequency analysis for research and environmental assessment purposes.
 
 ### Integration Options
 
