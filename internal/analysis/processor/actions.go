@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
@@ -299,6 +300,8 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		} else {
 			log.Printf("❌ Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s): %v\n",
 				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
+			// Send notification for non-retryable failures
+			notification.NotifyIntegrationFailure("BirdWeather", err)
 		}
 		return fmt.Errorf("failed to upload %s to BirdWeather: %w", note.CommonName, err) // Return wrapped error with context
 	}
@@ -385,6 +388,8 @@ func (a *MqttAction) Execute(data interface{}) error {
 		} else {
 			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s): %v\n",
 				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
+			// Send notification for non-retryable failures
+			notification.NotifyIntegrationFailure("MQTT", err)
 		}
 		return fmt.Errorf("failed to publish %s to MQTT topic %s: %w", a.Note.CommonName, a.Settings.Realtime.MQTT.Topic, err)
 	}

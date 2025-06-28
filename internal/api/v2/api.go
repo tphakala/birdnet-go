@@ -367,6 +367,7 @@ func (c *Controller) initRoutes() {
 		{"media routes", c.initMediaRoutes},
 		{"range routes", c.initRangeRoutes},
 		{"sse routes", c.initSSERoutes},
+		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
 	}
 

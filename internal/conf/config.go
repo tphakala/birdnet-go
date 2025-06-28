@@ -175,6 +175,28 @@ type TelemetrySettings struct {
 	Listen  string // IP address and port to listen on
 }
 
+// MonitoringSettings contains settings for system resource monitoring
+type MonitoringSettings struct {
+	Enabled       bool                  // true to enable system resource monitoring
+	CheckInterval int                   // interval in seconds between resource checks
+	CPU           ThresholdSettings     // CPU usage thresholds
+	Memory        ThresholdSettings     // Memory usage thresholds
+	Disk          DiskThresholdSettings // Disk usage thresholds
+}
+
+// ThresholdSettings contains warning and critical thresholds
+type ThresholdSettings struct {
+	Enabled  bool    // true to enable monitoring for this resource
+	Warning  float64 // warning threshold percentage
+	Critical float64 // critical threshold percentage
+}
+
+// DiskThresholdSettings extends ThresholdSettings with disk-specific options
+type DiskThresholdSettings struct {
+	ThresholdSettings
+	Path string // filesystem path to monitor (default: "/")
+}
+
 // SentrySettings contains settings for Sentry error tracking
 type SentrySettings struct {
 	Enabled bool // true to enable Sentry error tracking (opt-in)
@@ -198,6 +220,7 @@ type RealtimeSettings struct {
 	RTSP          RTSPSettings          // RTSP settings
 	MQTT          MQTTSettings          // MQTT settings
 	Telemetry     TelemetrySettings     // Telemetry settings
+	Monitoring    MonitoringSettings    // System resource monitoring settings
 	Species       SpeciesSettings       // Custom thresholds and actions for species
 	Weather       WeatherSettings       // Weather provider related settings
 }
