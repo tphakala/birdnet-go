@@ -3,12 +3,17 @@ package myaudio
 
 import (
 	"fmt"
+	"io"
+	"log"
+	"log/slog"
 	"math"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // OctaveBandData represents sound level statistics for a single 1/3rd octave band
@@ -119,6 +124,14 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 		}
 	}
 
+	// Warm up filters to avoid initial transients
+	// Process 100 samples of silence through each filter
+	for _, filter := range processor.filters {
+		for i := 0; i < 100; i++ {
+			_ = filter.processAudioSample(0.0)
+		}
+	}
+
 	// Initialize 10-second aggregator arrays
 	for i := range processor.tenSecondBuffer.secondMeasurements {
 		processor.tenSecondBuffer.secondMeasurements[i] = make(map[string]float64)
@@ -128,30 +141,7 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 }
 
 // newOctaveBandFilter creates a bandpass filter for the specified 1/3rd octave band.
-//
-// Filter Design Notes:
-// This implements a simplified 2nd order Butterworth bandpass filter, which provides:
-// - A relatively flat passband response
-// - -12 dB/octave roll-off rate (40 dB/decade)
-// - Moderate phase distortion near band edges
-//
-// Limitations:
-//   - The 2nd order design provides limited stopband attenuation, which may cause
-//     frequency leakage between adjacent 1/3rd octave bands
-//   - The filter coefficients are computed using a simplified approach that may not
-//     provide optimal frequency response characteristics
-//   - Phase response is not linear, which can affect time-domain characteristics
-//
-// This implementation is suitable for basic sound level analysis and general
-// acoustic measurements. For critical applications requiring higher precision:
-// - Consider using higher-order filters (4th or 6th order) for steeper roll-off
-// - Implement Chebyshev or elliptic filters for better stopband attenuation
-// - Use FIR filters if linear phase response is required
-// - Apply window functions to reduce spectral leakage
-//
-// The filter design follows ISO 61260 Class 2 tolerances for 1/3rd octave bands,
-// which allows ±0.5 dB deviation in the passband and -24 dB minimum attenuation
-// at the band edges.
+// Uses Robert Bristow-Johnson's audio EQ cookbook formulas for stable biquad filters.
 func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, error) {
 	if centerFreq <= 0 || sampleRate <= 0 {
 		return nil, errors.Newf("invalid filter parameters: centerFreq=%f, sampleRate=%f", centerFreq, sampleRate).
@@ -182,28 +172,49 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 			Build()
 	}
 
-	// Normalize frequencies to radians per sample
-	wl := 2.0 * math.Pi * lowFreq / sampleRate
-	wh := 2.0 * math.Pi * highFreq / sampleRate
+	// Implement biquad bandpass filter using RBJ cookbook formulas
+	// This provides much better stability especially at low frequencies
 
-	// Simplified bandpass filter design (2nd order Butterworth)
-	// Uses pole-zero placement method for digital filter design
-	wc := math.Sqrt(wl * wh) // Geometric mean provides symmetrical response on log scale
-	bw := wh - wl            // Bandwidth in radians
+	// Pre-warp the center frequency for bilinear transform
+	omega := 2.0 * math.Pi * centerFreq / sampleRate
+	sinOmega := math.Sin(omega)
+	cosOmega := math.Cos(omega)
 
-	// Compute filter coefficients using bilinear transform approximation
-	// r controls the pole radius (stability and bandwidth)
-	// k controls the zero placement (frequency response shape)
-	r := 1 - 3*bw
-	k := (1 - 2*r*math.Cos(wc) + r*r) / (2 - 2*math.Cos(wc))
+	// Q factor for 1/3 octave band (approximately 4.318)
+	// Q = f_center / bandwidth = f_center / (f_high - f_low)
+	Q := centerFreq / (highFreq - lowFreq)
 
-	// IIR filter coefficients for difference equation:
-	// y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
-	filter.a1 = 2 * r * math.Cos(wc)
-	filter.a2 = -r * r
-	filter.b0 = 1 - k
-	filter.b1 = 2 * (k - r) * math.Cos(wc)
-	filter.b2 = r*r - k
+	// For very low frequencies, ensure minimum Q to maintain stability
+	if Q < 0.5 {
+		Q = 0.5
+	}
+
+	alpha := sinOmega / (2.0 * Q)
+
+	// Bandpass filter coefficients (constant 0 dB peak gain)
+	b0 := alpha
+	b1 := 0.0
+	b2 := -alpha
+	a0 := 1.0 + alpha
+	a1 := -2.0 * cosOmega
+	a2 := 1.0 - alpha
+
+	// Normalize coefficients
+	filter.b0 = b0 / a0
+	filter.b1 = b1 / a0
+	filter.b2 = b2 / a0
+	filter.a1 = a1 / a0
+	filter.a2 = a2 / a0
+
+	// Validate filter stability (poles must be inside unit circle)
+	// For a 2nd order system: |a2| < 1 and |a1| < 1 + a2
+	if math.Abs(filter.a2) >= 1.0 || math.Abs(filter.a1) >= (1.0+filter.a2) {
+		return nil, errors.Newf("unstable filter coefficients for centerFreq=%f: a1=%f, a2=%f", centerFreq, filter.a1, filter.a2).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_filter_stability").
+			Build()
+	}
 
 	return filter, nil
 }
@@ -250,10 +261,39 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	sampleCount := len(samples) / 2
 	audioSamples := make([]float64, sampleCount)
 
+	// Track input signal statistics for debugging
+	var minSample, maxSample float64 = 1.0, -1.0
+	var sumSquares float64
+
 	for i := 0; i < sampleCount; i++ {
 		// Convert 16-bit little-endian to float64
 		sample := int16(samples[i*2]) | int16(samples[i*2+1])<<8
 		audioSamples[i] = float64(sample) / 32768.0 // Normalize to [-1, 1]
+
+		// Collect statistics
+		if audioSamples[i] < minSample {
+			minSample = audioSamples[i]
+		}
+		if audioSamples[i] > maxSample {
+			maxSample = audioSamples[i]
+		}
+		sumSquares += audioSamples[i] * audioSamples[i]
+	}
+
+	// Log input signal statistics if debug is enabled and realtime logging is on
+	if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
+		if logger := getSoundLevelLogger(); logger != nil {
+			inputRMS := math.Sqrt(sumSquares / float64(sampleCount))
+			inputDB := 20 * math.Log10(inputRMS+1e-10) // Add small value to avoid log(0)
+			logger.Debug("processing audio samples",
+				"source", p.source,
+				"name", p.name,
+				"sample_count", sampleCount,
+				"min_sample", minSample,
+				"max_sample", maxSample,
+				"input_rms", inputRMS,
+				"input_db", inputDB)
+		}
 	}
 
 	// Track if any band completed a 1-second measurement in this call
@@ -292,7 +332,20 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 
 			// Additional safety check for non-finite values
 			if math.IsInf(levelDB, 0) || math.IsNaN(levelDB) {
-				levelDB = -200.0 // Default to silence
+				levelDB = -100.0 // Default to noise floor
+			}
+
+			// Log band measurement if debug is enabled and realtime logging is on
+			if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
+				if logger := getSoundLevelLogger(); logger != nil {
+					logger.Debug("calculated band level",
+						"source", p.source,
+						"band", bandKey,
+						"center_freq", filter.centerFreq,
+						"rms", rms,
+						"level_db", levelDB,
+						"sample_count", buffer.targetSampleCount)
+				}
 			}
 
 			// Store 1-second measurement in 10-second aggregator
@@ -330,6 +383,19 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	// Check if 10-second window is complete based on measurement count
 	if p.tenSecondBuffer.measurementCount >= 10 {
 		soundLevelData := p.generateSoundLevelData()
+
+		// Log 10-second measurement completion if debug is enabled
+		// This should always log when debug is enabled since it matches the configured interval
+		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			if logger := getSoundLevelLogger(); logger != nil {
+				logger.Debug("completed 10-second sound level measurement",
+					"source", p.source,
+					"name", p.name,
+					"timestamp", soundLevelData.Timestamp,
+					"octave_bands", len(soundLevelData.OctaveBands))
+			}
+		}
+
 		p.resetTenSecondBuffer()
 		return soundLevelData, nil
 	}
@@ -389,13 +455,13 @@ func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 
 			// Final safety check for all values
 			if math.IsInf(minVal, 0) || math.IsNaN(minVal) {
-				minVal = -200.0
+				minVal = -100.0
 			}
 			if math.IsInf(maxVal, 0) || math.IsNaN(maxVal) {
-				maxVal = -200.0
+				maxVal = -100.0
 			}
 			if math.IsInf(mean, 0) || math.IsNaN(mean) {
-				mean = -200.0
+				mean = -100.0
 			}
 
 			octaveBands[bandKey] = OctaveBandData{
@@ -440,11 +506,43 @@ func formatBandKey(centerFreq float64) string {
 	return fmt.Sprintf("%.1f_kHz", centerFreq/1000)
 }
 
-// Global sound level processor registry
+// Global sound level processor registry and logger
 var (
 	soundLevelProcessors     = make(map[string]*soundLevelProcessor)
 	soundLevelProcessorMutex sync.RWMutex
+	soundLevelLogger         *slog.Logger
+	soundLevelLoggerOnce     sync.Once
+	soundLevelLevelVar       = new(slog.LevelVar) // Dynamic level control
+	soundLevelCloseLogger    func() error
 )
+
+// getSoundLevelLogger returns the sound level logger, initializing it if necessary
+func getSoundLevelLogger() *slog.Logger {
+	soundLevelLoggerOnce.Do(func() {
+		var err error
+		// Define log file path relative to working directory
+		logFilePath := filepath.Join("logs", "soundlevel.log")
+		// Set initial level based on debug flag
+		initialLevel := slog.LevelInfo
+		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			initialLevel = slog.LevelDebug
+		}
+		soundLevelLevelVar.Set(initialLevel)
+
+		// Initialize the service-specific file logger
+		soundLevelLogger, soundLevelCloseLogger, err = logging.NewFileLogger(logFilePath, "sound-level-processor", soundLevelLevelVar)
+		if err != nil {
+			// Fallback: Log error to standard log and use stdout logger
+			log.Printf("WARNING: Failed to initialize sound level processor file logger at %s: %v. Using console logging.", logFilePath, err)
+			// Fallback to console logger
+			logging.Init()
+			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: soundLevelLevelVar})
+			soundLevelLogger = slog.New(fbHandler).With("service", "sound-level-processor")
+			soundLevelCloseLogger = func() error { return nil } // No-op closer
+		}
+	})
+	return soundLevelLogger
+}
 
 // RegisterSoundLevelProcessor registers a sound level processor for a source
 func RegisterSoundLevelProcessor(source, name string) error {
