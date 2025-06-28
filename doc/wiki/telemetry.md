@@ -1,9 +1,5 @@
 # Error Tracking & Telemetry
 
-## ⚠️ Important Notice: Volunteer-Maintained Project
-
-BirdNET-Go is a hobby project maintained by volunteers in their spare time. While we are committed to protecting your privacy and following best practices, our capacity to respond to requests and provide support is limited by volunteer availability.
-
 BirdNET-Go includes an optional, privacy-first error tracking system designed to help developers identify and fix issues that affect system reliability and performance. This system is **completely opt-in** and follows privacy-by-design principles.
 
 📋 **For comprehensive privacy information, please see our [Privacy Statement](../../PRIVACY.md)**
