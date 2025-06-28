@@ -24,10 +24,19 @@ import (
 )
 
 // Package-level logger for sound level monitoring
-var soundLevelLogger *slog.Logger
+var (
+	soundLevelLogger *slog.Logger
+	soundLoggerOnce  sync.Once
+)
 
-func init() {
-	soundLevelLogger = logging.ForService("sound-level")
+// getSoundLevelLogger returns the sound level logger, initializing it if necessary
+func getSoundLevelLogger() *slog.Logger {
+	soundLoggerOnce.Do(func() {
+		// Initialize the logging system if not already done
+		logging.Init()
+		soundLevelLogger = logging.ForService("sound-level")
+	})
+	return soundLevelLogger
 }
 
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
@@ -57,15 +66,17 @@ func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData 
 		// Log sanitization details if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 			if band.Min != sanitizedBand.Min || band.Max != sanitizedBand.Max || band.Mean != sanitizedBand.Mean {
-				soundLevelLogger.Debug("sanitized non-finite values in octave band",
-					"band", key,
-					"center_freq", band.CenterFreq,
-					"original_min", band.Min,
-					"original_max", band.Max,
-					"original_mean", band.Mean,
-					"sanitized_min", sanitizedBand.Min,
-					"sanitized_max", sanitizedBand.Max,
-					"sanitized_mean", sanitizedBand.Mean)
+				if logger := getSoundLevelLogger(); logger != nil {
+					logger.Debug("sanitized non-finite values in octave band",
+						"band", key,
+						"center_freq", band.CenterFreq,
+						"original_min", band.Min,
+						"original_max", band.Max,
+						"original_mean", band.Mean,
+						"sanitized_min", sanitizedBand.Min,
+						"sanitized_max", sanitizedBand.Max,
+						"sanitized_mean", sanitizedBand.Mean)
+				}
 			}
 		}
 	}
@@ -94,12 +105,14 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, pr
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					soundLevelLogger.Debug("received sound level data",
-						"source", soundData.Source,
-						"name", soundData.Name,
-						"timestamp", soundData.Timestamp,
-						"duration", soundData.Duration,
-						"bands_count", len(soundData.OctaveBands))
+					if logger := getSoundLevelLogger(); logger != nil {
+						logger.Debug("received sound level data",
+							"source", soundData.Source,
+							"name", soundData.Name,
+							"timestamp", soundData.Timestamp,
+							"duration", soundData.Duration,
+							"bands_count", len(soundData.OctaveBands))
+					}
 				}
 				// Publish sound level data to MQTT
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
@@ -168,22 +181,24 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 
 	// Log detailed sound level data if debug is enabled
 	if settings.Realtime.Audio.SoundLevel.Debug {
-		soundLevelLogger.Debug("published sound level data to MQTT",
-			"topic", topic,
-			"source", soundData.Source,
-			"name", soundData.Name,
-			"json_size", len(jsonData),
-			"octave_bands", len(soundData.OctaveBands))
+		if logger := getSoundLevelLogger(); logger != nil {
+			logger.Debug("published sound level data to MQTT",
+				"topic", topic,
+				"source", soundData.Source,
+				"name", soundData.Name,
+				"json_size", len(jsonData),
+				"octave_bands", len(soundData.OctaveBands))
 
-		// Log each octave band's values
-		for band, data := range sanitizedData.OctaveBands {
-			soundLevelLogger.Debug("octave band values",
-				"band", band,
-				"center_freq", data.CenterFreq,
-				"min_db", data.Min,
-				"max_db", data.Max,
-				"mean_db", data.Mean,
-				"sample_count", data.SampleCount)
+			// Log each octave band's values
+			for band, data := range sanitizedData.OctaveBands {
+				logger.Debug("octave band values",
+					"band", band,
+					"center_freq", data.CenterFreq,
+					"min_db", data.Min,
+					"max_db", data.Max,
+					"mean_db", data.Mean,
+					"sample_count", data.SampleCount)
+			}
 		}
 	}
 
@@ -232,10 +247,12 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan stru
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					soundLevelLogger.Debug("MQTT publisher received sound level data",
-						"source", soundData.Source,
-						"name", soundData.Name,
-						"timestamp", soundData.Timestamp)
+					if logger := getSoundLevelLogger(); logger != nil {
+						logger.Debug("MQTT publisher received sound level data",
+							"source", soundData.Source,
+							"name", soundData.Name,
+							"timestamp", soundData.Timestamp)
+					}
 				}
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
 					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
@@ -264,10 +281,12 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					soundLevelLogger.Debug("SSE publisher received sound level data",
-						"source", soundData.Source,
-						"name", soundData.Name,
-						"timestamp", soundData.Timestamp)
+					if logger := getSoundLevelLogger(); logger != nil {
+						logger.Debug("SSE publisher received sound level data",
+							"source", soundData.Source,
+							"name", soundData.Name,
+							"timestamp", soundData.Timestamp)
+					}
 				}
 				if err := broadcastSoundLevelSSE(apiController, soundData); err != nil {
 					// Only log errors if rate limiter allows
@@ -307,10 +326,12 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 
 	// Log successful broadcast if debug is enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		soundLevelLogger.Debug("successfully broadcast sound level data via SSE",
-			"source", soundData.Source,
-			"name", soundData.Name,
-			"bands_count", len(soundData.OctaveBands))
+		if logger := getSoundLevelLogger(); logger != nil {
+			logger.Debug("successfully broadcast sound level data via SSE",
+				"source", soundData.Source,
+				"name", soundData.Name,
+				"bands_count", len(soundData.OctaveBands))
+		}
 	}
 
 	return nil
@@ -340,10 +361,12 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 			case soundData := <-soundLevelChan:
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					soundLevelLogger.Debug("metrics publisher received sound level data",
-						"source", soundData.Source,
-						"name", soundData.Name,
-						"timestamp", soundData.Timestamp)
+					if logger := getSoundLevelLogger(); logger != nil {
+						logger.Debug("metrics publisher received sound level data",
+							"source", soundData.Source,
+							"name", soundData.Name,
+							"timestamp", soundData.Timestamp)
+					}
 				}
 				// Update Prometheus metrics
 				if metrics != nil && metrics.SoundLevel != nil {
