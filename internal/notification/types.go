@@ -4,6 +4,7 @@
 package notification
 
 import (
+	"sort"
 	"sync"
 	"time"
 
@@ -175,6 +176,11 @@ type InMemoryStore struct {
 
 // NewInMemoryStore creates a new in-memory notification store
 func NewInMemoryStore(maxSize int) *InMemoryStore {
+	// Validate maxSize
+	if maxSize <= 0 {
+		maxSize = 1000 // Default to 1000 notifications
+	}
+
 	return &InMemoryStore{
 		notifications: make(map[string]*Notification),
 		maxSize:       maxSize,
@@ -354,13 +360,7 @@ func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions
 
 // sortNotificationsByTime sorts notifications by timestamp (newest first)
 func sortNotificationsByTime(notifications []*Notification) {
-	// Simple bubble sort for small datasets
-	n := len(notifications)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if notifications[j].Timestamp.Before(notifications[j+1].Timestamp) {
-				notifications[j], notifications[j+1] = notifications[j+1], notifications[j]
-			}
-		}
-	}
+	sort.Slice(notifications, func(i, j int) bool {
+		return notifications[i].Timestamp.After(notifications[j].Timestamp)
+	})
 }

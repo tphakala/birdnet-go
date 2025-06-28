@@ -6,19 +6,31 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/tphakala/birdnet-go/internal/errors"
+
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
+
+// Subscriber represents a notification subscriber
+type Subscriber struct {
+	ch     chan *Notification
+	ctx    context.Context
+	cancel context.CancelFunc
+}
 
 // Service manages notifications and provides rate limiting
 type Service struct {
 	store         NotificationStore
-	subscribers   []chan *Notification
+	subscribers   []*Subscriber
 	subscribersMu sync.RWMutex
 	rateLimiter   *RateLimiter
 	cleanupTicker *time.Ticker
 	ctx           context.Context
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
+	logger        *slog.Logger
 }
 
 // ServiceConfig holds configuration for the notification service
@@ -53,11 +65,12 @@ func NewService(config *ServiceConfig) *Service {
 
 	service := &Service{
 		store:         NewInMemoryStore(config.MaxNotifications),
-		subscribers:   make([]chan *Notification, 0),
+		subscribers:   make([]*Subscriber, 0),
 		rateLimiter:   NewRateLimiter(config.RateLimitWindow, config.RateLimitMaxEvents),
 		cleanupTicker: time.NewTicker(config.CleanupInterval),
 		ctx:           ctx,
 		cancel:        cancel,
+		logger:        logging.ForService("notification"),
 	}
 
 	// Start background cleanup
@@ -134,6 +147,13 @@ func (s *Service) List(filter *FilterOptions) ([]*Notification, error) {
 
 // MarkAsRead updates a notification's status to read
 func (s *Service) MarkAsRead(id string) error {
+	if id == "" {
+		return errors.Newf("notification ID cannot be empty").
+			Component("notification").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	notification, err := s.store.Get(id)
 	if err != nil {
 		return err
@@ -152,6 +172,13 @@ func (s *Service) MarkAsRead(id string) error {
 
 // MarkAsAcknowledged updates a notification's status to acknowledged
 func (s *Service) MarkAsAcknowledged(id string) error {
+	if id == "" {
+		return errors.Newf("notification ID cannot be empty").
+			Component("notification").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	notification, err := s.store.Get(id)
 	if err != nil {
 		return err
@@ -170,27 +197,42 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 
 // Delete removes a notification
 func (s *Service) Delete(id string) error {
+	if id == "" {
+		return errors.Newf("notification ID cannot be empty").
+			Component("notification").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	return s.store.Delete(id)
 }
 
 // Subscribe creates a channel to receive real-time notifications
-func (s *Service) Subscribe() <-chan *Notification {
+// The returned context should be used to detect when the subscription is cancelled
+func (s *Service) Subscribe() (<-chan *Notification, context.Context) {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
 
-	ch := make(chan *Notification, 10)
-	s.subscribers = append(s.subscribers, ch)
-	return ch
+	ctx, cancel := context.WithCancel(s.ctx)
+	sub := &Subscriber{
+		ch:     make(chan *Notification, 10),
+		ctx:    ctx,
+		cancel: cancel,
+	}
+	s.subscribers = append(s.subscribers, sub)
+	return sub.ch, ctx
 }
 
 // Unsubscribe removes a notification channel
+// It cancels the subscriber's context but does not close the channel
+// The subscriber should close the channel when done reading
 func (s *Service) Unsubscribe(ch <-chan *Notification) {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
 
 	for i, subscriber := range s.subscribers {
-		if subscriber == ch {
-			close(subscriber)
+		if subscriber.ch == ch {
+			subscriber.cancel()
 			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
 			break
 		}
@@ -246,16 +288,36 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 
 // broadcast sends a notification to all subscribers
 func (s *Service) broadcast(notification *Notification) {
-	s.subscribersMu.RLock()
-	defer s.subscribersMu.RUnlock()
+	s.subscribersMu.Lock()
+	defer s.subscribersMu.Unlock()
 
-	for _, ch := range s.subscribers {
+	// Track which subscribers are still active
+	activeSubscribers := make([]*Subscriber, 0, len(s.subscribers))
+
+	for _, sub := range s.subscribers {
 		select {
-		case ch <- notification:
+		case <-sub.ctx.Done():
+			// Subscriber cancelled, don't add to active list
+			continue
 		default:
-			// Channel is full, skip this subscriber
+			// Subscriber is still active
+			activeSubscribers = append(activeSubscribers, sub)
+
+			// Try to send notification
+			select {
+			case sub.ch <- notification:
+				// Successfully sent
+			default:
+				// Channel is full, skip this subscriber
+				if s.logger != nil {
+					s.logger.Debug("notification channel full, skipping subscriber")
+				}
+			}
 		}
 	}
+
+	// Update the subscribers list to only include active ones
+	s.subscribers = activeSubscribers
 }
 
 // cleanupLoop periodically removes expired notifications
@@ -267,7 +329,9 @@ func (s *Service) cleanupLoop() {
 		case <-s.cleanupTicker.C:
 			if err := s.store.DeleteExpired(); err != nil {
 				// Log error but don't stop the cleanup loop
-				fmt.Printf("Error cleaning up expired notifications: %v\n", err)
+				if s.logger != nil {
+					s.logger.Error("error cleaning up expired notifications", "error", err)
+				}
 			}
 		case <-s.ctx.Done():
 			return
@@ -281,11 +345,11 @@ func (s *Service) Stop() {
 	s.cleanupTicker.Stop()
 	s.wg.Wait()
 
-	// Close all subscriber channels
+	// Cancel all subscriber contexts
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
-	for _, ch := range s.subscribers {
-		close(ch)
+	for _, sub := range s.subscribers {
+		sub.cancel()
 	}
 	s.subscribers = nil
 }
@@ -315,14 +379,15 @@ func (r *RateLimiter) Allow() bool {
 	now := time.Now()
 	cutoff := now.Add(-r.window)
 
-	// Remove old events outside the window
-	validEvents := make([]time.Time, 0, len(r.events))
+	// Remove old events outside the window by reusing the slice
+	validCount := 0
 	for _, event := range r.events {
 		if event.After(cutoff) {
-			validEvents = append(validEvents, event)
+			r.events[validCount] = event
+			validCount++
 		}
 	}
-	r.events = validEvents
+	r.events = r.events[:validCount]
 
 	// Check if we're at the limit
 	if len(r.events) >= r.maxEvents {
@@ -338,5 +403,5 @@ func (r *RateLimiter) Allow() bool {
 func (r *RateLimiter) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.events = r.events[:0]
+	r.events = nil
 }
