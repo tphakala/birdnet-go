@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -345,3 +346,121 @@ func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
 func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() any           { return nil }
+
+// TestAnonymizeIPAddress tests IP address anonymization
+func TestAnonymizeIPAddress(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"localhost ipv4", "127.0.0.1", "localhost"},
+		{"localhost ipv6", "::1", "localhost"},
+		{"private ip 10.x", "10.0.1.100", "private-ip"},
+		{"private ip 192.168.x", "192.168.1.1", "private-ip"},
+		{"private ip 172.16.x", "172.16.0.1", "private-ip"},
+		{"link-local", "169.254.1.1", "private-ip"},
+		{"invalid ip", "not.an.ip", "invalid-ip-b94d27"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := anonymizeIPAddress(tt.input)
+			switch {
+			case tt.name == "invalid ip":
+				// For invalid IPs, we just check the prefix
+				assert.True(t, strings.HasPrefix(result, "invalid-ip-"), "Expected invalid-ip prefix for %s, got %s", tt.input, result)
+			case strings.HasPrefix(tt.expected, "public-ip-"):
+				// For public IPs, we just check the prefix since the hash varies
+				assert.True(t, strings.HasPrefix(result, "public-ip-"), "Expected public-ip prefix for %s, got %s", tt.input, result)
+			default:
+				assert.Equal(t, tt.expected, result, "Expected %s for %s, got %s", tt.expected, tt.input, result)
+			}
+		})
+	}
+}
+
+// TestAnonymizeURL tests URL anonymization
+func TestAnonymizeURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"http url", "http://example.com/path", "url-"},
+		{"https url", "https://192.168.1.1:8080/api/v1", "url-"},
+		{"rtsp url", "rtsp://user:pass@camera.local:554/stream", "url-"},
+		{"invalid url", "not-a-url", "url-"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := anonymizeURL(tt.input)
+			assert.True(t, strings.HasPrefix(result, tt.expected), "Expected %s prefix for %s, got %s", tt.expected, tt.input, result)
+		})
+	}
+}
+
+// TestScrubLogMessage tests comprehensive log message scrubbing
+func TestScrubLogMessage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		input       string
+		expected    []string // Expected substrings in output
+		notExpected []string // Substrings that should NOT be in output
+	}{
+		{
+			name:        "ip and url anonymization",
+			input:       "Error connecting to https://192.168.1.100:8080/api from 10.0.1.50",
+			expected:    []string{"Error connecting to", "from"},
+			notExpected: []string{"192.168.1.100", "10.0.1.50", "8080/api"},
+		},
+		{
+			name:        "email anonymization",
+			input:       "User john.doe@example.com logged in",
+			expected:    []string{"User", "logged in", "[EMAIL]"},
+			notExpected: []string{"john.doe@example.com"},
+		},
+		{
+			name:        "api key anonymization",
+			input:       "api_key=sk_test_123456789abcdef error occurred",
+			expected:    []string{"api_key=[REDACTED]", "error occurred"},
+			notExpected: []string{"sk_test_123456789abcdef"},
+		},
+		{
+			name:        "uuid anonymization",
+			input:       "Processing request id: 550e8400-e29b-41d4-a716-446655440000",
+			expected:    []string{"Processing request id:", "[UUID]"},
+			notExpected: []string{"550e8400-e29b-41d4-a716-446655440000"},
+		},
+		{
+			name:        "mixed sensitive data",
+			input:       "Failed to connect to rtsp://admin:password@192.168.1.200:554/stream1 from 203.0.113.42 (API token: Bearer abc123def456)",
+			expected:    []string{"Failed to connect to", "from", "token=[REDACTED]"},
+			notExpected: []string{"admin:password", "192.168.1.200", "203.0.113.42", "abc123def456"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := scrubLogMessage(tt.input)
+
+			for _, expected := range tt.expected {
+				assert.Contains(t, result, expected, "Expected '%s' to be in result: %s", expected, result)
+			}
+
+			for _, notExpected := range tt.notExpected {
+				assert.NotContains(t, result, notExpected, "Expected '%s' to NOT be in result: %s", notExpected, result)
+			}
+		})
+	}
+}
