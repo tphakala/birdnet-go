@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"math"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,14 +29,34 @@ import (
 var (
 	soundLevelLogger *slog.Logger
 	soundLoggerOnce  sync.Once
+	serviceLevelVar  = new(slog.LevelVar) // Dynamic level control
+	closeLogger      func() error
 )
 
 // getSoundLevelLogger returns the sound level logger, initializing it if necessary
 func getSoundLevelLogger() *slog.Logger {
 	soundLoggerOnce.Do(func() {
-		// Initialize the logging system if not already done
-		logging.Init()
-		soundLevelLogger = logging.ForService("sound-level")
+		var err error
+		// Define log file path relative to working directory
+		logFilePath := filepath.Join("logs", "soundlevel.log")
+		// Set initial level based on debug flag
+		initialLevel := slog.LevelInfo
+		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			initialLevel = slog.LevelDebug
+		}
+		serviceLevelVar.Set(initialLevel)
+
+		// Initialize the service-specific file logger
+		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "sound-level", serviceLevelVar)
+		if err != nil {
+			// Fallback: Log error to standard log and use stdout logger
+			log.Printf("WARNING: Failed to initialize sound level file logger at %s: %v. Using console logging.", logFilePath, err)
+			// Fallback to console logger
+			logging.Init()
+			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
+			soundLevelLogger = slog.New(fbHandler).With("service", "sound-level")
+			closeLogger = func() error { return nil } // No-op closer
+		}
 	})
 	return soundLevelLogger
 }

@@ -1,9 +1,11 @@
 package analysis
 
 import (
+	"io"
 	"log"
 	"log/slog"
 	"math"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -15,16 +17,36 @@ import (
 
 // Package-level logger for sound level metrics
 var (
-	metricsLogger *slog.Logger
-	loggerOnce    sync.Once
+	metricsLogger      *slog.Logger
+	loggerOnce         sync.Once
+	metricsLevelVar    = new(slog.LevelVar) // Dynamic level control
+	metricsCloseLogger func() error
 )
 
 // getMetricsLogger returns the metrics logger, initializing it if necessary
 func getMetricsLogger() *slog.Logger {
 	loggerOnce.Do(func() {
-		// Initialize the logging system if not already done
-		logging.Init()
-		metricsLogger = logging.ForService("sound-level-metrics")
+		var err error
+		// Define log file path relative to working directory - use same file as sound level
+		logFilePath := filepath.Join("logs", "soundlevel.log")
+		// Set initial level based on debug flag
+		initialLevel := slog.LevelInfo
+		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			initialLevel = slog.LevelDebug
+		}
+		metricsLevelVar.Set(initialLevel)
+
+		// Initialize the service-specific file logger
+		metricsLogger, metricsCloseLogger, err = logging.NewFileLogger(logFilePath, "sound-level-metrics", metricsLevelVar)
+		if err != nil {
+			// Fallback: Log error to standard log and use stdout logger
+			log.Printf("WARNING: Failed to initialize sound level metrics file logger at %s: %v. Using console logging.", logFilePath, err)
+			// Fallback to console logger
+			logging.Init()
+			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: metricsLevelVar})
+			metricsLogger = slog.New(fbHandler).With("service", "sound-level-metrics")
+			metricsCloseLogger = func() error { return nil } // No-op closer
+		}
 	})
 	return metricsLogger
 }
