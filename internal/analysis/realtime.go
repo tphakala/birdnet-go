@@ -25,7 +25,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/monitor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -206,6 +208,23 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		proc.SetBackupScheduler(backupScheduler)
 	}
 
+	// Initialize notification service
+	notification.Initialize(nil)         // Use default configuration
+	notification.SetupErrorIntegration() // Set up error reporting integration
+	logging.Info("Notification service initialized with error integration",
+		"component", "notification",
+		"error_integration", "enabled")
+
+	// Initialize system monitor if monitoring is enabled
+	var systemMonitor *monitor.SystemMonitor
+	if settings.Realtime.Monitoring.Enabled {
+		systemMonitor = monitor.NewSystemMonitor(settings)
+		systemMonitor.Start()
+		logging.Info("System resource monitoring started",
+			"component", "monitor",
+			"interval", settings.Realtime.Monitoring.CheckInterval)
+	}
+
 	// Initialize and start the HTTP server
 	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
 	httpServer.Start()
@@ -271,8 +290,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
 
-	// Track the HTTP server for clean shutdown
+	// Track the HTTP server and system monitor for clean shutdown
 	var httpServerRef *httpcontroller.Server = httpServer
+	var systemMonitorRef *monitor.SystemMonitor = systemMonitor
 
 	// loop to monitor quit and restart channels
 	for {
@@ -298,6 +318,17 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			}
 			// Wait for all goroutines to finish.
 			wg.Wait()
+			// Stop system monitor if running
+			if systemMonitorRef != nil {
+				systemMonitorRef.Stop()
+			}
+			// Stop notification service
+			if notification.IsInitialized() {
+				logging.Info("Stopping notification service", "component", "notification")
+				if service := notification.GetService(); service != nil {
+					service.Stop()
+				}
+			}
 			// Delete the BirdNET interpreter.
 			bn.Delete()
 			// Return nil to indicate that the program exited successfully.

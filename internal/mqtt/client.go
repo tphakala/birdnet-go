@@ -12,6 +12,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -511,6 +512,9 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 	mqttLogger.Error("Connection to MQTT broker lost", "broker", c.config.Broker, "client_id", c.config.ClientID, "error", enhancedErr)
 	c.metrics.UpdateConnectionStatus(false)
 	c.metrics.IncrementErrorsWithCategory("mqtt-connection", "connection_lost")
+
+	// Send notification for connection lost
+	notification.NotifyIntegrationFailure("MQTT", enhancedErr)
 	// Check if we should attempt to reconnect or if Disconnect was called
 	select {
 	case <-c.reconnectStop:

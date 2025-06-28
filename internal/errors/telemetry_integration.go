@@ -201,8 +201,14 @@ func getErrorLevel(category ErrorCategory) sentry.Level {
 	}
 }
 
+// ErrorHook is a function that gets called when an error is reported
+type ErrorHook func(ee *EnhancedError)
+
 // Global telemetry reporter (can be nil if telemetry is disabled)
 var globalTelemetryReporter TelemetryReporter
+
+// Global error hooks
+var errorHooks []ErrorHook
 
 // SetTelemetryReporter sets the global telemetry reporter
 func SetTelemetryReporter(reporter TelemetryReporter) {
@@ -214,10 +220,28 @@ func GetTelemetryReporter() TelemetryReporter {
 	return globalTelemetryReporter
 }
 
+// AddErrorHook adds a hook function that will be called when errors are reported
+func AddErrorHook(hook ErrorHook) {
+	errorHooks = append(errorHooks, hook)
+}
+
+// ClearErrorHooks removes all error hooks
+func ClearErrorHooks() {
+	errorHooks = nil
+}
+
 // reportToTelemetry reports an error to the configured telemetry system
 func reportToTelemetry(ee *EnhancedError) {
+	// Report to telemetry reporter
 	if globalTelemetryReporter != nil && globalTelemetryReporter.IsEnabled() {
 		globalTelemetryReporter.ReportError(ee)
+	}
+
+	// Call error hooks
+	for _, hook := range errorHooks {
+		if hook != nil {
+			hook(ee)
+		}
 	}
 }
 
