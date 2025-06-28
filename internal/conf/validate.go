@@ -204,6 +204,27 @@ func validateSecuritySettings(settings *Security) error {
 			Build()
 	}
 
+	// AutoTLS validation
+	if settings.AutoTLS {
+		// Host is required for AutoTLS
+		if settings.Host == "" {
+			return errors.New(fmt.Errorf("security.host must be set when AutoTLS is enabled")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-autotls-host").
+				Build()
+		}
+
+		// Warning about port requirements when running in container
+		if RunningInContainer() {
+			log.Println("WARNING: AutoTLS requires ports 80 and 443 to be exposed.")
+			log.Println("Ensure your Docker configuration maps these ports:")
+			log.Println("  ports:")
+			log.Println("    - \"80:80\"    # Required for ACME HTTP-01 challenge")
+			log.Println("    - \"443:443\"  # Required for HTTPS/AutoTLS")
+			log.Println("Consider using docker-compose.autotls.yml for proper AutoTLS configuration.")
+		}
+	}
+
 	// Validate the subnet bypass setting against the allowed pattern
 	if settings.AllowSubnetBypass.Enabled {
 		subnets := strings.Split(settings.AllowSubnetBypass.Subnet, ",")
