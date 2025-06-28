@@ -78,10 +78,11 @@ type CollectorOptions struct {
 	LogDuration       time.Duration `json:"log_duration"`
 	MaxLogSize        int64         `json:"max_log_size"`
 	ScrubSensitive    bool          `json:"scrub_sensitive"`
+	AnonymizePII      bool          `json:"anonymize_pii"`
 }
 
 // DefaultCollectorOptions returns default collector options with sensible defaults:
-// includes all data types, 4-week log window, 50MB max log size, and sensitive data scrubbing enabled.
+// includes all data types, 4-week log window, 50MB max log size, sensitive data scrubbing and PII anonymization enabled.
 func DefaultCollectorOptions() CollectorOptions {
 	return CollectorOptions{
 		IncludeLogs:       true,
@@ -90,5 +91,6 @@ func DefaultCollectorOptions() CollectorOptions {
 		LogDuration:       4 * 7 * 24 * time.Hour, // 4 weeks
 		MaxLogSize:        50 * 1024 * 1024,       // 50MB to accommodate more logs
 		ScrubSensitive:    true,
+		AnonymizePII:      true,
 	}
 }
