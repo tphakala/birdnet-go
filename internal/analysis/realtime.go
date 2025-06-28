@@ -98,31 +98,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// TODO FIXME
 	//ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
 
-	// Get system details with golps
-	info, err := host.Info()
-	if err != nil {
-		fmt.Printf("❌ Error retrieving host info: %v\n", err)
-	}
-
-	var hwModel string
-	// Print SBC hardware details
-	if conf.IsLinuxArm64() {
-		hwModel = conf.GetBoardModel()
-		// remove possible new line from hwModel
-		hwModel = strings.TrimSpace(hwModel)
-	} else {
-		hwModel = "unknown"
-	}
-
-	// Print platform, OS etc. details
-	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
-
-	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
-	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, overlap: %v, sensitivity: %v, interval: %v\n",
-		settings.BirdNET.Threshold,
-		settings.BirdNET.Overlap,
-		settings.BirdNET.Sensitivity,
-		settings.Realtime.Interval)
+	// Print system details and configuration
+	printSystemDetails(settings)
 
 	// Initialize database access.
 	dataStore := datastore.New(settings)
@@ -146,27 +123,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
-	// Prepare sources list
-	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
-		if len(settings.Realtime.RTSP.URLs) > 0 {
-			sources = settings.Realtime.RTSP.URLs
-		}
-		if settings.Realtime.Audio.Source != "" {
-			// We'll add malgo to sources only if device initialization succeeds
-			// This will be handled in CaptureAudio
-			sources = append(sources, "malgo")
-		}
-
-		// Initialize buffers for all audio sources
-		if err := initializeBuffers(sources); err != nil {
-			// If buffer initialization fails, log the error but continue
-			// Some sources might still work
-			log.Printf("⚠️  Error initializing buffers: %v", err)
-			log.Println("⚠️  Some audio sources might not be available.")
-		}
-	} else {
-		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+	// Initialize audio sources
+	sources, err := initializeAudioSources(settings)
+	if err != nil {
+		// Non-fatal error, continue with available sources
+		log.Printf("⚠️  Audio source initialization warning: %v", err)
 	}
 
 	// Queue is now initialized at package level in birdnet package
@@ -174,18 +135,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	birdnet.ResizeQueue(5)
 
 	// Initialize Prometheus metrics manager
-	metrics, err := observability.NewMetrics()
+	metrics, err := initializeMetrics()
 	if err != nil {
-		return fmt.Errorf("error initializing metrics: %w", err)
+		return err
 	}
 
-	var birdImageCache *imageprovider.BirdImageCache
-	if settings.Realtime.Dashboard.Thumbnails.Summary || settings.Realtime.Dashboard.Thumbnails.Recent {
-		// Initialize the bird image cache
-		birdImageCache = initBirdImageCache(dataStore, metrics)
-	} else {
-		birdImageCache = nil
-	}
+	// Initialize bird image cache if needed
+	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
 
 	// Initialize processor
 	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
@@ -209,21 +165,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// Initialize notification service
-	notification.Initialize(nil)         // Use default configuration
-	notification.SetupErrorIntegration() // Set up error reporting integration
-	logging.Info("Notification service initialized with error integration",
-		"component", "notification",
-		"error_integration", "enabled")
+	initializeNotificationService()
 
 	// Initialize system monitor if monitoring is enabled
-	var systemMonitor *monitor.SystemMonitor
-	if settings.Realtime.Monitoring.Enabled {
-		systemMonitor = monitor.NewSystemMonitor(settings)
-		systemMonitor.Start()
-		logging.Info("System resource monitoring started",
-			"component", "monitor",
-			"interval", settings.Realtime.Monitoring.CheckInterval)
-	}
+	systemMonitor := initializeSystemMonitor(settings)
 
 	// Initialize and start the HTTP server
 	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
@@ -943,4 +888,98 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 
 	backupLogger.Info("Backup system initialized.")
 	return backupManager, backupScheduler, nil
+}
+
+// initializeNotificationService initializes the notification service with error integration
+func initializeNotificationService() {
+	notification.Initialize(nil)         // Use default configuration
+	notification.SetupErrorIntegration() // Set up error reporting integration
+	logging.Info("Notification service initialized with error integration",
+		"component", "notification",
+		"error_integration", "enabled")
+}
+
+// initializeSystemMonitor initializes and starts the system resource monitor if enabled
+func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
+	if !settings.Realtime.Monitoring.Enabled {
+		return nil
+	}
+	systemMonitor := monitor.NewSystemMonitor(settings)
+	systemMonitor.Start()
+	logging.Info("System resource monitoring started",
+		"component", "monitor",
+		"interval", settings.Realtime.Monitoring.CheckInterval)
+	return systemMonitor
+}
+
+// initializeMetrics initializes the Prometheus metrics manager
+func initializeMetrics() (*observability.Metrics, error) {
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		return nil, fmt.Errorf("error initializing metrics: %w", err)
+	}
+	return metrics, nil
+}
+
+// initializeBirdImageCacheIfNeeded initializes the bird image cache if thumbnails are enabled
+func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics) *imageprovider.BirdImageCache {
+	if settings.Realtime.Dashboard.Thumbnails.Summary || settings.Realtime.Dashboard.Thumbnails.Recent {
+		return initBirdImageCache(dataStore, metrics)
+	}
+	return nil
+}
+
+// initializeAudioSources prepares and validates audio sources
+func initializeAudioSources(settings *conf.Settings) ([]string, error) {
+	var sources []string
+	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
+		if len(settings.Realtime.RTSP.URLs) > 0 {
+			sources = settings.Realtime.RTSP.URLs
+		}
+		if settings.Realtime.Audio.Source != "" {
+			// We'll add malgo to sources only if device initialization succeeds
+			// This will be handled in CaptureAudio
+			sources = append(sources, "malgo")
+		}
+
+		// Initialize buffers for all audio sources
+		if err := initializeBuffers(sources); err != nil {
+			// If buffer initialization fails, log the error but continue
+			// Some sources might still work
+			log.Printf("⚠️  Error initializing buffers: %v", err)
+			log.Println("⚠️  Some audio sources might not be available.")
+		}
+	} else {
+		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+	}
+	return sources, nil
+}
+
+// printSystemDetails prints system information and analyzer configuration
+func printSystemDetails(settings *conf.Settings) {
+	// Get system details with golps
+	info, err := host.Info()
+	if err != nil {
+		fmt.Printf("❌ Error retrieving host info: %v\n", err)
+	}
+
+	var hwModel string
+	// Print SBC hardware details
+	if conf.IsLinuxArm64() {
+		hwModel = conf.GetBoardModel()
+		// remove possible new line from hwModel
+		hwModel = strings.TrimSpace(hwModel)
+	} else {
+		hwModel = "unknown"
+	}
+
+	// Print platform, OS etc. details
+	fmt.Printf("System details: %s %s %s on %s hardware\n", info.OS, info.Platform, info.PlatformVersion, hwModel)
+
+	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
+	fmt.Printf("Starting analyzer in realtime mode. Threshold: %v, overlap: %v, sensitivity: %v, interval: %v\n",
+		settings.BirdNET.Threshold,
+		settings.BirdNET.Overlap,
+		settings.BirdNET.Sensitivity,
+		settings.Realtime.Interval)
 }
