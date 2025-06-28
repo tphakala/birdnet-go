@@ -5,7 +5,7 @@ import (
 )
 
 // errorNotificationHook is called when errors are reported
-func errorNotificationHook(ee interface{}) {
+func errorNotificationHook(ee any) {
 	// Type assert to get the enhanced error
 	enhancedErr, ok := ee.(interface {
 		GetComponent() string
@@ -36,7 +36,9 @@ func errorNotificationHook(ee interface{}) {
 	}
 
 	// Create error notification
-	_, _ = service.CreateErrorNotification(ee.(error))
+	if err, ok := ee.(error); ok {
+		_, _ = service.CreateErrorNotification(err)
+	}
 }
 
 // getNotificationPriority determines the notification priority based on error category
