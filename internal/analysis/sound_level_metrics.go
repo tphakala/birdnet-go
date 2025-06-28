@@ -14,10 +14,19 @@ import (
 )
 
 // Package-level logger for sound level metrics
-var metricsLogger *slog.Logger
+var (
+	metricsLogger *slog.Logger
+	loggerOnce    sync.Once
+)
 
-func init() {
-	metricsLogger = logging.ForService("sound-level-metrics")
+// getMetricsLogger returns the metrics logger, initializing it if necessary
+func getMetricsLogger() *slog.Logger {
+	loggerOnce.Do(func() {
+		// Initialize the logging system if not already done
+		logging.Init()
+		metricsLogger = logging.ForService("sound-level-metrics")
+	})
+	return metricsLogger
 }
 
 // startSoundLevelMetricsPublisher starts a goroutine to consume sound level data and update Prometheus metrics
@@ -59,12 +68,14 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 	// Log metrics update if debug is enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		metricsLogger.Debug("updating sound level metrics",
-			"source", soundData.Source,
-			"name", soundData.Name,
-			"timestamp", soundData.Timestamp,
-			"duration", soundData.Duration,
-			"bands_count", len(soundData.OctaveBands))
+		if logger := getMetricsLogger(); logger != nil {
+			logger.Debug("updating sound level metrics",
+				"source", soundData.Source,
+				"name", soundData.Name,
+				"timestamp", soundData.Timestamp,
+				"duration", soundData.Duration,
+				"bands_count", len(soundData.OctaveBands))
+		}
 	}
 
 	// Update metrics for each octave band
@@ -80,13 +91,15 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 		// Log detailed band metrics if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			metricsLogger.Debug("updated octave band metrics",
-				"source", soundData.Source,
-				"band", bandKey,
-				"min_db", bandData.Min,
-				"max_db", bandData.Max,
-				"mean_db", bandData.Mean,
-				"samples", bandData.SampleCount)
+			if logger := getMetricsLogger(); logger != nil {
+				logger.Debug("updated octave band metrics",
+					"source", soundData.Source,
+					"band", bandKey,
+					"min_db", bandData.Min,
+					"max_db", bandData.Max,
+					"mean_db", bandData.Mean,
+					"samples", bandData.SampleCount)
+			}
 		}
 	}
 
@@ -107,11 +120,13 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 		// Log overall sound level if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-			metricsLogger.Debug("calculated overall sound level",
-				"source", soundData.Source,
-				"name", soundData.Name,
-				"overall_level_db", overallLevel,
-				"bands_averaged", len(soundData.OctaveBands))
+			if logger := getMetricsLogger(); logger != nil {
+				logger.Debug("calculated overall sound level",
+					"source", soundData.Source,
+					"name", soundData.Name,
+					"overall_level_db", overallLevel,
+					"bands_averaged", len(soundData.OctaveBands))
+			}
 		}
 	}
 
@@ -121,9 +136,11 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 	// Log processing duration if debug is enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-		metricsLogger.Debug("sound level metrics update complete",
-			"source", soundData.Source,
-			"name", soundData.Name,
-			"processing_duration_seconds", processingDuration)
+		if logger := getMetricsLogger(); logger != nil {
+			logger.Debug("sound level metrics update complete",
+				"source", soundData.Source,
+				"name", soundData.Name,
+				"processing_duration_seconds", processingDuration)
+		}
 	}
 }
