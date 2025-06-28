@@ -5,13 +5,18 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -69,6 +74,195 @@ func defaultSensitiveKeys() []string {
 		"id", "apikey", "username", "broker", "topic", "urls",
 		"mqtt_username", "mqtt_topic", "birdweather_id",
 	}
+}
+
+// anonymizeIPAddress anonymizes IP addresses while preserving useful categorization
+func anonymizeIPAddress(ipStr string) string {
+	// Parse the IP
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		// If it's not a valid IP, hash the string
+		hash := sha256.Sum256([]byte(ipStr))
+		return fmt.Sprintf("invalid-ip-%x", hash[:6])
+	}
+
+	// Check for localhost patterns
+	if ip.IsLoopback() {
+		return "localhost"
+	}
+
+	// Check for private IP ranges
+	if isPrivateIP(ipStr) {
+		return "private-ip"
+	}
+
+	// For public IPs, return a consistent anonymized hash
+	hash := sha256.Sum256([]byte(ip.String()))
+	return fmt.Sprintf("public-ip-%x", hash[:8])
+}
+
+// isPrivateIP checks if the given IP address is in a private range
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+
+	// Check IPv4 private ranges
+	if ip.To4() != nil {
+		// 10.0.0.0/8
+		if ip[12] == 10 {
+			return true
+		}
+		// 172.16.0.0/12
+		if ip[12] == 172 && ip[13] >= 16 && ip[13] <= 31 {
+			return true
+		}
+		// 192.168.0.0/16
+		if ip[12] == 192 && ip[13] == 168 {
+			return true
+		}
+		// 169.254.0.0/16 (link-local)
+		if ip[12] == 169 && ip[13] == 254 {
+			return true
+		}
+	} else {
+		// Check IPv6 private ranges
+		// fc00::/7 (unique local)
+		if len(ip) >= 2 && (ip[0]&0xfe) == 0xfc {
+			return true
+		}
+		// fe80::/10 (link-local)
+		if len(ip) >= 2 && ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// anonymizeURL creates a consistent, privacy-safe identifier for URLs
+func anonymizeURL(rawURL string) string {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, create a hash of the raw string
+		hash := sha256.Sum256([]byte(rawURL))
+		return fmt.Sprintf("url-hash-%x", hash[:8])
+	}
+
+	// Create a normalized version for hashing
+	var normalizedParts []string
+
+	// Include scheme (rtsp, http, etc.)
+	if parsedURL.Scheme != "" {
+		normalizedParts = append(normalizedParts, parsedURL.Scheme)
+	}
+
+	// Anonymize hostname/IP
+	host := parsedURL.Hostname()
+	if host != "" {
+		hostType := categorizeHost(host)
+		normalizedParts = append(normalizedParts, hostType)
+	}
+
+	// Include port if present
+	if parsedURL.Port() != "" {
+		normalizedParts = append(normalizedParts, "port-"+parsedURL.Port())
+	}
+
+	// Include path structure (without sensitive details)
+	if parsedURL.Path != "" && parsedURL.Path != "/" {
+		pathStructure := anonymizePath(parsedURL.Path)
+		normalizedParts = append(normalizedParts, pathStructure)
+	}
+
+	// Create consistent hash
+	normalized := strings.Join(normalizedParts, ":")
+	hash := sha256.Sum256([]byte(normalized))
+
+	return fmt.Sprintf("url-%x", hash[:12])
+}
+
+// categorizeHost anonymizes hostnames while preserving useful categorization
+func categorizeHost(host string) string {
+	// Check for localhost patterns
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return "localhost"
+	}
+
+	// Check for private IP ranges
+	if isPrivateIP(host) {
+		return "private-ip"
+	}
+
+	// Check if it's a public IP
+	if net.ParseIP(host) != nil {
+		return "public-ip"
+	}
+
+	// For domain names, categorize by TLD
+	parts := strings.Split(host, ".")
+	if len(parts) >= 2 {
+		tld := parts[len(parts)-1]
+		return fmt.Sprintf("domain-%s", tld)
+	}
+
+	return "unknown-host"
+}
+
+// anonymizePath creates structure-preserving but privacy-safe path representation
+func anonymizePath(path string) string {
+	if path == "" || path == "/" {
+		return path
+	}
+
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	anonymizedSegments := make([]string, len(segments))
+
+	for i, segment := range segments {
+		if segment == "" {
+			continue
+		}
+
+		// Hash each path segment for privacy while preserving structure
+		hash := sha256.Sum256([]byte(segment))
+		anonymizedSegments[i] = fmt.Sprintf("seg-%x", hash[:4])
+	}
+
+	return "/" + strings.Join(anonymizedSegments, "/")
+}
+
+// scrubLogMessage removes or anonymizes sensitive information from log messages
+func scrubLogMessage(message string) string {
+	// Find and anonymize URLs
+	urlRegex := regexp.MustCompile(`\b(?:https?|rtsp|rtmp|ftp)://\S+`)
+	message = urlRegex.ReplaceAllStringFunc(message, anonymizeURL)
+
+	// Find and anonymize IP addresses
+	ipRegex := regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b`)
+	message = ipRegex.ReplaceAllStringFunc(message, anonymizeIPAddress)
+
+	// Anonymize common sensitive patterns
+	patterns := map[string]string{
+		// Email addresses
+		`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b`: "[EMAIL]",
+		// API keys (common patterns)
+		`\b[Aa]pi[_-]?[Kk]ey[:\s=]\s*['\"]?[A-Za-z0-9_-]{16,}['\"]?`: "api_key=[REDACTED]",
+		// Tokens (including Bearer tokens)
+		`\b[Tt]oken[:\s=]\s*(?:Bearer\s+)?['\"]?[A-Za-z0-9_-]{12,}['\"]?`: "token=[REDACTED]",
+		// Bearer tokens specifically
+		`\bBearer\s+[A-Za-z0-9_-]{12,}`: "Bearer [REDACTED]",
+		// UUIDs (potential sensitive identifiers)
+		`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`: "[UUID]",
+	}
+
+	for pattern, replacement := range patterns {
+		if regex, err := regexp.Compile(pattern); err == nil {
+			message = regex.ReplaceAllString(message, replacement)
+		}
+	}
+
+	return message
 }
 
 // NewCollector creates a new support data collector
@@ -171,8 +365,8 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 
 	// Collect logs
 	if opts.IncludeLogs {
-		serviceLogger.Debug("support: collecting logs", "duration", opts.LogDuration, "max_size", opts.MaxLogSize)
-		logs, err := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize)
+		serviceLogger.Debug("support: collecting logs", "duration", opts.LogDuration, "max_size", opts.MaxLogSize, "anonymize_pii", opts.AnonymizePII)
+		logs, err := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize, opts.AnonymizePII)
 		if err != nil {
 			serviceLogger.Error("support: failed to collect logs", "error", err)
 			return nil, errors.New(err).
@@ -181,6 +375,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 				Context("operation", "collect_logs").
 				Context("log_duration", opts.LogDuration.String()).
 				Context("max_log_size", opts.MaxLogSize).
+				Context("anonymize_pii", opts.AnonymizePII).
 				Build()
 		}
 		dump.Logs = logs
@@ -233,8 +428,8 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 
 	// Add log files in original format
 	if opts.IncludeLogs {
-		serviceLogger.Debug("support: adding log files to archive")
-		if err := c.addLogFilesToArchive(ctx, w, opts.LogDuration, opts.MaxLogSize); err != nil {
+		serviceLogger.Debug("support: adding log files to archive", "anonymize_pii", opts.AnonymizePII)
+		if err := c.addLogFilesToArchive(ctx, w, opts.LogDuration, opts.MaxLogSize, opts.AnonymizePII); err != nil {
 			serviceLogger.Error("support: failed to add log files to archive", "error", err)
 			return nil, err
 		}
@@ -427,17 +622,17 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 }
 
 // collectLogs collects recent log entries
-func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64) ([]LogEntry, error) {
+func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
 	var logs []LogEntry
 
 	// Try to collect from journald first (systemd systems)
-	journalLogs, err := c.collectJournalLogs(ctx, duration)
+	journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII)
 	if err == nil && len(journalLogs) > 0 {
 		logs = append(logs, journalLogs...)
 	}
 
 	// Also check for log files in the data directory
-	logFiles, err := c.collectLogFiles(duration, maxSize)
+	logFiles, err := c.collectLogFiles(duration, maxSize, anonymizePII)
 	if err == nil && len(logFiles) > 0 {
 		logs = append(logs, logFiles...)
 	}
@@ -449,7 +644,7 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 }
 
 // collectJournalLogs collects logs from systemd journal
-func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration) ([]LogEntry, error) {
+func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration, anonymizePII bool) ([]LogEntry, error) {
 	var logs []LogEntry
 
 	// Calculate since time
@@ -477,7 +672,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 			continue
 		}
 
-		var entry map[string]interface{}
+		var entry map[string]any
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			// Skip malformed JSON lines silently
 			continue
@@ -509,6 +704,11 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 			level = "DEBUG"
 		}
 
+		// Apply anonymization if requested
+		if anonymizePII {
+			message = scrubLogMessage(message)
+		}
+
 		logs = append(logs, LogEntry{
 			Timestamp: ts,
 			Level:     level,
@@ -521,7 +721,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 }
 
 // collectLogFiles collects logs from files in the data directory
-func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]LogEntry, error) {
+func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
 	var logs []LogEntry
 
 	// Look for log files in common locations
@@ -556,7 +756,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]Lo
 
 			for _, file := range files {
 				if strings.HasSuffix(file.Name(), ".log") {
-					fileLogs, size := c.parseLogFile(filepath.Join(logPath, file.Name()), cutoffTime, maxSize-totalSize)
+					fileLogs, size := c.parseLogFile(filepath.Join(logPath, file.Name()), cutoffTime, maxSize-totalSize, anonymizePII)
 					logs = append(logs, fileLogs...)
 					totalSize += size
 					if totalSize >= maxSize {
@@ -566,7 +766,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]Lo
 			}
 		} else {
 			// It's a file
-			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize)
+			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize, anonymizePII)
 			logs = append(logs, fileLogs...)
 			totalSize += size
 		}
@@ -580,7 +780,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64) ([]Lo
 }
 
 // parseLogFile parses a log file and extracts entries
-func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64) (logs []LogEntry, totalSize int64) {
+func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64, anonymizePII bool) (logs []LogEntry, totalSize int64) {
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -599,7 +799,7 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 		}
 
 		// Simple log parsing - adjust based on actual log format
-		entry := c.parseLogLine(line)
+		entry := c.parseLogLine(line, anonymizePII)
 		if entry != nil && entry.Timestamp.After(cutoffTime) {
 			logs = append(logs, *entry)
 		}
@@ -609,9 +809,9 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 }
 
 // parseLogLine parses a single log line
-func (c *Collector) parseLogLine(line string) *LogEntry {
+func (c *Collector) parseLogLine(line string, anonymizePII bool) *LogEntry {
 	// First try to parse as JSON (from slog)
-	var jsonLog map[string]interface{}
+	var jsonLog map[string]any
 	if err := json.Unmarshal([]byte(line), &jsonLog); err == nil {
 		// Extract fields from JSON log
 		entry := &LogEntry{
@@ -630,9 +830,13 @@ func (c *Collector) parseLogLine(line string) *LogEntry {
 			entry.Level = strings.ToUpper(level)
 		}
 
-		// Parse message
+		// Parse message and anonymize if requested
 		if msg, ok := jsonLog["msg"].(string); ok {
-			entry.Message = msg
+			if anonymizePII {
+				entry.Message = scrubLogMessage(msg)
+			} else {
+				entry.Message = msg
+			}
 		}
 
 		// Add service info if available
@@ -661,10 +865,15 @@ func (c *Collector) parseLogLine(line string) *LogEntry {
 	// Extract level
 	level := strings.Trim(parts[2], "[]")
 
+	message := parts[3]
+	if anonymizePII {
+		message = scrubLogMessage(message)
+	}
+
 	return &LogEntry{
 		Timestamp: timestamp,
 		Level:     level,
-		Message:   parts[3],
+		Message:   message,
 		Source:    "file",
 	}
 }
@@ -738,23 +947,25 @@ func (c *Collector) addConfigToArchive(w *zip.Writer, scrubSensitive bool) error
 
 // logFileCollector encapsulates the state for collecting log files
 type logFileCollector struct {
-	ctx        context.Context
-	collector  *Collector
-	cutoffTime time.Time
-	maxSize    int64
-	totalSize  int64
-	logsAdded  int
+	ctx          context.Context
+	collector    *Collector
+	cutoffTime   time.Time
+	maxSize      int64
+	totalSize    int64
+	logsAdded    int
+	anonymizePII bool
 }
 
 // addLogFilesToArchive adds log files to the archive in their original format
-func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, duration time.Duration, maxSize int64) error {
+func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, duration time.Duration, maxSize int64, anonymizePII bool) error {
 	lfc := &logFileCollector{
-		ctx:        ctx,
-		collector:  c,
-		cutoffTime: time.Now().Add(-duration),
-		maxSize:    maxSize,
-		totalSize:  0,
-		logsAdded:  0,
+		ctx:          ctx,
+		collector:    c,
+		cutoffTime:   time.Now().Add(-duration),
+		maxSize:      maxSize,
+		totalSize:    0,
+		logsAdded:    0,
+		anonymizePII: anonymizePII,
 	}
 
 	// Get unique log paths
@@ -918,9 +1129,9 @@ func (lfc *logFileCollector) processLogFileEntry(w *zip.Writer, dirPath string, 
 		return nil
 	}
 
-	// Add file to archive
+	// Add file to archive with optional anonymization
 	archivePath := filepath.Join("logs", file.Name())
-	if err := lfc.collector.addFileToArchive(w, filePath, archivePath); err != nil {
+	if err := lfc.collector.addLogFileToArchive(w, filePath, archivePath, lfc.anonymizePII); err != nil {
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -941,7 +1152,7 @@ func (lfc *logFileCollector) processSingleLogFile(w *zip.Writer, logPath string,
 	}
 
 	archivePath := filepath.Join("logs", filepath.Base(logPath))
-	if err := lfc.collector.addFileToArchive(w, logPath, archivePath); err != nil {
+	if err := lfc.collector.addLogFileToArchive(w, logPath, archivePath, lfc.anonymizePII); err != nil {
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
@@ -979,6 +1190,16 @@ func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Durati
 			Category(errors.CategorySystem).
 			Context("operation", "get_journald_logs").
 			Build()
+	}
+
+	// Apply anonymization if requested
+	if lfc.anonymizePII {
+		lines := strings.Split(journalLogs, "\n")
+		anonymizedLines := make([]string, len(lines))
+		for i, line := range lines {
+			anonymizedLines[i] = scrubLogMessage(line)
+		}
+		journalLogs = strings.Join(anonymizedLines, "\n")
 	}
 
 	journalFile, err := w.Create("logs/journald.log")
@@ -1040,6 +1261,51 @@ func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath stri
 
 	_, err = io.Copy(writer, file)
 	return err
+}
+
+// addLogFileToArchive adds a log file to the zip archive with optional anonymization
+func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath string, anonymizePII bool) error {
+	if !anonymizePII {
+		// If no anonymization needed, use the regular file copy
+		return c.addFileToArchive(w, sourcePath, archivePath)
+	}
+
+	// Read the file content for anonymization
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(fileInfo)
+	if err != nil {
+		return err
+	}
+	header.Name = archivePath
+	header.Method = zip.Deflate
+
+	writer, err := w.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	// Process the file line by line for anonymization
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		anonymizedLine := scrubLogMessage(line)
+
+		if _, err := writer.Write([]byte(anonymizedLine + "\n")); err != nil {
+			return err
+		}
+	}
+
+	return scanner.Err()
 }
 
 // getJournaldLogs retrieves logs from journald as a string
