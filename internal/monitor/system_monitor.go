@@ -134,8 +134,9 @@ func (m *SystemMonitor) checkAllResources() {
 
 // checkCPU monitors CPU usage
 func (m *SystemMonitor) checkCPU() {
-	// Get CPU usage percentage
-	cpuPercent, err := cpu.Percent(time.Second, false)
+	// Get CPU usage percentage with 0 interval for instant reading
+	// This is less accurate than a 1-second sample but doesn't block
+	cpuPercent, err := cpu.Percent(0, false)
 	if err != nil {
 		m.logger.Error("Failed to get CPU usage", "error", err)
 		return
@@ -292,13 +293,13 @@ func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current 
 }
 
 // GetResourceStatus returns the current status of all monitored resources
-func (m *SystemMonitor) GetResourceStatus() map[string]interface{} {
+func (m *SystemMonitor) GetResourceStatus() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	status := make(map[string]interface{})
+	status := make(map[string]any)
 	for resource, state := range m.alertStates {
-		status[resource] = map[string]interface{}{
+		status[resource] = map[string]any{
 			"current_value": fmt.Sprintf("%.1f%%", state.LastValue),
 			"in_warning":    state.InWarning,
 			"in_critical":   state.InCritical,
