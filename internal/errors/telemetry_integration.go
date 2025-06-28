@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/getsentry/sentry-go"
@@ -207,8 +208,11 @@ type ErrorHook func(ee *EnhancedError)
 // Global telemetry reporter (can be nil if telemetry is disabled)
 var globalTelemetryReporter TelemetryReporter
 
-// Global error hooks
-var errorHooks []ErrorHook
+// Global error hooks and mutex for thread safety
+var (
+	errorHooks      []ErrorHook
+	errorHooksMutex sync.RWMutex
+)
 
 // SetTelemetryReporter sets the global telemetry reporter
 func SetTelemetryReporter(reporter TelemetryReporter) {
@@ -222,11 +226,15 @@ func GetTelemetryReporter() TelemetryReporter {
 
 // AddErrorHook adds a hook function that will be called when errors are reported
 func AddErrorHook(hook ErrorHook) {
+	errorHooksMutex.Lock()
+	defer errorHooksMutex.Unlock()
 	errorHooks = append(errorHooks, hook)
 }
 
 // ClearErrorHooks removes all error hooks
 func ClearErrorHooks() {
+	errorHooksMutex.Lock()
+	defer errorHooksMutex.Unlock()
 	errorHooks = nil
 }
 
@@ -237,10 +245,26 @@ func reportToTelemetry(ee *EnhancedError) {
 		globalTelemetryReporter.ReportError(ee)
 	}
 
-	// Call error hooks
-	for _, hook := range errorHooks {
+	// Call error hooks with mutex protection
+	errorHooksMutex.RLock()
+	hooks := make([]ErrorHook, len(errorHooks))
+	copy(hooks, errorHooks)
+	errorHooksMutex.RUnlock()
+
+	// Call hooks outside of lock to avoid deadlock
+	for _, hook := range hooks {
 		if hook != nil {
-			hook(ee)
+			// Wrap hook call in panic recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						// Log the panic but don't let it crash the program
+						// We can't use our own error system here to avoid recursion
+						fmt.Printf("Error hook panicked: %v\n", r)
+					}
+				}()
+				hook(ee)
+			}()
 		}
 	}
 }
