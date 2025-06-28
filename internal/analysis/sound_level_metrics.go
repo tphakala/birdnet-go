@@ -102,13 +102,14 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 
 	// Update metrics for each octave band
 	for bandKey, bandData := range soundData.OctaveBands {
+		// Round values to 2 decimal places for cleaner metrics
 		metrics.SoundLevel.UpdateOctaveBandLevel(
 			soundData.Source,
 			soundData.Name,
 			bandKey,
-			bandData.Min,
-			bandData.Max,
-			bandData.Mean,
+			math.Round(bandData.Min*100)/100,
+			math.Round(bandData.Max*100)/100,
+			math.Round(bandData.Mean*100)/100,
 		)
 
 		// Log detailed band metrics if debug is enabled
@@ -138,6 +139,8 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 		avgPower := totalPower / float64(len(soundData.OctaveBands))
 		// Convert back to dB: dB = 10 * log10(power)
 		overallLevel := 10 * math.Log10(avgPower)
+		// Round to 2 decimal places
+		overallLevel = math.Round(overallLevel*100) / 100
 		metrics.SoundLevel.UpdateSoundLevel(soundData.Source, soundData.Name, "overall", overallLevel)
 
 		// Log overall sound level if debug is enabled
