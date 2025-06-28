@@ -89,3 +89,6 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
   ```
 - **Always use `b.ReportAllocs()`** in benchmarks to track memory allocations
 - **Benefits**: Better performance, cleaner code, leverages Go's modern iteration patterns
+
+### Code Defensive Patterns
+- Use defensive patterns, check for nils etc
