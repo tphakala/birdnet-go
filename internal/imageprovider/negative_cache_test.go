@@ -104,9 +104,12 @@ func TestNegativeCachingBehavior(t *testing.T) {
 		// Make 3 requests - each should hit API (no caching of transient errors)
 		for i := 0; i < 3; i++ {
 			_, err := cache2.Get(species)
-			if err == nil || errors.Is(err, imageprovider.ErrImageNotFound) {
-				t.Errorf("Request %d: Expected transient error, got %v", i+1, err)
+			if err == nil {
+				t.Errorf("Request %d: Expected transient error, got nil", i+1)
+			} else if errors.Is(err, imageprovider.ErrImageNotFound) {
+				t.Errorf("Request %d: Expected transient error, got ErrImageNotFound", i+1)
 			}
+			// The error should be a transient error (not nil and not ErrImageNotFound)
 		}
 
 		// Should have made 3 API calls (no caching of transient errors)
@@ -223,7 +226,12 @@ type mockProviderWithTransientError struct {
 
 func (m *mockProviderWithTransientError) Fetch(scientificName string) (imageprovider.BirdImage, error) {
 	atomic.AddInt64(&m.apiCallCount, 1)
-	return imageprovider.BirdImage{}, errors.NewStd(m.errorMessage)
+	// Return a network error (not ErrImageNotFound) to simulate transient error
+	return imageprovider.BirdImage{}, errors.New(errors.NewStd(m.errorMessage)).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("operation", "mock_fetch").
+		Build()
 }
 
 func (m *mockProviderWithTransientError) getAPICallCount() int64 {
