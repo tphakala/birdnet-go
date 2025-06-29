@@ -13,6 +13,7 @@ import (
 
 // TestNegativeCachingBehavior validates that negative caching works correctly
 func TestNegativeCachingBehavior(t *testing.T) {
+	t.Parallel()
 	// Create a provider that tracks API calls and returns not found for specific species
 	mockProvider := &mockProviderWithNotFound{
 		notFoundSpecies: map[string]bool{
@@ -34,6 +35,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 	cache.SetImageProvider(mockProvider)
 
 	t.Run("NegativeCacheReducesAPICalls", func(t *testing.T) {
+		t.Parallel()
 		mockProvider.resetCounters()
 		species := "Notfoundicus imaginary"
 
@@ -62,6 +64,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 	})
 
 	t.Run("NegativeCacheExpiry", func(t *testing.T) {
+		t.Parallel()
 		// This test would need to wait 15 minutes in real scenario
 		// For testing, we'll just verify the logic is in place
 		mockProvider.resetCounters()
@@ -88,6 +91,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 	})
 
 	t.Run("TransientErrorsNotCached", func(t *testing.T) {
+		t.Parallel()
 		// Create provider that returns transient errors
 		errorProvider := &mockProviderWithTransientError{
 			errorMessage: "temporary network error",
@@ -121,6 +125,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 
 // TestNegativeCachePersistence tests that negative cache entries persist in DB
 func TestNegativeCachePersistence(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockProviderWithNotFound{
 		notFoundSpecies: map[string]bool{
 			"Persisticus negative": true,

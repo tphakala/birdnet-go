@@ -308,6 +308,7 @@ func (m *mockFailingStore) GetSpeciesSummaryData(startDate, endDate string) ([]d
 
 // TestBirdImageCache tests the BirdImageCache implementation
 func TestBirdImageCache(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
@@ -361,6 +362,7 @@ func TestBirdImageCache(t *testing.T) {
 
 // TestBirdImageCacheError tests the BirdImageCache error handling
 func TestBirdImageCacheError(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockImageProvider{shouldFail: true}
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
@@ -381,6 +383,7 @@ func TestBirdImageCacheError(t *testing.T) {
 
 // TestCreateDefaultCache tests creating a default cache
 func TestCreateDefaultCache(t *testing.T) {
+	t.Parallel()
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create metrics: %v", err)
@@ -397,6 +400,7 @@ func TestCreateDefaultCache(t *testing.T) {
 
 // TestBirdImageEstimateSize tests the BirdImage size estimation
 func TestBirdImageEstimateSize(t *testing.T) {
+	t.Parallel()
 	img := imageprovider.BirdImage{
 		URL:         "http://example.com/bird.jpg",
 		LicenseName: "CC BY-SA 4.0",
@@ -414,6 +418,7 @@ func TestBirdImageEstimateSize(t *testing.T) {
 
 // TestBirdImageCacheMemoryUsage tests the cache memory usage calculation
 func TestBirdImageCacheMemoryUsage(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockImageProvider{}
 	metrics, err := observability.NewMetrics()
 	if err != nil {
@@ -445,6 +450,7 @@ func TestBirdImageCacheMemoryUsage(t *testing.T) {
 
 // TestBirdImageCacheDatabaseFailures tests that the cache handles database failures gracefully
 func TestBirdImageCacheDatabaseFailures(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		failGetCache   bool
@@ -471,6 +477,7 @@ func TestBirdImageCacheDatabaseFailures(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockProvider := &mockImageProvider{}
 			failingStore := newMockFailingStore()
 			failingStore.failGetCache = tt.failGetCache
@@ -502,6 +509,7 @@ func TestBirdImageCacheDatabaseFailures(t *testing.T) {
 
 // TestBirdImageCacheNilStore tests that the cache works without a database store
 func TestBirdImageCacheNilStore(t *testing.T) {
+	t.Parallel()
 	mockProvider := &mockImageProvider{}
 	metrics, err := observability.NewMetrics()
 	if err != nil {
@@ -604,6 +612,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 // TestConcurrentInitialization tests that concurrent requests for the same species
 // don't result in multiple fetches
 func TestConcurrentInitialization(t *testing.T) {
+	t.Parallel()
 	// Create a mock provider with a delay to simulate network latency
 	mockProvider := &mockImageProvider{
 		fetchDelay: 200 * time.Millisecond, // Delay to make race conditions more likely
@@ -679,6 +688,7 @@ func TestConcurrentInitialization(t *testing.T) {
 
 // TestInitializationTimeout tests that requests don't wait forever if initialization fails
 func TestInitializationTimeout(t *testing.T) {
+	t.Parallel()
 	// Create a mock provider that takes longer than the retry timeout
 	mockProvider := &mockImageProvider{
 		fetchDelay: 2 * time.Second, // Longer than the total retry time
@@ -741,6 +751,7 @@ func TestInitializationTimeout(t *testing.T) {
 
 // TestInitializationFailure tests that initialization failure is handled gracefully
 func TestInitializationFailure(t *testing.T) {
+	t.Parallel()
 	// Create a mock provider that fails
 	mockProvider := &mockImageProvider{
 		shouldFail: true,
