@@ -25,6 +25,7 @@ import (
 
 // TestGetSpeciesSummary tests the species summary endpoint
 func TestGetSpeciesSummary(t *testing.T) {
+	t.Parallel()
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -98,6 +99,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 
 // TestGetHourlyAnalytics tests the hourly analytics endpoint
 func TestGetHourlyAnalytics(t *testing.T) {
+	t.Parallel()
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -165,6 +167,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 
 // TestGetDailyAnalytics tests the daily analytics endpoint
 func TestGetDailyAnalytics(t *testing.T) {
+	t.Parallel()
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -241,6 +244,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 // TestGetDailyAnalyticsWithoutSpecies tests the daily analytics endpoint when no species is provided
 // This tests the aggregated data behavior, which represents detection trends across all species
 func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
+	t.Parallel()
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -302,6 +306,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 
 // TestGetInvalidAnalyticsRequests tests various invalid requests to analytics endpoints
 func TestGetInvalidAnalyticsRequests(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		method         string
@@ -363,6 +368,8 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	mockDS.On("GetSettings").Return(appSettings, nil) // Needed for cache init if controller setup does it
 	// Add GetAllImageCaches mock if cache init happens here
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
+	// Mock GetImageCacheBatch to return empty map (no cached images)
+	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(map[string]*datastore.ImageCache{}, nil)
 
 	// Initialize a mock image cache for controller creation - ONCE for all test cases
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
@@ -377,6 +384,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			controller := &Controller{
 				DS:             mockDS,
 				Settings:       appSettings,
@@ -422,6 +430,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 // TestGetDailySpeciesSummary_MultipleDetections tests that the GetDailySpeciesSummary function
 // correctly counts multiple detections of the same species
 func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
+	t.Parallel()
 	// Create a new echo instance
 	e := echo.New()
 
@@ -503,6 +512,9 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 
 	// Expect calls to GetImageCache during GetBatch and return nil (not found)
 	mockDS.On("GetImageCache", mock.AnythingOfType("datastore.ImageCacheQuery")).Return(nil, nil)
+
+	// Mock GetImageCacheBatch to return empty map (no cached images)
+	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(map[string]*datastore.ImageCache{}, nil)
 
 	// ---> FIX: Add mock expectation for SaveImageCache <---
 	// Expect calls to SaveImageCache when the cache tries to store fetched results
@@ -603,6 +615,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 // TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
 // correctly handles the case where each species has only one detection
 func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
+	t.Parallel()
 	// Create a new echo instance
 	e := echo.New()
 
@@ -647,6 +660,8 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	// ---> FIX: Add necessary mock expectations for image cache <---
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
 	mockDS.On("GetImageCache", mock.AnythingOfType("datastore.ImageCacheQuery")).Return(nil, nil)
+	// Mock GetImageCacheBatch to return empty map (no cached images)
+	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(map[string]*datastore.ImageCache{}, nil)
 	mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
 
 	// Create a mock image provider
@@ -706,6 +721,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 // TestGetDailySpeciesSummary_EmptyResult tests that the GetDailySpeciesSummary function
 // correctly handles the case where no detections are found
 func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
+	t.Parallel()
 	// Create a new echo instance
 	e := echo.New()
 
@@ -752,6 +768,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 // TestGetDailySpeciesSummary_TimeHandling tests that the GetDailySpeciesSummary function
 // correctly handles the first and latest detection times
 func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
+	t.Parallel()
 	// Create a new echo instance
 	e := echo.New()
 
@@ -839,6 +856,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 // TestGetDailySpeciesSummary_ConfidenceFilter tests that the GetDailySpeciesSummary function
 // correctly filters by confidence level
 func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
+	t.Parallel()
 	// Create a new echo instance
 	e := echo.New()
 
@@ -924,6 +942,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 // TestGetDailySpeciesSummary_LimitParameter tests that the GetDailySpeciesSummary function
 // correctly applies the limit parameter
 func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
+	t.Parallel()
 	// Create a new echo instance
 	e := echo.New()
 
@@ -1013,6 +1032,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 // TestGetDailySpeciesSummary_DatabaseError tests that the GetDailySpeciesSummary function
 // correctly handles database errors
 func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
+	t.Parallel()
 	// Setup using the proper test environment
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
