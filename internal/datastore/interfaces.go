@@ -438,6 +438,9 @@ type ClipForRemoval struct {
 
 // Dialector returns the database dialector
 func (ds *DataStore) Dialector() gorm.Dialector {
+	if ds.DB == nil {
+		return nil
+	}
 	return ds.DB.Dialector
 }
 

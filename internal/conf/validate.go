@@ -152,7 +152,7 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 
 	// If there are any errors, return them as a single error
 	if len(errs) > 0 {
-		return errors.New(fmt.Errorf("BirdNET settings errors: %v", errs)).
+		return errors.New(fmt.Errorf("birdnet settings errors: %v", errs)).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "birdnet-settings-collection").
 			Build()
