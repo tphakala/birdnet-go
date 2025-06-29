@@ -6,41 +6,10 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"unicode"
 
 	"github.com/getsentry/sentry-go"
 )
-
-// Pre-compiled regex patterns for privacy scrubbing
-var (
-	// URL patterns
-	urlRegex        = regexp.MustCompile(`(https?://[^?\s]+)\?\S*`)
-	queryParamRegex = regexp.MustCompile(`[?&]([^=\s]+)=([^&\s]+)`)
-
-	// API key patterns
-	apiKeyRegexes = []*regexp.Regexp{
-		regexp.MustCompile(`api[_-]?key[=:]\S+`),     // api_key=xxx, apikey:xxx
-		regexp.MustCompile(`token[=:]\S+`),           // token=xxx
-		regexp.MustCompile(`auth[=:]\S+`),            // auth=xxx
-		regexp.MustCompile(`key[=:][0-9a-fA-F]{8,}`), // key=hexstring
-		regexp.MustCompile(`\b[0-9a-fA-F]{32}\b`),    // 32-char hex strings with word boundaries (MD5-like API keys)
-	}
-
-	// ID patterns
-	idPatternRegexes = []*regexp.Regexp{
-		regexp.MustCompile(`station[_-]?id[=:]\S+`), // station_id=xxx, stationid:xxx
-		regexp.MustCompile(`user[_-]?id[=:]\S+`),    // user_id=xxx
-		regexp.MustCompile(`device[_-]?id[=:]\S+`),  // device_id=xxx
-		regexp.MustCompile(`client[_-]?id[=:]\S+`),  // client_id=xxx
-	}
-)
-
-// Initialize package state
-func init() {
-	// Initialize hasActiveReporting to false (no telemetry or hooks by default)
-	hasActiveReporting.Store(false)
-}
 
 // TelemetryReporter is an interface for reporting errors to telemetry systems
 type TelemetryReporter interface {
@@ -83,7 +52,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 		// Set the error title as a tag that Sentry can use for grouping
 		scope.SetTag("error_title", errorTitle)
-		scope.SetTag("component", ee.GetComponent())
+		scope.SetTag("component", ee.Component)
 		scope.SetTag("category", string(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
@@ -102,7 +71,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetLevel(level)
 
 		// Set custom fingerprint for better grouping using the error title
-		scope.SetFingerprint([]string{errorTitle, ee.GetComponent(), string(ee.Category)})
+		scope.SetFingerprint([]string{errorTitle, ee.Component, string(ee.Category)})
 
 		// Use the error title as the exception type by creating a custom exception
 		event := sentry.NewEvent()
@@ -133,9 +102,9 @@ func generateErrorTitle(ee *EnhancedError) string {
 	var titleParts []string
 
 	// Add component (capitalize first letter)
-	component := ee.GetComponent()
-	if component != "" && component != "unknown" {
-		titleParts = append(titleParts, titleCase(component))
+	if ee.Component != "" {
+		component := titleCase(ee.Component)
+		titleParts = append(titleParts, component)
 	}
 
 	// Add category (human-readable format)
@@ -243,13 +212,11 @@ var globalTelemetryReporter TelemetryReporter
 var (
 	errorHooks      []ErrorHook
 	errorHooksMutex sync.RWMutex
-	hasActiveReporting atomic.Bool // true if telemetry is enabled OR hooks exist
 )
 
 // SetTelemetryReporter sets the global telemetry reporter
 func SetTelemetryReporter(reporter TelemetryReporter) {
 	globalTelemetryReporter = reporter
-	updateActiveReportingStatus()
 }
 
 // GetTelemetryReporter returns the current telemetry reporter
@@ -262,7 +229,6 @@ func AddErrorHook(hook ErrorHook) {
 	errorHooksMutex.Lock()
 	defer errorHooksMutex.Unlock()
 	errorHooks = append(errorHooks, hook)
-	updateActiveReportingStatus()
 }
 
 // ClearErrorHooks removes all error hooks
@@ -270,40 +236,17 @@ func ClearErrorHooks() {
 	errorHooksMutex.Lock()
 	defer errorHooksMutex.Unlock()
 	errorHooks = nil
-	updateActiveReportingStatus()
-}
-
-// updateActiveReportingStatus updates the flag indicating if any reporting is active
-func updateActiveReportingStatus() {
-	errorHooksMutex.RLock()
-	hooksExist := len(errorHooks) > 0
-	errorHooksMutex.RUnlock()
-	
-	telemetryActive := globalTelemetryReporter != nil && globalTelemetryReporter.IsEnabled()
-	hasActiveReporting.Store(hooksExist || telemetryActive)
 }
 
 // reportToTelemetry reports an error to the configured telemetry system
 func reportToTelemetry(ee *EnhancedError) {
-	// Skip entirely if nothing to do
-	if !hasActiveReporting.Load() {
-		return
-	}
-
 	// Report to telemetry reporter
 	if globalTelemetryReporter != nil && globalTelemetryReporter.IsEnabled() {
 		globalTelemetryReporter.ReportError(ee)
 	}
 
-	// Skip hook processing if no hooks exist
+	// Call error hooks with mutex protection
 	errorHooksMutex.RLock()
-	hooksExist := len(errorHooks) > 0
-	if !hooksExist {
-		errorHooksMutex.RUnlock()
-		return
-	}
-	
-	// Copy hooks while holding lock
 	hooks := make([]ErrorHook, len(errorHooks))
 	copy(hooks, errorHooks)
 	errorHooksMutex.RUnlock()
@@ -349,19 +292,43 @@ func scrubMessageForPrivacy(message string) string {
 
 // basicURLScrub provides basic URL anonymization as fallback
 func basicURLScrub(message string) string {
+	// Regex to match URLs with query parameters
+	urlRegex := regexp.MustCompile(`(https?://[^?\s]+)\?\S*`)
+
 	// Replace query parameters with [REDACTED]
 	scrubbed := urlRegex.ReplaceAllString(message, "$1?[REDACTED]")
 
 	// Also scrub any standalone query parameters that might appear
+	queryParamRegex := regexp.MustCompile(`[?&]([^=\s]+)=([^&\s]+)`)
 	scrubbed = queryParamRegex.ReplaceAllString(scrubbed, "?[REDACTED]")
 
-	// Apply pre-compiled API key patterns
-	for _, regex := range apiKeyRegexes {
+	// Specific patterns for sensitive data
+	// API keys in various formats
+	apiKeyPatterns := []string{
+		`api[_-]?key[=:]\S+`,     // api_key=xxx, apikey:xxx
+		`token[=:]\S+`,           // token=xxx
+		`auth[=:]\S+`,            // auth=xxx
+		`key[=:][0-9a-fA-F]{8,}`, // key=hexstring
+		`[0-9a-fA-F]{32,}`,       // Long hex strings (likely API keys)
+	}
+
+	// Station IDs and other identifiers
+	idPatterns := []string{
+		`station[_-]?id[=:]\S+`, // station_id=xxx, stationid:xxx
+		`user[_-]?id[=:]\S+`,    // user_id=xxx
+		`device[_-]?id[=:]\S+`,  // device_id=xxx
+		`client[_-]?id[=:]\S+`,  // client_id=xxx
+	}
+
+	// Apply API key patterns
+	for _, pattern := range apiKeyPatterns {
+		regex := regexp.MustCompile(pattern)
 		scrubbed = regex.ReplaceAllString(scrubbed, "[API_KEY_REDACTED]")
 	}
 
-	// Apply pre-compiled ID patterns
-	for _, regex := range idPatternRegexes {
+	// Apply ID patterns
+	for _, pattern := range idPatterns {
+		regex := regexp.MustCompile(pattern)
 		scrubbed = regex.ReplaceAllString(scrubbed, "[ID_REDACTED]")
 	}
 

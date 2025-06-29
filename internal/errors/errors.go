@@ -48,13 +48,12 @@ const (
 // EnhancedError wraps an error with additional context and metadata
 type EnhancedError struct {
 	Err       error                  // Original error
-	component string                 // Component where error occurred (lazily detected)
+	Component string                 // Component where error occurred (auto-detected if empty)
 	Category  ErrorCategory          // Error category for better grouping
 	Context   map[string]interface{} // Additional context data
 	Timestamp time.Time              // When the error occurred
 	reported  bool                   // Whether telemetry has been sent
-	mu        sync.RWMutex           // Mutex to protect concurrent access
-	detected  bool                   // Whether component has been auto-detected
+	mu        sync.RWMutex           // Mutex to protect concurrent access to reported field
 }
 
 // Error implements the error interface
@@ -75,22 +74,9 @@ func (ee *EnhancedError) Is(target error) bool {
 	return Is(ee.Err, target)
 }
 
-// GetComponent returns the component name, detecting it lazily if needed
+// GetComponent returns the component name
 func (ee *EnhancedError) GetComponent() string {
-	ee.mu.Lock()
-	defer ee.mu.Unlock()
-	
-	// If component is empty and hasn't been detected yet, detect it now
-	if ee.component == "" && !ee.detected {
-		ee.component = detectComponent()
-		ee.detected = true
-		// Set to "unknown" if detection failed
-		if ee.component == "" {
-			ee.component = "unknown"
-		}
-	}
-	
-	return ee.component
+	return ee.Component
 }
 
 // GetCategory returns the error category
@@ -133,8 +119,8 @@ type ErrorBuilder struct {
 // New creates a new error with enhanced context
 func New(err error) *ErrorBuilder {
 	return &ErrorBuilder{
-		err: err,
-		// context is lazily initialized when needed
+		err:     err,
+		context: make(map[string]interface{}),
 	}
 }
 
@@ -157,9 +143,6 @@ func (eb *ErrorBuilder) Category(category ErrorCategory) *ErrorBuilder {
 
 // Context adds context data to the error
 func (eb *ErrorBuilder) Context(key string, value interface{}) *ErrorBuilder {
-	if eb.context == nil {
-		eb.context = make(map[string]interface{})
-	}
 	eb.context[key] = value
 	return eb
 }
@@ -167,15 +150,9 @@ func (eb *ErrorBuilder) Context(key string, value interface{}) *ErrorBuilder {
 // ModelContext adds model-specific context
 func (eb *ErrorBuilder) ModelContext(modelPath, modelVersion string) *ErrorBuilder {
 	if modelPath != "" {
-		if eb.context == nil {
-			eb.context = make(map[string]interface{})
-		}
 		eb.context["model_path_type"] = categorizeModelPath(modelPath)
 	}
 	if modelVersion != "" {
-		if eb.context == nil {
-			eb.context = make(map[string]interface{})
-		}
 		eb.context["model_version"] = modelVersion
 	}
 	return eb
@@ -184,16 +161,10 @@ func (eb *ErrorBuilder) ModelContext(modelPath, modelVersion string) *ErrorBuild
 // FileContext adds file-specific context (path is anonymized)
 func (eb *ErrorBuilder) FileContext(filePath string, fileSize int64) *ErrorBuilder {
 	if filePath != "" {
-		if eb.context == nil {
-			eb.context = make(map[string]interface{})
-		}
 		eb.context["file_type"] = categorizeFilePath(filePath)
 		eb.context["file_extension"] = getFileExtension(filePath)
 	}
 	if fileSize > 0 {
-		if eb.context == nil {
-			eb.context = make(map[string]interface{})
-		}
 		eb.context["file_size_category"] = categorizeFileSize(fileSize)
 	}
 	return eb
@@ -202,15 +173,9 @@ func (eb *ErrorBuilder) FileContext(filePath string, fileSize int64) *ErrorBuild
 // NetworkContext adds network-specific context (URLs are anonymized)
 func (eb *ErrorBuilder) NetworkContext(url string, timeout time.Duration) *ErrorBuilder {
 	if url != "" {
-		if eb.context == nil {
-			eb.context = make(map[string]interface{})
-		}
 		eb.context["url_category"] = categorizeURL(url)
 	}
 	if timeout > 0 {
-		if eb.context == nil {
-			eb.context = make(map[string]interface{})
-		}
 		eb.context["timeout_seconds"] = timeout.Seconds()
 	}
 	return eb
@@ -218,9 +183,6 @@ func (eb *ErrorBuilder) NetworkContext(url string, timeout time.Duration) *Error
 
 // Timing adds performance timing context
 func (eb *ErrorBuilder) Timing(operation string, duration time.Duration) *ErrorBuilder {
-	if eb.context == nil {
-		eb.context = make(map[string]interface{})
-	}
 	eb.context["operation"] = operation
 	eb.context["duration_ms"] = duration.Milliseconds()
 	return eb
@@ -228,28 +190,6 @@ func (eb *ErrorBuilder) Timing(operation string, duration time.Duration) *ErrorB
 
 // Build creates the EnhancedError and triggers optional telemetry reporting
 func (eb *ErrorBuilder) Build() *EnhancedError {
-	// Fast path - skip expensive operations if no reporting is active
-	if !hasActiveReporting.Load() {
-		ee := &EnhancedError{
-			Err:       eb.err,
-			component: eb.component, // Use provided or empty
-			Category:  eb.category,  // Use provided or empty
-			Context:   eb.context,
-			Timestamp: time.Now(),
-			detected:  eb.component != "", // Mark as detected if component was provided
-		}
-		// Set defaults without expensive detection
-		if ee.component == "" {
-			ee.component = "unknown"
-			ee.detected = true
-		}
-		if ee.Category == "" {
-			ee.Category = CategoryGeneric
-		}
-		return ee
-	}
-
-	// Full path - perform auto-detection when reporting is active
 	// Auto-detect component if not set
 	if eb.component == "" {
 		eb.component = detectComponent()
@@ -262,11 +202,10 @@ func (eb *ErrorBuilder) Build() *EnhancedError {
 
 	ee := &EnhancedError{
 		Err:       eb.err,
-		component: eb.component,
+		Component: eb.component,
 		Category:  eb.category,
 		Context:   eb.context,
 		Timestamp: time.Now(),
-		detected:  true, // Mark as detected since we just detected it
 	}
 
 	// Report to telemetry if available and enabled
@@ -306,56 +245,12 @@ func init() {
 
 // Helper functions for auto-detection and categorization
 
-// quickComponentLookup tries to detect component from a specific caller depth
-func quickComponentLookup(depth int) string {
-	// Try to get caller at specific depth
-	pc, _, _, ok := runtime.Caller(depth)
-	if !ok {
-		return ""
-	}
-	
-	fn := runtime.FuncForPC(pc)
-	if fn == nil {
-		return ""
-	}
-	
-	funcName := fn.Name()
-	
-	// Skip if it's our own error package
-	if strings.Contains(funcName, "github.com/tphakala/birdnet-go/internal/errors") {
-		return ""
-	}
-	
-	return lookupComponent(funcName)
-}
-
 // detectComponent automatically detects the component based on the call stack
 func detectComponent() string {
-	// First try common call depths for performance (adjust based on profiling)
-	// Typical depths: 4-6 for direct error creation, 6-8 for wrapped errors
-	for _, depth := range []int{4, 5, 6, 7} {
-		if component := quickComponentLookup(depth); component != "" && component != "unknown" {
-			return component
-		}
-	}
-	
-	// Fall back to full stack walk if quick lookup failed
-	return detectComponentFull()
-}
-
-// detectComponentFull walks the entire call stack to find the component
-func detectComponentFull() string {
 	// Walk the entire call stack to find the first recognizable component
 	// This is more robust than hardcoded depths as it adapts to different call chains
-	// Start with smaller buffer and grow if needed
-	pcs := make([]uintptr, 16)   // Start with 16 frames
-	n := runtime.Callers(2, pcs) // Skip runtime.Callers and detectComponentFull
-	
-	// If we filled the buffer, try again with larger size
-	if n == len(pcs) {
-		pcs = make([]uintptr, 32)
-		n = runtime.Callers(2, pcs)
-	}
+	pcs := make([]uintptr, 32)   // Capture up to 32 stack frames
+	n := runtime.Callers(2, pcs) // Skip runtime.Callers and detectComponent
 
 	for i := 0; i < n; i++ {
 		pc := pcs[i]
