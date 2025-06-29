@@ -94,7 +94,12 @@ func NewSFTPTarget(settings map[string]any, logger *slog.Logger) (*SFTPTarget, e
 			Context("operation", "create_sftp_target").
 			Build()
 	}
-	config.BasePath = strings.TrimRight(basePath, "/")
+	// Preserve root path "/" while trimming trailing slashes from other paths
+	if basePath == "/" {
+		config.BasePath = "/"
+	} else {
+		config.BasePath = strings.TrimRight(basePath, "/")
+	}
 
 	// Optional settings with defaults
 	if port, ok := settings["port"].(int); ok {
