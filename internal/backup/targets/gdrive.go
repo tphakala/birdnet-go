@@ -578,7 +578,7 @@ func (t *GDriveTarget) ensureFolder(ctx context.Context, path string) (string, e
 	}
 
 	parts := strings.Split(path, "/")
-	var parentId string = "root"
+	var parentId = "root"
 	currentPath := ""
 
 	for _, part := range parts {

@@ -326,7 +326,7 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 				// Only log if both kill attempts fail and process still exists
 				if !strings.Contains(err.Error(), "process already finished") {
 					log.Printf("⚠️ Failed to kill FFmpeg process for %s: %v", url, err)
-					telemetry.CaptureError(fmt.Errorf("Failed to kill FFmpeg process for %s: %w", url, err), "ffmpeg-kill-failure")
+					telemetry.CaptureError(fmt.Errorf("failed to kill FFmpeg process for %s: %w", url, err), "ffmpeg-kill-failure")
 				}
 			}
 		}
@@ -470,7 +470,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	// Write the audio data to the analysis buffer
 	if err := WriteToAnalysisBuffer(url, data); err != nil {
 		log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
-		telemetry.CaptureError(fmt.Errorf("Analysis buffer write error for %s: %w", url, err), "rtsp-analysis-buffer-error")
+		telemetry.CaptureError(fmt.Errorf("analysis buffer write error for %s: %w", url, err), "rtsp-analysis-buffer-error")
 		hasBufferError = true
 	} else {
 		// Update health watchdog that we received data
@@ -480,7 +480,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	// Write the audio data to the capture buffer
 	if err := WriteToCaptureBuffer(url, data); err != nil {
 		log.Printf("❌ Error writing to capture buffer for RTSP source %s: %v", url, err)
-		telemetry.CaptureError(fmt.Errorf("Capture buffer write error for %s: %w", url, err), "rtsp-capture-buffer-error")
+		telemetry.CaptureError(fmt.Errorf("capture buffer write error for %s: %w", url, err), "rtsp-capture-buffer-error")
 		hasBufferError = true
 	}
 

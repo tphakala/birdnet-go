@@ -887,18 +887,20 @@ func TestQueueOverflow(t *testing.T) {
 	// Count the jobs in the active and archived lists
 	for _, job := range queue.jobs {
 		queue.stats.TotalJobs++
-		if job.Status == JobStatusCompleted {
+		switch job.Status {
+		case JobStatusCompleted:
 			queue.stats.SuccessfulJobs++
-		} else if job.Status == JobStatusFailed {
+		case JobStatusFailed:
 			queue.stats.FailedJobs++
 		}
 	}
 
 	for _, job := range queue.archivedJobs {
 		queue.stats.TotalJobs++
-		if job.Status == JobStatusCompleted {
+		switch job.Status {
+		case JobStatusCompleted:
 			queue.stats.SuccessfulJobs++
-		} else if job.Status == JobStatusFailed {
+		case JobStatusFailed:
 			queue.stats.FailedJobs++
 		}
 	}
