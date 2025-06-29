@@ -607,7 +607,11 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		serviceLogger.Error("Soundscape upload received nil response", "url", maskedURL)
 		return "", fmt.Errorf("received nil response")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			serviceLogger.Debug("Failed to close response body", "error", err)
+		}
+	}()
 	serviceLogger.Debug("Received soundscape upload response", "url", maskedURL, "status_code", resp.StatusCode)
 
 	// Process the response using the new handler
@@ -758,7 +762,11 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		serviceLogger.Error("Detection post received nil response", "url", maskedDetectionURL, "soundscape_id", soundscapeID)
 		return fmt.Errorf("received nil response")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			serviceLogger.Debug("Failed to close response body", "error", err)
+		}
+	}()
 	serviceLogger.Debug("Received detection post response", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode)
 
 	// Handle response using the new handler
