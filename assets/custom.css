@@ -924,9 +924,10 @@ thead.sticky-header {
   100% { transform: rotate(0deg); }
 }
 
+/* Swing from the top like a real bell */
 .animate-wiggle {
-  animation: wiggle 0.5s ease-in-out;
-  animation-iteration-count: 2;
+  transform-origin: top center;
+  animation: wiggle 0.5s ease-in-out 2;
 }
 
 /* ========================================================================
