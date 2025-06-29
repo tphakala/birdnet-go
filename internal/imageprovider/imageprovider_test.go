@@ -639,7 +639,7 @@ func TestConcurrentInitialization(t *testing.T) {
 
 	// Channel to collect results
 	results := make(chan string, numRequests)
-	errors := make(chan error, numRequests)
+	errs := make(chan error, numRequests)
 
 	// Launch concurrent requests
 	for i := 0; i < numRequests; i++ {
@@ -647,7 +647,7 @@ func TestConcurrentInitialization(t *testing.T) {
 			defer wg.Done()
 			image, err := cache.Get(scientificName)
 			if err != nil {
-				errors <- err
+				errs <- err
 				return
 			}
 			results <- image.URL
@@ -657,10 +657,10 @@ func TestConcurrentInitialization(t *testing.T) {
 	// Wait for all requests to complete
 	wg.Wait()
 	close(results)
-	close(errors)
+	close(errs)
 
 	// Check for errors
-	for err := range errors {
+	for err := range errs {
 		t.Errorf("Concurrent request error: %v", err)
 	}
 

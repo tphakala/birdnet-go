@@ -59,7 +59,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 	now := time.Now()
 	date := now.Format("2006-01-02")
 	detectionTime := now.Add(-2 * time.Second)
-	time := detectionTime.Format("15:04:05")
+	timeStr := detectionTime.Format("15:04:05")
 
 	var audioSource string
 	if settings.Input.Path != "" {
@@ -75,7 +75,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 	return datastore.Note{
 		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
 		Date:           date,                         // Use ISO 8601 date format.
-		Time:           time,                         // Use 24-hour time format.
+		Time:           timeStr,                      // Use 24-hour time format.
 		Source:         audioSource,                  // From the provided configuration settings.
 		BeginTime:      beginTime,                    // Start time of the observation.
 		EndTime:        endTime,                      // End time of the observation.
