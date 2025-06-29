@@ -81,7 +81,11 @@ func TestAgeBasedCleanupFileTypeEligibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(testDir)
+	defer func() {
+		if err := os.RemoveAll(testDir); err != nil {
+			t.Errorf("Failed to remove test directory: %v", err)
+		}
+	}()
 
 	for _, tc := range testFiles {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,7 +125,11 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(testDir)
+	defer func() {
+		if err := os.RemoveAll(testDir); err != nil {
+			t.Errorf("Failed to remove test directory: %v", err)
+		}
+	}()
 
 	// Let's create files of all relevant types
 	fileTypes := []string{
