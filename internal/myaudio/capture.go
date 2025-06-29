@@ -573,9 +573,9 @@ func processAudioFrame(
 	unifiedAudioChan chan UnifiedAudioData,
 ) (finalBufferPtr *[]byte, fromPool bool, err error) { // Updated return signature
 
-	processedSamples := pSamples             // Start with original samples
-	needsReturn := false                     // Flag if we got something from pool
-	var currentBufferPtr *[]byte = &pSamples // Track the buffer source/identity
+	processedSamples := pSamples  // Start with original samples
+	needsReturn := false          // Flag if we got something from pool
+	currentBufferPtr := &pSamples // Track the buffer source/identity
 	var conversionError error
 
 	if formatType != malgo.FormatS16 && formatType != malgo.FormatU8 {
