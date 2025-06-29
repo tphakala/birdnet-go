@@ -436,10 +436,15 @@ type ClipForRemoval struct {
 	NumRecordings  int
 }
 
+// Dialector returns the database dialector
+func (ds *DataStore) Dialector() gorm.Dialector {
+	return ds.DB.Dialector
+}
+
 // GetHourFormat returns the database-specific SQL fragment for formatting a time column as hour.
 func (ds *DataStore) GetHourFormat() string {
 	// Handling for supported databases: SQLite and MySQL
-	switch ds.DB.Dialector.Name() {
+	switch ds.Dialector().Name() {
 	case "sqlite":
 		return "strftime('%H', time)"
 	case "mysql":
