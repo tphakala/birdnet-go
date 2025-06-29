@@ -3,6 +3,7 @@ package myaudio
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -103,7 +104,11 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 
 		return recordFileOperationError("save_wav", "wav", "file_creation_failed", enhancedErr)
 	}
-	defer outFile.Close()
+	defer func() {
+		if err := outFile.Close(); err != nil {
+			log.Printf("Failed to close WAV file: %v", err)
+		}
+	}()
 
 	// Create a new WAV encoder with the specified format settings
 	enc := wav.NewEncoder(outFile, conf.SampleRate, conf.BitDepth, conf.NumChannels, 1)
