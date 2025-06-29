@@ -193,9 +193,10 @@ func processFile(path string, settings *conf.Settings, processedFiles map[string
 	// Create processing lock file
 	outputPath := filepath.Join(settings.Output.File.Path, filepath.Base(path))
 	ext := strings.ToLower(filepath.Ext(outputPath))
-	if ext == ".wav" {
+	switch ext {
+	case ".wav":
 		outputPath = outputPath[:len(outputPath)-4]
-	} else if ext == ".flac" {
+	case ".flac":
 		outputPath = outputPath[:len(outputPath)-5]
 	}
 	lockFile := outputPath + ".processing"

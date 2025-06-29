@@ -682,9 +682,10 @@ func TestDDoSProtection(t *testing.T) {
 
 	for code := range statusCodesChan {
 		totalRequests++
-		if code == http.StatusOK {
+		switch code {
+		case http.StatusOK:
 			successCount++
-		} else if code == http.StatusTooManyRequests {
+		case http.StatusTooManyRequests:
 			rateLimitedCount++
 		}
 	}
