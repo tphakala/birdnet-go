@@ -71,8 +71,9 @@ func CaptureSystemInfo(errorMessage string) string {
 		debugFileName := fmt.Sprintf("debug_%s.txt", now.Format("2006-01-02_15-04-05"))
 		debugFilePath := filepath.Join(filepath.Dir(configPath), debugFileName)
 
-		// Write the debug info to the file
-		err = os.WriteFile(debugFilePath, []byte(info.String()), 0o644)
+		// Write the debug info to the file with secure permissions
+		// Debug files may contain sensitive information
+		err = os.WriteFile(debugFilePath, []byte(info.String()), 0o600)
 		if err != nil {
 			log.Printf("Error writing debug file: %v", err)
 		} else {

@@ -297,9 +297,19 @@ func (t *RsyncTarget) buildSSHCmd() string {
 
 // executeCommand executes a command with proper error handling
 func (t *RsyncTarget) executeCommand(ctx context.Context, cmd *exec.Cmd) error {
-	// Set up command with context
-	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
-	output, err := cmd.CombinedOutput()
+	// Validate command path is absolute or in secure location
+	if !filepath.IsAbs(cmd.Path) {
+		return &RsyncError{
+			Op:      "execute",
+			Command: cmd.Path,
+			Err:     fmt.Errorf("command path must be absolute for security"),
+		}
+	}
+
+	// Set up command with context - use a new command to ensure clean state
+	// #nosec G204 - Command path and args are validated elsewhere in the code
+	newCmd := exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
+	output, err := newCmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
 			return &RsyncError{
@@ -426,6 +436,7 @@ func (t *RsyncTarget) atomicUpload(ctx context.Context, sourcePath string) error
 		args = append(args, sourcePath, tempDest)
 
 		// Execute rsync command
+		// #nosec G204 - rsyncPath is validated during initialization, args are constructed safely
 		cmd := exec.CommandContext(ctx, t.rsyncPath, args...)
 		if err := t.executeCommand(ctx, cmd); err != nil {
 			return backup.NewError(backup.ErrIO, "rsync: upload failed", err)
@@ -479,6 +490,7 @@ func (t *RsyncTarget) renameFile(ctx context.Context, oldName, newName string) e
 			cleanBasePath, cleanOldName,
 			cleanBasePath, cleanNewName))
 
+	// #nosec G204 - sshPath is validated during initialization, sshArgs are constructed safely
 	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...)
 	return t.executeCommand(ctx, cmd)
 }

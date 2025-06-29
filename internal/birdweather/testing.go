@@ -400,7 +400,8 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 		// Add special transport to handle potential certificate issues with direct IP
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: false, // Keep secure by default
+				MinVersion:         tls.VersionTLS12, // Require TLS 1.2 minimum
+				InsecureSkipVerify: false,            // Keep secure by default
 			},
 		},
 	}
@@ -539,7 +540,8 @@ func tryAuthenticationWithHostOverride(ctx context.Context, b *BwClient, station
 		Timeout: authTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: false, // Keep secure
+				MinVersion:         tls.VersionTLS12, // Require TLS 1.2 minimum
+				InsecureSkipVerify: false,            // Keep secure
 			},
 		},
 	}

@@ -96,7 +96,8 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		// Best effort close on error path
+		_ = db.Close()
 		if isMediaError(err) {
 			return nil, errors.New(err).
 				Component("backup").
