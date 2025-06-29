@@ -62,7 +62,9 @@
             <button @click="toggleDropdown()" 
                     class="btn btn-ghost btn-sm p-1 relative"
                     aria-label="Notifications"
-                    :aria-expanded="dropdownOpen">
+                    :aria-expanded="dropdownOpen"
+                    aria-haspopup="menu"
+                    aria-controls="notification-dropdown">
                 <!-- Bell icon -->
                 <svg xmlns="http://www.w3.org/2000/svg" 
                         fill="none" 
@@ -78,12 +80,16 @@
                 <!-- Unread badge -->
                 <span x-show="unreadCount > 0" 
                         x-text="unreadCount > 99 ? '99+' : unreadCount"
-                        class="absolute -top-1 -right-1 bg-error text-error-content text-xs rounded-full px-1 min-w-[1.25rem] h-5 flex items-center justify-center font-bold">
+                        class="absolute -top-1 -right-1 bg-error text-error-content text-xs rounded-full px-1 min-w-[1.25rem] h-5 flex items-center justify-center font-bold"
+                        aria-live="polite"
+                        aria-atomic="true">
                 </span>
             </button>
 
             <!-- Notification dropdown panel -->
-            <div x-show="dropdownOpen"
+            <div id="notification-dropdown"
+                    role="menu"
+                    x-show="dropdownOpen"
                     x-transition:enter="transition ease-out duration-200"
                     x-transition:enter-start="opacity-0 scale-95"
                     x-transition:enter-end="opacity-100 scale-100"
@@ -129,9 +135,13 @@
 
                     <!-- Notifications -->
                     <template x-for="notification in notifications" :key="notification.id">
-                        <div class="border-b border-base-300 p-4 hover:bg-base-200 transition-colors cursor-pointer"
+                        <div role="menuitem"
+                                class="border-b border-base-300 p-4 hover:bg-base-200 transition-colors cursor-pointer"
                                 :class="{'bg-base-200/50': !notification.read}"
-                                @click="handleNotificationClick(notification)">
+                                @click="handleNotificationClick(notification)"
+                                tabindex="0"
+                                @keydown.enter="handleNotificationClick(notification)"
+                                @keydown.space.prevent="handleNotificationClick(notification)">
                             <!-- Notification icon based on type -->
                             <div class="flex items-start gap-3">
                                 <div class="flex-shrink-0 mt-1">
