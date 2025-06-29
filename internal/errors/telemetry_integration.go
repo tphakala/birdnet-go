@@ -24,7 +24,7 @@ var (
 		regexp.MustCompile(`token[=:]\S+`),           // token=xxx
 		regexp.MustCompile(`auth[=:]\S+`),            // auth=xxx
 		regexp.MustCompile(`key[=:][0-9a-fA-F]{8,}`), // key=hexstring
-		regexp.MustCompile(`[0-9a-fA-F]{32,}`),       // Long hex strings (likely API keys)
+		regexp.MustCompile(`\b[0-9a-fA-F]{32}\b`),    // 32-char hex strings with word boundaries (MD5-like API keys)
 	}
 
 	// ID patterns
