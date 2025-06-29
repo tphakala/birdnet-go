@@ -75,9 +75,10 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 				Build()
 			return nil, descriptiveErr
 		}
-		if record[1] == "always" {
+		switch record[1] {
+		case "always":
 			policy.AlwaysCleanupFirst[record[0]] = true
-		} else if record[1] == "never" {
+		case "never":
 			policy.NeverCleanup[record[0]] = true
 		}
 	}
