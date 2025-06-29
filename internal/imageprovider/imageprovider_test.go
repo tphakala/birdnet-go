@@ -866,12 +866,14 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 	numStaleEntries := 5
 	for i := 0; i < numStaleEntries; i++ {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
-		mockStore.SaveImageCache(&datastore.ImageCache{
+		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
 			URL:            fmt.Sprintf("http://example.com/old_%s.jpg", species),
 			CachedAt:       staleTime,
-		})
+		}); err != nil {
+			t.Fatalf("Failed to save stale cache entry: %v", err)
+		}
 	}
 
 	// Wait for background refresh to process, but with a timeout
