@@ -12,9 +12,14 @@ document.addEventListener('alpine:init', () => {
         reconnectDelay: 1000,
         maxReconnectDelay: 30000,
         soundEnabled: false,
+        debugMode: false,
         
         // Initialize
         init() {
+            // Get debug mode from data attribute
+            const debugAttr = this.$el.getAttribute('data-debug-mode');
+            this.debugMode = debugAttr === 'true';
+            
             // Load notifications
             this.loadNotifications();
             
@@ -37,7 +42,8 @@ document.addEventListener('alpine:init', () => {
                 const response = await fetch('/api/v2/notifications?limit=20&status=unread');
                 if (response.ok) {
                     const data = await response.json();
-                    this.notifications = data.notifications || [];
+                    // Filter notifications based on debug mode
+                    this.notifications = (data.notifications || []).filter(n => this.shouldShowNotification(n));
                     this.updateUnreadCount();
                 }
             } catch (error) {
@@ -96,8 +102,37 @@ document.addEventListener('alpine:init', () => {
             }
         },
         
+        // Check if notification should be shown based on debug mode
+        shouldShowNotification(notification) {
+            // Always show user-facing notifications
+            if (notification.type === 'detection' || 
+                notification.priority === 'critical' ||
+                notification.priority === 'high') {
+                return true;
+            }
+            
+            // In debug mode, show all notifications
+            if (this.debugMode) {
+                return true;
+            }
+            
+            // Filter out system/error notifications when not in debug mode
+            if (notification.type === 'error' || 
+                notification.type === 'system' || 
+                notification.type === 'warning') {
+                return false;
+            }
+            
+            return true;
+        },
+        
         // Add new notification
         addNotification(notification) {
+            // Check if notification should be shown
+            if (!this.shouldShowNotification(notification)) {
+                return;
+            }
+            
             // Add to beginning of array
             this.notifications.unshift(notification);
             
