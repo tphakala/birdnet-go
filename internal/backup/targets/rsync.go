@@ -114,8 +114,8 @@ func NewRsyncTarget(settings map[string]interface{}) (*RsyncTarget, error) {
 		}
 	}
 
-	if path, ok := settings["path"].(string); ok {
-		config.BasePath = strings.TrimRight(path, "/")
+	if basePath, ok := settings["path"].(string); ok {
+		config.BasePath = strings.TrimRight(basePath, "/")
 	} else {
 		return nil, backup.NewError(backup.ErrConfig, "rsync: path is required", nil)
 	}
@@ -511,17 +511,17 @@ func (t *RsyncTarget) deleteFile(ctx context.Context, filename string) error {
 }
 
 // trackTempFile adds a temporary file to the tracking map
-func (t *RsyncTarget) trackTempFile(path string) {
+func (t *RsyncTarget) trackTempFile(filePath string) {
 	t.tempFilesMu.Lock()
 	defer t.tempFilesMu.Unlock()
-	t.tempFiles[path] = true
+	t.tempFiles[filePath] = true
 }
 
 // untrackTempFile removes a temporary file from the tracking map
-func (t *RsyncTarget) untrackTempFile(path string) {
+func (t *RsyncTarget) untrackTempFile(filePath string) {
 	t.tempFilesMu.Lock()
 	defer t.tempFilesMu.Unlock()
-	delete(t.tempFiles, path)
+	delete(t.tempFiles, filePath)
 }
 
 // cleanupTempFiles attempts to clean up any tracked temporary files

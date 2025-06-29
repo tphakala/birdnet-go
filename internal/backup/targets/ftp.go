@@ -117,8 +117,8 @@ func NewFTPTargetFromMap(settings map[string]interface{}) (*FTPTarget, error) {
 	if password, ok := settings["password"].(string); ok {
 		config.Password = password
 	}
-	if path, ok := settings["path"].(string); ok {
-		config.BasePath = path
+	if basePath, ok := settings["path"].(string); ok {
+		config.BasePath = basePath
 	}
 	if timeout, ok := settings["timeout"].(string); ok {
 		duration, err := time.ParseDuration(timeout)
@@ -581,17 +581,17 @@ func (t *FTPTarget) Validate() error {
 }
 
 // trackTempFile adds a temporary file to the tracking map
-func (t *FTPTarget) trackTempFile(path string) {
+func (t *FTPTarget) trackTempFile(filePath string) {
 	t.tempFilesMu.Lock()
 	defer t.tempFilesMu.Unlock()
-	t.tempFiles[path] = true
+	t.tempFiles[filePath] = true
 }
 
 // untrackTempFile removes a temporary file from the tracking map
-func (t *FTPTarget) untrackTempFile(path string) {
+func (t *FTPTarget) untrackTempFile(filePath string) {
 	t.tempFilesMu.Lock()
 	defer t.tempFilesMu.Unlock()
-	delete(t.tempFiles, path)
+	delete(t.tempFiles, filePath)
 }
 
 // cleanupTempFiles attempts to clean up any tracked temporary files
