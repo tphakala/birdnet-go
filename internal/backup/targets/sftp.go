@@ -86,7 +86,7 @@ func NewSFTPTarget(settings map[string]any, logger *slog.Logger) (*SFTPTarget, e
 	}
 	config.Host = host
 
-	path, ok := settings["path"].(string)
+	basePath, ok := settings["path"].(string)
 	if !ok {
 		return nil, errors.Newf("sftp: path is required").
 			Component("backup").
@@ -94,7 +94,7 @@ func NewSFTPTarget(settings map[string]any, logger *slog.Logger) (*SFTPTarget, e
 			Context("operation", "create_sftp_target").
 			Build()
 	}
-	config.BasePath = strings.TrimRight(path, "/")
+	config.BasePath = strings.TrimRight(basePath, "/")
 
 	// Optional settings with defaults
 	if port, ok := settings["port"].(int); ok {
@@ -895,17 +895,17 @@ func (t *SFTPTarget) createDirectory(client *sftp.Client, dirPath string) error 
 }
 
 // trackTempFile adds a temporary file to the tracking map
-func (t *SFTPTarget) trackTempFile(path string) {
+func (t *SFTPTarget) trackTempFile(filePath string) {
 	t.tempFilesMu.Lock()
 	defer t.tempFilesMu.Unlock()
-	t.tempFiles[path] = true
+	t.tempFiles[filePath] = true
 }
 
 // untrackTempFile removes a temporary file from the tracking map
-func (t *SFTPTarget) untrackTempFile(path string) {
+func (t *SFTPTarget) untrackTempFile(filePath string) {
 	t.tempFilesMu.Lock()
 	defer t.tempFilesMu.Unlock()
-	delete(t.tempFiles, path)
+	delete(t.tempFiles, filePath)
 }
 
 // cleanupTempFiles attempts to clean up any tracked temporary files
