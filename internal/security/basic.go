@@ -316,7 +316,21 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 		cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
 		parsedURL, err := url.Parse(cleanedRedirect)
 
-		// Validate: No error, No scheme, No host, Path starts with '/', Path does NOT start with '//' or '/\'
+		// Security validation for redirect paths to prevent open redirect vulnerabilities
+		// We ONLY accept relative paths that:
+		// 1. Parse without error
+		// 2. Have no scheme (not http://, https://, etc.)
+		// 3. Have no host (not //evil.com)
+		// 4. Start with a single '/' (valid relative path)
+		// 5. Do NOT start with '//' or '/\' (which browsers interpret as protocol-relative URLs)
+		//
+		// Examples:
+		// - ACCEPTED: "/", "/dashboard", "/path?query=value"
+		// - REJECTED: "//evil.com", "/\evil.com", "http://evil.com", "https://evil.com"
+		//
+		// The condition below checks that either:
+		// - Path length is 1 (just "/"), OR
+		// - Path[1] is neither '/' nor '\' (preventing "//" and "/\" patterns)
 		if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
 			strings.HasPrefix(parsedURL.Path, "/") &&
 			(len(parsedURL.Path) <= 1 || (parsedURL.Path[1] != '/' && parsedURL.Path[1] != '\\')) {
