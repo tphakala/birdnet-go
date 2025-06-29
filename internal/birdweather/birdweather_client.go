@@ -124,7 +124,7 @@ func New(settings *conf.Settings) (*BwClient, error) {
 func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64) {
 	// Create a new local random generator seeded with current Unix time
 	src := rand.NewSource(time.Now().UnixNano())
-	rnd := rand.New(src)
+	rnd := rand.New(src) // #nosec G404 -- weak randomness acceptable for upload retry jitter, not security-critical
 
 	// Calculate the degree offset using an approximation that 111,000 meters equals 1 degree
 	degreeOffset := radiusMeters / 111000
@@ -849,7 +849,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 			serviceLogger.Warn("Could not create debug PCM directory", "directory", debugDir, "error", err)
 		} else {
 			// Save raw PCM data
-			if err := os.WriteFile(debugFilename, pcmData, 0o644); err != nil {
+			if err := os.WriteFile(debugFilename, pcmData, 0o600); err != nil {
 				serviceLogger.Warn("Could not save debug PCM file", "filename", debugFilename, "error", err)
 			} else {
 				serviceLogger.Debug("Saved debug PCM file", "filename", debugFilename)

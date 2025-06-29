@@ -443,7 +443,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 					Target: entry.Name,
 					Metadata: backup.Metadata{
 						Timestamp: entry.Time,
-						Size:      int64(entry.Size),
+						Size:      int64(entry.Size), // #nosec G115 -- file size conversion safe for FTP listing
 					},
 				})
 			}

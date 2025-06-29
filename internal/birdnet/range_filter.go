@@ -67,7 +67,7 @@ func BuildRangeFilter(bn *BirdNET) error {
 		for _, species := range includedSpecies {
 			content += species + "\n"
 		}
-		if err := os.WriteFile(debugFile, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(debugFile, []byte(content), 0o600); err != nil {
 			// Don't fail the operation, just log the error
 			err = errors.New(err).
 				Category(errors.CategoryFileIO).

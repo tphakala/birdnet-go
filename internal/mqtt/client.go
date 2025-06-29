@@ -475,7 +475,7 @@ func (c *client) Disconnect() {
 		// Check connection status *outside* lock to avoid potential deadlock
 		// if IsConnected internally needs a lock (though it uses RLock)
 		if clientToDisconnect.IsConnected() {
-			disconnectTimeoutMs := uint(c.config.DisconnectTimeout.Milliseconds())
+			disconnectTimeoutMs := uint(c.config.DisconnectTimeout.Milliseconds()) // #nosec G115 -- timeout value conversion safe
 			logger.Debug("Sending disconnect signal to Paho client", "timeout_ms", disconnectTimeoutMs)
 			clientToDisconnect.Disconnect(disconnectTimeoutMs) // Perform disconnect outside lock
 			c.metrics.UpdateConnectionStatus(false)            // Update metrics after disconnect attempt

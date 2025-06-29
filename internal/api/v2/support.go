@@ -145,7 +145,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if !req.UploadToSentry || !settings.Sentry.Enabled {
 		// Store temporarily for download
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
-		if err := os.WriteFile(tempFile, archiveData, 0o644); err != nil {
+		if err := os.WriteFile(tempFile, archiveData, 0o600); err != nil {
 			c.apiLogger.Error("Failed to store temporary file",
 				"error", err,
 				"path", tempFile,

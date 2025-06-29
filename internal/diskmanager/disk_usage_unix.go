@@ -43,7 +43,7 @@ func GetAvailableSpace(baseDir string) (uint64, error) {
 		return 0, err
 	}
 
-	return stat.Bavail * uint64(stat.Bsize), nil
+	return stat.Bavail * uint64(stat.Bsize), nil // #nosec G115 -- Bsize is system block size, safe conversion
 }
 
 // GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
@@ -61,8 +61,8 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 		return DiskSpaceInfo{}, descriptiveErr
 	}
 
-	totalBytes := stat.Blocks * uint64(stat.Bsize)
-	freeBytes := stat.Bavail * uint64(stat.Bsize) // Available to non-root user
+	totalBytes := stat.Blocks * uint64(stat.Bsize) // #nosec G115 -- Bsize is system block size, safe conversion
+	freeBytes := stat.Bavail * uint64(stat.Bsize) // Available to non-root user // #nosec G115 -- Bsize is system block size, safe conversion
 	usedBytes := totalBytes - freeBytes
 
 	return DiskSpaceInfo{

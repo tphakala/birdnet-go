@@ -95,7 +95,7 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 			lastErr = err
 			log.Printf("[DEBUG] Retry attempt %d failed: %v", attempts, err)
 			// Exponential backoff with jitter
-			jitter := time.Duration(rand.Int63n(int64(backoff / 2)))
+			jitter := time.Duration(rand.Int63n(int64(backoff / 2))) // #nosec G404 -- weak randomness acceptable for test backoff jitter, not security-critical
 			sleepTime := backoff + jitter
 			log.Printf("[DEBUG] Sleeping for %v before next retry", sleepTime)
 			time.Sleep(sleepTime)

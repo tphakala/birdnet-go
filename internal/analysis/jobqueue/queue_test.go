@@ -339,7 +339,7 @@ func TestRetryProcess(t *testing.T) {
 			if failCount > math.MaxInt32 {
 				t.Fatalf("failCount %d exceeds int32 range", failCount)
 			}
-			if count <= int32(failCount) {
+			if count <= int32(failCount) { // #nosec G115 -- test values small, safe conversion
 				// Return failure for the first N attempts
 				return errors.New("simulated failure")
 			}
@@ -1264,7 +1264,7 @@ func TestStressTest(t *testing.T) {
 						// This should not happen in practice, but handle it
 						maxRetries = math.MaxInt32
 					}
-					if count >= int32(maxRetries) {
+					if count >= int32(maxRetries) { // #nosec G115 -- test values small, safe conversion
 						defer wg.Done()
 						failedJobs.Add(1)
 					}

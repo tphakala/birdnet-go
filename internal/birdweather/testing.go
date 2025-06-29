@@ -137,7 +137,7 @@ var testConfig = &TestConfig{
 	FailureProbability: 0.5,
 	MinDelay:           500,
 	MaxDelay:           3000,
-	rng:                rand.New(rand.NewSource(time.Now().UnixNano())),
+	rng: rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404 -- weak randomness acceptable for test utilities, not security-critical
 }
 
 // simulateDelay adds an artificial delay

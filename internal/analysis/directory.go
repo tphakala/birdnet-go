@@ -341,7 +341,7 @@ func watchDirectory(watchDir string, settings *conf.Settings, processedFiles map
 			}
 
 			// Reset timer for next scan with random interval
-			sleepTime := 30 + rand.Intn(15)
+			sleepTime := 30 + rand.Intn(15) // #nosec G404 -- weak randomness acceptable for scan interval jitter, not security-critical
 			timer.Reset(time.Duration(sleepTime) * time.Second)
 		}
 	}

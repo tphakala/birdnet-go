@@ -1368,7 +1368,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 	assert.GreaterOrEqual(t, successes, int32(0), "At least one request should succeed")
 	assert.GreaterOrEqual(t, conflicts, int32(0), "Some requests should get conflict status")
 	assert.Equal(t, int32(0), failures, "There should be no unexpected failures")
-	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict")
+	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict") // #nosec G115 -- numConcurrent is a small test constant (3-10), no overflow risk
 }
 
 // TestTrueConcurrentPlatformSpecific tests platform-specific concurrency
@@ -1500,5 +1500,5 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	assert.GreaterOrEqual(t, successes, int32(0), "At least one request should succeed")
 	assert.GreaterOrEqual(t, conflicts, int32(0), "Some requests should get conflict status")
 	assert.Equal(t, int32(0), failures, "There should be no unexpected failures")
-	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict")
+	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict") // #nosec G115 -- numConcurrent is a small test constant (3-10), no overflow risk
 }
