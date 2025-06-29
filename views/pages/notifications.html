@@ -255,6 +255,23 @@
     </div>
 </div>
 
+<!-- Delete Confirmation Modal -->
+<dialog id="deleteConfirmModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Confirm Delete</h3>
+        <p class="py-4">Are you sure you want to delete this notification?</p>
+        <div class="modal-action">
+            <form method="dialog" class="flex gap-2">
+                <button class="btn btn-ghost">Cancel</button>
+                <button @click="confirmDelete()" class="btn btn-error">Delete</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('notificationsPage', () => ({
@@ -264,6 +281,7 @@ document.addEventListener('alpine:init', () => {
         totalPages: 1,
         pageSize: 20,
         hasUnread: false,
+        pendingDeleteId: null,
         filters: {
             status: '',
             type: '',
@@ -298,13 +316,16 @@ document.addEventListener('alpine:init', () => {
                     this.notifications = data.notifications || [];
                     this.hasUnread = this.notifications.some(n => !n.read);
                     
-                    // Calculate total pages (API should provide total count)
-                    // If we get less than pageSize, we're on the last page
-                    if (this.notifications.length < this.pageSize) {
-                        this.totalPages = this.currentPage;
+                    // Calculate total pages from API response
+                    if (data.total !== undefined) {
+                        this.totalPages = Math.ceil(data.total / this.pageSize) || 1;
                     } else {
-                        // We may have more pages, but we can't know for sure without total count
-                        this.totalPages = this.currentPage + 1;
+                        // Fallback if API doesn't provide total count
+                        if (this.notifications.length < this.pageSize) {
+                            this.totalPages = this.currentPage;
+                        } else {
+                            this.totalPages = this.currentPage + 1;
+                        }
                     }
                 }
             } catch (error) {
@@ -375,9 +396,15 @@ document.addEventListener('alpine:init', () => {
         },
 
         async deleteNotification(id) {
-            if (!confirm('Are you sure you want to delete this notification?')) {
-                return;
-            }
+            this.pendingDeleteId = id;
+            document.getElementById('deleteConfirmModal').showModal();
+        },
+
+        async confirmDelete() {
+            if (!this.pendingDeleteId) return;
+            
+            const id = this.pendingDeleteId;
+            this.pendingDeleteId = null;
 
             try {
                 const response = await fetch(`/api/v2/notifications/${id}`, {
