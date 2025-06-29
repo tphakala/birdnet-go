@@ -6,6 +6,8 @@ import (
 )
 
 func TestFastPathNoTelemetry(t *testing.T) {
+	t.Parallel()
+	
 	// Ensure no telemetry or hooks
 	SetTelemetryReporter(nil)
 	ClearErrorHooks()
@@ -28,6 +30,8 @@ func TestFastPathNoTelemetry(t *testing.T) {
 }
 
 func TestRegexPrecompilation(t *testing.T) {
+	t.Parallel()
+	
 	// Test that regex patterns are pre-compiled
 	testMessage := "Error at https://api.example.com?api_key=secret123&token=abc"
 	scrubbed := basicURLScrub(testMessage)
