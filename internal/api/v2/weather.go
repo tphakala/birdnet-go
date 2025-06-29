@@ -505,8 +505,8 @@ func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWea
 		return closestHourlyData // Return empty if no hourly data provided
 	}
 
-	loc := detectionTime.Location()                // Use the location from the detection time
-	var closestDiff time.Duration = 24 * time.Hour // Initialize with a large duration
+	loc := detectionTime.Location()  // Use the location from the detection time
+	var closestDiff = 24 * time.Hour // Initialize with a large duration
 	found := false
 
 	for i := range hourlyWeatherList {
