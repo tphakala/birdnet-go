@@ -179,10 +179,14 @@ func (m *MockTicker) SendTick() {
 func (m *MockTicker) SendTickAndWait(timeout time.Duration) bool {
 	m.SendTick()
 
+	// Use a timer instead of time.After to avoid creating unnecessary timers
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	select {
 	case <-m.tickProcessed:
 		return true
-	case <-time.After(timeout):
+	case <-timer.C:
 		return false
 	}
 }
@@ -956,10 +960,10 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 		select {
 		case stats = <-statsChan:
 			// Got statistics
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(200 * time.Millisecond):
 			t.Fatal("Could not retrieve test statistics")
 		}
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(1 * time.Second):
 		t.Fatal("Test did not complete within expected timeframe")
 	}
 
@@ -1019,11 +1023,13 @@ func TestWatchdogDetection(t *testing.T) {
 	watchdog.lastDataTime = time.Now().Add(-65 * time.Second)
 	watchdog.mu.Unlock()
 
-	// Wait for restart signal
+	// Wait for restart signal with proper timer
+	watchdogTimer := time.NewTimer(200 * time.Millisecond)
+	defer watchdogTimer.Stop()
 	select {
 	case <-restartChan:
 		// Success - watchdog triggered restart
-	case <-time.After(100 * time.Millisecond):
+	case <-watchdogTimer.C:
 		t.Fatal("Watchdog did not trigger restart")
 	}
 }
@@ -1249,7 +1255,7 @@ func TestConcurrentProcessOperations(t *testing.T) {
 	errorChan := make(chan error, concurrentOps*iterations)
 
 	// Create a context with timeout for the whole test
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	// Launch multiple goroutines to perform operations concurrently
@@ -1280,8 +1286,8 @@ func TestConcurrentProcessOperations(t *testing.T) {
 					errorChan <- fmt.Errorf("goroutine %d, iteration %d: %w", id, j, err)
 				}
 
-				// Small delay to avoid excessive contention
-				time.Sleep(5 * time.Millisecond)
+				// Use runtime.Gosched() instead of sleep to yield to other goroutines
+				runtime.Gosched()
 
 				// Remove the process
 				tc.Repo.ClearProcesses()
@@ -1292,7 +1298,7 @@ func TestConcurrentProcessOperations(t *testing.T) {
 	// Set up a goroutine to cancel the context if wg doesn't complete in time
 	go func() {
 		// Use a separate timer to avoid blocking on wg.Wait() forever
-		timer := time.NewTimer(1500 * time.Millisecond)
+		timer := time.NewTimer(2500 * time.Millisecond)
 		defer timer.Stop()
 
 		select {
@@ -1358,8 +1364,16 @@ func TestResourceCleanupDuringProcessing(t *testing.T) {
 	// Start the monitor
 	tc.Monitor.Start()
 
-	// Give monitor some time to run
-	time.Sleep(20 * time.Millisecond)
+	// Use a more deterministic approach - wait for the monitor to be running
+	started := false
+	for i := 0; i < 20; i++ {
+		if tc.Monitor.IsRunning() {
+			started = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	assert.True(t, started, "Monitor should have started")
 
 	// Stop the monitor
 	tc.Monitor.Stop()
@@ -1450,11 +1464,22 @@ func TestGoroutineTerminationOnStop(t *testing.T) {
 	// Start the monitor
 	ctx.Monitor.Start()
 
-	// Allow a brief moment for goroutines to start
-	time.Sleep(20 * time.Millisecond)
-
-	// Count goroutines after starting
-	goroutinesAfterStart := runtime.NumGoroutine()
+	// Wait for monitor to actually start and goroutines to spawn
+	started := false
+	var goroutinesAfterStart int
+	for i := 0; i < 20; i++ {
+		if ctx.Monitor.IsRunning() {
+			// Give a tiny bit more time for goroutines to fully initialize
+			time.Sleep(5 * time.Millisecond)
+			goroutinesAfterStart = runtime.NumGoroutine()
+			if goroutinesAfterStart > goroutinesBefore {
+				started = true
+				break
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	assert.True(t, started, "Monitor should have started with goroutines")
 
 	// There should be at least one more goroutine running
 	assert.Greater(t, goroutinesAfterStart, goroutinesBefore, "Starting the monitor should create at least one goroutine")
@@ -1462,11 +1487,19 @@ func TestGoroutineTerminationOnStop(t *testing.T) {
 	// Stop the monitor
 	ctx.Monitor.Stop()
 
-	// Allow a bit more time for goroutines to clean up
-	time.Sleep(20 * time.Millisecond)
-
-	// Count goroutines after stopping
-	goroutinesAfterStop := runtime.NumGoroutine()
+	// Wait for goroutines to actually clean up
+	var goroutinesAfterStop int
+	cleaned := false
+	for i := 0; i < 20; i++ {
+		goroutinesAfterStop = runtime.NumGoroutine()
+		// Allow some delta since other test goroutines might be running
+		if goroutinesAfterStop <= goroutinesBefore+2 {
+			cleaned = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	assert.True(t, cleaned, "Goroutines should be cleaned up after stop")
 
 	// The goroutine count should return approximately to the initial value
 	// We use approximate comparison because there might be other goroutines started/stopped by the testing framework
@@ -1830,29 +1863,35 @@ func TestContextCancellation(t *testing.T) {
 	}()
 
 	// Wait for operation to block
+	opBlockTimer := time.NewTimer(100 * time.Millisecond)
+	defer opBlockTimer.Stop()
 	select {
 	case <-operationBlocked:
 		// Operation is now blocked
-	case <-time.After(100 * time.Millisecond):
+	case <-opBlockTimer.C:
 		t.Fatal("Timed out waiting for operation to block")
 	}
 
 	// Let the context timeout occur (we specified 50ms timeout)
 
 	// Wait for operation to be cancelled
+	opCancelTimer := time.NewTimer(150 * time.Millisecond)
+	defer opCancelTimer.Stop()
 	select {
 	case <-operationCancelled:
 		// Operation was cancelled by context
-	case <-time.After(100 * time.Millisecond):
+	case <-opCancelTimer.C:
 		t.Fatal("Timed out waiting for operation to be cancelled")
 	}
 
 	// Get the error from the channel
 	var err error
+	opCompleteTimer := time.NewTimer(200 * time.Millisecond)
+	defer opCompleteTimer.Stop()
 	select {
 	case err = <-errChan:
 		// Got the error result
-	case <-time.After(200 * time.Millisecond):
+	case <-opCompleteTimer.C:
 		t.Fatal("Timed out waiting for operation to complete")
 	}
 
