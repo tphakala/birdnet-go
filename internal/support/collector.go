@@ -787,7 +787,11 @@ func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int6
 		// Log file might not exist or be inaccessible, which is fine
 		return logs, 0
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -1240,7 +1244,11 @@ func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath stri
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
@@ -1275,7 +1283,11 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
