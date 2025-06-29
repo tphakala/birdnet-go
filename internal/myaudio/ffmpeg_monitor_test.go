@@ -421,6 +421,7 @@ func (m *ForEachCallbackMatcher) String() string {
 // Test cases
 
 func TestNewFFmpegMonitor(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -441,6 +442,7 @@ func TestNewFFmpegMonitor(t *testing.T) {
 }
 
 func TestMonitorStartStop(t *testing.T) {
+	t.Parallel()
 	// Create test context with dependencies
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -476,6 +478,7 @@ func TestMonitorStartStop(t *testing.T) {
 }
 
 func TestMonitorDoubleStart(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -510,6 +513,7 @@ func TestMonitorDoubleStart(t *testing.T) {
 }
 
 func TestCheckProcesses(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -551,6 +555,7 @@ func TestCheckProcesses(t *testing.T) {
 }
 
 func TestCleanupOrphanedProcesses(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -588,6 +593,7 @@ func TestCleanupOrphanedProcesses(t *testing.T) {
 }
 
 func TestCleanupOrphanedProcessesError(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -609,6 +615,7 @@ func TestCleanupOrphanedProcessesError(t *testing.T) {
 }
 
 func TestMonitorLoopUnitTest(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -650,6 +657,7 @@ func TestMonitorLoopUnitTest(t *testing.T) {
 }
 
 func TestUnixProcessManager(t *testing.T) {
+	t.Parallel()
 	// Create mock command executor
 	mockExecutor := new(MockCommandExecutor)
 
@@ -681,6 +689,7 @@ func TestUnixProcessManager(t *testing.T) {
 }
 
 func TestWindowsProcessManager(t *testing.T) {
+	t.Parallel()
 	// Create mock command executor
 	mockExecutor := new(MockCommandExecutor)
 
@@ -715,6 +724,7 @@ func TestWindowsProcessManager(t *testing.T) {
 }
 
 func TestSettingsBasedConfigProvider(t *testing.T) {
+	t.Parallel()
 	// We can't easily test this without mocking conf.Setting
 	// This is more of an integration test than a unit test
 
@@ -731,6 +741,7 @@ func TestSettingsBasedConfigProvider(t *testing.T) {
 }
 
 func TestBoundedBuffer(t *testing.T) {
+	t.Parallel()
 	// Create a buffer with a small size
 	bufSize := 10
 	buf := NewBoundedBuffer(bufSize)
@@ -768,6 +779,7 @@ func TestBoundedBuffer(t *testing.T) {
 }
 
 func TestBackoffStrategy(t *testing.T) {
+	t.Parallel()
 	// Create a backoff strategy with 3 max attempts, 1s initial delay, and 5s max delay
 	maxAttempts := 3
 	initialDelay := 1 * time.Second
@@ -807,6 +819,7 @@ func TestBackoffStrategy(t *testing.T) {
 }
 
 func TestFFmpegProcessKilledDetection(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -857,6 +870,7 @@ func TestFFmpegProcessKilledDetection(t *testing.T) {
 }
 
 func TestFFmpegProcessRestartMechanism(t *testing.T) {
+	t.Parallel()
 	// Create channels to track counts
 	type testStats struct {
 		startCount   int
@@ -956,6 +970,7 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 }
 
 func TestWatchdogDetection(t *testing.T) {
+	t.Parallel()
 	// Create a watchdog instance
 	watchdog := &audioWatchdog{
 		lastDataTime: time.Now().Add(-30 * time.Second),
@@ -1014,6 +1029,7 @@ func TestWatchdogDetection(t *testing.T) {
 }
 
 func TestProcessCleanupOnConfigChange(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager) // Add process manager
@@ -1058,6 +1074,7 @@ func TestProcessCleanupOnConfigChange(t *testing.T) {
 }
 
 func TestBackoffDelayForProcessRestarts(t *testing.T) {
+	t.Parallel()
 	// Create a process with a restart tracker
 	proc := &FFmpegProcess{
 		cmd: &exec.Cmd{}, // Add mock command
@@ -1094,6 +1111,7 @@ func TestBackoffDelayForProcessRestarts(t *testing.T) {
 }
 
 func TestExternalProcessKill(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -1140,6 +1158,7 @@ func TestExternalProcessKill(t *testing.T) {
 }
 
 func TestProcessTerminationError(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -1192,6 +1211,7 @@ func TestProcessTerminationError(t *testing.T) {
 }
 
 func TestConcurrentProcessOperations(t *testing.T) {
+	t.Parallel()
 	// Skip in short mode since this is a longer running test
 	if testing.Short() {
 		t.Skip("Skipping concurrent operations test in short mode")
@@ -1321,6 +1341,7 @@ func TestConcurrentProcessOperations(t *testing.T) {
 }
 
 func TestResourceCleanupDuringProcessing(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -1413,6 +1434,7 @@ func (ctx *MonitorTestContext) Cleanup() {
 }
 
 func TestGoroutineTerminationOnStop(t *testing.T) {
+	t.Parallel()
 	// Setup with our new helper
 	ctx := CreateMonitorTestContext(t)
 	defer ctx.Cleanup()
@@ -1453,6 +1475,7 @@ func TestGoroutineTerminationOnStop(t *testing.T) {
 }
 
 func TestChannelClosureOnStop(t *testing.T) {
+	t.Parallel()
 	// Setup with our new helper
 	ctx := CreateMonitorTestContext(t)
 	defer ctx.Cleanup()
@@ -1586,6 +1609,7 @@ func (tc *TestContext) Cleanup() {
 
 // BenchmarkCheckProcessesEmpty measures performance with no processes
 func BenchmarkCheckProcessesEmpty(b *testing.B) {
+	b.ReportAllocs()
 	// Create dependencies
 	config := new(MockConfigProvider)
 	procMgr := new(MockProcessManager)
@@ -1611,6 +1635,7 @@ func BenchmarkCheckProcessesEmpty(b *testing.B) {
 
 // BenchmarkCheckProcessesSmall measures performance with a small number of processes
 func BenchmarkCheckProcessesSmall(b *testing.B) {
+	b.ReportAllocs()
 	// Create dependencies
 	config := new(MockConfigProvider)
 	procMgr := new(MockProcessManager)
@@ -1665,6 +1690,7 @@ func BenchmarkCheckProcessesSmall(b *testing.B) {
 
 // BenchmarkCheckProcessesLarge measures performance with a large number of processes
 func BenchmarkCheckProcessesLarge(b *testing.B) {
+	b.ReportAllocs()
 	// Create dependencies
 	config := new(MockConfigProvider)
 	procMgr := new(MockProcessManager)
@@ -1711,6 +1737,7 @@ func BenchmarkCheckProcessesLarge(b *testing.B) {
 
 // BenchmarkCleanupOrphanedProcesses measures performance of orphaned process cleanup
 func BenchmarkCleanupOrphanedProcesses(b *testing.B) {
+	b.ReportAllocs()
 	// Create dependencies
 	config := new(MockConfigProvider)
 	procMgr := new(MockProcessManager)
@@ -1765,6 +1792,7 @@ func BenchmarkCleanupOrphanedProcesses(b *testing.B) {
 }
 
 func TestContextCancellation(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
@@ -1837,6 +1865,7 @@ func TestContextCancellation(t *testing.T) {
 
 // TestEdgeCaseURLCleanup tests that the cleanup process handles unusual URL values correctly
 func TestEdgeCaseURLCleanup(t *testing.T) {
+	t.Parallel()
 	// Create test context
 	tc := NewTestContext(t)
 	defer tc.Cleanup()
