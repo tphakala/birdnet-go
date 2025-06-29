@@ -358,8 +358,16 @@ func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "rsync: failed to create temporary metadata file", err)
 	}
-	defer os.Remove(tempMetadataFile.Name())
-	defer tempMetadataFile.Close()
+	defer func() {
+		if err := os.Remove(tempMetadataFile.Name()); err != nil {
+			fmt.Printf("rsync: failed to remove temp metadata file: %v\n", err)
+		}
+	}()
+	defer func() {
+		if err := tempMetadataFile.Close(); err != nil {
+			fmt.Printf("rsync: failed to close temp metadata file: %v\n", err)
+		}
+	}()
 
 	if _, err := tempMetadataFile.Write(metadataBytes); err != nil {
 		return backup.NewError(backup.ErrIO, "rsync: failed to write metadata", err)
@@ -379,10 +387,14 @@ func (t *RsyncTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 
 	// Rename the temporary file to match the final name before upload
 	if err := t.atomicUpload(ctx, tempMetadataPath); err != nil {
-		os.Remove(tempMetadataPath)
+		if err := os.Remove(tempMetadataPath); err != nil {
+			fmt.Printf("rsync: failed to remove temp metadata path: %v\n", err)
+		}
 		return backup.NewError(backup.ErrIO, fmt.Sprintf("rsync: failed to store metadata file %s", metadataFileName), err)
 	}
-	os.Remove(tempMetadataPath)
+	if err := os.Remove(tempMetadataPath); err != nil {
+		fmt.Printf("rsync: failed to remove temp metadata path: %v\n", err)
+	}
 
 	if t.config.Debug {
 		fmt.Printf("✅ Rsync: Successfully stored backup %s with metadata\n", filepath.Base(sourcePath))
@@ -699,8 +711,16 @@ func (t *RsyncTarget) downloadAndParseMetadata(ctx context.Context, metadataPath
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary file for metadata: %w", err)
 	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			fmt.Printf("rsync: failed to remove temp file: %v\n", err)
+		}
+	}()
+	defer func() {
+		if err := tempFile.Close(); err != nil {
+			fmt.Printf("rsync: failed to close temp file: %v\n", err)
+		}
+	}()
 
 	// Download metadata file
 	downloadCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("cat %s", metadataPath))...) // #nosec G204 -- sshPath validated during initialization, metadataPath constructed from sanitized paths
