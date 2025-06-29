@@ -898,6 +898,8 @@ func TestQueueOverflow(t *testing.T) {
 			queue.stats.SuccessfulJobs++
 		case JobStatusFailed:
 			queue.stats.FailedJobs++
+		case JobStatusPending, JobStatusRunning, JobStatusRetrying, JobStatusCancelled:
+			// These statuses don't affect success/failure counts
 		}
 	}
 
@@ -908,6 +910,8 @@ func TestQueueOverflow(t *testing.T) {
 			queue.stats.SuccessfulJobs++
 		case JobStatusFailed:
 			queue.stats.FailedJobs++
+		case JobStatusPending, JobStatusRunning, JobStatusRetrying, JobStatusCancelled:
+			// These statuses don't affect success/failure counts
 		}
 	}
 	queue.mu.Unlock()
