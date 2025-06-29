@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -110,6 +111,17 @@ func mainWithExitCode() int {
 
 	// Initialize error handling integration with telemetry
 	telemetry.InitializeErrorIntegration()
+
+	// Enable runtime profiling if debug mode is enabled
+	if settings.Debug {
+		// Enable mutex profiling for detecting lock contention
+		runtime.SetMutexProfileFraction(1)
+		
+		// Enable block profiling for detecting blocking operations
+		runtime.SetBlockProfileRate(1)
+		
+		fmt.Println("🐛 Runtime profiling enabled (mutex and block profiling active)")
+	}
 
 	// Process configuration validation warnings that occurred before Sentry initialization
 	if len(settings.ValidationWarnings) > 0 {
