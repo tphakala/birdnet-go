@@ -471,7 +471,7 @@ type GoogleDriveBackupSettings struct {
 // Validate validates Google Drive backup settings
 func (s *GoogleDriveBackupSettings) Validate() error {
 	if s.CredentialsPath == "" {
-		return fmt.Errorf("Google Drive credentials path cannot be empty")
+		return fmt.Errorf("google Drive credentials path cannot be empty")
 	}
 	return nil
 }

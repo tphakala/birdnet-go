@@ -255,7 +255,7 @@ func validateSecuritySettings(settings *Security) error {
 func validateRealtimeSettings(settings *RealtimeSettings) error {
 	// Check if interval is non-negative
 	if settings.Interval < 0 {
-		return errors.New(fmt.Errorf("Realtime interval must be non-negative")).
+		return errors.New(fmt.Errorf("realtime interval must be non-negative")).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "realtime-interval").
 			Build()
@@ -364,7 +364,7 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 
 		// Check if threshold is within valid range
 		if settings.Threshold < 0 || settings.Threshold > 1 {
-			return errors.New(fmt.Errorf("Birdweather threshold must be between 0 and 1")).
+			return errors.New(fmt.Errorf("birdweather threshold must be between 0 and 1")).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "birdweather-threshold").
 				Build()
@@ -372,7 +372,7 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 
 		// Check if location accuracy is non-negative
 		if settings.LocationAccuracy < 0 {
-			return errors.New(fmt.Errorf("Birdweather location accuracy must be non-negative")).
+			return errors.New(fmt.Errorf("birdweather location accuracy must be non-negative")).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "birdweather-location-accuracy").
 				Build()

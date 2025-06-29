@@ -184,7 +184,7 @@ func formatAndValidateHost(host string, useHTTPS bool) (string, error) {
 
 	parsedHost, err := url.Parse(host)
 	if err != nil || parsedHost.Host == "" {
-		return "", fmt.Errorf("Invalid host address")
+		return "", fmt.Errorf("invalid host address")
 	}
 
 	return host, nil
