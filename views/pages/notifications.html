@@ -188,7 +188,8 @@
                                     <button x-show="!notification.read"
                                             @click="markAsRead(notification.id)"
                                             class="btn btn-ghost btn-xs"
-                                            title="Mark as read">
+                                            title="Mark as read"
+                                            aria-label="Mark notification as read">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -197,14 +198,16 @@
                                     <button x-show="notification.read && notification.status !== 'acknowledged'"
                                             @click="acknowledge(notification.id)"
                                             class="btn btn-ghost btn-xs"
-                                            title="Acknowledge">
+                                            title="Acknowledge"
+                                            aria-label="Acknowledge notification">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                         </svg>
                                     </button>
                                     <button @click="deleteNotification(notification.id)"
                                             class="btn btn-ghost btn-xs text-error"
-                                            title="Delete">
+                                            title="Delete"
+                                            aria-label="Delete notification">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                                         </svg>
@@ -252,6 +255,11 @@ document.addEventListener('alpine:init', () => {
             this.loadNotifications();
         },
 
+        // Helper function to safely get CSRF token
+        getCSRFToken() {
+            return NotificationUtils.getCSRFToken();
+        },
+
         async loadNotifications() {
             this.loading = true;
             try {
@@ -272,9 +280,13 @@ document.addEventListener('alpine:init', () => {
                     this.hasUnread = this.notifications.some(n => !n.read);
                     
                     // Calculate total pages (API should provide total count)
-                    // For now, assume we have more if we get a full page
-                    this.totalPages = this.notifications.length === this.pageSize ? 
-                        this.currentPage + 1 : this.currentPage;
+                    // If we get less than pageSize, we're on the last page
+                    if (this.notifications.length < this.pageSize) {
+                        this.totalPages = this.currentPage;
+                    } else {
+                        // We may have more pages, but we can't know for sure without total count
+                        this.totalPages = this.currentPage + 1;
+                    }
                 }
             } catch (error) {
                 console.error('Failed to load notifications:', error);
@@ -297,7 +309,7 @@ document.addEventListener('alpine:init', () => {
                 const response = await fetch(`/api/v2/notifications/${id}/read`, {
                     method: 'PUT',
                     headers: {
-                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-Token': this.getCSRFToken()
                     }
                 });
                 
@@ -319,9 +331,8 @@ document.addEventListener('alpine:init', () => {
                 .filter(n => !n.read)
                 .map(n => n.id);
                 
-            for (const id of unreadIds) {
-                await this.markAsRead(id);
-            }
+            // Parallel execution for better performance
+            await Promise.all(unreadIds.map(id => this.markAsRead(id)));
         },
 
         async acknowledge(id) {
@@ -329,7 +340,7 @@ document.addEventListener('alpine:init', () => {
                 const response = await fetch(`/api/v2/notifications/${id}/acknowledge`, {
                     method: 'PUT',
                     headers: {
-                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-Token': this.getCSRFToken()
                     }
                 });
                 
@@ -353,7 +364,7 @@ document.addEventListener('alpine:init', () => {
                 const response = await fetch(`/api/v2/notifications/${id}`, {
                     method: 'DELETE',
                     headers: {
-                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-Token': this.getCSRFToken()
                     }
                 });
                 
@@ -381,56 +392,15 @@ document.addEventListener('alpine:init', () => {
         },
 
         getNotificationIconClass(notification) {
-            const baseClass = 'w-10 h-10 rounded-full flex items-center justify-center';
-            
-            switch (notification.type) {
-                case 'error':
-                    return baseClass + ' bg-error/20 text-error';
-                case 'warning':
-                    return baseClass + ' bg-warning/20 text-warning';
-                case 'info':
-                    return baseClass + ' bg-info/20 text-info';
-                case 'detection':
-                    return baseClass + ' bg-success/20 text-success';
-                case 'system':
-                    return baseClass + ' bg-primary/20 text-primary';
-                default:
-                    return baseClass + ' bg-base-300 text-base-content';
-            }
+            return NotificationUtils.getNotificationIconClass(notification, 'w-10 h-10');
         },
 
         getPriorityBadgeClass(priority) {
-            switch (priority) {
-                case 'critical':
-                    return 'badge-error';
-                case 'high':
-                    return 'badge-warning';
-                case 'medium':
-                    return 'badge-info';
-                case 'low':
-                    return 'badge-ghost';
-                default:
-                    return 'badge-ghost';
-            }
+            return NotificationUtils.getPriorityBadgeClass(priority);
         },
 
         formatTime(timestamp) {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diff = now - date;
-            
-            // If today, show time
-            if (date.toDateString() === now.toDateString()) {
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
-            
-            // If this year, show date without year
-            if (date.getFullYear() === now.getFullYear()) {
-                return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-            }
-            
-            // Otherwise show full date
-            return date.toLocaleDateString();
+            return NotificationUtils.formatTime(timestamp);
         }
     }));
 });
