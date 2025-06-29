@@ -184,7 +184,9 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 	lfc.addNoLogsNote(w)
 
 	// Close the writer to finalize
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close zip writer: %v", err)
+	}
 
 	// Read the zip content
 	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
@@ -208,7 +210,9 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 		}
 
 		content, err := io.ReadAll(rc)
-		rc.Close() // Close immediately after reading, not deferred
+		if closeErr := rc.Close(); closeErr != nil {
+			t.Errorf("Failed to close README reader: %v", closeErr)
+		} // Close immediately after reading, not deferred
 
 		if err != nil {
 			t.Fatalf("Failed to read README: %v", err)

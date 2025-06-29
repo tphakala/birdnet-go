@@ -60,7 +60,11 @@ func mainWithExitCode() int {
 			fmt.Fprintf(os.Stderr, "Error creating profile file: %v\n", err)
 			return 1
 		}
-		defer f.Close()
+		defer func() {
+			if err := f.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error closing profile file: %v\n", err)
+			}
+		}()
 
 		if err := pprof.StartCPUProfile(f); err != nil {
 			fmt.Fprintf(os.Stderr, "Error starting CPU profile: %v\n", err)
@@ -116,10 +120,10 @@ func mainWithExitCode() int {
 	if settings.Debug {
 		// Enable mutex profiling for detecting lock contention
 		runtime.SetMutexProfileFraction(1)
-		
+
 		// Enable block profiling for detecting blocking operations
 		runtime.SetBlockProfileRate(1)
-		
+
 		fmt.Println("🐛 Runtime profiling enabled (mutex and block profiling active)")
 	}
 
