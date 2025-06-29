@@ -269,7 +269,7 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 
 	// Calculate start date based on the period
 	var startDate string
-	switch ds.DB.Dialector.Name() {
+	switch ds.Dialector().Name() {
 	case "sqlite":
 		startDate = fmt.Sprintf("date('now', '-%s')", interval)
 		query := fmt.Sprintf(`

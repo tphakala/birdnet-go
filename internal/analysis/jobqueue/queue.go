@@ -800,7 +800,7 @@ func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config Re
 	}
 
 	// Enqueue the job using the adapter
-	job, err := q.JobQueue.Enqueue(adapter, nil, config)
+	job, err := q.Enqueue(adapter, nil, config)
 	if err != nil {
 		return nil, err
 	}

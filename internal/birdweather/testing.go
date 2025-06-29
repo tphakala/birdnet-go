@@ -310,7 +310,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				// Attempt DNS resolution with fallback resolvers
 				ips, resolveErr := resolveDNSWithFallback(hostname)
 				if resolveErr != nil {
-					return fmt.Errorf("Failed to connect to BirdWeather API: %w - Could not resolve the BirdWeather API hostname", err)
+					return fmt.Errorf("failed to connect to BirdWeather API: %w - could not resolve the BirdWeather API hostname", err)
 				}
 
 				// If fallback DNS succeeded, it means the system DNS is incorrectly configured
@@ -335,7 +335,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				}
 
 				// Both attempts failed
-				return fmt.Errorf("Failed to connect to BirdWeather API: %w - Failed to perform API Connectivity connection with system DNS. Fallback DNS resolved the hostname, indicating issue with your systems DNS resolver configuration. Please check your network settings.", err)
+				return fmt.Errorf("failed to connect to BirdWeather API: %w - failed to perform API Connectivity connection with system DNS. Fallback DNS resolved the hostname, indicating issue with your systems DNS resolver configuration. Please check your network settings", err)
 			}
 
 			// Not a DNS error, return the original error
@@ -413,9 +413,9 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 		}
 		// Check if this is a DNS error
 		if isDNSError(err) {
-			return fmt.Errorf("Failed to connect to BirdWeather API: %w - Could not resolve the BirdWeather API hostname", err)
+			return fmt.Errorf("failed to connect to BirdWeather API: %w - could not resolve the BirdWeather API hostname", err)
 		}
-		return fmt.Errorf("Failed to connect to BirdWeather API: %w", err)
+		return fmt.Errorf("failed to connect to BirdWeather API: %w", err)
 	}
 	defer resp.Body.Close()
 

@@ -262,8 +262,8 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 }
 
 // SetFileMetrics sets the metrics instance for file operations
-func SetFileMetrics(metrics *metrics.MyAudioMetrics) {
-	fileMetrics = metrics
+func SetFileMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
+	fileMetrics = myAudioMetrics
 }
 
 // getAudioDivisor returns the appropriate divisor for converting samples based on bit depth

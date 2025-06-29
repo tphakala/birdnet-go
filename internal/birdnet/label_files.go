@@ -48,8 +48,8 @@ type Logger interface {
 
 // getModelFileSystem returns the appropriate embedded filesystem for the given model version
 func getModelFileSystem(modelVersion string) (fs.FS, error) {
-	switch {
-	case modelVersion == BirdNET_GLOBAL_6K_V2_4:
+	switch modelVersion {
+	case BirdNET_GLOBAL_6K_V2_4:
 		return v24LabelFiles, nil
 	default:
 		return nil, fmt.Errorf("no embedded filesystem available for model version: %s", modelVersion)

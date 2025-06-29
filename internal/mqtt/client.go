@@ -35,7 +35,7 @@ type client struct {
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
-func NewClient(settings *conf.Settings, metrics *observability.Metrics) (Client, error) {
+func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metrics) (Client, error) {
 	mqttLogger.Info("Creating new MQTT client")
 	config := DefaultConfig()
 	config.Broker = settings.Realtime.MQTT.Broker
@@ -67,7 +67,7 @@ func NewClient(settings *conf.Settings, metrics *observability.Metrics) (Client,
 	return &client{
 		config:        config,
 		reconnectStop: make(chan struct{}),
-		metrics:       metrics.MQTT,
+		metrics:       observabilityMetrics.MQTT,
 		controlChan:   nil, // Will be set externally when needed
 	}, nil
 }

@@ -1333,14 +1333,14 @@ func TestConcurrentProcessOperations(t *testing.T) {
 	close(errorChan)
 
 	// Collect any errors
-	var errors []error
+	var collectedErrors []error
 	for err := range errorChan {
-		errors = append(errors, err)
+		collectedErrors = append(collectedErrors, err)
 	}
 
-	if len(errors) > 0 && ctx.Err() == nil {
+	if len(collectedErrors) > 0 && ctx.Err() == nil {
 		// Only report errors if the context wasn't cancelled
-		assert.Empty(t, errors, "Concurrent operations produced errors: %v", errors)
+		assert.Empty(t, collectedErrors, "Concurrent operations produced errors: %v", collectedErrors)
 	}
 
 	// If we got here without deadlocks or panics, the test passes

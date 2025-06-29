@@ -19,8 +19,8 @@ var (
 )
 
 // SetFilterMetrics sets the metrics instance for filter operations
-func SetFilterMetrics(metrics *metrics.MyAudioMetrics) {
-	filterMetrics = metrics
+func SetFilterMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
+	filterMetrics = myAudioMetrics
 }
 
 // InitializeFilterChain sets up the initial filter chain based on settings
