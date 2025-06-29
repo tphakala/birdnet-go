@@ -118,7 +118,8 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	includedSpecies := c.Settings.GetIncludedSpecies()
 
 	// Convert to response format with parsed names
-	var speciesList []RangeFilterSpecies
+	// Pre-allocate slice with capacity for all included species
+	speciesList := make([]RangeFilterSpecies, 0, len(includedSpecies))
 	for _, label := range includedSpecies {
 		scientificName, commonName, _ := observation.ParseSpeciesString(label)
 
@@ -238,7 +239,8 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	// Convert to response format
-	var speciesList []RangeFilterSpecies
+	// Pre-allocate slice with capacity for all species scores
+	speciesList := make([]RangeFilterSpecies, 0, len(speciesScores))
 	for _, speciesScore := range speciesScores {
 		scientificName, commonName, _ := observation.ParseSpeciesString(speciesScore.Label)
 

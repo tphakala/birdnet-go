@@ -407,7 +407,8 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	}
 
 	// Create a single note for each species with the count information
-	var notes []Note
+	// Pre-allocate slice with capacity for all results
+	notes := make([]Note, 0, len(results))
 	for _, result := range results {
 		// Create a representative note for this species
 		note := Note{

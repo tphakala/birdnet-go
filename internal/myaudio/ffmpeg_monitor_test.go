@@ -1333,7 +1333,8 @@ func TestConcurrentProcessOperations(t *testing.T) {
 	close(errorChan)
 
 	// Collect any errors
-	var collectedErrors []error
+	// Pre-allocate slice with reasonable capacity for errors
+	collectedErrors := make([]error, 0, concurrentOps*iterations)
 	for err := range errorChan {
 		collectedErrors = append(collectedErrors, err)
 	}

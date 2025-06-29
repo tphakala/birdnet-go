@@ -9,7 +9,8 @@ import (
 
 // prepareLocalesData returns sorted locale data to be used for select menu on the main settings page
 func (s *Server) prepareLocalesData() []LocaleData {
-	var locales []LocaleData
+	// Pre-allocate slice with capacity for all locale codes
+	locales := make([]LocaleData, 0, len(conf.LocaleCodes))
 	for code, name := range conf.LocaleCodes {
 		locales = append(locales, LocaleData{Code: code, Name: name})
 	}

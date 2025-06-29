@@ -570,7 +570,8 @@ func TestRetryBackoff(t *testing.T) {
 
 	// Close the channel and collect execution times
 	close(executionTimes)
-	var times []time.Time
+	// Pre-allocate slice with expected capacity (initial execution + retries)
+	times := make([]time.Time, 0, maxRetries+1)
 	for execTime := range executionTimes {
 		times = append(times, execTime)
 	}

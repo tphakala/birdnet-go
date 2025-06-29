@@ -91,7 +91,8 @@ func validateCommandPath(command string) (string, error) {
 
 // buildSafeArguments creates a sanitized list of command arguments
 func buildSafeArguments(params map[string]interface{}, note *datastore.Note) ([]string, error) {
-	var args []string
+	// Pre-allocate slice with capacity for all parameters
+	args := make([]string, 0, len(params))
 
 	for key, value := range params {
 		// Validate parameter name (allow only alphanumeric and _-)
