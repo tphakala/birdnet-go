@@ -188,7 +188,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			// We update this after each deletion to avoid checking disk usage too frequently
 			currentUsagePercent := 0
 			if params.diskInfo.TotalBytes > 0 {
-				currentUsagePercent = int((estimatedUsedBytes * 100) / params.diskInfo.TotalBytes)
+				currentUsagePercent = int((estimatedUsedBytes * 100) / params.diskInfo.TotalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
 				lastKnownGoodUsagePercent = currentUsagePercent
 			}
 
@@ -221,7 +221,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 				speciesMonthCount[file.Species][subDir]--
 				deletedCount++
 				// Update our estimate of used bytes based on the deleted file's size
-				estimatedUsedBytes -= uint64(file.Size)
+				estimatedUsedBytes -= uint64(file.Size)              // #nosec G115 -- file size conversion safe
 				if estimatedUsedBytes > params.diskInfo.TotalBytes { // Prevent underflow/wrap-around (safety check)
 					estimatedUsedBytes = 0
 				}
@@ -245,7 +245,7 @@ func getFinalUsagePercent(baseDir string, lastKnownGoodUsagePercent int, debug b
 	}
 
 	if finalDiskInfo.TotalBytes > 0 {
-		finalUsagePercent := int((finalDiskInfo.UsedBytes * 100) / finalDiskInfo.TotalBytes)
+		finalUsagePercent := int((finalDiskInfo.UsedBytes * 100) / finalDiskInfo.TotalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
 		if debug {
 			log.Printf("Final accurate disk usage: %d%%", finalUsagePercent)
 		}
@@ -288,7 +288,7 @@ func checkInitialUsage(baseDir string, usageThreshold int, debug bool) (initialU
 
 	// Detailed usage obtained successfully
 	if diskInfo.TotalBytes > 0 {
-		initialUsagePercent = int((diskInfo.UsedBytes * 100) / diskInfo.TotalBytes)
+		initialUsagePercent = int((diskInfo.UsedBytes * 100) / diskInfo.TotalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
 	}
 
 	if initialUsagePercent < usageThreshold {

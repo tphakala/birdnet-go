@@ -23,7 +23,7 @@ type FuzzTestData struct {
 
 // generateFuzzTestData creates randomized test data
 func generateFuzzTestData(seed int64) FuzzTestData {
-	r := rand.New(rand.NewSource(seed))
+	r := rand.New(rand.NewSource(seed)) // #nosec G404 -- weak randomness acceptable for fuzz test data generation, not security-critical
 
 	data := FuzzTestData{
 		NumConfiguredURLs:    r.Intn(50) + 1,    // 1-50 URLs
@@ -154,7 +154,7 @@ func TestFuzzMonitorLifecycle(t *testing.T) {
 		t.Run(fmt.Sprintf("FuzzSeed:%d", i), func(t *testing.T) {
 			// Create test data with different seed each iteration
 			seed := time.Now().UnixNano() + int64(i)
-			r := rand.New(rand.NewSource(seed))
+			r := rand.New(rand.NewSource(seed)) // #nosec G404 -- weak randomness acceptable for fuzz test data generation, not security-critical
 
 			// Create test context
 			tc := NewTestContext(t)

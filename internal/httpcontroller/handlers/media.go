@@ -534,11 +534,11 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 
 		// Set up commands
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
-			soxCmd = exec.Command(soxBinary, soxArgs...)
+			cmd = exec.Command(ffmpegBinary, ffmpegArgs...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
+			soxCmd = exec.Command(soxBinary, soxArgs...)    // #nosec G204 -- soxBinary validated via ValidateToolPath
 		} else {
-			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
+			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)    // #nosec G204 -- soxBinary validated via ValidateToolPath
 		}
 
 		// Set up pipe between ffmpeg and sox
@@ -600,9 +600,9 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
 
 		if runtime.GOOS == "windows" {
-			soxCmd = exec.Command(soxBinary, soxArgs...)
+			soxCmd = exec.Command(soxBinary, soxArgs...) // #nosec G204 -- soxBinary validated via ValidateToolPath
 		} else {
-			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
+			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...) // #nosec G204 -- soxBinary validated via ValidateToolPath
 		}
 
 		// Capture output
@@ -672,7 +672,7 @@ func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width in
 		cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
 	} else {
 		// Prepend 'nice' to the command on Unix-like systems
-		cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+		cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
 	}
 
 	log.Printf("ffmpeg command: %s", cmd.String())

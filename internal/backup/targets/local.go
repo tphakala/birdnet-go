@@ -119,7 +119,7 @@ func isTransientError(err error) bool {
 
 // backoffDuration calculates exponential backoff duration
 func backoffDuration(attempt int) time.Duration {
-	return baseBackoffDelay * time.Duration(1<<uint(attempt))
+	return baseBackoffDelay * time.Duration(1<<uint(attempt)) // #nosec G115 -- attempt is bounded by retry logic, safe conversion
 }
 
 // withRetry executes an operation with retry logic for transient errors

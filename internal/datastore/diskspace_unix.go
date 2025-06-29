@@ -14,5 +14,5 @@ func getDiskFreeSpace(path string) (uint64, error) {
 	}
 
 	// Available space in bytes
-	return stat.Bavail * uint64(stat.Bsize), nil
+	return stat.Bavail * uint64(stat.Bsize), nil // #nosec G115 -- Bsize is system block size, safe conversion
 }

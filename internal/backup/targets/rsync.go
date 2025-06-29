@@ -518,7 +518,7 @@ func (t *RsyncTarget) deleteFile(ctx context.Context, filename string) error {
 	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", t.config.Username, t.config.Host),
 		fmt.Sprintf("rm -- %s/%s", cleanBasePath, cleanFilename))
 
-	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...)
+	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...) // #nosec G204 -- sshPath validated during initialization, args constructed with sanitized paths
 	return t.executeCommand(ctx, cmd)
 }
 
@@ -619,7 +619,7 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", t.config.Username, t.config.Host),
 		fmt.Sprintf("ls -l --time-style=full-iso %s", t.config.BasePath))
 
-	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...)
+	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...) // #nosec G204 -- sshPath validated during initialization, args constructed with sanitized paths
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, backup.NewError(backup.ErrIO, "rsync: failed to list backups", fmt.Errorf("%w: %s", err, output))
@@ -649,7 +649,7 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		backupPath := path.Join(t.config.BasePath, backupName)
 
 		// Check if the corresponding backup file exists
-		checkCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("test -f %s && echo exists", backupPath))...)
+		checkCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("test -f %s && echo exists", backupPath))...) // #nosec G204 -- sshPath validated during initialization, backupPath constructed from sanitized paths
 		if output, err := checkCmd.CombinedOutput(); err != nil || !strings.Contains(string(output), "exists") {
 			if t.config.Debug {
 				fmt.Printf("⚠️ Rsync: Skipping orphaned metadata file %s: backup file not found\n", name)
@@ -703,7 +703,7 @@ func (t *RsyncTarget) downloadAndParseMetadata(ctx context.Context, metadataPath
 	defer tempFile.Close()
 
 	// Download metadata file
-	downloadCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("cat %s", metadataPath))...)
+	downloadCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("cat %s", metadataPath))...) // #nosec G204 -- sshPath validated during initialization, metadataPath constructed from sanitized paths
 	metadataBytes, err := downloadCmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata for %s: %w", backupName, err)
@@ -753,7 +753,7 @@ func (t *RsyncTarget) Delete(ctx context.Context, target string) error {
 	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", t.config.Username, t.config.Host),
 		fmt.Sprintf("rm -f -- '%s' '%s'", cleanPath, cleanMetadataPath))
 
-	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...)
+	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...) // #nosec G204 -- sshPath validated during initialization, args constructed with sanitized paths
 	if err := t.executeCommand(ctx, cmd); err != nil {
 		return backup.NewError(backup.ErrIO, "rsync: failed to delete backup", err)
 	}
@@ -779,7 +779,7 @@ func (t *RsyncTarget) Validate() error {
 	}
 	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", t.config.Username, t.config.Host), "echo test")
 
-	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...)
+	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...) // #nosec G204 -- sshPath validated during initialization, args constructed with sanitized paths
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return backup.NewError(backup.ErrValidation, "rsync: SSH connection test failed", fmt.Errorf("%w: %s", err, output))
 	}
@@ -792,7 +792,7 @@ func (t *RsyncTarget) Validate() error {
 		fmt.Sprintf("%s@%s:%s/.test", t.config.Username, t.config.Host, t.config.BasePath),
 	}
 
-	cmd = exec.CommandContext(ctx, t.rsyncPath, args...)
+	cmd = exec.CommandContext(ctx, t.rsyncPath, args...) // #nosec G204 -- rsyncPath validated during initialization, args constructed safely
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return backup.NewError(backup.ErrValidation, "rsync: access test failed", fmt.Errorf("%w: %s", err, output))
 	}

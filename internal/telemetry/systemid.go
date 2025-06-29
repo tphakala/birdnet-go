@@ -53,7 +53,7 @@ func LoadOrCreateSystemID(configDir string) (string, error) {
 	}
 
 	// Save to file
-	if err := os.WriteFile(idFile, []byte(id), 0o644); err != nil {
+	if err := os.WriteFile(idFile, []byte(id), 0o600); err != nil {
 		return "", fmt.Errorf("failed to save system ID: %w", err)
 	}
 
