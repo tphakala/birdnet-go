@@ -13,6 +13,7 @@ import (
 // TestTimingVsFunctionalNotifications demonstrates using synchronization with
 // channels instead of time.Sleep() for timing-dependent tests
 func TestTimingVsFunctionalNotifications(t *testing.T) {
+	t.Parallel()
 	// Create a simpler version of this test with direct mock replacement
 	t.Skip("Skipping this test as it's unreliable due to concurrent behavior in monitor")
 
@@ -75,6 +76,7 @@ func TestTimingVsFunctionalNotifications(t *testing.T) {
 
 // TestModifiedTimingTest is a simplified version that avoids the timing problems
 func TestModifiedTimingTest(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
@@ -137,6 +139,7 @@ func TestModifiedTimingTest(t *testing.T) {
 
 // TestConcurrencyWithoutSleep demonstrates testing concurrency without using time.Sleep()
 func TestConcurrencyWithoutSleep(t *testing.T) {
+	t.Parallel()
 	// Skip in short mode
 	if testing.Short() {
 		t.Skip("Skipping concurrency test in short mode")
@@ -282,6 +285,7 @@ waitForCompletion:
 
 // TestTimedOperationsWithContext shows a pattern for replacing time.Sleep with context timeout
 func TestTimedOperationsWithContext(t *testing.T) {
+	t.Parallel()
 	// Create mock dependencies
 	mockConfig := new(MockConfigProvider)
 	mockProcMgr := new(MockProcessManager)
