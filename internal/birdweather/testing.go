@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -137,7 +137,7 @@ var testConfig = &TestConfig{
 	FailureProbability: 0.5,
 	MinDelay:           500,
 	MaxDelay:           3000,
-	rng:                rand.New(rand.NewSource(time.Now().UnixNano())), // #nosec G404 -- weak randomness acceptable for test utilities, not security-critical
+	rng:                rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))), //nolint:gosec // G404: weak randomness acceptable for test utilities, not security-critical
 }
 
 // simulateDelay adds an artificial delay
@@ -146,7 +146,7 @@ func simulateDelay() {
 		return
 	}
 	testConfig.mu.Lock()
-	delay := testConfig.rng.Intn(testConfig.MaxDelay-testConfig.MinDelay) + testConfig.MinDelay
+	delay := testConfig.rng.IntN(testConfig.MaxDelay-testConfig.MinDelay) + testConfig.MinDelay
 	testConfig.mu.Unlock()
 	time.Sleep(time.Duration(delay) * time.Millisecond)
 }
