@@ -14,7 +14,8 @@
                 <div class="flex flex-wrap gap-2">
                     <!-- Status Filter -->
                     <select x-model="filters.status" @change="applyFilters()" 
-                            class="select select-sm select-bordered">
+                            class="select select-sm select-bordered"
+                            aria-label="Filter by status">
                         <option value="">All Status</option>
                         <option value="unread">Unread</option>
                         <option value="read">Read</option>
@@ -23,7 +24,8 @@
 
                     <!-- Type Filter -->
                     <select x-model="filters.type" @change="applyFilters()" 
-                            class="select select-sm select-bordered">
+                            class="select select-sm select-bordered"
+                            aria-label="Filter by type">
                         <option value="">All Types</option>
                         <option value="error">Errors</option>
                         <option value="warning">Warnings</option>
@@ -34,7 +36,8 @@
 
                     <!-- Priority Filter -->
                     <select x-model="filters.priority" @change="applyFilters()" 
-                            class="select select-sm select-bordered">
+                            class="select select-sm select-bordered"
+                            aria-label="Filter by priority">
                         <option value="">All Priorities</option>
                         <option value="critical">Critical</option>
                         <option value="high">High</option>
@@ -51,8 +54,9 @@
                         Mark All Read
                     </button>
                     <button @click="refresh()" 
-                            class="btn btn-sm btn-ghost">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                            class="btn btn-sm btn-ghost"
+                            aria-label="Refresh notifications">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                         </svg>
                         Refresh
@@ -63,12 +67,14 @@
     </div>
 
     <!-- Notifications List -->
-    <div class="space-y-4">
+    <div class="space-y-4" role="region" aria-label="Notifications list" aria-live="polite" aria-relevant="additions removals">
         <!-- Loading State -->
         <div x-show="loading" class="card bg-base-100 shadow-sm">
             <div class="card-body">
                 <div class="flex justify-center">
-                    <div class="loading loading-spinner loading-lg"></div>
+                    <div class="loading loading-spinner loading-lg" role="status">
+                        <span class="sr-only">Loading notifications...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -82,7 +88,9 @@
                      viewBox="0 0 24 24" 
                      stroke-width="1.5" 
                      stroke="currentColor" 
-                     class="w-16 h-16 mx-auto mb-4 opacity-30">
+                     class="w-16 h-16 mx-auto mb-4 opacity-30"
+                     role="img"
+                     aria-label="No notifications icon">
                     <path stroke-linecap="round" 
                           stroke-linejoin="round" 
                           d="M9.143 17.082a24.248 24.248 0 003.844.148m-3.844-.148a23.856 23.856 0 01-5.455-1.31 8.964 8.964 0 002.3-5.542m3.155 6.852a3 3 0 005.667 1.97m1.965-2.277L21 21m-4.225-4.225a23.81 23.81 0 003.536-1.003A8.967 8.967 0 0118 9.75V9A6 6 0 006.53 6.53m10.245 10.245L6.53 6.53M3 3l3.53 3.53" />
@@ -94,8 +102,10 @@
 
         <!-- Notification Items -->
         <template x-for="notification in notifications" :key="notification.id">
-            <div class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-                 :class="{'bg-base-200/30': !notification.read}">
+            <article class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
+                 :class="{'bg-base-200/30': !notification.read}"
+                 role="article"
+                 :aria-label="`${notification.type} notification: ${notification.title}`">
                 <div class="card-body">
                     <div class="flex items-start gap-4">
                         <!-- Icon -->
@@ -178,8 +188,9 @@
                                         <span :class="getPriorityBadgeClass(notification.priority)"
                                               class="badge badge-sm" 
                                               x-text="notification.priority"></span>
-                                        <span class="text-xs text-base-content/60" 
-                                              x-text="formatTime(notification.timestamp)"></span>
+                                        <time class="text-xs text-base-content/60" 
+                                              :datetime="notification.timestamp"
+                                              x-text="formatTime(notification.timestamp)"></time>
                                     </div>
                                 </div>
 
@@ -217,22 +228,30 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </article>
         </template>
 
         <!-- Pagination -->
-        <div x-show="!loading && totalPages > 1" 
-             class="flex justify-center mt-6">
+        <nav x-show="!loading && totalPages > 1" 
+             class="flex justify-center mt-6"
+             role="navigation"
+             aria-label="Pagination Navigation">
             <div class="join">
                 <button @click="previousPage()" 
                         :disabled="currentPage === 1"
-                        class="join-item btn btn-sm">«</button>
-                <button class="join-item btn btn-sm btn-active" x-text="`Page ${currentPage} of ${totalPages}`"></button>
+                        class="join-item btn btn-sm"
+                        :aria-label="`Go to previous page, page ${currentPage - 1}`"
+                        :aria-disabled="currentPage === 1">«</button>
+                <button class="join-item btn btn-sm btn-active" 
+                        x-text="`Page ${currentPage} of ${totalPages}`"
+                        aria-current="page"></button>
                 <button @click="nextPage()" 
                         :disabled="currentPage === totalPages"
-                        class="join-item btn btn-sm">»</button>
+                        class="join-item btn btn-sm"
+                        :aria-label="`Go to next page, page ${currentPage + 1}`"
+                        :aria-disabled="currentPage === totalPages">»</button>
             </div>
-        </div>
+        </nav>
     </div>
 </div>
 
