@@ -157,7 +157,7 @@ func (b *backoffStrategy) nextDelay() (time.Duration, bool) {
 	if b.maxAttempts > 0 && b.attempt >= b.maxAttempts {
 		return 0, false
 	}
-	delay := b.initialDelay * time.Duration(1<<uint(b.attempt))
+	delay := b.initialDelay * time.Duration(1<<uint(b.attempt)) //nolint:gosec // G115: attempt bounded by retry logic
 	if delay > b.maxDelay {
 		delay = b.maxDelay
 	}

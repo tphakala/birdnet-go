@@ -830,7 +830,7 @@ func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buff
 	// Calculating sizes and rates
 	byteRate := sampleRate * numChannels * (bitDepth / 8) // 48000 * 1 * 2 = 96000 bytes per second
 	blockAlign := numChannels * (bitDepth / 8)            // 1 * 2 = 2 bytes per frame
-	subChunk2Size := uint32(len(pcmData))                 // Size of the data chunk in bytes
+	subChunk2Size := uint32(len(pcmData))                 //nolint:gosec // G115: PCM data length bounded by available memory
 	chunkSize := 36 + subChunk2Size                       // 36 is fixed size for header
 
 	// Initialize a buffer to build the WAV file

@@ -79,11 +79,11 @@ func readFLACBuffered(file *os.File, settings *conf.Settings, callback AudioChun
 			var sample int32
 			switch decoder.BitsPerSample {
 			case 16:
-				sample = int32(int16(binary.LittleEndian.Uint16(frame[i:])))
+				sample = int32(int16(binary.LittleEndian.Uint16(frame[i:]))) //nolint:gosec // G115: FLAC audio sample conversion within 16-bit range
 			case 24:
 				sample = int32(frame[i]) | int32(frame[i+1])<<8 | int32(frame[i+2])<<16
 			case 32:
-				sample = int32(binary.LittleEndian.Uint32(frame[i:]))
+				sample = int32(binary.LittleEndian.Uint32(frame[i:])) //nolint:gosec // G115: FLAC audio sample conversion within 32-bit range
 			}
 			floatChunk = append(floatChunk, float32(sample)/divisor)
 		}
