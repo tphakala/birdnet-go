@@ -122,6 +122,7 @@ func TestableRestartLogicFunc(settingsProvider *MockLifecycleSettingsProvider, u
 // Test cases demonstrate how to test restart scenarios
 
 func TestFFmpegRestartLogic_StreamRemovedFromConfig(t *testing.T) {
+	t.Parallel()
 	mockSettings := NewMockLifecycleSettingsProvider()
 	url := "rtsp://example.com/stream"
 
@@ -160,6 +161,7 @@ func TestFFmpegRestartLogic_StreamRemovedFromConfig(t *testing.T) {
 }
 
 func TestFFmpegRestartLogic_MaxAttemptsExceeded(t *testing.T) {
+	t.Parallel()
 	mockSettings := NewMockLifecycleSettingsProvider()
 	url := "rtsp://example.com/stream"
 
@@ -184,6 +186,7 @@ func TestFFmpegRestartLogic_MaxAttemptsExceeded(t *testing.T) {
 }
 
 func TestFFmpegRestartLogic_SuccessAfterRetries(t *testing.T) {
+	t.Parallel()
 	mockSettings := NewMockLifecycleSettingsProvider()
 	url := "rtsp://example.com/stream"
 
@@ -197,6 +200,7 @@ func TestFFmpegRestartLogic_SuccessAfterRetries(t *testing.T) {
 }
 
 func TestWatchdogBehavior(t *testing.T) {
+	t.Parallel()
 	// Test the audioWatchdog functionality
 	watchdog := &audioWatchdog{
 		lastDataTime: time.Now().Add(-70 * time.Second), // Old data
@@ -214,6 +218,7 @@ func TestWatchdogBehavior(t *testing.T) {
 }
 
 func TestBackoffStrategyLifecycle(t *testing.T) {
+	t.Parallel()
 	backoff := newBackoffStrategy(3, 1*time.Second, 5*time.Second)
 
 	// Test progression
@@ -241,6 +246,7 @@ func TestBackoffStrategyLifecycle(t *testing.T) {
 }
 
 func TestRestartTrackerBehavior(t *testing.T) {
+	t.Parallel()
 	// Create a mock command for testing
 	cmd := &exec.Cmd{}
 
@@ -278,6 +284,7 @@ func TestRestartTrackerBehavior(t *testing.T) {
 
 // Example of how to test the processAudio function's watchdog mechanism
 func TestProcessAudioWatchdogTimeout(t *testing.T) {
+	t.Parallel()
 	// Create a mock watchdog that simulates timeout
 	watchdog := &audioWatchdog{
 		lastDataTime: time.Now().Add(-70 * time.Second), // Simulate old data
@@ -312,6 +319,7 @@ func TestProcessAudioWatchdogTimeout(t *testing.T) {
 
 // Example of how to test configuration-based stream management
 func TestConfigurationBasedStreamManagement(t *testing.T) {
+	t.Parallel()
 	// This demonstrates how to test the configuration checking logic
 	// that exists in manageFfmpegLifecycle
 
@@ -377,6 +385,7 @@ func (m *MockLifecycleProcessMap) Delete(key string) {
 }
 
 func TestProcessMapOperations(t *testing.T) {
+	t.Parallel()
 	processMap := NewMockLifecycleProcessMap()
 	testURL := "rtsp://example.com/stream"
 
@@ -397,6 +406,7 @@ func TestProcessMapOperations(t *testing.T) {
 
 // BoundedBuffer tests (this component is already well-designed for testing)
 func TestBoundedBufferUsage(t *testing.T) {
+	t.Parallel()
 	buf := NewBoundedBuffer(10)
 
 	// Test normal write
@@ -415,6 +425,7 @@ func TestBoundedBufferUsage(t *testing.T) {
 // Example of how you might test the actual manageFfmpegLifecycle function
 // by wrapping it with dependency injection
 func TestFfmpegLifecyclePattern(t *testing.T) {
+	t.Parallel()
 	// This test demonstrates the pattern you would use to test the actual
 	// manageFfmpegLifecycle function without major refactoring
 
@@ -487,6 +498,7 @@ func TestFfmpegLifecyclePattern(t *testing.T) {
 
 // TestRestartChannelBlocking tests the scenario where restart channel is full and drops requests
 func TestRestartChannelBlocking(t *testing.T) {
+	t.Parallel()
 	// Create a channel with buffer size 1 to test blocking
 	restartChan := make(chan struct{}, 1)
 
@@ -514,6 +526,7 @@ func TestRestartChannelBlocking(t *testing.T) {
 
 // TestProcessMapConcurrentAccess tests concurrent access to the process map
 func TestProcessMapConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	realProcessMap := &sync.Map{} // Use real sync.Map to test actual concurrency
 
 	var wg sync.WaitGroup
@@ -550,6 +563,7 @@ func TestProcessMapConcurrentAccess(t *testing.T) {
 
 // TestWatchdogTimingIssues tests potential timing issues with the watchdog
 func TestWatchdogTimingIssues(t *testing.T) {
+	t.Parallel()
 	watchdog := &audioWatchdog{lastDataTime: time.Now()}
 
 	// Test 1: Check that watchdog properly handles time updates
@@ -585,6 +599,7 @@ func TestWatchdogTimingIssues(t *testing.T) {
 
 // TestBackoffStrategyEdgeCases tests edge cases in backoff strategy that might prevent restarts
 func TestBackoffStrategyEdgeCases(t *testing.T) {
+	t.Parallel()
 	// Test 1: Backoff at maximum attempts
 	backoff := newBackoffStrategy(3, 1*time.Second, 2*time.Minute)
 
@@ -625,6 +640,7 @@ func TestBackoffStrategyEdgeCases(t *testing.T) {
 
 // TestRestartTrackerResetLogic tests the restart tracker reset mechanism
 func TestRestartTrackerResetLogic(t *testing.T) {
+	t.Parallel()
 	// Clear global restart trackers to ensure clean test state
 	restartTrackers = sync.Map{}
 
@@ -673,6 +689,7 @@ func TestRestartTrackerResetLogic(t *testing.T) {
 
 // TestProcessCleanupConsistency tests that process cleanup maintains consistent state
 func TestProcessCleanupConsistency(t *testing.T) {
+	t.Parallel()
 	// Create a mock process map
 	processMap := &sync.Map{}
 	url := "rtsp://test.com/stream"
@@ -723,6 +740,7 @@ func TestProcessCleanupConsistency(t *testing.T) {
 
 // TestProcessStateInconsistency tests the critical issue where updateRestartInfo is called after cleanup
 func TestProcessStateInconsistency(t *testing.T) {
+	t.Parallel()
 	// Clear global restart trackers to ensure clean test state
 	restartTrackers = sync.Map{}
 
@@ -766,6 +784,7 @@ func TestProcessStateInconsistency(t *testing.T) {
 
 // TestResourceLeakInStartFFmpeg tests file descriptor leaks when startFFmpeg fails
 func TestResourceLeakInStartFFmpeg(t *testing.T) {
+	t.Parallel()
 	// Test case where StdoutPipe succeeds but Start fails
 	ctx := context.Background()
 	config := FFmpegConfig{
@@ -792,6 +811,7 @@ func TestResourceLeakInStartFFmpeg(t *testing.T) {
 
 // TestCleanupRaceCondition tests race conditions in the Cleanup method
 func TestCleanupRaceCondition(t *testing.T) {
+	t.Parallel()
 	url := "rtsp://test.com/stream"
 
 	// Create a mock process that simulates a race condition
@@ -825,6 +845,7 @@ func TestCleanupRaceCondition(t *testing.T) {
 
 // TestBufferWriteErrorAccumulation tests handling of accumulated buffer write errors
 func TestBufferWriteErrorAccumulation(t *testing.T) {
+	t.Parallel()
 	// This test simulates the scenario where WriteToAnalysisBuffer or WriteToCaptureBuffer
 	// repeatedly fails, but the process continues without triggering a restart
 
@@ -857,6 +878,7 @@ func TestBufferWriteErrorAccumulation(t *testing.T) {
 
 // TestWatchdogConfigurationRace tests race conditions in configuration reading
 func TestWatchdogConfigurationRace(t *testing.T) {
+	t.Parallel()
 	// This test simulates the race condition where conf.Setting() is called
 	// multiple times without synchronization in different parts of the lifecycle
 
@@ -904,6 +926,7 @@ func TestWatchdogConfigurationRace(t *testing.T) {
 
 // TestRestartTrackerMemoryLeak tests the memory leak in global restartTrackers map
 func TestRestartTrackerMemoryLeak(t *testing.T) {
+	t.Parallel()
 	// Clear global restart trackers to start clean
 	restartTrackers = sync.Map{}
 
@@ -945,6 +968,7 @@ func TestRestartTrackerMemoryLeak(t *testing.T) {
 
 // TestAudioLevelChannelRace tests race conditions in audio level channel clearing
 func TestAudioLevelChannelRace(t *testing.T) {
+	t.Parallel()
 	unifiedAudioChan := make(chan UnifiedAudioData, 1)
 
 	// Fill the channel
@@ -999,6 +1023,7 @@ func TestAudioLevelChannelRace(t *testing.T) {
 
 // TestFFmpegProcessExitRace tests race conditions between process exit and cleanup
 func TestFFmpegProcessExitRace(t *testing.T) {
+	t.Parallel()
 	// This test simulates the race between the goroutine waiting for cmd.Wait()
 	// and the cleanup process
 
@@ -1046,6 +1071,7 @@ func TestFFmpegProcessExitRace(t *testing.T) {
 
 // TestContextCancellationRace tests race conditions with context cancellation
 func TestContextCancellationRace(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	watchdogDone := make(chan struct{})
 
@@ -1088,6 +1114,7 @@ func TestContextCancellationRace(t *testing.T) {
 
 // TestPlatformSpecificProcessGroupFailure tests handling of process group kill failures
 func TestPlatformSpecificProcessGroupFailure(t *testing.T) {
+	t.Parallel()
 	// Test the Unix version of killProcessGroup with invalid PID
 	// This should fail but not panic
 	defer func() {
@@ -1116,6 +1143,7 @@ func TestPlatformSpecificProcessGroupFailure(t *testing.T) {
 
 // TestBackoffStrategyStateConsistency tests backoff strategy state consistency
 func TestBackoffStrategyStateConsistency(t *testing.T) {
+	t.Parallel()
 	backoff := newBackoffStrategy(3, 1*time.Second, 10*time.Second)
 
 	// Test that backoff maintains consistent state across multiple operations
@@ -1153,6 +1181,7 @@ func TestBackoffStrategyStateConsistency(t *testing.T) {
 
 // TestConfigurationConsistencyAcrossLifecycle tests configuration consistency throughout lifecycle
 func TestConfigurationConsistencyAcrossLifecycle(t *testing.T) {
+	t.Parallel()
 	// Mock the configuration checking logic used throughout the lifecycle
 	testURL := "rtsp://test.com/stream"
 
@@ -1180,6 +1209,7 @@ func TestConfigurationConsistencyAcrossLifecycle(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := checkStreamConfigured(tc.configuredURLs, testURL)
 			assert.Equal(t, tc.expectedResult, result, "Configuration check should match expected result")
 
@@ -1197,6 +1227,7 @@ func TestConfigurationConsistencyAcrossLifecycle(t *testing.T) {
 
 // TestRestartTrackerCleanupFix tests that the memory leak fix for restart trackers works
 func TestRestartTrackerCleanupFix(t *testing.T) {
+	t.Parallel()
 	// Clear global restart trackers to start clean
 	restartTrackers = sync.Map{}
 
@@ -1256,6 +1287,7 @@ func TestRestartTrackerCleanupFix(t *testing.T) {
 }
 
 func TestBackoffStrategyUnlimitedRetries(t *testing.T) {
+	t.Parallel()
 	// Test unlimited retries with maxAttempts = -1
 	backoff := newBackoffStrategy(-1, 1*time.Second, 10*time.Second)
 
@@ -1284,6 +1316,7 @@ func TestBackoffStrategyUnlimitedRetries(t *testing.T) {
 }
 
 func TestConcurrentCleanupRaceConditions(t *testing.T) {
+	t.Parallel()
 	// Test concurrent cleanup calls to ensure no race conditions
 	url := "rtsp://test-race.com/stream"
 
@@ -1327,6 +1360,7 @@ func TestConcurrentCleanupRaceConditions(t *testing.T) {
 }
 
 func TestConcurrentRestartSignalRaceConditions(t *testing.T) {
+	t.Parallel()
 	// Test concurrent restart signal sending to ensure no race conditions
 	restartChan := make(chan struct{}, 1) // Small buffer to force blocking scenarios
 	url := "rtsp://test-restart.com/stream"
@@ -1372,6 +1406,7 @@ func TestConcurrentRestartSignalRaceConditions(t *testing.T) {
 }
 
 func TestConcurrentProcessMapOperations(t *testing.T) {
+	t.Parallel()
 	// Test concurrent operations on the process map
 	baseURL := "rtsp://concurrent-test.com/stream"
 
@@ -1455,6 +1490,7 @@ func mockProcessAudioDataForChannelTest(url string, data []byte, unifiedAudioCha
 
 // TestSoundLevelDataPath tests that sound level data is properly included in UnifiedAudioData
 func TestSoundLevelDataPath(t *testing.T) {
+	t.Parallel()
 	// Register sound level processor for test
 	testSource := "test_rtsp_stream"
 	testName := "Test Camera"
@@ -1591,6 +1627,7 @@ func mockProcessAudioDataWithSoundLevel(url string, data []byte, unifiedAudioCha
 }
 
 func TestAudioLevelChannelRaceConditions(t *testing.T) {
+	t.Parallel()
 	// Test concurrent audio level channel operations
 	unifiedAudioChan := make(chan UnifiedAudioData, 1) // Small buffer to test clearing logic
 
@@ -1641,6 +1678,7 @@ func TestAudioLevelChannelRaceConditions(t *testing.T) {
 }
 
 func TestProcessTrackerConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	// Test concurrent access to restart trackers
 	var wg sync.WaitGroup
 	numGoroutines := 10
@@ -1689,6 +1727,7 @@ func TestProcessTrackerConcurrentAccess(t *testing.T) {
 // Test the new lifecycle manager functions
 
 func TestLifecycleManager_IsStreamConfigured(t *testing.T) {
+	t.Parallel()
 	// We can't easily test isStreamConfigured without modifying global state
 	// Instead, let's test the logic by creating a testable function
 
@@ -1717,6 +1756,7 @@ func TestLifecycleManager_IsStreamConfigured(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := testIsStreamConfigured(tt.configURLs, testURL)
 			assert.Equal(t, tt.expectFound, result)
 		})
@@ -1724,6 +1764,7 @@ func TestLifecycleManager_IsStreamConfigured(t *testing.T) {
 }
 
 func TestLifecycleManager_WaitWithInterrupts(t *testing.T) {
+	t.Parallel()
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://test.com"},
 		make(chan struct{}, 1),
@@ -1744,6 +1785,7 @@ func TestLifecycleManager_WaitWithInterrupts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -1780,6 +1822,7 @@ func TestLifecycleManager_WaitWithInterrupts(t *testing.T) {
 }
 
 func TestLifecycleManager_CleanupProcessFromMap(t *testing.T) {
+	t.Parallel()
 	url := "rtsp://cleanup-test.com/stream"
 
 	// Create a mock process
@@ -1810,6 +1853,7 @@ func TestLifecycleManager_CleanupProcessFromMap(t *testing.T) {
 }
 
 func TestLifecycleManager_StartProcessWithRetry_StreamNotConfigured(t *testing.T) {
+	t.Parallel()
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://not-configured.com"},
 		make(chan struct{}),
@@ -1838,6 +1882,7 @@ func TestLifecycleManager_StartProcessWithRetry_StreamNotConfigured(t *testing.T
 }
 
 func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		timeout          time.Duration
@@ -1870,6 +1915,7 @@ func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			manager := newLifecycleManager(
 				FFmpegConfig{URL: "rtsp://test-delay.com"},
 				make(chan struct{}),
@@ -1904,6 +1950,7 @@ func TestLifecycleManager_HandleRestartDelay(t *testing.T) {
 }
 
 func TestNewLifecycleManager(t *testing.T) {
+	t.Parallel()
 	config := FFmpegConfig{URL: "rtsp://test.com", Transport: "tcp"}
 	restartChan := make(chan struct{})
 	unifiedAudioChan := make(chan UnifiedAudioData)
@@ -1924,6 +1971,7 @@ func TestNewLifecycleManager(t *testing.T) {
 }
 
 func TestLifecycleManager_ConcurrentOperations(t *testing.T) {
+	t.Parallel()
 	// Test concurrent operations on the lifecycle manager
 	manager := newLifecycleManager(
 		FFmpegConfig{URL: "rtsp://concurrent.com"},
@@ -1973,6 +2021,7 @@ func formatURLsForYAML(urls []string) string {
 
 // Test the simplified manageFfmpegLifecycle function
 func TestManageFfmpegLifecycle_StreamNotConfigured(t *testing.T) {
+	t.Parallel()
 	// Since the default config likely doesn't contain our test URL,
 	// this should return quickly with no error
 	ctx := context.Background()
@@ -1987,6 +2036,7 @@ func TestManageFfmpegLifecycle_StreamNotConfigured(t *testing.T) {
 }
 
 func TestManageFfmpegLifecycle_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	config := FFmpegConfig{URL: "rtsp://test-cancel.com"}
 	restartChan := make(chan struct{})

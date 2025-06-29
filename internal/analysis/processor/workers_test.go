@@ -473,22 +473,22 @@ func TestGetJobQueueRetryConfig(t *testing.T) {
 // TestEnqueueTask tests the Processor.EnqueueTask method with various action types and scenarios
 func TestEnqueueTask(t *testing.T) {
 	t.Parallel()
-	// Create a real job queue for testing
-	realQueue := jobqueue.NewJobQueue()
-	realQueue.Start()
-	defer realQueue.Stop()
-
-	// Create a processor with the real queue
-	processor := &Processor{
-		JobQueue: realQueue,
-		Settings: &conf.Settings{
-			Debug: true,
-		},
-	}
 
 	// Test with different action types
 	t.Run("DifferentActionTypes", func(t *testing.T) {
 		t.Parallel()
+		// Create a real job queue for this subtest
+		realQueue := jobqueue.NewJobQueue()
+		realQueue.Start()
+		defer realQueue.Stop()
+
+		// Create a processor with the real queue
+		processor := &Processor{
+			JobQueue: realQueue,
+			Settings: &conf.Settings{
+				Debug: true,
+			},
+		}
 		// Create different types of actions
 		actions := []struct {
 			name   string
@@ -517,7 +517,7 @@ func TestEnqueueTask(t *testing.T) {
 
 		for _, tc := range actions {
 			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
+				// Don't run in parallel since we're sharing the processor's queue
 				// Create a task with this action
 				task := &Task{
 					Type: TaskTypeAction,
@@ -640,6 +640,19 @@ func TestEnqueueTask(t *testing.T) {
 	// Test with a task that has a detection with a lot of data
 	t.Run("LargeDetection", func(t *testing.T) {
 		t.Parallel()
+		// Create a real job queue for this subtest
+		realQueue := jobqueue.NewJobQueue()
+		realQueue.Start()
+		defer realQueue.Stop()
+
+		// Create a processor with the real queue
+		processor := &Processor{
+			JobQueue: realQueue,
+			Settings: &conf.Settings{
+				Debug: true,
+			},
+		}
+
 		// Create a large detection with many results
 		detection := Detections{
 			Note: datastore.Note{
@@ -859,6 +872,12 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 // TestIntegrationWithJobQueue tests the integration between Processor.EnqueueTask and a real job queue
 func TestIntegrationWithJobQueue(t *testing.T) {
 	t.Parallel()
+	// Set up the test retry config override to ensure consistent behavior
+	testRetryConfigOverride = nil
+	defer func() {
+		testRetryConfigOverride = nil
+	}()
+
 	// Create a real job queue with a short processing interval for testing
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
@@ -959,7 +978,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	}
 
 	// Wait for the job queue to process the failing job
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 
 	// Verify that the failing action was executed
 	if failingAction.ExecuteCount != 1 {
@@ -996,14 +1015,6 @@ func TestRetryLogic(t *testing.T) {
 	realQueue.StartWithContext(ctx)
 	defer realQueue.Stop()
 
-	// Create a processor with the real queue
-	processor := &Processor{
-		JobQueue: realQueue,
-		Settings: &conf.Settings{
-			Debug: true,
-		},
-	}
-
 	// Create a counter for tracking attempts
 	var attemptCount int
 	var attemptMutex sync.Mutex
@@ -1021,6 +1032,22 @@ func TestRetryLogic(t *testing.T) {
 		InitialDelay: 10 * time.Millisecond,
 		MaxDelay:     100 * time.Millisecond,
 		Multiplier:   1.5,
+	}
+
+	// Set up the test retry config override BEFORE creating the processor
+	testRetryConfigOverride = func(action Action) (jobqueue.RetryConfig, bool) {
+		if _, ok := action.(*MockAction); ok {
+			return retryConfig, true
+		}
+		return jobqueue.RetryConfig{}, false
+	}
+
+	// Create a processor with the real queue
+	processor := &Processor{
+		JobQueue: realQueue,
+		Settings: &conf.Settings{
+			Debug: true,
+		},
 	}
 
 	// Create a mock action that fails a specified number of times before succeeding
@@ -1043,14 +1070,6 @@ func TestRetryLogic(t *testing.T) {
 			close(successChan)
 			return nil
 		},
-	}
-
-	// Set up the test retry config override to return our retry config for MockAction
-	testRetryConfigOverride = func(action Action) (jobqueue.RetryConfig, bool) {
-		if _, ok := action.(*MockAction); ok {
-			return retryConfig, true
-		}
-		return jobqueue.RetryConfig{}, false
 	}
 
 	// Create a task with the mock action
