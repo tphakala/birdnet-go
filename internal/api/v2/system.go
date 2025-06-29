@@ -415,7 +415,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 		PlatformVer:   hostInfo.PlatformVersion,
 		KernelVersion: hostInfo.KernelVersion,
 		UpTime:        hostInfo.Uptime,
-		BootTime:      time.Unix(int64(hostInfo.BootTime), 0),
+		BootTime:      time.Unix(int64(hostInfo.BootTime), 0), // #nosec G115 -- BootTime from system APIs, safe conversion for timestamp
 		AppStart:      startTime,
 		AppUptime:     appUptime,
 		NumCPU:        runtime.NumCPU(),
@@ -505,7 +505,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	cpuPercent := GetCachedCPUUsage()
 
 	// Get process information (current process)
-	proc, err := process.NewProcess(int32(os.Getpid()))
+	proc, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get process information",
@@ -1107,7 +1107,7 @@ func (c *Controller) GetProcessInfo(ctx echo.Context) error {
 	}
 
 	showAll := ctx.QueryParam("all") == "true"
-	currentPID := int32(os.Getpid())
+	currentPID := int32(os.Getpid()) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
 
 	procs, err := process.Processes()
 	if err != nil {

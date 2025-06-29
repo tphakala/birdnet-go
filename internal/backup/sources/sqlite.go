@@ -96,7 +96,8 @@ func (s *SQLiteSource) openDatabase(dbPath string, readOnly bool) (*DatabaseConn
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		// Best effort close on error path
+		_ = db.Close()
 		if isMediaError(err) {
 			return nil, errors.New(err).
 				Component("backup").
@@ -179,6 +180,8 @@ func isMediaError(err error) bool {
 					ERROR_DISK_FULL,      // Disk full
 					ERROR_DEVICE_REMOVED: // Device removed
 					return true
+				default:
+					// Other errno values don't indicate media errors
 				}
 			}
 		} else {
@@ -192,6 +195,8 @@ func isMediaError(err error) bool {
 					syscall.ENODEV, // No such device
 					syscall.ENXIO:  // No such device or address
 					return true
+				default:
+					// Other errno values don't indicate media errors
 				}
 
 				// Linux-specific error detection

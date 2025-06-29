@@ -6,6 +6,7 @@ output:
     - file
 linters:
   enable:
+    # Existing linters
     - copyloopvar
     - durationcheck
     - errname
@@ -18,6 +19,14 @@ linters:
     - revive
     - unconvert
     - wastedassign
+    # Security & quality linters
+    - gosec
+    - staticcheck
+    - ineffassign
+    - bodyclose
+    # Performance linters
+    - prealloc
+    - exhaustive
   disable:
     - unused
   settings:
@@ -31,10 +40,32 @@ linters:
         - style
         - diagnostic
         - performance
+      enabled-checks:
+        # Additional performance checks
+        - hugeParam
+        - preferFprint
+        # Additional diagnostic checks
+        - badLock
+        - nilValReturn
     revive:
       rules:
         - name: unused-parameter
           disabled: true
+    gosec:
+      # Configure gosec for security scanning
+      excludes:
+        - G104  # Audit errors not checked (covered by errcheck)
+      severity: medium
+      confidence: medium
+    prealloc:
+      # Configure prealloc for slice optimization
+      simple: true
+      range-loops: true
+      for-loops: true
+    exhaustive:
+      # Check exhaustiveness of enum switch statements
+      check-generated: false
+      default-signifies-exhaustive: true
   exclusions:
     generated: lax
     presets:
@@ -57,6 +88,20 @@ issues:
   max-same-issues: 0
   uniq-by-line: true
   new: false
+  exclude-rules:
+    # Exclude certain security checks from test files
+    - path: _test\.go
+      linters:
+        - gosec
+    # Allow non-exhaustive switches in test files
+    - path: _test\.go
+      linters:
+        - exhaustive
+    # Exclude ineffassign in test setup code
+    - path: _test\.go
+      text: "ineffectual assignment"
+      linters:
+        - ineffassign
 formatters:
   enable:
     - gofmt

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -137,7 +137,7 @@ var testConfig = &TestConfig{
 	FailureProbability: 0.5,
 	MinDelay:           500,
 	MaxDelay:           3000,
-	rng:                rand.New(rand.NewSource(time.Now().UnixNano())),
+	rng:                rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))), //nolint:gosec // G404: weak randomness acceptable for test utilities, not security-critical
 }
 
 // simulateDelay adds an artificial delay
@@ -146,7 +146,7 @@ func simulateDelay() {
 		return
 	}
 	testConfig.mu.Lock()
-	delay := testConfig.rng.Intn(testConfig.MaxDelay-testConfig.MinDelay) + testConfig.MinDelay
+	delay := testConfig.rng.IntN(testConfig.MaxDelay-testConfig.MinDelay) + testConfig.MinDelay
 	testConfig.mu.Unlock()
 	time.Sleep(time.Duration(delay) * time.Millisecond)
 }
@@ -400,7 +400,8 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 		// Add special transport to handle potential certificate issues with direct IP
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: false, // Keep secure by default
+				MinVersion:         tls.VersionTLS12, // Require TLS 1.2 minimum
+				InsecureSkipVerify: false,            // Keep secure by default
 			},
 		},
 	}
@@ -539,7 +540,8 @@ func tryAuthenticationWithHostOverride(ctx context.Context, b *BwClient, station
 		Timeout: authTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: false, // Keep secure
+				MinVersion:         tls.VersionTLS12, // Require TLS 1.2 minimum
+				InsecureSkipVerify: false,            // Keep secure
 			},
 		},
 	}

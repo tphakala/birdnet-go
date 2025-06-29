@@ -56,10 +56,10 @@ func TestGetAudioFilesContinuesOnError(t *testing.T) {
 	invalidFile := tempDir + "/invalid_file.wav"
 
 	// Create the files
-	err := os.WriteFile(validFile, []byte("test content"), 0o644)
+	err := os.WriteFile(validFile, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 	assert.NoError(t, err, "Should be able to create valid file")
 
-	err = os.WriteFile(invalidFile, []byte("test content"), 0o644)
+	err = os.WriteFile(invalidFile, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 	assert.NoError(t, err, "Should be able to create invalid file")
 
 	// Create a mock DB
@@ -94,7 +94,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 
 	// Create all the files
 	for _, file := range append(validFiles, invalidFiles...) {
-		err := os.WriteFile(file, []byte("test content"), 0o644)
+		err := os.WriteFile(file, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 		assert.NoError(t, err, "Should be able to create file: %s", file)
 	}
 
@@ -123,7 +123,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	for _, file := range invalidFiles {
 		baseName := filepath.Base(file)
 		newPath := filepath.Join(invalidOnlyDir, baseName)
-		err := os.WriteFile(newPath, []byte("test content"), 0o644)
+		err := os.WriteFile(newPath, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 		assert.NoError(t, err, "Should be able to create file: %s", newPath)
 	}
 

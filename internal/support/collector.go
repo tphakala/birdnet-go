@@ -645,8 +645,6 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 
 // collectJournalLogs collects logs from systemd journal
 func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration, anonymizePII bool) ([]LogEntry, error) {
-	var logs []LogEntry
-
 	// Calculate since time
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
 
@@ -662,11 +660,13 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	if err != nil {
 		// journalctl might not be available or service might not exist
 		// This is not a fatal error, just means no journald logs available
-		return logs, nil
+		return nil, nil
 	}
 
 	// Parse JSON output line by line
 	lines := strings.Split(string(output), "\n")
+	// Pre-allocate logs slice based on number of lines
+	logs := make([]LogEntry, 0, len(lines))
 	for _, line := range lines {
 		if line == "" {
 			continue

@@ -403,8 +403,10 @@ func parseRange(rangeHeader string, size int64) ([]httpRange, error) {
 	}
 	rangeHeader = strings.TrimPrefix(rangeHeader, "bytes=")
 
-	var ranges []httpRange
-	for _, r := range strings.Split(rangeHeader, ",") {
+	// Pre-allocate slice based on comma-separated range count
+	rangeParts := strings.Split(rangeHeader, ",")
+	ranges := make([]httpRange, 0, len(rangeParts))
+	for _, r := range rangeParts {
 		r = strings.TrimSpace(r)
 		if r == "" {
 			continue
@@ -620,10 +622,14 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath)...)
 
 		if runtime.GOOS == "windows" {
+			// #nosec G204 - ffmpegBinary and soxBinary are validated by ValidateToolPath/exec.LookPath
 			cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
+			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
 			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
 		} else {
+			// #nosec G204 - ffmpegBinary is validated by ValidateToolPath/exec.LookPath
 			cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
+			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
 			soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
 		}
 
@@ -665,8 +671,10 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath)...)
 
 		if runtime.GOOS == "windows" {
+			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
 			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
 		} else {
+			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
 			soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
 		}
 
@@ -725,8 +733,10 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
+		// #nosec G204 - ffmpegBinary is validated by ValidateToolPath/exec.LookPath
 		cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
 	} else {
+		// #nosec G204 - ffmpegBinary is validated by ValidateToolPath/exec.LookPath
 		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
 	}
 

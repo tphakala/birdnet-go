@@ -90,7 +90,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 		return err
 	}
 
-	requiredSpace := uint64(dbInfo.Size()) + 1024*1024 // Add 1MB buffer
+	requiredSpace := uint64(dbInfo.Size()) + 1024*1024 // #nosec G115 -- file size safe conversion, Add 1MB buffer
 
 	if availableSpace < requiredSpace {
 		return errors.Newf("insufficient disk space for backup").

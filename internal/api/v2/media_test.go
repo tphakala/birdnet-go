@@ -66,7 +66,7 @@ func TestServeAudioClip(t *testing.T) {
 	// Create a small test audio file within the secure root
 	smallFilename := "small.mp3"
 	smallFilePath := filepath.Join(tempDir, smallFilename)
-	err := os.WriteFile(smallFilePath, []byte("small audio file content"), 0o644)
+	err := os.WriteFile(smallFilePath, []byte("small audio file content"), 0o600)
 	require.NoError(t, err)
 
 	// Create a large test audio file (over 1MB)
@@ -76,7 +76,7 @@ func TestServeAudioClip(t *testing.T) {
 	for i := range largeContent {
 		largeContent[i] = byte(i % 256)
 	}
-	err = os.WriteFile(largeFilePath, largeContent, 0o644)
+	err = os.WriteFile(largeFilePath, largeContent, 0o600)
 	require.NoError(t, err)
 
 	// Test cases
@@ -190,7 +190,7 @@ func TestServeSpectrogram(t *testing.T) {
 	// Create a test audio file within the secure root
 	audioFilename := "audio.mp3"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := os.WriteFile(audioFilePath, []byte("audio file content"), 0o644)
+	err := os.WriteFile(audioFilePath, []byte("audio file content"), 0o600)
 	require.NoError(t, err)
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
@@ -198,7 +198,7 @@ func TestServeSpectrogram(t *testing.T) {
 	spectrogramFilename := "audio_800.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "simulated spectrogram content"
-	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o644)
+	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
 	require.NoError(t, err)
 
 	// Test cases
@@ -311,14 +311,14 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 	// Create test files within the SecureFS root
 	audioFilename := "test.mp3"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := os.WriteFile(audioFilePath, []byte("test audio content"), 0o644)
+	err := os.WriteFile(audioFilePath, []byte("test audio content"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate existing spectrogram
 	spectrogramFilename := "test_800.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "test spectrogram content"
-	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o644)
+	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
 	require.NoError(t, err)
 
 	// Create a real HTTP server using the Echo instance from setup
@@ -390,7 +390,7 @@ func TestMediaSecurityScenarios(t *testing.T) {
 	// Create a test audio file within the secure root
 	secureFilename := "secure.mp3"
 	secureFilePath := filepath.Join(tempDir, secureFilename)
-	err := os.WriteFile(secureFilePath, []byte("secure audio content"), 0o644)
+	err := os.WriteFile(secureFilePath, []byte("secure audio content"), 0o600)
 	require.NoError(t, err)
 
 	// --- No need to create sensitive file outside tempDir, SecureFS prevents access ---
@@ -449,7 +449,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 	for i := range fileContent {
 		fileContent[i] = byte(i % 256)
 	}
-	err := os.WriteFile(filePath, fileContent, 0o644)
+	err := os.WriteFile(filePath, fileContent, 0o600)
 	require.NoError(t, err)
 
 	// Test cases for range headers (same as before, but now served via SecureFS -> http.ServeContent)
@@ -595,7 +595,7 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 	for _, name := range unicodeNames {
 		// Use filename directly relative to tempDir (SecureFS root)
 		filePath := filepath.Join(tempDir, name)
-		err := os.WriteFile(filePath, []byte("unicode audio content"), 0o644)
+		err := os.WriteFile(filePath, []byte("unicode audio content"), 0o600)
 		require.NoError(t, err)
 	}
 

@@ -157,7 +157,7 @@ func (b *backoffStrategy) nextDelay() (time.Duration, bool) {
 	if b.maxAttempts > 0 && b.attempt >= b.maxAttempts {
 		return 0, false
 	}
-	delay := b.initialDelay * time.Duration(1<<uint(b.attempt))
+	delay := b.initialDelay * time.Duration(1<<uint(b.attempt)) //nolint:gosec // G115: attempt bounded by retry logic
 	if delay > b.maxDelay {
 		delay = b.maxDelay
 	}
@@ -649,7 +649,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	ffmpegSampleRate, ffmpegNumChannels, ffmpegFormat := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
 
 	// Prepare the FFmpeg command with appropriate arguments
-	cmd := exec.CommandContext(ctx, settings.FfmpegPath,
+	cmd := exec.CommandContext(ctx, settings.FfmpegPath, // #nosec G204 -- FfmpegPath is validated via ValidateToolPath(), args are passed as separate parameters not shell-executed
 		"-rtsp_transport", config.Transport, // Set RTSP transport protocol
 		"-i", config.URL, // Input URL
 		"-loglevel", "error", // Set log level to error

@@ -350,7 +350,8 @@ func extractNonEmptyLines(data []byte) []string {
 
 // extractScientificNames extracts scientific names (part before underscore) from label lines
 func extractScientificNames(lines []string) []string {
-	var scientificNames []string
+	// Pre-allocate slice with capacity for all lines
+	scientificNames := make([]string, 0, len(lines))
 	for _, line := range lines {
 		parts := strings.SplitN(line, "_", 2)
 		scientificNames = append(scientificNames, parts[0])

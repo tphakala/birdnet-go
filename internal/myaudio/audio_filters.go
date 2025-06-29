@@ -314,7 +314,7 @@ func ApplyFilters(samples []byte) error {
 	sampleCount := len(samples) / 2
 	floatSamples := make([]float64, sampleCount)
 	for i := 0; i < len(samples); i += 2 {
-		floatSamples[i/2] = float64(int16(binary.LittleEndian.Uint16(samples[i:]))) / 32768.0
+		floatSamples[i/2] = float64(int16(binary.LittleEndian.Uint16(samples[i:]))) / 32768.0 //nolint:gosec // G115: audio sample conversion within 16-bit range
 	}
 
 	// Apply filters to the float samples in batch
@@ -329,7 +329,7 @@ func ApplyFilters(samples []byte) error {
 			sample = -1.0
 		}
 		intSample := int16(sample * 32767.0)
-		binary.LittleEndian.PutUint16(samples[i*2:], uint16(intSample))
+		binary.LittleEndian.PutUint16(samples[i*2:], uint16(intSample)) //nolint:gosec // G115: audio sample conversion within 16-bit range
 	}
 
 	// Record successful filter application

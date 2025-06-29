@@ -43,7 +43,12 @@ func GetAvailableSpace(baseDir string) (uint64, error) {
 		return 0, err
 	}
 
-	return stat.Bavail * uint64(stat.Bsize), nil
+	// Validate that Bsize is positive to avoid overflow when converting to uint64
+	if stat.Bsize <= 0 {
+		return 0, fmt.Errorf("diskmanager: invalid block size %d from filesystem", stat.Bsize)
+	}
+	bsize := uint64(stat.Bsize) // Bsize validated as positive, safe conversion
+	return stat.Bavail * bsize, nil
 }
 
 // GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
@@ -61,8 +66,21 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 		return DiskSpaceInfo{}, descriptiveErr
 	}
 
-	totalBytes := stat.Blocks * uint64(stat.Bsize)
-	freeBytes := stat.Bavail * uint64(stat.Bsize) // Available to non-root user
+	// Validate that Bsize is positive to avoid overflow when converting to uint64
+	if stat.Bsize <= 0 {
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid block size %d from filesystem", stat.Bsize)).
+			Component("diskmanager").
+			Category(errors.CategoryDiskUsage).
+			Context("path", path).
+			Context("bsize", stat.Bsize).
+			Timing("detailed_disk_usage_check", time.Since(startTime)).
+			Build()
+		return DiskSpaceInfo{}, descriptiveErr
+	}
+
+	bsize := uint64(stat.Bsize) // Bsize validated as positive, safe conversion
+	totalBytes := stat.Blocks * bsize
+	freeBytes := stat.Bavail * bsize // Available to non-root user
 	usedBytes := totalBytes - freeBytes
 
 	return DiskSpaceInfo{
