@@ -236,8 +236,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	monitorCtrlC(quitChan)
 
 	// Track the HTTP server and system monitor for clean shutdown
-	var httpServerRef *httpcontroller.Server = httpServer
-	var systemMonitorRef *monitor.SystemMonitor = systemMonitor
+	httpServerRef := httpServer
+	systemMonitorRef := systemMonitor
 
 	// loop to monitor quit and restart channels
 	for {

@@ -262,7 +262,7 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	audioSamples := make([]float64, sampleCount)
 
 	// Track input signal statistics for debugging
-	var minSample, maxSample float64 = 1.0, -1.0
+	minSample, maxSample := 1.0, -1.0
 	var sumSquares float64
 
 	for i := 0; i < sampleCount; i++ {

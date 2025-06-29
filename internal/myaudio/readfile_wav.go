@@ -62,8 +62,8 @@ func readWAVBuffered(file *os.File, settings *conf.Settings, callback AudioChunk
 		fmt.Println("Channels:", decoder.NumChans)
 	}
 
-	var doResample bool = false
-	var sourceSampleRate int = int(decoder.SampleRate)
+	doResample := false
+	sourceSampleRate := int(decoder.SampleRate)
 
 	if decoder.SampleRate != conf.SampleRate {
 		doResample = true
