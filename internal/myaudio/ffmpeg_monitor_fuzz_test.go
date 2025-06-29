@@ -203,11 +203,15 @@ func TestFuzzMonitorLifecycle(t *testing.T) {
 					tc.Repo.AddProcess(url, process)
 				case 1:
 					// Check processes
-					tc.Monitor.checkProcesses()
+					if err := tc.Monitor.checkProcesses(); err != nil {
+						t.Logf("checkProcesses error: %v", err)
+					}
 				case 2:
 					// Cleanup orphaned processes
 					tc.ProcMgr.On("FindProcesses").Return([]ProcessInfo{}, nil).Maybe()
-					tc.Monitor.cleanupOrphanedProcesses()
+					if err := tc.Monitor.cleanupOrphanedProcesses(); err != nil {
+						t.Logf("cleanupOrphanedProcesses error: %v", err)
+					}
 				}
 			}
 
