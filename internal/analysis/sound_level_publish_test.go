@@ -258,9 +258,9 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 				OctaveBands: map[string]myaudio.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
-						Min:        -200.0,
-						Max:        -200.0,
-						Mean:       -200.0,
+						Min:        -100.0,
+						Max:        -100.0,
+						Mean:       -100.0,
 					},
 				},
 			},
@@ -288,9 +288,9 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 				OctaveBands: map[string]myaudio.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
-						Min:        -200.0,
-						Max:        -200.0,
-						Mean:       -200.0,
+						Min:        -100.0,
+						Max:        -100.0,
+						Mean:       -100.0,
 					},
 				},
 			},
@@ -324,9 +324,9 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 				OctaveBands: map[string]myaudio.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
-						Min:        -60.5,
-						Max:        -200.0,
-						Mean:       -200.0,
+						Min:        -100.0,
+						Max:        -100.0,
+						Mean:       -100.0,
 					},
 					"2000_Hz": {
 						CenterFreq: 2000,
@@ -433,7 +433,10 @@ func TestSoundLevelChannelFlow(t *testing.T) {
 func TestConcurrentPublishers(t *testing.T) {
 	t.Parallel()
 
-	testChan := make(chan myaudio.SoundLevelData, 100)
+	// Create separate channels for each publisher to ensure all receive messages
+	mqttChan := make(chan myaudio.SoundLevelData, 100)
+	sseChan := make(chan myaudio.SoundLevelData, 100)
+	metricsChan := make(chan myaudio.SoundLevelData, 100)
 	quitChan := make(chan struct{})
 
 	var wg sync.WaitGroup
@@ -453,7 +456,7 @@ func TestConcurrentPublishers(t *testing.T) {
 				select {
 				case <-quitChan:
 					return
-				case <-testChan:
+				case <-mqttChan:
 					publishCount.Lock()
 					publishCount.mqtt++
 					publishCount.Unlock()
@@ -470,7 +473,7 @@ func TestConcurrentPublishers(t *testing.T) {
 				select {
 				case <-quitChan:
 					return
-				case <-testChan:
+				case <-sseChan:
 					publishCount.Lock()
 					publishCount.sse++
 					publishCount.Unlock()
@@ -487,7 +490,7 @@ func TestConcurrentPublishers(t *testing.T) {
 				select {
 				case <-quitChan:
 					return
-				case <-testChan:
+				case <-metricsChan:
 					publishCount.Lock()
 					publishCount.metrics++
 					publishCount.Unlock()
@@ -501,10 +504,10 @@ func TestConcurrentPublishers(t *testing.T) {
 	mockSSEPublisher()
 	mockMetricsPublisher()
 
-	// Send test data
+	// Send test data to all channels
 	numMessages := 50
 	for i := range numMessages {
-		testChan <- myaudio.SoundLevelData{
+		data := myaudio.SoundLevelData{
 			Timestamp: time.Now(),
 			Source:    fmt.Sprintf("test-%d", i),
 			Name:      "device",
@@ -518,6 +521,10 @@ func TestConcurrentPublishers(t *testing.T) {
 				},
 			},
 		}
+		// Send to all channels
+		mqttChan <- data
+		sseChan <- data
+		metricsChan <- data
 	}
 
 	// Allow time for processing
@@ -531,10 +538,10 @@ func TestConcurrentPublishers(t *testing.T) {
 	publishCount.Lock()
 	defer publishCount.Unlock()
 
-	// Each publisher should process some messages
-	assert.Greater(t, publishCount.mqtt, 0)
-	assert.Greater(t, publishCount.sse, 0)
-	assert.Greater(t, publishCount.metrics, 0)
+	// Each publisher should process all messages
+	assert.Equal(t, numMessages, publishCount.mqtt)
+	assert.Equal(t, numMessages, publishCount.sse)
+	assert.Equal(t, numMessages, publishCount.metrics)
 }
 
 // TestSanitizeFloat64 tests the sanitizeFloat64 helper function
