@@ -11,7 +11,7 @@ import (
 	"log"
 	"log/slog"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	neturl "net/url"
@@ -123,8 +123,7 @@ func New(settings *conf.Settings) (*BwClient, error) {
 // radiusMeters - the maximum radius in meters to adjust the coordinates
 func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude float64) {
 	// Create a new local random generator seeded with current Unix time
-	src := rand.NewSource(time.Now().UnixNano())
-	rnd := rand.New(src) // #nosec G404 -- weak randomness acceptable for upload retry jitter, not security-critical
+	rnd := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))) //nolint:gosec // G404: weak randomness acceptable for upload retry jitter, not security-critical
 
 	// Calculate the degree offset using an approximation that 111,000 meters equals 1 degree
 	degreeOffset := radiusMeters / 111000

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -341,7 +341,7 @@ func watchDirectory(watchDir string, settings *conf.Settings, processedFiles map
 			}
 
 			// Reset timer for next scan with random interval
-			sleepTime := 30 + rand.Intn(15) // #nosec G404 -- weak randomness acceptable for scan interval jitter, not security-critical
+			sleepTime := 30 + rand.IntN(15) //nolint:gosec // G404: weak randomness acceptable for scan interval jitter, not security-critical
 			timer.Reset(time.Duration(sleepTime) * time.Second)
 		}
 	}
