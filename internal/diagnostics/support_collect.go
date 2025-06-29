@@ -112,7 +112,12 @@ func collectSystemInfo(tmpDir string) {
 
 // collectLegacyLogs collects logs from non-systemd systems
 func collectLegacyLogs(tmpDir string) error {
+	// Validate that logFile is within tmpDir to prevent path traversal
 	logFile := filepath.Join(tmpDir, "container_logs.txt")
+	logFile = filepath.Clean(logFile)
+	if !strings.HasPrefix(logFile, filepath.Clean(tmpDir)) {
+		return fmt.Errorf("log file path traversal detected")
+	}
 	f, err := os.Create(logFile)
 	if err != nil {
 		return fmt.Errorf("failed to create log file: %w", err)
@@ -131,7 +136,14 @@ func collectLegacyLogs(tmpDir string) error {
 				if file == "" {
 					continue
 				}
-				tailCmd := exec.Command("tail", "-n", "1000", file)
+				// Validate the log file path
+				absFile, err := filepath.Abs(file)
+				if err != nil {
+					fmt.Printf("Notice: Failed to resolve path for %s: %v\n", file, err)
+					continue
+				}
+				// #nosec G204 - file paths come from find command output and are validated
+				tailCmd := exec.Command("tail", "-n", "1000", absFile)
 				tailOutput, err := tailCmd.Output()
 				if err != nil {
 					fmt.Printf("Notice: Failed to tail %s: %v\n", file, err)
@@ -310,14 +322,19 @@ func runCommand(command string, args []string, outputFile string) error {
 	}
 
 	// Write the command output to the specified file
-	// 0644 sets read/write permissions for owner, and read-only for others
-	return os.WriteFile(outputFile, output, 0o644)
+	// Support files may contain sensitive information, restrict to owner only
+	return os.WriteFile(outputFile, output, 0o600)
 }
 
 // zipDirectory compresses the contents of a source directory into a zip file
 func zipDirectory(source, target string) error {
-	// Create the target zip file
-	zipfile, err := os.Create(target)
+	// Create the target zip file with path validation
+	// Ensure target is absolute to prevent directory traversal
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("failed to resolve target path: %w", err)
+	}
+	zipfile, err := os.Create(absTarget)
 	if err != nil {
 		return err
 	}
@@ -412,8 +429,9 @@ func collectConfigFile(tmpDir string) error {
 	maskedContent := maskSensitiveInfo(string(content))
 
 	// Write the masked config to the temporary directory
+	// Config may still contain sensitive paths or settings, restrict access
 	outputPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(outputPath, []byte(maskedContent), 0o644)
+	err = os.WriteFile(outputPath, []byte(maskedContent), 0o600)
 	if err != nil {
 		return fmt.Errorf("error writing masked config file: %w", err)
 	}

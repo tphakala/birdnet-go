@@ -722,8 +722,9 @@ func createDefaultConfig() error {
 			Build()
 	}
 
-	// Write default config file
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
+	// Write default config file with secure permissions (0600)
+	// Only the owner should be able to read/write the config file for security
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0o600); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "write-default-config").
@@ -834,7 +835,8 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 
 	// Write the YAML data to the temporary file
 	if _, err := tempFile.Write(yamlData); err != nil {
-		tempFile.Close()
+		// Best effort close on error path
+		_ = tempFile.Close()
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "write-temp-file").

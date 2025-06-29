@@ -139,11 +139,13 @@ func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, sfs *Sec
 			return nil, fmt.Errorf("security error: Windows pipe path must start with \\\\.\\pipe\\")
 		}
 		// For Windows, open the named pipe directly
-		return os.OpenFile(pipePath, openFlags, 0o666)
+		// Named pipes on Windows have their own security model independent of file permissions
+		return os.OpenFile(pipePath, openFlags, 0o600)
 	}
 
 	// For Unix systems, use SecureFS to maintain security
-	return sfs.OpenFile(fifoPath, openFlags, 0o666)
+	// FIFOs need write permission for IPC, but restrict to owner+group
+	return sfs.OpenFile(fifoPath, openFlags, 0o660)
 }
 
 // Platform-specific FIFO creation is implemented in:

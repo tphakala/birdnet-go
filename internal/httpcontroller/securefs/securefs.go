@@ -45,8 +45,9 @@ func New(baseDir string) (*SecureFS, error) {
 		return nil, fmt.Errorf("failed to resolve base path: %w", err)
 	}
 
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(absPath, 0o755); err != nil {
+	// Create the directory if it doesn't exist with secure permissions
+	// Only owner can write, others can read/execute for serving files
+	if err := os.MkdirAll(absPath, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create base directory: %w", err)
 	}
 
