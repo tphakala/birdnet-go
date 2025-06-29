@@ -2,6 +2,7 @@ package errors
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -42,22 +43,8 @@ func TestRegexPrecompilation(t *testing.T) {
 	}
 
 	for _, pattern := range expectedPatterns {
-		if !contains(scrubbed, pattern) {
+		if !strings.Contains(scrubbed, pattern) {
 			t.Errorf("Expected scrubbed message to contain '%s', got: %s", pattern, scrubbed)
 		}
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && substr != "" && 
-		(s == substr || len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		func() bool {
-			for i := 1; i < len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-			return false
-		}()))
 }
