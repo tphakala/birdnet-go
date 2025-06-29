@@ -257,7 +257,7 @@ func (h *Handlers) GetLabels() []string {
 func (h *Handlers) GetBirdNET() *birdnet.BirdNET {
 	if h.Server == nil {
 		if h.debug {
-			h.baseHandler.logInfo("GetBirdNET: Server reference is nil - cannot access processor")
+			h.logInfo("GetBirdNET: Server reference is nil - cannot access processor")
 		}
 		return nil
 	}
@@ -266,7 +266,7 @@ func (h *Handlers) GetBirdNET() *birdnet.BirdNET {
 	processor := h.Server.GetProcessor()
 	if processor == nil {
 		if h.debug {
-			h.baseHandler.logInfo("GetBirdNET: Processor reference is nil - cannot access BirdNET instance")
+			h.logInfo("GetBirdNET: Processor reference is nil - cannot access BirdNET instance")
 		}
 		return nil
 	}
@@ -287,7 +287,7 @@ func (h *Handlers) GetSecurity(c echo.Context) *Security {
 	if h.Server != nil {
 		accessAllowed = h.Server.IsAccessAllowed(c)
 	} else if h.debug {
-		h.baseHandler.logInfo("GetSecurity: Server reference is nil - defaulting to access denied")
+		h.logInfo("GetSecurity: Server reference is nil - defaulting to access denied")
 	}
 
 	return &Security{
