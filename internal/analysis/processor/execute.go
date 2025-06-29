@@ -114,7 +114,7 @@ func buildSafeArguments(params map[string]interface{}, note *datastore.Note) ([]
 		// Handle quoting for values that need it
 		if strings.ContainsAny(strValue, " @\"'") {
 			// Check if already quoted to avoid double quoting
-			if !(strings.HasPrefix(strValue, "\"") && strings.HasSuffix(strValue, "\"")) {
+			if !strings.HasPrefix(strValue, "\"") || !strings.HasSuffix(strValue, "\"") {
 				// Use %q for proper quoting (handles escaping automatically)
 				strValue = fmt.Sprintf("%q", strValue)
 			}
@@ -130,8 +130,8 @@ func buildSafeArguments(params map[string]interface{}, note *datastore.Note) ([]
 // isValidParamName checks if a parameter name contains only safe characters
 func isValidParamName(name string) bool {
 	for _, r := range name {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '_' || r == '-') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') &&
+			(r < '0' || r > '9') && r != '_' && r != '-' {
 			return false
 		}
 	}
