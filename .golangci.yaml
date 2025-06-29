@@ -40,13 +40,6 @@ linters:
         - style
         - diagnostic
         - performance
-      enabled-checks:
-        # Additional performance checks
-        - hugeParam
-        - preferFprint
-        # Additional diagnostic checks
-        - badLock
-        - nilValReturn
     revive:
       rules:
         - name: unused-parameter
@@ -64,52 +57,8 @@ linters:
       for-loops: true
     exhaustive:
       # Check exhaustiveness of enum switch statements
-      check-generated: false
       default-signifies-exhaustive: true
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      - linters:
-          - errcheck
-          - govet
-          - structcheck
-        path: _test.go
-    paths:
-      - ^.*\.(pb|y)\.go$
-      - third_party$
-      - builtin$
-      - examples$
 issues:
   max-same-issues: 0
   uniq-by-line: true
   new: false
-  exclude-rules:
-    # Exclude certain security checks from test files
-    - path: _test\.go
-      linters:
-        - gosec
-    # Allow non-exhaustive switches in test files
-    - path: _test\.go
-      linters:
-        - exhaustive
-    # Exclude ineffassign in test setup code
-    - path: _test\.go
-      text: "ineffectual assignment"
-      linters:
-        - ineffassign
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - ^.*\.(pb|y)\.go$
-      - third_party$
-      - builtin$
-      - examples$
