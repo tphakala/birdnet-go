@@ -831,7 +831,11 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 	}
 	tempFileName := tempFile.Name()
 	// Ensure the temporary file is removed in case of any failure
-	defer os.Remove(tempFileName)
+	defer func() {
+		if err := os.Remove(tempFileName); err != nil && !os.IsNotExist(err) {
+			log.Printf("Failed to remove temporary file: %v", err)
+		}
+	}()
 
 	// Write the YAML data to the temporary file
 	if _, err := tempFile.Write(yamlData); err != nil {
