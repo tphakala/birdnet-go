@@ -319,7 +319,7 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 		// Validate: No error, No scheme, No host, Path starts with '/', Path does NOT start with '//' or '/\'
 		if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
 			strings.HasPrefix(parsedURL.Path, "/") &&
-			!(len(parsedURL.Path) > 1 && (parsedURL.Path[1] == '/' || parsedURL.Path[1] == '\\')) {
+			(len(parsedURL.Path) <= 1 || (parsedURL.Path[1] != '/' && parsedURL.Path[1] != '\\')) {
 
 			// Additional check for CR/LF injection characters in path and query
 			pathContainsCRLF := strings.ContainsAny(parsedURL.Path, "\r\n") || strings.Contains(strings.ToLower(parsedURL.Path), "%0d") || strings.Contains(strings.ToLower(parsedURL.Path), "%0a")
