@@ -313,7 +313,11 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	if file == nil {
 		return nil, fmt.Errorf("file '%s' not found in default config paths", fileName)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close species config file: %v", err)
+		}
+	}()
 
 	// Read from the CSV file
 	reader := csv.NewReader(file)

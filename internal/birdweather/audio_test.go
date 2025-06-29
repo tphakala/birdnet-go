@@ -66,7 +66,9 @@ func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
 
 	// Reset buffer position
 	wavBuffer.Reset()
-	io.ReadFull(wavBuffer, header)
+	if _, err := io.ReadFull(wavBuffer, header); err != nil {
+		t.Fatalf("Failed to read WAV header: %v", err)
+	}
 
 	// Check RIFF header
 	if string(header[0:4]) != "RIFF" {

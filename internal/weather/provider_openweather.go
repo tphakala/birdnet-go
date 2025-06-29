@@ -123,7 +123,9 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				attemptLogger.Debug("Failed to close response body", "error", err)
+			}
 			attemptLogger.Warn("Received non-OK status code", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
 			if i == MaxRetries-1 {
 				logger.Error("Failed to fetch weather data due to non-OK status after max retries", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
@@ -141,7 +143,9 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			logger.Debug("Failed to close response body", "error", err)
+		}
 		if err != nil {
 			logger.Error("Failed to read response body", "status_code", resp.StatusCode, "error", err)
 			return nil, errors.New(err).

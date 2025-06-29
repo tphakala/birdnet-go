@@ -407,7 +407,11 @@ func (bn *BirdNET) loadExternalLabels() error {
 			Timing("label-file-open", time.Since(start)).
 			Build()
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close label file: %v", err)
+		}
+	}()
 
 	// Read the file directly as a text file
 	err = bn.loadLabelsFromText(file)

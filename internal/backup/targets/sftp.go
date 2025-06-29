@@ -176,7 +176,11 @@ func (t *SFTPTarget) getConnection(ctx context.Context) (*sftp.Client, error) {
 			return client, nil
 		}
 		// Connection is dead, close it and create a new one
-		client.Close()
+		if err := client.Close(); err != nil {
+			if t.config.Debug {
+				t.logger.Debug("SFTP: Failed to close dead connection", "error", err)
+			}
+		}
 	default:
 		// Pool is empty, create a new connection
 	}
@@ -195,7 +199,11 @@ func (t *SFTPTarget) returnConnection(client *sftp.Client) {
 		// Connection returned to pool
 	default:
 		// Pool is full, close the connection
-		client.Close()
+		if err := client.Close(); err != nil {
+			if t.config.Debug {
+				t.logger.Debug("SFTP: Failed to close excess connection", "error", err)
+			}
+		}
 	}
 }
 
@@ -257,7 +265,11 @@ func (t *SFTPTarget) withRetry(ctx context.Context, op func(*sftp.Client) error)
 		}
 
 		lastErr = err
-		client.Close()
+		if closeErr := client.Close(); closeErr != nil {
+			if t.config.Debug {
+				t.logger.Debug("SFTP: Failed to close connection after operation error", "error", closeErr)
+			}
+		}
 
 		if !t.isTransientError(err) {
 			return err
@@ -368,7 +380,12 @@ func (t *SFTPTarget) connect(ctx context.Context) (*sftp.Client, error) {
 		// Create SFTP client
 		client, err := sftp.NewClient(sshConn)
 		if err != nil {
-			sshConn.Close()
+			if closeErr := sshConn.Close(); closeErr != nil {
+				// Log error but continue with original error
+				if t.config.Debug {
+					t.logger.Debug("SFTP: Failed to close SSH connection after client creation failure", "error", closeErr)
+				}
+			}
 			resultChan <- connResult{nil, errors.New(err).
 				Component("backup").
 				Category(errors.CategoryNetwork).
@@ -528,8 +545,20 @@ func (t *SFTPTarget) Store(ctx context.Context, sourcePath string, metadata *bac
 				Context("operation", "create_temp_metadata_file").
 				Build()
 		}
-		defer os.Remove(tempMetadataFile.Name())
-		defer tempMetadataFile.Close()
+		defer func() {
+			if err := os.Remove(tempMetadataFile.Name()); err != nil && !os.IsNotExist(err) {
+				if t.config.Debug {
+					t.logger.Debug("SFTP: Failed to remove temp metadata file", "path", tempMetadataFile.Name(), "error", err)
+				}
+			}
+		}()
+		defer func() {
+			if err := tempMetadataFile.Close(); err != nil {
+				if t.config.Debug {
+					t.logger.Debug("SFTP: Failed to close temp metadata file", "error", err)
+				}
+			}
+		}()
 
 		if _, err := tempMetadataFile.Write(metadataBytes); err != nil {
 			return errors.New(err).
@@ -583,8 +612,16 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 			Build()
 	}
 	tempName := tempFile.Name()
-	tempFile.Close()
-	os.Remove(tempName) // Remove the local temp file as we only need its name pattern
+	if err := tempFile.Close(); err != nil {
+		if t.config.Debug {
+			t.logger.Debug("SFTP: Failed to close temp file", "path", tempName, "error", err)
+		}
+	}
+	if err := os.Remove(tempName); err != nil && !os.IsNotExist(err) {
+		if t.config.Debug {
+			t.logger.Debug("SFTP: Failed to remove local temp file", "path", tempName, "error", err)
+		}
+	}
 
 	// Create the remote temp file name using the same base name
 	tempName = path.Join(path.Dir(remotePath), filepath.Base(tempName))
@@ -629,7 +666,13 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 			Context("local_path", localPath).
 			Build()
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			if t.config.Debug {
+				t.logger.Debug("SFTP: Failed to close local file", "path", localPath, "error", err)
+			}
+		}
+	}()
 
 	dstFile, err := client.Create(remotePath)
 	if err != nil {
@@ -640,14 +683,26 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 			Context("remote_path", remotePath).
 			Build()
 	}
-	defer dstFile.Close()
+	defer func() {
+		if err := dstFile.Close(); err != nil {
+			if t.config.Debug {
+				t.logger.Debug("SFTP: Failed to close remote file", "path", remotePath, "error", err)
+			}
+		}
+	}()
 
 	// Create a pipe for streaming with context cancellation
 	pr, pw := io.Pipe()
 	errChan := make(chan error, 2)
 
 	go func() {
-		defer pw.Close()
+		defer func() {
+			if err := pw.Close(); err != nil {
+				if t.config.Debug {
+					t.logger.Debug("SFTP: Failed to close pipe writer", "error", err)
+				}
+			}
+		}()
 		_, err := io.Copy(pw, file)
 		errChan <- err
 	}()
@@ -663,7 +718,11 @@ func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localP
 	// Wait for completion or cancellation
 	select {
 	case <-ctx.Done():
-		pr.Close()
+		if err := pr.Close(); err != nil {
+			if t.config.Debug {
+				t.logger.Debug("SFTP: Failed to close pipe reader", "error", err)
+			}
+		}
 		return errors.New(ctx.Err()).
 			Component("backup").
 			Category(errors.CategorySystem).
@@ -806,7 +865,13 @@ func (t *SFTPTarget) Validate() error {
 				Context("operation", "validate_create_test_file").
 				Build()
 		}
-		defer os.Remove(tempFile.Name())
+		defer func() {
+			if err := os.Remove(tempFile.Name()); err != nil && !os.IsNotExist(err) {
+				if t.config.Debug {
+					t.logger.Debug("SFTP: Failed to remove test file", "path", tempFile.Name(), "error", err)
+				}
+			}
+		}()
 		if _, err := tempFile.Write(testData); err != nil {
 			return errors.New(err).
 				Component("backup").

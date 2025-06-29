@@ -758,7 +758,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		}
 	})
 	if err != nil {
-		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ context init failed:", err)
+		if _, printErr := color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ context init failed:", err); printErr != nil {
+			log.Printf("Failed to print error message: %v", printErr)
+		}
 		return
 	}
 	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
@@ -825,7 +827,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	// Initialize the capture device
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
-		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device initialization failed:", err)
+		if _, printErr := color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device initialization failed:", err); printErr != nil {
+			log.Printf("Failed to print error message: %v", printErr)
+		}
 		conf.PrintUserInfo()
 		return
 	}
@@ -843,7 +847,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 	}
 	err = captureDevice.Start()
 	if err != nil {
-		color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device start failed:", err)
+		if _, printErr := color.New(color.FgHiYellow).Fprintln(os.Stderr, "❌ Device start failed:", err); printErr != nil {
+			log.Printf("Failed to print error message: %v", printErr)
+		}
 		return
 	}
 	defer captureDevice.Stop() //nolint:errcheck // We handle errors in the caller
@@ -852,7 +858,9 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		fmt.Println("Device started")
 	}
 	// print audio device we are attached to
-	color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", source.Name, source.ID)
+	if _, err := color.New(color.FgHiGreen).Printf("Listening on source: %s (%s)\n", source.Name, source.ID); err != nil {
+		log.Printf("Failed to print device info: %v", err)
+	}
 
 	// Loop until quit or restart signal
 	for {

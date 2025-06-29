@@ -928,7 +928,11 @@ func TestDropOldestJob(t *testing.T) {
 	queueCapacity := 3
 	queue := NewJobQueueWithOptions(queueCapacity, 10, false)
 	queue.Start()
-	defer queue.Stop()
+	defer func() {
+		if err := queue.Stop(); err != nil {
+			t.Errorf("Failed to stop queue: %v", err)
+		}
+	}()
 
 	// Enable job dropping for this test
 	AllowJobDropping = true
@@ -1528,7 +1532,11 @@ func TestJobCancellation(t *testing.T) {
 	queue := NewJobQueueWithOptions(100, 10, false)
 	queue.SetProcessingInterval(10 * time.Millisecond)
 	queue.StartWithContext(ctx)
-	defer queue.Stop()
+	defer func() {
+		if err := queue.Stop(); err != nil {
+			t.Errorf("Failed to stop queue: %v", err)
+		}
+	}()
 
 	longJobStarted := make(chan struct{})
 	longJobBlocked := make(chan struct{})

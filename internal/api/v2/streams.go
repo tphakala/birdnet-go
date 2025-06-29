@@ -149,7 +149,9 @@ func (client *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		client.conn.Close()
+		if err := client.conn.Close(); err != nil {
+			client.logger.Printf("Failed to close connection: %v", err)
+		}
 	}()
 
 	for {
@@ -221,7 +223,9 @@ func (client *Client) readPump(logger *log.Logger) {
 		client.mu.Lock()
 		client.closed = true
 		client.mu.Unlock()
-		client.conn.Close()
+		if err := client.conn.Close(); err != nil {
+			client.logger.Printf("Failed to close connection: %v", err)
+		}
 	}()
 
 	client.conn.SetReadLimit(maxMessageSize)

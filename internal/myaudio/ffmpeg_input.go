@@ -295,7 +295,9 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 
 	// First close stdout to prevent blocking reads
 	if p.stdout != nil {
-		p.stdout.Close()
+		if err := p.stdout.Close(); err != nil {
+			log.Printf("Failed to close FFmpeg stdout: %v", err)
+		}
 	}
 
 	// Cancel the context to signal process termination

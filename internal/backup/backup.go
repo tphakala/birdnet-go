@@ -351,7 +351,11 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	if err != nil {
 		return tempDirs, fmt.Errorf("failed to initiate backup from source: %w", err)
 	}
-	defer backupReader.Close()
+	defer func() {
+		if err := backupReader.Close(); err != nil {
+			m.logger.Warn("Failed to close backup reader", "source", sourceName, "error", err)
+		}
+	}()
 	m.logger.Debug("Source backup stream obtained", "source_name", sourceName)
 
 	// 2. Create a temporary directory for staging the archive
@@ -636,7 +640,11 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 			Context("archive_path", archivePath).
 			Build()
 	}
-	defer archiveFile.Close()
+	defer func() {
+		if err := archiveFile.Close(); err != nil {
+			m.logger.Warn("Failed to close archive file", "archive_path", archivePath, "error", err)
+		}
+	}()
 
 	// Determine writer: plain tar or gzipped tar
 	var fileWriter io.WriteCloser = archiveFile
@@ -650,7 +658,11 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	// }
 
 	tarWriter := tar.NewWriter(fileWriter)
-	defer tarWriter.Close()
+	defer func() {
+		if err := tarWriter.Close(); err != nil {
+			m.logger.Warn("Failed to close tar writer", "archive_path", archivePath, "error", err)
+		}
+	}()
 
 	// 1. Add metadata.json
 	m.logger.Debug("Adding metadata to archive", "backup_id", metadata.ID)

@@ -36,7 +36,9 @@ func BenchmarkCacheHit(b *testing.B) {
 	cache.SetImageProvider(mockProvider)
 
 	// Pre-populate cache
-	cache.Get("Turdus merula")
+	if _, err := cache.Get("Turdus merula"); err != nil {
+		b.Fatalf("Failed to pre-populate cache: %v", err)
+	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -61,12 +63,14 @@ func BenchmarkCacheMissWithDBHit(b *testing.B) {
 	// Pre-populate DB store
 	for i := 0; i < 100; i++ {
 		species := fmt.Sprintf("Species_%d", i)
-		mockStore.SaveImageCache(&datastore.ImageCache{
+		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
 			URL:            fmt.Sprintf("http://example.com/%s.jpg", species),
 			CachedAt:       time.Now(),
-		})
+		}); err != nil {
+			b.Fatalf("Failed to pre-populate DB store: %v", err)
+		}
 	}
 
 	// Create new cache without pre-loading memory
@@ -137,7 +141,9 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 	// Pre-populate some cache entries
 	species := []string{"Turdus merula", "Parus major", "Carduelis carduelis", "Sturnus vulgaris"}
 	for _, s := range species {
-		cache.Get(s)
+		if _, err := cache.Get(s); err != nil {
+			b.Fatalf("Failed to pre-populate cache entry: %v", err)
+		}
 	}
 
 	b.ReportAllocs()
@@ -223,7 +229,9 @@ func BenchmarkGetBatch(b *testing.B) {
 
 			// Pre-populate half of the entries
 			for i := 0; i < size/2; i++ {
-				cache.Get(species[i])
+				if _, err := cache.Get(species[i]); err != nil {
+					b.Fatalf("Failed to pre-populate cache entry: %v", err)
+				}
 			}
 
 			b.ReportAllocs()
@@ -289,12 +297,14 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 	staleTime := time.Now().Add(-15 * 24 * time.Hour)
 	for i := 0; i < 50; i++ {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
-		mockStore.SaveImageCache(&datastore.ImageCache{
+		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
 			URL:            fmt.Sprintf("http://example.com/old_%s.jpg", species),
 			CachedAt:       staleTime,
-		})
+		}); err != nil {
+			b.Fatalf("Failed to save stale cache entry: %v", err)
+		}
 	}
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)

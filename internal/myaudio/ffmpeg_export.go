@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -299,7 +300,11 @@ func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, se
 	// Write PCM data to FFmpeg's stdin in a separate goroutine
 	writeErrChan := make(chan error, 1)
 	go func() {
-		defer stdin.Close() // Close stdin when writing is done
+		defer func() {
+			if err := stdin.Close(); err != nil {
+				log.Printf("Failed to close FFmpeg stdin: %v", err)
+			}
+		}() // Close stdin when writing is done
 
 		// Check if context is already done before writing
 		select {
@@ -570,7 +575,11 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 	// and capture potential write errors
 	writeErrChan := make(chan error, 1)
 	go func() {
-		defer stdin.Close() // Close stdin when writing is done
+		defer func() {
+			if err := stdin.Close(); err != nil {
+				log.Printf("Failed to close FFmpeg stdin: %v", err)
+			}
+		}() // Close stdin when writing is done
 
 		// Check if context is already done before writing
 		select {
@@ -733,7 +742,11 @@ func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpeg
 	// while waiting for stderr to capture output
 	writeErrChan := make(chan error, 1)
 	go func() {
-		defer stdin.Close() // Close stdin when done
+		defer func() {
+			if err := stdin.Close(); err != nil {
+				log.Printf("Failed to close FFmpeg stdin: %v", err)
+			}
+		}() // Close stdin when done
 
 		// Check if context is already done before writing
 		select {

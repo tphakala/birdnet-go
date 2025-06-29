@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,13 +49,17 @@ func cleanupTestArtifacts() {
 	// Clean up debug directory if it exists
 	debugDir := "debug"
 	if _, err := os.Stat(debugDir); err == nil {
-		os.RemoveAll(debugDir)
+		if err := os.RemoveAll(debugDir); err != nil {
+			log.Printf("Failed to remove debug directory: %v", err)
+		}
 	}
 
 	// Clean up logs directory if it exists
 	logsDir := "logs"
 	if _, err := os.Stat(logsDir); err == nil {
-		os.RemoveAll(logsDir)
+		if err := os.RemoveAll(logsDir); err != nil {
+			log.Printf("Failed to remove logs directory: %v", err)
+		}
 	}
 }
 
@@ -229,7 +234,7 @@ func TestUploadSoundscape(t *testing.T) {
 		// Return success response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprint(w, `{
+		if _, err := fmt.Fprint(w, `{
 			"success": true,
 			"soundscape": {
 				"id": 12345,
@@ -240,7 +245,9 @@ func TestUploadSoundscape(t *testing.T) {
 				"extension": "wav",
 				"duration": 3.0
 			}
-		}`)
+		}`); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -315,7 +322,9 @@ func TestUploadSoundscape_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, `{"success": false, "error": "Server error"}`)
+		if _, err := fmt.Fprint(w, `{"success": false, "error": "Server error"}`); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -486,7 +495,7 @@ func TestPublish(t *testing.T) {
 			// This is a soundscape upload
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			fmt.Fprint(w, `{
+			if _, err := fmt.Fprint(w, `{
 				"success": true,
 				"soundscape": {
 					"id": 12345,
@@ -497,12 +506,16 @@ func TestPublish(t *testing.T) {
 					"extension": "wav",
 					"duration": 3.0
 				}
-			}`)
+			}`); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 		case "application/json":
 			// This is a detection post
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			fmt.Fprint(w, `{"success": true}`)
+			if _, err := fmt.Fprint(w, `{"success": true}`); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 		default:
 			// Unexpected content type
 			t.Errorf("Unexpected Content-Type: %s", contentType)

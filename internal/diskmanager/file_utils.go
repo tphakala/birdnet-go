@@ -45,7 +45,11 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 			Build()
 		return nil, descriptiveErr
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
@@ -267,7 +271,11 @@ func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	for _, fileInfo := range files {
 		line := fmt.Sprintf("Path: %s, Species: %s, Confidence: %d, Timestamp: %s, Size: %d\n",

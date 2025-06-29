@@ -65,7 +65,9 @@ func isProcessed(path, outputPath string, processedFiles map[string]bool) bool {
 		// If lock file exists but is stale, remove it
 		if age > 60*time.Minute {
 			log.Printf("Lock file is stale (older than 60 minutes), removing: %s", outputPathProcessing)
-			os.Remove(outputPathProcessing)
+			if err := os.Remove(outputPathProcessing); err != nil {
+				log.Printf("Failed to remove stale lock file: %v", err)
+			}
 			return false
 		}
 		return true // File is being processed by another instance
@@ -89,7 +91,9 @@ func isFileLocked(path string) bool {
 		// File is probably locked by another process
 		return true
 	}
-	file.Close()
+	if err := file.Close(); err != nil {
+		log.Printf("Failed to close file: %v", err)
+	}
 
 	// On Windows, also try write access to be sure
 	if runtime.GOOS == "windows" {
@@ -97,7 +101,9 @@ func isFileLocked(path string) bool {
 		if err != nil {
 			return true
 		}
-		file.Close()
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
 	}
 
 	return false
@@ -207,7 +213,9 @@ func processFile(path string, settings *conf.Settings, processedFiles map[string
 		// Another instance is processing this file
 		return false, nil
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		log.Printf("Failed to close lock file: %v", err)
+	}
 
 	// Save the original path and restore it after processing
 	origPath := settings.Input.Path

@@ -380,7 +380,11 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 		},
 	}
 	mockImageCache := imageprovider.InitCache("test", stubProvider, testMetrics, mockDS)
-	t.Cleanup(func() { mockImageCache.Close() })
+	t.Cleanup(func() {
+		if err := mockImageCache.Close(); err != nil {
+			t.Errorf("Failed to close image cache: %v", err)
+		}
+	})
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -536,7 +540,11 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// ---> FIX: Provide a non-nil observability.Metrics instance <---
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
 	imageCache := imageprovider.InitCache("test", mockImageProvider, testMetrics, mockDS)
-	t.Cleanup(func() { imageCache.Close() })
+	t.Cleanup(func() {
+		if err := imageCache.Close(); err != nil {
+			t.Errorf("Failed to close image cache: %v", err)
+		}
+	})
 
 	// Create a controller with our mocks
 	controller := &Controller{
@@ -712,7 +720,9 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	}
 
 	// Close the image cache to clean up resources
-	imageCache.Close()
+	if err := imageCache.Close(); err != nil {
+		t.Errorf("Failed to close image cache: %v", err)
+	}
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)

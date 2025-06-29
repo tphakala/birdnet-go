@@ -30,7 +30,11 @@ func CollectDiagnostics() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir) // Clean up the temporary directory
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			fmt.Printf("Failed to remove temp directory: %v\n", err)
+		}
+	}() // Clean up the temporary directory
 
 	// Collect OS-specific diagnostics
 	switch runtime.GOOS {
@@ -122,7 +126,11 @@ func collectLegacyLogs(tmpDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create log file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Printf("Failed to close log file: %v\n", err)
+		}
+	}()
 
 	// Check for /var/log directory
 	if _, err := os.Stat("/var/log"); !os.IsNotExist(err) {
@@ -338,11 +346,19 @@ func zipDirectory(source, target string) error {
 	if err != nil {
 		return err
 	}
-	defer zipfile.Close()
+	defer func() {
+		if err := zipfile.Close(); err != nil {
+			fmt.Printf("Failed to close zip file: %v\n", err)
+		}
+	}()
 
 	// Create a new zip archive
 	archive := zip.NewWriter(zipfile)
-	defer archive.Close()
+	defer func() {
+		if err := archive.Close(); err != nil {
+			fmt.Printf("Failed to close zip archive: %v\n", err)
+		}
+	}()
 
 	// Walk through the source directory
 	err = filepath.Walk(source, func(path string, info os.FileInfo, err error) error {

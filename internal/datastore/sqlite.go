@@ -61,8 +61,14 @@ func checkWritePermission(path string) error {
 			Context("directory", filepath.Dir(path)).
 			Build()
 	}
-	f.Close()
-	os.Remove(tempFile)
+	if err := f.Close(); err != nil {
+		// Log but don't fail permission check
+		log.Printf("Failed to close temp file: %v", err)
+	}
+	if err := os.Remove(tempFile); err != nil {
+		// Log but don't fail permission check
+		log.Printf("Failed to remove temp file: %v", err)
+	}
 	return nil
 }
 
@@ -121,7 +127,11 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 			Context("db_path", dbPath).
 			Build()
 	}
-	defer source.Close()
+	defer func() {
+		if err := source.Close(); err != nil {
+			log.Printf("Failed to close source database: %v", err)
+		}
+	}()
 
 	// Create backup file
 	destination, err := os.Create(backupPath)
@@ -133,7 +143,11 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 			Context("backup_path", backupPath).
 			Build()
 	}
-	defer destination.Close()
+	defer func() {
+		if err := destination.Close(); err != nil {
+			log.Printf("Failed to close backup file: %v", err)
+		}
+	}()
 
 	// Copy the file
 	if _, err := io.Copy(destination, source); err != nil {

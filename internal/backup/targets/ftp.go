@@ -325,7 +325,11 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "ftp: failed to open local file", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.logger.Printf("ftp: failed to close file: %v", err)
+		}
+	}()
 
 	// Create a pipe for streaming
 	pr, pw := io.Pipe()
@@ -333,7 +337,11 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 
 	// Start upload in a goroutine
 	go func() {
-		defer pw.Close()
+		defer func() {
+			if err := pw.Close(); err != nil {
+				t.logger.Printf("ftp: failed to close pipe writer: %v", err)
+			}
+		}()
 		_, err := io.Copy(pw, file)
 		if err != nil {
 			errChan <- backup.NewError(backup.ErrIO, "ftp: failed to copy file data", err)
@@ -390,8 +398,16 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 		if err != nil {
 			return backup.NewError(backup.ErrIO, "ftp: failed to create temporary metadata file", err)
 		}
-		defer os.Remove(tempMetadataFile.Name())
-		defer tempMetadataFile.Close()
+		defer func() {
+			if err := os.Remove(tempMetadataFile.Name()); err != nil {
+				t.logger.Printf("ftp: failed to remove temp metadata file: %v", err)
+			}
+		}()
+		defer func() {
+			if err := tempMetadataFile.Close(); err != nil {
+				t.logger.Printf("ftp: failed to close temp metadata file: %v", err)
+			}
+		}()
 
 		if _, err := tempMetadataFile.Write(metadataBytes); err != nil {
 			return backup.NewError(backup.ErrIO, "ftp: failed to write metadata", err)
@@ -540,7 +556,11 @@ func (t *FTPTarget) Validate() error {
 		if err != nil {
 			return backup.NewError(backup.ErrIO, "ftp: failed to create temporary test file", err)
 		}
-		defer os.Remove(tempFile.Name())
+		defer func() {
+			if err := os.Remove(tempFile.Name()); err != nil {
+				t.logger.Printf("ftp: failed to remove temp file: %v", err)
+			}
+		}()
 		if _, err := tempFile.Write(testData); err != nil {
 			return backup.NewError(backup.ErrIO, "ftp: failed to write test data", err)
 		}

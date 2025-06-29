@@ -29,7 +29,7 @@ linters:
     - exhaustive
   disable:
     - unused
-    - errcheck  # Temporarily disabled due to too many warnings
+    #- errcheck  # Temporarily disabled due to too many warnings
   settings:
     gocognit:
       min-complexity: 50

@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,7 +93,11 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 		}
 		return AudioInfo{}, enhancedErr
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close audio file: %v", err)
+		}
+	}()
 
 	// Process based on file extension
 	var info AudioInfo
@@ -211,7 +216,11 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 		}
 		return enhancedErr
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close audio file: %v", err)
+		}
+	}()
 
 	// Process based on file format
 	switch ext {
