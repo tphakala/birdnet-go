@@ -273,7 +273,7 @@ func getHourlyHeaderData(hourIndex int, class string, length int, date string, s
 func getHourlyCounts(element *handlers.NoteWithIndex, hourIndex int) map[string]interface{} {
 	baseData := map[string]interface{}{
 		"HourIndex": hourIndex,
-		"Name":      element.Note.CommonName,
+		"Name":      element.CommonName,
 	}
 
 	return baseData

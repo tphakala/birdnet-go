@@ -46,8 +46,8 @@ func readFLACBuffered(file *os.File, settings *conf.Settings, callback AudioChun
 		fmt.Println("Channels:", decoder.NChannels)
 	}
 
-	var doResample bool = false
-	var sourceSampleRate int = decoder.SampleRate
+	doResample := false
+	sourceSampleRate := decoder.SampleRate
 
 	if decoder.SampleRate != conf.SampleRate {
 		doResample = true

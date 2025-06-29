@@ -163,7 +163,7 @@ func GetHLSDirectory() (string, error) {
 // PrintUserInfo checks the operating system. If it's Linux, it prints the current user and their group memberships.
 func PrintUserInfo() {
 	// Initialize a flag to check if the user is a member of the audio group
-	var audioMember bool = false
+	var audioMember = false
 
 	// Check if the operating system is Linux
 	if runtime.GOOS == "linux" {
