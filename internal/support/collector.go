@@ -645,6 +645,7 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 
 // collectJournalLogs collects logs from systemd journal
 func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration, anonymizePII bool) ([]LogEntry, error) {
+	// Start with empty slice, will pre-allocate after getting output
 	var logs []LogEntry
 
 	// Calculate since time
@@ -667,6 +668,8 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 
 	// Parse JSON output line by line
 	lines := strings.Split(string(output), "\n")
+	// Pre-allocate logs slice based on number of lines
+	logs = make([]LogEntry, 0, len(lines))
 	for _, line := range lines {
 		if line == "" {
 			continue

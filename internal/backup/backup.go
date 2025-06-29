@@ -577,7 +577,7 @@ func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, 
 	close(errChan)
 
 	// Collect errors
-	var storeErrors []error
+	storeErrors := make([]error, 0, len(targetsToStore))
 	for err := range errChan {
 		storeErrors = append(storeErrors, err)
 	}
@@ -1162,7 +1162,7 @@ func (m *Manager) cleanupOldBackups(ctx context.Context) error {
 	close(errChan)
 
 	// Collect errors from retention enforcement
-	var cleanupErrors []error
+	cleanupErrors := make([]error, 0, len(groupedBackups))
 	for err := range errChan {
 		cleanupErrors = append(cleanupErrors, err)
 	}
@@ -1233,7 +1233,7 @@ func (m *Manager) ListBackups(ctx context.Context) ([]BackupInfo, error) {
 	close(errChan)
 
 	// Collect errors from listing
-	var listErrors []error
+	listErrors := make([]error, 0, len(m.targets))
 	for err := range errChan {
 		listErrors = append(listErrors, err)
 	}

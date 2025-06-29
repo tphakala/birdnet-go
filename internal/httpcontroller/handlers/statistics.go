@@ -70,8 +70,10 @@ func (h *Handlers) createBirdVocalizationChart(startDate, endDate time.Time) *ch
 	}
 
 	// Prepare data for the chart
-	var dates []string
-	var counts []opts.BarData
+	// Pre-allocate slices based on date range
+	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
+	dates := make([]string, 0, dayCount)
+	counts := make([]opts.BarData, 0, dayCount)
 	for date := startDate; date.Before(endDate.AddDate(0, 0, 1)); date = date.AddDate(0, 0, 1) {
 		dateStr := date.Format("2006-01-02")
 		dates = append(dates, dateStr)
