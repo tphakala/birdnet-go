@@ -11,6 +11,7 @@ func BenchmarkErrorCreationNoTelemetry(b *testing.B) {
 	SetTelemetryReporter(nil)
 	ClearErrorHooks()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
 		err := fmt.Errorf("test error")
@@ -27,6 +28,7 @@ func BenchmarkErrorCreationNoTelemetryAutoDetect(b *testing.B) {
 	SetTelemetryReporter(nil)
 	ClearErrorHooks()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
 		err := fmt.Errorf("test error")
@@ -40,6 +42,7 @@ func BenchmarkErrorCreationWithContext(b *testing.B) {
 	SetTelemetryReporter(nil)
 	ClearErrorHooks()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
 		err := fmt.Errorf("test error")
@@ -72,6 +75,7 @@ func BenchmarkErrorCreationWithTelemetry(b *testing.B) {
 	reporter := &mockReporter{enabled: true}
 	SetTelemetryReporter(reporter)
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
 		err := fmt.Errorf("test error with URL https://example.com?api_key=secret123&token=abc")
@@ -87,6 +91,7 @@ func BenchmarkErrorCreationWithTelemetry(b *testing.B) {
 func BenchmarkPrivacyScrubbing(b *testing.B) {
 	testMessage := "Error connecting to https://api.example.com?api_key=1234567890abcdef&station_id=test123&token=secret"
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
 		_ = basicURLScrub(testMessage)
