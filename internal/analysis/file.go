@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,7 +122,11 @@ func validateAudioFile(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("\033[31m❌ Error opening file %s: %w\033[0m", filepath.Base(filePath), err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close audio file: %v", err)
+		}
+	}()
 
 	// Try to get audio info to validate the file format
 	audioInfo, err := myaudio.GetAudioInfo(filePath)
