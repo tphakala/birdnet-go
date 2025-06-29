@@ -52,7 +52,11 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 			Context("operation", "create_file").
 			Build()
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close audio file: %v", err)
+		}
+	}()
 
 	// Write the buffer to the file
 	if _, err := io.Copy(file, buffer); err != nil {
@@ -81,7 +85,11 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 		log.Printf("Warning: could not create metadata file: %v", err)
 		return nil // Continue even if metadata file creation fails
 	}
-	defer metaFile.Close()
+	defer func() {
+		if err := metaFile.Close(); err != nil {
+			log.Printf("Failed to close metadata file: %v", err)
+		}
+	}()
 
 	// Write timestamp information to the metadata file
 	fileExt := filepath.Ext(filename)

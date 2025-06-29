@@ -418,7 +418,11 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 		}
 		return fmt.Errorf("failed to connect to BirdWeather API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode >= 400 {
 		// Special handling for 404 Not Found errors
@@ -501,7 +505,11 @@ func tryAuthentication(ctx context.Context, b *BwClient, stationURL string) erro
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with BirdWeather at %s: %w", maskedURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Failed to close response body: %v", err)
+		}
+	}()
 
 	switch resp.StatusCode {
 	case 401, 403:
@@ -551,7 +559,11 @@ func tryAuthenticationWithHostOverride(ctx context.Context, b *BwClient, station
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with BirdWeather at %s (host: %s): %w", maskedURL, hostOverride, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Failed to close response body: %v", err)
+		}
+	}()
 
 	switch resp.StatusCode {
 	case 401, 403:
