@@ -83,7 +83,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 		// Set the error title as a tag that Sentry can use for grouping
 		scope.SetTag("error_title", errorTitle)
-		scope.SetTag("component", ee.Component)
+		scope.SetTag("component", ee.GetComponent())
 		scope.SetTag("category", string(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
@@ -102,7 +102,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetLevel(level)
 
 		// Set custom fingerprint for better grouping using the error title
-		scope.SetFingerprint([]string{errorTitle, ee.Component, string(ee.Category)})
+		scope.SetFingerprint([]string{errorTitle, ee.GetComponent(), string(ee.Category)})
 
 		// Use the error title as the exception type by creating a custom exception
 		event := sentry.NewEvent()
@@ -133,9 +133,9 @@ func generateErrorTitle(ee *EnhancedError) string {
 	var titleParts []string
 
 	// Add component (capitalize first letter)
-	if ee.Component != "" {
-		component := titleCase(ee.Component)
-		titleParts = append(titleParts, component)
+	component := ee.GetComponent()
+	if component != "" && component != "unknown" {
+		titleParts = append(titleParts, titleCase(component))
 	}
 
 	// Add category (human-readable format)

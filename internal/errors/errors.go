@@ -48,12 +48,13 @@ const (
 // EnhancedError wraps an error with additional context and metadata
 type EnhancedError struct {
 	Err       error                  // Original error
-	Component string                 // Component where error occurred (auto-detected if empty)
+	component string                 // Component where error occurred (lazily detected)
 	Category  ErrorCategory          // Error category for better grouping
 	Context   map[string]interface{} // Additional context data
 	Timestamp time.Time              // When the error occurred
 	reported  bool                   // Whether telemetry has been sent
-	mu        sync.RWMutex           // Mutex to protect concurrent access to reported field
+	mu        sync.RWMutex           // Mutex to protect concurrent access
+	detected  bool                   // Whether component has been auto-detected
 }
 
 // Error implements the error interface
@@ -74,9 +75,22 @@ func (ee *EnhancedError) Is(target error) bool {
 	return Is(ee.Err, target)
 }
 
-// GetComponent returns the component name
+// GetComponent returns the component name, detecting it lazily if needed
 func (ee *EnhancedError) GetComponent() string {
-	return ee.Component
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	
+	// If component is empty and hasn't been detected yet, detect it now
+	if ee.component == "" && !ee.detected {
+		ee.component = detectComponent()
+		ee.detected = true
+		// Set to "unknown" if detection failed
+		if ee.component == "" {
+			ee.component = "unknown"
+		}
+	}
+	
+	return ee.component
 }
 
 // GetCategory returns the error category
@@ -218,14 +232,16 @@ func (eb *ErrorBuilder) Build() *EnhancedError {
 	if !hasActiveReporting.Load() {
 		ee := &EnhancedError{
 			Err:       eb.err,
-			Component: eb.component, // Use provided or empty
+			component: eb.component, // Use provided or empty
 			Category:  eb.category,  // Use provided or empty
 			Context:   eb.context,
 			Timestamp: time.Now(),
+			detected:  eb.component != "", // Mark as detected if component was provided
 		}
 		// Set defaults without expensive detection
-		if ee.Component == "" {
-			ee.Component = "unknown"
+		if ee.component == "" {
+			ee.component = "unknown"
+			ee.detected = true
 		}
 		if ee.Category == "" {
 			ee.Category = CategoryGeneric
@@ -246,10 +262,11 @@ func (eb *ErrorBuilder) Build() *EnhancedError {
 
 	ee := &EnhancedError{
 		Err:       eb.err,
-		Component: eb.component,
+		component: eb.component,
 		Category:  eb.category,
 		Context:   eb.context,
 		Timestamp: time.Now(),
+		detected:  true, // Mark as detected since we just detected it
 	}
 
 	// Report to telemetry if available and enabled
@@ -289,12 +306,56 @@ func init() {
 
 // Helper functions for auto-detection and categorization
 
+// quickComponentLookup tries to detect component from a specific caller depth
+func quickComponentLookup(depth int) string {
+	// Try to get caller at specific depth
+	pc, _, _, ok := runtime.Caller(depth)
+	if !ok {
+		return ""
+	}
+	
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return ""
+	}
+	
+	funcName := fn.Name()
+	
+	// Skip if it's our own error package
+	if strings.Contains(funcName, "github.com/tphakala/birdnet-go/internal/errors") {
+		return ""
+	}
+	
+	return lookupComponent(funcName)
+}
+
 // detectComponent automatically detects the component based on the call stack
 func detectComponent() string {
+	// First try common call depths for performance (adjust based on profiling)
+	// Typical depths: 4-6 for direct error creation, 6-8 for wrapped errors
+	for _, depth := range []int{4, 5, 6, 7} {
+		if component := quickComponentLookup(depth); component != "" && component != "unknown" {
+			return component
+		}
+	}
+	
+	// Fall back to full stack walk if quick lookup failed
+	return detectComponentFull()
+}
+
+// detectComponentFull walks the entire call stack to find the component
+func detectComponentFull() string {
 	// Walk the entire call stack to find the first recognizable component
 	// This is more robust than hardcoded depths as it adapts to different call chains
-	pcs := make([]uintptr, 32)   // Capture up to 32 stack frames
-	n := runtime.Callers(2, pcs) // Skip runtime.Callers and detectComponent
+	// Start with smaller buffer and grow if needed
+	pcs := make([]uintptr, 16)   // Start with 16 frames
+	n := runtime.Callers(2, pcs) // Skip runtime.Callers and detectComponentFull
+	
+	// If we filled the buffer, try again with larger size
+	if n == len(pcs) {
+		pcs = make([]uintptr, 32)
+		n = runtime.Callers(2, pcs)
+	}
 
 	for i := 0; i < n; i++ {
 		pc := pcs[i]

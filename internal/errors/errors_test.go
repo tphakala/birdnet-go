@@ -18,8 +18,8 @@ func TestFastPathNoTelemetry(t *testing.T) {
 		t.Errorf("Expected error message 'test error', got '%s'", ee.Err.Error())
 	}
 
-	if ee.Component != "unknown" {
-		t.Errorf("Expected component 'unknown' in fast path, got '%s'", ee.Component)
+	if ee.GetComponent() != "unknown" {
+		t.Errorf("Expected component 'unknown' in fast path, got '%s'", ee.GetComponent())
 	}
 
 	if ee.Category != CategoryGeneric {
@@ -45,7 +45,7 @@ func TestRegexPrecompilation(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && len(substr) > 0 && 
+	return len(s) >= len(substr) && substr != "" && 
 		(s == substr || len(s) > len(substr) && 
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
 		func() bool {
