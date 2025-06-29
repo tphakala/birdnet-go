@@ -106,7 +106,9 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 
 		// Handle Not Modified specifically
 		if resp.StatusCode == http.StatusNotModified {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				logger.Debug("Failed to close response body", "error", err)
+			}
 			logger.Info("Weather data not modified since last fetch", "status_code", http.StatusNotModified, "last_modified", p.lastModified)
 			// Returning a specific error might be better, but for now, let upstream handle nil data
 			// For now, treat as non-error, but signal no new data maybe?
@@ -118,7 +120,9 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body) // Try reading body for context
-			resp.Body.Close()                     // Close body even on error
+			if err := resp.Body.Close(); err != nil {
+				logger.Debug("Failed to close response body", "error", err)
+			} // Close body even on error
 			responseBodyStr := string(bodyBytes)
 			if len(responseBodyStr) > 200 {
 				responseBodyStr = responseBodyStr[:200] + "... (truncated)"
@@ -152,7 +156,9 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			attemptLogger.Debug("Response is gzip encoded, creating reader")
 			gzReader, err = gzip.NewReader(resp.Body)
 			if err != nil {
-				resp.Body.Close()
+				if err := resp.Body.Close(); err != nil {
+					logger.Debug("Failed to close response body", "error", err)
+				}
 				logger.Error("Failed to create gzip reader", "error", err)
 				return nil, errors.New(err).
 					Component("weather").
@@ -166,9 +172,13 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 
 		body, err := io.ReadAll(reader)
 		if gzReader != nil {
-			gzReader.Close() // Close gzip reader immediately after reading
+			if err := gzReader.Close(); err != nil {
+				logger.Debug("Failed to close gzip reader", "error", err)
+			} // Close gzip reader immediately after reading
 		}
-		resp.Body.Close() // Close original body now
+		if err := resp.Body.Close(); err != nil {
+			logger.Debug("Failed to close response body", "error", err)
+		} // Close original body now
 		if err != nil {
 			logger.Error("Failed to read response body", "status_code", resp.StatusCode, "error", err)
 			return nil, errors.New(err).
