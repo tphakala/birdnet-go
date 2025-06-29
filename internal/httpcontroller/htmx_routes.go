@@ -74,6 +74,7 @@ func (s *Server) initRoutes() {
 		"/analytics/species": {Path: "/analytics/species", TemplateName: "species", Title: "Species"},
 		"/search":            {Path: "/search", TemplateName: "search", Title: "Search Detections"},
 		"/about":             {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
+		"/notifications":     {Path: "/notifications", TemplateName: "notifications", Title: "Notifications"},
 		// System route is protected by auth middleware
 		"/system": {Path: "/system", TemplateName: "system", Title: "System Dashboard", Authorized: true},
 		// Settings Routes are managed by settingsBase template
