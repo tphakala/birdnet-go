@@ -128,13 +128,10 @@ var ffmpegMonitor *FFmpegMonitor
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
-	// Create a slice to store audio device information
-	var devices []AudioDeviceInfo
-
 	// Initialize the audio context
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return devices, fmt.Errorf("failed to initialize context: %w", err)
+		return nil, fmt.Errorf("failed to initialize context: %w", err)
 	}
 
 	// Ensure the context is uninitialized when the function returns
@@ -147,8 +144,11 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	// Get a list of capture devices
 	infos, err := ctx.Devices(malgo.Capture)
 	if err != nil {
-		return devices, fmt.Errorf("failed to get devices: %w", err)
+		return nil, fmt.Errorf("failed to get devices: %w", err)
 	}
+
+	// Pre-allocate slice with capacity for all devices (minus discard devices)
+	devices := make([]AudioDeviceInfo, 0, len(infos))
 
 	// Iterate through the list of devices
 	for i := range infos {

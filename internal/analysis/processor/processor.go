@@ -200,7 +200,8 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
 func (p *Processor) processResults(item *birdnet.Results) []Detections {
-	var detections []Detections
+	// Pre-allocate slice with capacity for all results
+	detections := make([]Detections, 0, len(item.Results))
 
 	// Collect processing time metric
 	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {

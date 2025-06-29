@@ -770,7 +770,8 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 	}
 
 	// Create the test files
-	var filePaths []string
+	// Pre-allocate slice with capacity for all test files
+	filePaths := make([]string, 0, len(testFiles))
 	for _, tf := range testFiles {
 		filePath := filepath.Join(tempDir, tf.name)
 		err := os.WriteFile(filePath, []byte("test content"), 0o644)
@@ -944,7 +945,8 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	}
 
 	// Create the test files
-	var filePaths []string
+	// Pre-allocate slice with capacity for all test files
+	filePaths := make([]string, 0, len(testFiles))
 	for _, tf := range testFiles {
 		filePath := filepath.Join(tempDir, tf.name)
 		err := os.WriteFile(filePath, []byte("test content"), 0o644)
@@ -1015,7 +1017,8 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	}
 
 	// Create the test files
-	var filePaths []string
+	// Pre-allocate slice with capacity for all test files
+	filePaths := make([]string, 0, len(testFiles))
 	for _, tf := range testFiles {
 		filePath := filepath.Join(tempDir, tf.name)
 		err := os.WriteFile(filePath, []byte("test content"), 0o644)

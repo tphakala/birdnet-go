@@ -201,7 +201,8 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 	var source = ""
 	var clipName = ""
 
-	var notes []datastore.Note
+	// Pre-allocate slice with capacity for all results
+	notes := make([]datastore.Note, 0, len(results))
 	for _, result := range results {
 		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, 0)
 		notes = append(notes, note)
@@ -227,7 +228,8 @@ func pairLabelsAndConfidence(labels []string, preds []float32) ([]datastore.Resu
 		return nil, fmt.Errorf("mismatched labels and predictions lengths: %d vs %d", len(labels), len(preds))
 	}
 
-	var results []datastore.Results
+	// Pre-allocate slice with known capacity
+	results := make([]datastore.Results, 0, len(labels))
 	for i, label := range labels {
 		results = append(results, datastore.Results{Species: label, Confidence: preds[i]})
 	}

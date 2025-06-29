@@ -52,7 +52,8 @@ func BuildRangeFilter(bn *BirdNET) error {
 	}
 
 	// Convert the speciesScores slice to a slice of species labels
-	var includedSpecies []string
+	// Pre-allocate slice with capacity for all species scores
+	includedSpecies := make([]string, 0, len(speciesScores))
 	for _, speciesScore := range speciesScores {
 		includedSpecies = append(includedSpecies, speciesScore.Label)
 	}

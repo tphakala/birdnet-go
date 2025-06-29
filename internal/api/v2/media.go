@@ -403,8 +403,10 @@ func parseRange(rangeHeader string, size int64) ([]httpRange, error) {
 	}
 	rangeHeader = strings.TrimPrefix(rangeHeader, "bytes=")
 
-	var ranges []httpRange
-	for _, r := range strings.Split(rangeHeader, ",") {
+	// Pre-allocate slice based on comma-separated range count
+	rangeParts := strings.Split(rangeHeader, ",")
+	ranges := make([]httpRange, 0, len(rangeParts))
+	for _, r := range rangeParts {
 		r = strings.TrimSpace(r)
 		if r == "" {
 			continue
