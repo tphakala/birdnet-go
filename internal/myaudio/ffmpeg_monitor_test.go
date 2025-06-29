@@ -1829,7 +1829,9 @@ func BenchmarkCleanupOrphanedProcesses(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		monitor.cleanupOrphanedProcesses()
+		if err := monitor.cleanupOrphanedProcesses(); err != nil {
+			b.Logf("cleanupOrphanedProcesses error: %v", err)
+		}
 	}
 }
 
