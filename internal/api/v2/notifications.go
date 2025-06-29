@@ -139,15 +139,15 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Main event loop
 	for {
 		select {
-		case notification := <-notificationCh:
-			if notification == nil {
+		case notif := <-notificationCh:
+			if notif == nil {
 				// Channel closed, service is shutting down
 				return nil
 			}
 
 			// Send notification event
 			event := SSENotificationData{
-				Notification: notification,
+				Notification: notif,
 				EventType:    "notification",
 			}
 

@@ -39,8 +39,8 @@ func init() {
 }
 
 // SetCaptureMetrics sets the metrics instance for capture buffer operations
-func SetCaptureMetrics(metrics *metrics.MyAudioMetrics) {
-	captureMetrics = metrics
+func SetCaptureMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
+	captureMetrics = myAudioMetrics
 }
 
 // AllocateCaptureBuffer initializes an audio buffer for a single source.

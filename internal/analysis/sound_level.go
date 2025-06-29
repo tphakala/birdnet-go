@@ -544,9 +544,9 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 
 	if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 		// Record error metric
-		if metrics := getSoundLevelMetricsFromAPI(apiController); metrics != nil {
-			metrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
-			metrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
+		if m := getSoundLevelMetricsFromAPI(apiController); m != nil {
+			m.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
+			m.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
 		}
 
 		// Return enhanced error
@@ -561,8 +561,8 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 	}
 
 	// Record success metric
-	if metrics := getSoundLevelMetricsFromAPI(apiController); metrics != nil {
-		metrics.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
+	if m := getSoundLevelMetricsFromAPI(apiController); m != nil {
+		m.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
 	}
 
 	// Log successful broadcast if debug is enabled
@@ -588,7 +588,7 @@ func getSoundLevelMetricsFromAPI(apiController *api.Controller) *metrics.SoundLe
 }
 
 // startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
-func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metrics *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metricsInstance *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -610,8 +610,8 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 					}
 				}
 				// Update Prometheus metrics
-				if metrics != nil && metrics.SoundLevel != nil {
-					updateSoundLevelMetrics(soundData, metrics)
+				if metricsInstance != nil && metricsInstance.SoundLevel != nil {
+					updateSoundLevelMetrics(soundData, metricsInstance)
 				}
 			}
 		}
