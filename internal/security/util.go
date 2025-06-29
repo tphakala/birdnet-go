@@ -11,9 +11,10 @@ import (
 // normalizePort returns the port string, substituting the default port if empty.
 func normalizePort(scheme, port string) string {
 	if port == "" {
-		if scheme == "https" {
+		switch scheme {
+		case "https":
 			return "443"
-		} else if scheme == "http" {
+		case "http":
 			return "80"
 		}
 	}
