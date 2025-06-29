@@ -211,6 +211,7 @@ func (s *MockSettings) IsDebug() bool {
 }
 
 func TestSanitizeError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      error
@@ -262,6 +263,7 @@ func TestSanitizeError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.err == nil {
 				if sanitizeError(tt.err) != nil {
 					t.Errorf("sanitizeError(nil) should return nil")
@@ -290,6 +292,7 @@ func TestSanitizeError(t *testing.T) {
 
 // TestSanitizeErrorWrapped tests that sanitizeError works with wrapped errors
 func TestSanitizeErrorWrapped(t *testing.T) {
+	t.Parallel()
 	// Create a wrapped error with sensitive information
 	baseErr := errors.New("password=secret123")
 	wrappedErr := fmt.Errorf("operation failed: %w", baseErr)
@@ -316,6 +319,7 @@ func TestSanitizeErrorWrapped(t *testing.T) {
 
 // TestStartWorkerPool tests the startWorkerPool function
 func TestStartWorkerPool(t *testing.T) {
+	t.Parallel()
 	// Create a real job queue for testing
 	realQueue := jobqueue.NewJobQueue()
 
@@ -338,6 +342,7 @@ func TestStartWorkerPool(t *testing.T) {
 
 // TestGetJobQueueRetryConfig tests that the getJobQueueRetryConfig function correctly extracts retry configuration from different action types
 func TestGetJobQueueRetryConfig(t *testing.T) {
+	t.Parallel()
 	// Create test retry configurations
 	bwRetryConfig := jobqueue.RetryConfig{
 		Enabled:      true,
@@ -402,6 +407,7 @@ func TestGetJobQueueRetryConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var config jobqueue.RetryConfig
 
 			// Handle nil action case safely
@@ -466,6 +472,7 @@ func TestGetJobQueueRetryConfig(t *testing.T) {
 
 // TestEnqueueTask tests the Processor.EnqueueTask method with various action types and scenarios
 func TestEnqueueTask(t *testing.T) {
+	t.Parallel()
 	// Create a real job queue for testing
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.Start()
@@ -481,6 +488,7 @@ func TestEnqueueTask(t *testing.T) {
 
 	// Test with different action types
 	t.Run("DifferentActionTypes", func(t *testing.T) {
+		t.Parallel()
 		// Create different types of actions
 		actions := []struct {
 			name   string
@@ -509,6 +517,7 @@ func TestEnqueueTask(t *testing.T) {
 
 		for _, tc := range actions {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 				// Create a task with this action
 				task := &Task{
 					Type: TaskTypeAction,
@@ -536,6 +545,7 @@ func TestEnqueueTask(t *testing.T) {
 
 	// Test error handling with a queue that's been stopped
 	t.Run("StoppedQueue", func(t *testing.T) {
+		t.Parallel()
 		// Create a new queue that we'll stop immediately
 		stoppedQueue := jobqueue.NewJobQueue()
 		stoppedQueue.Start()
@@ -576,6 +586,7 @@ func TestEnqueueTask(t *testing.T) {
 
 	// Test with a full queue
 	t.Run("FullQueue", func(t *testing.T) {
+		t.Parallel()
 		// Create a queue with a very small capacity
 		tinyQueue := jobqueue.NewJobQueueWithOptions(2, 1, false)
 		tinyQueue.Start()
@@ -628,6 +639,7 @@ func TestEnqueueTask(t *testing.T) {
 
 	// Test with a task that has a detection with a lot of data
 	t.Run("LargeDetection", func(t *testing.T) {
+		t.Parallel()
 		// Create a large detection with many results
 		detection := Detections{
 			Note: datastore.Note{
@@ -665,6 +677,7 @@ func TestEnqueueTask(t *testing.T) {
 
 // TestEnqueueTaskBasic tests the basic functionality of the EnqueueTask method
 func TestEnqueueTaskBasic(t *testing.T) {
+	t.Parallel()
 	// Create a real job queue for testing
 	realQueue := jobqueue.NewJobQueue()
 
@@ -717,6 +730,7 @@ func TestEnqueueTaskBasic(t *testing.T) {
 
 // TestEnqueueMultipleTasks tests enqueueing multiple tasks with Scandinavian bird species
 func TestEnqueueMultipleTasks(t *testing.T) {
+	t.Parallel()
 	// Create a real job queue for testing
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.Start()
@@ -844,6 +858,7 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 
 // TestIntegrationWithJobQueue tests the integration between Processor.EnqueueTask and a real job queue
 func TestIntegrationWithJobQueue(t *testing.T) {
+	t.Parallel()
 	// Create a real job queue with a short processing interval for testing
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
@@ -964,6 +979,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 
 // TestRetryLogic tests that the job queue properly retries failed actions
 func TestRetryLogic(t *testing.T) {
+	t.Parallel()
 	// Set up the test retry config override
 	testRetryConfigOverride = nil
 	defer func() {
@@ -1208,6 +1224,7 @@ func TestRetryLogic(t *testing.T) {
 // - Actions that return errors with sensitive data
 // - Nil processor case (which is expected to panic and is caught with defer/recover)
 func TestEdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		setupFunc   func() (*Processor, *Task)
@@ -1281,6 +1298,7 @@ func TestEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.name == "Nil processor" {
 				// Use defer/recover to catch the expected panic
 				defer func() {
@@ -1370,6 +1388,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 
 // TestSanitizeActionType tests that the sanitizeActionType function correctly sanitizes sensitive information
 func TestSanitizeActionType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -1409,6 +1428,7 @@ func TestSanitizeActionType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sanitized := sanitizeActionType(tt.input)
 			// Print the actual output for debugging
 			t.Logf("Input: %q", tt.input)
