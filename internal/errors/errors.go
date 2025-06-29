@@ -119,8 +119,8 @@ type ErrorBuilder struct {
 // New creates a new error with enhanced context
 func New(err error) *ErrorBuilder {
 	return &ErrorBuilder{
-		err:     err,
-		context: make(map[string]interface{}),
+		err: err,
+		// context is lazily initialized when needed
 	}
 }
 
@@ -143,6 +143,9 @@ func (eb *ErrorBuilder) Category(category ErrorCategory) *ErrorBuilder {
 
 // Context adds context data to the error
 func (eb *ErrorBuilder) Context(key string, value interface{}) *ErrorBuilder {
+	if eb.context == nil {
+		eb.context = make(map[string]interface{})
+	}
 	eb.context[key] = value
 	return eb
 }
@@ -150,9 +153,15 @@ func (eb *ErrorBuilder) Context(key string, value interface{}) *ErrorBuilder {
 // ModelContext adds model-specific context
 func (eb *ErrorBuilder) ModelContext(modelPath, modelVersion string) *ErrorBuilder {
 	if modelPath != "" {
+		if eb.context == nil {
+			eb.context = make(map[string]interface{})
+		}
 		eb.context["model_path_type"] = categorizeModelPath(modelPath)
 	}
 	if modelVersion != "" {
+		if eb.context == nil {
+			eb.context = make(map[string]interface{})
+		}
 		eb.context["model_version"] = modelVersion
 	}
 	return eb
@@ -161,10 +170,16 @@ func (eb *ErrorBuilder) ModelContext(modelPath, modelVersion string) *ErrorBuild
 // FileContext adds file-specific context (path is anonymized)
 func (eb *ErrorBuilder) FileContext(filePath string, fileSize int64) *ErrorBuilder {
 	if filePath != "" {
+		if eb.context == nil {
+			eb.context = make(map[string]interface{})
+		}
 		eb.context["file_type"] = categorizeFilePath(filePath)
 		eb.context["file_extension"] = getFileExtension(filePath)
 	}
 	if fileSize > 0 {
+		if eb.context == nil {
+			eb.context = make(map[string]interface{})
+		}
 		eb.context["file_size_category"] = categorizeFileSize(fileSize)
 	}
 	return eb
@@ -173,9 +188,15 @@ func (eb *ErrorBuilder) FileContext(filePath string, fileSize int64) *ErrorBuild
 // NetworkContext adds network-specific context (URLs are anonymized)
 func (eb *ErrorBuilder) NetworkContext(url string, timeout time.Duration) *ErrorBuilder {
 	if url != "" {
+		if eb.context == nil {
+			eb.context = make(map[string]interface{})
+		}
 		eb.context["url_category"] = categorizeURL(url)
 	}
 	if timeout > 0 {
+		if eb.context == nil {
+			eb.context = make(map[string]interface{})
+		}
 		eb.context["timeout_seconds"] = timeout.Seconds()
 	}
 	return eb
@@ -183,6 +204,9 @@ func (eb *ErrorBuilder) NetworkContext(url string, timeout time.Duration) *Error
 
 // Timing adds performance timing context
 func (eb *ErrorBuilder) Timing(operation string, duration time.Duration) *ErrorBuilder {
+	if eb.context == nil {
+		eb.context = make(map[string]interface{})
+	}
 	eb.context["operation"] = operation
 	eb.context["duration_ms"] = duration.Milliseconds()
 	return eb
@@ -190,6 +214,26 @@ func (eb *ErrorBuilder) Timing(operation string, duration time.Duration) *ErrorB
 
 // Build creates the EnhancedError and triggers optional telemetry reporting
 func (eb *ErrorBuilder) Build() *EnhancedError {
+	// Fast path - skip expensive operations if no reporting is active
+	if !hasActiveReporting.Load() {
+		ee := &EnhancedError{
+			Err:       eb.err,
+			Component: eb.component, // Use provided or empty
+			Category:  eb.category,  // Use provided or empty
+			Context:   eb.context,
+			Timestamp: time.Now(),
+		}
+		// Set defaults without expensive detection
+		if ee.Component == "" {
+			ee.Component = "unknown"
+		}
+		if ee.Category == "" {
+			ee.Category = CategoryGeneric
+		}
+		return ee
+	}
+
+	// Full path - perform auto-detection when reporting is active
 	// Auto-detect component if not set
 	if eb.component == "" {
 		eb.component = detectComponent()
