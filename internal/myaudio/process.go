@@ -17,8 +17,8 @@ var (
 )
 
 // SetProcessMetrics sets the metrics instance for audio processing operations
-func SetProcessMetrics(metrics *metrics.MyAudioMetrics) {
-	processMetrics = metrics
+func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
+	processMetrics = myAudioMetrics
 }
 
 // processData processes the given audio data to detect bird species, logs the detected species

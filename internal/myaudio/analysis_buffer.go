@@ -39,8 +39,8 @@ func init() {
 }
 
 // SetAnalysisMetrics sets the metrics instance for analysis buffer operations
-func SetAnalysisMetrics(metrics *metrics.MyAudioMetrics) {
-	analysisMetrics = metrics
+func SetAnalysisMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
+	analysisMetrics = myAudioMetrics
 }
 
 // SecondsToBytes converts overlap in seconds to bytes

@@ -765,9 +765,9 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 
 // startControlMonitor handles various control signals for realtime analysis mode
 func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server) {
-	monitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan)
-	monitor.httpServer = httpServer
-	monitor.Start()
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan)
+	ctrlMonitor.httpServer = httpServer
+	ctrlMonitor.Start()
 }
 
 // initializeBuffers handles initialization of all audio-related buffers

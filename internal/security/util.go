@@ -92,14 +92,14 @@ func ValidateRedirectURI(providedURIString string, expectedURI *url.URL) error {
 // - No directory traversal '..'
 // - No null bytes '\x00'
 // - Reasonable length limit
-func IsSafePath(path string) bool {
-	return strings.HasPrefix(path, "/") &&
-		!strings.Contains(path, "//") &&
-		!strings.Contains(path, "\\") &&
-		!strings.Contains(path, "://") &&
-		!strings.Contains(path, "..") &&
-		!strings.Contains(path, "\x00") &&
-		len(path) < 512 // Prevent excessively long paths
+func IsSafePath(pathStr string) bool {
+	return strings.HasPrefix(pathStr, "/") &&
+		!strings.Contains(pathStr, "//") &&
+		!strings.Contains(pathStr, "\\") &&
+		!strings.Contains(pathStr, "://") &&
+		!strings.Contains(pathStr, "..") &&
+		!strings.Contains(pathStr, "\x00") &&
+		len(pathStr) < 512 // Prevent excessively long paths
 }
 
 // IsValidRedirect ensures the redirect path is safe and internal by checking IsSafePath.
