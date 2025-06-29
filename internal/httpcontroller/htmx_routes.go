@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"strings"
 
@@ -246,6 +247,23 @@ func (s *Server) initRoutes() {
 				}
 			}
 		}
+	}
+
+	// Add pprof endpoints if debug mode is enabled
+	if s.Settings.Debug {
+		s.Echo.GET("/debug/pprof/", echo.WrapHandler(http.HandlerFunc(pprof.Index)), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/cmdline", echo.WrapHandler(http.HandlerFunc(pprof.Cmdline)), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/profile", echo.WrapHandler(http.HandlerFunc(pprof.Profile)), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/symbol", echo.WrapHandler(http.HandlerFunc(pprof.Symbol)), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/trace", echo.WrapHandler(http.HandlerFunc(pprof.Trace)), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/allocs", echo.WrapHandler(pprof.Handler("allocs")), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/block", echo.WrapHandler(pprof.Handler("block")), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/goroutine", echo.WrapHandler(pprof.Handler("goroutine")), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/heap", echo.WrapHandler(pprof.Handler("heap")), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/mutex", echo.WrapHandler(pprof.Handler("mutex")), s.AuthMiddleware)
+		s.Echo.GET("/debug/pprof/threadcreate", echo.WrapHandler(pprof.Handler("threadcreate")), s.AuthMiddleware)
+		
+		log.Printf("🐛 pprof debugging endpoints enabled at /debug/pprof/")
 	}
 
 	// Set up template renderer
