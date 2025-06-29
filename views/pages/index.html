@@ -57,13 +57,16 @@
 			}
 		});
 	</script>
-	<!-- alpine.js -->
+	<!-- Custom utilities and Alpine components must load before Alpine.js -->
+	<script src="/assets/util.js?v={{.Settings.Version}}" defer></script>
+	<script src="/assets/notification-utils.js?v={{.Settings.Version}}" defer></script>
+	<script src="/assets/notifications.js?v={{.Settings.Version}}" defer></script>
+	<!-- alpine.js - must load after Alpine components are defined -->
 	<script src="/assets/alpinejs.min.js?v={{.Settings.Version}}" defer></script>
 	<!-- HLS.js - HLS streaming support -->
 	<script src="/assets/hls.min.js?v={{.Settings.Version}}" defer></script>
 	<!-- Custom utilities -->
 	<script src="/assets/audioplayer.js?v={{.Settings.Version}}" type="module"></script>
-	<script src="/assets/util.js?v={{.Settings.Version}}" defer></script>
 	<meta name="csrf-token" content="{{.CSRFToken}}">
 </head>
 
@@ -130,9 +133,14 @@
 		}
 
 		// Event listener for theme toggle
-		document.querySelector('.theme-controller').addEventListener('change', function () {
-			toggleTheme();
-			this.checked = localStorage.getItem('theme') === 'dark';
+		document.addEventListener('DOMContentLoaded', function() {
+			const themeController = document.querySelector('.theme-controller');
+			if (themeController) {
+				themeController.addEventListener('change', function () {
+					toggleTheme();
+					this.checked = localStorage.getItem('theme') === 'dark';
+				});
+			}
 		});
 
 		{{ if .Settings.Security.RedirectToHTTPS }}
