@@ -1395,9 +1395,10 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	// Adjust concurrency level based on platform
 	// Windows might need lower concurrency to avoid resource exhaustion
 	numConcurrent := 5
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		numConcurrent = 3 // Lower concurrency for Windows
-	} else if runtime.GOOS == "darwin" {
+	case "darwin":
 		numConcurrent = 4 // Moderate concurrency for macOS
 	}
 

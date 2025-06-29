@@ -1165,12 +1165,14 @@ func TestRetryLogic(t *testing.T) {
 
 	// Update the test retry config override to handle both actions
 	testRetryConfigOverride = func(action Action) (jobqueue.RetryConfig, bool) {
-		if action == exhaustingAction {
+		switch action {
+		case exhaustingAction:
 			return exhaustionRetryConfig, true
-		} else if action == mockAction {
+		case mockAction:
 			return retryConfig, true
+		default:
+			return jobqueue.RetryConfig{}, false
 		}
-		return jobqueue.RetryConfig{}, false
 	}
 
 	// Create a task with the exhausting action

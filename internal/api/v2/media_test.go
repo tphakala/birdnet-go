@@ -165,9 +165,10 @@ func TestServeAudioClip(t *testing.T) {
 			} else {
 				// Optional: For error cases (non-2xx), we could assert on the body
 				// For example, Echo's default error handler returns JSON like: {"message":"Not Found"}
-				if tc.expectedStatus == http.StatusNotFound {
+				switch tc.expectedStatus {
+				case http.StatusNotFound:
 					assert.Contains(t, rec.Body.String(), "File not found", "Expected 'File not found' in body for 404")
-				} else if tc.expectedStatus == http.StatusBadRequest {
+				case http.StatusBadRequest:
 					if tc.name == "Invalid filename (traversal attempt)" {
 						assert.Contains(t, rec.Body.String(), "Invalid file path", "Expected 'Invalid file path' in body for traversal attempt")
 					} else {
