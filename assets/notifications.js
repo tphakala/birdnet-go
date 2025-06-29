@@ -13,6 +13,7 @@ document.addEventListener('alpine:init', () => {
         maxReconnectDelay: 30000,
         soundEnabled: false,
         debugMode: false,
+        animationTimeout: null,
         
         // Initialize
         init() {
@@ -77,7 +78,17 @@ document.addEventListener('alpine:init', () => {
             
             this.sseConnection.onerror = (error) => {
                 console.error('SSE connection error:', error);
-                this.sseConnection.close();
+                
+                // Only reconnect if not explicitly closed
+                if (this.sseConnection.readyState !== EventSource.CLOSED) {
+                    this.sseConnection.close();
+                }
+                
+                // Don't reconnect if page is being unloaded or offline
+                if (!window.navigator.onLine || document.hidden) {
+                    return;
+                }
+                
                 this.scheduleReconnect();
             };
         },
@@ -144,9 +155,15 @@ document.addEventListener('alpine:init', () => {
             this.updateUnreadCount();
             
             // Wiggle animation
+            // Clear any existing animation timeout
+            if (this.animationTimeout) {
+                clearTimeout(this.animationTimeout);
+            }
+            
             this.hasUnread = true;
-            setTimeout(() => {
+            this.animationTimeout = setTimeout(() => {
                 this.hasUnread = false;
+                this.animationTimeout = null;
             }, 1000);
             
             // Play sound if enabled and notification is high priority
@@ -190,13 +207,18 @@ document.addEventListener('alpine:init', () => {
             }
         },
         
+        // Helper function to safely get CSRF token
+        getCSRFToken() {
+            return NotificationUtils.getCSRFToken();
+        },
+        
         // Mark notification as read
         async markAsRead(notificationId) {
             try {
                 const response = await fetch(`/api/v2/notifications/${notificationId}/read`, {
                     method: 'PUT',
                     headers: {
-                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-Token': this.getCSRFToken()
                     }
                 });
                 
@@ -218,9 +240,8 @@ document.addEventListener('alpine:init', () => {
                 .filter(n => !n.read)
                 .map(n => n.id);
                 
-            for (const id of unreadIds) {
-                await this.markAsRead(id);
-            }
+            // Parallel execution for better performance
+            await Promise.all(unreadIds.map(id => this.markAsRead(id)));
         },
         
         // Play notification sound
@@ -243,52 +264,17 @@ document.addEventListener('alpine:init', () => {
         
         // Get notification icon class
         getNotificationIconClass(notification) {
-            const baseClass = 'w-8 h-8 rounded-full flex items-center justify-center';
-            
-            switch (notification.type) {
-                case 'error':
-                    return baseClass + ' bg-error/20 text-error';
-                case 'warning':
-                    return baseClass + ' bg-warning/20 text-warning';
-                case 'info':
-                    return baseClass + ' bg-info/20 text-info';
-                case 'detection':
-                    return baseClass + ' bg-success/20 text-success';
-                case 'system':
-                    return baseClass + ' bg-primary/20 text-primary';
-                default:
-                    return baseClass + ' bg-base-300 text-base-content';
-            }
+            return NotificationUtils.getNotificationIconClass(notification);
         },
         
         // Get priority badge class
         getPriorityBadgeClass(priority) {
-            switch (priority) {
-                case 'critical':
-                    return 'badge-error';
-                case 'high':
-                    return 'badge-warning';
-                case 'medium':
-                    return 'badge-info';
-                case 'low':
-                    return 'badge-ghost';
-                default:
-                    return 'badge-ghost';
-            }
+            return NotificationUtils.getPriorityBadgeClass(priority);
         },
         
         // Format time ago
         formatTimeAgo(timestamp) {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const seconds = Math.floor((now - date) / 1000);
-            
-            if (seconds < 60) return 'just now';
-            if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-            if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
-            if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
-            
-            return date.toLocaleDateString();
+            return NotificationUtils.formatTimeAgo(timestamp);
         },
         
         // Schedule reconnection
@@ -313,6 +299,9 @@ document.addEventListener('alpine:init', () => {
             }
             if (this.reconnectTimeout) {
                 clearTimeout(this.reconnectTimeout);
+            }
+            if (this.animationTimeout) {
+                clearTimeout(this.animationTimeout);
             }
         }
     }));
