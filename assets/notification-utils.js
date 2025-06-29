@@ -6,17 +6,17 @@ const NotificationUtils = {
         
         switch (notification.type) {
             case 'error':
-                return baseClass + ' bg-error/20 text-error';
+                return `${baseClass} bg-error/20 text-error`;
             case 'warning':
-                return baseClass + ' bg-warning/20 text-warning';
+                return `${baseClass} bg-warning/20 text-warning`;
             case 'info':
-                return baseClass + ' bg-info/20 text-info';
+                return `${baseClass} bg-info/20 text-info`;
             case 'detection':
-                return baseClass + ' bg-success/20 text-success';
+                return `${baseClass} bg-success/20 text-success`;
             case 'system':
-                return baseClass + ' bg-primary/20 text-primary';
+                return `${baseClass} bg-primary/20 text-primary`;
             default:
-                return baseClass + ' bg-base-300 text-base-content';
+                return `${baseClass} bg-base-300 text-base-content`;
         }
     },
     
@@ -43,9 +43,9 @@ const NotificationUtils = {
         const seconds = Math.floor((now - date) / 1000);
         
         if (seconds < 60) return 'just now';
-        if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
-        if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
         
         return date.toLocaleDateString();
     },

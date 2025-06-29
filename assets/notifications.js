@@ -202,7 +202,7 @@ document.addEventListener('alpine:init', () => {
             this.dropdownOpen = false;
             
             // Navigate based on notification type
-            if (notification.metadata && notification.metadata.link) {
+            if (notification.metadata?.link) {
                 window.location.href = notification.metadata.link;
             }
         },
