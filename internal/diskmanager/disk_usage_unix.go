@@ -62,7 +62,7 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	}
 
 	totalBytes := stat.Blocks * uint64(stat.Bsize) // #nosec G115 -- Bsize is system block size, safe conversion
-	freeBytes := stat.Bavail * uint64(stat.Bsize) // Available to non-root user // #nosec G115 -- Bsize is system block size, safe conversion
+	freeBytes := stat.Bavail * uint64(stat.Bsize)  //nolint:gosec // G115: Bsize is system block size, safe conversion. Available to non-root user
 	usedBytes := totalBytes - freeBytes
 
 	return DiskSpaceInfo{

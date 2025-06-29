@@ -105,7 +105,7 @@ func TestFuzzCheckProcesses(t *testing.T) {
 				tc.Repo.AddProcess(url, process)
 
 				// Configure IsProcessRunning with random failures based on FailureRate
-				isRunning := rand.Float64() >= data.FailureRate
+				isRunning := rand.Float64() >= data.FailureRate //nolint:gosec // G404: weak randomness acceptable for fuzz test randomization
 				tc.ProcMgr.On("IsProcessRunning", data.ProcessInfos[i].PID).Return(isRunning).Maybe()
 			}
 

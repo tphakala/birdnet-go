@@ -1299,7 +1299,7 @@ func TestBackoffStrategyUnlimitedRetries(t *testing.T) {
 		delays = append(delays, delay)
 
 		// Verify exponential backoff pattern with cap
-		expectedDelay := time.Duration(1<<uint(i)) * time.Second
+		expectedDelay := time.Duration(1<<uint(i)) * time.Second //nolint:gosec // G115: test loop counter, safe conversion
 		if expectedDelay > 10*time.Second {
 			expectedDelay = 10 * time.Second
 		}

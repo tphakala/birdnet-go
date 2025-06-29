@@ -318,7 +318,7 @@ func convertPCMToFloat32(data []byte, bytesPerSample, numChannels int, divisor f
 			// Convert bytes to sample based on bit depth
 			switch bytesPerSample {
 			case 2: // 16-bit
-				sample = int32(int16(binary.LittleEndian.Uint16(data[offset : offset+2])))
+				sample = int32(int16(binary.LittleEndian.Uint16(data[offset : offset+2]))) //nolint:gosec // G115: WAV audio sample conversion within 16-bit range
 			case 3: // 24-bit
 				// 24-bit is typically stored as 3 bytes in little endian
 				b1, b2, b3 := int32(data[offset]), int32(data[offset+1]), int32(data[offset+2])
@@ -328,7 +328,7 @@ func convertPCMToFloat32(data []byte, bytesPerSample, numChannels int, divisor f
 					sample |= -0x800000 // Properly sign-extend negative values
 				}
 			case 4: // 32-bit
-				sample = int32(binary.LittleEndian.Uint32(data[offset : offset+4]))
+				sample = int32(binary.LittleEndian.Uint32(data[offset : offset+4])) //nolint:gosec // G115: WAV audio sample conversion within 32-bit range
 			default:
 				return nil, fmt.Errorf("unsupported bytes per sample: %d", bytesPerSample)
 			}
