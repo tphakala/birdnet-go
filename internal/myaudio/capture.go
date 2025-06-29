@@ -128,13 +128,10 @@ var ffmpegMonitor *FFmpegMonitor
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
-	// Create a slice to store audio device information
-	var devices []AudioDeviceInfo
-
 	// Initialize the audio context
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return devices, fmt.Errorf("failed to initialize context: %w", err)
+		return nil, fmt.Errorf("failed to initialize context: %w", err)
 	}
 
 	// Ensure the context is uninitialized when the function returns
@@ -147,8 +144,11 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 	// Get a list of capture devices
 	infos, err := ctx.Devices(malgo.Capture)
 	if err != nil {
-		return devices, fmt.Errorf("failed to get devices: %w", err)
+		return nil, fmt.Errorf("failed to get devices: %w", err)
 	}
+
+	// Pre-allocate slice with capacity for all devices (minus discard devices)
+	devices := make([]AudioDeviceInfo, 0, len(infos))
 
 	// Iterate through the list of devices
 	for i := range infos {
@@ -920,7 +920,7 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 		}
 
 		// Convert two bytes to a 16-bit sample
-		sample := int16(binary.LittleEndian.Uint16(samples[i : i+2]))
+		sample := int16(binary.LittleEndian.Uint16(samples[i : i+2])) //nolint:gosec // G115: audio sample conversion within 16-bit range
 		sampleAbs := math.Abs(float64(sample))
 		sum += sampleAbs * sampleAbs
 
@@ -1065,11 +1065,11 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 			} else if val < -32768 {
 				val = -32768
 			}
-			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val))
+			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped to 16-bit range above
 
 		case malgo.FormatS32:
 			// Convert 32-bit integer to 16-bit
-			val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+4]))
+			val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+4])) //nolint:gosec // G115: 32-bit to 32-bit conversion
 			val >>= 16
 			// Clamp to 16-bit range
 			if val > 32767 {
@@ -1077,7 +1077,7 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 			} else if val < -32768 {
 				val = -32768
 			}
-			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val))
+			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped to 16-bit range above
 
 		case malgo.FormatF32:
 			// Convert 32-bit float to 16-bit integer
@@ -1091,7 +1091,10 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 			} else if val < -32768.0 {
 				val = -32768.0
 			}
-			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(int16(val)))
+			binary.LittleEndian.PutUint16(actualOutputBuffer[dstIdx:dstIdx+2], uint16(int16(val))) //nolint:gosec // G115: val clamped to 16-bit range above
+		case malgo.FormatUnknown, malgo.FormatU8, malgo.FormatS16:
+			// These formats are not handled by this conversion function
+			// The caller should ensure only S24, S32, or F32 formats are passed
 		}
 	}
 

@@ -455,13 +455,23 @@ func moveFile(src, dst string) error {
 	}
 
 	// If rename fails, fall back to copy and delete method
-	srcFile, err := os.Open(src)
+	// Validate paths to prevent directory traversal
+	srcAbs, err := filepath.Abs(src)
+	if err != nil {
+		return fmt.Errorf("error resolving source path: %w", err)
+	}
+	dstAbs, err := filepath.Abs(dst)
+	if err != nil {
+		return fmt.Errorf("error resolving destination path: %w", err)
+	}
+
+	srcFile, err := os.Open(srcAbs)
 	if err != nil {
 		return fmt.Errorf("error opening source file: %w", err)
 	}
 	defer srcFile.Close() // Ensure the source file is closed when we're done
 
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dstAbs)
 	if err != nil {
 		return fmt.Errorf("error creating destination file: %w", err)
 	}

@@ -2,7 +2,7 @@ package myaudio
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -23,12 +23,12 @@ type FuzzTestData struct {
 
 // generateFuzzTestData creates randomized test data
 func generateFuzzTestData(seed int64) FuzzTestData {
-	r := rand.New(rand.NewSource(seed))
+	r := rand.New(rand.NewPCG(uint64(seed), uint64(seed))) //nolint:gosec // G404: weak randomness acceptable for fuzz test data generation, not security-critical
 
 	data := FuzzTestData{
-		NumConfiguredURLs:    r.Intn(50) + 1,    // 1-50 URLs
-		NumRunningProcesses:  r.Intn(20) + 1,    // 1-20 processes
-		NumOrphanedProcesses: r.Intn(10),        // 0-9 orphaned processes
+		NumConfiguredURLs:    r.IntN(50) + 1,    // 1-50 URLs
+		NumRunningProcesses:  r.IntN(20) + 1,    // 1-20 processes
+		NumOrphanedProcesses: r.IntN(10),        // 0-9 orphaned processes
 		FailureRate:          r.Float64() * 0.5, // 0-50% failure rate
 		FindProcessError:     r.Float64() < 0.1, // 10% chance of error
 	}
@@ -57,9 +57,9 @@ func generateRandomURL(r *rand.Rand) string {
 	hosts := []string{"example.com", "test.com", "stream.org", "video.net", "media.io"}
 	paths := []string{"live", "stream", "camera", "feed", "input", "output"}
 
-	host := hosts[r.Intn(len(hosts))]
-	path := paths[r.Intn(len(paths))]
-	id := r.Intn(1000)
+	host := hosts[r.IntN(len(hosts))]
+	path := paths[r.IntN(len(paths))]
+	id := r.IntN(1000)
 
 	return "rtsp://" + host + "/" + path + "/" + fmt.Sprintf("%d", id)
 }
@@ -105,7 +105,7 @@ func TestFuzzCheckProcesses(t *testing.T) {
 				tc.Repo.AddProcess(url, process)
 
 				// Configure IsProcessRunning with random failures based on FailureRate
-				isRunning := rand.Float64() >= data.FailureRate
+				isRunning := rand.Float64() >= data.FailureRate //nolint:gosec // G404: weak randomness acceptable for fuzz test randomization
 				tc.ProcMgr.On("IsProcessRunning", data.ProcessInfos[i].PID).Return(isRunning).Maybe()
 			}
 
@@ -154,18 +154,18 @@ func TestFuzzMonitorLifecycle(t *testing.T) {
 		t.Run(fmt.Sprintf("FuzzSeed:%d", i), func(t *testing.T) {
 			// Create test data with different seed each iteration
 			seed := time.Now().UnixNano() + int64(i)
-			r := rand.New(rand.NewSource(seed))
+			r := rand.New(rand.NewPCG(uint64(seed), uint64(seed))) //nolint:gosec // G404: weak randomness acceptable for fuzz test data generation, not security-critical
 
 			// Create test context
 			tc := NewTestContext(t)
 			defer tc.Cleanup()
 
 			// Random monitoring interval between 10ms and 100ms
-			interval := time.Duration(r.Intn(90)+10) * time.Millisecond
+			interval := time.Duration(r.IntN(90)+10) * time.Millisecond
 			tc.Config.On("GetMonitoringInterval").Return(interval).Maybe()
 
 			// Random number of URLs between 1 and 10
-			numURLs := r.Intn(10) + 1
+			numURLs := r.IntN(10) + 1
 			urls := make([]string, numURLs)
 			for i := 0; i < numURLs; i++ {
 				urls[i] = generateRandomURL(r)
@@ -182,7 +182,7 @@ func TestFuzzMonitorLifecycle(t *testing.T) {
 			tc.Monitor.Start()
 
 			// Random number of operations between 1 and 5
-			numOps := r.Intn(5) + 1
+			numOps := r.IntN(5) + 1
 			for j := 0; j < numOps; j++ {
 				// Wait for a tick
 				select {
@@ -194,7 +194,7 @@ func TestFuzzMonitorLifecycle(t *testing.T) {
 				}
 
 				// Perform a random operation
-				opType := r.Intn(3)
+				opType := r.IntN(3)
 				switch opType {
 				case 0:
 					// Add a process

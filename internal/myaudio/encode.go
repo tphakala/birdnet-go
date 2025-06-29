@@ -173,7 +173,8 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 // byteSliceToInts converts a byte slice to a slice of integers.
 // Each pair of bytes is treated as a single 16-bit sample.
 func byteSliceToInts(pcmData []byte) []int {
-	var samples []int
+	// Pre-allocate samples slice based on PCM data length (2 bytes per sample)
+	samples := make([]int, 0, len(pcmData)/2)
 	buf := bytes.NewBuffer(pcmData)
 
 	// Read each 16-bit sample from the byte buffer and store it as an int.

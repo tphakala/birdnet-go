@@ -407,7 +407,8 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	}
 
 	// Create a single note for each species with the count information
-	var notes []Note
+	// Pre-allocate slice with capacity for all results
+	notes := make([]Note, 0, len(results))
 	for _, result := range results {
 		// Create a representative note for this species
 		note := Note{
@@ -1639,7 +1640,9 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Build()
 	}
 
-	var conditions []*gorm.DB
+	// Pre-allocate conditions slice based on date range
+	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
+	conditions := make([]*gorm.DB, 0, dayCount)
 	window := time.Duration(sunriseSetWindowMinutes) * time.Minute // Define window for sunrise/sunset
 
 	// Optimization: Group dates by week and calculate sun times once per week

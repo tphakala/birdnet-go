@@ -131,7 +131,7 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 
 	for _, ext := range fileTypes {
 		filePath := filepath.Join(testDir, fmt.Sprintf("bubo_bubo_80p_20210102T150405Z%s", ext))
-		if err := os.WriteFile(filePath, []byte("test content"), 0o644); err != nil {
+		if err := os.WriteFile(filePath, []byte("test content"), 0o644); err != nil { //nolint:gosec // G306: Test files don't require restrictive permissions
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
@@ -261,8 +261,8 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 
 		audioPath := filepath.Join(testDir, baseName+".wav")
 		pngPath := filepath.Join(testDir, baseName+".png")
-		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath)
-		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file: %s", pngPath)
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath) //nolint:gosec // G306: Test files don't require restrictive permissions
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file: %s", pngPath)         //nolint:gosec // G306: Test files don't require restrictive permissions
 		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set audio time: %s", audioPath)
 		require.NoError(t, os.Chtimes(pngPath, modTime, modTime), "Failed to set png time: %s", pngPath)
 		return audioPath, pngPath
@@ -368,7 +368,7 @@ func TestAgeBasedCleanupMinClipsGlobal(t *testing.T) {
 		timestampStr := modTime.UTC().Format("20060102T150405Z")
 		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
 		audioPath := filepath.Join(testDir, subdir, baseName+".wav")
-		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath)
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file: %s", audioPath) //nolint:gosec // G306: Test files don't require restrictive permissions
 		require.NoError(t, os.Chtimes(audioPath, modTime, modTime), "Failed to set time for audio file: %s", audioPath)
 		return audioPath
 	}
@@ -435,8 +435,8 @@ func TestAgeBasedCleanupShortRetention(t *testing.T) {
 		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
 		audioPath := filepath.Join(testDir, baseName+".wav")
 		pngPath := filepath.Join(testDir, baseName+".png")
-		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644))
-		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644))
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644)) //nolint:gosec // G306: Test files don't require restrictive permissions
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644))     //nolint:gosec // G306: Test files don't require restrictive permissions
 		require.NoError(t, os.Chtimes(audioPath, modTime, modTime))
 		require.NoError(t, os.Chtimes(pngPath, modTime, modTime))
 		return audioPath, pngPath

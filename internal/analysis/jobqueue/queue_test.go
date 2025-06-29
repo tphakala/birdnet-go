@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
 	"sync"
@@ -334,7 +335,11 @@ func TestRetryProcess(t *testing.T) {
 		ExecuteFunc: func(data interface{}) error {
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryProcess: Attempt %d of %d", count, failCount+1)
-			if count <= int32(failCount) {
+			// Safely convert failCount to int32 to match atomic counter type
+			if failCount > math.MaxInt32 {
+				t.Fatalf("failCount %d exceeds int32 range", failCount)
+			}
+			if count <= int32(failCount) { //nolint:gosec // G115: test values small, safe conversion
 				// Return failure for the first N attempts
 				return errors.New("simulated failure")
 			}
@@ -570,7 +575,8 @@ func TestRetryBackoff(t *testing.T) {
 
 	// Close the channel and collect execution times
 	close(executionTimes)
-	var times []time.Time
+	// Pre-allocate slice with expected capacity (initial execution + retries)
+	times := make([]time.Time, 0, maxRetries+1)
 	for execTime := range executionTimes {
 		times = append(times, execTime)
 	}
@@ -892,6 +898,8 @@ func TestQueueOverflow(t *testing.T) {
 			queue.stats.SuccessfulJobs++
 		case JobStatusFailed:
 			queue.stats.FailedJobs++
+		case JobStatusPending, JobStatusRunning, JobStatusRetrying, JobStatusCancelled:
+			// These statuses don't affect success/failure counts
 		}
 	}
 
@@ -902,6 +910,8 @@ func TestQueueOverflow(t *testing.T) {
 			queue.stats.SuccessfulJobs++
 		case JobStatusFailed:
 			queue.stats.FailedJobs++
+		case JobStatusPending, JobStatusRunning, JobStatusRetrying, JobStatusCancelled:
+			// These statuses don't affect success/failure counts
 		}
 	}
 	queue.mu.Unlock()
@@ -1248,7 +1258,13 @@ func TestStressTest(t *testing.T) {
 				ExecuteFunc: func(data interface{}) error {
 					// Only call wg.Done() and increment failedJobs once, on the final attempt
 					count := attemptCount.Add(1)
-					if count >= int32(config.MaxRetries+1) {
+					// Safely check if count reached max retries
+					maxRetries := config.MaxRetries + 1
+					if maxRetries > math.MaxInt32 {
+						// This should not happen in practice, but handle it
+						maxRetries = math.MaxInt32
+					}
+					if count >= int32(maxRetries) { //nolint:gosec // G115: test values small, safe conversion
 						defer wg.Done()
 						failedJobs.Add(1)
 					}

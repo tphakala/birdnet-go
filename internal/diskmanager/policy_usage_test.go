@@ -412,8 +412,8 @@ func TestUsageBasedCleanupTriggered(t *testing.T) {
 	createTestFilePair := func(baseName string) (string, string) {
 		audioPath := filepath.Join(tempDir, baseName+".wav")
 		pngPath := filepath.Join(tempDir, baseName+".png")
-		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file")
-		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file")
+		require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0o644), "Failed to create audio file") //nolint:gosec // G306: Test files don't require restrictive permissions
+		require.NoError(t, os.WriteFile(pngPath, []byte("png"), 0o644), "Failed to create png file")       //nolint:gosec // G306: Test files don't require restrictive permissions
 		// No need to set time for this usage-based test
 		return audioPath, pngPath
 	}
@@ -770,10 +770,11 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 	}
 
 	// Create the test files
-	var filePaths []string
+	// Pre-allocate slice with capacity for all test files
+	filePaths := make([]string, 0, len(testFiles))
 	for _, tf := range testFiles {
 		filePath := filepath.Join(tempDir, tf.name)
-		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		err := os.WriteFile(filePath, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 		require.NoError(t, err, "Failed to create test file: %s", filePath)
 		filePaths = append(filePaths, filePath)
 	}
@@ -944,10 +945,11 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	}
 
 	// Create the test files
-	var filePaths []string
+	// Pre-allocate slice with capacity for all test files
+	filePaths := make([]string, 0, len(testFiles))
 	for _, tf := range testFiles {
 		filePath := filepath.Join(tempDir, tf.name)
-		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		err := os.WriteFile(filePath, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 		require.NoError(t, err, "Failed to create test file: %s", filePath)
 		filePaths = append(filePaths, filePath)
 	}
@@ -1015,10 +1017,11 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	}
 
 	// Create the test files
-	var filePaths []string
+	// Pre-allocate slice with capacity for all test files
+	filePaths := make([]string, 0, len(testFiles))
 	for _, tf := range testFiles {
 		filePath := filepath.Join(tempDir, tf.name)
-		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		err := os.WriteFile(filePath, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
 		require.NoError(t, err, "Failed to create test file: %s", filePath)
 		filePaths = append(filePaths, filePath)
 	}
