@@ -516,7 +516,8 @@ func updateEqualizerFromForm(v reflect.Value, formValues map[string][]string, pr
 	}
 
 	// Initialize a slice to store the equalizer filters
-	var filters []conf.EqualizerFilter
+	// Pre-allocate with reasonable capacity for typical equalizer bands
+	filters := make([]conf.EqualizerFilter, 0, 10)
 	for i := 0; ; i++ {
 		// Construct keys for each filter parameter
 		typeKey := fmt.Sprintf("%s.filters[%d].type", prefix, i)

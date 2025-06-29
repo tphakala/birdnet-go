@@ -1640,7 +1640,9 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Build()
 	}
 
-	var conditions []*gorm.DB
+	// Pre-allocate conditions slice based on date range
+	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
+	conditions := make([]*gorm.DB, 0, dayCount)
 	window := time.Duration(sunriseSetWindowMinutes) * time.Minute // Define window for sunrise/sunset
 
 	// Optimization: Group dates by week and calculate sun times once per week

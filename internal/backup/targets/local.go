@@ -501,7 +501,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			Build()
 	}
 
-	var backups []backup.BackupInfo
+	backups := make([]backup.BackupInfo, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".meta") {
 			continue

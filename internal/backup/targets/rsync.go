@@ -625,8 +625,8 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		return nil, backup.NewError(backup.ErrIO, "rsync: failed to list backups", fmt.Errorf("%w: %s", err, output))
 	}
 
-	var backups []backup.BackupInfo
 	lines := strings.Split(string(output), "\n")
+	backups := make([]backup.BackupInfo, 0, len(lines))
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "total ") {
 			continue

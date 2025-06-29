@@ -52,7 +52,8 @@ type NewSpeciesData struct {
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
 // Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
 func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
-	var summaries []SpeciesSummaryData
+	// Pre-allocate with reasonable capacity for typical species count
+	summaries := make([]SpeciesSummaryData, 0, 100)
 
 	// Track query time for performance monitoring
 	queryStart := time.Now()
