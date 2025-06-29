@@ -1061,7 +1061,7 @@ func (c *BirdImageCache) updateMetrics() {
 }
 
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
-func CreateDefaultCache(metrics *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
+func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	// Use the correct constructor name from wikipedia.go
 	provider, err := NewWikiMediaProvider()
 	if err != nil {
@@ -1075,7 +1075,7 @@ func CreateDefaultCache(metrics *observability.Metrics, store datastore.Interfac
 		return nil, enhancedErr
 	}
 	// Using "wikimedia" as the provider name aligns with the constructor used
-	return InitCache("wikimedia", provider, metrics, store), nil
+	return InitCache("wikimedia", provider, metricsCollector, store), nil
 }
 
 // --- Image Provider Registry ---

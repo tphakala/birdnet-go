@@ -162,7 +162,7 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 	}
 
 	// Get security state for the current context
-	security := h.GetSecurity(c)
+	securityState := h.GetSecurity(c)
 
 	// Prepare error data with consistent structure across all error templates
 	errorData := struct {
@@ -180,7 +180,7 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 		Message:    he.Message,
 		StackTrace: string(debug.Stack()),
 		Settings:   h.Settings,
-		Security:   security, // Pass the security state
+		Security:   securityState, // Pass the security state
 		User:       c.Get("user"),
 		Debug:      h.Settings.Debug,
 	}
