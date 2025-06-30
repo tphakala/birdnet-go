@@ -32,19 +32,47 @@ func TestFastPathNoTelemetry(t *testing.T) {
 
 func TestRegexPrecompilation(t *testing.T) {
 	t.Parallel()
-	
-	// Test that regex patterns are pre-compiled
-	testMessage := "Error at https://api.example.com?api_key=secret123&token=abc"
-	scrubbed := basicURLScrub(testMessage)
 
-	expectedPatterns := []string{
-		"[REDACTED]",           // URL params
-		"[API_KEY_REDACTED]",   // API key
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		contains string
+		excludes []string
+	}{
+		{
+			name:     "URL parameter scrubbing",
+			input:    "Error at https://api.example.com?api_key=secret123&token=abc",
+			expected: "Error at https://api.example.com?[REDACTED]",
+		},
+		{
+			name:     "API key scrubbing",
+			input:    "Config error: api_key=secret123 is invalid",
+			contains: "[API_KEY_REDACTED]",
+		},
+		{
+			name:     "Multi-token scrubbing",
+			input:    "Auth failed with token=abc123 and auth=xyz789",
+			excludes: []string{"abc123", "xyz789"},
+		},
 	}
 
-	for _, pattern := range expectedPatterns {
-		if !strings.Contains(scrubbed, pattern) {
-			t.Errorf("Expected scrubbed message to contain '%s', got: %s", pattern, scrubbed)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scrubbed := basicURLScrub(tt.input)
+
+			if tt.expected != "" && scrubbed != tt.expected {
+				t.Errorf("Expected: %s, got: %s", tt.expected, scrubbed)
+			}
+			if tt.contains != "" && !strings.Contains(scrubbed, tt.contains) {
+				t.Errorf("Expected to contain '%s', got: %s", tt.contains, scrubbed)
+			}
+			for _, exclude := range tt.excludes {
+				if strings.Contains(scrubbed, exclude) {
+					t.Errorf("Should not contain '%s', got: %s", exclude, scrubbed)
+				}
+			}
+		})
 	}
 }

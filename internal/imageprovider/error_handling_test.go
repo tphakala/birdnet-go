@@ -80,7 +80,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 				}
 
 				// Verify category if applicable
-				if tt.expectCategory != "" && enhancedErr.GetCategory() != tt.expectCategory {
+				if tt.expectCategory != "" && enhancedErr.GetCategory() != string(tt.expectCategory) {
 					t.Errorf("Expected category '%s', got '%s'", tt.expectCategory, enhancedErr.GetCategory())
 				}
 
