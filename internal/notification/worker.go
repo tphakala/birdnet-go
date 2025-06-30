@@ -14,6 +14,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// getLoggerSafe returns a logger for the service, falling back to default if logging not initialized
+func getLoggerSafe(service string) *slog.Logger {
+	logger := logging.ForService(service)
+	if logger == nil {
+		logger = slog.Default().With("service", service)
+	}
+	return logger
+}
+
 // NotificationWorker implements EventConsumer to process error events
 type NotificationWorker struct {
 	service       *Service
@@ -84,7 +93,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 			state:  "closed",
 			config: config,
 		},
-		logger: logging.ForService("notification-worker"),
+		logger: getLoggerSafe("notification-worker"),
 	}
 	
 	// Pre-compile templates
