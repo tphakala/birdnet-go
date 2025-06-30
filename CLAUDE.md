@@ -61,34 +61,44 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
 
 ### Modern Go Loop Patterns (Go 1.22+)
 - **Use modern range syntax** instead of traditional for loops where applicable:
-  - **Benchmarks**: Use `for range b.Loop()` instead of `for i := 0; i < b.N; i++` (Go 1.24+)
+  - **Benchmarks**: Use `for b.Loop()` instead of `for i := 0; i < b.N; i++` (Go 1.24+)
   - **Integer ranges**: Use `for i := range n` instead of `for i := 0; i < n; i++` (Go 1.22+)
   - **Function iteration**: Use `for range iteratorFunc` for custom iterators (Go 1.23+)
+
+### Go 1.24 Benchmark Pattern with b.Loop()
+- **Key differences from traditional benchmarks**:
+  - Use `for b.Loop() { }` instead of `for range b.Loop()` or `for i := 0; i < b.N; i++`
+  - Setup code runs exactly once, not multiple times
+  - Automatic timer management - only loop body is timed
+  - Prevents unwanted compiler optimizations
+  - After loop completes, `b.N` contains total iterations
 - **Benchmark examples**:
   ```go
-  // Preferred (Go 1.24+)
+  // Preferred (Go 1.24+) - Using b.Loop()
   func BenchmarkExample(b *testing.B) {
-      // Setup code here (e.g., pre-populate cache)
-      cache.Get("example")
+      // Setup code here (expensive operations not timed)
+      big := NewBig()
       
       b.ReportAllocs()
-      b.ResetTimer() // Reset timer AFTER setup
-      for range b.Loop() {
-          // benchmark code
+      // No need for b.ResetTimer() with b.Loop()
+      for b.Loop() {
+          // Only this code is timed
+          big.Len()
       }
+      // b.N now contains total iterations for computing averages
   }
   
-  // Avoid - setup inside measurement
+  // Avoid - traditional pattern with b.N
   func BenchmarkExample(b *testing.B) {
       b.ReportAllocs()
+      b.ResetTimer()
       for i := 0; i < b.N; i++ {
-          cache.Get("example") // Setup mixed with measurement
-          // benchmark code
+          // Old pattern - more error-prone
       }
   }
   ```
 - **Always use `b.ReportAllocs()`** in benchmarks to track memory allocations
-- **Benefits**: Better performance, cleaner code, leverages Go's modern iteration patterns
+- **Benefits**: More robust, efficient, automatic timer management, prevents compiler optimizations
 
 ### Code Defensive Patterns
 - Use defensive patterns, check for nils etc
