@@ -960,7 +960,7 @@ func initializeNotificationService() error {
 	
 	// Initialize telemetry worker with event bus
 	// This replaces the direct telemetry calls with async processing
-	if err := telemetry.InitializeTelemetryEventBus(); err != nil {
+	if err := telemetry.InitializeEventBus(); err != nil {
 		// Log but don't fail - telemetry is not critical
 		logging.Warn("Failed to initialize telemetry event bus integration",
 			"error", err,
