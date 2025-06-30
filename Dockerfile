@@ -105,8 +105,11 @@ VOLUME /config
 VOLUME /data
 WORKDIR /data
 
-# Make port 8080 available to the world outside this container
-EXPOSE 8080
+# Make ports available to the world outside this container
+# 80, 443 for AutoTLS (automatic HTTPS certificates)
+# 8080 for standard HTTP web interface
+# 8090 for Prometheus metrics endpoint
+EXPOSE 80 443 8080 8090
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
