@@ -32,28 +32,47 @@ func TestFastPathNoTelemetry(t *testing.T) {
 
 func TestRegexPrecompilation(t *testing.T) {
 	t.Parallel()
-	
-	// Test that regex patterns are pre-compiled and work correctly
-	
-	// Test URL scrubbing
-	testMessage1 := "Error at https://api.example.com?api_key=secret123&token=abc"
-	scrubbed1 := basicURLScrub(testMessage1)
-	expected1 := "Error at https://api.example.com?[REDACTED]"
-	if scrubbed1 != expected1 {
-		t.Errorf("URL scrubbing failed. Expected: %s, got: %s", expected1, scrubbed1)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		contains string
+		excludes []string
+	}{
+		{
+			name:     "URL parameter scrubbing",
+			input:    "Error at https://api.example.com?api_key=secret123&token=abc",
+			expected: "Error at https://api.example.com?[REDACTED]",
+		},
+		{
+			name:     "API key scrubbing",
+			input:    "Config error: api_key=secret123 is invalid",
+			contains: "[API_KEY_REDACTED]",
+		},
+		{
+			name:     "Multi-token scrubbing",
+			input:    "Auth failed with token=abc123 and auth=xyz789",
+			excludes: []string{"abc123", "xyz789"},
+		},
 	}
-	
-	// Test API key scrubbing in non-URL context
-	testMessage2 := "Config error: api_key=secret123 is invalid"
-	scrubbed2 := basicURLScrub(testMessage2)
-	if !strings.Contains(scrubbed2, "[API_KEY_REDACTED]") {
-		t.Errorf("API key scrubbing failed. Expected to contain '[API_KEY_REDACTED]', got: %s", scrubbed2)
-	}
-	
-	// Test multiple patterns
-	testMessage3 := "Auth failed with token=abc123 and auth=xyz789"
-	scrubbed3 := basicURLScrub(testMessage3)
-	if strings.Contains(scrubbed3, "abc123") || strings.Contains(scrubbed3, "xyz789") {
-		t.Errorf("Token scrubbing failed. Sensitive data still present: %s", scrubbed3)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scrubbed := basicURLScrub(tt.input)
+
+			if tt.expected != "" && scrubbed != tt.expected {
+				t.Errorf("Expected: %s, got: %s", tt.expected, scrubbed)
+			}
+			if tt.contains != "" && !strings.Contains(scrubbed, tt.contains) {
+				t.Errorf("Expected to contain '%s', got: %s", tt.contains, scrubbed)
+			}
+			for _, exclude := range tt.excludes {
+				if strings.Contains(scrubbed, exclude) {
+					t.Errorf("Should not contain '%s', got: %s", exclude, scrubbed)
+				}
+			}
+		})
 	}
 }

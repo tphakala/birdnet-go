@@ -9,34 +9,31 @@ import (
 // This interface allows the errors package to publish events without
 // importing the events package, avoiding circular dependencies
 type EventPublisher interface {
-	TryPublish(event interface{}) bool
+	TryPublish(event any) bool
 }
 
 // Global event publisher (set by the events package)
-var globalEventPublisher atomic.Pointer[EventPublisher]
+var globalEventPublisher atomic.Value // stores EventPublisher
 
 // SetEventPublisher sets the global event publisher
 // This should be called by the events package during initialization
 func SetEventPublisher(publisher EventPublisher) {
-	globalEventPublisher.Store(&publisher)
+	globalEventPublisher.Store(publisher)
 }
 
 // publishToEventBus publishes an error to the event bus if available
 func publishToEventBus(ee *EnhancedError) {
 	// Load the publisher atomically
-	publisherPtr := globalEventPublisher.Load()
-	if publisherPtr == nil {
-		return
-	}
-	
-	publisher := *publisherPtr
+	publisher := globalEventPublisher.Load()
 	if publisher == nil {
 		return
 	}
 	
+	eventPublisher := publisher.(EventPublisher)
+	
 	// Try to publish the event
 	// The event bus will handle type assertion to ErrorEvent interface
-	publisher.TryPublish(ee)
+	eventPublisher.TryPublish(ee)
 }
 
 // reportToTelemetry has been updated to use the event bus
@@ -48,8 +45,7 @@ func reportToTelemetry(ee *EnhancedError) {
 	}
 	
 	// Try to publish to event bus first
-	publisherPtr := globalEventPublisher.Load()
-	if publisherPtr != nil && *publisherPtr != nil {
+	if globalEventPublisher.Load() != nil {
 		// Event bus is available, use async processing
 		publishToEventBus(ee)
 		return

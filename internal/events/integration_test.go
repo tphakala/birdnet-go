@@ -13,7 +13,7 @@ import (
 // TestNoCircularDependency verifies that events package doesn't import errors package
 // This test will fail to compile if there's a circular dependency
 func TestNoCircularDependency(t *testing.T) {
-	// Don't run in parallel due to global state
+	t.Parallel()
 	
 	// This test primarily exists to ensure compilation succeeds
 	// If there's a circular dependency, this won't compile
@@ -45,7 +45,7 @@ func TestNoCircularDependency(t *testing.T) {
 
 // TestErrorEventIntegration tests the integration between errors and events packages
 func TestErrorEventIntegration(t *testing.T) {
-	// Don't run in parallel as we're modifying global state
+	t.Parallel()
 	
 	// Initialize logging
 	logging.Init()
@@ -105,8 +105,27 @@ func TestErrorEventIntegration(t *testing.T) {
 		Build()
 	
 	// The error should have been published to the event bus
-	// Wait a bit for async processing
-	time.Sleep(50 * time.Millisecond)
+	// Wait for the event to be processed
+	waitForEvents := func(expected int) bool {
+		deadline := time.Now().Add(100 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			consumer.mu.Lock()
+			count := len(consumer.events)
+			consumer.mu.Unlock()
+			if count >= expected {
+				return true
+			}
+			time.Sleep(1 * time.Millisecond) // Small sleep to avoid busy loop
+		}
+		return false
+	}
+	
+	if !waitForEvents(1) {
+		consumer.mu.Lock()
+		count := len(consumer.events)
+		consumer.mu.Unlock()
+		t.Fatalf("timeout waiting for event, got %d events", count)
+	}
 	
 	// Check that the consumer received the event
 	consumer.mu.Lock()

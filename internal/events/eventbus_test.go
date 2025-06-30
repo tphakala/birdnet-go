@@ -83,6 +83,19 @@ func (m *mockConsumer) GetEvents() []ErrorEvent {
 	return events
 }
 
+// waitForProcessed waits for the consumer to process n events or times out
+func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if consumer.GetProcessedCount() >= expected {
+			return
+		}
+		time.Sleep(1 * time.Millisecond) // Small sleep to avoid busy loop
+	}
+	t.Fatalf("timeout waiting for %d events, got %d", expected, consumer.GetProcessedCount())
+}
+
 // TestEventBusInitialization tests event bus initialization
 func TestEventBusInitialization(t *testing.T) {
 	// Don't run in parallel due to global state modifications
@@ -94,7 +107,7 @@ func TestEventBusInitialization(t *testing.T) {
 	ResetForTesting()
 	
 	t.Run("default initialization", func(t *testing.T) {
-		// Don't run subtests in parallel when modifying global state
+		t.Parallel()
 		
 		// Reset global state for this test
 		ResetForTesting()
@@ -122,7 +135,7 @@ func TestEventBusInitialization(t *testing.T) {
 	})
 	
 	t.Run("disabled configuration", func(t *testing.T) {
-		// Don't run subtests in parallel when modifying global state
+		t.Parallel()
 		
 		// Reset global state
 		ResetForTesting()
@@ -200,9 +213,6 @@ func TestEventBusPublish(t *testing.T) {
 			t.Fatalf("failed to register consumer: %v", err)
 		}
 		
-		// Give workers time to start
-		time.Sleep(10 * time.Millisecond)
-		
 		// Publish event
 		event := &mockErrorEvent{
 			component: "test",
@@ -216,7 +226,7 @@ func TestEventBusPublish(t *testing.T) {
 		}
 		
 		// Wait for processing
-		time.Sleep(50 * time.Millisecond)
+		waitForProcessed(t, consumer, 1, 100*time.Millisecond)
 		
 		if consumer.GetProcessedCount() != 1 {
 			t.Errorf("expected 1 processed event, got %d", consumer.GetProcessedCount())
@@ -406,7 +416,7 @@ func TestConsumerPanic(t *testing.T) {
 	}
 	
 	// Wait for processing
-	time.Sleep(100 * time.Millisecond)
+	waitForProcessed(t, normalConsumer, 1, 200*time.Millisecond)
 	
 	// Normal consumer should still process the event
 	if normalConsumer.GetProcessedCount() != 1 {
