@@ -57,4 +57,5 @@ type EventBusStats struct {
 	EventsProcessed  uint64
 	EventsDropped    uint64
 	ConsumerErrors   uint64
+	FastPathHits     uint64 // Number of times fast path was taken (no consumers)
 }
