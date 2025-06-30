@@ -31,6 +31,9 @@ type EventBus struct {
 	// Consumers
 	consumers []EventConsumer
 	
+	// Deduplication
+	deduplicator *ErrorDeduplicator
+	
 	// Metrics
 	stats EventBusStats
 	
@@ -47,17 +50,19 @@ var (
 // DefaultConfig returns the default event bus configuration
 func DefaultConfig() *Config {
 	return &Config{
-		BufferSize: 10000,
-		Workers:    4,
-		Enabled:    true,
+		BufferSize:   10000,
+		Workers:      4,
+		Enabled:      true,
+		Deduplication: DefaultDeduplicationConfig(),
 	}
 }
 
 // Config holds event bus configuration
 type Config struct {
-	BufferSize int
-	Workers    int
-	Enabled    bool
+	BufferSize    int
+	Workers       int
+	Enabled       bool
+	Deduplication *DeduplicationConfig
 }
 
 // Initialize creates or returns the global event bus instance
@@ -91,6 +96,11 @@ func Initialize(config *Config) (*EventBus, error) {
 		cancel:     cancel,
 		consumers:  make([]EventConsumer, 0),
 		logger:     logging.ForService("events"),
+	}
+	
+	// Initialize deduplicator if enabled
+	if config.Deduplication != nil && config.Deduplication.Enabled {
+		eb.deduplicator = NewErrorDeduplicator(config.Deduplication, eb.logger)
 	}
 	
 	// Mark as initialized
@@ -166,6 +176,14 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 	
 	if !hasConsumers {
 		return false
+	}
+	
+	// Check deduplication
+	if eb.deduplicator != nil {
+		if !eb.deduplicator.ShouldProcess(event) {
+			atomic.AddUint64(&eb.stats.EventsSuppressed, 1)
+			return true // Return true since we handled it (by suppressing)
+		}
 	}
 	
 	// Non-blocking send
@@ -276,6 +294,11 @@ func (eb *EventBus) Shutdown(timeout time.Duration) error {
 	// Stop accepting new events
 	eb.running.Store(false)
 	
+	// Shutdown deduplicator
+	if eb.deduplicator != nil {
+		eb.deduplicator.Shutdown()
+	}
+	
 	// Cancel context to signal workers
 	eb.cancel()
 	
@@ -309,4 +332,13 @@ func (eb *EventBus) GetStats() EventBusStats {
 		EventsDropped:    atomic.LoadUint64(&eb.stats.EventsDropped),
 		ConsumerErrors:   atomic.LoadUint64(&eb.stats.ConsumerErrors),
 	}
+}
+
+// GetDeduplicationStats returns deduplication statistics
+func (eb *EventBus) GetDeduplicationStats() DeduplicationStats {
+	if eb == nil || eb.deduplicator == nil {
+		return DeduplicationStats{}
+	}
+	
+	return eb.deduplicator.GetStats()
 }
