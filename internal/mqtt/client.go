@@ -575,7 +575,7 @@ func (c *client) reconnectWithBackoff() {
 		errorCategory := "generic"
 		var enhancedErr *errors.EnhancedError
 		if errors.As(err, &enhancedErr) {
-			errorCategory = string(enhancedErr.GetCategory())
+			errorCategory = enhancedErr.GetCategory()
 		}
 		c.metrics.IncrementErrorsWithCategory(errorCategory, "reconnect_failed")
 

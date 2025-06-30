@@ -194,7 +194,7 @@ func runNetworkTest(ctx context.Context, stage TestStage, test networkTest) Test
 			// Check if it's already an enhanced error
 			var enhancedErr *errors.EnhancedError
 			if errors.As(err, &enhancedErr) {
-				errorCategory = string(enhancedErr.GetCategory())
+				errorCategory = enhancedErr.GetCategory()
 			} else {
 				// Categorize based on error content
 				errorLower := strings.ToLower(errorMessage)
