@@ -166,9 +166,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		proc.SetBackupScheduler(backupScheduler)
 	}
 
-	// Initialize notification service
-	if err := initializeNotificationService(); err != nil {
-		log.Printf("Error: Failed to initialize notification service: %v", err)
+	// Initialize async services (event bus, notification workers, telemetry workers)
+	if err := telemetry.InitializeAsyncSystems(); err != nil {
+		log.Printf("Error: Failed to initialize async services: %v", err)
 		return err
 	}
 
@@ -895,89 +895,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	return backupManager, backupScheduler, nil
 }
 
-// simpleTelemetryReporter is a minimal reporter that just enables the fast path
-type simpleTelemetryReporter struct {
-	enabled bool
-}
 
-func (r *simpleTelemetryReporter) ReportError(err *errors.EnhancedError) {
-	// Actual reporting happens async through event bus
-}
-
-func (r *simpleTelemetryReporter) IsEnabled() bool {
-	return r.enabled
-}
-
-// initializeNotificationService initializes the notification service with error integration
-func initializeNotificationService() error {
-	// Initialize notification service first
-	notification.Initialize(nil) // Use default configuration
-	
-	// Initialize event bus for async error processing
-	eventBusConfig := &events.Config{
-		BufferSize: 10000,
-		Workers:    4,
-		Enabled:    true,
-		Deduplication: &events.DeduplicationConfig{
-			Enabled:         true,
-			TTL:             5 * time.Minute,
-			MaxEntries:      1000,
-			CleanupInterval: 1 * time.Minute,
-		},
-	}
-	
-	eventBus, err := events.Initialize(eventBusConfig)
-	if err != nil {
-		return errors.New(err).
-			Component("notification").
-			Category(errors.CategorySystem).
-			Context("operation", "event_bus_init").
-			Build()
-	}
-	
-	// Set up integration between errors package and event bus
-	err = events.InitializeErrorsIntegration(func(publisher interface{}) {
-		if p, ok := publisher.(errors.EventPublisher); ok {
-			errors.SetEventPublisher(p)
-		}
-	})
-	if err != nil {
-		return errors.New(err).
-			Component("notification").
-			Category(errors.CategorySystem).
-			Context("operation", "errors_integration_init").
-			Build()
-	}
-	
-	// Initialize notification worker with event bus
-	if err := notification.InitializeEventBusIntegration(); err != nil {
-		return errors.New(err).
-			Component("notification").
-			Category(errors.CategorySystem).
-			Context("operation", "notification_worker_init").
-			Build()
-	}
-	
-	// Initialize telemetry worker with event bus
-	// This replaces the direct telemetry calls with async processing
-	if err := telemetry.InitializeEventBus(); err != nil {
-		// Log but don't fail - telemetry is not critical
-		logging.Warn("Failed to initialize telemetry event bus integration",
-			"error", err,
-			"component", "telemetry")
-	}
-	
-	// Create a simple telemetry reporter that enables the fast path
-	errors.SetTelemetryReporter(&simpleTelemetryReporter{enabled: true})
-	
-	logging.Info("Notification service initialized",
-		"component", "notification",
-		"event_bus", eventBus != nil,
-		"error_integration", "async-eventbus",
-		"telemetry_integration", telemetry.IsTelemetryEventBusEnabled())
-	
-	return nil
-}
 
 // initializeSystemMonitor initializes and starts the system resource monitor if enabled
 func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {

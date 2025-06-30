@@ -45,10 +45,10 @@ func main() {
 }
 
 func mainWithExitCode() int {
-	// Ensure telemetry is properly shut down on exit
+	// Ensure all systems are properly shut down on exit
 	defer func() {
-		if err := telemetry.Shutdown(2 * time.Second); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: telemetry shutdown incomplete: %v\n", err)
+		if err := telemetry.ShutdownSystem(5 * time.Second); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: system shutdown incomplete: %v\n", err)
 		}
 	}()
 
@@ -111,16 +111,16 @@ func mainWithExitCode() int {
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
 		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
 
-	// Initialize telemetry system with the new coordinator
-	if err := telemetry.Initialize(settings); err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing telemetry: %v\n", err)
-		// Continue without telemetry - it's not critical
+	// Initialize core systems (telemetry and notification)
+	if err := telemetry.InitializeSystem(settings); err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing core systems: %v\n", err)
+		// Continue - these are not critical for basic operation
 	}
 
-	// Wait for telemetry components to be ready (with timeout)
+	// Wait for core systems to be ready (with timeout)
 	if err := telemetry.WaitForReady(5 * time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: telemetry initialization incomplete: %v\n", err)
-		// Continue - telemetry is not critical for operation
+		fmt.Fprintf(os.Stderr, "Warning: core systems initialization incomplete: %v\n", err)
+		// Continue - not critical for operation
 	}
 
 	// Enable runtime profiling if debug mode is enabled
