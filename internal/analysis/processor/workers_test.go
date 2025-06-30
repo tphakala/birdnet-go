@@ -337,7 +337,9 @@ func TestStartWorkerPool(t *testing.T) {
 	}
 
 	// Clean up
-	realQueue.Stop()
+	if err := realQueue.Stop(); err != nil {
+		t.Errorf("Failed to stop queue: %v", err)
+	}
 }
 
 // TestGetJobQueueRetryConfig tests that the getJobQueueRetryConfig function correctly extracts retry configuration from different action types
@@ -480,7 +482,11 @@ func TestEnqueueTask(t *testing.T) {
 		// Create a real job queue for this subtest
 		realQueue := jobqueue.NewJobQueue()
 		realQueue.Start()
-		defer realQueue.Stop()
+		defer func() {
+			if err := realQueue.Stop(); err != nil {
+				t.Errorf("Failed to stop queue: %v", err)
+			}
+		}()
 
 		// Create a processor with the real queue
 		processor := &Processor{
@@ -549,7 +555,9 @@ func TestEnqueueTask(t *testing.T) {
 		// Create a new queue that we'll stop immediately
 		stoppedQueue := jobqueue.NewJobQueue()
 		stoppedQueue.Start()
-		stoppedQueue.Stop()
+		if err := stoppedQueue.Stop(); err != nil {
+			t.Errorf("Failed to stop queue: %v", err)
+		}
 
 		// Create a processor with the stopped queue
 		stoppedProcessor := &Processor{
@@ -590,7 +598,11 @@ func TestEnqueueTask(t *testing.T) {
 		// Create a queue with a very small capacity
 		tinyQueue := jobqueue.NewJobQueueWithOptions(2, 1, false)
 		tinyQueue.Start()
-		defer tinyQueue.Stop()
+		defer func() {
+			if err := tinyQueue.Stop(); err != nil {
+				t.Errorf("Failed to stop queue: %v", err)
+			}
+		}()
 
 		// Create a processor with the tiny queue
 		tinyProcessor := &Processor{
@@ -643,7 +655,11 @@ func TestEnqueueTask(t *testing.T) {
 		// Create a real job queue for this subtest
 		realQueue := jobqueue.NewJobQueue()
 		realQueue.Start()
-		defer realQueue.Stop()
+		defer func() {
+			if err := realQueue.Stop(); err != nil {
+				t.Errorf("Failed to stop queue: %v", err)
+			}
+		}()
 
 		// Create a processor with the real queue
 		processor := &Processor{
@@ -738,7 +754,9 @@ func TestEnqueueTaskBasic(t *testing.T) {
 	}
 
 	// Clean up
-	realQueue.Stop()
+	if err := realQueue.Stop(); err != nil {
+		t.Errorf("Failed to stop queue: %v", err)
+	}
 }
 
 // TestEnqueueMultipleTasks tests enqueueing multiple tasks with Scandinavian bird species
@@ -747,7 +765,11 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 	// Create a real job queue for testing
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.Start()
-	defer realQueue.Stop()
+	defer func() {
+		if err := realQueue.Stop(); err != nil {
+			t.Errorf("Failed to stop queue: %v", err)
+		}
+	}()
 
 	// Create a processor with the real queue
 	processor := &Processor{
@@ -882,7 +904,11 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
 	realQueue.Start()
-	defer realQueue.Stop()
+	defer func() {
+		if err := realQueue.Stop(); err != nil {
+			t.Errorf("Failed to stop queue: %v", err)
+		}
+	}()
 
 	// Create a processor with the real queue
 	processor := &Processor{
@@ -1013,7 +1039,11 @@ func TestRetryLogic(t *testing.T) {
 	realQueue := jobqueue.NewJobQueue()
 	realQueue.SetProcessingInterval(50 * time.Millisecond) // Process jobs quickly for testing
 	realQueue.StartWithContext(ctx)
-	defer realQueue.Stop()
+	defer func() {
+		if err := realQueue.Stop(); err != nil {
+			t.Errorf("Failed to stop queue: %v", err)
+		}
+	}()
 
 	// Create a counter for tracking attempts
 	var attemptCount int
@@ -1333,7 +1363,11 @@ func TestEdgeCases(t *testing.T) {
 
 			// Clean up job queue if it exists
 			if p != nil && p.JobQueue != nil {
-				defer p.JobQueue.Stop()
+				defer func() {
+					if err := p.JobQueue.Stop(); err != nil {
+						t.Errorf("Failed to stop queue: %v", err)
+					}
+				}()
 			}
 
 			err := p.EnqueueTask(task)

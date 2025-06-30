@@ -237,7 +237,11 @@ func (s *SQLiteSource) withDatabase(dbPath string, readOnly bool, fn func(*Datab
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Debug("Failed to close database connection", "error", err)
+		}
+	}()
 
 	return fn(conn)
 }
@@ -414,7 +418,11 @@ func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
 			Context("operation", "open_backup_file").
 			Build()
 	}
-	defer backupFile.Close()
+	defer func() {
+		if err := backupFile.Close(); err != nil {
+			slog.Debug("Failed to close backup file", "error", err)
+		}
+	}()
 
 	if _, err := io.Copy(w, backupFile); err != nil {
 		if isMediaError(err) {
@@ -481,7 +489,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 			Context("operation", "open_temp_database").
 			Build()
 	}
-	defer destDB.Close()
+	defer func() {
+		if err := destDB.Close(); err != nil {
+			slog.Debug("Failed to close destination database", "error", err)
+		}
+	}()
 
 	// Get the SQLite connection objects using the internal driver connection
 	srcConn, err := db.Conn(ctx)
@@ -492,7 +504,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 			Context("operation", "get_source_connection").
 			Build()
 	}
-	defer srcConn.Close()
+	defer func() {
+		if err := srcConn.Close(); err != nil {
+			slog.Debug("Failed to close source connection", "error", err)
+		}
+	}()
 
 	dstConn, err := destDB.Conn(ctx)
 	if err != nil {
@@ -502,7 +518,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 			Context("operation", "get_destination_connection").
 			Build()
 	}
-	defer dstConn.Close()
+	defer func() {
+		if err := dstConn.Close(); err != nil {
+			slog.Debug("Failed to close destination connection", "error", err)
+		}
+	}()
 
 	// Extract the underlying sqlite3 connections
 	var rawSrcConn, rawDstConn any
@@ -551,7 +571,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	if err != nil {
 		return err // Return the error from initializeBackupConnection
 	}
-	defer backupConn.Close()
+	defer func() {
+		if err := backupConn.Close(); err != nil {
+			slog.Debug("Failed to close backup connection", "error", err)
+		}
+	}()
 	s.logger.Debug("Initialized SQLite backup connection", "total_pages", totalPages)
 
 	// Validate and adjust page counts
@@ -577,7 +601,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 			Context("temp_path", tempPath).
 			Build()
 	}
-	defer backupFile.Close()
+	defer func() {
+		if err := backupFile.Close(); err != nil {
+			slog.Debug("Failed to close backup file for reading", "error", err)
+		}
+	}()
 
 	// Copy the backup data to the writer
 	copiedBytes, err := io.Copy(w, backupFile)

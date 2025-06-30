@@ -199,12 +199,14 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	// Pre-populate with stale entry
 	staleTime := time.Now().Add(-15 * 24 * time.Hour)
 	species := "Turdus merula"
-	mockStore.SaveImageCache(&datastore.ImageCache{
+	if err := mockStore.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   "wikimedia",
 		URL:            "http://example.com/old.jpg",
 		CachedAt:       staleTime,
-	})
+	}); err != nil {
+		t.Fatalf("Failed to save stale cache entry: %v", err)
+	}
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	if err != nil {

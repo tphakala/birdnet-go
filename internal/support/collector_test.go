@@ -152,9 +152,13 @@ func TestCollector_getUniqueLogPaths(t *testing.T) {
 
 	// Change to temp directory to test relative path resolution
 	oldWd, _ := os.Getwd()
-	os.Chdir(tempDir)
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
 	t.Cleanup(func() {
-		os.Chdir(oldWd)
+		if err := os.Chdir(oldWd); err != nil {
+			t.Logf("Warning: Failed to restore working directory: %v", err)
+		}
 	})
 
 	uniquePaths := c.getUniqueLogPaths()
@@ -184,7 +188,9 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 	lfc.addNoLogsNote(w)
 
 	// Close the writer to finalize
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close zip writer: %v", err)
+	}
 
 	// Read the zip content
 	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
@@ -208,7 +214,9 @@ func TestLogFileCollector_addNoLogsNote(t *testing.T) {
 		}
 
 		content, err := io.ReadAll(rc)
-		rc.Close() // Close immediately after reading, not deferred
+		if closeErr := rc.Close(); closeErr != nil {
+			t.Errorf("Failed to close README reader: %v", closeErr)
+		} // Close immediately after reading, not deferred
 
 		if err != nil {
 			t.Fatalf("Failed to read README: %v", err)

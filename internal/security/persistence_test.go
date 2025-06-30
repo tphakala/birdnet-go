@@ -22,11 +22,7 @@ var ctx = context.Background()
 // TestTokenPersistence tests saving and loading of access tokens
 func TestTokenPersistence(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "birdnet-test-tokens")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create test server with custom token file
 	server := &OAuth2Server{
@@ -53,8 +49,7 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Save tokens
-	err = server.saveTokens(ctx)
-	if err != nil {
+	if err := server.saveTokens(ctx); err != nil {
 		t.Fatalf("Failed to save tokens: %v", err)
 	}
 
@@ -68,8 +63,7 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Load tokens
-	err = newServer.loadTokens(ctx)
-	if err != nil {
+	if err := newServer.loadTokens(ctx); err != nil {
 		t.Fatalf("Failed to load tokens: %v", err)
 	}
 
@@ -100,11 +94,7 @@ func TestTokenPersistence(t *testing.T) {
 // TestFilesystemStore tests that the FilesystemStore is initialized correctly
 func TestFilesystemStore(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "birdnet-test-sessions")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Set test config path and restore after test
 	SetTestConfigPath(tempDir)
@@ -164,11 +154,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 	assert.Equal(t, false, cookieStore.Options.Secure, "Secure should be false for local network")
 
 	// Test with FilesystemStore
-	tempDir, err := os.MkdirTemp("", "birdnet-test-local")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	gothic.Store = sessions.NewFilesystemStore(tempDir, []byte("test-secret"))
 	server.configureLocalNetworkCookieStore()
@@ -269,16 +255,11 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 
 // TestLoadCorruptedTokensFile tests handling of corrupted tokens file
 func TestLoadCorruptedTokensFile(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "birdnet-test-corrupt")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a corrupted tokens file
 	tokensFile := filepath.Join(tempDir, "tokens.json")
-	err = os.WriteFile(tokensFile, []byte("this is not valid json"), 0o600)
-	if err != nil {
+	if err := os.WriteFile(tokensFile, []byte("this is not valid json"), 0o600); err != nil {
 		t.Fatalf("Failed to write corrupted tokens file: %v", err)
 	}
 
@@ -296,7 +277,7 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err = server.loadTokens(ctx)
+	err := server.loadTokens(ctx)
 	assert.Error(t, err, "Loading corrupted file should return error")
 	// Check for a more specific part of the error
 	assert.Contains(t, err.Error(), "failed to unmarshal token data", "Error message should indicate unmarshal failure")
@@ -309,11 +290,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 		t.Skip("Skipping on Windows as permission handling is different")
 	}
 
-	tempDir, err := os.MkdirTemp("", "birdnet-test-unwritable")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a token file path in a subdirectory that we'll make unwritable
 	unwritableDir := filepath.Join(tempDir, "unwritable")
@@ -327,7 +304,9 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	if err := os.Chmod(unwritableDir, 0o500); err != nil { // r-x --- ---
 		t.Fatalf("Failed to make directory unwritable: %v", err)
 	}
-	defer os.Chmod(unwritableDir, 0o755) // Restore permissions for cleanup
+	defer func() {
+		_ = os.Chmod(unwritableDir, 0o755) // Best effort to restore permissions for cleanup
+	}()
 
 	server := &OAuth2Server{
 		Settings: &conf.Settings{},
@@ -343,7 +322,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	}
 
 	// Should handle error gracefully
-	err = server.saveTokens(ctx)
+	err := server.saveTokens(ctx)
 	assert.Error(t, err, "Saving tokens to unwritable directory should return error")
 	// Check for a more specific part of the error related to file writing/renaming
 	assert.Contains(t, err.Error(), "failed to write tokens to temp file", "Error message should indicate temp file write failure or rename failure")

@@ -119,7 +119,13 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			Context("end_date", endDate).
 			Build()
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logger.Error("Failed to close rows",
+				"error", err,
+				"operation", "get_species_summary_data")
+		}
+	}()
 
 	queryExecutionTime := time.Since(queryStart)
 	if settings != nil && settings.Debug {

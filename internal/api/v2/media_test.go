@@ -274,7 +274,11 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	// Create a temporary directory for test files
 	tempDir, err := os.MkdirTemp("", "media_env_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	})
 
 	// Use the standard test setup which now initializes SFS
 	// We need the controller instance to reconfigure its SFS
@@ -283,13 +287,19 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	// --- Crucially: Re-initialize SFS in the controller to use the *media test* tempDir ---
 	// Close the SFS created by setupTestEnvironment (if any)
 	if controller.SFS != nil {
-		controller.SFS.Close()
+		if err := controller.SFS.Close(); err != nil {
+			t.Errorf("Failed to close SFS: %v", err)
+		}
 	}
 	// Create and assign the new SFS rooted in our tempDir
 	newSFS, err := securefs.New(tempDir)
 	require.NoError(t, err, "Failed to create SecureFS for media test environment")
 	controller.SFS = newSFS
-	t.Cleanup(func() { controller.SFS.Close() }) // Ensure this one is closed too
+	t.Cleanup(func() {
+		if err := controller.SFS.Close(); err != nil {
+			t.Errorf("Failed to close SFS: %v", err)
+		}
+	}) // Ensure this one is closed too
 
 	// Assign the tempDir to settings just in case any *other* part relies on it
 	// (though SecureFS should make this less necessary)
@@ -366,7 +376,11 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			// Make request to the HTTP server
 			resp, err := client.Get(server.URL + tc.endpoint)
 			assert.NoError(t, err)
-			defer resp.Body.Close()
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Errorf("Failed to close response body: %v", err)
+				}
+			}()
 
 			// Check status code
 			assert.Equal(t, tc.expectedStatus, resp.StatusCode)

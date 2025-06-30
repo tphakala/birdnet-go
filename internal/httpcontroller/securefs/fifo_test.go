@@ -49,7 +49,11 @@ func TestFIFOOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create SecureFS: %v", err)
 	}
-	defer sfs.Close()
+	t.Cleanup(func() {
+		if err := sfs.Close(); err != nil {
+			t.Logf("error closing sfs: %v", err)
+		}
+	})
 
 	// Create a pipe file path
 	fifoPath := filepath.Join(tempDir, "test.fifo")

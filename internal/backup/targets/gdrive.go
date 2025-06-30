@@ -267,7 +267,11 @@ func (t *GDriveTarget) tokenFromFile() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			t.logger.Printf("gdrive: failed to close file: %v", err)
+		}
+	}()
 	tok := &oauth2.Token{}
 	err = json.NewDecoder(f).Decode(tok)
 	return tok, err
@@ -279,7 +283,11 @@ func (t *GDriveTarget) saveToken(token *oauth2.Token) error {
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "gdrive: unable to cache oauth token", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			t.logger.Printf("gdrive: failed to close file: %v", err)
+		}
+	}()
 	return json.NewEncoder(f).Encode(token)
 }
 
@@ -540,7 +548,11 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 		if err != nil {
 			return backup.NewError(backup.ErrIO, "gdrive: failed to open source file", err)
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				t.logger.Printf("gdrive: failed to close file: %v", err)
+			}
+		}()
 
 		if _, err = t.service.Files.Create(backupFile).Media(file).Context(ctx).Do(); err != nil {
 			return backup.NewError(backup.ErrIO, "gdrive: failed to upload backup file", err)

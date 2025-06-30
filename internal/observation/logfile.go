@@ -27,7 +27,11 @@ func LogNoteToFile(settings *conf.Settings, note *datastore.Note) error {
 		fmt.Printf("failed to open file '%s': %v\n", absoluteFilePath, err)
 		return fmt.Errorf("failed to open file '%s': %w", absoluteFilePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("failed to close log file: %v\n", err)
+		}
+	}()
 
 	// Parse the time from the note, assuming it's in the "15:04:05" format
 	t, err := time.Parse("15:04:05", note.Time)

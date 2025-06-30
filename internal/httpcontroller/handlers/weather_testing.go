@@ -371,7 +371,11 @@ func (h *Handlers) testWeatherAPIConnectivity(ctx context.Context, settings *con
 			State:   "failed",
 		}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
 
 	// For connectivity test, we just check if we got a response
 	log.Printf("✅ Successfully connected to %s API (status: %d)", getProviderDisplayName(provider), resp.StatusCode)
@@ -419,7 +423,11 @@ func (h *Handlers) testWeatherAuthentication(ctx context.Context, settings *conf
 			State:   "failed",
 		}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
 
 	switch resp.StatusCode {
 	case 401:
