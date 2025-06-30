@@ -45,7 +45,16 @@ type EventBus struct {
 var (
 	globalEventBus *EventBus
 	globalMutex    sync.Mutex
+	
+	// Fast path optimization: track if any consumers are registered
+	hasActiveConsumers atomic.Bool
 )
+
+// HasActiveConsumers returns true if any consumers are registered
+// This is used for fast path optimization to avoid overhead when no consumers exist
+func HasActiveConsumers() bool {
+	return hasActiveConsumers.Load()
+}
 
 // ResetForTesting resets the global event bus state (for testing only)
 func ResetForTesting() {
@@ -56,6 +65,7 @@ func ResetForTesting() {
 		_ = globalEventBus.Shutdown(1 * time.Second)
 	}
 	globalEventBus = nil
+	hasActiveConsumers.Store(false)
 }
 
 // DefaultConfig returns the default event bus configuration
@@ -160,6 +170,9 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 	
 	eb.consumers = append(eb.consumers, consumer)
 	
+	// Update global flag for fast path optimization
+	hasActiveConsumers.Store(true)
+	
 	eb.logger.Info("registered event consumer",
 		"consumer", consumer.Name(),
 		"supports_batching", consumer.SupportsBatching(),
@@ -176,6 +189,11 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 // TryPublish attempts to publish an event without blocking
 // Returns true if the event was accepted, false if dropped
 func (eb *EventBus) TryPublish(event ErrorEvent) bool {
+	// Ultra-fast path: check global flag first (lock-free)
+	if !hasActiveConsumers.Load() {
+		return false
+	}
+	
 	if eb == nil || !eb.initialized.Load() || !eb.running.Load() {
 		return false
 	}
