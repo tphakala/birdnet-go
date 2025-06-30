@@ -47,6 +47,17 @@ var (
 	globalMutex    sync.Mutex
 )
 
+// ResetForTesting resets the global event bus state (for testing only)
+func ResetForTesting() {
+	globalMutex.Lock()
+	defer globalMutex.Unlock()
+	
+	if globalEventBus != nil {
+		_ = globalEventBus.Shutdown(1 * time.Second)
+	}
+	globalEventBus = nil
+}
+
 // DefaultConfig returns the default event bus configuration
 func DefaultConfig() *Config {
 	return &Config{
