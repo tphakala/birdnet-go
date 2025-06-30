@@ -85,23 +85,19 @@ func (m *mockConsumer) GetEvents() []ErrorEvent {
 
 // TestEventBusInitialization tests event bus initialization
 func TestEventBusInitialization(t *testing.T) {
-	t.Parallel()
+	// Don't run in parallel due to global state modifications
 	
 	// Initialize logging for tests
 	logging.Init()
 	
 	// Reset global state
-	globalMutex.Lock()
-	globalEventBus = nil
-	globalMutex.Unlock()
+	ResetForTesting()
 	
 	t.Run("default initialization", func(t *testing.T) {
-		t.Parallel()
+		// Don't run subtests in parallel when modifying global state
 		
 		// Reset global state for this test
-		globalMutex.Lock()
-		globalEventBus = nil
-		globalMutex.Unlock()
+		ResetForTesting()
 		
 		eb, err := Initialize(nil)
 		if err != nil {
@@ -126,12 +122,10 @@ func TestEventBusInitialization(t *testing.T) {
 	})
 	
 	t.Run("disabled configuration", func(t *testing.T) {
-		t.Parallel()
+		// Don't run subtests in parallel when modifying global state
 		
 		// Reset global state
-		globalMutex.Lock()
-		globalEventBus = nil
-		globalMutex.Unlock()
+		ResetForTesting()
 		
 		config := &Config{
 			Enabled: false,

@@ -13,13 +13,16 @@ import (
 // TestNoCircularDependency verifies that events package doesn't import errors package
 // This test will fail to compile if there's a circular dependency
 func TestNoCircularDependency(t *testing.T) {
-	t.Parallel()
+	// Don't run in parallel due to global state
 	
 	// This test primarily exists to ensure compilation succeeds
 	// If there's a circular dependency, this won't compile
 	
 	// Initialize logging
 	logging.Init()
+	
+	// Reset state
+	events.ResetForTesting()
 	
 	// Initialize event bus
 	eb, err := events.Initialize(nil)
@@ -33,6 +36,11 @@ func TestNoCircularDependency(t *testing.T) {
 	
 	// The fact that this compiles proves no circular dependency
 	t.Log("No circular dependency detected")
+	
+	// Cleanup
+	t.Cleanup(func() {
+		events.ResetForTesting()
+	})
 }
 
 // TestErrorEventIntegration tests the integration between errors and events packages
@@ -120,6 +128,12 @@ func TestErrorEventIntegration(t *testing.T) {
 	if op, ok := ctx["operation"].(string); !ok || op != "test_operation" {
 		t.Errorf("expected operation 'test_operation', got %v", ctx["operation"])
 	}
+	
+	// Cleanup
+	t.Cleanup(func() {
+		events.ResetForTesting()
+		errors.ClearErrorHooks()
+	})
 }
 
 // testConsumer is a simple consumer for testing
