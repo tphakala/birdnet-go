@@ -605,7 +605,12 @@ func resolveGatewayFromRoute() net.IP {
 	if err != nil {
 		return nil
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Log error but don't fail - this is a best-effort operation
+			log.Printf("warning: failed to close /proc/net/route: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

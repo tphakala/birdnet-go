@@ -152,9 +152,13 @@ func TestCollector_getUniqueLogPaths(t *testing.T) {
 
 	// Change to temp directory to test relative path resolution
 	oldWd, _ := os.Getwd()
-	os.Chdir(tempDir)
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
 	t.Cleanup(func() {
-		os.Chdir(oldWd)
+		if err := os.Chdir(oldWd); err != nil {
+			t.Logf("Warning: Failed to restore working directory: %v", err)
+		}
 	})
 
 	uniquePaths := c.getUniqueLogPaths()

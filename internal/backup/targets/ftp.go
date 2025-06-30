@@ -507,97 +507,153 @@ func (t *FTPTarget) Validate() error {
 
 	return t.withRetry(ctx, func(conn *ftp.ServerConn) error {
 		// Check server features if required
-		if len(t.config.Features) > 0 {
-			t.logger.Printf("Warning: feature checking is not supported with current FTP library version")
+		t.checkServerFeatures()
+
+		// Validate base directory access
+		if err := t.validateBaseDirectory(ctx, conn); err != nil {
+			return err
 		}
 
-		// First ensure the base backup path exists
-		if err := t.createDirectory(ctx, conn, t.config.BasePath); err != nil {
-			if t.config.Debug {
-				t.logger.Printf("FTP: Failed to create base backup directory %s: %v", t.config.BasePath, err)
-			}
-			return backup.NewError(backup.ErrValidation, "ftp: failed to create base backup directory", err)
+		// Test write permissions
+		if err := t.testWritePermissions(ctx, conn); err != nil {
+			return err
 		}
 
-		// Change to the backup directory to ensure we have proper permissions
-		if err := conn.ChangeDir(t.config.BasePath); err != nil {
-			if t.config.Debug {
-				t.logger.Printf("FTP: Failed to change to backup directory %s: %v", t.config.BasePath, err)
-			}
-			return backup.NewError(backup.ErrValidation, "ftp: cannot access backup directory", err)
-		}
-
-		// Create a test subdirectory (using relative path since we're in the base directory)
-		testDirName := "write_test_dir"
-		if err := conn.MakeDir(testDirName); err != nil {
-			errStr := strings.ToLower(err.Error())
-			if !strings.Contains(errStr, "file exists") &&
-				!strings.Contains(errStr, "already exists") &&
-				!strings.Contains(errStr, "directory exists") &&
-				!strings.Contains(errStr, "550") {
-				if t.config.Debug {
-					t.logger.Printf("FTP: Failed to create test directory %s: %v", testDirName, err)
-				}
-				return backup.NewError(backup.ErrValidation, "ftp: failed to create test directory", err)
-			}
-		}
-
-		// Change into test directory
-		if err := conn.ChangeDir(testDirName); err != nil {
-			if t.config.Debug {
-				t.logger.Printf("FTP: Failed to change to test directory %s: %v", testDirName, err)
-			}
-			return backup.NewError(backup.ErrValidation, "ftp: cannot access test directory", err)
-		}
-
-		// Create a test file (using relative path since we're in the test directory)
-		testData := []byte("test")
-		tempFile, err := os.CreateTemp("", "ftp-test-*")
-		if err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to create temporary test file", err)
-		}
-		defer func() {
-			if err := os.Remove(tempFile.Name()); err != nil {
-				t.logger.Printf("ftp: failed to remove temp file: %v", err)
-			}
-		}()
-		if _, err := tempFile.Write(testData); err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to write test data", err)
-		}
-		if err := tempFile.Close(); err != nil {
-			return backup.NewError(backup.ErrIO, "ftp: failed to close test file", err)
-		}
-
-		// Upload test file using relative path
-		if err := t.uploadFile(ctx, conn, tempFile.Name(), "test.txt"); err != nil {
-			if t.config.Debug {
-				t.logger.Printf("FTP: Failed to upload test file: %v", err)
-			}
-			return backup.NewError(backup.ErrValidation, "ftp: failed to upload test file", err)
-		}
-
-		// Test file deletion - continue on error
-		if err := conn.Delete("test.txt"); err != nil && t.config.Debug {
-			t.logger.Printf("⚠️ FTP: Failed to delete test file: %v", err)
-		}
-
-		// Change back to parent directory
-		if err := conn.ChangeDirToParent(); err != nil && t.config.Debug {
-			t.logger.Printf("⚠️ FTP: Failed to change to parent directory: %v", err)
-		}
-
-		// Test directory deletion - continue on error
-		if err := conn.RemoveDir(testDirName); err != nil && t.config.Debug {
-			t.logger.Printf("⚠️ FTP: Failed to remove test directory %s: %v", testDirName, err)
-		}
-
-		// Change back to initial directory
-		if err := conn.ChangeDir(t.initialDir); err != nil && t.config.Debug {
-			t.logger.Printf("⚠️ FTP: Failed to change back to initial directory %s: %v", t.initialDir, err)
-		}
+		// Cleanup test artifacts
+		t.cleanupTestArtifacts(conn)
 
 		return nil
 	})
+}
+
+// checkServerFeatures checks if required server features are supported
+func (t *FTPTarget) checkServerFeatures() {
+	if len(t.config.Features) > 0 {
+		t.logger.Printf("Warning: feature checking is not supported with current FTP library version")
+	}
+}
+
+// validateBaseDirectory ensures the base backup directory exists and is accessible
+func (t *FTPTarget) validateBaseDirectory(ctx context.Context, conn *ftp.ServerConn) error {
+	// First ensure the base backup path exists
+	if err := t.createDirectory(ctx, conn, t.config.BasePath); err != nil {
+		if t.config.Debug {
+			t.logger.Printf("FTP: Failed to create base backup directory %s: %v", t.config.BasePath, err)
+		}
+		return backup.NewError(backup.ErrValidation, "ftp: failed to create base backup directory", err)
+	}
+
+	// Change to the backup directory to ensure we have proper permissions
+	if err := conn.ChangeDir(t.config.BasePath); err != nil {
+		if t.config.Debug {
+			t.logger.Printf("FTP: Failed to change to backup directory %s: %v", t.config.BasePath, err)
+		}
+		return backup.NewError(backup.ErrValidation, "ftp: cannot access backup directory", err)
+	}
+
+	return nil
+}
+
+// testWritePermissions tests if we can create directories and files
+func (t *FTPTarget) testWritePermissions(ctx context.Context, conn *ftp.ServerConn) error {
+	testDirName := "write_test_dir"
+
+	// Create test directory
+	if err := t.createTestDirectory(conn, testDirName); err != nil {
+		return err
+	}
+
+	// Change into test directory
+	if err := conn.ChangeDir(testDirName); err != nil {
+		if t.config.Debug {
+			t.logger.Printf("FTP: Failed to change to test directory %s: %v", testDirName, err)
+		}
+		return backup.NewError(backup.ErrValidation, "ftp: cannot access test directory", err)
+	}
+
+	// Test file upload
+	if err := t.testFileUpload(ctx, conn); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createTestDirectory creates a test directory for validation
+func (t *FTPTarget) createTestDirectory(conn *ftp.ServerConn, dirName string) error {
+	if err := conn.MakeDir(dirName); err != nil {
+		errStr := strings.ToLower(err.Error())
+		if !t.isDirectoryExistsError(errStr) {
+			if t.config.Debug {
+				t.logger.Printf("FTP: Failed to create test directory %s: %v", dirName, err)
+			}
+			return backup.NewError(backup.ErrValidation, "ftp: failed to create test directory", err)
+		}
+	}
+	return nil
+}
+
+// isDirectoryExistsError checks if the error indicates the directory already exists
+func (t *FTPTarget) isDirectoryExistsError(errStr string) bool {
+	return strings.Contains(errStr, "file exists") ||
+		strings.Contains(errStr, "already exists") ||
+		strings.Contains(errStr, "directory exists") ||
+		strings.Contains(errStr, "550")
+}
+
+// testFileUpload tests uploading a file to the FTP server
+func (t *FTPTarget) testFileUpload(ctx context.Context, conn *ftp.ServerConn) error {
+	// Create a test file
+	testData := []byte("test")
+	tempFile, err := os.CreateTemp("", "ftp-test-*")
+	if err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to create temporary test file", err)
+	}
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			t.logger.Printf("ftp: failed to remove temp file: %v", err)
+		}
+	}()
+
+	if _, err := tempFile.Write(testData); err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to write test data", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return backup.NewError(backup.ErrIO, "ftp: failed to close test file", err)
+	}
+
+	// Upload test file
+	if err := t.uploadFile(ctx, conn, tempFile.Name(), "test.txt"); err != nil {
+		if t.config.Debug {
+			t.logger.Printf("FTP: Failed to upload test file: %v", err)
+		}
+		return backup.NewError(backup.ErrValidation, "ftp: failed to upload test file", err)
+	}
+
+	return nil
+}
+
+// cleanupTestArtifacts removes test files and directories created during validation
+func (t *FTPTarget) cleanupTestArtifacts(conn *ftp.ServerConn) {
+	// Test file deletion - continue on error
+	if err := conn.Delete("test.txt"); err != nil && t.config.Debug {
+		t.logger.Printf("⚠️ FTP: Failed to delete test file: %v", err)
+	}
+
+	// Change back to parent directory
+	if err := conn.ChangeDirToParent(); err != nil && t.config.Debug {
+		t.logger.Printf("⚠️ FTP: Failed to change to parent directory: %v", err)
+	}
+
+	// Test directory deletion - continue on error
+	if err := conn.RemoveDir("write_test_dir"); err != nil && t.config.Debug {
+		t.logger.Printf("⚠️ FTP: Failed to remove test directory: %v", err)
+	}
+
+	// Change back to initial directory
+	if err := conn.ChangeDir(t.initialDir); err != nil && t.config.Debug {
+		t.logger.Printf("⚠️ FTP: Failed to change back to initial directory %s: %v", t.initialDir, err)
+	}
 }
 
 // trackTempFile adds a temporary file to the tracking map
