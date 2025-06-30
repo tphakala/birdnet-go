@@ -2,6 +2,8 @@ package notification
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"text/template"
@@ -217,28 +219,133 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 	return nil
 }
 
-// ProcessBatch processes multiple events at once
+// ProcessBatch processes multiple events at once with aggregation
 func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
-	// For now, process individually
-	// TODO: Implement true batch processing with aggregation
-	var lastErr error
+	if len(errorEvents) == 0 {
+		return nil
+	}
+	
+	// Group events by component and category for aggregation
+	type eventKey struct {
+		component string
+		category  string
+		priority  Priority
+	}
+	
+	eventGroups := make(map[eventKey][]events.ErrorEvent)
+	
+	// Group events by key
+	for _, event := range errorEvents {
+		priority := getNotificationPriority(event.GetCategory())
+		
+		// Skip low priority events
+		if priority != PriorityHigh && priority != PriorityCritical {
+			continue
+		}
+		
+		key := eventKey{
+			component: event.GetComponent(),
+			category:  event.GetCategory(),
+			priority:  priority,
+		}
+		eventGroups[key] = append(eventGroups[key], event)
+	}
+	
+	// Process each group
+	var aggregatedErrors []error
 	successCount := 0
 	
-	for _, event := range errorEvents {
-		if err := w.ProcessEvent(event); err != nil {
-			lastErr = err
+	for key, events := range eventGroups {
+		// Check circuit breaker once per group
+		if !w.circuitBreaker.Allow() {
+			w.eventsDropped.Add(uint64(len(events)))
+			w.logger.Debug("circuit breaker open, dropping event group",
+				"component", key.component,
+				"category", key.category,
+				"count", len(events),
+			)
+			continue
+		}
+		
+		// Create aggregated notification
+		title := fmt.Sprintf("%s (%d occurrences)", 
+			w.generateTitle(events[0], key.priority), len(events))
+		
+		// Aggregate messages
+		var messageBuilder strings.Builder
+		messageBuilder.WriteString(fmt.Sprintf("Multiple %s errors in %s:\n", 
+			key.category, key.component))
+		
+		// Include up to 5 unique messages
+		uniqueMessages := make(map[string]bool)
+		for _, event := range events {
+			msg := event.GetMessage()
+			if len(uniqueMessages) >= 5 {
+				messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors", 
+					len(events)-len(uniqueMessages)))
+				break
+			}
+			if !uniqueMessages[msg] {
+				uniqueMessages[msg] = true
+				messageBuilder.WriteString("\n• ")
+				messageBuilder.WriteString(w.truncateMessage(msg, 100))
+			}
+		}
+		
+		// Create single notification for the group
+		notification, err := w.service.CreateWithComponent(
+			TypeError,
+			key.priority,
+			title,
+			messageBuilder.String(),
+			key.component,
+		)
+		
+		if err != nil {
+			w.eventsFailed.Add(uint64(len(events)))
+			w.circuitBreaker.RecordFailure()
+			aggregatedErrors = append(aggregatedErrors, err)
+			
+			// Check for rate limit
+			var enhErr *errors.EnhancedError
+			if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
+				w.eventsDropped.Add(uint64(len(events)))
+			}
 		} else {
-			successCount++
+			w.eventsProcessed.Add(uint64(len(events)))
+			w.circuitBreaker.RecordSuccess()
+			successCount += len(events)
+			
+			// Add aggregated context
+			if notification != nil {
+				notification.WithMetadata("error_count", len(events))
+				notification.WithMetadata("first_occurrence", events[0].GetTimestamp())
+				notification.WithMetadata("last_occurrence", events[len(events)-1].GetTimestamp())
+			}
 		}
 	}
 	
-	w.logger.Debug("processed event batch",
+	w.logger.Debug("processed event batch with aggregation",
 		"total", len(errorEvents),
+		"groups", len(eventGroups),
 		"success", successCount,
 		"failed", len(errorEvents)-successCount,
 	)
 	
-	return lastErr
+	// Return aggregated errors if any
+	if len(aggregatedErrors) > 0 {
+		return errors.Join(aggregatedErrors...)
+	}
+	
+	return nil
+}
+
+// truncateMessage truncates a message to the specified length
+func (w *NotificationWorker) truncateMessage(message string, maxLength int) string {
+	if len(message) <= maxLength {
+		return message
+	}
+	return message[:maxLength-3] + "..."
 }
 
 // SupportsBatching returns true if this consumer supports batch processing
@@ -261,19 +368,80 @@ func (w *NotificationWorker) generateTitle(event events.ErrorEvent, priority Pri
 	}
 }
 
-// generateMessage generates a notification message based on the event
+// generateMessage generates a notification message based on the event using pre-compiled templates
 func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority Priority) string {
-	// For now, use simple message formatting
-	// TODO: Use pre-compiled templates for better performance
-	message := event.GetMessage()
-	
-	// Truncate very long messages
-	const maxLength = 500
-	if len(message) > maxLength {
-		message = message[:maxLength-3] + "..."
+	// Select appropriate template based on priority
+	var templateName string
+	switch priority {
+	case PriorityCritical:
+		templateName = "error_critical"
+	case PriorityHigh:
+		templateName = "error_high"
+	case PriorityMedium:
+		templateName = "error_medium"
+	case PriorityLow:
+		templateName = "error_low"
+	default:
+		templateName = "error_medium"
 	}
 	
-	return message
+	// Get template
+	w.templateMu.RLock()
+	tmpl, exists := w.templates[templateName]
+	w.templateMu.RUnlock()
+	
+	if !exists {
+		// Fallback to simple message if template not found
+		return w.truncateMessage(event.GetMessage(), 500)
+	}
+	
+	// Prepare template data
+	data := map[string]interface{}{
+		"Component": event.GetComponent(),
+		"Category":  event.GetCategory(),
+		"Message":   event.GetMessage(),
+	}
+	
+	// Add context if available
+	if ctx := event.GetContext(); len(ctx) > 0 {
+		data["Context"] = formatContext(ctx)
+	}
+	
+	// Execute template
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
+		w.logger.Error("failed to execute notification template",
+			"template", templateName,
+			"error", err,
+		)
+		// Fallback to simple message
+		return w.truncateMessage(event.GetMessage(), 500)
+	}
+	
+	// Truncate if necessary
+	result := buf.String()
+	const maxLength = 500
+	if len(result) > maxLength {
+		result = result[:maxLength-3] + "..."
+	}
+	
+	return result
+}
+
+// formatContext formats the error context for display
+func formatContext(ctx map[string]interface{}) string {
+	if len(ctx) == 0 {
+		return ""
+	}
+	
+	parts := make([]string, 0, len(ctx))
+	for k, v := range ctx {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+	}
+	
+	// Sort for consistent output
+	sort.Strings(parts)
+	return strings.Join(parts, ", ")
 }
 
 // GetStats returns worker statistics

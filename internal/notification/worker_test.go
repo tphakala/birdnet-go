@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func (m *mockErrorEvent) MarkReported() {
 }
 
 func TestNotificationWorker_ProcessEvent(t *testing.T) {
-	// Do not run in parallel since we're testing notification creation
+	t.Parallel()
 	
 	// Initialize logging
 	logging.Init()
@@ -96,7 +97,7 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Do not run subtests in parallel
+			t.Parallel()
 			
 			// Create service with small buffer
 			service := NewService(&ServiceConfig{
@@ -124,10 +125,7 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 			t.Logf("Worker stats: processed=%d, dropped=%d, failed=%d", 
 				stats.EventsProcessed, stats.EventsDropped, stats.EventsFailed)
 			
-			// Give the service a moment to process
-			time.Sleep(10 * time.Millisecond)
-			
-			// Check notifications
+			// Check notifications immediately - ProcessEvent is synchronous
 			notifications, err := service.List(&FilterOptions{
 				Types: []Type{TypeError},
 			})
@@ -163,7 +161,7 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 }
 
 func TestNotificationWorker_CircuitBreaker(t *testing.T) {
-	// Do not run in parallel
+	t.Parallel()
 	
 	// Initialize logging
 	logging.Init()
@@ -206,8 +204,6 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 		if err == nil {
 			successCount++
 		}
-		// Small delay between events to ensure processing
-		time.Sleep(5 * time.Millisecond)
 	}
 	
 	// Check circuit state
@@ -222,19 +218,30 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 		t.Errorf("Expected some events to be processed or dropped, got neither")
 	}
 	
-	// If circuit is open, test recovery
+	// If circuit is open, test recovery behavior by checking state transitions
 	if stats.CircuitState == "open" {
-		// Wait for recovery timeout (add extra buffer)
-		time.Sleep(150 * time.Millisecond)
+		// Create a test helper to wait for circuit recovery
+		waitForCircuitRecovery := func(t *testing.T, cb *CircuitBreaker, timeout time.Duration) bool {
+			deadline := time.Now().Add(timeout)
+			ticker := time.NewTicker(10 * time.Millisecond)
+			defer ticker.Stop()
+			
+			for time.Now().Before(deadline) {
+				<-ticker.C
+				if cb.Allow() {
+					return true
+				}
+			}
+			return false
+		}
 		
-		// Test that circuit allows request after recovery
-		allowed := worker.circuitBreaker.Allow()
+		// Wait for circuit to allow requests after recovery timeout
+		recovered := waitForCircuitRecovery(t, worker.circuitBreaker, 200*time.Millisecond)
 		newState := worker.circuitBreaker.State()
 		
-		t.Logf("After recovery timeout: allowed=%v, state=%s", allowed, newState)
+		t.Logf("After recovery wait: recovered=%v, state=%s", recovered, newState)
 		
-		// Circuit should either allow the request or be in a non-open state
-		if !allowed && newState == "open" {
+		if !recovered {
 			t.Errorf("Circuit breaker should allow request after recovery timeout")
 		}
 	} else {
@@ -257,37 +264,44 @@ func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 	}
 	
 	tests := []struct {
-		name          string
-		event         events.ErrorEvent
-		priority      Priority
-		expectedTitle string
+		name            string
+		event           events.ErrorEvent
+		priority        Priority
+		expectedTitle   string
+		expectedMessage string // Add message validation
 	}{
 		{
-			name: "critical_title",
+			name: "critical_title_and_message",
 			event: &mockErrorEvent{
 				component: "database",
 				category:  string(errors.CategoryDatabase),
+				message:   "Connection failed",
 			},
-			priority:      PriorityCritical,
-			expectedTitle: "Critical database Error in database",
+			priority:        PriorityCritical,
+			expectedTitle:   "Critical database Error in database",
+			expectedMessage: "Critical database error in database: Connection failed",
 		},
 		{
-			name: "high_title",
+			name: "high_title_and_message",
 			event: &mockErrorEvent{
 				component: "network",
 				category:  string(errors.CategoryNetwork),
+				message:   "Timeout occurred",
 			},
-			priority:      PriorityHigh,
-			expectedTitle: "network Error in network",
+			priority:        PriorityHigh,
+			expectedTitle:   "network Error in network",
+			expectedMessage: "network error in network: Timeout occurred",
 		},
 		{
-			name: "medium_title",
+			name: "medium_title_and_message",
 			event: &mockErrorEvent{
 				component: "audio",
 				category:  string(errors.CategoryAudio),
+				message:   "Buffer underrun",
 			},
-			priority:      PriorityMedium,
-			expectedTitle: "audio Issue",
+			priority:        PriorityMedium,
+			expectedTitle:   "audio Issue",
+			expectedMessage: "audio reported: Buffer underrun",
 		},
 	}
 	
@@ -298,6 +312,12 @@ func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 			title := worker.generateTitle(tt.event, tt.priority)
 			if title != tt.expectedTitle {
 				t.Errorf("Expected title %q, got %q", tt.expectedTitle, title)
+			}
+			
+			// Test message generation with templates
+			message := worker.generateMessage(tt.event, tt.priority)
+			if message != tt.expectedMessage {
+				t.Errorf("Expected message %q, got %q", tt.expectedMessage, message)
 			}
 		})
 	}
@@ -324,7 +344,9 @@ func TestNotificationWorker_MessageTruncation(t *testing.T) {
 	}
 	
 	event := &mockErrorEvent{
-		message: string(longMessage),
+		component: "test",
+		category:  string(errors.CategoryGeneric),
+		message:   string(longMessage),
 	}
 	
 	message := worker.generateMessage(event, PriorityHigh)
@@ -336,5 +358,106 @@ func TestNotificationWorker_MessageTruncation(t *testing.T) {
 	
 	if message[len(message)-3:] != "..." {
 		t.Errorf("Expected truncated message to end with '...', got %q", message[len(message)-3:])
+	}
+}
+
+func TestNotificationWorker_BatchProcessing(t *testing.T) {
+	t.Parallel()
+	
+	// Initialize logging
+	logging.Init()
+	
+	service := NewService(&ServiceConfig{
+		MaxNotifications:   100,
+		CleanupInterval:    5 * time.Minute,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 100,
+	})
+	defer service.Stop()
+	
+	config := &WorkerConfig{
+		BatchingEnabled: true,
+		BatchSize:       10,
+		BatchTimeout:    100 * time.Millisecond,
+	}
+	
+	worker, err := NewNotificationWorker(service, config)
+	if err != nil {
+		t.Fatalf("Failed to create worker: %v", err)
+	}
+	
+	// Create multiple events for batch processing
+	errorEvents := []events.ErrorEvent{
+		// Same component and category - should be grouped
+		&mockErrorEvent{
+			component: "database",
+			category:  string(errors.CategoryDatabase),
+			message:   "Connection failed",
+			timestamp: time.Now(),
+		},
+		&mockErrorEvent{
+			component: "database",
+			category:  string(errors.CategoryDatabase),
+			message:   "Connection timeout",
+			timestamp: time.Now(),
+		},
+		&mockErrorEvent{
+			component: "database",
+			category:  string(errors.CategoryDatabase),
+			message:   "Connection failed", // Duplicate message
+			timestamp: time.Now(),
+		},
+		// Different component - should be separate group
+		&mockErrorEvent{
+			component: "system",
+			category:  string(errors.CategorySystem),
+			message:   "High memory usage",
+			timestamp: time.Now(),
+		},
+		// Low priority - should be skipped
+		&mockErrorEvent{
+			component: "validation",
+			category:  string(errors.CategoryValidation),
+			message:   "Invalid input",
+			timestamp: time.Now(),
+		},
+	}
+	
+	// Process batch
+	err = worker.ProcessBatch(errorEvents)
+	if err != nil {
+		t.Errorf("ProcessBatch failed: %v", err)
+	}
+	
+	// Check notifications created
+	notifications, err := service.List(&FilterOptions{
+		Types: []Type{TypeError},
+	})
+	if err != nil {
+		t.Fatalf("Failed to list notifications: %v", err)
+	}
+	
+	// Should have 2 notifications (database group + system)
+	if len(notifications) != 2 {
+		t.Errorf("Expected 2 notifications (grouped), got %d", len(notifications))
+	}
+	
+	// Verify aggregation in titles
+	for _, notif := range notifications {
+		if notif.Component == "database" {
+			if !strings.Contains(notif.Title, "occurrences") {
+				t.Errorf("Expected database notification to show occurrences in title, got %q", notif.Title)
+			}
+			if !strings.Contains(notif.Message, "Multiple") {
+				t.Errorf("Expected database notification to mention multiple errors, got %q", notif.Message)
+			}
+		}
+	}
+	
+	// Check stats
+	stats := worker.GetStats()
+	// Should process 4 events (5 - 1 low priority)
+	if stats.EventsProcessed != 4 {
+		t.Errorf("Expected 4 events processed, got %d", stats.EventsProcessed)
 	}
 }
