@@ -30,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
@@ -957,13 +958,23 @@ func initializeNotificationService() error {
 			Build()
 	}
 	
+	// Initialize telemetry worker with event bus
+	// This replaces the direct telemetry calls with async processing
+	if err := telemetry.InitializeTelemetryEventBus(); err != nil {
+		// Log but don't fail - telemetry is not critical
+		logging.Warn("Failed to initialize telemetry event bus integration",
+			"error", err,
+			"component", "telemetry")
+	}
+	
 	// Create a simple telemetry reporter that enables the fast path
 	errors.SetTelemetryReporter(&simpleTelemetryReporter{enabled: true})
 	
 	logging.Info("Notification service initialized",
 		"component", "notification",
 		"event_bus", eventBus != nil,
-		"error_integration", "async-eventbus")
+		"error_integration", "async-eventbus",
+		"telemetry_integration", telemetry.IsTelemetryEventBusEnabled())
 	
 	return nil
 }
