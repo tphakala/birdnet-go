@@ -893,10 +893,17 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 // initializeNotificationService initializes the notification service with error integration
 func initializeNotificationService() {
 	notification.Initialize(nil)         // Use default configuration
-	notification.SetupErrorIntegration() // Set up error reporting integration
-	logging.Info("Notification service initialized with error integration",
+	
+	// TEMPORARILY DISABLED: The error integration is causing deadlocks during startup
+	// when the notification service tries to create errors that trigger its own hooks.
+	// This creates a circular dependency that blocks application startup.
+	// TODO: Implement proper initialization ordering and recursion prevention
+	// See: https://github.com/tphakala/birdnet-go/issues/825
+	// notification.SetupErrorIntegration() // Set up error reporting integration
+	
+	logging.Info("Notification service initialized",
 		"component", "notification",
-		"error_integration", "enabled")
+		"error_integration", "disabled")
 }
 
 // initializeSystemMonitor initializes and starts the system resource monitor if enabled
