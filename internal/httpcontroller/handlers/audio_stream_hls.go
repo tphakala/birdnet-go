@@ -256,7 +256,11 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 		log.Printf("❌ Error creating secure filesystem: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Server error")
 	}
-	defer secFS.Close()
+	defer func() {
+		if err := secFS.Close(); err != nil {
+			log.Printf("Failed to close secure filesystem: %v", err)
+		}
+	}()
 
 	// Set proper content type for m3u8 playlist
 	c.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
@@ -319,7 +323,11 @@ func (h *Handlers) serveSegmentFile(c echo.Context, stream *HLSStreamInfo, reque
 		log.Printf("❌ Error creating secure filesystem: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Server error")
 	}
-	defer secFS.Close()
+	defer func() {
+		if err := secFS.Close(); err != nil {
+			log.Printf("Failed to close secure filesystem: %v", err)
+		}
+	}()
 
 	// Use securefs to validate the path is within the stream's output directory
 	isWithin, err := securefs.IsPathWithinBase(stream.OutputDir, segmentPath)
@@ -573,7 +581,11 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 		streamCancel() // Clean up context
 		return nil, fmt.Errorf("failed to initialize secure filesystem: %w", err)
 	}
-	defer secFS.Close()
+	defer func() {
+		if err := secFS.Close(); err != nil {
+			log.Printf("Failed to close secure filesystem: %v", err)
+		}
+	}()
 
 	// Prepare the output directory and playlist path using the filesystem-safe name
 	outputDir, playlistPath, err := prepareStreamDirectory(secFS, hlsBaseDir, filesystemSafeSourceID)
@@ -686,7 +698,11 @@ func setupWindowsAudioFeed(ctx context.Context, sourceID string, cmd *exec.Cmd) 
 
 	// Start audio feeding in a goroutine
 	go func() {
-		defer stdin.Close()
+		defer func() {
+			if err := stdin.Close(); err != nil {
+				log.Printf("Failed to close stdin: %v", err)
+			}
+		}()
 		log.Printf("🎵 Starting audio feed via stdin for source %s", sourceID)
 
 		// Set up audio callback
@@ -752,7 +768,9 @@ func setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd, hlsBaseDir, out
 	cmd.Stderr = logFile
 
 	if err := cmd.Start(); err != nil {
-		logFile.Close() // Close the log file
+		if err := logFile.Close(); err != nil {
+			log.Printf("Failed to close log file: %v", err)
+		} // Close the log file
 		log.Printf("❌ Error starting FFmpeg: %v", err)
 		// Use secureFS for cleanup
 		if err := secFS.RemoveAll(outputDir); err != nil {
@@ -917,7 +935,11 @@ func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 		log.Printf("❌ Error creating secure filesystem: %v", err)
 		return
 	}
-	defer secFS.Close()
+	defer func() {
+		if err := secFS.Close(); err != nil {
+			log.Printf("Failed to close secure filesystem: %v", err)
+		}
+	}()
 
 	// Determine the filesystem path for callbacks
 	// Derive paths from the *trusted* pipePath we already have
@@ -963,7 +985,9 @@ func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	}
 	defer func() {
 		log.Printf("🧹 Closing pipe for source %s", sanitizedSourceID)
-		fifo.Close()
+		if err := fifo.Close(); err != nil {
+			log.Printf("Failed to close fifo: %v", err)
+		}
 	}()
 
 	// Set up audio callback using the ORIGINAL sourceID for myaudio registration
@@ -1182,7 +1206,11 @@ func (h *Handlers) cleanupExistingStream(sourceID string) bool {
 			if err != nil {
 				log.Printf("Error creating secure filesystem: %v", err)
 			} else {
-				defer secFS.Close()
+				defer func() {
+					if err := secFS.Close(); err != nil {
+						log.Printf("Failed to close secure filesystem: %v", err)
+					}
+				}()
 
 				if secFS.ExistsNoErr(outputDir) {
 					log.Printf("🧹 Removing stream directory: %s", outputDir)
@@ -1270,7 +1298,11 @@ func (h *Handlers) checkPlaylistReady(c echo.Context, sourceID string, stream *H
 		log.Printf("❌ Error creating secure filesystem: %v", err)
 		return false
 	}
-	defer secFS.Close()
+	defer func() {
+		if err := secFS.Close(); err != nil {
+			log.Printf("Failed to close secure filesystem: %v", err)
+		}
+	}()
 
 	// Check if the playlist file exists, waiting a reasonable time if needed
 	// Use a cancellable context to ensure we don't wait forever
@@ -1414,7 +1446,11 @@ func CleanupAllStreams() error {
 	if err != nil {
 		return fmt.Errorf("failed to create secure filesystem: %w", err)
 	}
-	defer secFS.Close()
+	defer func() {
+		if err := secFS.Close(); err != nil {
+			log.Printf("Failed to close secure filesystem: %v", err)
+		}
+	}()
 
 	// Read all entries in the HLS directory using SecureFS
 	entries, err := secFS.ReadDir(hlsBaseDir)
@@ -1621,7 +1657,11 @@ func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string)
 			if err != nil {
 				log.Printf("Error creating secure filesystem: %v", err)
 			} else {
-				defer secFS.Close()
+				defer func() {
+					if err := secFS.Close(); err != nil {
+						log.Printf("Failed to close secure filesystem: %v", err)
+					}
+				}()
 
 				if secFS.ExistsNoErr(stream.OutputDir) {
 					log.Printf("🧹 Cleaning up stream directory: %s", stream.OutputDir)

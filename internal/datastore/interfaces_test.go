@@ -21,7 +21,11 @@ func createDatabase(t *testing.T, settings *conf.Settings) Interface {
 	}
 
 	// Ensure the database is closed after the test completes.
-	t.Cleanup(func() { dataStore.Close() })
+	t.Cleanup(func() {
+		if err := dataStore.Close(); err != nil {
+			t.Errorf("Failed to close datastore: %v", err)
+		}
+	})
 
 	return dataStore
 }

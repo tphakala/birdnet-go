@@ -234,7 +234,11 @@ func RunningInContainer() bool {
 		fmt.Println("Error opening /proc/self/cgroup:", err)
 		return false
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close /proc/self/cgroup: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -469,13 +473,21 @@ func moveFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("error opening source file: %w", err)
 	}
-	defer srcFile.Close() // Ensure the source file is closed when we're done
+	defer func() {
+		if err := srcFile.Close(); err != nil {
+			log.Printf("Failed to close source file: %v", err)
+		}
+	}() // Ensure the source file is closed when we're done
 
 	dstFile, err := os.Create(dstAbs)
 	if err != nil {
 		return fmt.Errorf("error creating destination file: %w", err)
 	}
-	defer dstFile.Close() // Ensure the destination file is closed when we're done
+	defer func() {
+		if err := dstFile.Close(); err != nil {
+			log.Printf("Failed to close destination file: %v", err)
+		}
+	}() // Ensure the destination file is closed when we're done
 
 	// Copy the contents from source to destination
 	_, err = io.Copy(dstFile, srcFile)
@@ -593,7 +605,12 @@ func resolveGatewayFromRoute() net.IP {
 	if err != nil {
 		return nil
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Log error but don't fail - this is a best-effort operation
+			log.Printf("warning: failed to close /proc/net/route: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

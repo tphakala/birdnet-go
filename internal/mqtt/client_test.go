@@ -60,7 +60,10 @@ func isLocalBrokerAvailable() bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		// Log but don't fail the check
+		log.Printf("Failed to close connection: %v", err)
+	}
 	return true
 }
 
@@ -70,7 +73,10 @@ func isTestBrokerAvailable() bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		// Log but don't fail the check
+		log.Printf("Failed to close connection: %v", err)
+	}
 	return true
 }
 

@@ -268,7 +268,11 @@ func (c *client) testTCPStage(ctx context.Context) TestResult {
 				Build()
 			return enhancedErr
 		}
-		defer conn.Close()
+		defer func() {
+			if err := conn.Close(); err != nil {
+				log.Printf("Failed to close connection: %v", err)
+			}
+		}()
 		return nil
 	})
 }
@@ -605,7 +609,9 @@ func testTCPConnection(ctx context.Context, broker string) TestResult {
 		var d net.Dialer
 		conn, err := d.DialContext(ctx, "tcp", hostPort)
 		if err == nil {
-			conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Printf("Failed to close connection: %v", closeErr)
+			}
 		}
 		resultChan <- err
 	}()

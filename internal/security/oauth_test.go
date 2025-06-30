@@ -36,7 +36,7 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	// Store token using gothic's method
-	gothic.StoreInSession("access_token", "valid_token", req, rec)
+	_ = gothic.StoreInSession("access_token", "valid_token", req, rec) // Test setup, error not relevant
 
 	// Add cookie to request
 	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
@@ -92,7 +92,7 @@ func TestIsUserAuthenticated(t *testing.T) {
 			c := e.NewContext(req, rec)
 
 			// Store token using gothic's method
-			gothic.StoreInSession("access_token", tt.token, req, rec)
+			_ = gothic.StoreInSession("access_token", tt.token, req, rec) // Test setup, error not relevant
 
 			// Add cookie to request
 			req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))

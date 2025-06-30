@@ -110,7 +110,11 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
-		defer file.Close() // Ensure the file is closed when the function exits.
+		defer func() {
+			if err := file.Close(); err != nil {
+				fmt.Printf("failed to close output file: %v\n", err)
+			}
+		}() // Ensure the file is closed when the function exits.
 		w = file
 	}
 
@@ -146,7 +150,9 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 	if err != nil {
 		return fmt.Errorf("failed to write note: %w", err)
 	} else if filename != "" {
-		yellow.Println("📁 Output written to", filename)
+		if _, err := yellow.Println("📁 Output written to", filename); err != nil {
+			fmt.Printf("failed to print output message: %v\n", err)
+		}
 	}
 
 	// Return nil if the writing operation completes successfully.
@@ -171,7 +177,11 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 		if err != nil {
 			return fmt.Errorf("failed to create file %s: %w", filename, err)
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				fmt.Printf("failed to close CSV file: %v\n", err)
+			}
+		}()
 		w = file
 	} else {
 		// Print output to stdout if the file output is disabled

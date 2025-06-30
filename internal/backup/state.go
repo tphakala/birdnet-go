@@ -149,7 +149,9 @@ func (sm *StateManager) saveState() error {
 
 	// Rename temporary file to actual state file (atomic operation)
 	if err := os.Rename(tempFile, sm.statePath); err != nil {
-		os.Remove(tempFile) // Clean up temp file if rename fails
+		if removeErr := os.Remove(tempFile); removeErr != nil {
+			sm.logger.Warn("Failed to clean up temp file after rename failure", "temp_path", tempFile, "error", removeErr)
+		}
 		sm.logger.Error("Failed to save state file (rename failed)", "temp_path", tempFile, "final_path", sm.statePath, "error", err)
 		return fmt.Errorf("failed to save state file: %w", err)
 	}

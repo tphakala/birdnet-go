@@ -52,8 +52,14 @@ func atomicWriteFile(targetPath, tempPattern string, perm os.FileMode, write fun
 	success := false
 	defer func() {
 		if !success {
-			tempFile.Close()
-			os.Remove(tempPath)
+			if err := tempFile.Close(); err != nil {
+				// Log but don't return error since we're in cleanup
+				fmt.Printf("local: failed to close temp file: %v\n", err)
+			}
+			if err := os.Remove(tempPath); err != nil {
+				// Log but don't return error since we're in cleanup
+				fmt.Printf("local: failed to remove temp file: %v\n", err)
+			}
 		}
 	}()
 
@@ -388,7 +394,11 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 					Context("source_path", sourcePath).
 					Build()
 			}
-			defer srcFile.Close()
+			defer func() {
+				if err := srcFile.Close(); err != nil {
+					t.logger.Printf("local: failed to close source file: %v", err)
+				}
+			}()
 
 			// Create a buffered copy with context cancellation
 			copyDone := make(chan error, 1)
@@ -530,11 +540,15 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		var metadata backup.Metadata
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&metadata); err != nil {
-			metadataFile.Close()
+			if err := metadataFile.Close(); err != nil {
+				t.logger.Printf("local: failed to close metadata file: %v", err)
+			}
 			t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", backupName, err)
 			continue
 		}
-		metadataFile.Close()
+		if err := metadataFile.Close(); err != nil {
+			t.logger.Printf("local: failed to close metadata file: %v", err)
+		}
 
 		backupInfo := backup.BackupInfo{
 			Metadata: metadata,
@@ -642,8 +656,12 @@ func (t *LocalTarget) Validate() error {
 			Context("path", t.path).
 			Build()
 	}
-	f.Close()
-	os.Remove(tmpFile)
+	if err := f.Close(); err != nil {
+		t.logger.Printf("local: failed to close test file: %v", err)
+	}
+	if err := os.Remove(tmpFile); err != nil {
+		t.logger.Printf("local: failed to remove test file: %v", err)
+	}
 
 	// Check available disk space
 	availableBytes, err := diskmanager.GetAvailableSpace(t.path)

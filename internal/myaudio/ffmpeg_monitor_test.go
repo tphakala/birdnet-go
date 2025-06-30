@@ -944,7 +944,9 @@ func TestFFmpegProcessRestartMechanism(t *testing.T) {
 
 	// Run the test function in a goroutine
 	go func() {
-		testManageFfmpegLifecycle(config, restartChan, audioLevelChan)
+		if err := testManageFfmpegLifecycle(config, restartChan, audioLevelChan); err != nil {
+			t.Logf("testManageFfmpegLifecycle error: %v", err)
+		}
 		close(testDone)
 	}()
 
@@ -1663,7 +1665,9 @@ func BenchmarkCheckProcessesEmpty(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		monitor.checkProcesses()
+		if err := monitor.checkProcesses(); err != nil {
+			b.Logf("checkProcesses error: %v", err)
+		}
 	}
 }
 
@@ -1718,7 +1722,9 @@ func BenchmarkCheckProcessesSmall(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		monitor.checkProcesses()
+		if err := monitor.checkProcesses(); err != nil {
+			b.Logf("checkProcesses error: %v", err)
+		}
 	}
 }
 
@@ -1765,7 +1771,9 @@ func BenchmarkCheckProcessesLarge(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		monitor.checkProcesses()
+		if err := monitor.checkProcesses(); err != nil {
+			b.Logf("checkProcesses error: %v", err)
+		}
 	}
 }
 
@@ -1821,7 +1829,9 @@ func BenchmarkCleanupOrphanedProcesses(b *testing.B) {
 	// Run the benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		monitor.cleanupOrphanedProcesses()
+		if err := monitor.cleanupOrphanedProcesses(); err != nil {
+			b.Logf("cleanupOrphanedProcesses error: %v", err)
+		}
 	}
 }
 
