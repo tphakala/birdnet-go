@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -165,7 +166,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// Initialize notification service
-	initializeNotificationService()
+	if err := initializeNotificationService(); err != nil {
+		log.Printf("Error: Failed to initialize notification service: %v", err)
+		return err
+	}
 
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
@@ -890,20 +894,78 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	return backupManager, backupScheduler, nil
 }
 
+// simpleTelemetryReporter is a minimal reporter that just enables the fast path
+type simpleTelemetryReporter struct {
+	enabled bool
+}
+
+func (r *simpleTelemetryReporter) ReportError(err *errors.EnhancedError) {
+	// Actual reporting happens async through event bus
+}
+
+func (r *simpleTelemetryReporter) IsEnabled() bool {
+	return r.enabled
+}
+
 // initializeNotificationService initializes the notification service with error integration
-func initializeNotificationService() {
-	notification.Initialize(nil)         // Use default configuration
+func initializeNotificationService() error {
+	// Initialize notification service first
+	notification.Initialize(nil) // Use default configuration
 	
-	// TEMPORARILY DISABLED: The error integration is causing deadlocks during startup
-	// when the notification service tries to create errors that trigger its own hooks.
-	// This creates a circular dependency that blocks application startup.
-	// TODO: Implement proper initialization ordering and recursion prevention
-	// See: https://github.com/tphakala/birdnet-go/issues/825
-	// notification.SetupErrorIntegration() // Set up error reporting integration
+	// Initialize event bus for async error processing
+	eventBusConfig := &events.Config{
+		BufferSize: 10000,
+		Workers:    4,
+		Enabled:    true,
+		Deduplication: &events.DeduplicationConfig{
+			Enabled:         true,
+			TTL:             5 * time.Minute,
+			MaxEntries:      1000,
+			CleanupInterval: 1 * time.Minute,
+		},
+	}
+	
+	eventBus, err := events.Initialize(eventBusConfig)
+	if err != nil {
+		return errors.New(err).
+			Component("notification").
+			Category(errors.CategorySystem).
+			Context("operation", "event_bus_init").
+			Build()
+	}
+	
+	// Set up integration between errors package and event bus
+	err = events.InitializeErrorsIntegration(func(publisher interface{}) {
+		if p, ok := publisher.(errors.EventPublisher); ok {
+			errors.SetEventPublisher(p)
+		}
+	})
+	if err != nil {
+		return errors.New(err).
+			Component("notification").
+			Category(errors.CategorySystem).
+			Context("operation", "errors_integration_init").
+			Build()
+	}
+	
+	// Initialize notification worker with event bus
+	if err := notification.InitializeEventBusIntegration(); err != nil {
+		return errors.New(err).
+			Component("notification").
+			Category(errors.CategorySystem).
+			Context("operation", "notification_worker_init").
+			Build()
+	}
+	
+	// Create a simple telemetry reporter that enables the fast path
+	errors.SetTelemetryReporter(&simpleTelemetryReporter{enabled: true})
 	
 	logging.Info("Notification service initialized",
 		"component", "notification",
-		"error_integration", "disabled")
+		"event_bus", eventBus != nil,
+		"error_integration", "async-eventbus")
+	
+	return nil
 }
 
 // initializeSystemMonitor initializes and starts the system resource monitor if enabled
