@@ -134,7 +134,7 @@ Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
 
-License: https://github.com/go-viper/mapstructure/blob/v2.2.1/LICENSE
+License: https://github.com/go-viper/mapstructure/blob/v2.3.0/LICENSE
 Source: MIT
 
 ### github.com/google/s2a-go
