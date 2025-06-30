@@ -109,6 +109,13 @@ func Initialize(config *Config) (*EventBus, error) {
 	// Create new event bus
 	ctx, cancel := context.WithCancel(context.Background())
 	
+	// Get logger (may be nil if logging not initialized yet)
+	logger := logging.ForService("events")
+	if logger == nil {
+		// Use default logger if logging system not initialized
+		logger = slog.Default().With("service", "events")
+	}
+	
 	eb := &EventBus{
 		eventChan:  make(chan ErrorEvent, config.BufferSize),
 		bufferSize: config.BufferSize,
@@ -116,7 +123,7 @@ func Initialize(config *Config) (*EventBus, error) {
 		ctx:        ctx,
 		cancel:     cancel,
 		consumers:  make([]EventConsumer, 0),
-		logger:     logging.ForService("events"),
+		logger:     logger,
 	}
 	
 	// Initialize deduplicator if enabled

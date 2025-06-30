@@ -16,6 +16,9 @@ var (
 
 func init() {
 	logger = logging.ForService("notification-integration")
+	if logger == nil {
+		logger = slog.Default().With("service", "notification-integration")
+	}
 }
 
 // InitializeEventBusIntegration sets up the notification worker as an event consumer
