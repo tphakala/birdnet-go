@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"log/slog"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // InitState represents the initialization state of a component
@@ -102,7 +103,12 @@ func (m *InitManager) InitializeSentrySafe(settings interface{}) error {
 
 		done := make(chan error, 1)
 		go func() {
-			done <- InitSentry(settings)
+			// Type assertion for settings
+			if s, ok := settings.(*conf.Settings); ok {
+				done <- InitSentry(s)
+			} else {
+				done <- fmt.Errorf("invalid settings type: expected *conf.Settings")
+			}
 		}()
 
 		select {
@@ -116,7 +122,7 @@ func (m *InitManager) InitializeSentrySafe(settings interface{}) error {
 				m.logger.Info("Sentry initialized successfully")
 			}
 		case <-ctx.Done():
-			err = fmt.Errorf("Sentry initialization timeout")
+			err = fmt.Errorf("sentry initialization timeout")
 			m.sentryErr.Store(err)
 			m.sentryClient.Store(int32(InitStateFailed))
 			m.logger.Error("Sentry initialization timeout")

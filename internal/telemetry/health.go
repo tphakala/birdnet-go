@@ -23,7 +23,7 @@ func NewHealthCheckHandler() *HealthCheckHandler {
 func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.coordinator == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "error",
 			"error":  "telemetry not initialized",
 		})
@@ -70,7 +70,7 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // getOverallStatus returns a string status based on health
