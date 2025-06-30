@@ -14,8 +14,8 @@ func NewEventPublisherAdapter(eventBus *EventBus) *EventPublisherAdapter {
 }
 
 // TryPublish attempts to publish an event
-// It accepts interface{} and type asserts to ErrorEvent
-func (a *EventPublisherAdapter) TryPublish(event interface{}) bool {
+// It accepts any and type asserts to ErrorEvent
+func (a *EventPublisherAdapter) TryPublish(event any) bool {
 	if a.eventBus == nil {
 		return false
 	}
@@ -31,7 +31,7 @@ func (a *EventPublisherAdapter) TryPublish(event interface{}) bool {
 
 // InitializeErrorsIntegration sets up the integration with the errors package
 // This should be called after the event bus is initialized
-func InitializeErrorsIntegration(setPublisher func(interface{})) error {
+func InitializeErrorsIntegration(setPublisher func(any)) error {
 	eb := GetEventBus()
 	if eb == nil {
 		return nil // Event bus not initialized, skip integration

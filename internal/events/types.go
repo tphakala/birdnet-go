@@ -46,7 +46,7 @@ type EventConsumer interface {
 	// ProcessBatch processes multiple events at once (for efficiency)
 	ProcessBatch(events []ErrorEvent) error
 	
-	// SupportsRatching returns true if this consumer supports batch processing
+	// SupportsBatching returns true if this consumer supports batch processing
 	SupportsBatching() bool
 }
 
