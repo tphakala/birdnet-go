@@ -77,10 +77,20 @@ func (ee *EnhancedError) Is(target error) bool {
 
 // GetComponent returns the component name, detecting it lazily if needed
 func (ee *EnhancedError) GetComponent() string {
+	// Fast path: try read lock first for already detected components
+	ee.mu.RLock()
+	if ee.detected || ee.component != "" {
+		component := ee.component
+		ee.mu.RUnlock()
+		return component
+	}
+	ee.mu.RUnlock()
+	
+	// Slow path: need to detect component, use full lock
 	ee.mu.Lock()
 	defer ee.mu.Unlock()
 	
-	// If component is empty and hasn't been detected yet, detect it now
+	// Double-check in case another goroutine detected it while we were waiting
 	if ee.component == "" && !ee.detected {
 		ee.component = detectComponent()
 		ee.detected = true
