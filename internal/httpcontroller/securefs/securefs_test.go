@@ -36,9 +36,11 @@ func setupSecureFS(t *testing.T) (sfs *SecureFS, tempDir string) {
 func TestSecureFSFileOperations(t *testing.T) {
 	t.Parallel()
 	sfs, tempDir := setupSecureFS(t)
-	defer func() {
-		_ = sfs.Close() // Safe to ignore in test cleanup
-	}()
+	t.Cleanup(func() {
+		if err := sfs.Close(); err != nil {
+			t.Logf("error closing sfs: %v", err)
+		}
+	})
 
 	// Test file operations
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -92,7 +94,11 @@ func TestSecureFSFileOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenFile failed: %v", err)
 	}
-	_ = file.Close() // Safe to ignore in test
+	t.Cleanup(func() {
+		if err := file.Close(); err != nil {
+			t.Logf("error closing file: %v", err)
+		}
+	})
 
 	// Test Remove
 	err = sfs.Remove(testFile)
@@ -111,9 +117,11 @@ func TestSecureFSFileOperations(t *testing.T) {
 func TestSecureFSDirectoryOperations(t *testing.T) {
 	t.Parallel()
 	sfs, tempDir := setupSecureFS(t)
-	defer func() {
-		_ = sfs.Close() // Safe to ignore in test cleanup
-	}()
+	t.Cleanup(func() {
+		if err := sfs.Close(); err != nil {
+			t.Logf("error closing sfs: %v", err)
+		}
+	})
 
 	// Test MkdirAll
 	testDir := filepath.Join(tempDir, "subdir", "nested")
@@ -154,9 +162,11 @@ func TestSecureFSDirectoryOperations(t *testing.T) {
 func TestSecureFSPathTraversalPrevention(t *testing.T) {
 	t.Parallel()
 	sfs, tempDir := setupSecureFS(t)
-	defer func() {
-		_ = sfs.Close() // Safe to ignore in test cleanup
-	}()
+	t.Cleanup(func() {
+		if err := sfs.Close(); err != nil {
+			t.Logf("error closing sfs: %v", err)
+		}
+	})
 
 	// Test path traversal prevention
 	traversalPath := filepath.Join(tempDir, "..", "outside.txt")
@@ -237,9 +247,11 @@ func TestIsPathWithinBase(t *testing.T) {
 	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
 		t.Fatalf("Failed to create outside test directory: %v", err)
 	}
-	defer func() {
-		_ = os.RemoveAll(outsideDir) // Safe to ignore in test cleanup
-	}()
+	t.Cleanup(func() {
+		if err := os.RemoveAll(outsideDir); err != nil {
+			t.Logf("error removing outsideDir: %v", err)
+		}
+	})
 
 	// Create a file in the outside directory
 	outsideFile := filepath.Join(outsideDir, "secret.txt")
