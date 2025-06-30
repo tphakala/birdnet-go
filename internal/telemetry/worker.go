@@ -26,6 +26,7 @@ type TelemetryWorker struct {
 	enabled        bool
 	circuitBreaker *CircuitBreaker
 	config         *WorkerConfig
+	configMu       sync.RWMutex // Protects config access
 	
 	// Metrics
 	eventsProcessed atomic.Uint64
@@ -209,6 +210,8 @@ func (w *TelemetryWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
 
 // SupportsBatching returns true if this consumer supports batch processing
 func (w *TelemetryWorker) SupportsBatching() bool {
+	w.configMu.RLock()
+	defer w.configMu.RUnlock()
 	return w.config.BatchingEnabled
 }
 
@@ -240,7 +243,11 @@ func (w *TelemetryWorker) reportToSentry(event events.ErrorEvent) error {
 
 // shouldSample determines if an event should be sampled
 func (w *TelemetryWorker) shouldSample(event events.ErrorEvent) bool {
-	if w.config.SamplingRate >= 1.0 {
+	w.configMu.RLock()
+	samplingRate := w.config.SamplingRate
+	w.configMu.RUnlock()
+	
+	if samplingRate >= 1.0 {
 		return true
 	}
 	
@@ -249,7 +256,7 @@ func (w *TelemetryWorker) shouldSample(event events.ErrorEvent) bool {
 	hash := hashString(event.GetComponent() + event.GetCategory())
 	sample := float64(hash%100) / 100.0
 	
-	return sample < w.config.SamplingRate
+	return sample < samplingRate
 }
 
 // hashString returns a simple hash of a string

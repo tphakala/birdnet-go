@@ -104,7 +104,10 @@ func UpdateSamplingRate(rate float64) error {
 		return fmt.Errorf("sampling rate must be between 0.0 and 1.0")
 	}
 	
+	telemetryWorker.configMu.Lock()
 	telemetryWorker.config.SamplingRate = rate
+	telemetryWorker.configMu.Unlock()
+	
 	logger.Info("updated telemetry sampling rate", "rate", rate)
 	
 	return nil

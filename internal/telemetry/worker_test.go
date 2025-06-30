@@ -161,8 +161,25 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 		t.Errorf("Expected 3 events dropped, got %d", stats.EventsDropped)
 	}
 	
-	// Wait for rate limit window to pass
-	time.Sleep(150 * time.Millisecond)
+	// Wait for rate limit window to pass using a helper function
+	waitForRateLimitReset := func(t *testing.T, rl *RateLimiter, timeout time.Duration) bool {
+		deadline := time.Now().Add(timeout)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		
+		for time.Now().Before(deadline) {
+			<-ticker.C
+			if rl.Allow() {
+				return true
+			}
+		}
+		return false
+	}
+	
+	// Wait for rate limiter to reset
+	if !waitForRateLimitReset(t, worker.rateLimiter, 200*time.Millisecond) {
+		t.Fatal("Rate limiter did not reset within timeout")
+	}
 	
 	// Should be able to process more events now
 	event := &mockErrorEvent{
@@ -222,11 +239,23 @@ func TestTelemetryWorker_CircuitBreaker(t *testing.T) {
 		t.Error("Circuit breaker should not allow when open")
 	}
 	
-	// Wait for recovery timeout
-	time.Sleep(150 * time.Millisecond)
+	// Create a test helper to wait for circuit recovery
+	waitForCircuitRecovery := func(t *testing.T, cb *CircuitBreaker, timeout time.Duration) bool {
+		deadline := time.Now().Add(timeout)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		
+		for time.Now().Before(deadline) {
+			<-ticker.C
+			if cb.Allow() {
+				return true
+			}
+		}
+		return false
+	}
 	
-	// Should transition to half-open
-	if !cb.Allow() {
+	// Wait for circuit to allow requests after recovery timeout
+	if !waitForCircuitRecovery(t, cb, 200*time.Millisecond) {
 		t.Error("Circuit breaker should allow after recovery timeout")
 	}
 	
