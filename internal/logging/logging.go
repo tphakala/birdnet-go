@@ -28,6 +28,7 @@ var currentHumanReadableOutputCloser io.Closer
 // currentLogLevel stores the dynamic level for all loggers
 var currentLogLevel = new(slog.LevelVar)
 var initOnce sync.Once
+var initialized bool
 
 const (
 	LevelTrace = slog.Level(-8)
@@ -111,7 +112,15 @@ func Init() {
 
 		// Set the default logger
 		slog.SetDefault(structuredLogger)
+		
+		// Mark as initialized
+		initialized = true
 	})
+}
+
+// IsInitialized returns true if the logging system has been initialized
+func IsInitialized() bool {
+	return initialized
 }
 
 // SetLevel changes the logging level for all initialized loggers.
