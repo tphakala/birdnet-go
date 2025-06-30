@@ -45,7 +45,16 @@ type EventBus struct {
 var (
 	globalEventBus *EventBus
 	globalMutex    sync.Mutex
+	
+	// Fast path optimization: track if any consumers are registered
+	hasActiveConsumers atomic.Bool
 )
+
+// HasActiveConsumers returns true if any consumers are registered
+// This is used for fast path optimization to avoid overhead when no consumers exist
+func HasActiveConsumers() bool {
+	return hasActiveConsumers.Load()
+}
 
 // ResetForTesting resets the global event bus state (for testing only)
 func ResetForTesting() {
@@ -56,6 +65,7 @@ func ResetForTesting() {
 		_ = globalEventBus.Shutdown(1 * time.Second)
 	}
 	globalEventBus = nil
+	hasActiveConsumers.Store(false)
 }
 
 // DefaultConfig returns the default event bus configuration
@@ -160,6 +170,9 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 	
 	eb.consumers = append(eb.consumers, consumer)
 	
+	// Update global flag for fast path optimization
+	hasActiveConsumers.Store(true)
+	
 	eb.logger.Info("registered event consumer",
 		"consumer", consumer.Name(),
 		"supports_batching", consumer.SupportsBatching(),
@@ -176,6 +189,14 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 // TryPublish attempts to publish an event without blocking
 // Returns true if the event was accepted, false if dropped
 func (eb *EventBus) TryPublish(event ErrorEvent) bool {
+	// Ultra-fast path: check global flag first (lock-free)
+	if !hasActiveConsumers.Load() {
+		if eb != nil {
+			atomic.AddUint64(&eb.stats.FastPathHits, 1)
+		}
+		return false
+	}
+	
 	if eb == nil || !eb.initialized.Load() || !eb.running.Load() {
 		return false
 	}
@@ -186,6 +207,7 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 	eb.mu.Unlock()
 	
 	if !hasConsumers {
+		atomic.AddUint64(&eb.stats.FastPathHits, 1)
 		return false
 	}
 	
@@ -230,6 +252,10 @@ func (eb *EventBus) start() {
 		eb.wg.Add(1)
 		go eb.worker(i)
 	}
+	
+	// Start metrics logger (logs performance stats periodically)
+	eb.wg.Add(1)
+	go eb.metricsLogger()
 }
 
 // worker processes events from the channel
@@ -342,6 +368,7 @@ func (eb *EventBus) GetStats() EventBusStats {
 		EventsProcessed:  atomic.LoadUint64(&eb.stats.EventsProcessed),
 		EventsDropped:    atomic.LoadUint64(&eb.stats.EventsDropped),
 		ConsumerErrors:   atomic.LoadUint64(&eb.stats.ConsumerErrors),
+		FastPathHits:     atomic.LoadUint64(&eb.stats.FastPathHits),
 	}
 }
 
@@ -352,4 +379,50 @@ func (eb *EventBus) GetDeduplicationStats() DeduplicationStats {
 	}
 	
 	return eb.deduplicator.GetStats()
+}
+
+// metricsLogger periodically logs performance metrics
+func (eb *EventBus) metricsLogger() {
+	defer eb.wg.Done()
+	
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-eb.ctx.Done():
+			// Log final stats on shutdown
+			eb.logMetrics("final")
+			return
+			
+		case <-ticker.C:
+			eb.logMetrics("periodic")
+		}
+	}
+}
+
+// logMetrics logs current performance metrics
+func (eb *EventBus) logMetrics(reason string) {
+	stats := eb.GetStats()
+	dedupStats := eb.GetDeduplicationStats()
+	
+	totalAttempts := stats.EventsReceived + stats.EventsDropped + stats.FastPathHits
+	fastPathPercent := float64(0)
+	if totalAttempts > 0 {
+		fastPathPercent = float64(stats.FastPathHits) / float64(totalAttempts) * 100
+	}
+	
+	eb.logger.Info("event bus performance metrics",
+		"reason", reason,
+		"events_received", stats.EventsReceived,
+		"events_processed", stats.EventsProcessed,
+		"events_dropped", stats.EventsDropped,
+		"events_suppressed", stats.EventsSuppressed,
+		"consumer_errors", stats.ConsumerErrors,
+		"fast_path_hits", stats.FastPathHits,
+		"fast_path_percent", fmt.Sprintf("%.2f%%", fastPathPercent),
+		"dedup_total_seen", dedupStats.TotalSeen,
+		"dedup_total_suppressed", dedupStats.TotalSuppressed,
+		"dedup_cache_size", dedupStats.CacheSize,
+	)
 }
