@@ -98,6 +98,11 @@ func TestEventBusInitialization(t *testing.T) {
 	t.Run("default initialization", func(t *testing.T) {
 		t.Parallel()
 		
+		// Reset global state for this test
+		globalMutex.Lock()
+		globalEventBus = nil
+		globalMutex.Unlock()
+		
 		eb, err := Initialize(nil)
 		if err != nil {
 			t.Fatalf("failed to initialize event bus: %v", err)

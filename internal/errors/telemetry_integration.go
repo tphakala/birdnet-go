@@ -284,7 +284,9 @@ func updateActiveReportingStatus() {
 }
 
 // reportToTelemetry reports an error to the configured telemetry system
-func reportToTelemetry(ee *EnhancedError) {
+// NOTE: This function is replaced by event bus integration when async processing is enabled
+// It remains here for backward compatibility when event bus is not initialized
+func reportToTelemetryLegacy(ee *EnhancedError) {
 	// Skip entirely if nothing to do
 	if !hasActiveReporting.Load() {
 		return

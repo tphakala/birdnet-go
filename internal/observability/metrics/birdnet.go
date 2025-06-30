@@ -216,18 +216,18 @@ func categorizeError(err error) string {
 	var enhancedErr *errors.EnhancedError
 	if errors.As(err, &enhancedErr) {
 		switch enhancedErr.GetCategory() {
-		case errors.CategoryModelInit, errors.CategoryModelLoad:
+		case string(errors.CategoryModelInit), string(errors.CategoryModelLoad):
 			return "model_error"
-		case errors.CategoryFileIO:
+		case string(errors.CategoryFileIO):
 			return "file_error"
-		case errors.CategoryAudio:
+		case string(errors.CategoryAudio):
 			return "audio_error"
-		case errors.CategoryValidation:
+		case string(errors.CategoryValidation):
 			return "validation_error"
-		case errors.CategorySystem:
+		case string(errors.CategorySystem):
 			return "system_error"
 		default:
-			return string(enhancedErr.GetCategory())
+			return enhancedErr.GetCategory()
 		}
 	}
 

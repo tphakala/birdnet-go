@@ -104,19 +104,45 @@ func (ee *EnhancedError) GetComponent() string {
 }
 
 // GetCategory returns the error category
-func (ee *EnhancedError) GetCategory() ErrorCategory {
-	return ee.Category
+func (ee *EnhancedError) GetCategory() string {
+	return string(ee.Category)
 }
 
-// GetContext returns the error context data
+// GetContext returns the error context
 func (ee *EnhancedError) GetContext() map[string]interface{} {
-	return ee.Context
+	ee.mu.RLock()
+	defer ee.mu.RUnlock()
+	
+	// Return a copy to prevent external modification
+	if ee.Context == nil {
+		return nil
+	}
+	
+	contextCopy := make(map[string]interface{}, len(ee.Context))
+	for k, v := range ee.Context {
+		contextCopy[k] = v
+	}
+	return contextCopy
 }
 
 // GetTimestamp returns when the error occurred
 func (ee *EnhancedError) GetTimestamp() time.Time {
 	return ee.Timestamp
 }
+
+// GetError returns the underlying error
+func (ee *EnhancedError) GetError() error {
+	return ee.Err
+}
+
+// GetMessage returns the error message
+func (ee *EnhancedError) GetMessage() string {
+	if ee.Err != nil {
+		return ee.Err.Error()
+	}
+	return ""
+}
+
 
 // MarkReported marks this error as reported to telemetry
 func (ee *EnhancedError) MarkReported() {
