@@ -36,6 +36,9 @@ type TelemetryWorker struct {
 	// Rate limiting
 	rateLimiter *RateLimiter
 	
+	// Sentry reporter
+	sentryReporter *errors.SentryReporter
+	
 	logger *slog.Logger
 }
 
@@ -109,7 +112,8 @@ func NewTelemetryWorker(enabled bool, config *WorkerConfig) (*TelemetryWorker, e
 			window:    config.RateLimitWindow,
 			maxEvents: config.RateLimitMaxEvents,
 		},
-		logger: getLoggerSafe("telemetry-worker"),
+		sentryReporter: errors.NewSentryReporter(enabled),
+		logger:         getLoggerSafe("telemetry-worker"),
 	}
 	
 	return worker, nil
@@ -234,9 +238,8 @@ func (w *TelemetryWorker) reportToSentry(event events.ErrorEvent) error {
 		}
 	}
 	
-	// Use existing SentryReporter logic
-	reporter := errors.NewSentryReporter(true)
-	reporter.ReportError(ee)
+	// Use cached SentryReporter
+	w.sentryReporter.ReportError(ee)
 	
 	return nil
 }
