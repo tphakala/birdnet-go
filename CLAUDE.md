@@ -105,13 +105,14 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
 - **Avoid pointer-to-interface anti-pattern**: Use `atomic.Value` instead of `atomic.Pointer[Interface]` for storing interfaces
 - **Interface type parameters**: Use `any` instead of `interface{}` for better readability (Go 1.18+)
 
-### Code Review Best Practices (Lessons from PR #834)
+### Code Review Best Practices (Lessons from PR #834 and #836)
 - **Fix typos immediately**: Even in comments/method names - they can cause compilation errors
 - **Testing improvements**:
   - Always add `t.Parallel()` to test functions and subtests for concurrent execution
   - Replace `time.Sleep` with deterministic synchronization (channels, wait groups, polling helpers)
   - Use table-driven tests with subtests for better organization and parallel execution
   - Create helper functions like `waitForProcessed()` to avoid timing-dependent test failures
+  - For time-dependent operations (like circuit breakers), use polling with deadline instead of fixed sleeps
 - **Atomic operations**: When using `atomic.Value` to store interfaces:
   - Store the interface directly, not a pointer to it
   - Use type assertions when loading: `value.(InterfaceType)`
@@ -119,4 +120,10 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
 - **Performance considerations**:
   - Consider using efficient LRU implementations (e.g., `github.com/hashicorp/golang-lru/v2`) for caches
   - Batch operations when updating indices to avoid O(n) complexity in loops
+  - Always utilize pre-compiled resources (templates, regexes) instead of wasting compilation effort
+  - Implement proper batch processing with aggregation, not just iterating over items
 - **Error handling patterns**: Maintain consistency in error category comparisons across the codebase
+- **Code efficiency**: 
+  - If you pre-compile templates or patterns, actually use them - don't leave them unused
+  - Implement true batch processing with error aggregation and notification deduplication
+  - Group similar errors to reduce notification spam and improve efficiency
