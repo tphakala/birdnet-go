@@ -366,7 +366,7 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 	errorCategory := "unknown"
 	var enhancedErr *errors.EnhancedError
 	if errors.As(delErr, &enhancedErr) {
-		errorCategory = string(enhancedErr.GetCategory())
+		errorCategory = enhancedErr.GetCategory()
 	}
 
 	log.Printf("Failed to remove %s: %s\n", filePath, delErr)
@@ -400,7 +400,7 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 		var enhancedLoopErr *errors.EnhancedError
 		categoryForLog := "unknown"
 		if errors.As(loopErr, &enhancedLoopErr) {
-			categoryForLog = string(enhancedLoopErr.GetCategory())
+			categoryForLog = enhancedLoopErr.GetCategory()
 		}
 
 		serviceLogger.Error("Cleanup loop stopping due to too many errors",

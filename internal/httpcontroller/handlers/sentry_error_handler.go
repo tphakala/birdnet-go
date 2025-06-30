@@ -18,15 +18,15 @@ func getStatusCodeFromError(err error) int {
 	var enhancedErr *errors.EnhancedError
 	if errors.As(err, &enhancedErr) {
 		switch enhancedErr.GetCategory() {
-		case errors.CategoryValidation:
+		case string(errors.CategoryValidation):
 			return http.StatusBadRequest
-		case errors.CategoryMQTTAuth:
+		case string(errors.CategoryMQTTAuth):
 			return http.StatusUnauthorized
-		case errors.CategoryNetwork, errors.CategoryDatabase, errors.CategoryFileIO, errors.CategoryRTSP, errors.CategoryMQTTConnection:
+		case string(errors.CategoryNetwork), string(errors.CategoryDatabase), string(errors.CategoryFileIO), string(errors.CategoryRTSP), string(errors.CategoryMQTTConnection):
 			return http.StatusServiceUnavailable
-		case errors.CategoryConfiguration, errors.CategoryModelInit, errors.CategoryModelLoad:
+		case string(errors.CategoryConfiguration), string(errors.CategoryModelInit), string(errors.CategoryModelLoad):
 			return http.StatusInternalServerError
-		case errors.CategoryHTTP:
+		case string(errors.CategoryHTTP):
 			// For HTTP errors, default to bad gateway
 			return http.StatusBadGateway
 		default:

@@ -106,17 +106,17 @@ func (tm *TelemetryMiddleware) categorizeError(err error) string {
 	if errors.As(err, &enhancedErr) {
 		category := enhancedErr.GetCategory()
 		switch category {
-		case errors.CategoryValidation:
+		case string(errors.CategoryValidation):
 			return "validation"
-		case errors.CategoryDatabase:
+		case string(errors.CategoryDatabase):
 			return "database"
-		case errors.CategoryNetwork:
+		case string(errors.CategoryNetwork):
 			return "network"
-		case errors.CategoryFileIO:
+		case string(errors.CategoryFileIO):
 			return "file_io"
-		case errors.CategoryConfiguration:
+		case string(errors.CategoryConfiguration):
 			return "configuration"
-		case errors.CategorySystem:
+		case string(errors.CategorySystem):
 			return "system"
 		default:
 			return "unknown"

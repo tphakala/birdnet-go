@@ -204,21 +204,21 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 }
 
 // mapCategoryToHTTPStatus maps error categories to appropriate HTTP status codes
-func (h *Handlers) mapCategoryToHTTPStatus(category errors.ErrorCategory) int {
+func (h *Handlers) mapCategoryToHTTPStatus(category string) int {
 	switch category {
-	case errors.CategoryValidation:
+	case string(errors.CategoryValidation):
 		return http.StatusBadRequest
-	case errors.CategoryDatabase:
+	case string(errors.CategoryDatabase):
 		return http.StatusInternalServerError
-	case errors.CategoryNetwork:
+	case string(errors.CategoryNetwork):
 		return http.StatusBadGateway
-	case errors.CategoryFileIO:
+	case string(errors.CategoryFileIO):
 		return http.StatusInternalServerError
-	case errors.CategoryConfiguration:
+	case string(errors.CategoryConfiguration):
 		return http.StatusInternalServerError
-	case errors.CategorySystem:
+	case string(errors.CategorySystem):
 		return http.StatusInternalServerError
-	case errors.CategoryImageFetch, errors.CategoryImageCache, errors.CategoryImageProvider:
+	case string(errors.CategoryImageFetch), string(errors.CategoryImageCache), string(errors.CategoryImageProvider):
 		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
