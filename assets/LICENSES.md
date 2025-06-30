@@ -17,9 +17,19 @@ Source: CC0-1.0
 License: https://github.com/cgt/go-mwclient.git/blob/v1.3.0/params/LICENSE
 Source: BSD-3-Clause
 
+### cloud.google.com/go/auth
+
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.16.2/auth/LICENSE
+Source: Apache-2.0
+
+### cloud.google.com/go/auth/oauth2adapt
+
+License: https://github.com/googleapis/google-cloud-go/blob/auth/oauth2adapt/v0.2.8/auth/oauth2adapt/LICENSE
+Source: Apache-2.0
+
 ### cloud.google.com/go/compute/metadata
 
-License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.6.0/compute/metadata/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.7.0/compute/metadata/LICENSE
 Source: Apache-2.0
 
 ### filippo.io/edwards25519
@@ -62,6 +72,11 @@ Source: EPL-2.0
 License: https://github.com/fatih/color/blob/v1.18.0/LICENSE.md
 Source: MIT
 
+### github.com/felixge/httpsnoop
+
+License: https://github.com/felixge/httpsnoop/blob/v1.0.4/LICENSE.txt
+Source: MIT
+
 ### github.com/fsnotify/fsnotify
 
 License: https://github.com/fsnotify/fsnotify/blob/v1.8.0/LICENSE
@@ -102,6 +117,16 @@ Source: MIT
 License: https://github.com/go-echarts/go-echarts/blob/v2.5.2/LICENSE
 Source: MIT
 
+### github.com/go-logr/logr
+
+License: https://github.com/go-logr/logr/blob/v1.4.2/LICENSE
+Source: Apache-2.0
+
+### github.com/go-logr/stdr
+
+License: https://github.com/go-logr/stdr/blob/v1.2.2/LICENSE
+Source: Apache-2.0
+
 ### github.com/go-sql-driver/mysql
 
 License: https://github.com/go-sql-driver/mysql/blob/v1.8.1/LICENSE
@@ -112,9 +137,24 @@ Source: MPL-2.0
 License: https://github.com/go-viper/mapstructure/blob/v2.2.1/LICENSE
 Source: MIT
 
+### github.com/google/s2a-go
+
+License: https://github.com/google/s2a-go/blob/v0.1.9/LICENSE.md
+Source: Apache-2.0
+
 ### github.com/google/uuid
 
 License: https://github.com/google/uuid/blob/v1.6.0/LICENSE
+Source: BSD-3-Clause
+
+### github.com/googleapis/enterprise-certificate-proxy/client
+
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.6/LICENSE
+Source: Apache-2.0
+
+### github.com/googleapis/gax-go/v2
+
+License: https://github.com/googleapis/gax-go/blob/v2.14.2/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -137,6 +177,16 @@ Source: BSD-3-Clause
 License: https://github.com/gorilla/websocket/blob/v1.5.3/LICENSE
 Source: BSD-2-Clause
 
+### github.com/hashicorp/errwrap
+
+License: https://github.com/hashicorp/errwrap/blob/v1.0.0/LICENSE
+Source: MPL-2.0
+
+### github.com/hashicorp/go-multierror
+
+License: https://github.com/hashicorp/go-multierror/blob/v1.1.1/LICENSE
+Source: MPL-2.0
+
 ### github.com/jinzhu/inflection
 
 License: https://github.com/jinzhu/inflection/blob/v1.0.0/LICENSE
@@ -147,6 +197,11 @@ Source: MIT
 License: https://github.com/jinzhu/now/blob/v1.1.5/License
 Source: MIT
 
+### github.com/jlaffaye/ftp
+
+License: https://github.com/jlaffaye/ftp/blob/v0.2.0/LICENSE
+Source: ISC
+
 ### github.com/k3a/html2text
 
 License: https://github.com/k3a/html2text/blob/v1.2.1/LICENSE
@@ -154,8 +209,13 @@ Source: MIT
 
 ### github.com/klauspost/cpuid/v2
 
-License: https://github.com/klauspost/cpuid/blob/v2.2.10/LICENSE
+License: https://github.com/klauspost/cpuid/blob/v2.2.11/LICENSE
 Source: MIT
+
+### github.com/kr/fs
+
+License: https://github.com/kr/fs/blob/v0.1.0/LICENSE
+Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
@@ -211,6 +271,11 @@ Source: MIT
 
 License: https://github.com/pelletier/go-toml/blob/v2.2.3/LICENSE
 Source: MIT
+
+### github.com/pkg/sftp
+
+License: https://github.com/pkg/sftp/blob/v1.13.9/LICENSE
+Source: BSD-2-Clause
 
 ### github.com/pmezard/go-difflib/difflib
 
@@ -347,12 +412,37 @@ Source: MIT
 License: https://github.com/valyala/fasttemplate/blob/v1.2.2/LICENSE
 Source: MIT
 
+### go.opentelemetry.io/auto/sdk
+
+License: https://github.com/open-telemetry/opentelemetry-go-instrumentation/blob/sdk/v1.1.0/sdk/LICENSE
+Source: Apache-2.0
+
+### go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
+
+License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.61.0/instrumentation/net/http/otelhttp/LICENSE
+Source: Apache-2.0
+
+### go.opentelemetry.io/otel
+
+License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.36.0/LICENSE
+Source: Apache-2.0
+
+### go.opentelemetry.io/otel/metric
+
+License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.36.0/metric/LICENSE
+Source: Apache-2.0
+
+### go.opentelemetry.io/otel/trace
+
+License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.36.0/trace/LICENSE
+Source: Apache-2.0
+
 ### go.uber.org/mock/gomock
 
 License: https://github.com/uber/mock/blob/v0.5.2/LICENSE
 Source: Apache-2.0
 
-### golang.org/x/crypto/acme
+### golang.org/x/crypto
 
 License: https://cs.opensource.google/go/x/crypto/+/v0.39.0:LICENSE
 Source: BSD-3-Clause
@@ -391,6 +481,21 @@ Source: BSD-3-Clause
 
 License: https://cs.opensource.google/go/x/time/+/v0.12.0:LICENSE
 Source: BSD-3-Clause
+
+### google.golang.org/api
+
+License: https://github.com/googleapis/google-api-go-client/blob/v0.239.0/LICENSE
+Source: BSD-3-Clause
+
+### google.golang.org/genproto/googleapis/rpc
+
+License: https://github.com/googleapis/go-genproto/blob/513f23925822/googleapis/rpc/LICENSE
+Source: Apache-2.0
+
+### google.golang.org/grpc
+
+License: https://github.com/grpc/grpc-go/blob/v1.73.0/LICENSE
+Source: Apache-2.0
 
 ### google.golang.org/protobuf
 
