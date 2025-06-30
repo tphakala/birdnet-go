@@ -16,6 +16,11 @@ func NewEventPublisherAdapter(eventBus *EventBus) *EventPublisherAdapter {
 // TryPublish attempts to publish an event
 // It accepts any and type asserts to ErrorEvent
 func (a *EventPublisherAdapter) TryPublish(event any) bool {
+	// Fast path: check if any consumers are active
+	if !HasActiveConsumers() {
+		return false
+	}
+	
 	if a.eventBus == nil {
 		return false
 	}
