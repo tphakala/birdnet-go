@@ -299,7 +299,11 @@ func (sfs *SecureFS) RemoveAll(path string) error {
 	if err != nil {
 		return err
 	}
-	defer dir.Close()
+	defer func() {
+		if err := dir.Close(); err != nil {
+			log.Printf("SecureFS: warning: failed to close directory %s: %v", relPath, err)
+		}
+	}()
 
 	// Read directory entries
 	entries, err := dir.ReadDir(0) // 0 means read all entries
@@ -453,7 +457,11 @@ func (sfs *SecureFS) ReadFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("SecureFS: warning: failed to close file: %v", err)
+		}
+	}()
 
 	// Read the entire file
 	return io.ReadAll(file)
@@ -466,7 +474,11 @@ func (sfs *SecureFS) WriteFile(path string, data []byte, perm os.FileMode) error
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("SecureFS: warning: failed to close file: %v", err)
+		}
+	}()
 
 	// Write the data
 	_, err = file.Write(data)
@@ -509,7 +521,11 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 		log.Printf("SecureFS: Unhandled error serving file for path %s: %v", effectivePath, err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Error serving file").SetInternal(err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("SecureFS: warning: failed to close file: %v", err)
+		}
+	}()
 
 	// Get file info for size and modification time
 	stat, err := f.Stat()
@@ -620,7 +636,11 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open directory: %w", err)
 	}
-	defer dirFile.Close()
+	defer func() {
+		if err := dirFile.Close(); err != nil {
+			log.Printf("SecureFS: warning: failed to close directory: %v", err)
+		}
+	}()
 
 	// Read directory entries
 	entries, err := dirFile.ReadDir(0) // 0 means read all entries

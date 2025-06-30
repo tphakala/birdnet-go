@@ -1237,8 +1237,8 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		c2.SetParamValues("1")
 
 		// Execute both requests sequentially (simulating the race condition outcome)
-		controller.ReviewDetection(c1)
-		controller.ReviewDetection(c2)
+		_ = controller.ReviewDetection(c1) // Expected to fail with conflict in test
+		_ = controller.ReviewDetection(c2) // Expected to fail with conflict in test
 
 		// Verify results - check status codes
 		assert.Equal(t, http.StatusConflict, rec1.Code, "First request should fail with conflict due to lock acquisition failure")
@@ -1339,7 +1339,9 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 
 			// Track the results
 			if err == nil {
-				defer resp.Body.Close()
+				defer func() {
+					_ = resp.Body.Close() // Safe to ignore in test cleanup
+				}()
 
 				switch resp.StatusCode {
 				case http.StatusOK:
@@ -1461,7 +1463,9 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 
 				// Track results
 				if err == nil {
-					defer resp.Body.Close()
+					defer func() {
+					_ = resp.Body.Close() // Safe to ignore in test cleanup
+				}()
 
 					switch resp.StatusCode {
 					case http.StatusOK:

@@ -90,7 +90,7 @@ func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
 		ExpectedBasicRedirectURI: parsedExpectedURI,
 	}
 
-	server.HandleBasicAuthorize(c)
+	_ = server.HandleBasicAuthorize(c) // Error is checked via HTTP response code in test
 	resp := rec.Result()
 
 	if resp == nil {

@@ -26,7 +26,9 @@ func TestTokenPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Safe to ignore in test cleanup
+	}()
 
 	// Create test server with custom token file
 	server := &OAuth2Server{
@@ -104,7 +106,9 @@ func TestFilesystemStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Safe to ignore in test cleanup
+	}()
 
 	// Set test config path and restore after test
 	SetTestConfigPath(tempDir)
@@ -168,7 +172,9 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Safe to ignore in test cleanup
+	}()
 
 	gothic.Store = sessions.NewFilesystemStore(tempDir, []byte("test-secret"))
 	server.configureLocalNetworkCookieStore()
@@ -273,7 +279,9 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Safe to ignore in test cleanup
+	}()
 
 	// Create a corrupted tokens file
 	tokensFile := filepath.Join(tempDir, "tokens.json")
@@ -313,7 +321,9 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Safe to ignore in test cleanup
+	}()
 
 	// Create a token file path in a subdirectory that we'll make unwritable
 	unwritableDir := filepath.Join(tempDir, "unwritable")
@@ -327,7 +337,9 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 	if err := os.Chmod(unwritableDir, 0o500); err != nil { // r-x --- ---
 		t.Fatalf("Failed to make directory unwritable: %v", err)
 	}
-	defer os.Chmod(unwritableDir, 0o755) // Restore permissions for cleanup
+	defer func() {
+		_ = os.Chmod(unwritableDir, 0o755) // Best effort to restore permissions for cleanup
+	}()
 
 	server := &OAuth2Server{
 		Settings: &conf.Settings{},

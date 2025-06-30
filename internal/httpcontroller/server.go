@@ -526,14 +526,14 @@ func canBindPrivilegedPorts() bool {
 	// Try to create a test listener on port 80
 	listener, err := net.Listen("tcp", ":80") // #nosec G102 -- intentional privileged port test, listener immediately closed
 	if err == nil {
-		listener.Close()
+		_ = listener.Close() // Best effort close for test listener
 		return true
 	}
 
 	// Try port 443 as well
 	listener, err = net.Listen("tcp", ":443") // #nosec G102 -- intentional privileged port test, listener immediately closed
 	if err == nil {
-		listener.Close()
+		_ = listener.Close() // Best effort close for test listener
 		return true
 	}
 
