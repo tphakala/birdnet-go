@@ -1099,6 +1099,17 @@ The sound level monitoring system:
 3. **Calculates min/max/mean values** for each frequency band within the window
 4. **Publishes data via multiple channels**: MQTT, SSE, and Prometheus metrics
 
+##### Audio Processing Architecture
+
+The sound level measurement system reads the raw audio directly from the source without any equalization or filtering applied. This ensures that measurements reflect the actual acoustic environment:
+
+- **Raw Audio Input**: Audio samples are processed directly as received from the audio source (internal/myaudio/soundlevel.go:268-271)
+- **Direct Band Analysis**: Raw samples are passed through octave band filters without any pre-processing or equalization (internal/myaudio/soundlevel.go:308-310)
+- **Pure Measurement**: The octave band filters isolate specific frequency bands for measurement but do not apply any equalization - they simply measure the energy present in each frequency band (internal/myaudio/soundlevel.go:143-220)
+- **Unmodified Output**: Sound level data is sanitized for JSON compatibility and published without any acoustic modifications (internal/analysis/sound_level.go)
+
+This approach ensures that sound level measurements represent the true acoustic conditions at the monitoring location, which is essential for environmental monitoring, research applications, and compliance with acoustic measurement standards.
+
 #### Configuration
 
 Enable sound level monitoring in your `config.yaml`:
