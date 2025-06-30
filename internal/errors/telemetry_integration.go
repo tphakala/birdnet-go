@@ -260,20 +260,28 @@ func GetTelemetryReporter() TelemetryReporter {
 // AddErrorHook adds a hook function that will be called when errors are reported
 func AddErrorHook(hook ErrorHook) {
 	errorHooksMutex.Lock()
-	defer errorHooksMutex.Unlock()
 	errorHooks = append(errorHooks, hook)
-	updateActiveReportingStatus()
+	hooksExist := len(errorHooks) > 0
+	errorHooksMutex.Unlock()
+	
+	// Update status after releasing the lock
+	telemetryActive := globalTelemetryReporter != nil && globalTelemetryReporter.IsEnabled()
+	hasActiveReporting.Store(hooksExist || telemetryActive)
 }
 
 // ClearErrorHooks removes all error hooks
 func ClearErrorHooks() {
 	errorHooksMutex.Lock()
-	defer errorHooksMutex.Unlock()
 	errorHooks = nil
-	updateActiveReportingStatus()
+	errorHooksMutex.Unlock()
+	
+	// Update status after releasing the lock
+	telemetryActive := globalTelemetryReporter != nil && globalTelemetryReporter.IsEnabled()
+	hasActiveReporting.Store(false || telemetryActive)
 }
 
 // updateActiveReportingStatus updates the flag indicating if any reporting is active
+// This must be called without holding errorHooksMutex to avoid deadlock
 func updateActiveReportingStatus() {
 	errorHooksMutex.RLock()
 	hooksExist := len(errorHooks) > 0
