@@ -36,21 +36,21 @@ func errorNotificationHook(ee any) {
 }
 
 // getNotificationPriority determines the notification priority based on error category
-func getNotificationPriority(category errors.ErrorCategory) Priority {
+func getNotificationPriority(category string) Priority {
 	switch category {
-	case errors.CategoryModelInit, errors.CategoryModelLoad:
+	case string(errors.CategoryModelInit), string(errors.CategoryModelLoad):
 		return PriorityCritical // App cannot function without models
-	case errors.CategoryDatabase:
+	case string(errors.CategoryDatabase):
 		return PriorityCritical // Data integrity at risk
-	case errors.CategorySystem:
+	case string(errors.CategorySystem):
 		return PriorityHigh // System resources issues
-	case errors.CategoryConfiguration:
+	case string(errors.CategoryConfiguration):
 		return PriorityHigh // May prevent proper operation
-	case errors.CategoryNetwork, errors.CategoryRTSP:
+	case string(errors.CategoryNetwork), string(errors.CategoryRTSP):
 		return PriorityMedium // Often transient
-	case errors.CategoryFileIO, errors.CategoryAudio:
+	case string(errors.CategoryFileIO), string(errors.CategoryAudio):
 		return PriorityMedium // Usually recoverable
-	case errors.CategoryValidation:
+	case string(errors.CategoryValidation):
 		return PriorityLow // User input issues
 	default:
 		return PriorityMedium

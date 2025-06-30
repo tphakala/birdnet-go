@@ -295,10 +295,10 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 
 		// Determine priority based on category
 		switch category {
-		case errors.CategorySystem, errors.CategoryDatabase:
+		case string(errors.CategorySystem), string(errors.CategoryDatabase):
 			priority = PriorityCritical
 			title = "Critical System Error"
-		case errors.CategoryNetwork, errors.CategoryHTTP:
+		case string(errors.CategoryNetwork), string(errors.CategoryHTTP):
 			priority = PriorityHigh
 			title = fmt.Sprintf("%s Error", category)
 		default:
