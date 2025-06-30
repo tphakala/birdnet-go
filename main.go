@@ -113,12 +113,10 @@ func mainWithExitCode() int {
 		// Continue without Sentry - it's not critical
 	}
 
-	// Initialize error handling integration with telemetry
-	// TEMPORARILY DISABLED: This integration is causing deadlocks during startup
-	// when errors are reported before all services are fully initialized.
-	// TODO: Fix the circular dependency between error handler, telemetry, and notification services
-	// See: https://github.com/tphakala/birdnet-go/issues/825
-	// telemetry.InitializeErrorIntegration()
+	// Initialize basic error handling integration with telemetry
+	// The async event bus integration is now handled in realtime.go after all services are initialized
+	// This only sets up the basic telemetry reporter for early startup errors
+	telemetry.InitializeErrorIntegration()
 
 	// Enable runtime profiling if debug mode is enabled
 	if settings.Debug {
