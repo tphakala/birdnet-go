@@ -274,6 +274,13 @@ func (m *SystemInitManager) Shutdown(ctx context.Context) error {
 
 	var shutdownErrors []error
 
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// Shutdown notification service
 	if notification.IsInitialized() {
 		if service := notification.GetService(); service != nil {
@@ -282,20 +289,67 @@ func (m *SystemInitManager) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Check context again after notification shutdown
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// Shutdown event bus
 	if events.IsInitialized() {
 		if eventBus := events.GetEventBus(); eventBus != nil {
 			m.logger.Info("stopping event bus")
-			if err := eventBus.Shutdown(5 * time.Second); err != nil {
+			
+			// Use remaining time from context
+			deadline, ok := ctx.Deadline()
+			timeout := 5 * time.Second
+			if ok {
+				timeout = time.Until(deadline)
+				if timeout <= 0 {
+					return ctx.Err()
+				}
+				// Cap timeout at 5 seconds
+				if timeout > 5*time.Second {
+					timeout = 5 * time.Second
+				}
+			}
+			
+			if err := eventBus.Shutdown(timeout); err != nil {
 				shutdownErrors = append(shutdownErrors, fmt.Errorf("event bus shutdown error: %w", err))
 			}
 		}
 	}
 
+	// Check context again
+	select {
+	case <-ctx.Done():
+		if len(shutdownErrors) > 0 {
+			return fmt.Errorf("shutdown cancelled: %w (previous errors: %v)", ctx.Err(), shutdownErrors)
+		}
+		return ctx.Err()
+	default:
+	}
+
 	// Shutdown telemetry
 	if m.telemetryCoordinator != nil {
 		m.logger.Info("stopping telemetry")
-		if err := m.telemetryCoordinator.Shutdown(2 * time.Second); err != nil {
+		
+		// Use remaining time from context
+		deadline, ok := ctx.Deadline()
+		timeout := 2 * time.Second
+		if ok {
+			timeout = time.Until(deadline)
+			if timeout <= 0 {
+				return ctx.Err()
+			}
+			// Cap timeout at 2 seconds
+			if timeout > 2*time.Second {
+				timeout = 2 * time.Second
+			}
+		}
+		
+		if err := m.telemetryCoordinator.Shutdown(timeout); err != nil {
 			shutdownErrors = append(shutdownErrors, fmt.Errorf("telemetry shutdown error: %w", err))
 		}
 	}
