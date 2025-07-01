@@ -36,8 +36,14 @@ var (
 // GetSystemInitManager returns the singleton system init manager
 func GetSystemInitManager() *SystemInitManager {
 	systemInitManagerOnce.Do(func() {
+		// Defensive check for globalInitCoordinator
+		var coordinator *InitCoordinator
+		if globalInitCoordinator != nil {
+			coordinator = globalInitCoordinator
+		}
+		
 		systemInitManager = &SystemInitManager{
-			telemetryCoordinator: globalInitCoordinator,
+			telemetryCoordinator: coordinator,
 			logger:              getLoggerSafe("system-init"),
 		}
 	})
@@ -90,14 +96,18 @@ func (m *SystemInitManager) InitializeAsyncServices() error {
 // initializeTelemetry initializes the telemetry system
 func (m *SystemInitManager) initializeTelemetry(settings *conf.Settings) error {
 	if m.telemetryCoordinator == nil {
-		return Initialize(settings)
+		// Create a new coordinator if one doesn't exist
+		m.telemetryCoordinator = NewInitCoordinator()
+		if m.telemetryCoordinator == nil {
+			// Fallback to direct initialization
+			return Initialize(settings)
+		}
 	}
 	return m.telemetryCoordinator.InitializeAll(settings)
 }
 
 // initializeNotification initializes the notification service
 func (m *SystemInitManager) initializeNotification() error {
-	var err error
 	m.notificationInitOnce.Do(func() {
 		m.logger.Debug("initializing notification service")
 		
@@ -114,15 +124,11 @@ func (m *SystemInitManager) initializeNotification() error {
 		m.logger.Info("notification service initialized successfully")
 	})
 	
-	if err != nil {
-		return err
-	}
 	return m.notificationErr
 }
 
 // initializeEventBus initializes the event bus
 func (m *SystemInitManager) initializeEventBus() error {
-	var err error
 	m.eventBusInitOnce.Do(func() {
 		m.logger.Debug("initializing event bus")
 		
@@ -152,15 +158,11 @@ func (m *SystemInitManager) initializeEventBus() error {
 			"workers", eventBusConfig.Workers)
 	})
 	
-	if err != nil {
-		return err
-	}
 	return m.eventBusErr
 }
 
 // initializeNotificationWorker initializes the notification worker
 func (m *SystemInitManager) initializeNotificationWorker() error {
-	var err error
 	m.notificationWorkerOnce.Do(func() {
 		m.logger.Debug("initializing notification worker")
 		
@@ -184,9 +186,6 @@ func (m *SystemInitManager) initializeNotificationWorker() error {
 		m.logger.Info("notification worker initialized successfully")
 	})
 	
-	if err != nil {
-		return err
-	}
 	return m.workerErr
 }
 

@@ -19,7 +19,7 @@ func TestInitManager_ConcurrentInitialization(t *testing.T) {
 
 	// Test concurrent error integration initialization
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 			err := manager.InitializeErrorIntegrationSafe()
@@ -87,13 +87,30 @@ func TestInitManager_WaitForComponent(t *testing.T) {
 		t.Error("Expected timeout error, got nil")
 	}
 
-	// Test state change during wait
+	// Test state change during wait using channel synchronization
+	ready := make(chan struct{})
+	stateSet := make(chan struct{})
+	
 	go func() {
-		time.Sleep(30 * time.Millisecond)
+		<-ready
 		manager.eventBus.Store(int32(InitStateCompleted))
+		close(stateSet)
 	}()
 
-	err = manager.WaitForComponent("event_bus", InitStateCompleted, 100*time.Millisecond)
+	// Start the wait in a goroutine
+	waitErr := make(chan error, 1)
+	go func() {
+		waitErr <- manager.WaitForComponent("event_bus", InitStateCompleted, 100*time.Millisecond)
+	}()
+	
+	// Signal to set the state
+	close(ready)
+	
+	// Wait for state to be set
+	<-stateSet
+	
+	// Get the result
+	err = <-waitErr
 	if err != nil {
 		t.Errorf("WaitForComponent failed when state changed: %v", err)
 	}
@@ -185,12 +202,12 @@ func TestInitManager_ConcurrentHealthChecks(t *testing.T) {
 
 	// Launch concurrent health checks
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 			
 			// Perform multiple operations
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				health := manager.HealthCheck()
 				_ = health.Healthy
 				

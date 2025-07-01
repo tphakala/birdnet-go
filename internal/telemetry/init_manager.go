@@ -2,7 +2,7 @@ package telemetry
 
 import (
 	"context"
-	"fmt"
+	"fmt" // Using fmt instead of errors package to avoid circular dependencies
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,7 +84,7 @@ func (m *InitManager) InitializeErrorIntegrationSafe() error {
 }
 
 // InitializeSentrySafe safely initializes Sentry with retry logic
-func (m *InitManager) InitializeSentrySafe(settings interface{}) error {
+func (m *InitManager) InitializeSentrySafe(settings any) error {
 	var err error
 	m.sentryOnce.Do(func() {
 		m.sentryClient.Store(int32(InitStateInProgress))
@@ -226,19 +226,27 @@ func (m *InitManager) HealthCheck() HealthStatus {
 		switch comp {
 		case "error_integration":
 			if v := m.errorIntegrationErr.Load(); v != nil {
-				health.Error = v.(error).Error()
+				if err, ok := v.(error); ok {
+					health.Error = err.Error()
+				}
 			}
 		case "sentry":
 			if v := m.sentryErr.Load(); v != nil {
-				health.Error = v.(error).Error()
+				if err, ok := v.(error); ok {
+					health.Error = err.Error()
+				}
 			}
 		case "event_bus":
 			if v := m.eventBusErr.Load(); v != nil {
-				health.Error = v.(error).Error()
+				if err, ok := v.(error); ok {
+					health.Error = err.Error()
+				}
 			}
 		case "worker":
 			if v := m.workerErr.Load(); v != nil {
-				health.Error = v.(error).Error()
+				if err, ok := v.(error); ok {
+					health.Error = err.Error()
+				}
 			}
 		}
 
