@@ -183,6 +183,13 @@ func InitSentry(settings *conf.Settings) error {
 		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
 	}
 
+	// Initialize event bus integration for async telemetry
+	if err := InitializeEventBusIntegration(settings); err != nil {
+		log.Printf("Failed to initialize telemetry event bus integration: %v", err)
+		// Don't fail initialization if event bus integration fails
+		// Telemetry will still work synchronously
+	}
+
 	return nil
 }
 
