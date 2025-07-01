@@ -87,6 +87,8 @@ Protects against Sentry outages:
 ```go
 // Initialize Sentry first
 if err := telemetry.InitSentry(settings); err != nil {
+    // Using fmt.Errorf here is intentional - this is initialization
+    // code where the enhanced error system may not be ready yet
     return fmt.Errorf("failed to init Sentry: %w", err)
 }
 

@@ -81,7 +81,7 @@ graph TB
 
 When no consumers are registered:
 - Fast path optimization skips all processing
-- Only 2.5ns overhead for error creation
+- Only ~2.5ns overhead for error creation
 - No allocations or goroutine creation
 
 ### 2. Non-Blocking Guarantees
@@ -273,6 +273,8 @@ type EventBusStats struct {
     FastPathHits     uint64  // Skip processing count
 }
 ```
+
+Note: The metrics use atomic 64-bit counters. On 32-bit platforms, ensure proper alignment for atomic operations or consider using atomic.Uint64 type (Go 1.19+) which handles alignment automatically.
 
 ### Health Checks
 
