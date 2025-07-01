@@ -34,15 +34,20 @@ func BenchmarkChannelOperations(b *testing.B) {
 			}
 		}()
 		
+		// Pre-create error to reduce allocations
+		testErr := fmt.Errorf("test error")
+		event := ErrorEvent{
+			Error:     testErr,
+			Component: "test",
+		}
+		
 		b.ReportAllocs()
 		b.ResetTimer()
 		
 		for b.Loop() {
-			ch <- ErrorEvent{
-				Error:     fmt.Errorf("test error"),
-				Component: "test",
-				Timestamp: time.Now(),
-			}
+			// Only update timestamp to reduce allocations
+			event.Timestamp = time.Now()
+			ch <- event
 		}
 	})
 	
@@ -175,19 +180,24 @@ func BenchmarkChannelBackpressure(b *testing.B) {
 	
 	b.Run("RateLimited", func(b *testing.B) {
 		ch := make(chan ErrorEvent, 1000)
-		limiter := time.NewTicker(time.Microsecond) // 1M events/sec
+		// Use a more realistic rate limit: 1000 events/sec (1ms between events)
+		limiter := time.NewTicker(time.Millisecond)
 		defer limiter.Stop()
+		
+		// Pre-create error to reduce allocations
+		testErr := fmt.Errorf("test error")
+		event := ErrorEvent{
+			Error:     testErr,
+			Component: "test",
+		}
 		
 		b.ReportAllocs()
 		b.ResetTimer()
 		
 		for b.Loop() {
 			<-limiter.C
-			ch <- ErrorEvent{
-				Error:     fmt.Errorf("test error"),
-				Component: "test",
-				Timestamp: time.Now(),
-			}
+			event.Timestamp = time.Now()
+			ch <- event
 		}
 	})
 }

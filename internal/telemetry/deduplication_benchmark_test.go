@@ -52,13 +52,25 @@ func (d *SimpleDeduplicator) IsDuplicate(key string) bool {
 func (d *SimpleDeduplicator) cleanup() {
 	// In production, this would be more sophisticated
 	// For benchmark, just clear half the map
+	targetDeletions := len(d.seen) / 2
+	if targetDeletions == 0 {
+		return
+	}
+	
+	// Collect keys to delete first to avoid modifying map during iteration
+	keysToDelete := make([]string, 0, targetDeletions)
 	count := 0
 	for k := range d.seen {
-		delete(d.seen, k)
+		keysToDelete = append(keysToDelete, k)
 		count++
-		if count >= len(d.seen)/2 {
+		if count >= targetDeletions {
 			break
 		}
+	}
+	
+	// Now delete the collected keys
+	for _, k := range keysToDelete {
+		delete(d.seen, k)
 	}
 }
 
