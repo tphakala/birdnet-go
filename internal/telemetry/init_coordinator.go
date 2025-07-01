@@ -127,6 +127,12 @@ func (c *InitCoordinator) Shutdown(timeout time.Duration) error {
 // GlobalInitCoordinator provides a global initialization coordinator
 var globalInitCoordinator *InitCoordinator
 
+// GetGlobalInitCoordinator returns the global init coordinator instance
+// This is used by debug endpoints to access telemetry health status
+func GetGlobalInitCoordinator() *InitCoordinator {
+	return globalInitCoordinator
+}
+
 // Initialize creates the global init coordinator and performs basic initialization
 func Initialize(settings *conf.Settings) error {
 	if globalInitCoordinator == nil {

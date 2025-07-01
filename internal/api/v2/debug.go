@@ -301,14 +301,6 @@ func mapNotificationType(typeStr string) notification.Type {
 }
 
 func getGlobalInitCoordinator() *telemetry.InitCoordinator {
-	// Access the global coordinator through the health check handler
-	healthHandler := telemetry.NewHealthCheckHandler()
-	if healthHandler == nil {
-		return nil
-	}
-	
-	// Use reflection to access the private field (not ideal but necessary)
-	// In production, we'd export a getter function in the telemetry package
-	// For now, return nil and let the caller handle it
-	return nil
+	// Use the exported getter function from the telemetry package
+	return telemetry.GetGlobalInitCoordinator()
 }
