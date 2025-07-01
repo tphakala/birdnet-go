@@ -29,7 +29,7 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 	require.NoError(t, err)
 	
 	t.Run("Shutdown respects context timeout", func(t *testing.T) {
-		t.Parallel()
+		// Cannot run in parallel - accessing shared singleton manager
 		
 		// Create an already-expired context by setting deadline in the past
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
