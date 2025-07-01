@@ -18,8 +18,11 @@ import (
 // Package logging provides structured logging capabilities using slog.
 
 // global logger instances, initialized in Init()
-var structuredLogger *slog.Logger
-var humanReadableLogger *slog.Logger
+var (
+	structuredLogger     *slog.Logger
+	humanReadableLogger  *slog.Logger
+	loggerMu            sync.RWMutex // Protects logger access
+)
 
 // Track closable writers for proper resource management in SetOutput
 var currentStructuredOutputCloser io.Closer
@@ -28,6 +31,7 @@ var currentHumanReadableOutputCloser io.Closer
 // currentLogLevel stores the dynamic level for all loggers
 var currentLogLevel = new(slog.LevelVar)
 var initOnce sync.Once
+var initialized bool
 
 const (
 	LevelTrace = slog.Level(-8)
@@ -98,8 +102,7 @@ func Init() {
 			Level:       currentLogLevel,
 			ReplaceAttr: defaultReplaceAttr,
 		})
-		structuredLogger = slog.New(structuredHandler)
-
+		
 		// Human-readable logger (Text) to console
 		// os.Stdout is not typically closed by the application, so no closer needed here.
 		currentHumanReadableOutputCloser = nil
@@ -107,11 +110,24 @@ func Init() {
 			Level:       currentLogLevel,
 			ReplaceAttr: defaultReplaceAttr,
 		})
+		
+		// Set loggers with lock protection
+		loggerMu.Lock()
+		structuredLogger = slog.New(structuredHandler)
 		humanReadableLogger = slog.New(humanReadableHandler)
+		loggerMu.Unlock()
 
 		// Set the default logger
 		slog.SetDefault(structuredLogger)
+		
+		// Mark as initialized
+		initialized = true
 	})
+}
+
+// IsInitialized returns true if the logging system has been initialized
+func IsInitialized() bool {
+	return initialized
 }
 
 // SetLevel changes the logging level for all initialized loggers.
@@ -152,13 +168,17 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
 		Level:       currentLogLevel,
 		ReplaceAttr: defaultReplaceAttr,
 	})
-	structuredLogger = slog.New(structuredHandler)
 
 	humanReadableHandler := slog.NewTextHandler(humanReadableOutput, &slog.HandlerOptions{
 		Level:       currentLogLevel,
 		ReplaceAttr: defaultReplaceAttr,
 	})
+	
+	// Update loggers with lock protection
+	loggerMu.Lock()
+	structuredLogger = slog.New(structuredHandler)
 	humanReadableLogger = slog.New(humanReadableHandler)
+	loggerMu.Unlock()
 
 	// Track the new closers if they implement io.Closer
 	if c, ok := structuredOutput.(io.Closer); ok {
@@ -182,12 +202,16 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
 // Structured returns the globally configured structured (JSON) logger.
 // Returns nil if Init() has not been called.
 func Structured() *slog.Logger {
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
 	return structuredLogger
 }
 
 // HumanReadable returns the globally configured human-readable (Text) logger.
 // Returns nil if Init() has not been called.
 func HumanReadable() *slog.Logger {
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
 	return humanReadableLogger
 }
 
@@ -195,10 +219,14 @@ func HumanReadable() *slog.Logger {
 // It uses the global structured logger as the base.
 // Returns nil if Init() has not been called.
 func ForService(serviceName string) *slog.Logger {
-	if structuredLogger == nil {
+	loggerMu.RLock()
+	logger := structuredLogger
+	loggerMu.RUnlock()
+	
+	if logger == nil {
 		return nil
 	}
-	return structuredLogger.With("service", serviceName)
+	return logger.With("service", serviceName)
 }
 
 // --- Convenience functions using the default logger ---
