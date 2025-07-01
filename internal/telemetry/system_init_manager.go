@@ -135,6 +135,7 @@ func (m *SystemInitManager) initializeEventBus() error {
 		eventBusConfig := &events.Config{
 			BufferSize: 10000,
 			Workers:    4,
+			Enabled:    true,
 		}
 		
 		eventBus, err := events.Initialize(eventBusConfig)
