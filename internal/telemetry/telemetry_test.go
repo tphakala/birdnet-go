@@ -230,8 +230,18 @@ func TestEventSummaries(t *testing.T) {
 	if s.Tags["component"] != "test" {
 		t.Errorf("Expected tag component='test', got %s", s.Tags["component"])
 	}
-	if count, ok := s.Extra["count"].(float64); !ok || count != 42 {
-		t.Errorf("Expected extra count=42, got %v", s.Extra["count"])
+	count := s.Extra["count"]
+	switch v := count.(type) {
+	case float64:
+		if v != 42 {
+			t.Errorf("Expected extra count=42, got %v", v)
+		}
+	case int:
+		if v != 42 {
+			t.Errorf("Expected extra count=42, got %v", v)
+		}
+	default:
+		t.Errorf("Expected extra count to be numeric, got %T: %v", count, count)
 	}
 }
 
