@@ -182,3 +182,110 @@ notification.NotifyError(err)
 - **PriorityHigh**: Important but not urgent (service disruption, repeated failures)
 - **PriorityMedium**: Normal priority (warnings, standard errors)
 - **PriorityLow**: Informational only (status updates, confirmations)
+
+## Event Bus Integration
+
+The notification package is fully integrated with the async event bus system for automatic error notifications.
+
+### Architecture
+
+```mermaid
+graph TD
+    A[Event Bus] -->|ErrorEvent| B[NotificationWorker]
+    B --> C{Error Severity}
+    C -->|Critical| D[Create Critical Notification]
+    C -->|High| E[Create High Priority]
+    C -->|Medium| F[Create Medium Priority]
+    C -->|Low| G[Create Low Priority]
+    
+    D --> H[Notification Service]
+    E --> H
+    F --> H
+    G --> H
+    
+    H --> I[Subscribers]
+    H --> J[Storage]
+    
+    K[Rate Limiter] --> B
+    
+    style B fill:#bbf,stroke:#333,stroke-width:4px
+    style H fill:#9f9,stroke:#333,stroke-width:2px
+```
+
+### NotificationWorker
+
+The notification package implements an `EventConsumer` that:
+- Receives error events from the event bus
+- Converts errors to appropriate notifications
+- Applies rate limiting to prevent spam
+- Maps error categories to notification priorities
+
+### Automatic Error Notifications
+
+When errors are created through the enhanced error system, they automatically flow to notifications:
+
+```go
+// This error...
+err := errors.New("API rate limit exceeded").
+    Component("birdweather").
+    Category(errors.CategoryRateLimit).
+    Build()
+
+// ...automatically creates a notification with:
+// - Type: TypeError
+// - Priority: Based on error category
+// - Title: Component-specific title
+// - Message: Error message with context
+```
+
+### Priority Mapping
+
+Error categories are mapped to notification priorities:
+
+| Error Category | Notification Priority |
+|----------------|----------------------|
+| Critical errors | Critical |
+| Network/API failures | High |
+| Validation errors | Medium |
+| Info/Debug | Low |
+
+### Performance Impact
+
+The event bus integration ensures:
+- **Non-blocking**: Notifications never block error creation
+- **Batching**: Multiple errors can be batched
+- **Deduplication**: Prevents notification spam
+- **Async processing**: No impact on main code flow
+
+### Configuration
+
+The notification worker respects the service configuration:
+
+```go
+// Rate limiting is applied per the service config
+config := &notification.ServiceConfig{
+    RateLimitWindow:    30 * time.Second,
+    RateLimitMaxEvents: 50,
+}
+```
+
+### Monitoring
+
+Track notification worker performance:
+
+```go
+// Through event bus stats
+stats := events.GetEventBus().GetStats()
+
+// Or through notification service metrics
+service := notification.GetService()
+unreadCount, _ := service.GetUnreadCount()
+```
+
+### Best Practices with Event Bus
+
+1. **Let errors flow naturally**: Don't manually create notifications for errors
+2. **Set proper error categories**: They determine notification priority
+3. **Monitor dropped events**: May indicate rate limiting
+4. **Use error context**: It becomes notification metadata
+5. **Handle initialization order**: Event bus must be initialized first
