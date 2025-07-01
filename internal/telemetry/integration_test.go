@@ -207,6 +207,9 @@ func TestTelemetryDisabled(t *testing.T) {
 		t.Errorf("InitSentry should not error when disabled: %v", err)
 	}
 
+	// Update the cached telemetry state
+	UpdateTelemetryEnabled()
+
 	// Try to report error
 	testErr := fmt.Errorf("should not be captured")
 	CaptureError(testErr, "test")
