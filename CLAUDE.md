@@ -9,6 +9,41 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
   - API v1 is deprecated and should not receive new functionality
   - Follow the existing patterns in v2 for consistency
 
+## Git Branch Management Guidelines
+
+### Creating New Branches
+- **ALWAYS create new branches from the latest main branch** to avoid missing recent changes:
+  ```bash
+  git checkout main
+  git pull origin main
+  git checkout -b feat/your-new-feature
+  ```
+- **Check for related PRs before starting work**:
+  - Review open PRs that might touch similar code areas
+  - Look at recently merged PRs that might not be in your base branch
+  - Use GitHub's PR search: `is:pr is:merged` to see recent merges
+- **Understand PR merge timing**:
+  - Multiple PRs can be in flight simultaneously
+  - PR A might be created before PR B but merged after it
+  - Creating a branch from a recently merged PR might miss other concurrent changes
+- **Rebase regularly during development**:
+  ```bash
+  git fetch origin
+  git rebase origin/main
+  ```
+  This helps catch conflicts early and ensures you have the latest changes
+- **Before creating a PR**:
+  - Fetch and rebase on latest main one more time
+  - Run linter and tests to catch any integration issues
+  - Check if any new PRs were merged while you were working
+
+### Why This Matters
+When multiple PRs are being developed in parallel:
+- PR #1 (created Monday, merged Wednesday) adds feature A
+- PR #2 (created Tuesday, merged Thursday) adds feature B
+- If you branch from PR #2's merge commit, you might miss PR #1's changes if they touched different files
+- This can lead to "surprise" conflicts when merging to main later
+
 ## Go Code Quality Guidelines
 
 ### Development Commands
