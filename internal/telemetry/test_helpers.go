@@ -14,9 +14,16 @@ type TestConfig struct {
 	Settings      *conf.Settings
 }
 
+// TestingTB is a common interface for *testing.T and *testing.B
+type TestingTB interface {
+	Helper()
+	Fatalf(format string, args ...interface{})
+	Logf(format string, args ...interface{})
+}
+
 // InitForTesting initializes telemetry with a mock transport for testing
 // This ensures tests don't send real data to Sentry
-func InitForTesting(t *testing.T) (config *TestConfig, cleanup func()) {
+func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	t.Helper()
 
 	// Create mock transport
