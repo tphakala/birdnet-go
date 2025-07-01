@@ -21,12 +21,29 @@ func NewHealthCheckHandler() *HealthCheckHandler {
 
 // ServeHTTP implements http.Handler for health checks
 func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Use request context for potential timeout handling
+	ctx := r.Context()
+	
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		w.WriteHeader(http.StatusRequestTimeout)
+		return
+	default:
+	}
+	
 	if h.coordinator == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"status": "error",
 			"error":  "telemetry not initialized",
-		})
+		}); err != nil {
+			// Log the error but response headers are already set
+			logger := getLoggerSafe("health-check")
+			if logger != nil {
+				logger.Error("failed to encode health check error response", "error", err)
+			}
+		}
 		return
 	}
 
@@ -39,28 +56,28 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to JSON-friendly format
-	response := map[string]interface{}{
+	response := map[string]any{
 		"status":    getOverallStatus(status),
 		"timestamp": status.Timestamp.Format(time.RFC3339),
-		"components": map[string]interface{}{},
+		"components": map[string]any{},
 	}
 
 	// Add component details
 	for name, health := range status.Components {
-		componentInfo := map[string]interface{}{
+		componentInfo := map[string]any{
 			"state":   health.State.String(),
 			"healthy": health.Healthy,
 		}
 		if health.Error != "" {
 			componentInfo["error"] = health.Error
 		}
-		response["components"].(map[string]interface{})[name] = componentInfo
+		response["components"].(map[string]any)[name] = componentInfo
 	}
 
 	// Add worker statistics if available
 	if worker := GetTelemetryWorker(); worker != nil {
 		stats := worker.GetStats()
-		response["statistics"] = map[string]interface{}{
+		response["statistics"] = map[string]any{
 			"events_processed": stats.EventsProcessed,
 			"events_dropped":   stats.EventsDropped,
 			"events_failed":    stats.EventsFailed,
@@ -70,7 +87,13 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	_ = json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		// Log the error but response headers are already set
+		logger := getLoggerSafe("health-check")
+		if logger != nil {
+			logger.Error("failed to encode health check response", "error", err)
+		}
+	}
 }
 
 // getOverallStatus returns a string status based on health
