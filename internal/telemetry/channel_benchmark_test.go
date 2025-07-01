@@ -66,16 +66,20 @@ func BenchmarkChannelOperations(b *testing.B) {
 	b.Run("NonBlockingSend", func(b *testing.B) {
 		ch := make(chan ErrorEvent, 100)
 		
+		// Pre-create error to reduce allocations
+		testErr := fmt.Errorf("test error")
+		event := ErrorEvent{
+			Error:     testErr,
+			Component: "test",
+		}
+		
 		b.ReportAllocs()
 		b.ResetTimer()
 		
 		for b.Loop() {
+			event.Timestamp = time.Now()
 			select {
-			case ch <- ErrorEvent{
-				Error:     fmt.Errorf("test error"),
-				Component: "test",
-				Timestamp: time.Now(),
-			}:
+			case ch <- event:
 				// Sent successfully
 			default:
 				// Channel full, drop event
@@ -103,15 +107,19 @@ func BenchmarkChannelOperations(b *testing.B) {
 			}()
 		}
 		
+		// Pre-create error to reduce allocations
+		testErr := fmt.Errorf("test error")
+		event := ErrorEvent{
+			Error:     testErr,
+			Component: "test",
+		}
+		
 		b.ReportAllocs()
 		b.ResetTimer()
 		
 		for b.Loop() {
-			ch <- ErrorEvent{
-				Error:     fmt.Errorf("test error"),
-				Component: "test",
-				Timestamp: time.Now(),
-			}
+			event.Timestamp = time.Now()
+			ch <- event
 		}
 	})
 }
@@ -133,15 +141,19 @@ func benchmarkBufferedChannel(b *testing.B, bufferSize int) {
 		}
 	}()
 	
+	// Pre-create error to reduce allocations
+	testErr := fmt.Errorf("test error")
+	event := ErrorEvent{
+		Error:     testErr,
+		Component: "test",
+	}
+	
 	b.ReportAllocs()
 	b.ResetTimer()
 	
 	for b.Loop() {
-		ch <- ErrorEvent{
-			Error:     fmt.Errorf("test error"),
-			Component: "test",
-			Timestamp: time.Now(),
-		}
+		event.Timestamp = time.Now()
+		ch <- event
 	}
 }
 
