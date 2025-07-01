@@ -24,7 +24,8 @@ func NewMockTransport() *MockTransport {
 	}
 }
 
-// Configure implements sentry.Transport
+// Configure implements sentry.Transport.
+// This is a no-op for the mock transport as configuration is handled during creation.
 //
 //nolint:gocritic // hugeParam: interface requirement, cannot change signature
 func (t *MockTransport) Configure(_ sentry.ClientOptions) {}
@@ -158,7 +159,7 @@ type EventSummary struct {
 	Message     string                 `json:"message"`
 	Level       string                 `json:"level"`
 	Tags        map[string]string      `json:"tags"`
-	Extra       map[string]interface{} `json:"extra"`
+	Extra       map[string]any `json:"extra"`
 	Fingerprint []string               `json:"fingerprint"`
 	Timestamp   time.Time              `json:"timestamp"`
 }

@@ -12,6 +12,7 @@ import (
 
 // TestE2ECompleteFlow tests the complete telemetry flow
 func TestE2ECompleteFlow(t *testing.T) {
+	t.Parallel()
 	config, cleanup := InitForTesting(t)
 	defer cleanup()
 
@@ -19,6 +20,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 	InitializeErrorIntegration()
 
 	t.Run("error to telemetry flow", func(t *testing.T) {
+		t.Parallel()
 		// Create enhanced error
 		enhancedErr := errors.New(fmt.Errorf("test error")).
 			Component("test-component").
@@ -40,6 +42,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 	})
 
 	t.Run("privacy scrubbing", func(t *testing.T) {
+		t.Parallel()
 		config.MockTransport.Clear()
 
 		// Error with sensitive URL
@@ -61,11 +64,12 @@ func TestE2ECompleteFlow(t *testing.T) {
 	})
 
 	t.Run("concurrent reporting", func(t *testing.T) {
+		t.Parallel()
 		config.MockTransport.Clear()
 
 		// Report errors concurrently
 		done := make(chan bool, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			go func(id int) {
 				err := fmt.Errorf("concurrent error %d", id)
 				CaptureError(err, fmt.Sprintf("component-%d", id))
@@ -74,7 +78,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 		}
 
 		// Wait for all
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 
@@ -85,6 +89,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 
 // TestE2EMessageFlow tests message reporting flow
 func TestE2EMessageFlow(t *testing.T) {
+	t.Parallel()
 	config, cleanup := InitForTesting(t)
 	defer cleanup()
 
@@ -100,6 +105,7 @@ func TestE2EMessageFlow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.message, func(t *testing.T) {
+			t.Parallel()
 			config.MockTransport.Clear()
 			
 			CaptureMessage(tt.message, tt.level, tt.component)

@@ -12,7 +12,9 @@ import (
 )
 
 func TestTelemetryIntegration(t *testing.T) {
+	t.Parallel()
 	t.Run("error reporting through telemetry", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -47,6 +49,7 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("message reporting with different levels", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -79,6 +82,7 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("attachment uploader availability", func(t *testing.T) {
+		t.Parallel()
 		_, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -93,6 +97,7 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("initialization safety", func(t *testing.T) {
+		t.Parallel()
 		// Test that telemetry handles initialization safely
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
@@ -106,6 +111,7 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("privacy compliance", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -136,6 +142,7 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("concurrent event reporting", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -144,9 +151,9 @@ func TestTelemetryIntegration(t *testing.T) {
 		eventsPerGoroutine := 5
 
 		done := make(chan bool)
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			go func(id int) {
-				for j := 0; j < eventsPerGoroutine; j++ {
+				for j := range eventsPerGoroutine {
 					err := fmt.Errorf("error from goroutine %d event %d", id, j)
 					ReportError(err)
 				}
@@ -155,7 +162,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		}
 
 		// Wait for all goroutines
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			<-done
 		}
 
@@ -165,11 +172,12 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("flush behavior", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
 		// Report multiple events
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			ReportMessage(fmt.Sprintf("Event %d", i), sentry.LevelInfo, "test")
 		}
 
@@ -182,6 +190,7 @@ func TestTelemetryIntegration(t *testing.T) {
 }
 
 func TestTelemetryDisabled(t *testing.T) {
+	t.Parallel()
 	// Test behavior when telemetry is disabled
 	transport := NewMockTransport()
 
