@@ -11,7 +11,9 @@ import (
 
 // TestErrorHandlerNeverBlocks validates that error reporting never blocks the caller
 func TestErrorHandlerNeverBlocks(t *testing.T) {
+	t.Parallel()
 	t.Run("error.Build() should never block on telemetry", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 		
@@ -42,6 +44,7 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 	})
 
 	t.Run("batch error creation performance", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 		
@@ -51,7 +54,7 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 		start := time.Now()
 		
 		// Create many errors rapidly
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			_ = errors.New(fmt.Errorf("error %d", i)).
 				Component("batch-test").
 				Category(errors.CategoryDatabase).
@@ -71,7 +74,9 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 
 // TestEventBusAsyncBehavior validates that when event bus is available, error reporting is async
 func TestEventBusAsyncBehavior(t *testing.T) {
+	t.Parallel()
 	t.Run("notification system uses event bus (async)", func(t *testing.T) {
+		t.Parallel()
 		// This test documents that the notification system properly uses
 		// the event bus for async error handling, while telemetry does not
 		
@@ -86,7 +91,9 @@ func TestEventBusAsyncBehavior(t *testing.T) {
 
 // TestCurrentTelemetryIntegration tests the current telemetry integration
 func TestCurrentTelemetryIntegration(t *testing.T) {
+	t.Parallel()
 	t.Run("telemetry uses legacy synchronous path", func(t *testing.T) {
+		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 		
@@ -95,9 +102,6 @@ func TestCurrentTelemetryIntegration(t *testing.T) {
 		
 		// Add significant delay to telemetry
 		config.MockTransport.SetDelay(100 * time.Millisecond)
-		
-		// Track timing of telemetry call
-		var telemetryCallTime time.Duration
 		
 		// Create error - this should trigger telemetry
 		start := time.Now()
@@ -118,8 +122,6 @@ func TestCurrentTelemetryIntegration(t *testing.T) {
 			t.Logf("WARNING: Telemetry integration appears to be SYNCHRONOUS")
 			t.Logf("Error creation may have blocked waiting for telemetry")
 		}
-		
-		_ = telemetryCallTime // avoid unused variable warning
 	})
 }
 
@@ -144,7 +146,9 @@ func (c *slowEventConsumer) String() string {
 
 // TestRecommendedAsyncPattern shows the recommended pattern
 func TestRecommendedAsyncPattern(t *testing.T) {
+	t.Parallel()
 	t.Run("recommended: use event bus for all error reporting", func(t *testing.T) {
+		t.Parallel()
 		// This test demonstrates the recommended architecture:
 		// 1. Error creation publishes to event bus (non-blocking)
 		// 2. Telemetry worker consumes from event bus (async)

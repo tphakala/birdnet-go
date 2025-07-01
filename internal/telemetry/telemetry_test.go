@@ -12,7 +12,9 @@ import (
 )
 
 func TestMockTransport(t *testing.T) {
+	t.Parallel()
 	t.Run("SendEvent stores events", func(t *testing.T) {
+		t.Parallel()
 		transport := NewMockTransport()
 		
 		event := &sentry.Event{
@@ -43,7 +45,7 @@ func TestMockTransport(t *testing.T) {
 		transport := NewMockTransport()
 		
 		// Send multiple events
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			transport.SendEvent(&sentry.Event{
 				Message: fmt.Sprintf("event %d", i),
 			})
@@ -61,6 +63,7 @@ func TestMockTransport(t *testing.T) {
 	})
 	
 	t.Run("SetDisabled prevents event capture", func(t *testing.T) {
+		t.Parallel()
 		transport := NewMockTransport()
 		transport.SetDisabled(true)
 		
@@ -72,6 +75,7 @@ func TestMockTransport(t *testing.T) {
 	})
 	
 	t.Run("FindEventByMessage locates events", func(t *testing.T) {
+		t.Parallel()
 		transport := NewMockTransport()
 		
 		events := []string{"first", "second", "third"}
@@ -93,6 +97,7 @@ func TestMockTransport(t *testing.T) {
 	})
 	
 	t.Run("WaitForEventCount with timeout", func(t *testing.T) {
+		t.Parallel()
 		transport := NewMockTransport()
 		
 		// Test immediate success
@@ -110,6 +115,7 @@ func TestMockTransport(t *testing.T) {
 	})
 	
 	t.Run("FlushWithContext respects cancellation", func(t *testing.T) {
+		t.Parallel()
 		transport := NewMockTransport()
 		transport.SetDelay(100 * time.Millisecond)
 		
@@ -132,6 +138,7 @@ func TestMockTransport(t *testing.T) {
 }
 
 func TestURLAnonymization(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		input       string
@@ -166,6 +173,7 @@ func TestURLAnonymization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			scrubbed := ScrubMessage(tt.input)
 			
 			if tt.notContains != "" && strings.Contains(scrubbed, tt.notContains) {
@@ -180,6 +188,7 @@ func TestURLAnonymization(t *testing.T) {
 }
 
 func TestEventSummaries(t *testing.T) {
+	t.Parallel()
 	transport := NewMockTransport()
 	
 	// Create events with different properties
@@ -187,19 +196,19 @@ func TestEventSummaries(t *testing.T) {
 		message string
 		level   sentry.Level
 		tags    map[string]string
-		extra   map[string]interface{}
+		extra   map[string]any
 	}{
 		{
 			message: "Info event",
 			level:   sentry.LevelInfo,
 			tags:    map[string]string{"component": "test", "version": "1.0"},
-			extra:   map[string]interface{}{"count": 42},
+			extra:   map[string]any{"count": 42},
 		},
 		{
 			message: "Error event",
 			level:   sentry.LevelError,
 			tags:    map[string]string{"component": "api"},
-			extra:   map[string]interface{}{"endpoint": "/test"},
+			extra:   map[string]any{"endpoint": "/test"},
 		},
 	}
 	
@@ -246,6 +255,7 @@ func TestEventSummaries(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	transport := NewMockTransport()
 	
 	// Run concurrent operations
@@ -254,11 +264,11 @@ func TestConcurrentAccess(t *testing.T) {
 	eventsPerGoroutine := 100
 	
 	// Writers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < eventsPerGoroutine; j++ {
+			for j := range eventsPerGoroutine {
 				transport.SendEvent(&sentry.Event{
 					Message: fmt.Sprintf("event-%d-%d", id, j),
 				})
@@ -267,11 +277,11 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 	
 	// Readers
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < eventsPerGoroutine; j++ {
+			for range eventsPerGoroutine {
 				_ = transport.GetEventCount()
 				_ = transport.GetEvents()
 				time.Sleep(time.Microsecond) // Small delay to increase contention

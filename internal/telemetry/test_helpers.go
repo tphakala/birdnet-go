@@ -17,8 +17,8 @@ type TestConfig struct {
 // TestingTB is a common interface for *testing.T and *testing.B
 type TestingTB interface {
 	Helper()
-	Fatalf(format string, args ...interface{})
-	Logf(format string, args ...interface{})
+	Fatalf(format string, args ...any)
+	Logf(format string, args ...any)
 }
 
 // InitForTesting initializes telemetry with a mock transport for testing
@@ -97,17 +97,18 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 func AssertEventCaptured(t *testing.T, transport *MockTransport, message string, timeout time.Duration) {
 	t.Helper()
 	
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if transport.FindEventByMessage(message) != nil {
-			return // Success
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Wait for at least one event first
+	if !transport.WaitForEventCount(1, timeout) {
+		events := transport.GetEventMessages()
+		t.Errorf("Expected event with message %q not found within timeout. Captured events: %v", message, events)
+		return
 	}
 	
-	// Failed to find event
-	events := transport.GetEventMessages()
-	t.Errorf("Expected event with message %q not found. Captured events: %v", message, events)
+	// Then check if our specific message exists
+	if transport.FindEventByMessage(message) == nil {
+		events := transport.GetEventMessages()
+		t.Errorf("Expected event with message %q not found. Captured events: %v", message, events)
+	}
 }
 
 // AssertNoEvents verifies that no events were captured

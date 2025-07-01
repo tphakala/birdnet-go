@@ -56,7 +56,8 @@ func (w *TelemetryWorker) ProcessError(ctx context.Context, err error) {
 
 	// Extract component from error
 	component := "unknown"
-	if enhancedErr, ok := err.(*errors.EnhancedError); ok {
+	var enhancedErr *errors.EnhancedError
+	if errors.As(err, &enhancedErr) {
 		component = enhancedErr.GetComponent()
 	}
 

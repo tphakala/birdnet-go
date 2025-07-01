@@ -7,28 +7,6 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// FastCaptureError is an optimized version that checks telemetry state first
-func FastCaptureError(err error, component string) {
-	// Fast path: check atomic flag first
-	if !IsTelemetryEnabled() {
-		return
-	}
-	
-	// Slow path: actually capture
-	CaptureError(err, component)
-}
-
-// FastCaptureMessage is an optimized version that checks telemetry state first
-func FastCaptureMessage(message string, level sentry.Level, component string) {
-	// Fast path: check atomic flag first
-	if !IsTelemetryEnabled() {
-		return
-	}
-	
-	// Slow path: actually capture
-	CaptureMessage(message, level, component)
-}
-
 // BenchmarkOptimizedTelemetryDisabled measures optimized performance when disabled
 func BenchmarkOptimizedTelemetryDisabled(b *testing.B) {
 	// Ensure telemetry is disabled
