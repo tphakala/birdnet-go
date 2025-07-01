@@ -82,10 +82,12 @@ func BenchmarkDeduplication(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		
+		i := 0
 		for b.Loop() {
 			// Each error is unique
-			key := fmt.Sprintf("error_%d", b.N)
+			key := fmt.Sprintf("error_%d", i)
 			_ = dedup.IsDuplicate(key)
+			i++
 		}
 	})
 	
@@ -116,7 +118,7 @@ func BenchmarkDeduplication(b *testing.B) {
 			// 80% duplicates, 20% unique
 			var key string
 			if i%5 == 0 {
-				key = fmt.Sprintf("unique_error_%d", b.N)
+				key = fmt.Sprintf("unique_error_%d", i)
 			} else {
 				key = fmt.Sprintf("common_error_%d", i%20)
 			}
@@ -148,10 +150,12 @@ func BenchmarkDeduplicationMemory(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		
+		i := 0
 		for b.Loop() {
 			// Fill the cache with unique errors
-			key := fmt.Sprintf("error_%d", b.N)
+			key := fmt.Sprintf("error_%d", i)
 			_ = dedup.IsDuplicate(key)
+			i++
 		}
 		
 		b.Logf("Final cache size: %d entries", len(dedup.seen))
