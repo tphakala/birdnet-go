@@ -1,9 +1,11 @@
 # Telemetry Package Initialization Analysis
 
 ## Overview
+
 This document analyzes the initialization patterns in the telemetry package and its dependencies, identifying potential circular dependencies and initialization order issues.
 
 ## Package Dependencies Graph
+
 ```
 telemetry → conf (for settings)
 telemetry → errors (for error handling)
@@ -21,6 +23,7 @@ events → logging (for logging)
 ### 1. Package-Level Variables
 
 #### telemetry package:
+
 - `var sentryInitialized bool` - tracks Sentry initialization
 - `var deferredMessages []DeferredMessage` - stores messages before Sentry init
 - `var attachmentUploader *AttachmentUploader` - singleton attachment uploader
@@ -29,16 +32,19 @@ events → logging (for logging)
 - `var deferredInitMutex sync.Mutex` - protects deferred initialization
 
 #### conf package:
+
 - `var settingsInstance *Settings` - global settings singleton
 - `var once sync.Once` - ensures single initialization
 - `var settingsMutex sync.RWMutex` - protects settings access
 
 #### events package:
+
 - `var globalEventBus *EventBus` - global event bus singleton
 - `var globalMutex sync.Mutex` - protects event bus initialization
 - `var hasActiveConsumers atomic.Bool` - fast path optimization
 
 #### logging package:
+
 - `var structuredLogger *slog.Logger` - global structured logger
 - `var humanReadableLogger *slog.Logger` - global human-readable logger
 - `var currentLogLevel = new(slog.LevelVar)` - dynamic log level
@@ -47,6 +53,7 @@ events → logging (for logging)
 ### 2. Init Functions
 
 #### telemetry/eventbus_integration.go:
+
 ```go
 func init() {
     logger = logging.ForService("telemetry-integration")
@@ -57,6 +64,7 @@ func init() {
 ```
 
 #### errors/telemetry_integration.go:
+
 ```go
 func init() {
     // Initialize hasActiveReporting to false (no telemetry or hooks by default)
@@ -87,7 +95,8 @@ The telemetry package uses a **deferred initialization pattern** to avoid circul
 ### 4. Circular Dependency Issues
 
 #### Potential Circular Dependencies:
-1. **telemetry ↔ errors**: 
+
+1. **telemetry ↔ errors**:
    - telemetry imports errors for error handling
    - errors imports telemetry indirectly via SetTelemetryReporter/SetPrivacyScrubber
    - **Solution**: Uses interfaces and deferred initialization
@@ -112,6 +121,7 @@ Based on the analysis, the correct initialization order should be:
 ### 6. Singleton Patterns
 
 All packages use thread-safe singleton patterns:
+
 - **conf**: Uses sync.Once and mutex-protected global variable
 - **events**: Uses mutex-protected global variable with lazy initialization
 - **logging**: Uses sync.Once for initialization
@@ -120,6 +130,7 @@ All packages use thread-safe singleton patterns:
 ### 7. Fast Path Optimizations
 
 Several packages implement fast path optimizations:
+
 - **events**: `hasActiveConsumers` atomic bool to skip processing when no consumers
 - **errors**: `hasActiveReporting` atomic bool to skip reporting when disabled
 - **telemetry**: `telemetryInitialized` atomic bool to track initialization state
@@ -127,6 +138,7 @@ Several packages implement fast path optimizations:
 ### 8. Thread Safety
 
 All packages implement proper thread safety:
+
 - Mutex protection for shared state
 - Atomic operations for boolean flags
 - Read/write mutexes for frequently read data
