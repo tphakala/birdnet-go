@@ -9,7 +9,7 @@ The telemetry system has a complex initialization sequence designed to avoid cir
 ### Phase 1: Early Initialization (main.go)
 
 1. **Configuration Loading** - Load settings from config file
-2. **System ID Generation** - Create or load unique system identifier  
+2. **System ID Generation** - Create or load unique system identifier
 3. **Logging Initialization** - Set up structured logging
 4. **Telemetry Initialization** - Initialize telemetry coordinator
    - Error integration (synchronous)
@@ -45,18 +45,21 @@ graph TD
 ## Key Components
 
 ### InitManager
+
 - Coordinates safe initialization using sync.Once
 - Tracks component states (not started, in progress, completed, failed)
 - Provides health checks and timeout handling
 - Prevents race conditions during startup
 
 ### InitCoordinator
+
 - Implements ordered initialization sequence
 - Handles dependency checking
 - Provides graceful shutdown capabilities
 - Manages global initialization state
 
 ### Deferred Initialization
+
 - Event bus integration happens after core services
 - Prevents circular dependencies
 - Allows early error reporting before full async setup
@@ -64,6 +67,7 @@ graph TD
 ## Thread Safety
 
 All initialization operations are protected by:
+
 - `sync.Once` for singleton initialization
 - Atomic operations for state tracking
 - Mutexes for shared resource access
@@ -72,6 +76,7 @@ All initialization operations are protected by:
 ## Error Handling
 
 The system is designed to be resilient:
+
 - Telemetry failures don't stop application startup
 - Each component can fail independently
 - Health checks provide visibility into component states
@@ -80,6 +85,7 @@ The system is designed to be resilient:
 ## Debugging Initialization Issues
 
 1. Check component states:
+
    ```go
    status := telemetry.GetHealthStatus()
    ```

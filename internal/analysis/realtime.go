@@ -21,7 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -894,8 +893,6 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	backupLogger.Info("Backup system initialized.")
 	return backupManager, backupScheduler, nil
 }
-
-
 
 // initializeSystemMonitor initializes and starts the system resource monitor if enabled
 func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
