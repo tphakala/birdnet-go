@@ -93,7 +93,7 @@ The telemetry package uses a **deferred initialization pattern** to avoid circul
    - **Solution**: Uses interfaces and deferred initialization
 
 2. **errors → events → telemetry**:
-   - errors publishes to events
+   - errors package publishes to events
    - events delivers to telemetry worker
    - telemetry reports errors
    - **Solution**: Event-driven architecture breaks direct dependency
