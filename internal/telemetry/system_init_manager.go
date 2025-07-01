@@ -136,6 +136,12 @@ func (m *SystemInitManager) initializeEventBus() error {
 			BufferSize: 10000,
 			Workers:    4,
 			Enabled:    true,
+			Deduplication: &events.DeduplicationConfig{
+				Enabled:         true,
+				TTL:             5 * time.Minute,
+				MaxEntries:      1000,
+				CleanupInterval: 1 * time.Minute,
+			},
 		}
 		
 		eventBus, err := events.Initialize(eventBusConfig)
