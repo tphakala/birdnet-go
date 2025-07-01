@@ -116,8 +116,7 @@ func (m *SystemInitManager) initializeNotification() error {
 		
 		// Verify initialization
 		if !notification.IsInitialized() {
-			err = fmt.Errorf("notification service initialization failed")
-			m.notificationErr = err
+			m.notificationErr = fmt.Errorf("notification service initialization failed")
 			return
 		}
 		
@@ -178,7 +177,7 @@ func (m *SystemInitManager) initializeNotificationWorker() error {
 		}
 		
 		// Initialize notification worker
-		if err = notification.InitializeEventBusIntegration(); err != nil {
+		if err := notification.InitializeEventBusIntegration(); err != nil {
 			m.workerErr = fmt.Errorf("notification worker initialization failed: %w", err)
 			return
 		}
