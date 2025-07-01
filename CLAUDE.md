@@ -3,6 +3,12 @@
 ## Project Overview
 BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identification with telemetry and observability features.
 
+## API Development Guidelines
+- **IMPORTANT: Do not expand HTTP API v1 anymore**
+  - All new API endpoints must be created in `internal/api/v2/`
+  - API v1 is deprecated and should not receive new functionality
+  - Follow the existing patterns in v2 for consistency
+
 ## Go Code Quality Guidelines
 
 ### Development Commands
