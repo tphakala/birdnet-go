@@ -45,8 +45,12 @@ func main() {
 }
 
 func mainWithExitCode() int {
-	// Ensure Sentry is flushed on exit
-	defer telemetry.Flush(2 * time.Second)
+	// Ensure all systems are properly shut down on exit
+	defer func() {
+		if err := telemetry.ShutdownSystem(5 * time.Second); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: system shutdown incomplete: %v\n", err)
+		}
+	}()
 
 	// Check if profiling is enabled
 	if os.Getenv("BIRDNET_GO_PROFILE") == "1" {
@@ -107,16 +111,17 @@ func mainWithExitCode() int {
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
 		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
 
-	// Initialize Sentry telemetry if enabled
-	if err := telemetry.InitSentry(settings); err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing Sentry: %v\n", err)
-		// Continue without Sentry - it's not critical
+	// Initialize core systems (telemetry and notification)
+	if err := telemetry.InitializeSystem(settings); err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing core systems: %v\n", err)
+		// Continue - these are not critical for basic operation
 	}
 
-	// Initialize basic error handling integration with telemetry
-	// The async event bus integration is now handled in realtime.go after all services are initialized
-	// This only sets up the basic telemetry reporter for early startup errors
-	telemetry.InitializeErrorIntegration()
+	// Wait for core systems to be ready (with timeout)
+	if err := telemetry.WaitForReady(5 * time.Second); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: core systems initialization incomplete: %v\n", err)
+		// Continue - not critical for operation
+	}
 
 	// Enable runtime profiling if debug mode is enabled
 	if settings.Debug {
