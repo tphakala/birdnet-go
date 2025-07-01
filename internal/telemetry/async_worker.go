@@ -163,11 +163,11 @@ func (w *AsyncWorker) processEventInternal(event events.ErrorEvent) error {
 }
 
 // ProcessBatch processes multiple events at once
-func (w *AsyncWorker) ProcessBatch(events []events.ErrorEvent) error {
+func (w *AsyncWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
 	// For telemetry, we don't really benefit from batching
 	// Process each event individually
 	var lastErr error
-	for _, event := range events {
+	for _, event := range errorEvents {
 		if err := w.ProcessEvent(event); err != nil {
 			lastErr = err
 		}

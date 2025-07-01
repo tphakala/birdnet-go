@@ -29,12 +29,18 @@ func TestAsyncTelemetryNonBlocking(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to initialize event bus: %v", err)
 		}
-		defer eventBus.Shutdown(5 * time.Second)
+		defer func() {
+			if err := eventBus.Shutdown(5 * time.Second); err != nil {
+				t.Logf("Error shutting down event bus: %v", err)
+			}
+		}()
 		
 		// Set up the event publisher in errors package
-		events.InitializeErrorsIntegration(func(publisher any) {
+		if err := events.InitializeErrorsIntegration(func(publisher any) {
 			errors.SetEventPublisher(publisher.(errors.EventPublisher))
-		})
+		}); err != nil {
+			t.Fatalf("Failed to initialize errors integration: %v", err)
+		}
 		
 		// Initialize error integration
 		InitializeErrorIntegration()
@@ -94,12 +100,18 @@ func TestAsyncTelemetryNonBlocking(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to initialize event bus: %v", err)
 		}
-		defer eventBus.Shutdown(5 * time.Second)
+		defer func() {
+			if err := eventBus.Shutdown(5 * time.Second); err != nil {
+				t.Logf("Error shutting down event bus: %v", err)
+			}
+		}()
 		
 		// Set up integrations
-		events.InitializeErrorsIntegration(func(publisher any) {
+		if err := events.InitializeErrorsIntegration(func(publisher any) {
 			errors.SetEventPublisher(publisher.(errors.EventPublisher))
-		})
+		}); err != nil {
+			t.Fatalf("Failed to initialize errors integration: %v", err)
+		}
 		InitializeErrorIntegration()
 		
 		settings := conf.Setting()
