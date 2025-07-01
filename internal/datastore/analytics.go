@@ -72,7 +72,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		SELECT 
 			scientific_name,
 			MAX(common_name) as common_name,
-			species_code,
+			MAX(species_code) as species_code,
 			COUNT(*) as count,
 			MIN(date || ' ' || time) as first_seen,
 			MAX(date || ' ' || time) as last_seen,
