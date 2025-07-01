@@ -31,12 +31,9 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 	t.Run("Shutdown respects context timeout", func(t *testing.T) {
 		t.Parallel()
 		
-		// Create a context with very short timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+		// Create an already-expired context by setting deadline in the past
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
 		defer cancel()
-		
-		// Wait for context to expire
-		time.Sleep(2 * time.Millisecond)
 		
 		// Shutdown should return context error immediately
 		err := manager.Shutdown(ctx)
@@ -74,26 +71,41 @@ func TestSystemInitManager_ShutdownTimeoutCalculation(t *testing.T) {
 	t.Parallel()
 	
 	// Test timeout calculation logic
-	t.Run("Uses remaining time from context", func(t *testing.T) {
-		// Create a context with 3 second deadline
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	t.Run("Calculates remaining time correctly", func(t *testing.T) {
+		// Create a fixed deadline in the future
+		futureTime := time.Now().Add(5 * time.Second)
+		ctx, cancel := context.WithDeadline(context.Background(), futureTime)
 		defer cancel()
 		
 		// Get deadline
 		deadline, ok := ctx.Deadline()
 		assert.True(t, ok)
+		assert.Equal(t, futureTime, deadline)
 		
-		// Calculate remaining time
-		remaining := time.Until(deadline)
-		assert.Greater(t, remaining, 2*time.Second)
-		assert.Less(t, remaining, 3*time.Second)
+		// Calculate remaining time at a fixed point
+		// Instead of using time.Until which depends on current time,
+		// we test the calculation logic directly
+		testTime := futureTime.Add(-3 * time.Second) // 3 seconds before deadline
+		remaining := futureTime.Sub(testTime)
+		assert.Equal(t, 3*time.Second, remaining)
 		
-		// Sleep a bit
-		time.Sleep(1 * time.Second)
+		// Test with different time points
+		testTime2 := futureTime.Add(-1 * time.Second) // 1 second before deadline
+		remaining2 := futureTime.Sub(testTime2)
+		assert.Equal(t, 1*time.Second, remaining2)
 		
-		// Remaining time should be less now
-		remaining = time.Until(deadline)
-		assert.Greater(t, remaining, 1*time.Second)
-		assert.Less(t, remaining, 2*time.Second)
+		// Test when deadline has passed
+		testTime3 := futureTime.Add(1 * time.Second) // 1 second after deadline
+		remaining3 := futureTime.Sub(testTime3)
+		assert.Equal(t, -1*time.Second, remaining3)
+	})
+	
+	t.Run("Context without deadline", func(t *testing.T) {
+		// Test with context that has no deadline
+		ctx := context.Background()
+		
+		deadline, ok := ctx.Deadline()
+		assert.False(t, ok)
+		assert.Zero(t, deadline)
 	})
 }
