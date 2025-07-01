@@ -125,7 +125,8 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 		
 		var resp map[string]string
-		json.Unmarshal(rec.Body.Bytes(), &resp)
+		err = json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
 		assert.Equal(t, "Debug mode not enabled", resp["error"])
 	})
 	
@@ -145,7 +146,7 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 	t.Run("DebugSystemStatus", func(t *testing.T) {
 		t.Parallel()
 		
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/debug/status", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/debug/status", http.NoBody)
 		rec := httptest.NewRecorder()
 		ctx := e.NewContext(req, rec)
 		
