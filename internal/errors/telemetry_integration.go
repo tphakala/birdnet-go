@@ -340,17 +340,23 @@ func reportToTelemetryLegacy(ee *EnhancedError) {
 type PrivacyScrubber func(string) string
 
 // Global privacy scrubber function (set by telemetry package)
-var globalPrivacyScrubber PrivacyScrubber
+// Using atomic.Value for thread-safe access
+var globalPrivacyScrubber atomic.Value
 
 // SetPrivacyScrubber sets the global privacy scrubbing function
 func SetPrivacyScrubber(scrubber PrivacyScrubber) {
-	globalPrivacyScrubber = scrubber
+	if scrubber != nil {
+		globalPrivacyScrubber.Store(scrubber)
+	}
 }
 
 // scrubMessageForPrivacy applies privacy protection to error messages
 func scrubMessageForPrivacy(message string) string {
-	if globalPrivacyScrubber != nil {
-		return globalPrivacyScrubber(message)
+	// Load the scrubber atomically
+	if scrubber := globalPrivacyScrubber.Load(); scrubber != nil {
+		if fn, ok := scrubber.(PrivacyScrubber); ok {
+			return fn(message)
+		}
 	}
 
 	// Fallback to basic scrubbing if no privacy scrubber is set

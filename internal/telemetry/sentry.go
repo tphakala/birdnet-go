@@ -184,7 +184,7 @@ func InitSentry(settings *conf.Settings) error {
 	}
 
 	// Initialize event bus integration for async telemetry
-	if err := InitializeEventBusIntegration(settings); err != nil {
+	if err := InitializeEventBusIntegration(); err != nil {
 		log.Printf("Failed to initialize telemetry event bus integration: %v", err)
 		// Don't fail initialization if event bus integration fails
 		// Telemetry will still work synchronously

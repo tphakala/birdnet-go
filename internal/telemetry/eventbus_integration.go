@@ -2,45 +2,57 @@ package telemetry
 
 import (
 	"fmt"
-	"log/slog"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"log/slog"
 )
 
 var (
-	// asyncWorker is the singleton telemetry async worker
-	asyncWorker *AsyncWorker
-	// eventBusLogger is the logger for event bus integration
-	eventBusLogger *slog.Logger
+	// telemetryWorker is the singleton telemetry worker
+	telemetryWorker *TelemetryWorker
+	logger         *slog.Logger
 )
 
 func init() {
-	eventBusLogger = logging.ForService("telemetry-eventbus")
-	if eventBusLogger == nil {
-		eventBusLogger = slog.Default().With("service", "telemetry-eventbus")
+	logger = logging.ForService("telemetry-integration")
+	if logger == nil {
+		logger = slog.Default().With("service", "telemetry-integration")
 	}
 }
 
 // InitializeEventBusIntegration sets up the telemetry worker as an event consumer
-// This should be called after both the telemetry service and event bus are initialized
-func InitializeEventBusIntegration(settings *conf.Settings) error {
-	// Check if telemetry is enabled
+// This should be called after both Sentry and event bus are initialized
+func InitializeEventBusIntegration() error {
+	// Check if Sentry is enabled
+	settings := conf.GetSettings()
 	if settings == nil || !settings.Sentry.Enabled {
-		eventBusLogger.Info("telemetry disabled, skipping event bus integration")
+		logger.Info("Sentry telemetry disabled, skipping event bus integration")
 		return nil
 	}
 	
 	// Check if event bus is initialized
 	if !events.IsInitialized() {
-		eventBusLogger.Warn("event bus not initialized, skipping telemetry integration")
+		logger.Warn("event bus not initialized, skipping telemetry integration")
 		return nil
 	}
 	
-	// Create telemetry worker
-	config := DefaultAsyncWorkerConfig()
-	worker, err := NewAsyncWorker(settings, config)
+	// Create telemetry worker with custom config
+	config := &WorkerConfig{
+		FailureThreshold:   10,
+		RecoveryTimeout:    60 * time.Second,
+		HalfOpenMaxEvents:  5,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 100, // Reasonable limit for Sentry
+		SamplingRate:       1.0, // 100% sampling by default
+		BatchingEnabled:    true,
+		BatchSize:          10,
+		BatchTimeout:       100 * time.Millisecond,
+	}
+	
+	worker, err := NewTelemetryWorker(true, config)
 	if err != nil {
 		return fmt.Errorf("failed to create telemetry worker: %w", err)
 	}
@@ -57,27 +69,46 @@ func InitializeEventBusIntegration(settings *conf.Settings) error {
 	}
 	
 	// Store reference for stats/monitoring
-	asyncWorker = worker
+	telemetryWorker = worker
 	
-	eventBusLogger.Info("telemetry worker registered with event bus",
-		"rate_limit_window", config.RateLimitWindow,
-		"rate_limit_events", config.RateLimitEvents,
-		"circuit_breaker_threshold", config.FailureThreshold,
+	logger.Info("telemetry worker registered with event bus",
+		"batching_enabled", config.BatchingEnabled,
+		"rate_limit", config.RateLimitMaxEvents,
+		"sampling_rate", config.SamplingRate,
 	)
 	
 	return nil
 }
 
-// GetAsyncWorker returns the telemetry worker instance
-func GetAsyncWorker() *AsyncWorker {
-	return asyncWorker
+// GetTelemetryWorker returns the telemetry worker instance
+func GetTelemetryWorker() *TelemetryWorker {
+	return telemetryWorker
 }
 
-// GetAsyncWorkerStats returns telemetry worker statistics
-func GetAsyncWorkerStats() *AsyncWorkerStats {
-	if asyncWorker == nil {
+// GetWorkerStats returns telemetry worker statistics
+func GetWorkerStats() *WorkerStats {
+	if telemetryWorker == nil {
 		return nil
 	}
-	stats := asyncWorker.GetStats()
+	stats := telemetryWorker.GetStats()
 	return &stats
+}
+
+// UpdateSamplingRate allows dynamic adjustment of sampling rate
+func UpdateSamplingRate(rate float64) error {
+	if telemetryWorker == nil {
+		return fmt.Errorf("telemetry worker not initialized")
+	}
+	
+	if rate < 0.0 || rate > 1.0 {
+		return fmt.Errorf("sampling rate must be between 0.0 and 1.0")
+	}
+	
+	telemetryWorker.configMu.Lock()
+	telemetryWorker.config.SamplingRate = rate
+	telemetryWorker.configMu.Unlock()
+	
+	logger.Info("updated telemetry sampling rate", "rate", rate)
+	
+	return nil
 }
