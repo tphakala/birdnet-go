@@ -44,10 +44,34 @@ BirdNET-Go is a Go implementation of BirdNET for real-time bird sound identifica
     ```
 
 ### Testing Best Practices
-- **Always use `t.Parallel()`** in test functions and subtests to enable concurrent execution
-  - Add `t.Parallel()` as the first line in test functions
-  - Also add `t.Parallel()` inside each `t.Run()` subtest
-  - This improves test suite performance by running tests concurrently
+- **Use `t.Parallel()` carefully** to enable concurrent test execution:
+  - Add `t.Parallel()` as the first line in test functions that don't share state
+  - Add `t.Parallel()` inside `t.Run()` subtests only when they're truly independent
+  - **IMPORTANT: Do NOT use `t.Parallel()` when**:
+    - Tests access shared singleton instances
+    - Tests modify global state or package-level variables
+    - Subtests access the same resource that could be modified
+    - Tests rely on specific execution order
+  - Example of when NOT to use parallel:
+    ```go
+    // BAD - subtests access shared singleton
+    func TestSingleton(t *testing.T) {
+        manager := GetSingletonManager()
+        
+        t.Run("Test1", func(t *testing.T) {
+            t.Parallel() // WRONG! This will cause race conditions
+            manager.Modify()
+        })
+    }
+    
+    // GOOD - subtests don't share state
+    func TestIndependent(t *testing.T) {
+        t.Run("Test1", func(t *testing.T) {
+            t.Parallel() // OK - creates its own instance
+            obj := NewObject()
+            obj.Test()
+        })
+    }
 - **Avoid time-dependent tests** that rely on `time.Sleep()` or real-time delays
   - Use channels, mocks, or other deterministic approaches instead
   - Replace `time.Sleep` with channel-based synchronization:
