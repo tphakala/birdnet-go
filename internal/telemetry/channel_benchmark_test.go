@@ -3,7 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -156,7 +156,7 @@ func BenchmarkChannelBackpressure(b *testing.B) {
 		
 		for b.Loop() {
 			event := ErrorEvent{
-				Error:     fmt.Errorf("test error %d", b.N),
+				Error:     fmt.Errorf("test error"),
 				Component: "test",
 				Timestamp: time.Now(),
 			}
@@ -205,23 +205,16 @@ func BenchmarkChannelBackpressure(b *testing.B) {
 // BenchmarkConcurrentProducers tests multiple producers sending to the same channel
 func BenchmarkConcurrentProducers(b *testing.B) {
 	ch := make(chan ErrorEvent, 10000)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	done := make(chan struct{})
 	
 	// Consumer that counts events
-	var received int64
-	var mu sync.Mutex
+	var received atomic.Int64
 	go func() {
-		for {
-			select {
-			case <-ch:
-				mu.Lock()
-				received++
-				mu.Unlock()
-			case <-ctx.Done():
-				return
-			}
+		for event := range ch {
+			_ = event // Process event
+			received.Add(1)
 		}
+		close(done)
 	}()
 	
 	b.ReportAllocs()
@@ -239,10 +232,11 @@ func BenchmarkConcurrentProducers(b *testing.B) {
 		}
 	})
 	
-	// Give consumer time to process remaining events
-	time.Sleep(10 * time.Millisecond)
+	// Close channel to signal consumer to exit
+	close(ch)
 	
-	mu.Lock()
-	b.Logf("Received %d events", received)
-	mu.Unlock()
+	// Wait for consumer to finish processing all events
+	<-done
+	
+	b.Logf("Received %d events", received.Load())
 }
