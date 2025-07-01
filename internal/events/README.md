@@ -69,6 +69,7 @@ type EventConsumer interface {
 - **Channel buffer**: 10,000 events (configurable)
 - **Non-blocking sends**: Events dropped if buffer full (tracked in metrics)
 - **Async processing**: Worker goroutines process events independently
+- **Back-pressure strategy**: When buffer is full, new events are dropped and counted in `EventsDropped` metric. This ensures the application never blocks on telemetry/notification operations.
 
 ### 2. Error Deduplication
 
@@ -100,6 +101,8 @@ eventBus, err := events.Initialize(nil)
 if err != nil {
     return err
 }
+// The eventBus handle is typically not needed as most operations
+// go through the global singleton accessed via events.GetEventBus()
 
 // Or with custom config
 config := &events.Config{
@@ -113,6 +116,7 @@ config := &events.Config{
     },
 }
 eventBus, err := events.Initialize(config)
+// Use eventBus for direct operations or rely on global singleton
 ```
 
 ### Registering Consumers
@@ -133,9 +137,9 @@ func (c *MyConsumer) ProcessEvent(event events.ErrorEvent) error {
     return nil
 }
 
-func (c *MyConsumer) ProcessBatch(events []events.ErrorEvent) error {
+func (c *MyConsumer) ProcessBatch(errorEvents []events.ErrorEvent) error {
     // Process batch of events
-    for _, event := range events {
+    for _, event := range errorEvents {
         if err := c.ProcessEvent(event); err != nil {
             return err
         }

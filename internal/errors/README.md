@@ -495,7 +495,7 @@ The enhanced error system is designed to be lightweight:
 - Telemetry reporting is asynchronous via event bus
 - Privacy scrubbing uses efficient regex patterns
 - Automatic component detection uses call stack inspection minimally
-- Zero cost when telemetry is disabled (2.5ns overhead)
+- Negligible cost when telemetry is disabled (~2.5ns overhead)
 
 ## Import Best Practices
 
