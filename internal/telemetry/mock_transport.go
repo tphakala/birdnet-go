@@ -25,6 +25,8 @@ func NewMockTransport() *MockTransport {
 }
 
 // Configure implements sentry.Transport
+//
+//nolint:gocritic // hugeParam: interface requirement, cannot change signature
 func (t *MockTransport) Configure(_ sentry.ClientOptions) {}
 
 // SendEvent implements sentry.Transport

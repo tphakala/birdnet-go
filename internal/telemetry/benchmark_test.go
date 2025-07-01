@@ -19,7 +19,9 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 	}
 	
 	// Initialize with disabled telemetry
-	InitSentry(settings)
+	if err := InitSentry(settings); err != nil {
+		b.Fatalf("Failed to initialize Sentry: %v", err)
+	}
 	InitializeErrorIntegration()
 
 	b.Run("CaptureError", func(b *testing.B) {
