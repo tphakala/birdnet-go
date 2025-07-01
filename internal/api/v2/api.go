@@ -369,6 +369,7 @@ func (c *Controller) initRoutes() {
 		{"sse routes", c.initSSERoutes},
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
+		{"debug routes", c.initDebugRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
