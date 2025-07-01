@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // fieldsToSkip is a map of fields that should not be updated from the form
@@ -161,6 +162,9 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		})
 		return h.NewHandlerError(err, "Failed to save settings", http.StatusInternalServerError)
 	}
+
+	// Update the cached telemetry state after settings change
+	telemetry.UpdateTelemetryEnabled()
 
 	// Send success notification for applying and saving settings
 	h.SSE.SendNotification(Notification{

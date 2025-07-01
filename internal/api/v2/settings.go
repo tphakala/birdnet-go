@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // UpdateRequest represents a request to update settings
@@ -169,6 +170,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		c.logAPIRequest(ctx, slog.LevelError, "Failed to save settings to disk, rolling back", "error", err.Error())
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
+
+	// Update the cached telemetry state after settings change
+	telemetry.UpdateTelemetryEnabled()
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "Settings updated and saved successfully", "skipped_fields_count", len(skippedFields))
 	return ctx.JSON(http.StatusOK, map[string]interface{}{
@@ -477,6 +481,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		*settings = oldSettings
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
+
+	// Update the cached telemetry state after settings change
+	telemetry.UpdateTelemetryEnabled()
 
 	return ctx.JSON(http.StatusOK, map[string]interface{}{
 		"message":       fmt.Sprintf("%s settings updated successfully", section),
