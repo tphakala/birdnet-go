@@ -97,6 +97,102 @@ func TestGetSpeciesSummary(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetSpeciesSummaryDatabaseError tests that database errors are properly handled and return 500
+func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
+	t.Parallel()
+	// Setup
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// Setup mock to return a database error (like the SQL aggregate error)
+	dbError := errors.New("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
+	mockDS.On("GetSpeciesSummaryData", "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
+
+	// Create a request
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/analytics/species/summary")
+
+	// We need to bypass auth middleware for this test
+	handler := func(c echo.Context) error {
+		return controller.GetSpeciesSummary(c)
+	}
+
+	// Test - HandleError returns nil and writes JSON response
+	err := handler(c)
+	
+	// The controller's HandleError method returns a JSON response, not an error
+	assert.NoError(t, err)
+	
+	// Check response code
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	
+	// Parse error response
+	var errorResponse map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
+	assert.NoError(t, err)
+	
+	// Check error message
+	assert.Contains(t, errorResponse["message"], "Failed to get species summary data")
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
+// TestGetSpeciesSummaryWithDateFilters tests the species summary endpoint with date filtering
+func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
+	t.Parallel()
+	// Setup
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// Create mock data
+	mockSummaryData := []datastore.SpeciesSummaryData{
+		{
+			ScientificName: "Turdus migratorius",
+			CommonName:     "American Robin",
+			SpeciesCode:    "amerob",
+			Count:          10,
+			FirstSeen:      time.Date(2024, 1, 15, 8, 30, 0, 0, time.UTC),
+			LastSeen:       time.Date(2024, 1, 16, 14, 0, 0, 0, time.UTC),
+			AvgConfidence:  0.85,
+			MaxConfidence:  0.90,
+		},
+	}
+
+	// Setup mock expectations with date filters
+	mockDS.On("GetSpeciesSummaryData", "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
+
+	// Create a request with date parameters
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/analytics/species/summary")
+
+	// We need to bypass auth middleware for this test
+	handler := func(c echo.Context) error {
+		return controller.GetSpeciesSummary(c)
+	}
+
+	// Test
+	if assert.NoError(t, handler(c)) {
+		// Check response
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Parse response body
+		var response []map[string]interface{}
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		assert.NoError(t, err)
+
+		// Check response content
+		assert.Len(t, response, 1)
+		assert.Equal(t, "Turdus migratorius", response[0]["scientific_name"])
+		assert.Equal(t, float64(10), response[0]["count"])
+	}
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
 // TestGetHourlyAnalytics tests the hourly analytics endpoint
 func TestGetHourlyAnalytics(t *testing.T) {
 	t.Parallel()
