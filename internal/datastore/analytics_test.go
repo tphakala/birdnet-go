@@ -72,15 +72,15 @@ func seedTestData(t *testing.T, ds *DataStore) {
 			ID:             5,
 			Date:           "2024-01-17",
 			Time:           "07:45:00",
-			ScientificName: "Cardinalis cardinalis",
+			ScientificName: "Cardinalis cardinalis", //nolint:misspell // This is the correct scientific name
 			CommonName:     "Northern Cardinal",
 			SpeciesCode:    "norcar",
 			Confidence:     0.95,
 		},
 	}
 
-	for _, note := range testNotes {
-		err := ds.DB.Create(&note).Error
+	for i := range testNotes {
+		err := ds.DB.Create(&testNotes[i]).Error
 		require.NoError(t, err)
 	}
 }
@@ -118,7 +118,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Equal(t, 0.80, blueJay.MaxConfidence)
 
 		// Check Northern Cardinal summary
-		cardinal := findSpeciesByScientificName(summaries, "Cardinalis cardinalis")
+		cardinal := findSpeciesByScientificName(summaries, "Cardinalis cardinalis") //nolint:misspell // This is the correct scientific name
 		require.NotNil(t, cardinal)
 		assert.Equal(t, "Northern Cardinal", cardinal.CommonName)
 		assert.Equal(t, "norcar", cardinal.SpeciesCode)
@@ -153,7 +153,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Len(t, summaries, 2) // American Robin and Blue Jay
 
 		// Northern Cardinal should not be in results
-		cardinal := findSpeciesByScientificName(summaries, "Cardinalis cardinalis")
+		cardinal := findSpeciesByScientificName(summaries, "Cardinalis cardinalis") //nolint:misspell // This is the correct scientific name
 		assert.Nil(t, cardinal)
 	})
 
