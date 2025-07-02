@@ -1269,6 +1269,30 @@ func (c *BirdImageCache) GetBatch(scientificNames []string) map[string]BirdImage
 	return result
 }
 
+// GetBatchCachedOnly retrieves multiple bird images from cache only (memory + database)
+// without triggering any provider fetches. This is useful for fast initial page loads.
+// Missing images will simply not be included in the result map.
+func (c *BirdImageCache) GetBatchCachedOnly(scientificNames []string) map[string]BirdImage {
+	batchStart := time.Now()
+	result := make(map[string]BirdImage, len(scientificNames))
+
+	// Phase 1: Check memory cache
+	missingNames := c.checkMemoryCache(scientificNames, result)
+
+	// Phase 2: Check database cache (if there are missing names)
+	if c.store != nil && len(missingNames) > 0 {
+		_ = c.checkDatabaseCache(missingNames, result)
+	}
+
+	// Note: We do NOT fetch from provider - just return what we have cached
+	if c.debug {
+		log.Printf("GetBatchCachedOnly: Completed in %v - found %d/%d in cache",
+			time.Since(batchStart), len(result), len(scientificNames))
+	}
+
+	return result
+}
+
 // checkMemoryCache checks memory cache for requested images and populates result map
 // Returns list of names not found in memory cache
 func (c *BirdImageCache) checkMemoryCache(scientificNames []string, result map[string]BirdImage) []string {
