@@ -344,7 +344,12 @@ func TestStartWorkerPool(t *testing.T) {
 
 // TestGetJobQueueRetryConfig tests that the getJobQueueRetryConfig function correctly extracts retry configuration from different action types
 func TestGetJobQueueRetryConfig(t *testing.T) {
-	t.Parallel()
+	// Remove t.Parallel() to avoid race conditions with testRetryConfigOverride
+	// Set testRetryConfigOverride to nil to ensure clean state
+	testRetryConfigOverride = nil
+	defer func() {
+		testRetryConfigOverride = nil
+	}()
 	// Create test retry configurations
 	bwRetryConfig := jobqueue.RetryConfig{
 		Enabled:      true,
@@ -409,7 +414,7 @@ func TestGetJobQueueRetryConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			// Don't run subtests in parallel to avoid race conditions
 			var config jobqueue.RetryConfig
 
 			// Handle nil action case safely
