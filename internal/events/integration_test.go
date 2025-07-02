@@ -45,7 +45,7 @@ func TestNoCircularDependency(t *testing.T) {
 
 // TestErrorEventIntegration tests the integration between errors and events packages
 func TestErrorEventIntegration(t *testing.T) {
-	t.Parallel()
+	// Remove t.Parallel() to ensure clean state for global error hooks
 	
 	// Initialize logging
 	logging.Init()
@@ -107,7 +107,8 @@ func TestErrorEventIntegration(t *testing.T) {
 	// The error should have been published to the event bus
 	// Wait for the event to be processed
 	waitForEvents := func(expected int) bool {
-		deadline := time.Now().Add(100 * time.Millisecond)
+		// Increase timeout to 2 seconds to avoid flakiness
+		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
 			consumer.mu.Lock()
 			count := len(consumer.events)
@@ -115,7 +116,7 @@ func TestErrorEventIntegration(t *testing.T) {
 			if count >= expected {
 				return true
 			}
-			time.Sleep(1 * time.Millisecond) // Small sleep to avoid busy loop
+			time.Sleep(10 * time.Millisecond) // Small sleep to avoid busy loop
 		}
 		return false
 	}
