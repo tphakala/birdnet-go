@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -30,7 +31,7 @@ var (
 	deferredMessages   []DeferredMessage
 	deferredMutex      sync.Mutex
 	attachmentUploader *AttachmentUploader
-	testMode           bool // testMode allows tests to bypass settings checks
+	testMode           int32 // testMode allows tests to bypass settings checks (0=false, 1=true)
 )
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -197,7 +198,7 @@ func InitSentry(settings *conf.Settings) error {
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
 	// Skip settings check in test mode
-	if !testMode {
+	if atomic.LoadInt32(&testMode) == 0 {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
 			return
@@ -223,7 +224,7 @@ func CaptureError(err error, component string) {
 // CaptureMessage captures a message with privacy-compliant context
 func CaptureMessage(message string, level sentry.Level, component string) {
 	// Skip settings check in test mode
-	if !testMode {
+	if atomic.LoadInt32(&testMode) == 0 {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
 			return
@@ -244,7 +245,7 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 // If Sentry is already initialized, it immediately sends the message
 func CaptureMessageDeferred(message string, level sentry.Level, component string) {
 	// Skip settings check in test mode
-	if !testMode {
+	if atomic.LoadInt32(&testMode) == 0 {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
 			return
@@ -274,7 +275,7 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 // Flush ensures all buffered events are sent to Sentry
 func Flush(timeout time.Duration) {
 	// Skip settings check in test mode
-	if !testMode {
+	if atomic.LoadInt32(&testMode) == 0 {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
 			return

@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,7 +63,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 	// Mark as initialized and enable test mode
 	sentryInitialized = true
-	testMode = true
+	atomic.StoreInt32(&testMode, 1)
 	
 	// Update telemetry enabled state for test mode
 	UpdateTelemetryEnabled()
@@ -116,7 +117,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 		// Reset initialization state
 		sentryInitialized = false
-		testMode = false
+		atomic.StoreInt32(&testMode, 0)
 
 		// Clear deferred messages
 		deferredMutex.Lock()
