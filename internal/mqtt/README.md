@@ -154,6 +154,47 @@ for result := range resultChan {
 }
 ```
 
+### Secure Connection Examples
+
+#### Basic TLS Connection
+```yaml
+realtime:
+  mqtt:
+    enabled: true
+    broker: "tls://mqtt.example.com:8883"  # or ssl:// or mqtts://
+    username: "your-username"
+    password: "your-password"
+```
+
+#### Self-Signed Certificate
+```yaml
+realtime:
+  mqtt:
+    broker: "tls://mqtt.local:8883"
+    tls:
+      insecureSkipVerify: true  # Skip certificate verification
+```
+
+#### Custom CA Certificate
+```yaml
+realtime:
+  mqtt:
+    broker: "tls://mqtt.company.com:8883"
+    tls:
+      caCert: "/path/to/ca-cert.pem"
+```
+
+#### Mutual TLS (mTLS)
+```yaml
+realtime:
+  mqtt:
+    broker: "tls://mqtt.secure.com:8883"
+    tls:
+      caCert: "/path/to/ca-cert.pem"
+      clientCert: "/path/to/client-cert.pem"
+      clientKey: "/path/to/client-key.pem"
+```
+
 ## Testing
 
 ### Test Coverage
@@ -185,10 +226,29 @@ Tests support multiple brokers:
 
 ## Security Considerations
 
-1. **Authentication**: Supports username/password authentication
-2. **TLS Support**: Broker URLs can use `ssl://` or `tls://` schemes
-3. **Password Handling**: Passwords are never logged
-4. **Input Validation**: All inputs are validated before use
+### Authentication
+- **Username/Password**: Basic authentication support
+- **Anonymous Connections**: Can connect without credentials if broker allows
+
+### TLS/SSL Support
+- **Automatic Detection**: TLS is enabled automatically for `ssl://`, `tls://`, `mqtts://` schemes
+- **Port 8883**: Standard MQTTS port with TLS encryption
+- **Certificate Verification**: 
+  - Validates server certificates by default
+  - `InsecureSkipVerify` option for self-signed certificates (use with caution)
+- **Custom CA Certificates**: Support for custom Certificate Authority certificates
+- **Mutual TLS**: Client certificate authentication support
+- **Certificate Paths**: Configure paths to:
+  - CA certificate (`CACert`)
+  - Client certificate (`ClientCert`)
+  - Client private key (`ClientKey`)
+
+### Security Best Practices
+1. **Always use TLS** for production deployments
+2. **Verify certificates** unless using self-signed certs in trusted networks
+3. **Protect private keys** with appropriate file permissions
+4. **Passwords are never logged** for security
+5. **Input validation** on all configuration parameters
 
 ## Best Practices for Developers and LLMs
 
