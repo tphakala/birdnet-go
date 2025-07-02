@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -30,6 +31,7 @@ var (
 	deferredMessages   []DeferredMessage
 	deferredMutex      sync.Mutex
 	attachmentUploader *AttachmentUploader
+	testMode           int32 // testMode allows tests to bypass settings checks (0=false, 1=true)
 )
 
 // PlatformInfo holds privacy-safe platform information for telemetry
@@ -195,9 +197,12 @@ func InitSentry(settings *conf.Settings) error {
 
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
-		return
+	// Skip settings check in test mode
+	if atomic.LoadInt32(&testMode) == 0 {
+		settings := conf.GetSettings()
+		if settings == nil || !settings.Sentry.Enabled {
+			return
+		}
 	}
 
 	// Create a scrubbed error for privacy
@@ -218,9 +223,12 @@ func CaptureError(err error, component string) {
 
 // CaptureMessage captures a message with privacy-compliant context
 func CaptureMessage(message string, level sentry.Level, component string) {
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
-		return
+	// Skip settings check in test mode
+	if atomic.LoadInt32(&testMode) == 0 {
+		settings := conf.GetSettings()
+		if settings == nil || !settings.Sentry.Enabled {
+			return
+		}
 	}
 
 	// Scrub sensitive information from the message
@@ -236,9 +244,12 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
 // If Sentry is already initialized, it immediately sends the message
 func CaptureMessageDeferred(message string, level sentry.Level, component string) {
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
-		return
+	// Skip settings check in test mode
+	if atomic.LoadInt32(&testMode) == 0 {
+		settings := conf.GetSettings()
+		if settings == nil || !settings.Sentry.Enabled {
+			return
+		}
 	}
 
 	deferredMutex.Lock()
@@ -263,9 +274,12 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 
 // Flush ensures all buffered events are sent to Sentry
 func Flush(timeout time.Duration) {
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
-		return
+	// Skip settings check in test mode
+	if atomic.LoadInt32(&testMode) == 0 {
+		settings := conf.GetSettings()
+		if settings == nil || !settings.Sentry.Enabled {
+			return
+		}
 	}
 
 	sentry.Flush(timeout)

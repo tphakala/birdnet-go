@@ -12,6 +12,12 @@ var telemetryEnabled atomic.Bool
 
 // UpdateTelemetryEnabled updates the cached telemetry enabled state
 func UpdateTelemetryEnabled() {
+	// In test mode, telemetry is always enabled
+	if atomic.LoadInt32(&testMode) == 1 {
+		telemetryEnabled.Store(true)
+		return
+	}
+	
 	settings := conf.GetSettings()
 	if settings != nil && settings.Sentry.Enabled {
 		telemetryEnabled.Store(true)
