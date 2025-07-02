@@ -60,8 +60,12 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 		t.Fatalf("Failed to initialize Sentry for testing: %v", err)
 	}
 
-	// Mark as initialized
+	// Mark as initialized and enable test mode
 	sentryInitialized = true
+	testMode = true
+	
+	// Update telemetry enabled state for test mode
+	UpdateTelemetryEnabled()
 
 	// Configure scope with test data
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -112,6 +116,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 		// Reset initialization state
 		sentryInitialized = false
+		testMode = false
 
 		// Clear deferred messages
 		deferredMutex.Lock()
