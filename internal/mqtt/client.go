@@ -653,11 +653,23 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 	
 	tlsConfig := &tls.Config{
 		ServerName:         hostname,
+		// WARNING: InsecureSkipVerify disables certificate verification.
+		// This makes the connection vulnerable to man-in-the-middle attacks.
+		// Only use for testing or with self-signed certificates in trusted networks.
 		InsecureSkipVerify: c.config.TLS.InsecureSkipVerify, // #nosec G402 -- InsecureSkipVerify is controlled by user configuration for self-signed certificates
 	}
 
 	// Load CA certificate if provided
 	if c.config.TLS.CACert != "" {
+		// Check if file exists for better error message
+		if _, err := os.Stat(c.config.TLS.CACert); os.IsNotExist(err) {
+			return nil, errors.Newf("CA certificate file does not exist: %s", c.config.TLS.CACert).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("ca_cert_path", c.config.TLS.CACert).
+				Build()
+		}
+		
 		caCert, err := os.ReadFile(c.config.TLS.CACert)
 		if err != nil {
 			return nil, errors.Newf("failed to read CA certificate file: %v", err).
@@ -681,6 +693,24 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 
 	// Load client certificate and key if provided
 	if c.config.TLS.ClientCert != "" && c.config.TLS.ClientKey != "" {
+		// Check if client certificate exists
+		if _, err := os.Stat(c.config.TLS.ClientCert); os.IsNotExist(err) {
+			return nil, errors.Newf("client certificate file does not exist: %s", c.config.TLS.ClientCert).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("client_cert_path", c.config.TLS.ClientCert).
+				Build()
+		}
+		
+		// Check if client key exists
+		if _, err := os.Stat(c.config.TLS.ClientKey); os.IsNotExist(err) {
+			return nil, errors.Newf("client key file does not exist: %s", c.config.TLS.ClientKey).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("client_key_path", c.config.TLS.ClientKey).
+				Build()
+		}
+		
 		cert, err := tls.LoadX509KeyPair(c.config.TLS.ClientCert, c.config.TLS.ClientKey)
 		if err != nil {
 			return nil, errors.Newf("failed to load client certificate and key: %v", err).
