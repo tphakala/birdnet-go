@@ -3,6 +3,7 @@ package mqtt
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -256,23 +257,70 @@ func (c *client) testTCPStage(ctx context.Context) TestResult {
 	return runNetworkTest(tcpCtx, TCPConnection, func(ctx context.Context) error {
 		var d net.Dialer
 		hostPort := extractHostPort(c.config.Broker)
-		conn, err := d.DialContext(ctx, "tcp", hostPort)
-		if err != nil {
-			// Enhance TCP connection errors
-			enhancedErr := errors.New(err).
-				Component("mqtt").
-				Category(errors.CategoryNetwork).
-				Context("broker", c.config.Broker).
-				Context("host_port", hostPort).
-				Context("operation", "tcp_connection_test").
-				Build()
-			return enhancedErr
-		}
-		defer func() {
-			if err := conn.Close(); err != nil {
-				log.Printf("Failed to close connection: %v", err)
+		
+		// For TLS connections, we should test the TLS handshake as well
+		if c.config.TLS.Enabled {
+			tlsConfig, err := c.createTLSConfig()
+			if err != nil {
+				return errors.New(err).
+					Component("mqtt").
+					Category(errors.CategoryConfiguration).
+					Context("broker", c.config.Broker).
+					Context("operation", "tls_config_test").
+					Build()
 			}
-		}()
+			
+			// Dial TCP first
+			conn, err := d.DialContext(ctx, "tcp", hostPort)
+			if err != nil {
+				enhancedErr := errors.New(err).
+					Component("mqtt").
+					Category(errors.CategoryNetwork).
+					Context("broker", c.config.Broker).
+					Context("host_port", hostPort).
+					Context("operation", "tcp_connection_test").
+					Build()
+				return enhancedErr
+			}
+			
+			// Perform TLS handshake
+			tlsConn := tls.Client(conn, tlsConfig)
+			if err := tlsConn.HandshakeContext(ctx); err != nil {
+				_ = conn.Close()
+				enhancedErr := errors.New(err).
+					Component("mqtt").
+					Category(errors.CategoryNetwork).
+					Context("broker", c.config.Broker).
+					Context("host_port", hostPort).
+					Context("operation", "tls_handshake_test").
+					Build()
+				return enhancedErr
+			}
+			
+			defer func() {
+				if err := tlsConn.Close(); err != nil {
+					log.Printf("Failed to close TLS connection: %v", err)
+				}
+			}()
+		} else {
+			// Regular TCP connection
+			conn, err := d.DialContext(ctx, "tcp", hostPort)
+			if err != nil {
+				enhancedErr := errors.New(err).
+					Component("mqtt").
+					Category(errors.CategoryNetwork).
+					Context("broker", c.config.Broker).
+					Context("host_port", hostPort).
+					Context("operation", "tcp_connection_test").
+					Build()
+				return enhancedErr
+			}
+			defer func() {
+				if err := conn.Close(); err != nil {
+					log.Printf("Failed to close connection: %v", err)
+				}
+			}()
+		}
 		return nil
 	})
 }
