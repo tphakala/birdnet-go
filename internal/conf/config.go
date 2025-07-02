@@ -174,9 +174,9 @@ type MQTTSettings struct {
 type MQTTTLSSettings struct {
 	Enabled            bool   // true to enable TLS (auto-detected from broker URL)
 	InsecureSkipVerify bool   // true to skip certificate verification (for self-signed certs)
-	CACert             string // path to CA certificate file (optional)
-	ClientCert         string // path to client certificate file (optional)
-	ClientKey          string // path to client key file (optional)
+	CACert             string `yaml:"cacert,omitempty"`     // path to CA certificate file (managed internally)
+	ClientCert         string `yaml:"clientcert,omitempty"` // path to client certificate file (managed internally)
+	ClientKey          string `yaml:"clientkey,omitempty"`  // path to client key file (managed internally)
 }
 
 // TelemetrySettings contains settings for telemetry.
