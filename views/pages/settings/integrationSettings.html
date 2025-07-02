@@ -116,6 +116,13 @@
         password: '{{.Settings.Realtime.MQTT.Password}}',
         retain: {{.Settings.Realtime.MQTT.Retain}},
         anonymous: {{if and (eq .Settings.Realtime.MQTT.Username "") (eq .Settings.Realtime.MQTT.Password "")}}true{{else}}false{{end}},
+        tls: {
+            enabled: {{.Settings.Realtime.MQTT.TLS.Enabled}},
+            insecureSkipVerify: {{.Settings.Realtime.MQTT.TLS.InsecureSkipVerify}},
+            caCert: '{{.Settings.Realtime.MQTT.TLS.CACert}}',
+            clientCert: '{{.Settings.Realtime.MQTT.TLS.ClientCert}}',
+            clientKey: '{{.Settings.Realtime.MQTT.TLS.ClientKey}}'
+        },
         testResults: [],
         isTesting: false,
         currentTestStage: null
@@ -168,6 +175,11 @@
             mqtt.password = '';
         }
     });
+    $watch('mqtt.tls', () => {
+        hasChanges = true;
+        mqtt.testResults = [];
+        mqtt.currentTestStage = null;
+    }, { deep: true });
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -261,6 +273,105 @@
                     "label" "Retain Messages"
                     "tooltip" "When enabled, MQTT broker will keep the last message on each topic and deliver to new subscribers."}}
             </div>
+            
+            <!-- TLS/SSL Security Section -->
+            <div class="border-t border-base-300 pt-4 mt-2">
+                <h3 class="text-sm font-medium mb-3">TLS/SSL Security</h3>
+                
+                {{template "checkbox" dict
+                    "id" "mqttTlsEnabled"
+                    "model" "mqtt.tls.enabled"
+                    "name" "realtime.mqtt.tls.enabled"
+                    "label" "Enable TLS/SSL"
+                    "tooltip" "Enable TLS/SSL encryption for secure MQTT connections. Required for mqtts://, ssl://, or tls:// URLs."}}
+                
+                <div x-show="mqtt.tls.enabled" class="mt-4 space-y-4">
+                    {{template "checkbox" dict
+                        "id" "mqttTlsInsecureSkipVerify"
+                        "model" "mqtt.tls.insecureSkipVerify"
+                        "name" "realtime.mqtt.tls.insecureSkipverify"
+                        "label" "Skip Certificate Verification"
+                        "tooltip" "Skip TLS certificate verification. WARNING: This is insecure and should only be used for testing with self-signed certificates."}}
+                    
+                    <!-- Note about insecure mode -->
+                    {{template "noteField" dict
+                        "condition" "mqtt.tls.enabled && mqtt.tls.insecureSkipVerify"
+                        "content" "<strong>Security Warning:</strong> Certificate verification is disabled. This connection is vulnerable to man-in-the-middle attacks. Only use this option for testing with self-signed certificates in trusted networks."}}
+                    
+                    <div class="space-y-4">
+                        <!-- CA Certificate -->
+                        <div class="form-control relative">
+                            <label class="label justify-start" for="mqttTlsCaCert">
+                                <span class="label-text">CA Certificate (PEM)</span>
+                                <span class="help-icon" 
+                                      @mouseenter="showTooltip = 'mqttTlsCaCert'" 
+                                      @mouseleave="showTooltip = null">ⓘ</span>
+                            </label>
+                            <textarea 
+                                id="mqttTlsCaCert"
+                                x-model="mqtt.tls.caCert"
+                                name="realtime.mqtt.tls.cacert"
+                                class="textarea textarea-bordered textarea-sm h-24"
+                                placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                                rows="4"></textarea>
+                            <div x-show="showTooltip === 'mqttTlsCaCert'" 
+                                 x-cloak 
+                                 class="tooltip">
+                                Certificate Authority (CA) certificate in PEM format. Required for verifying the broker's certificate.
+                            </div>
+                        </div>
+                        
+                        <!-- Client Certificate -->
+                        <div class="form-control relative">
+                            <label class="label justify-start" for="mqttTlsClientCert">
+                                <span class="label-text">Client Certificate (PEM)</span>
+                                <span class="help-icon" 
+                                      @mouseenter="showTooltip = 'mqttTlsClientCert'" 
+                                      @mouseleave="showTooltip = null">ⓘ</span>
+                            </label>
+                            <textarea 
+                                id="mqttTlsClientCert"
+                                x-model="mqtt.tls.clientCert"
+                                name="realtime.mqtt.tls.clientcert"
+                                class="textarea textarea-bordered textarea-sm h-24"
+                                placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                                rows="4"></textarea>
+                            <div x-show="showTooltip === 'mqttTlsClientCert'" 
+                                 x-cloak 
+                                 class="tooltip">
+                                Client certificate in PEM format. Required for mutual TLS (mTLS) authentication.
+                            </div>
+                        </div>
+                        
+                        <!-- Client Private Key -->
+                        <div class="form-control relative">
+                            <label class="label justify-start" for="mqttTlsClientKey">
+                                <span class="label-text">Client Private Key (PEM)</span>
+                                <span class="help-icon" 
+                                      @mouseenter="showTooltip = 'mqttTlsClientKey'" 
+                                      @mouseleave="showTooltip = null">ⓘ</span>
+                            </label>
+                            <textarea 
+                                id="mqttTlsClientKey"
+                                x-model="mqtt.tls.clientKey"
+                                name="realtime.mqtt.tls.clientkey"
+                                class="textarea textarea-bordered textarea-sm h-24"
+                                placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                                rows="4"></textarea>
+                            <div x-show="showTooltip === 'mqttTlsClientKey'" 
+                                 x-cloak 
+                                 class="tooltip">
+                                Client private key in PEM format. Required for mutual TLS (mTLS) authentication. Keep this secret!
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Note about TLS configuration -->
+                    {{template "noteField" dict
+                        "condition" "mqtt.tls.enabled"
+                        "content" "<strong>TLS Configuration:</strong><br>• For standard TLS: Only provide CA Certificate if broker uses self-signed certificate<br>• For mutual TLS (mTLS): Provide all three certificates<br>• URL schemes ssl://, tls://, and mqtts:// automatically enable TLS"}}
+                </div>
+            </div>
         </div>
         
         <!-- Note about MQTT Retain for HomeAssistant - full width -->
@@ -278,7 +389,7 @@
                 "buttonLoadingText" "Testing..."
                 "buttonDisabledCondition" "!mqtt.enabled || !mqtt.broker || isRunning"
                 "buttonTooltipMap" "!mqtt.enabled ? 'MQTT must be enabled to test' : !mqtt.broker ? 'MQTT broker must be specified' : isRunning ? 'Test in progress...' : 'Test MQTT connection'"
-                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password, retain: mqtt.retain}"
+                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password, retain: mqtt.retain, tls: mqtt.tls}"
                 "completionMessage" "Please remember to save settings to apply the changes permanently."
             }}
         </div>
