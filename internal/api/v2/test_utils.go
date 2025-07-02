@@ -520,6 +520,11 @@ func (m *MockDataStoreV2) GetAllImageCaches(providerName string) ([]datastore.Im
 }
 func (m *MockDataStoreV2) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
 	args := m.Called(providerName, scientificNames)
+	// Handle function return for dynamic mocking
+	if fn, ok := args.Get(0).(func(string, []string) map[string]*datastore.ImageCache); ok {
+		return fn(providerName, scientificNames), args.Error(1)
+	}
+	// Handle regular return
 	if result := args.Get(0); result != nil {
 		return result.(map[string]*datastore.ImageCache), args.Error(1)
 	}
