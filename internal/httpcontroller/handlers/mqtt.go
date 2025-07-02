@@ -41,6 +41,13 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 		Topic    string `json:"topic"`
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Retain   bool   `json:"retain"`
+		TLS      struct {
+			InsecureSkipVerify bool   `json:"insecureSkipVerify"`
+			CACert             string `json:"caCert"`
+			ClientCert         string `json:"clientCert"`
+			ClientKey          string `json:"clientKey"`
+		} `json:"tls"`
 	}
 
 	var testConfig TestConfig
@@ -54,6 +61,13 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 
 		// Create temporary settings for the test
 		settings = &conf.Settings{
+			Main: struct {
+				Name      string
+				TimeAs24h bool
+				Log       conf.LogConfig
+			}{
+				Name: "BirdNET-Go-Test", // Test client ID
+			},
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
 					Enabled:  testConfig.Enabled,
@@ -61,6 +75,13 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 					Topic:    testConfig.Topic,
 					Username: testConfig.Username,
 					Password: testConfig.Password,
+					Retain:   testConfig.Retain,
+					TLS: conf.MQTTTLSSettings{
+						InsecureSkipVerify: testConfig.TLS.InsecureSkipVerify,
+						CACert:             testConfig.TLS.CACert,
+						ClientCert:         testConfig.TLS.ClientCert,
+						ClientKey:          testConfig.TLS.ClientKey,
+					},
 				},
 			},
 		}
@@ -168,6 +189,13 @@ func generateTroubleshootingHint(result *mqtt.TestResult, broker string) string 
 				"1. The broker address and port are correct\n" +
 				"2. The broker is accessible from your network\n" +
 				"3. No firewall rules are blocking the connection"
+		}
+		if strings.Contains(lowerError, "tls") || strings.Contains(lowerError, "certificate") {
+			return "TLS/SSL connection failed. Please check:\n" +
+				"1. The broker supports TLS on this port\n" +
+				"2. Server certificate is valid\n" +
+				"3. Use 'Skip Certificate Verification' for self-signed certificates\n" +
+				"4. CA certificate path is correct (if provided)"
 		}
 		return "Please verify the broker is running and accessible from your network."
 
