@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -22,15 +22,7 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 	}
 
 	// Create a temporary directory for non-existent certificate paths
-	tempDir, err := os.MkdirTemp("", "mqtt-tls-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Logf("Failed to remove temp dir: %v", err)
-		}
-	}()
+	tempDir := t.TempDir()
 
 	metrics, err := observability.NewMetrics()
 	if err != nil {
@@ -122,9 +114,7 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 			}
 
 			// Check that the error message contains the expected text
-			if !strings.Contains(err.Error(), tt.expectedError) {
-				t.Errorf("Expected error to contain '%s', got: %v", tt.expectedError, err)
-			}
+			assert.Contains(t, err.Error(), tt.expectedError)
 		})
 	}
 }
