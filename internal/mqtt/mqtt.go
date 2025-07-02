@@ -53,6 +53,17 @@ type Config struct {
 	ReconnectTimeout  time.Duration
 	PublishTimeout    time.Duration
 	DisconnectTimeout time.Duration
+	// TLS configuration
+	TLS TLSConfig
+}
+
+// TLSConfig holds TLS/SSL configuration for secure MQTT connections
+type TLSConfig struct {
+	Enabled            bool   // true to enable TLS (auto-detected from broker URL)
+	InsecureSkipVerify bool   // true to skip certificate verification
+	CACert             string // path to CA certificate file
+	ClientCert         string // path to client certificate file
+	ClientKey          string // path to client key file
 }
 
 // Package-level logger for MQTT related events
