@@ -328,11 +328,12 @@ func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rat
 	// }
 
 	result := BirdImage{
-		URL:         thumbnailURL,
-		AuthorName:  authorInfo.name,
-		AuthorURL:   authorInfo.URL,
-		LicenseName: authorInfo.licenseName,
-		LicenseURL:  authorInfo.licenseURL,
+		URL:            thumbnailURL,
+		ScientificName: scientificName,
+		AuthorName:     authorInfo.name,
+		AuthorURL:      authorInfo.URL,
+		LicenseName:    authorInfo.licenseName,
+		LicenseURL:     authorInfo.licenseURL,
 	}
 	logger.Info("Successfully fetched image and metadata from Wikipedia")
 	return result, nil
