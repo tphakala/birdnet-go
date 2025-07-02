@@ -441,8 +441,9 @@ func TestTLSConfigValidation(t *testing.T) {
 			t.Fatal("Expected connection to fail with invalid CA certificate path")
 		}
 
-		if !strings.Contains(err.Error(), "failed to read CA certificate") {
-			t.Errorf("Expected CA certificate read error, got: %v", err)
+		// We now check for file existence first, so expect the more specific error
+		if !strings.Contains(err.Error(), "CA certificate file does not exist") {
+			t.Errorf("Expected CA certificate file does not exist error, got: %v", err)
 		}
 	})
 
@@ -487,8 +488,9 @@ func TestTLSConfigValidation(t *testing.T) {
 			t.Fatal("Expected connection to fail with invalid client certificate path")
 		}
 
-		if !strings.Contains(err.Error(), "failed to load client certificate") {
-			t.Errorf("Expected client certificate load error, got: %v", err)
+		// We now check for file existence first, so expect the more specific error
+		if !strings.Contains(err.Error(), "client certificate file does not exist") {
+			t.Errorf("Expected client certificate file does not exist error, got: %v", err)
 		}
 	})
 }
