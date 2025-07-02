@@ -77,7 +77,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response []map[string]interface{}
+		var response []map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
@@ -128,7 +128,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	
 	// Parse error response
-	var errorResponse map[string]interface{}
+	var errorResponse map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
 	
@@ -179,7 +179,7 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response []map[string]interface{}
+		var response []map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
@@ -236,7 +236,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body - the actual implementation returns a single object, not an array
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
@@ -245,7 +245,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 		assert.Equal(t, species, response["species"])
 
 		// Check the counts array
-		counts, ok := response["counts"].([]interface{})
+		counts, ok := response["counts"].([]any)
 		assert.True(t, ok, "Expected counts to be an array")
 		assert.Len(t, counts, 24, "Expected 24 hours in counts array")
 
@@ -307,7 +307,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body - the actual implementation returns an object with a 'data' array
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
@@ -318,17 +318,17 @@ func TestGetDailyAnalytics(t *testing.T) {
 		assert.Equal(t, float64(20), response["total"]) // 12 + 8 = 20
 
 		// Check data array
-		data, ok := response["data"].([]interface{})
+		data, ok := response["data"].([]any)
 		assert.True(t, ok, "Expected data to be an array")
 		assert.Len(t, data, 2, "Expected 2 items in data array")
 
 		// Check first data item
-		item1 := data[0].(map[string]interface{})
+		item1 := data[0].(map[string]any)
 		assert.Equal(t, "2023-01-01", item1["date"])
 		assert.Equal(t, float64(12), item1["count"])
 
 		// Check second data item
-		item2 := data[1].(map[string]interface{})
+		item2 := data[1].(map[string]any)
 		assert.Equal(t, "2023-01-02", item2["date"])
 		assert.Equal(t, float64(8), item2["count"])
 	}
@@ -386,12 +386,12 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Parse response body
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		assert.NoError(t, err)
 
 		// Check response content
-		data, ok := response["data"].([]interface{})
+		data, ok := response["data"].([]any)
 		assert.True(t, ok)
 		assert.Len(t, data, 3)
 	}
@@ -464,8 +464,21 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	mockDS.On("GetSettings").Return(appSettings, nil) // Needed for cache init if controller setup does it
 	// Add GetAllImageCaches mock if cache init happens here
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-	// Mock GetImageCacheBatch to return empty map (no cached images)
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(map[string]*datastore.ImageCache{}, nil)
+	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
+	// Use dynamic return based on input parameters
+	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
+		func(provider string, names []string) map[string]*datastore.ImageCache {
+			result := make(map[string]*datastore.ImageCache)
+			for _, name := range names {
+				result[name] = &datastore.ImageCache{
+					ScientificName: name,
+					URL:            "http://example.com/" + name + ".jpg",
+					CachedAt:       time.Now(),
+					ProviderName:   provider,
+				}
+			}
+			return result
+		}, nil)
 
 	// Initialize a mock image cache for controller creation - ONCE for all test cases
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
@@ -512,7 +525,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 				// For error cases, check the error message
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 				if tc.expectedBody != "" {
-					var errorResp map[string]interface{}
+					var errorResp map[string]any
 					err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
 					assert.NoError(t, err)
 					if errVal, ok := errorResp["error"]; ok {
@@ -610,15 +623,27 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Mock for image cache initialization
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
 
-	// Expect calls to GetImageCache during GetBatch and return nil (not found)
-	mockDS.On("GetImageCache", mock.AnythingOfType("datastore.ImageCacheQuery")).Return(nil, nil)
+	// GetImageCache not needed when using GetImageCacheBatch
+	// mockDS.On("GetImageCache", mock.AnythingOfType("datastore.ImageCacheQuery")).Return(nil, nil)
 
-	// Mock GetImageCacheBatch to return empty map (no cached images)
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(map[string]*datastore.ImageCache{}, nil)
+	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
+	// Use dynamic return based on input parameters
+	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
+		func(provider string, names []string) map[string]*datastore.ImageCache {
+			result := make(map[string]*datastore.ImageCache)
+			for _, name := range names {
+				result[name] = &datastore.ImageCache{
+					ScientificName: name,
+					URL:            "http://example.com/" + name + ".jpg",
+					CachedAt:       time.Now(),
+					ProviderName:   provider,
+				}
+			}
+			return result
+		}, nil)
 
-	// ---> FIX: Add mock expectation for SaveImageCache <---
-	// Expect calls to SaveImageCache when the cache tries to store fetched results
-	mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
+	// Expect calls to SaveImageCache - not needed since we're returning cached images
+	// mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
 
 	// Create a mock image provider (can be nil if cache doesn't need real fetching)
 	mockImageProvider := &TestImageProvider{
@@ -761,12 +786,25 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	mockDS.On("GetHourlyOccurrences", "2025-03-07", "American Crow", 0.0).Return(expectedAmcroSingleHourly, nil)
 	mockDS.On("GetHourlyOccurrences", "2025-03-07", "Red-bellied Woodpecker", 0.0).Return(expectedRbwoSingleHourly, nil)
 
-	// ---> FIX: Add necessary mock expectations for image cache <---
+	// Mock for image cache initialization
 	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-	mockDS.On("GetImageCache", mock.AnythingOfType("datastore.ImageCacheQuery")).Return(nil, nil)
-	// Mock GetImageCacheBatch to return empty map (no cached images)
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(map[string]*datastore.ImageCache{}, nil)
-	mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
+	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
+	// Use dynamic return based on input parameters
+	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
+		func(provider string, names []string) map[string]*datastore.ImageCache {
+			result := make(map[string]*datastore.ImageCache)
+			for _, name := range names {
+				result[name] = &datastore.ImageCache{
+					ScientificName: name,
+					URL:            "http://example.com/" + name + ".jpg",
+					CachedAt:       time.Now(),
+					ProviderName:   provider,
+				}
+			}
+			return result
+		}, nil)
+	// SaveImageCache not needed since we're returning already cached images
+	// mockDS.On("SaveImageCache", mock.AnythingOfType("*datastore.ImageCache")).Return(nil)
 
 	// Create a mock image provider
 	mockImageProvider := &TestImageProvider{
@@ -1160,7 +1198,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	// Parse the error response
-	var errorResponse map[string]interface{}
+	var errorResponse map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
 
