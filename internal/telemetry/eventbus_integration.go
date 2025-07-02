@@ -26,11 +26,13 @@ func init() {
 // InitializeEventBusIntegration sets up the telemetry worker as an event consumer
 // This should be called after both Sentry and event bus are initialized
 func InitializeEventBusIntegration() error {
-	// Check if Sentry is enabled
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
-		logger.Info("Sentry telemetry disabled, skipping event bus integration")
-		return nil
+	// Check if Sentry is enabled (skip check in test mode)
+	if !testMode {
+		settings := conf.GetSettings()
+		if settings == nil || !settings.Sentry.Enabled {
+			logger.Info("Sentry telemetry disabled, skipping event bus integration")
+			return nil
+		}
 	}
 
 	// Check if event bus is initialized
