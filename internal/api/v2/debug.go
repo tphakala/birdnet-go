@@ -64,8 +64,8 @@ func (c *Controller) initDebugRoutes() {
 
 // DebugTriggerError triggers a test error for telemetry testing
 func (c *Controller) DebugTriggerError(ctx echo.Context) error {
-	// Double-check debug mode
-	if !conf.GetSettings().Debug {
+	// Double-check debug mode using controller's settings
+	if c.Settings == nil || !c.Settings.Debug {
 		return ctx.JSON(http.StatusForbidden, map[string]string{
 			"error": "Debug mode not enabled",
 		})
@@ -131,8 +131,8 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 
 // DebugTriggerNotification triggers a test notification
 func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
-	// Double-check debug mode
-	if !conf.GetSettings().Debug {
+	// Double-check debug mode using controller's settings
+	if c.Settings == nil || !c.Settings.Debug {
 		return ctx.JSON(http.StatusForbidden, map[string]string{
 			"error": "Debug mode not enabled",
 		})
@@ -198,8 +198,8 @@ func (c *Controller) DebugTriggerNotification(ctx echo.Context) error {
 
 // DebugSystemStatus returns current system status for debugging
 func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
-	// Double-check debug mode
-	if !conf.GetSettings().Debug {
+	// Double-check debug mode using controller's settings
+	if c.Settings == nil || !c.Settings.Debug {
 		return ctx.JSON(http.StatusForbidden, map[string]string{
 			"error": "Debug mode not enabled",
 		})
@@ -207,7 +207,7 @@ func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
 
 	status := DebugSystemStatus{
 		Timestamp: time.Now().Format(time.RFC3339),
-		Debug:     conf.GetSettings().Debug,
+		Debug:     c.Settings.Debug,
 	}
 
 	// Get telemetry status
@@ -248,7 +248,12 @@ func mapErrorCategory(category string) errors.ErrorCategory {
 func getTelemetryStatus() map[string]any {
 	// Get more detailed telemetry status
 	status := map[string]any{
-		"enabled": conf.GetSettings().Sentry.Enabled,
+		"enabled": false, // Default to false for safety
+	}
+	
+	// Check if settings are available via global conf
+	if settings := conf.GetSettings(); settings != nil {
+		status["enabled"] = settings.Sentry.Enabled
 	}
 	
 	// Add health check info if available
