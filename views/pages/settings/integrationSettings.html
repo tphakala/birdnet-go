@@ -116,12 +116,6 @@
         password: '{{.Settings.Realtime.MQTT.Password}}',
         retain: {{.Settings.Realtime.MQTT.Retain}},
         anonymous: {{if and (eq .Settings.Realtime.MQTT.Username "") (eq .Settings.Realtime.MQTT.Password "")}}true{{else}}false{{end}},
-        tls: {
-            insecureSkipVerify: {{.Settings.Realtime.MQTT.TLS.InsecureSkipVerify}},
-            caCert: '{{.Settings.Realtime.MQTT.TLS.CACert}}',
-            clientCert: '{{.Settings.Realtime.MQTT.TLS.ClientCert}}',
-            clientKey: '{{.Settings.Realtime.MQTT.TLS.ClientKey}}'
-        },
         testResults: [],
         isTesting: false,
         currentTestStage: null
@@ -174,11 +168,6 @@
             mqtt.password = '';
         }
     });
-    $watch('mqtt.tls', () => {
-        hasChanges = true;
-        mqtt.testResults = [];
-        mqtt.currentTestStage = null;
-    }, { deep: true });
 ">
 
     <!-- control collapse element open state and label visibility -->
@@ -217,7 +206,7 @@
                 "name" "realtime.mqtt.broker"
                 "label" "MQTT Broker"
                 "placeholder" "mqtt://localhost:1883"
-                "tooltip" "MQTT broker URL. Use tcp:// for standard connections, or ssl://, tls://, mqtts:// for secure connections (e.g., tls://mqtt.example.com:8883)"}}
+                "tooltip" "MQTT broker URL (e.g., mqtt://localhost:1883)"}}
 
             {{template "textField" dict
                 "id" "mqttTopic"
@@ -272,50 +261,7 @@
                     "label" "Retain Messages"
                     "tooltip" "When enabled, MQTT broker will keep the last message on each topic and deliver to new subscribers."}}
             </div>
-            
-            <!-- TLS/SSL Settings Section -->
-            <div x-show="mqtt.broker && (mqtt.broker.startsWith('ssl://') || mqtt.broker.startsWith('tls://') || mqtt.broker.startsWith('mqtts://') || mqtt.broker.includes(':8883'))" 
-                 class="border-t border-base-300 pt-4 mt-2">
-                <h3 class="text-sm font-medium mb-3">TLS/SSL Settings</h3>
-                
-                {{template "checkbox" dict
-                    "id" "mqttTLSInsecureSkipVerify"
-                    "model" "mqtt.tls.insecureSkipVerify"
-                    "name" "realtime.mqtt.tls.insecureskipverify"
-                    "label" "Skip Certificate Verification"
-                    "tooltip" "Skip server certificate verification. Use this for self-signed certificates. WARNING: This reduces security!"}}
-                
-                {{template "textField" dict
-                    "id" "mqttTLSCACert"
-                    "model" "mqtt.tls.caCert"
-                    "name" "realtime.mqtt.tls.cacert"
-                    "label" "CA Certificate Path"
-                    "placeholder" "/path/to/ca.crt"
-                    "tooltip" "Path to CA certificate file for server verification (optional)"}}
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {{template "textField" dict
-                        "id" "mqttTLSClientCert"
-                        "model" "mqtt.tls.clientCert"
-                        "name" "realtime.mqtt.tls.clientcert"
-                        "label" "Client Certificate Path"
-                        "placeholder" "/path/to/client.crt"
-                        "tooltip" "Path to client certificate file for mutual TLS (optional)"}}
-                    
-                    {{template "textField" dict
-                        "id" "mqttTLSClientKey"
-                        "model" "mqtt.tls.clientKey"
-                        "name" "realtime.mqtt.tls.clientkey"
-                        "label" "Client Key Path"
-                        "placeholder" "/path/to/client.key"
-                        "tooltip" "Path to client key file for mutual TLS (optional)"}}
-                </div>
-                
-                <!-- Note about TLS -->
-                {{template "noteField" dict
-                    "condition" "mqtt.tls.insecureSkipVerify"
-                    "content" "<strong>Security Warning:</strong> Certificate verification is disabled. This makes the connection vulnerable to man-in-the-middle attacks. Only use this option with self-signed certificates in trusted networks."}}
-            </div>
+        </div>
         
         <!-- Note about MQTT Retain for HomeAssistant - full width -->
         {{template "noteField" dict
@@ -332,7 +278,7 @@
                 "buttonLoadingText" "Testing..."
                 "buttonDisabledCondition" "!mqtt.enabled || !mqtt.broker || isRunning"
                 "buttonTooltipMap" "!mqtt.enabled ? 'MQTT must be enabled to test' : !mqtt.broker ? 'MQTT broker must be specified' : isRunning ? 'Test in progress...' : 'Test MQTT connection'"
-                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password, retain: mqtt.retain, tls: mqtt.tls}"
+                "payload" "{enabled: mqtt.enabled, broker: mqtt.broker, topic: mqtt.topic, username: mqtt.username, password: mqtt.password, retain: mqtt.retain}"
                 "completionMessage" "Please remember to save settings to apply the changes permanently."
             }}
         </div>
