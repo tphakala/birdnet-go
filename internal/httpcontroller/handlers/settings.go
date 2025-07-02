@@ -741,7 +741,11 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldSettings.Realtime.MQTT.Topic != currentSettings.Realtime.MQTT.Topic ||
 		oldSettings.Realtime.MQTT.Username != currentSettings.Realtime.MQTT.Username ||
 		oldSettings.Realtime.MQTT.Password != currentSettings.Realtime.MQTT.Password ||
-		oldSettings.Realtime.MQTT.Retain != currentSettings.Realtime.MQTT.Retain
+		oldSettings.Realtime.MQTT.Retain != currentSettings.Realtime.MQTT.Retain ||
+		oldSettings.Realtime.MQTT.TLS.InsecureSkipVerify != currentSettings.Realtime.MQTT.TLS.InsecureSkipVerify ||
+		oldSettings.Realtime.MQTT.TLS.CACert != currentSettings.Realtime.MQTT.TLS.CACert ||
+		oldSettings.Realtime.MQTT.TLS.ClientCert != currentSettings.Realtime.MQTT.TLS.ClientCert ||
+		oldSettings.Realtime.MQTT.TLS.ClientKey != currentSettings.Realtime.MQTT.TLS.ClientKey
 }
 
 // birdWeatherSettingsChanged checks if BirdWeather integration settings have changed
