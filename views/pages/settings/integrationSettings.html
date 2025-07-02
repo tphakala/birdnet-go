@@ -4,7 +4,7 @@
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
 <!-- BirdWeather Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+<div class="collapse bg-base-100 shadow-xs col-span-3" 
      role="region" 
      aria-labelledby="birdweatherHeader"
      x-data="{ 
@@ -33,7 +33,7 @@
     <input type="checkbox" id="birdweatherSettingsOpen"
         x-on:change="birdweatherSettingsOpen = !birdweatherSettingsOpen"
         aria-controls="birdweatherSettingsContent"
-        aria-expanded="true" />
+        aria-expanded="false" />
 
     {{template "sectionHeader" dict
         "id" "birdweather"
@@ -104,7 +104,7 @@
 <!-- BirdWeather Settings end -->
 
 <!-- MQTT Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+<div class="collapse bg-base-100 shadow-xs col-span-3 mt-4" 
      role="region" 
      aria-labelledby="mqttHeader"
      x-data="{ 
@@ -186,7 +186,7 @@
            id="mqttSettingsOpen" 
            x-on:change="mqttSettingsOpen = !mqttSettingsOpen"
            aria-controls="mqttSettingsContent"
-           aria-expanded="true" />
+           aria-expanded="false" />
 
     {{template "sectionHeader" dict
         "id" "mqtt"
@@ -217,7 +217,7 @@
                 "name" "realtime.mqtt.broker"
                 "label" "MQTT Broker"
                 "placeholder" "mqtt://localhost:1883"
-                "tooltip" "MQTT broker URL (e.g., mqtt://localhost:1883)"}}
+                "tooltip" "MQTT broker URL. Use tcp:// for standard connections, or ssl://, tls://, mqtts:// for secure connections (e.g., tls://mqtt.example.com:8883)"}}
 
             {{template "textField" dict
                 "id" "mqttTopic"
@@ -315,7 +315,7 @@
                 {{template "noteField" dict
                     "condition" "mqtt.tls.insecureSkipVerify"
                     "content" "<strong>Security Warning:</strong> Certificate verification is disabled. This makes the connection vulnerable to man-in-the-middle attacks. Only use this option with self-signed certificates in trusted networks."}}
-        </div>
+            </div>
         
         <!-- Note about MQTT Retain for HomeAssistant - full width -->
         {{template "noteField" dict
@@ -341,7 +341,7 @@
 <!-- MQTT Settings end -->
 
 <!-- Observability Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+<div class="collapse bg-base-100 shadow-xs col-span-3 mt-4" 
      role="region" 
      aria-labelledby="observabilityHeader"
      x-data="{ 
@@ -364,7 +364,7 @@
            id="observabilitySettingsOpen" 
            x-on:change="observabilitySettingsOpen = !observabilitySettingsOpen" 
            aria-controls="observabilitySettingsContent"
-           aria-expanded="true" />
+           aria-expanded="false" />
 
     {{template "sectionHeader" dict
         "id" "observability"
@@ -402,7 +402,7 @@
 <!-- Observability Settings end -->
 
 <!-- Weather Settings start -->
-<div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
+<div class="collapse bg-base-100 shadow-xs col-span-3 mt-4" 
      role="region" 
      aria-labelledby="weatherHeader"
      x-data="{ 
@@ -432,7 +432,7 @@
            id="weatherSettingsOpen" 
            x-on:change="weatherSettingsOpen = !weatherSettingsOpen"
            aria-controls="weatherSettingsContent"
-           aria-expanded="true" />
+           aria-expanded="false" />
 
     {{template "sectionHeader" dict
         "id" "weather"
