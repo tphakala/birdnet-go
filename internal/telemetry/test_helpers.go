@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,8 +61,12 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 		t.Fatalf("Failed to initialize Sentry for testing: %v", err)
 	}
 
-	// Mark as initialized
+	// Mark as initialized and enable test mode
 	sentryInitialized = true
+	atomic.StoreInt32(&testMode, 1)
+	
+	// Update telemetry enabled state for test mode
+	UpdateTelemetryEnabled()
 
 	// Configure scope with test data
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -112,6 +117,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 		// Reset initialization state
 		sentryInitialized = false
+		atomic.StoreInt32(&testMode, 0)
 
 		// Clear deferred messages
 		deferredMutex.Lock()
