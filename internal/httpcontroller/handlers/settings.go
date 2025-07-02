@@ -277,11 +277,21 @@ func processTLSCertificates(settings *conf.Settings, formValues map[string][]str
 
 	for fieldName, certInfo := range certFields {
 		values, exists := formValues[fieldName]
-		if !exists || len(values) == 0 {
+		if !exists {
 			continue
 		}
 		
-		content := values[0]
+		content := ""
+		if len(values) > 0 {
+			content = values[0]
+		}
+		
+		// If content is empty, clear the certificate path
+		if content == "" {
+			*certInfo.pathPtr = ""
+			delete(formValues, fieldName)
+			continue
+		}
 		
 		// Save certificate and get the path
 		path, err := tlsManager.SaveCertificate(certInfo.service, certInfo.certType, content)

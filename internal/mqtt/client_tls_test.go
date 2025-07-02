@@ -257,6 +257,7 @@ func testTLSAutoDetection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &conf.Settings{
 				Main: struct {
 					Name      string
@@ -378,8 +379,8 @@ loop:
 			t.Fatal("Test timed out waiting for results")
 			
 		case <-testDone:
-			// Give a brief moment for any remaining results
-			time.Sleep(100 * time.Millisecond)
+			// Close the channel when test is done
+			close(resultChan)
 			break loop
 		}
 	}
@@ -401,7 +402,9 @@ loop:
 
 // TestTLSConfigValidation tests validation of TLS configuration options
 func TestTLSConfigValidation(t *testing.T) {
+	t.Parallel()
 	t.Run("Invalid CA Certificate Path", func(t *testing.T) {
+		t.Parallel()
 		settings := &conf.Settings{
 			Main: struct {
 				Name      string
@@ -448,6 +451,7 @@ func TestTLSConfigValidation(t *testing.T) {
 	})
 
 	t.Run("Invalid Client Certificate Path", func(t *testing.T) {
+		t.Parallel()
 		settings := &conf.Settings{
 			Main: struct {
 				Name      string

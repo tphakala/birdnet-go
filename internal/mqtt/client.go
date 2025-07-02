@@ -653,6 +653,7 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 	
 	tlsConfig := &tls.Config{
 		ServerName:         hostname,
+		MinVersion:         tls.VersionTLS12,
 		// WARNING: InsecureSkipVerify disables certificate verification.
 		// This makes the connection vulnerable to man-in-the-middle attacks.
 		// Only use for testing or with self-signed certificates in trusted networks.
