@@ -280,6 +280,11 @@
                     "name" "realtime.mqtt.retain"
                     "label" "Retain Messages"
                     "tooltip" "When enabled, MQTT broker will keep the last message on each topic and deliver to new subscribers."}}
+                
+                <!-- Note about MQTT Retain for HomeAssistant -->
+                {{template "noteField" dict
+                    "condition" "mqtt.enabled"
+                    "content" "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts. With retain enabled, Home Assistant can retrieve the last known state of the sensor. This is similar to how platforms like Zigbee2MQTT preserve sensor states across Home Assistant restarts."}}
             </div>
             
             <!-- TLS/SSL Security Section -->
@@ -377,11 +382,6 @@
             </div>
         </div>
         
-        <!-- Note about MQTT Retain for HomeAssistant - full width -->
-        {{template "noteField" dict
-            "condition" "mqtt.enabled"
-            "content" "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts. With retain enabled, Home Assistant can retrieve the last known state of the sensor. This is similar to how platforms like Zigbee2MQTT preserve sensor states across Home Assistant restarts."}}
-
         <!-- Multi-Stage Operation Component for MQTT Connection Test -->
         <div x-show="mqtt.enabled" class="mt-4">
             {{template "multiStageOperation" dict
