@@ -829,11 +829,12 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 
 	// If rate limiting was applied (2 req/s), 10 requests would take at least 5 seconds
 	// Without rate limiting, it should complete much faster (allowing for actual API latency)
-	if duration > 3*time.Second {
-		t.Errorf("User requests appear to be rate limited. Duration: %v, expected < 3s", duration)
+	// Increase timeout to 4 seconds to account for network variability
+	if duration > 4*time.Second {
+		t.Errorf("User requests appear to be rate limited. Duration: %v, expected < 4s", duration)
 	}
 
-	t.Logf("10 user requests completed in %v (no rate limiting)", duration)
+	t.Logf("10 user requests completed in %v (no rate limiting, threshold: 4s)", duration)
 }
 
 // TestBackgroundRequestsRateLimited tests that background requests are subject to rate limiting
