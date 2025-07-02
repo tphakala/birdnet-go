@@ -55,6 +55,7 @@ func generateTestCertificate(t *testing.T) (caCert, clientCert, clientKey string
 
 //nolint:gocognit // Test functions can have high complexity
 func TestTLSManager(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "tls-test")
 	if err != nil {
@@ -72,6 +73,7 @@ func TestTLSManager(t *testing.T) {
 	caCert, clientCert, clientKey := generateTestCertificate(t)
 
 	t.Run("SaveAndRetrieveCertificates", func(t *testing.T) {
+		t.Parallel()
 		// Save CA certificate
 		caPath, err := tm.SaveCertificate("mqtt", TLSCertTypeCA, caCert)
 		if err != nil {
@@ -124,6 +126,7 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("RemoveCertificate", func(t *testing.T) {
+		t.Parallel()
 		// Remove CA certificate
 		err := tm.RemoveCertificate("mqtt", TLSCertTypeCA)
 		if err != nil {
@@ -137,6 +140,7 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("RemoveAllCertificates", func(t *testing.T) {
+		t.Parallel()
 		// First save some certificates
 		if _, err := tm.SaveCertificate("mysql", TLSCertTypeCA, caCert); err != nil {
 			t.Errorf("Failed to save CA cert: %v", err)
@@ -163,6 +167,7 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("EmptyContentRemovesCertificate", func(t *testing.T) {
+		t.Parallel()
 		// Save a certificate
 		_, err := tm.SaveCertificate("redis", TLSCertTypeCA, caCert)
 		if err != nil {
@@ -185,6 +190,7 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("InvalidCertificateValidation", func(t *testing.T) {
+		t.Parallel()
 		// Test invalid PEM
 		_, err := tm.SaveCertificate("test", TLSCertTypeCA, "invalid certificate")
 		if err == nil {
@@ -207,11 +213,12 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("ConcurrentAccess", func(t *testing.T) {
+		t.Parallel()
 		// Test concurrent saves
 		var wg sync.WaitGroup
 		errors := make(chan error, 10)
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -238,6 +245,7 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("ServiceIsolation", func(t *testing.T) {
+		t.Parallel()
 		// Save certificates for different services
 		if _, err := tm.SaveCertificate("service1", TLSCertTypeCA, caCert); err != nil {
 			t.Errorf("Failed to save service1 CA cert: %v", err)
@@ -258,6 +266,7 @@ func TestTLSManager(t *testing.T) {
 	})
 
 	t.Run("DirectoryPermissions", func(t *testing.T) {
+		t.Parallel()
 		// Create a new manager to test directory creation
 		newTempDir := filepath.Join(tempDir, "new-test")
 		newTm := NewTLSManager(newTempDir)
@@ -291,6 +300,7 @@ func TestTLSManager(t *testing.T) {
 }
 
 func TestGetTLSManager(t *testing.T) {
+	t.Parallel()
 	// Test that GetTLSManager returns a valid manager
 	manager := GetTLSManager()
 	if manager == nil {
@@ -335,6 +345,7 @@ func generatePKCS8Key(t *testing.T) string {
 }
 
 func TestValidateCertificateContent(t *testing.T) {
+	t.Parallel()
 	// Generate test certificates
 	_, certPEM, keyPEM := generateTestCertificate(t)
 	ecKeyPEM := generateECKey(t)
@@ -363,6 +374,7 @@ func TestValidateCertificateContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateCertificateContent(tt.certType, tt.content)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateCertificateContent() error = %v, wantErr %v", err, tt.wantErr)

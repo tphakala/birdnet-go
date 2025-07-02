@@ -14,6 +14,7 @@ import (
 // TestTLSFileExistenceChecks verifies that the MQTT client provides helpful
 // error messages when TLS certificate files don't exist
 func TestTLSFileExistenceChecks(t *testing.T) {
+	t.Parallel()
 	// Skip if no broker is available
 	broker := getBrokerAddress()
 	if broker == "" {
@@ -71,6 +72,7 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create any files that should exist for the test
 			switch tt.name {
 			case "Non-existent client key":
@@ -121,14 +123,10 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 			}
 
 			// Check that the error message contains the expected text
-			if !containsString(err.Error(), tt.expectedError) {
+			if !strings.Contains(err.Error(), tt.expectedError) {
 				t.Errorf("Expected error to contain '%s', got: %v", tt.expectedError, err)
 			}
 		})
 	}
 }
 
-// containsString is a helper function to check if a string contains a substring
-func containsString(s, substr string) bool {
-	return strings.Contains(s, substr)
-}
