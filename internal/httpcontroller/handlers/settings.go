@@ -62,6 +62,11 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 		return h.NewHandlerError(err, "Failed to parse form", http.StatusBadRequest)
 	}
 
+	// Process TLS certificates before updating settings
+	if err := processTLSCertificates(settings, formParams); err != nil {
+		return h.NewHandlerError(err, "Error processing TLS certificates", http.StatusInternalServerError)
+	}
+
 	// Update settings from form parameters
 	if err := updateSettingsFromForm(settings, formParams); err != nil {
 		//log.Printf("Debug: Form parameters for species config: %+v", formParams["realtime.species.config"])
@@ -238,6 +243,70 @@ func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
 	}
 
 	h.OAuth2Server.UpdateProviders()
+}
+
+// processTLSCertificates handles TLS certificate content from the form and saves them securely
+func processTLSCertificates(settings *conf.Settings, formValues map[string][]string) error {
+	tlsManager := conf.GetTLSManager()
+	if tlsManager == nil {
+		return fmt.Errorf("TLS manager not initialized")
+	}
+
+	// Process MQTT TLS certificates
+	certFields := map[string]struct {
+		service  string
+		certType conf.TLSCertificateType
+		pathPtr  *string
+	}{
+		"realtime.mqtt.tls.cacert": {
+			service:  "mqtt",
+			certType: conf.TLSCertTypeCA,
+			pathPtr:  &settings.Realtime.MQTT.TLS.CACert,
+		},
+		"realtime.mqtt.tls.clientcert": {
+			service:  "mqtt",
+			certType: conf.TLSCertTypeClient,
+			pathPtr:  &settings.Realtime.MQTT.TLS.ClientCert,
+		},
+		"realtime.mqtt.tls.clientkey": {
+			service:  "mqtt",
+			certType: conf.TLSCertTypeKey,
+			pathPtr:  &settings.Realtime.MQTT.TLS.ClientKey,
+		},
+	}
+
+	for fieldName, certInfo := range certFields {
+		values, exists := formValues[fieldName]
+		if !exists {
+			continue
+		}
+		
+		content := ""
+		if len(values) > 0 {
+			content = values[0]
+		}
+		
+		// If content is empty, clear the certificate path
+		if content == "" {
+			*certInfo.pathPtr = ""
+			delete(formValues, fieldName)
+			continue
+		}
+		
+		// Save certificate and get the path
+		path, err := tlsManager.SaveCertificate(certInfo.service, certInfo.certType, content)
+		if err != nil {
+			return fmt.Errorf("failed to save %s certificate: %w", fieldName, err)
+		}
+		
+		// Update the settings with the file path
+		*certInfo.pathPtr = path
+		
+		// Remove the form value so it doesn't get processed again
+		delete(formValues, fieldName)
+	}
+
+	return nil
 }
 
 // updateSettingsFromForm updates the settings based on form values
@@ -741,7 +810,11 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldSettings.Realtime.MQTT.Topic != currentSettings.Realtime.MQTT.Topic ||
 		oldSettings.Realtime.MQTT.Username != currentSettings.Realtime.MQTT.Username ||
 		oldSettings.Realtime.MQTT.Password != currentSettings.Realtime.MQTT.Password ||
-		oldSettings.Realtime.MQTT.Retain != currentSettings.Realtime.MQTT.Retain
+		oldSettings.Realtime.MQTT.Retain != currentSettings.Realtime.MQTT.Retain ||
+		oldSettings.Realtime.MQTT.TLS.InsecureSkipVerify != currentSettings.Realtime.MQTT.TLS.InsecureSkipVerify ||
+		oldSettings.Realtime.MQTT.TLS.CACert != currentSettings.Realtime.MQTT.TLS.CACert ||
+		oldSettings.Realtime.MQTT.TLS.ClientCert != currentSettings.Realtime.MQTT.TLS.ClientCert ||
+		oldSettings.Realtime.MQTT.TLS.ClientKey != currentSettings.Realtime.MQTT.TLS.ClientKey
 }
 
 // birdWeatherSettingsChanged checks if BirdWeather integration settings have changed

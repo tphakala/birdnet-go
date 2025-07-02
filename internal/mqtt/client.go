@@ -3,9 +3,13 @@ package mqtt
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"log/slog"
 	"net"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,6 +50,19 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	config.Retain = settings.Realtime.MQTT.Retain
 	config.Debug = settings.Realtime.MQTT.Debug
 
+	// Configure TLS settings
+	config.TLS.Enabled = settings.Realtime.MQTT.TLS.Enabled
+	config.TLS.InsecureSkipVerify = settings.Realtime.MQTT.TLS.InsecureSkipVerify
+	config.TLS.CACert = settings.Realtime.MQTT.TLS.CACert
+	config.TLS.ClientCert = settings.Realtime.MQTT.TLS.ClientCert
+	config.TLS.ClientKey = settings.Realtime.MQTT.TLS.ClientKey
+
+	// Auto-detect TLS from broker URL scheme
+	if strings.HasPrefix(config.Broker, "ssl://") || strings.HasPrefix(config.Broker, "tls://") || strings.HasPrefix(config.Broker, "mqtts://") {
+		config.TLS.Enabled = true
+		mqttLogger.Info("TLS enabled based on broker URL scheme")
+	}
+
 	// Set log level based on the Debug flag
 	if config.Debug {
 		SetLogLevel(slog.LevelDebug)
@@ -62,6 +79,8 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 		"topic", config.Topic,
 		"retain", config.Retain,
 		"debug", config.Debug,
+		"tls_enabled", config.TLS.Enabled,
+		"tls_skip_verify", config.TLS.InsecureSkipVerify,
 	)
 
 	return &client{
@@ -168,6 +187,29 @@ func (c *client) Connect(ctx context.Context) error {
 	opts.SetPingTimeout(10 * time.Second)
 	opts.SetWriteTimeout(10 * time.Second)
 	opts.SetConnectTimeout(c.config.ConnectTimeout) // Use config timeout for initial connection attempt
+
+	// Configure TLS if enabled
+	if c.config.TLS.Enabled {
+		tlsConfig, err := c.createTLSConfig()
+		if err != nil {
+			c.mu.Unlock()
+			logger.Error("Failed to create TLS configuration", "error", err)
+			enhancedErr := errors.New(err).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("broker", c.config.Broker).
+				Context("client_id", c.config.ClientID).
+				Context("operation", "create_tls_config").
+				Build()
+			return enhancedErr
+		}
+		opts.SetTLSConfig(tlsConfig)
+		logger.Debug("TLS configuration applied",
+			"skip_verify", c.config.TLS.InsecureSkipVerify,
+			"has_ca_cert", c.config.TLS.CACert != "",
+			"has_client_cert", c.config.TLS.ClientCert != "",
+		)
+	}
 
 	// Create and store the new client instance under lock
 	c.internalClient = mqtt.NewClient(opts)
@@ -593,6 +635,100 @@ func (c *client) reconnectWithBackoff() {
 		logger.Info("Reconnect successful")
 		// No need to call startReconnectTimer here, connection is established
 	}
+}
+
+// createTLSConfig creates a TLS configuration based on the client settings
+func (c *client) createTLSConfig() (*tls.Config, error) {
+	// Extract hostname from broker URL for ServerName
+	u, err := url.Parse(c.config.Broker)
+	if err != nil {
+		return nil, errors.Newf("failed to parse broker URL for TLS config: %v", err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("broker", c.config.Broker).
+			Build()
+	}
+	
+	hostname := u.Hostname()
+	
+	tlsConfig := &tls.Config{
+		ServerName:         hostname,
+		MinVersion:         tls.VersionTLS12,
+		// WARNING: InsecureSkipVerify disables certificate verification.
+		// This makes the connection vulnerable to man-in-the-middle attacks.
+		// Only use for testing or with self-signed certificates in trusted networks.
+		InsecureSkipVerify: c.config.TLS.InsecureSkipVerify, // #nosec G402 -- InsecureSkipVerify is controlled by user configuration for self-signed certificates
+	}
+
+	// Load CA certificate if provided
+	if c.config.TLS.CACert != "" {
+		// Check if file exists for better error message
+		if _, err := os.Stat(c.config.TLS.CACert); os.IsNotExist(err) {
+			return nil, errors.Newf("CA certificate file does not exist: %s", c.config.TLS.CACert).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("ca_cert_path", c.config.TLS.CACert).
+				Build()
+		}
+		
+		caCert, err := os.ReadFile(c.config.TLS.CACert)
+		if err != nil {
+			return nil, errors.Newf("failed to read CA certificate file: %v", err).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("ca_cert_path", c.config.TLS.CACert).
+				Build()
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, errors.Newf("failed to parse CA certificate").
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("ca_cert_path", c.config.TLS.CACert).
+				Build()
+		}
+		tlsConfig.RootCAs = caCertPool
+		mqttLogger.Debug("CA certificate loaded", "path", c.config.TLS.CACert)
+	}
+
+	// Load client certificate and key if provided
+	if c.config.TLS.ClientCert != "" && c.config.TLS.ClientKey != "" {
+		// Check if client certificate exists
+		if _, err := os.Stat(c.config.TLS.ClientCert); os.IsNotExist(err) {
+			return nil, errors.Newf("client certificate file does not exist: %s", c.config.TLS.ClientCert).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("client_cert_path", c.config.TLS.ClientCert).
+				Build()
+		}
+		
+		// Check if client key exists
+		if _, err := os.Stat(c.config.TLS.ClientKey); os.IsNotExist(err) {
+			return nil, errors.Newf("client key file does not exist: %s", c.config.TLS.ClientKey).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("client_key_path", c.config.TLS.ClientKey).
+				Build()
+		}
+		
+		cert, err := tls.LoadX509KeyPair(c.config.TLS.ClientCert, c.config.TLS.ClientKey)
+		if err != nil {
+			return nil, errors.Newf("failed to load client certificate and key: %v", err).
+				Component("mqtt").
+				Category(errors.CategoryConfiguration).
+				Context("client_cert_path", c.config.TLS.ClientCert).
+				Context("client_key_path", c.config.TLS.ClientKey).
+				Build()
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+		mqttLogger.Debug("Client certificate loaded", 
+			"cert_path", c.config.TLS.ClientCert,
+			"key_path", c.config.TLS.ClientKey,
+		)
+	}
+
+	return tlsConfig, nil
 }
 
 // Helper function to get the current internal client safely

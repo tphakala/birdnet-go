@@ -167,6 +167,16 @@ type MQTTSettings struct {
 	Password      string        // MQTT password
 	Retain        bool          // true to retain messages
 	RetrySettings RetrySettings // settings for retry mechanism
+	TLS           MQTTTLSSettings // TLS/SSL configuration
+}
+
+// MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections
+type MQTTTLSSettings struct {
+	Enabled            bool   // true to enable TLS (auto-detected from broker URL)
+	InsecureSkipVerify bool   // true to skip certificate verification (for self-signed certs)
+	CACert             string `yaml:"cacert,omitempty"`     // path to CA certificate file (managed internally)
+	ClientCert         string `yaml:"clientcert,omitempty"` // path to client certificate file (managed internally)
+	ClientKey          string `yaml:"clientkey,omitempty"`  // path to client key file (managed internally)
 }
 
 // TelemetrySettings contains settings for telemetry.
