@@ -144,6 +144,14 @@
         hasChanges = true;
         mqtt.testResults = [];
         mqtt.currentTestStage = null;
+        
+        // Auto-detect TLS from URL scheme
+        const brokerUrl = mqtt.broker.toLowerCase();
+        if (brokerUrl.startsWith('mqtts://') || 
+            brokerUrl.startsWith('ssl://') || 
+            brokerUrl.startsWith('tls://')) {
+            mqtt.tls.enabled = true;
+        }
     });
     $watch('mqtt.topic', () => { 
         hasChanges = true;
@@ -218,7 +226,7 @@
                 "name" "realtime.mqtt.broker"
                 "label" "MQTT Broker"
                 "placeholder" "mqtt://localhost:1883"
-                "tooltip" "MQTT broker URL (e.g., mqtt://localhost:1883)"}}
+                "tooltip" "MQTT broker URL. Supported schemes: mqtt://, mqtts://, ssl://, tls://, tcp:// (e.g., mqtt://localhost:1883, mqtts://broker.hivemq.com:8883)"}}
 
             {{template "textField" dict
                 "id" "mqttTopic"
@@ -283,7 +291,7 @@
                     "model" "mqtt.tls.enabled"
                     "name" "realtime.mqtt.tls.enabled"
                     "label" "Enable TLS/SSL"
-                    "tooltip" "Enable TLS/SSL encryption for secure MQTT connections. Required for mqtts://, ssl://, or tls:// URLs."}}
+                    "tooltip" "Enable TLS/SSL encryption for secure MQTT connections. Automatically enabled for mqtts://, ssl://, or tls:// URLs."}}
                 
                 <div x-show="mqtt.tls.enabled" class="mt-4 space-y-4">
                     {{template "checkbox" dict
@@ -291,12 +299,7 @@
                         "model" "mqtt.tls.insecureSkipVerify"
                         "name" "realtime.mqtt.tls.insecureSkipverify"
                         "label" "Skip Certificate Verification"
-                        "tooltip" "Skip TLS certificate verification. WARNING: This is insecure and should only be used for testing with self-signed certificates."}}
-                    
-                    <!-- Note about insecure mode -->
-                    {{template "noteField" dict
-                        "condition" "mqtt.tls.enabled && mqtt.tls.insecureSkipVerify"
-                        "content" "<strong>Security Warning:</strong> Certificate verification is disabled. This connection is vulnerable to man-in-the-middle attacks. Only use this option for testing with self-signed certificates in trusted networks."}}
+                        "tooltip" "Skip TLS certificate verification. Useful for self-signed certificates."}}
                     
                     <div class="space-y-4">
                         <!-- CA Certificate -->
@@ -369,7 +372,7 @@
                     <!-- Note about TLS configuration -->
                     {{template "noteField" dict
                         "condition" "mqtt.tls.enabled"
-                        "content" "<strong>TLS Configuration:</strong><br>• For standard TLS: Only provide CA Certificate if broker uses self-signed certificate<br>• For mutual TLS (mTLS): Provide all three certificates<br>• URL schemes ssl://, tls://, and mqtts:// automatically enable TLS"}}
+                        "content" "<strong>TLS Configuration:</strong><br>• Standard TLS: Leave certificates empty for public brokers<br>• Self-signed certificates: Provide CA Certificate<br>• Mutual TLS (mTLS): Provide all three certificates"}}
                 </div>
             </div>
         </div>
