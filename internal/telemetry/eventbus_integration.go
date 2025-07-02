@@ -13,7 +13,7 @@ import (
 var (
 	// telemetryWorker is the singleton telemetry worker
 	telemetryWorker *TelemetryWorker
-	logger         *slog.Logger
+	logger          *slog.Logger
 )
 
 func init() {
@@ -32,13 +32,19 @@ func InitializeEventBusIntegration() error {
 		logger.Info("Sentry telemetry disabled, skipping event bus integration")
 		return nil
 	}
-	
+
 	// Check if event bus is initialized
 	if !events.IsInitialized() {
 		logger.Warn("event bus not initialized, skipping telemetry integration")
 		return nil
 	}
-	
+
+	// Check if already initialized
+	if telemetryWorker != nil {
+		logger.Debug("telemetry worker already initialized, skipping")
+		return nil
+	}
+
 	// Create telemetry worker with custom config
 	config := &WorkerConfig{
 		FailureThreshold:   10,
@@ -51,32 +57,32 @@ func InitializeEventBusIntegration() error {
 		BatchSize:          10,
 		BatchTimeout:       100 * time.Millisecond,
 	}
-	
+
 	worker, err := NewTelemetryWorker(true, config)
 	if err != nil {
 		return fmt.Errorf("failed to create telemetry worker: %w", err)
 	}
-	
+
 	// Get event bus
 	eventBus := events.GetEventBus()
 	if eventBus == nil {
 		return fmt.Errorf("event bus is nil")
 	}
-	
+
 	// Register the worker as a consumer
 	if err := eventBus.RegisterConsumer(worker); err != nil {
 		return fmt.Errorf("failed to register telemetry worker: %w", err)
 	}
-	
+
 	// Store reference for stats/monitoring
 	telemetryWorker = worker
-	
+
 	logger.Info("telemetry worker registered with event bus",
 		"batching_enabled", config.BatchingEnabled,
 		"rate_limit", config.RateLimitMaxEvents,
 		"sampling_rate", config.SamplingRate,
 	)
-	
+
 	return nil
 }
 
@@ -99,16 +105,17 @@ func UpdateSamplingRate(rate float64) error {
 	if telemetryWorker == nil {
 		return fmt.Errorf("telemetry worker not initialized")
 	}
-	
+
 	if rate < 0.0 || rate > 1.0 {
 		return fmt.Errorf("sampling rate must be between 0.0 and 1.0")
 	}
-	
+
 	telemetryWorker.configMu.Lock()
 	telemetryWorker.config.SamplingRate = rate
 	telemetryWorker.configMu.Unlock()
-	
+
 	logger.Info("updated telemetry sampling rate", "rate", rate)
-	
+
 	return nil
 }
+

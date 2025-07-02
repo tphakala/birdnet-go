@@ -59,16 +59,15 @@ func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
 
 	// Extract header components
 	header := make([]byte, 44) // Standard WAV header size
-	_, err = io.ReadFull(wavBuffer, header)
-	if err != nil {
-		t.Fatalf("Failed to read WAV header: %v", err)
+
+	// Get all data from buffer to avoid issues with reading twice
+	allData := wavBuffer.Bytes()
+	if len(allData) < 44 {
+		t.Fatalf("WAV buffer too small for header: got %d bytes, need at least 44", len(allData))
 	}
 
-	// Reset buffer position
-	wavBuffer.Reset()
-	if _, err := io.ReadFull(wavBuffer, header); err != nil {
-		t.Fatalf("Failed to read WAV header: %v", err)
-	}
+	// Copy header from the beginning of the data
+	copy(header, allData[:44])
 
 	// Check RIFF header
 	if string(header[0:4]) != "RIFF" {

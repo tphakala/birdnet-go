@@ -12,9 +12,8 @@ import (
 )
 
 func TestTelemetryIntegration(t *testing.T) {
-	t.Parallel()
+	// Cannot run in parallel due to global event bus state
 	t.Run("error reporting through telemetry", func(t *testing.T) {
-		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -49,7 +48,6 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("message reporting with different levels", func(t *testing.T) {
-		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -75,14 +73,13 @@ func TestTelemetryIntegration(t *testing.T) {
 
 		for i, event := range events {
 			if event.Level != expectedLevels[i] {
-				t.Errorf("Event %d: expected level %s, got %s", 
+				t.Errorf("Event %d: expected level %s, got %s",
 					i, expectedLevels[i], event.Level)
 			}
 		}
 	})
 
 	t.Run("attachment uploader availability", func(t *testing.T) {
-		t.Parallel()
 		_, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -97,7 +94,6 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("initialization safety", func(t *testing.T) {
-		t.Parallel()
 		// Test that telemetry handles initialization safely
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
@@ -111,7 +107,6 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("privacy compliance", func(t *testing.T) {
-		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -132,7 +127,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		if strings.Contains(event.Message, "api.example.com") {
 			t.Error("Sensitive URL was not anonymized")
 		}
-		
+
 		if strings.Contains(event.Message, "user:pass") {
 			t.Error("Credentials were not removed")
 		}
@@ -142,7 +137,6 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("concurrent event reporting", func(t *testing.T) {
-		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -172,7 +166,6 @@ func TestTelemetryIntegration(t *testing.T) {
 	})
 
 	t.Run("flush behavior", func(t *testing.T) {
-		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
@@ -227,11 +220,12 @@ func ReportError(err error) {
 	if enhancedErr, ok := err.(interface{ GetComponent() string }); ok {
 		component = enhancedErr.GetComponent()
 	}
-	
+
 	CaptureError(err, component)
 }
 
-// Helper function to test ReportMessage  
+// Helper function to test ReportMessage
 func ReportMessage(message string, level sentry.Level, component string) {
 	CaptureMessage(message, level, component)
 }
+

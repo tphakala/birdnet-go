@@ -12,7 +12,7 @@ import (
 
 // TestE2ECompleteFlow tests the complete telemetry flow
 func TestE2ECompleteFlow(t *testing.T) {
-	t.Parallel()
+	// Cannot run in parallel due to global event bus state
 	config, cleanup := InitForTesting(t)
 	defer cleanup()
 
@@ -20,7 +20,6 @@ func TestE2ECompleteFlow(t *testing.T) {
 	InitializeErrorIntegration()
 
 	t.Run("error to telemetry flow", func(t *testing.T) {
-		t.Parallel()
 		// Create enhanced error
 		enhancedErr := errors.New(fmt.Errorf("test error")).
 			Component("test-component").
@@ -32,7 +31,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 
 		// Verify capture
 		AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
-		
+
 		// Check actual event
 		event := config.MockTransport.GetLastEvent()
 		if event != nil {
@@ -42,7 +41,6 @@ func TestE2ECompleteFlow(t *testing.T) {
 	})
 
 	t.Run("privacy scrubbing", func(t *testing.T) {
-		t.Parallel()
 		config.MockTransport.Clear()
 
 		// Error with sensitive URL
@@ -50,7 +48,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 		CaptureError(err, "api-client")
 
 		AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
-		
+
 		event := config.MockTransport.GetLastEvent()
 		if event != nil {
 			// Verify URL was scrubbed
@@ -64,7 +62,6 @@ func TestE2ECompleteFlow(t *testing.T) {
 	})
 
 	t.Run("concurrent reporting", func(t *testing.T) {
-		t.Parallel()
 		config.MockTransport.Clear()
 
 		// Report errors concurrently
@@ -89,7 +86,7 @@ func TestE2ECompleteFlow(t *testing.T) {
 
 // TestE2EMessageFlow tests message reporting flow
 func TestE2EMessageFlow(t *testing.T) {
-	t.Parallel()
+	// Cannot run in parallel due to global event bus state
 	config, cleanup := InitForTesting(t)
 	defer cleanup()
 
@@ -105,14 +102,14 @@ func TestE2EMessageFlow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.message, func(t *testing.T) {
-			t.Parallel()
 			config.MockTransport.Clear()
-			
+
 			CaptureMessage(tt.message, tt.level, tt.component)
-			
+
 			AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
 			AssertEventLevel(t, config.MockTransport, tt.message, tt.level)
 			AssertEventTag(t, config.MockTransport, tt.message, "component", tt.component)
 		})
 	}
 }
+

@@ -6,6 +6,8 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 )
 
 // TestConfig holds configuration for telemetry testing
@@ -73,18 +75,54 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 		})
 	})
 
+	// Initialize event bus for async processing
+	eventBusConfig := events.DefaultConfig()
+	eventBusConfig.Deduplication.Enabled = false // Disable deduplication for predictable testing
+	_, err = events.Initialize(eventBusConfig)
+	if err != nil {
+		t.Fatalf("Failed to initialize event bus for testing: %v", err)
+	}
+
+	// Set up event bus integration for errors package
+	if events.IsInitialized() {
+		eventBus := events.GetEventBus()
+		adapter := events.NewEventPublisherAdapter(eventBus)
+		errors.SetEventPublisher(adapter)
+	}
+
+	// Initialize error integration
+	InitializeErrorIntegration()
+
+	// Initialize telemetry event bus integration
+	if err := InitializeEventBusIntegration(); err != nil {
+		t.Fatalf("Failed to initialize telemetry event bus integration: %v", err)
+	}
+
 	// Cleanup function
 	cleanup = func() {
+		// Reset telemetry worker first to avoid registration conflicts
+		telemetryWorker = nil
+		telemetryInitialized.Store(false)
+
+		// Use the testing reset function which properly cleans up global state
+		events.ResetForTesting()
+
 		// Flush any pending events
 		sentry.Flush(2 * time.Second)
-		
+
 		// Reset initialization state
 		sentryInitialized = false
-		
+
 		// Clear deferred messages
 		deferredMutex.Lock()
 		deferredMessages = nil
 		deferredMutex.Unlock()
+
+		// Clear error hooks
+		errors.ClearErrorHooks()
+
+		// Note: We don't reset the event publisher to nil as atomic.Value doesn't accept nil
+		// The next test will override it if needed
 	}
 
 	return &TestConfig{
@@ -96,52 +134,52 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 // AssertEventCaptured verifies that an event with the given message was captured
 func AssertEventCaptured(t *testing.T, transport *MockTransport, message string, timeout time.Duration) {
 	t.Helper()
-	
+
 	// Wait for at least one event first
 	if !transport.WaitForEventCount(1, timeout) {
-		events := transport.GetEventMessages()
-		t.Errorf("Expected event with message %q not found within timeout. Captured events: %v", message, events)
+		capturedEvents := transport.GetEventMessages()
+		t.Errorf("Expected event with message %q not found within timeout. Captured events: %v", message, capturedEvents)
 		return
 	}
-	
+
 	// Then check if our specific message exists
 	if transport.FindEventByMessage(message) == nil {
-		events := transport.GetEventMessages()
-		t.Errorf("Expected event with message %q not found. Captured events: %v", message, events)
+		capturedEvents := transport.GetEventMessages()
+		t.Errorf("Expected event with message %q not found. Captured events: %v", message, capturedEvents)
 	}
 }
 
 // AssertNoEvents verifies that no events were captured
 func AssertNoEvents(t *testing.T, transport *MockTransport) {
 	t.Helper()
-	
+
 	if count := transport.GetEventCount(); count > 0 {
-		events := transport.GetEventMessages()
-		t.Errorf("Expected no events, but found %d: %v", count, events)
+		capturedEvents := transport.GetEventMessages()
+		t.Errorf("Expected no events, but found %d: %v", count, capturedEvents)
 	}
 }
 
 // AssertEventCount verifies the exact number of events captured
 func AssertEventCount(t *testing.T, transport *MockTransport, expected int, timeout time.Duration) {
 	t.Helper()
-	
+
 	if !transport.WaitForEventCount(expected, timeout) {
 		actual := transport.GetEventCount()
-		events := transport.GetEventMessages()
-		t.Errorf("Expected %d events, but found %d: %v", expected, actual, events)
+		capturedEvents := transport.GetEventMessages()
+		t.Errorf("Expected %d events, but found %d: %v", expected, actual, capturedEvents)
 	}
 }
 
 // AssertEventLevel verifies that an event has the expected level
 func AssertEventLevel(t *testing.T, transport *MockTransport, message string, expectedLevel sentry.Level) {
 	t.Helper()
-	
+
 	event := transport.FindEventByMessage(message)
 	if event == nil {
 		t.Errorf("Event with message %q not found", message)
 		return
 	}
-	
+
 	if event.Level != expectedLevel {
 		t.Errorf("Expected event level %s, got %s", expectedLevel, event.Level)
 	}
@@ -150,14 +188,15 @@ func AssertEventLevel(t *testing.T, transport *MockTransport, message string, ex
 // AssertEventTag verifies that an event has a specific tag value
 func AssertEventTag(t *testing.T, transport *MockTransport, message, tagKey, expectedValue string) {
 	t.Helper()
-	
+
 	event := transport.FindEventByMessage(message)
 	if event == nil {
 		t.Errorf("Event with message %q not found", message)
 		return
 	}
-	
+
 	if value, ok := event.Tags[tagKey]; !ok || value != expectedValue {
 		t.Errorf("Expected tag %s=%s, got %s=%s", tagKey, expectedValue, tagKey, value)
 	}
 }
+
