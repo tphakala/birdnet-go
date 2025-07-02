@@ -25,6 +25,7 @@ const (
 type TLSManager struct {
 	configDir string
 	tlsDir    string
+	mu        sync.RWMutex
 }
 
 var (
@@ -38,6 +39,9 @@ func GetTLSManager() *TLSManager {
 		configPaths, _ := GetDefaultConfigPaths()
 		if len(configPaths) > 0 {
 			globalTLSManager = NewTLSManager(configPaths[0])
+		} else {
+			// Use a default path or panic to fail fast
+			globalTLSManager = NewTLSManager("./config")
 		}
 	})
 	return globalTLSManager
@@ -105,12 +109,15 @@ func (tm *TLSManager) EnsureServiceDirectory(service string) error {
 
 // SaveCertificate saves a certificate or key to the service-specific TLS directory
 func (tm *TLSManager) SaveCertificate(service string, certType TLSCertificateType, content string) (string, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	
 	// Trim whitespace
 	content = strings.TrimSpace(content)
 	
 	// If content is empty, remove the certificate file if it exists
 	if content == "" {
-		return "", tm.RemoveCertificate(service, certType)
+		return "", tm.removeCertificateUnlocked(service, certType)
 	}
 
 	// Ensure service directory exists
@@ -162,6 +169,8 @@ func (tm *TLSManager) GetCertificatePath(service string, certType TLSCertificate
 
 // CertificateExists checks if a certificate file exists
 func (tm *TLSManager) CertificateExists(service string, certType TLSCertificateType) bool {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	path := tm.GetCertificatePath(service, certType)
 	_, err := os.Stat(path)
 	return err == nil
@@ -169,6 +178,13 @@ func (tm *TLSManager) CertificateExists(service string, certType TLSCertificateT
 
 // RemoveCertificate removes a certificate file
 func (tm *TLSManager) RemoveCertificate(service string, certType TLSCertificateType) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	return tm.removeCertificateUnlocked(service, certType)
+}
+
+// removeCertificateUnlocked is an internal method that removes a certificate without locking
+func (tm *TLSManager) removeCertificateUnlocked(service string, certType TLSCertificateType) error {
 	path := tm.GetCertificatePath(service, certType)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return errors.New(err).
@@ -183,9 +199,12 @@ func (tm *TLSManager) RemoveCertificate(service string, certType TLSCertificateT
 
 // RemoveAllCertificates removes all certificates for a service
 func (tm *TLSManager) RemoveAllCertificates(service string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	
 	certTypes := []TLSCertificateType{TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeKey}
 	for _, certType := range certTypes {
-		if err := tm.RemoveCertificate(service, certType); err != nil {
+		if err := tm.removeCertificateUnlocked(service, certType); err != nil {
 			return err
 		}
 	}
@@ -218,22 +237,25 @@ func validateCertificateContent(certType TLSCertificateType, content string) err
 
 	case TLSCertTypeKey:
 		// Validate private key
-		validKeyTypes := []string{
-			"RSA PRIVATE KEY",
-			"EC PRIVATE KEY",
-			"PRIVATE KEY", // PKCS#8
-		}
-		validType := false
-		for _, kt := range validKeyTypes {
-			if block.Type == kt {
-				validType = true
-				break
+		switch block.Type {
+		case "RSA PRIVATE KEY":
+			_, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				return fmt.Errorf("invalid RSA private key: %w", err)
 			}
-		}
-		if !validType {
+		case "EC PRIVATE KEY":
+			_, err := x509.ParseECPrivateKey(block.Bytes)
+			if err != nil {
+				return fmt.Errorf("invalid EC private key: %w", err)
+			}
+		case "PRIVATE KEY": // PKCS#8
+			_, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return fmt.Errorf("invalid PKCS8 private key: %w", err)
+			}
+		default:
 			return fmt.Errorf("expected private key block, got %s", block.Type)
 		}
-		// We don't parse the actual key to avoid potential issues with different formats
 	}
 
 	return nil
