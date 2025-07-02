@@ -315,10 +315,10 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		}
 	}
 
-	// Batch fetch thumbnail URLs
+	// Batch fetch thumbnail URLs (cached only for fast response)
 	thumbnailURLs := make(map[string]string)
 	if c.BirdImageCache != nil && len(scientificNames) > 0 {
-		batchResults := c.BirdImageCache.GetBatch(scientificNames)
+		batchResults := c.BirdImageCache.GetBatchCachedOnly(scientificNames)
 		if len(batchResults) > 0 {
 			for name := range batchResults {
 				imgData := batchResults[name] // Access value using key
@@ -444,36 +444,31 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 		scientificNames = append(scientificNames, summaryData[i].ScientificName)
 	}
 
-	// Check if we should skip thumbnails (for performance)
-	skipThumbnails := ctx.QueryParam("skip_thumbnails") == "true"
 
-	// Batch fetch thumbnail URLs
+	// Batch fetch thumbnail URLs (cached only for fast response)
 	var thumbnailURLs map[string]imageprovider.BirdImage
-	if c.BirdImageCache != nil && len(scientificNames) > 0 && !skipThumbnails {
+	if c.BirdImageCache != nil && len(scientificNames) > 0 {
 		thumbStart := time.Now()
-		// log.Printf("GetSpeciesSummary: Starting batch fetch of %d thumbnails", len(scientificNames))
 		if c.apiLogger != nil {
-			c.apiLogger.Debug("Batch fetching thumbnails",
+			c.apiLogger.Debug("Fetching cached thumbnails only",
 				"count", len(scientificNames),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
-		thumbnailURLs = c.BirdImageCache.GetBatch(scientificNames)
+		// Use GetBatchCachedOnly for fast response - frontend will fetch missing thumbnails async
+		thumbnailURLs = c.BirdImageCache.GetBatchCachedOnly(scientificNames)
 		thumbDuration := time.Since(thumbStart)
-		// log.Printf("GetSpeciesSummary: Thumbnail batch fetch completed in %v", thumbDuration)
 		if c.apiLogger != nil {
-			c.apiLogger.Info("Thumbnail batch fetch completed",
+			c.apiLogger.Info("Cached thumbnail fetch completed",
 				"duration_ms", thumbDuration.Milliseconds(),
-				"count", len(scientificNames),
+				"cached_count", len(thumbnailURLs),
+				"requested_count", len(scientificNames),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
 		}
 	}
-	// else if skipThumbnails {
-	//	log.Printf("GetSpeciesSummary: Skipping thumbnail fetch as requested")
-	// }
 
 	for i := range summaryData {
 		data := &summaryData[i]
@@ -630,7 +625,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	total := sumCounts(hourlyCountsArray)
 
 	// Build the response
-	response := map[string]interface{}{
+	response := map[string]any{
 		"date":    date,
 		"species": species,
 		"counts":  hourlyCountsArray,
@@ -875,7 +870,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	// If no data is available yet, return an array with 24 empty hours
 	if len(hourlyData) == 0 {
 		emptyData := make([]HourlyDistribution, 24)
-		for hour := 0; hour < 24; hour++ {
+		for hour := range 24 {
 			emptyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
 		}
 
@@ -894,7 +889,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 
 	// Ensure we have data for all 24 hours (fill in zeros for missing hours)
 	completeHourlyData := make([]HourlyDistribution, 24)
-	for hour := 0; hour < 24; hour++ {
+	for hour := range 24 {
 		completeHourlyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
 	}
 
