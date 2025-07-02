@@ -35,7 +35,7 @@ type MockJobQueue struct {
 // mockEnqueueCall tracks the arguments passed to Enqueue
 type mockEnqueueCall struct {
 	action jobqueue.Action
-	data   interface{}
+	data   any
 	config jobqueue.RetryConfig
 }
 
@@ -71,7 +71,7 @@ func (m *MockJobQueue) StopWithTimeout(timeout time.Duration) error {
 	return nil
 }
 
-func (m *MockJobQueue) Enqueue(action jobqueue.Action, data interface{}, config jobqueue.RetryConfig) (*jobqueue.Job, error) {
+func (m *MockJobQueue) Enqueue(action jobqueue.Action, data any, config jobqueue.RetryConfig) (*jobqueue.Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -150,12 +150,12 @@ func (m *MockJobQueue) Reset() {
 // MockAction is a mock implementation of the Action interface
 type MockAction struct {
 	mu           sync.Mutex
-	ExecuteFunc  func(data interface{}) error
+	ExecuteFunc  func(data any) error
 	ExecuteCount int
-	ExecuteData  []interface{}
+	ExecuteData  []any
 }
 
-func (m *MockAction) Execute(data interface{}) error {
+func (m *MockAction) Execute(data any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ExecuteCount++
@@ -618,7 +618,7 @@ func TestEnqueueTask(t *testing.T) {
 		}
 
 		// Create tasks to fill the queue
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			task := &Task{
 				Type: TaskTypeAction,
 				Detection: Detections{
@@ -632,7 +632,7 @@ func TestEnqueueTask(t *testing.T) {
 					},
 				},
 				Action: &MockAction{
-					ExecuteFunc: func(data interface{}) error {
+					ExecuteFunc: func(data any) error {
 						// Sleep to keep the queue full
 						time.Sleep(100 * time.Millisecond)
 						return nil
@@ -687,7 +687,7 @@ func TestEnqueueTask(t *testing.T) {
 		}
 
 		// Add a large number of results
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			detection.Results = append(detection.Results, datastore.Results{
 				Species:    fmt.Sprintf("Test Bird %d", i),
 				Confidence: float32(i) / 100.0,
@@ -898,7 +898,7 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 
 // TestIntegrationWithJobQueue tests the integration between Processor.EnqueueTask and a real job queue
 func TestIntegrationWithJobQueue(t *testing.T) {
-	t.Parallel()
+	// Remove t.Parallel() to avoid race conditions with testRetryConfigOverride
 	// Set up the test retry config override to ensure consistent behavior
 	testRetryConfigOverride = nil
 	defer func() {
@@ -928,7 +928,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 
 	// Create a mock action that signals when executed
 	mockAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			// Signal that the action was executed
 			executionChan <- struct{}{}
 			return nil
@@ -981,7 +981,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 
 	// Test with a failing action
 	failingAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			return fmt.Errorf("simulated failure")
 		},
 	}
@@ -1029,7 +1029,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 
 // TestRetryLogic tests that the job queue properly retries failed actions
 func TestRetryLogic(t *testing.T) {
-	t.Parallel()
+	// Remove t.Parallel() to avoid race conditions with testRetryConfigOverride
 	// Set up the test retry config override
 	testRetryConfigOverride = nil
 	defer func() {
@@ -1087,7 +1087,7 @@ func TestRetryLogic(t *testing.T) {
 
 	// Create a mock action that fails a specified number of times before succeeding
 	mockAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			attemptMutex.Lock()
 			attemptCount++
 			currentAttempt := attemptCount
@@ -1180,7 +1180,7 @@ func TestRetryLogic(t *testing.T) {
 
 	// Create a mock action that always fails
 	exhaustingAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			attemptMutex.Lock()
 			attemptCount++
 			currentAttempt := attemptCount
@@ -1299,7 +1299,7 @@ func TestEdgeCases(t *testing.T) {
 					Settings: &conf.Settings{},
 				}
 				action := &MockAction{
-					ExecuteFunc: func(data interface{}) error {
+					ExecuteFunc: func(data any) error {
 						time.Sleep(100 * time.Millisecond) // Simulate long execution
 						return nil
 					},
@@ -1438,7 +1438,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 	b.ResetTimer()
 
 	// Run the benchmark
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := enqueueTaskBench(task)
 		if err != nil {
 			b.Fatalf("EnqueueTask failed: %v", err)
