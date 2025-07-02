@@ -639,7 +639,20 @@ func (c *client) reconnectWithBackoff() {
 
 // createTLSConfig creates a TLS configuration based on the client settings
 func (c *client) createTLSConfig() (*tls.Config, error) {
+	// Extract hostname from broker URL for ServerName
+	u, err := url.Parse(c.config.Broker)
+	if err != nil {
+		return nil, errors.Newf("failed to parse broker URL for TLS config: %v", err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("broker", c.config.Broker).
+			Build()
+	}
+	
+	hostname := u.Hostname()
+	
 	tlsConfig := &tls.Config{
+		ServerName:         hostname,
 		InsecureSkipVerify: c.config.TLS.InsecureSkipVerify, // #nosec G402 -- InsecureSkipVerify is controlled by user configuration for self-signed certificates
 	}
 
