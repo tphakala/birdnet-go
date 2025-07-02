@@ -243,12 +243,20 @@ Tests support multiple brokers:
   - Client certificate (`ClientCert`)
   - Client private key (`ClientKey`)
 
+### TLS Certificate Management
+BirdNET-Go provides a secure certificate management system:
+- **UI Certificate Entry**: Paste PEM-encoded certificates directly in the web interface
+- **Secure Storage**: Certificates are saved to `config/tls/mqtt/` with proper permissions
+- **File Permissions**: Private keys (0600), certificates (0644)
+- **Automatic Path Management**: The system handles file paths internally
+
 ### Security Best Practices
 1. **Always use TLS** for production deployments
 2. **Verify certificates** unless using self-signed certs in trusted networks
 3. **Protect private keys** with appropriate file permissions
 4. **Passwords are never logged** for security
 5. **Input validation** on all configuration parameters
+6. **Certificate Storage**: Certificates are stored as files, not in the config YAML
 
 ## Best Practices for Developers and LLMs
 
@@ -298,11 +306,19 @@ The MQTT integration settings are managed through a web interface located at:
 
 1. **Configuration Fields**:
    - Enable/Disable toggle for MQTT integration
-   - Broker URL input (e.g., `mqtt://localhost:1883`)
+   - Broker URL input with scheme support:
+     - Standard: `mqtt://localhost:1883`
+     - Secure: `mqtts://`, `ssl://`, `tls://` (auto-enables TLS)
    - Topic configuration for publishing detections
    - Authentication options:
      - Anonymous connection toggle
      - Username/Password fields (hidden when anonymous is enabled)
+   - TLS/SSL Security settings:
+     - Auto-enabled for secure URL schemes
+     - Skip certificate verification option (for self-signed certs)
+     - CA Certificate textarea (PEM format)
+     - Client Certificate textarea (for mTLS)
+     - Client Private Key textarea (for mTLS)
    - Message settings:
      - Retain flag toggle with Home Assistant-specific guidance
 
@@ -328,8 +344,9 @@ The MQTT integration settings are managed through a web interface located at:
 
 1. **Settings Handler** (`handlers/settings.go`):
    - **SaveSettings**: Processes form data and updates MQTT configuration
-   - **Anonymous Connection**: Special handling in `updateSettingsFromForm` (lines 246-253)
-   - **Configuration Changes**: Detected by `mqttSettingsChanged` (lines 738-745)
+   - **TLS Certificate Processing**: `processTLSCertificates` saves certificates securely before form processing
+   - **Anonymous Connection**: Special handling in `updateSettingsFromForm` 
+   - **Configuration Changes**: Detected by `mqttSettingsChanged`
    - **Control Channel**: Sends `reconfigure_mqtt` command when settings change
 
 2. **API Endpoints**:
