@@ -14,11 +14,23 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+const (
+	// DefaultSlowQueryThreshold defines the duration after which a query is considered slow.
+	// 200ms is chosen based on common industry practices and to catch queries that may
+	// impact user experience. This threshold helps identify queries that need optimization
+	// while avoiding false positives from typical database operations.
+	DefaultSlowQueryThreshold = 200 * time.Millisecond
+	
+	// MaxColumnsForDetailedDisplay defines the maximum number of columns to display
+	// in detailed logs. When more columns are present, only the count is shown to
+	// keep log output concise and readable.
+	MaxColumnsForDetailedDisplay = 5
+)
+
 // createGormLogger configures and returns a new GORM logger instance.
 func createGormLogger() logger.Interface {
 	// Use our custom GORM logger with metrics support
-	// Default to WARN level with 200ms slow query threshold
-	return NewGormLogger(200*time.Millisecond, logger.Warn, nil)
+	return NewGormLogger(DefaultSlowQueryThreshold, logger.Warn, nil)
 }
 
 // getSQLiteIndexInfo executes PRAGMA index_info for a given SQLite index name,
@@ -545,14 +557,7 @@ func findNewColumns(db *gorm.DB, model interface{}, columnsBefore []string) []st
 	if cols, err := db.Migrator().ColumnTypes(model); err == nil {
 		for _, col := range cols {
 			colName := col.Name()
-			found := false
-			for _, oldCol := range columnsBefore {
-				if oldCol == colName {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !slices.Contains(columnsBefore, colName) {
 				addedColumns = append(addedColumns, colName)
 			}
 		}
@@ -571,7 +576,7 @@ func logTableMigration(lgr *slog.Logger, tableName, action string, addedColumns 
 	
 	if len(addedColumns) > 0 {
 		logFields = append(logFields, "columns_added", len(addedColumns))
-		if len(addedColumns) <= 5 { // Only show column names if not too many
+		if len(addedColumns) <= MaxColumnsForDetailedDisplay {
 			logFields = append(logFields, "new_columns", addedColumns)
 		}
 	}

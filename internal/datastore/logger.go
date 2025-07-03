@@ -93,11 +93,11 @@ func SetLogLevel(level slog.Level) {
 type GormLogger struct {
 	SlowThreshold time.Duration
 	LogLevel      logger.LogLevel
-	metrics       *DatastoreMetrics
+	metrics       *Metrics
 }
 
 // NewGormLogger creates a new GORM logger instance
-func NewGormLogger(slowThreshold time.Duration, logLevel logger.LogLevel, metrics *DatastoreMetrics) *GormLogger {
+func NewGormLogger(slowThreshold time.Duration, logLevel logger.LogLevel, metrics *Metrics) *GormLogger {
 	return &GormLogger{
 		SlowThreshold: slowThreshold,
 		LogLevel:      logLevel,
