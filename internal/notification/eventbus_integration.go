@@ -44,6 +44,10 @@ func InitializeEventBusIntegration() error {
 	
 	// Create notification worker
 	config := DefaultWorkerConfig()
+	// Inherit debug setting from the service
+	if service.config != nil {
+		config.Debug = service.config.Debug
+	}
 	worker, err := NewNotificationWorker(service, config)
 	if err != nil {
 		return fmt.Errorf("failed to create notification worker: %w", err)
@@ -66,6 +70,7 @@ func InitializeEventBusIntegration() error {
 	logger.Info("notification worker registered with event bus",
 		"batching_enabled", config.BatchingEnabled,
 		"circuit_breaker_threshold", config.FailureThreshold,
+		"debug", config.Debug,
 	)
 	
 	return nil
