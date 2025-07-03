@@ -5,6 +5,7 @@ package notification
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -73,7 +74,7 @@ type Notification struct {
 	// Timestamp indicates when the notification was created
 	Timestamp time.Time `json:"timestamp"`
 	// Metadata contains additional context-specific data
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 	// ExpiresAt indicates when the notification should be auto-removed (optional)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
@@ -88,7 +89,7 @@ func NewNotification(notifType Type, priority Priority, title, message string) *
 		Title:     title,
 		Message:   message,
 		Timestamp: time.Now(),
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 }
 
@@ -99,9 +100,9 @@ func (n *Notification) WithComponent(component string) *Notification {
 }
 
 // WithMetadata adds metadata and returns the notification for chaining
-func (n *Notification) WithMetadata(key string, value interface{}) *Notification {
+func (n *Notification) WithMetadata(key string, value any) *Notification {
 	if n.Metadata == nil {
-		n.Metadata = make(map[string]interface{})
+		n.Metadata = make(map[string]any)
 	}
 	n.Metadata[key] = value
 	return n
@@ -146,6 +147,8 @@ type NotificationStore interface {
 	Delete(id string) error
 	// DeleteExpired removes all expired notifications
 	DeleteExpired() error
+	// GetUnreadCount returns the count of unread notifications
+	GetUnreadCount() (int, error)
 }
 
 // FilterOptions provides filtering capabilities for listing notifications
@@ -173,6 +176,7 @@ type InMemoryStore struct {
 	mu            sync.RWMutex
 	notifications map[string]*Notification
 	maxSize       int
+	unreadCount   int // Track unread count for optimization
 }
 
 // NewInMemoryStore creates a new in-memory notification store
@@ -199,6 +203,12 @@ func (s *InMemoryStore) Save(notification *Notification) error {
 	}
 
 	s.notifications[notification.ID] = notification
+	
+	// Update unread count if this is a new unread notification
+	if notification.Status == StatusUnread {
+		s.unreadCount++
+	}
+	
 	return nil
 }
 
@@ -208,7 +218,9 @@ func (s *InMemoryStore) Get(id string) (*Notification, error) {
 	defer s.mu.RUnlock()
 
 	if notif, exists := s.notifications[id]; exists {
-		return notif, nil
+		// Return a copy to prevent external modifications from affecting the stored notification
+		notifCopy := *notif
+		return &notifCopy, nil
 	}
 	return nil, nil
 }
@@ -221,7 +233,9 @@ func (s *InMemoryStore) List(filter *FilterOptions) ([]*Notification, error) {
 	var results []*Notification
 	for _, notif := range s.notifications {
 		if s.matchesFilter(notif, filter) {
-			results = append(results, notif)
+			// Return copies to prevent external modifications
+			notifCopy := *notif
+			results = append(results, &notifCopy)
 		}
 	}
 
@@ -249,11 +263,20 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.notifications[notification.ID]; exists {
-		s.notifications[notification.ID] = notification
-		return nil
+	oldNotif, exists := s.notifications[notification.ID]
+	if !exists {
+		return fmt.Errorf("notification not found: %s", notification.ID)
 	}
-	return fmt.Errorf("notification not found: %s", notification.ID)
+	
+	// Update unread count if status changed
+	if oldNotif.Status == StatusUnread && notification.Status != StatusUnread {
+		s.unreadCount--
+	} else if oldNotif.Status != StatusUnread && notification.Status == StatusUnread {
+		s.unreadCount++
+	}
+	
+	s.notifications[notification.ID] = notification
+	return nil
 }
 
 // Delete removes a notification
@@ -261,6 +284,13 @@ func (s *InMemoryStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check if notification exists and is unread
+	if notif, exists := s.notifications[id]; exists {
+		if notif.Status == StatusUnread {
+			s.unreadCount--
+		}
+	}
+	
 	delete(s.notifications, id)
 	return nil
 }
@@ -272,6 +302,9 @@ func (s *InMemoryStore) DeleteExpired() error {
 
 	for id, notif := range s.notifications {
 		if notif.IsExpired() {
+			if notif.Status == StatusUnread {
+				s.unreadCount--
+			}
 			delete(s.notifications, id)
 		}
 	}
@@ -291,6 +324,10 @@ func (s *InMemoryStore) removeOldest() {
 	}
 
 	if oldestID != "" {
+		// Update unread count if removing an unread notification
+		if notif, exists := s.notifications[oldestID]; exists && notif.Status == StatusUnread {
+			s.unreadCount--
+		}
 		delete(s.notifications, oldestID)
 	}
 }
@@ -302,45 +339,18 @@ func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions
 	}
 
 	// Check type filter
-	if len(filter.Types) > 0 {
-		typeMatch := false
-		for _, t := range filter.Types {
-			if notif.Type == t {
-				typeMatch = true
-				break
-			}
-		}
-		if !typeMatch {
-			return false
-		}
+	if len(filter.Types) > 0 && !slices.Contains(filter.Types, notif.Type) {
+		return false
 	}
 
 	// Check priority filter
-	if len(filter.Priorities) > 0 {
-		priorityMatch := false
-		for _, p := range filter.Priorities {
-			if notif.Priority == p {
-				priorityMatch = true
-				break
-			}
-		}
-		if !priorityMatch {
-			return false
-		}
+	if len(filter.Priorities) > 0 && !slices.Contains(filter.Priorities, notif.Priority) {
+		return false
 	}
 
 	// Check status filter
-	if len(filter.Status) > 0 {
-		statusMatch := false
-		for _, s := range filter.Status {
-			if notif.Status == s {
-				statusMatch = true
-				break
-			}
-		}
-		if !statusMatch {
-			return false
-		}
+	if len(filter.Status) > 0 && !slices.Contains(filter.Status, notif.Status) {
+		return false
 	}
 
 	// Check component filter
@@ -359,9 +369,33 @@ func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions
 	return true
 }
 
+// GetUnreadCount returns the count of unread notifications
+func (s *InMemoryStore) GetUnreadCount() (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.unreadCount, nil
+}
+
 // sortNotificationsByTime sorts notifications by timestamp (newest first)
 func sortNotificationsByTime(notifications []*Notification) {
 	sort.Slice(notifications, func(i, j int) bool {
 		return notifications[i].Timestamp.After(notifications[j].Timestamp)
 	})
+}
+
+// Config is deprecated and will be removed in a future version.
+// Use ServiceConfig in service.go for configuring the notification service.
+// ServiceConfig provides all necessary configuration options including:
+// - Debug logging control
+// - Maximum notifications limit
+// - Cleanup intervals for expired notifications
+// - Rate limiting settings
+//
+// Deprecated: This type is kept for backward compatibility only.
+// New code should use ServiceConfig instead.
+type Config struct {
+	// Debug enables debug logging for the notification system
+	Debug bool `json:"debug" yaml:"debug"`
+	// MaxNotifications sets the maximum number of notifications to keep in memory
+	MaxNotifications int `json:"max_notifications" yaml:"max_notifications"`
 }
