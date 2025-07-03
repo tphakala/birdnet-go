@@ -24,6 +24,12 @@ var (
 	
 	// Generic API token/key pattern - matches tokens with clear context
 	apiTokenPattern = regexp.MustCompile(`(?:api[_-]?key|token|secret|auth)[:=]\s*([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)|(?:with\s+(?:token|key|secret|auth)\s+)([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+	
+	// Token extraction pattern for replacing just the token part
+	tokenRegex = regexp.MustCompile(`([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+	
+	// Separator normalization pattern for API tokens
+	separatorRegex = regexp.MustCompile(`=\s*`)
 )
 
 // Common two-part TLDs that need special handling
@@ -183,11 +189,10 @@ func ScrubCoordinates(message string) string {
 // It replaces tokens with generic placeholders while preserving message structure
 func ScrubAPITokens(message string) string {
 	return apiTokenPattern.ReplaceAllStringFunc(message, func(match string) string {
-		// Use regex to find and replace just the token part within the match
-		tokenRegex := regexp.MustCompile(`([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+		// Use pre-compiled regex to find and replace just the token part within the match
 		result := tokenRegex.ReplaceAllString(match, "[API_TOKEN]")
-		// Normalize separators to colon for consistency
-		result = regexp.MustCompile(`=\s*`).ReplaceAllString(result, ": ")
+		// Normalize separators to colon for consistency using pre-compiled regex
+		result = separatorRegex.ReplaceAllString(result, ": ")
 		return result
 	})
 }
