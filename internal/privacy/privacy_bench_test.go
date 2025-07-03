@@ -53,6 +53,7 @@ func BenchmarkScrubMessageLarge(b *testing.B) {
 		strings.Repeat("more text after URLs ", 15)
 	
 	b.ReportAllocs()
+	b.ResetTimer()
 	
 	for b.Loop() {
 		_ = ScrubMessage(largeMessage)
