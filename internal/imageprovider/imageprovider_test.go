@@ -160,6 +160,7 @@ func (m *mockStore) Save(note *datastore.Note, results []datastore.Results) erro
 func (m *mockStore) Delete(id string) error                                       { return nil }
 func (m *mockStore) Get(id string) (datastore.Note, error)                        { return datastore.Note{}, nil }
 func (m *mockStore) Close() error                                                 { return nil }
+func (m *mockStore) SetMetrics(metrics *datastore.DatastoreMetrics)               {}
 func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                       { return nil, nil }
 func (m *mockStore) GetTopBirdsData(date string, minConf float64) ([]datastore.Note, error) {
 	return nil, nil

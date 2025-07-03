@@ -29,6 +29,7 @@ type Interface interface {
 	Delete(id string) error
 	Get(id string) (Note, error)
 	Close() error
+	SetMetrics(metrics *DatastoreMetrics) // Set metrics instance for observability
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
@@ -81,6 +82,7 @@ type DataStore struct {
 	DB            *gorm.DB         // GORM database instance
 	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
+	metrics       *DatastoreMetrics // Metrics instance for tracking operations
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
@@ -107,6 +109,11 @@ func New(settings *conf.Settings) Interface {
 		// Consider handling the case where neither database is enabled
 		return nil
 	}
+}
+
+// SetMetrics sets the metrics instance for the datastore
+func (ds *DataStore) SetMetrics(metrics *DatastoreMetrics) {
+	ds.metrics = metrics
 }
 
 // Save stores a note and its associated results as a single transaction in the database.
