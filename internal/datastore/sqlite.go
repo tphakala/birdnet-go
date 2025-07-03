@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // SQLiteStore implements StoreInterface for SQLite databases
@@ -179,8 +181,16 @@ func (s *SQLiteStore) Open() error {
 			Build()
 	}
 
-	// Configure GORM logger
-	gormLogger := createGormLogger()
+	// Configure GORM logger with metrics if available
+	var gormLogger logger.Interface
+	if s.Settings.Debug {
+		// Use debug log level with lower slow threshold
+		gormLogger = NewGormLogger(100*time.Millisecond, logger.Info, s.metrics)
+		datastoreLevelVar.Set(slog.LevelDebug)
+	} else {
+		// Use default settings with metrics
+		gormLogger = NewGormLogger(200*time.Millisecond, logger.Warn, s.metrics)
+	}
 
 	// Open SQLite database with GORM
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{

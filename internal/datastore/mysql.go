@@ -3,11 +3,14 @@ package datastore
 import (
 	"fmt"
 	"log"
+	"log/slog"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // MySQLStore implements DataStore for MySQL
@@ -33,11 +36,19 @@ func (store *MySQLStore) Open() error {
 		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
 		store.Settings.Output.MySQL.Database)
 
-	// Create a new GORM logger
-	newLogger := createGormLogger()
+	// Configure GORM logger with metrics if available
+	var gormLogger logger.Interface
+	if store.Settings.Debug {
+		// Use debug log level with lower slow threshold
+		gormLogger = NewGormLogger(100*time.Millisecond, logger.Info, store.metrics)
+		datastoreLevelVar.Set(slog.LevelDebug)
+	} else {
+		// Use default settings with metrics
+		gormLogger = NewGormLogger(200*time.Millisecond, logger.Warn, store.metrics)
+	}
 
 	// Open the MySQL database
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: gormLogger})
 	if err != nil {
 		log.Printf("Failed to open MySQL database: %v\n", err)
 		return fmt.Errorf("failed to open MySQL database: %w", err)
