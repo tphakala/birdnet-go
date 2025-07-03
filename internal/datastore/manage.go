@@ -379,7 +379,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 	var schemaCorrect bool
 	var err error
 
-	switch dbType {
+	switch strings.ToLower(dbType) {
 	case "sqlite":
 		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
 		if err != nil {
