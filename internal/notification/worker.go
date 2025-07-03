@@ -113,6 +113,15 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 			Build()
 	}
 	
+	// Log worker initialization
+	logger.Info("notification worker initialized",
+		"batch_size", config.BatchSize,
+		"batch_timeout", config.BatchTimeout,
+		"failure_threshold", config.FailureThreshold,
+		"recovery_timeout", config.RecoveryTimeout,
+		"half_open_max_events", config.HalfOpenMaxEvents,
+		"debug", config.Debug)
+	
 	return worker, nil
 }
 

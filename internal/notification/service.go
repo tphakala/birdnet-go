@@ -75,9 +75,20 @@ func NewService(config *ServiceConfig) *Service {
 		config:        config,
 	}
 
+	// Log service initialization
+	service.logger.Info("notification service initialized",
+		"max_notifications", config.MaxNotifications,
+		"cleanup_interval", config.CleanupInterval,
+		"rate_limit_window", config.RateLimitWindow,
+		"rate_limit_max_events", config.RateLimitMaxEvents,
+		"debug", config.Debug)
+
 	// Start background cleanup
 	service.wg.Add(1)
 	go service.cleanupLoop()
+
+	service.logger.Info("notification cleanup worker started",
+		"interval", config.CleanupInterval)
 
 	return service
 }
@@ -448,17 +459,23 @@ func (s *Service) cleanupLoop() {
 
 // Stop gracefully shuts down the notification service
 func (s *Service) Stop() {
+	s.logger.Info("notification service shutting down")
+	
 	s.cancel()
 	s.cleanupTicker.Stop()
 	s.wg.Wait()
 
 	// Cancel all subscriber contexts
 	s.subscribersMu.Lock()
-	defer s.subscribersMu.Unlock()
+	subscriberCount := len(s.subscribers)
 	for _, sub := range s.subscribers {
 		sub.cancel()
 	}
 	s.subscribers = nil
+	s.subscribersMu.Unlock()
+	
+	s.logger.Info("notification service stopped",
+		"subscribers_cancelled", subscriberCount)
 }
 
 // RateLimiter provides rate limiting for notifications
