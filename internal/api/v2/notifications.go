@@ -114,10 +114,16 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 
 	// Log the connection
 	if c.apiLogger != nil {
-		c.apiLogger.Info("notification SSE client connected",
-			"clientId", clientID,
-			"ip", ctx.RealIP(),
-		)
+		if c.Settings != nil && c.Settings.WebServer.Debug {
+			c.apiLogger.Debug("notification SSE client connected",
+				"clientId", clientID,
+				"ip", ctx.RealIP(),
+				"user_agent", ctx.Request().UserAgent())
+		} else {
+			c.apiLogger.Info("notification SSE client connected",
+				"clientId", clientID,
+				"ip", ctx.RealIP())
+		}
 	}
 
 	// Handle client disconnect
@@ -126,9 +132,14 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		client.Done <- true
 		service.Unsubscribe(notificationCh)
 		if c.apiLogger != nil {
-			c.apiLogger.Info("notification SSE client disconnected",
-				"clientId", clientID,
-			)
+			if c.Settings != nil && c.Settings.WebServer.Debug {
+				c.apiLogger.Debug("notification SSE client disconnected",
+					"clientId", clientID,
+					"reason", "context_done")
+			} else {
+				c.apiLogger.Info("notification SSE client disconnected",
+					"clientId", clientID)
+			}
 		}
 	}()
 
@@ -159,6 +170,14 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 					)
 				}
 				return err
+			}
+			
+			if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+				c.apiLogger.Debug("notification sent via SSE",
+					"clientId", clientID,
+					"notification_id", notif.ID,
+					"type", notif.Type,
+					"priority", notif.Priority)
 			}
 
 		case <-ticker.C:
@@ -224,6 +243,15 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		}
 	}
 
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("listing notifications",
+			"status", filter.Status,
+			"types", filter.Types,
+			"priorities", filter.Priorities,
+			"limit", filter.Limit,
+			"offset", filter.Offset)
+	}
+
 	// Get notifications
 	notifications, err := service.List(filter)
 	if err != nil {
@@ -233,6 +261,12 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notifications",
 		})
+	}
+
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("notifications retrieved",
+			"count", len(notifications),
+			"total_unread", countUnread(notifications))
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -294,6 +328,11 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	}
 
 	service := notification.GetService()
+	
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("marking notification as read", "id", id)
+	}
+	
 	if err := service.MarkAsRead(id); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
@@ -390,4 +429,15 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"unreadCount": count,
 	})
+}
+
+// countUnread counts the number of unread notifications in a slice
+func countUnread(notifications []*notification.Notification) int {
+	count := 0
+	for _, n := range notifications {
+		if n.Status == notification.StatusUnread {
+			count++
+		}
+	}
+	return count
 }
