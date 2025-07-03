@@ -7,7 +7,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // SpeciesSummaryData contains overall statistics for a bird species
@@ -58,11 +57,10 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	// Track query time for performance monitoring
 	queryStart := time.Now()
 
-	// Get logger and check debug setting
+	// Get settings and check debug setting
 	settings := conf.GetSettings()
-	logger := logging.ForService("datastore")
-	if settings != nil && settings.Debug {
-		logger.Debug("GetSpeciesSummaryData: Starting query",
+	if settings != nil && settings.Debug && datastoreLogger != nil {
+		datastoreLogger.Debug("GetSpeciesSummaryData: Starting query",
 			"start_date", startDate,
 			"end_date", endDate)
 	}
@@ -104,8 +102,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	`
 
 	// Execute the query
-	if settings != nil && settings.Debug {
-		logger.Debug("GetSpeciesSummaryData: Executing query",
+	if settings != nil && settings.Debug && datastoreLogger != nil {
+		datastoreLogger.Debug("GetSpeciesSummaryData: Executing query",
 			"query", queryStr,
 			"args", args)
 	}
@@ -120,16 +118,16 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			Build()
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
-			logger.Error("Failed to close rows",
+		if err := rows.Close(); err != nil && datastoreLogger != nil {
+			datastoreLogger.Error("Failed to close rows",
 				"error", err,
 				"operation", "get_species_summary_data")
 		}
 	}()
 
 	queryExecutionTime := time.Since(queryStart)
-	if settings != nil && settings.Debug {
-		logger.Debug("GetSpeciesSummaryData: Query executed, scanning rows",
+	if settings != nil && settings.Debug && datastoreLogger != nil {
+		datastoreLogger.Debug("GetSpeciesSummaryData: Query executed, scanning rows",
 			"query_duration_ms", queryExecutionTime.Milliseconds())
 	}
 	rowCount := 0
@@ -175,8 +173,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 
 	totalDuration := time.Since(queryStart)
-	if settings != nil && settings.Debug {
-		logger.Debug("GetSpeciesSummaryData: Completed",
+	if settings != nil && settings.Debug && datastoreLogger != nil {
+		datastoreLogger.Debug("GetSpeciesSummaryData: Completed",
 			"total_duration_ms", totalDuration.Milliseconds(),
 			"rows_processed", rowCount)
 	}
@@ -510,10 +508,11 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 			})
 		} else {
 			// Log if a record surprisingly had an empty date after SQL filtering
-			logger := logging.ForService("datastore")
-			logger.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
-				"scientific_name", raw.ScientificName,
-				"operation", "get_new_species_detections")
+			if datastoreLogger != nil {
+				datastoreLogger.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
+					"scientific_name", raw.ScientificName,
+					"operation", "get_new_species_detections")
+			}
 		}
 	}
 
