@@ -30,7 +30,7 @@ type Interface interface {
 	Delete(id string) error
 	Get(id string) (Note, error)
 	Close() error
-	SetMetrics(metrics *DatastoreMetrics) // Set metrics instance for observability
+	SetMetrics(metrics *Metrics) // Set metrics instance for observability
 	Optimize(ctx context.Context) error // Perform database optimization (VACUUM, ANALYZE, etc.)
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
@@ -84,7 +84,7 @@ type DataStore struct {
 	DB            *gorm.DB         // GORM database instance
 	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
-	metrics       *DatastoreMetrics // Metrics instance for tracking operations
+	metrics       *Metrics // Metrics instance for tracking operations
 	
 	// Monitoring lifecycle management
 	monitoringCtx    context.Context    // Context for monitoring goroutines
@@ -119,7 +119,7 @@ func New(settings *conf.Settings) Interface {
 }
 
 // SetMetrics sets the metrics instance for the datastore
-func (ds *DataStore) SetMetrics(metrics *DatastoreMetrics) {
+func (ds *DataStore) SetMetrics(metrics *Metrics) {
 	ds.metrics = metrics
 }
 
@@ -2067,12 +2067,30 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 	time.Sleep(delay)
 }
 
-// isDatabaseLocked checks if an error is a database lock error
+// isDatabaseLocked checks if an error is a database lock error for both SQLite and MySQL
 func isDatabaseLocked(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "database is locked")
+	
+	errStr := strings.ToLower(err.Error())
+	
+	// Check for SQLite lock errors
+	if strings.Contains(errStr, "database is locked") {
+		return true
+	}
+	
+	// Check for MySQL lock errors
+	if strings.Contains(errStr, "lock wait timeout exceeded") {
+		return true
+	}
+	
+	// Check for MySQL deadlock errors
+	if strings.Contains(errStr, "deadlock found") {
+		return true
+	}
+	
+	return false
 }
 
 // executeTransaction executes the save operations within a transaction
