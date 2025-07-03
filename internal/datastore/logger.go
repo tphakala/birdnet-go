@@ -22,8 +22,9 @@ var (
 	loggerOnce        sync.Once            // Ensures logger is initialized only once
 	loggerMu          sync.RWMutex         // Protects logger access
 	
-	// defaultLogPath follows the project convention of using a "logs/" directory
-	// for all log files. This centralizes logs in a single location for easier
+	// defaultLogPath follows the project-wide convention of using a "logs/" directory
+	// for all log files. This is consistent across all components (API, weather,
+	// imageprovider, etc.) and centralizes logs in a single location for easier
 	// management, rotation, and debugging. The directory is created automatically
 	// if it doesn't exist when the logger is initialized.
 	defaultLogPath    = "logs/datastore.log"
