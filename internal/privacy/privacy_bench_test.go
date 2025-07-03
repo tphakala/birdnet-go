@@ -275,14 +275,14 @@ func BenchmarkScrubAPITokens(b *testing.B) {
 	}
 }
 
-// BenchmarkScrubAllSensitiveData tests performance of comprehensive scrubbing
-func BenchmarkScrubAllSensitiveData(b *testing.B) {
+// BenchmarkScrubMessage_Comprehensive tests performance of comprehensive scrubbing
+func BenchmarkScrubMessage_Comprehensive(b *testing.B) {
 	message := "Failed upload to rtsp://admin:pass@192.168.1.100:554 at location 60.1699,24.9384 using api_key: secret123token"
 	
 	b.ReportAllocs()
 	
 	for b.Loop() {
-		_ = ScrubAllSensitiveData(message)
+		_ = ScrubMessage(message)
 	}
 }
 

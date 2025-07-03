@@ -98,40 +98,29 @@ func AnonymizeURL(rawURL string) string {
 // SanitizeRTSPUrl removes sensitive information from RTSP URL and returns a display-friendly version
 // It strips credentials and path information while preserving the host and port for debugging
 func SanitizeRTSPUrl(source string) string {
-	// If not an RTSP URL, return as is
-	if !strings.HasPrefix(source, "rtsp://") {
+	// Parse the URL using standard library
+	parsedURL, err := url.Parse(source)
+	if err != nil {
+		// If parsing fails, return original to avoid data loss
 		return source
 	}
 
-	// Find the @ symbol that separates credentials from host
-	atIndex := -1
-	for i := len("rtsp://"); i < len(source); i++ {
-		if source[i] == '@' {
-			atIndex = i
-			break
-		}
+	// Only process RTSP URLs
+	if parsedURL.Scheme != "rtsp" {
+		return source
 	}
 
-	if atIndex > -1 {
-		// Keep only rtsp:// and everything after @
-		source = "rtsp://" + source[atIndex+1:]
-	}
-
-	// Find the first slash after the host:port
-	slashIndex := -1
-	for i := len("rtsp://"); i < len(source); i++ {
-		if source[i] == '/' {
-			slashIndex = i
-			break
-		}
-	}
-
-	if slashIndex > -1 {
-		// Keep only up to the first slash
-		source = source[:slashIndex]
-	}
-
-	return source
+	// Remove user credentials
+	parsedURL.User = nil
+	
+	// Remove path and query components
+	parsedURL.Path = ""
+	parsedURL.RawPath = ""
+	parsedURL.RawQuery = ""
+	parsedURL.Fragment = ""
+	
+	// Return sanitized URL
+	return parsedURL.String()
 }
 
 // GenerateSystemID creates a unique system identifier
@@ -197,15 +186,6 @@ func ScrubAPITokens(message string) string {
 	})
 }
 
-// ScrubAllSensitiveData applies all privacy scrubbing functions to the input message
-// This is a convenience function that applies URL, coordinate, and token scrubbing
-func ScrubAllSensitiveData(message string) string {
-	// Apply all scrubbing functions in sequence
-	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
-	result = ScrubCoordinates(result)
-	result = ScrubAPITokens(result)
-	return result
-}
 
 // categorizeHost anonymizes hostnames while preserving useful categorization
 func categorizeHost(host string) string {
