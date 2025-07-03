@@ -2,54 +2,61 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
 
 // startConnectionPoolMonitoring starts a goroutine that periodically monitors
 // database connection pool statistics
-func (ds *DataStore) startConnectionPoolMonitoring(interval time.Duration) {
+func (ds *DataStore) startConnectionPoolMonitoring(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
-		for range ticker.C {
-			sqlDB, err := ds.DB.DB()
-			if err != nil {
-				datastoreLogger.Error("Failed to get SQL DB for monitoring",
-					"error", err)
-				continue
-			}
-			
-			stats := sqlDB.Stats()
-			
-			// Update metrics
-			if ds.metrics != nil {
-				ds.metrics.UpdateConnectionMetrics(
-					stats.InUse,
-					stats.Idle,
-					stats.MaxOpenConnections,
-				)
-				
-				if stats.WaitCount > 0 {
-					ds.metrics.RecordLockContention("connection_pool", "wait_for_connection")
-					ds.metrics.RecordLockWaitTime("connection_pool", stats.WaitDuration.Seconds())
+		for {
+			select {
+			case <-ctx.Done():
+				datastoreLogger.Info("Connection pool monitoring stopped due to context cancellation")
+				return
+			case <-ticker.C:
+				sqlDB, err := ds.DB.DB()
+				if err != nil {
+					datastoreLogger.Error("Failed to get SQL DB for monitoring",
+						"error", err)
+					continue
 				}
-			}
-			
-			datastoreLogger.Info("Connection pool statistics",
-				"open_connections", stats.OpenConnections,
-				"in_use", stats.InUse,
-				"idle", stats.Idle,
-				"wait_count", stats.WaitCount,
-				"wait_duration", stats.WaitDuration,
-				"max_idle_closed", stats.MaxIdleClosed,
-				"max_lifetime_closed", stats.MaxLifetimeClosed)
 				
-			// Warn if pool is exhausted
-			if stats.WaitCount > 0 {
-				datastoreLogger.Warn("Connection pool experiencing waits",
+				stats := sqlDB.Stats()
+				
+				// Update metrics
+				if ds.metrics != nil {
+					ds.metrics.UpdateConnectionMetrics(
+						stats.InUse,
+						stats.Idle,
+						stats.MaxOpenConnections,
+					)
+					
+					if stats.WaitCount > 0 {
+						ds.metrics.RecordLockContention("connection_pool", "wait_for_connection")
+						ds.metrics.RecordLockWaitTime("connection_pool", stats.WaitDuration.Seconds())
+					}
+				}
+				
+				datastoreLogger.Info("Connection pool statistics",
+					"open_connections", stats.OpenConnections,
+					"in_use", stats.InUse,
+					"idle", stats.Idle,
 					"wait_count", stats.WaitCount,
-					"total_wait_duration", stats.WaitDuration)
+					"wait_duration", stats.WaitDuration,
+					"max_idle_closed", stats.MaxIdleClosed,
+					"max_lifetime_closed", stats.MaxLifetimeClosed)
+					
+				// Warn if pool is exhausted
+				if stats.WaitCount > 0 {
+					datastoreLogger.Warn("Connection pool experiencing waits",
+						"wait_count", stats.WaitCount,
+						"total_wait_duration", stats.WaitDuration)
+				}
 			}
 		}
 	}()
@@ -57,37 +64,43 @@ func (ds *DataStore) startConnectionPoolMonitoring(interval time.Duration) {
 
 // startDatabaseMonitoring starts a goroutine that periodically monitors
 // database size and table statistics
-func (ds *DataStore) startDatabaseMonitoring(interval time.Duration) {
+func (ds *DataStore) startDatabaseMonitoring(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
-		for range ticker.C {
-			// Update database size metrics
-			if dbSize, err := ds.getDatabaseSize(); err == nil && ds.metrics != nil {
-				ds.metrics.UpdateDatabaseSize(dbSize)
-			} else if err != nil {
-				datastoreLogger.Error("Failed to get database size",
-					"error", err)
-			}
-			
-			// Update table row counts
-			tables := []string{"notes", "results", "image_caches", "note_reviews", "note_locks"}
-			for _, table := range tables {
-				if count, err := ds.getTableRowCount(table); err == nil && ds.metrics != nil {
-					ds.metrics.UpdateTableRowCount(table, count)
+		for {
+			select {
+			case <-ctx.Done():
+				datastoreLogger.Info("Database monitoring stopped due to context cancellation")
+				return
+			case <-ticker.C:
+				// Update database size metrics
+				if dbSize, err := ds.getDatabaseSize(); err == nil && ds.metrics != nil {
+					ds.metrics.UpdateDatabaseSize(dbSize)
 				} else if err != nil {
-					datastoreLogger.Error("Failed to get table row count",
-						"table", table,
+					datastoreLogger.Error("Failed to get database size",
 						"error", err)
 				}
-			}
-			
-			// Update active lock count
-			if lockCount, err := ds.getActiveLockCount(); err == nil && ds.metrics != nil {
-				ds.metrics.UpdateActiveLockCount(lockCount)
-			} else if err != nil {
-				datastoreLogger.Error("Failed to get active lock count",
-					"error", err)
+				
+				// Update table row counts
+				tables := []string{"notes", "results", "image_caches", "note_reviews", "note_locks"}
+				for _, table := range tables {
+					if count, err := ds.getTableRowCount(table); err == nil && ds.metrics != nil {
+						ds.metrics.UpdateTableRowCount(table, count)
+					} else if err != nil {
+						datastoreLogger.Error("Failed to get table row count",
+							"table", table,
+							"error", err)
+					}
+				}
+				
+				// Update active lock count
+				if lockCount, err := ds.getActiveLockCount(); err == nil && ds.metrics != nil {
+					ds.metrics.UpdateActiveLockCount(lockCount)
+				} else if err != nil {
+					datastoreLogger.Error("Failed to get active lock count",
+						"error", err)
+				}
 			}
 		}
 	}()
@@ -149,15 +162,15 @@ func (ds *DataStore) getActiveLockCount() (int, error) {
 }
 
 // StartMonitoring initializes all monitoring routines for the datastore
-func (ds *DataStore) StartMonitoring(connectionPoolInterval, databaseStatsInterval time.Duration) {
+func (ds *DataStore) StartMonitoring(ctx context.Context, connectionPoolInterval, databaseStatsInterval time.Duration) {
 	if connectionPoolInterval > 0 {
-		ds.startConnectionPoolMonitoring(connectionPoolInterval)
+		ds.startConnectionPoolMonitoring(ctx, connectionPoolInterval)
 		datastoreLogger.Info("Started connection pool monitoring",
 			"interval", connectionPoolInterval)
 	}
 	
 	if databaseStatsInterval > 0 {
-		ds.startDatabaseMonitoring(databaseStatsInterval)
+		ds.startDatabaseMonitoring(ctx, databaseStatsInterval)
 		datastoreLogger.Info("Started database statistics monitoring",
 			"interval", databaseStatsInterval)
 	}

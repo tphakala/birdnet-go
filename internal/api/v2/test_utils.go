@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -69,8 +70,8 @@ func (m *MockDataStore) SetMetrics(metrics *datastore.DatastoreMetrics) {
 	// Mock implementation - no-op
 }
 
-func (m *MockDataStore) Optimize() error {
-	args := m.Called()
+func (m *MockDataStore) Optimize(ctx context.Context) error {
+	args := m.Called(ctx)
 	return args.Error(0)
 }
 
@@ -403,8 +404,8 @@ func (m *MockDataStoreV2) SetMetrics(metrics *datastore.DatastoreMetrics) {
 	// Mock implementation - no-op
 }
 
-func (m *MockDataStoreV2) Optimize() error {
-	args := m.Called()
+func (m *MockDataStoreV2) Optimize(ctx context.Context) error {
+	args := m.Called(ctx)
 	return args.Error(0)
 }
 func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error) {
