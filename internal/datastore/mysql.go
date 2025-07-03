@@ -35,6 +35,14 @@ func (store *MySQLStore) Open() error {
 		store.Settings.Output.MySQL.Username, store.Settings.Output.MySQL.Password,
 		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
 		store.Settings.Output.MySQL.Database)
+	
+	// Log database opening (with sanitized DSN)
+	sanitizedDSN := fmt.Sprintf("%s:***@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		store.Settings.Output.MySQL.Username,
+		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
+		store.Settings.Output.MySQL.Database)
+	datastoreLogger.Info("Opening MySQL database connection",
+		"dsn", sanitizedDSN)
 
 	// Configure GORM logger with metrics if available
 	var gormLogger logger.Interface
@@ -56,6 +64,12 @@ func (store *MySQLStore) Open() error {
 
 	store.DB = db
 	
+	// Log successful connection
+	datastoreLogger.Info("MySQL database opened successfully",
+		"host", store.Settings.Output.MySQL.Host,
+		"port", store.Settings.Output.MySQL.Port,
+		"database", store.Settings.Output.MySQL.Database)
+	
 	if err := performAutoMigration(db, store.Settings.Debug, "MySQL", dsn); err != nil {
 		return err
 	}
@@ -75,19 +89,33 @@ func (store *MySQLStore) Close() error {
 	if store.DB == nil {
 		return fmt.Errorf("database connection is not initialized")
 	}
+	
+	// Log database closing
+	datastoreLogger.Info("Closing MySQL database connection",
+		"host", store.Settings.Output.MySQL.Host,
+		"database", store.Settings.Output.MySQL.Database)
 
 	// Retrieve the generic database object from the GORM DB object
 	sqlDB, err := store.DB.DB()
 	if err != nil {
-		log.Printf("Failed to retrieve generic DB object: %v\n", err)
+		datastoreLogger.Error("Failed to retrieve generic DB object",
+			"error", err)
 		return err
 	}
 
 	// Close the generic database object, which closes the underlying SQL database connection
 	if err := sqlDB.Close(); err != nil {
-		log.Printf("Failed to close MySQL database: %v\n", err)
+		datastoreLogger.Error("Failed to close MySQL database",
+			"host", store.Settings.Output.MySQL.Host,
+			"database", store.Settings.Output.MySQL.Database,
+			"error", err)
 		return err
 	}
+	
+	// Log successful closure
+	datastoreLogger.Info("MySQL database closed successfully",
+		"host", store.Settings.Output.MySQL.Host,
+		"database", store.Settings.Output.MySQL.Database)
 
 	return nil
 }

@@ -170,6 +170,10 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 func (s *SQLiteStore) Open() error {
 	// Get database path from settings
 	dbPath := s.Settings.Output.SQLite.Path
+	
+	// Log database opening
+	datastoreLogger.Info("Opening SQLite database",
+		"path", dbPath)
 
 	// Create database directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -232,6 +236,12 @@ func (s *SQLiteStore) Open() error {
 
 	// Store the database connection
 	s.DB = db
+	
+	// Log successful connection
+	datastoreLogger.Info("SQLite database opened successfully",
+		"path", dbPath,
+		"journal_mode", "WAL",
+		"synchronous", "NORMAL")
 
 	// Perform auto-migration
 	if err := performAutoMigration(db, s.Settings.Debug, "SQLite", dbPath); err != nil {
@@ -250,6 +260,10 @@ func (s *SQLiteStore) Open() error {
 // Close closes the SQLite database connection
 func (s *SQLiteStore) Close() error {
 	if s.DB != nil {
+		// Log database closing
+		datastoreLogger.Info("Closing SQLite database",
+			"path", s.Settings.Output.SQLite.Path)
+		
 		sqlDB, err := s.DB.DB()
 		if err != nil {
 			return errors.New(err).
@@ -258,7 +272,18 @@ func (s *SQLiteStore) Close() error {
 				Context("operation", "get_underlying_sqldb").
 				Build()
 		}
-		return sqlDB.Close()
+		
+		if err := sqlDB.Close(); err != nil {
+			datastoreLogger.Error("Failed to close SQLite database",
+				"path", s.Settings.Output.SQLite.Path,
+				"error", err)
+			return err
+		}
+		
+		// Log successful closure
+		datastoreLogger.Info("SQLite database closed successfully",
+			"path", s.Settings.Output.SQLite.Path)
+		return nil
 	}
 	return nil
 }
