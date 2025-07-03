@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // SSENotificationData represents notification data sent via SSE
@@ -117,12 +118,12 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		if c.Settings != nil && c.Settings.WebServer.Debug {
 			c.apiLogger.Debug("notification SSE client connected",
 				"clientId", clientID,
-				"ip", ctx.RealIP(),
+				"ip", privacy.AnonymizeURL(ctx.RealIP()),
 				"user_agent", ctx.Request().UserAgent())
 		} else {
 			c.apiLogger.Info("notification SSE client connected",
 				"clientId", clientID,
-				"ip", ctx.RealIP())
+				"ip", privacy.AnonymizeURL(ctx.RealIP()))
 		}
 	}
 
