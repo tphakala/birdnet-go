@@ -92,6 +92,9 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Subscribe to notifications
 	service := notification.GetService()
 	notificationCh, notificationCtx := service.Subscribe()
+	
+	// Ensure cleanup happens regardless of how we exit
+	defer service.Unsubscribe(notificationCh)
 
 	// Create notification client
 	client := &NotificationClient{
@@ -109,7 +112,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		"clientId": clientID,
 		"message":  "Connected to notification stream",
 	}); err != nil {
-		service.Unsubscribe(notificationCh)
+		// No need to unsubscribe here - defer will handle it
 		return err
 	}
 
@@ -131,7 +134,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	go func() {
 		<-ctx.Request().Context().Done()
 		client.Done <- true
-		service.Unsubscribe(notificationCh)
+		// No need to unsubscribe here - defer will handle it
 		if c.apiLogger != nil {
 			if c.Settings != nil && c.Settings.WebServer.Debug {
 				c.apiLogger.Debug("notification SSE client disconnected",
