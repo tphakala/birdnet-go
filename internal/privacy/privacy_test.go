@@ -33,10 +33,34 @@ func TestScrubMessage(t *testing.T) {
 			notContains: []string{"user", "pass", "cam1.local", "api.service.com"},
 		},
 		{
-			name:     "Message without URLs",
-			input:    "Simple error message without any URLs",
-			contains: []string{"Simple error message without any URLs"},
-			notContains: []string{"url-"},
+			name:     "Message with BirdWeather ID",
+			input:    "BirdWeather upload failed for ID abc123def456",
+			contains: []string{"upload failed for ID bw-[REDACTED]"},
+			notContains: []string{"abc123def456"},
+		},
+		{
+			name:     "Message with GPS coordinates",
+			input:    "Weather fetch failed for location 60.1699,24.9384",
+			contains: []string{"Weather fetch failed for location [LAT],[LON]"},
+			notContains: []string{"60.1699", "24.9384"},
+		},
+		{
+			name:     "Message with API token",
+			input:    "API call failed with token abc123XYZ789",
+			contains: []string{"API call failed with [API_TOKEN]"},
+			notContains: []string{"abc123XYZ789"},
+		},
+		{
+			name:     "Complex message with multiple sensitive data",
+			input:    "Failed to upload to rtsp://admin:pass@192.168.1.100:554/stream with BirdWeather ID abc123def and coordinates 60.1699,24.9384",
+			contains: []string{"Failed to upload to url-", "with bw-[REDACTED]", "[LAT],[LON]"},
+			notContains: []string{"admin", "pass", "192.168.1.100", "abc123def", "60.1699", "24.9384"},
+		},
+		{
+			name:     "Message without sensitive data",
+			input:    "Simple error message without any sensitive information",
+			contains: []string{"Simple error message without any sensitive information"},
+			notContains: []string{"url-", "bw-[REDACTED]", "[LAT],[LON]", "[API_TOKEN]"},
 		},
 		{
 			name:     "Empty message",
@@ -679,3 +703,234 @@ func TestIsHexChar(t *testing.T) {
 		})
 	}
 }
+func TestScrubBirdWeatherID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "BirdWeather ID with label",
+			input:    "BirdWeather ID: abc123def456",
+			expected: "bw-[REDACTED]",
+		},
+		{
+			name:     "Birdweather id lowercase",
+			input:    "birdweather id abc123def456",
+			expected: "bw-[REDACTED]",
+		},
+		{
+			name:     "ID without context (should not match)",
+			input:    "Upload failed for abc123def456",
+			expected: "Upload failed for abc123def456",
+		},
+		{
+			name:     "Multiple BirdWeather IDs",
+			input:    "BirdWeather ID abc123def456 and retry with birdweather id xyz789abc012",
+			expected: "bw-[REDACTED] and bw-[REDACTED]",
+		},
+		{
+			name:     "Mixed with equals sign",
+			input:    "BirdweatherID=abc123def456",
+			expected: "bw-[REDACTED]",
+		},
+		{
+			name:     "No BirdWeather ID",
+			input:    "Normal error message",
+			expected: "Normal error message",
+		},
+		{
+			name:     "Short ID (should not match)",
+			input:    "BirdWeather ID abc123",
+			expected: "BirdWeather ID abc123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubBirdWeatherID(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestScrubCoordinates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Decimal coordinates with comma",
+			input:    "Location 60.1699,24.9384",
+			expected: "Location [LAT],[LON]",
+		},
+		{
+			name:     "Coordinates with lat/lng labels",
+			input:    "lat=60.1699 lng=24.9384",
+			expected: "[LAT],[LON]",
+		},
+		{
+			name:     "Coordinates with latitude/longitude labels",
+			input:    "latitude: 60.1699, longitude: 24.9384",
+			expected: "[LAT],[LON]",
+		},
+		{
+			name:     "Negative coordinates",
+			input:    "Position -45.123,122.456",
+			expected: "Position [LAT],[LON]",
+		},
+		{
+			name:     "Coordinates with spaces",
+			input:    "GPS 60.1699 24.9384",
+			expected: "GPS [LAT],[LON]",
+		},
+		{
+			name:     "Multiple coordinate pairs",
+			input:    "From 60.1699,24.9384 to 61.4981,23.7610",
+			expected: "From [LAT],[LON] to [LAT],[LON]",
+		},
+		{
+			name:     "No coordinates",
+			input:    "Normal message without coordinates",
+			expected: "Normal message without coordinates",
+		},
+		{
+			name:     "Integer coordinates",
+			input:    "Location 60,24",
+			expected: "Location [LAT],[LON]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubCoordinates(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestScrubAPITokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "API key with colon",
+			input:    "api_key: abc123XYZ789",
+			expected: "api_key: [API_TOKEN]",
+		},
+		{
+			name:     "Token with equals",
+			input:    "token=abc123XYZ789+/==",
+			expected: "token: [API_TOKEN]",
+		},
+		{
+			name:     "API-key with hyphen (no space)",
+			input:    "api-key abc123XYZ789",
+			expected: "api-key abc123XYZ789",
+		},
+		{
+			name:     "Secret token",
+			input:    "secret: abc123XYZ789+/",
+			expected: "secret: [API_TOKEN]",
+		},
+		{
+			name:     "Auth token",
+			input:    "auth=abc123XYZ789",
+			expected: "auth: [API_TOKEN]",
+		},
+		{
+			name:     "Multiple tokens",
+			input:    "Using api_key: abc123token and token=xyz789token",
+			expected: "Using api_key: [API_TOKEN] and token: [API_TOKEN]",
+		},
+		{
+			name:     "No tokens",
+			input:    "Normal message without tokens",
+			expected: "Normal message without tokens",
+		},
+		{
+			name:     "Short token (should not match)",
+			input:    "api_key: abc123",
+			expected: "api_key: abc123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubAPITokens(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestScrubAllSensitiveData(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		contains []string
+		notContains []string
+	}{
+		{
+			name:  "Message with all sensitive data types",
+			input: "Failed upload to rtsp://admin:pass@192.168.1.100:554 with BirdWeather ID abc123def456 at location 60.1699,24.9384 using api_key: secret123token",
+			contains: []string{"Failed upload to url-", "with bw-[REDACTED]", "[LAT],[LON]", "[API_TOKEN]"},
+			notContains: []string{"admin", "pass", "192.168.1.100", "abc123def456", "60.1699", "24.9384", "secret123token"},
+		},
+		{
+			name:  "Message with partial sensitive data",
+			input: "Weather service error for coordinates 45.123,-122.456",
+			contains: []string{"Weather service error for coordinates [LAT],[LON]"},
+			notContains: []string{"45.123", "-122.456"},
+		},
+		{
+			name:  "Clean message",
+			input: "Normal operation completed successfully",
+			contains: []string{"Normal operation completed successfully"},
+			notContains: []string{"url-", "bw-[REDACTED]", "[LAT],[LON]", "[API_TOKEN]"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubAllSensitiveData(tt.input)
+			
+			for _, expected := range tt.contains {
+				if !strings.Contains(result, expected) {
+					t.Errorf("Expected result to contain %q, but got: %s", expected, result)
+				}
+			}
+			
+			for _, unexpected := range tt.notContains {
+				if strings.Contains(result, unexpected) {
+					t.Errorf("Expected result to NOT contain %q, but got: %s", unexpected, result)
+				}
+			}
+		})
+	}
+}
+

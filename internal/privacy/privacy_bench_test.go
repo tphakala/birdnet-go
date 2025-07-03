@@ -237,6 +237,101 @@ func BenchmarkPrivacyFunctionsComparison(b *testing.B) {
 	})
 }
 
+// BenchmarkScrubBirdWeatherID tests performance of BirdWeather ID scrubbing
+func BenchmarkScrubBirdWeatherID(b *testing.B) {
+	messages := []string{
+		"BirdWeather ID: abc123def456789",
+		"birdweather id xyz789abc012345",
+		"Upload failed for normal text without BirdWeather context",
+		"Error with BirdweatherID=test123456789",
+	}
+	
+	b.ReportAllocs()
+	
+	for b.Loop() {
+		for _, msg := range messages {
+			_ = ScrubBirdWeatherID(msg)
+		}
+	}
+}
+
+// BenchmarkScrubCoordinates tests performance of GPS coordinate scrubbing
+func BenchmarkScrubCoordinates(b *testing.B) {
+	messages := []string{
+		"Location 60.1699,24.9384",
+		"Weather service error for coordinates lat=45.123,lng=-122.456",
+		"GPS position -33.8688,151.2093",
+		"Normal message without coordinates",
+	}
+	
+	b.ReportAllocs()
+	
+	for b.Loop() {
+		for _, msg := range messages {
+			_ = ScrubCoordinates(msg)
+		}
+	}
+}
+
+// BenchmarkScrubAPITokens tests performance of API token scrubbing
+func BenchmarkScrubAPITokens(b *testing.B) {
+	messages := []string{
+		"api_key: abc123XYZ789token",
+		"token=xyz789ABC123token",
+		"secret: verylongbase64encodedtoken123+/==",
+		"Normal message without any tokens",
+	}
+	
+	b.ReportAllocs()
+	
+	for b.Loop() {
+		for _, msg := range messages {
+			_ = ScrubAPITokens(msg)
+		}
+	}
+}
+
+// BenchmarkScrubAllSensitiveData tests performance of comprehensive scrubbing
+func BenchmarkScrubAllSensitiveData(b *testing.B) {
+	message := "Failed upload to rtsp://admin:pass@192.168.1.100:554 with BirdWeather ID abc123def456 at location 60.1699,24.9384 using api_key: secret123token"
+	
+	b.ReportAllocs()
+	
+	for b.Loop() {
+		_ = ScrubAllSensitiveData(message)
+	}
+}
+
+// BenchmarkNewPrivacyFunctions compares performance of new privacy functions
+func BenchmarkNewPrivacyFunctions(b *testing.B) {
+	testData := map[string]string{
+		"BirdWeatherID": "BirdWeather ID: abc123def456789",
+		"Coordinates":   "Weather error for location 60.1699,24.9384",
+		"APIToken":      "Authentication failed with api_key: abc123XYZ789token",
+	}
+	
+	b.Run("ScrubBirdWeatherID", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = ScrubBirdWeatherID(testData["BirdWeatherID"])
+		}
+	})
+	
+	b.Run("ScrubCoordinates", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = ScrubCoordinates(testData["Coordinates"])
+		}
+	})
+	
+	b.Run("ScrubAPITokens", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = ScrubAPITokens(testData["APIToken"])
+		}
+	})
+}
+
 // BenchmarkRegexVsStringOperations compares regex vs string operations performance
 func BenchmarkRegexVsStringOperations(b *testing.B) {
 	rtspURL := "rtsp://admin:password@192.168.1.100:554/stream1"
