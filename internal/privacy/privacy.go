@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,25 +18,27 @@ var (
 	// URL pattern for finding URLs in text
 	urlPattern = regexp.MustCompile(`\b(?:https?|rtsp|rtmp)://\S+`)
 	
-	// IPv4 pattern for IP address detection
-	ipv4Pattern = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
 	
-	// BirdWeather ID pattern - matches IDs with explicit BirdWeather context
-	birdWeatherIDPattern = regexp.MustCompile(`(?i)birdweather\s*(?:id|identifier)?[:=]?\s*([A-Za-z0-9]{8,32})`)
-	
-	// GPS coordinates pattern - matches decimal degree coordinates
-	coordinatesPattern = regexp.MustCompile(`(?:(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
+	// GPS coordinates pattern - matches decimal degree coordinates  
+	coordinatesPattern = regexp.MustCompile(`(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*[,\s]+(?:lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*|(?:lat(?:itude)?[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
 	
 	// Generic API token/key pattern - matches tokens with clear context
-	apiTokenPattern = regexp.MustCompile(`(?:api[_-]?key|token|secret|auth)[:=]\s*([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+	apiTokenPattern = regexp.MustCompile(`(?:api[_-]?key|token|secret|auth)[:=]\s*([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)|(?:with\s+(?:token|key|secret|auth)\s+)([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
 )
+
+// Common two-part TLDs that need special handling
+var commonTwoPartTLDs = map[string]bool{
+	"co.uk": true, "co.nz": true, "co.za": true, "co.jp": true,
+	"gov.uk": true, "gov.au": true, "gov.ca": true,
+	"ac.uk": true, "edu.au": true, "org.uk": true,
+	"net.au": true, "com.au": true,
+}
 
 // ScrubMessage removes or anonymizes sensitive information from telemetry messages
 // It finds URLs and other sensitive data in the message and replaces them with anonymized versions
 func ScrubMessage(message string) string {
 	// Apply all scrubbing functions in sequence
 	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
-	result = ScrubBirdWeatherID(result)
 	result = ScrubCoordinates(result)
 	result = ScrubAPITokens(result)
 	return result
@@ -169,18 +172,6 @@ func IsValidSystemID(id string) bool {
 	return true
 }
 
-// ScrubBirdWeatherID removes or anonymizes BirdWeather IDs from text messages
-// It replaces BirdWeather IDs with a generic placeholder while preserving message structure
-func ScrubBirdWeatherID(message string) string {
-	return birdWeatherIDPattern.ReplaceAllStringFunc(message, func(match string) string {
-		// Check if this is a BirdWeather context match
-		if strings.Contains(strings.ToLower(match), "birdweather") || strings.Contains(strings.ToLower(match), "id") {
-			return "bw-[REDACTED]"
-		}
-		// For standalone alphanumeric strings that might be BirdWeather IDs, be more conservative
-		return "bw-[REDACTED]"
-	})
-}
 
 // ScrubCoordinates removes or anonymizes GPS coordinates from text messages
 // It replaces coordinate pairs with generic placeholders while preserving message structure
@@ -192,23 +183,20 @@ func ScrubCoordinates(message string) string {
 // It replaces tokens with generic placeholders while preserving message structure
 func ScrubAPITokens(message string) string {
 	return apiTokenPattern.ReplaceAllStringFunc(message, func(match string) string {
-		// Replace the entire match with a placeholder, preserving any prefixes
-		if strings.Contains(match, ":") || strings.Contains(match, "=") {
-			parts := strings.FieldsFunc(match, func(r rune) bool { return r == ':' || r == '=' })
-			if len(parts) >= 2 {
-				return parts[0] + ": [API_TOKEN]"
-			}
-		}
-		return "[API_TOKEN]"
+		// Use regex to find and replace just the token part within the match
+		tokenRegex := regexp.MustCompile(`([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+		result := tokenRegex.ReplaceAllString(match, "[API_TOKEN]")
+		// Normalize separators to colon for consistency
+		result = regexp.MustCompile(`=\s*`).ReplaceAllString(result, ": ")
+		return result
 	})
 }
 
 // ScrubAllSensitiveData applies all privacy scrubbing functions to the input message
-// This is a convenience function that applies URL, BirdWeather ID, coordinate, and token scrubbing
+// This is a convenience function that applies URL, coordinate, and token scrubbing
 func ScrubAllSensitiveData(message string) string {
 	// Apply all scrubbing functions in sequence
 	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
-	result = ScrubBirdWeatherID(result)
 	result = ScrubCoordinates(result)
 	result = ScrubAPITokens(result)
 	return result
@@ -221,7 +209,7 @@ func categorizeHost(host string) string {
 		return "localhost"
 	}
 
-	// Check for private IP ranges
+	// Check for private IP ranges using RFC-compliant detection
 	if isPrivateIP(host) {
 		return "private-ip"
 	}
@@ -231,14 +219,28 @@ func categorizeHost(host string) string {
 		return "public-ip"
 	}
 
-	// For domain names, preserve TLD only
+	// For domain names, handle multi-part TLDs properly
+	return categorizeDomain(host)
+}
+
+// categorizeDomain properly handles domain classification including multi-part TLDs
+func categorizeDomain(host string) string {
 	parts := strings.Split(host, ".")
-	if len(parts) >= 2 {
-		tld := parts[len(parts)-1]
-		return "domain-" + tld
+	if len(parts) < 2 {
+		return "unknown-host"
 	}
 
-	return "unknown-host"
+	// Check for common two-part TLDs (e.g., co.uk, gov.au)
+	if len(parts) >= 3 {
+		twoPartTLD := parts[len(parts)-2] + "." + parts[len(parts)-1]
+		if commonTwoPartTLDs[strings.ToLower(twoPartTLD)] {
+			return "domain-" + strings.ToLower(twoPartTLD)
+		}
+	}
+
+	// Use the last part as TLD for regular domains
+	tld := parts[len(parts)-1]
+	return "domain-" + strings.ToLower(tld)
 }
 
 // anonymizePath creates a structure-preserving but privacy-safe path representation
@@ -274,37 +276,38 @@ func anonymizePath(path string) string {
 	return strings.Join(anonymizedSegments, "/")
 }
 
-// isPrivateIP checks if the host is a private IP address (both IPv4 and IPv6)
+// isPrivateIP checks if the host is a private IP address using net.ParseIP and enhanced classification
 func isPrivateIP(host string) bool {
-	privateRanges := []string{
-		// IPv4 private ranges
-		"10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
-		"172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-		"192.168.", "169.254.",
-		// IPv6 private ranges
-		"fc00:", "fd00:", // Unique local addresses
-		"fe80:",                   // Link-local addresses
-		"::1",                     // Loopback
-		"ff00:", "ff01:", "ff02:", // Multicast
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
 	}
-
-	for _, prefix := range privateRanges {
-		if strings.HasPrefix(strings.ToLower(host), strings.ToLower(prefix)) {
-			return true
-		}
+	
+	// Check for RFC 1918 private addresses using IsPrivate()
+	if ip.IsPrivate() {
+		return true
 	}
+	
+	// Check for additional "internal" ranges that should be considered private for privacy purposes
+	if ip.IsLoopback() {
+		return true
+	}
+	
+	if ip.IsLinkLocalUnicast() {
+		return true
+	}
+	
+	// Check for IPv6 multicast that should be considered internal
+	if ip.IsMulticast() && ip.To4() == nil {
+		return true
+	}
+	
 	return false
 }
 
-// isIPAddress checks if the host looks like an IP address
+// isIPAddress checks if the host is a valid IP address using net.ParseIP
 func isIPAddress(host string) bool {
-	// Check for IPv4 using pre-compiled pattern
-	if ipv4Pattern.MatchString(host) {
-		return true
-	}
-
-	// Check for IPv6 (contains colons)
-	return strings.Contains(host, ":")
+	return net.ParseIP(host) != nil
 }
 
 // isCommonStreamName checks if a path segment is a common, non-sensitive stream name
