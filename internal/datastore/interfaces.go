@@ -413,7 +413,7 @@ func (ds *DataStore) Dialector() gorm.Dialector {
 // GetHourFormat returns the database-specific SQL fragment for formatting a time column as hour.
 func (ds *DataStore) GetHourFormat() string {
 	// Handling for supported databases: SQLite and MySQL
-	switch ds.Dialector().Name() {
+	switch strings.ToLower(ds.Dialector().Name()) {
 	case "sqlite":
 		return "strftime('%H', time)"
 	case "mysql":
