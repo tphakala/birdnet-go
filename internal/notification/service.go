@@ -9,8 +9,6 @@ import (
 	"log/slog"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // Subscriber represents a notification subscriber
@@ -31,6 +29,7 @@ type Service struct {
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
 	logger        *slog.Logger
+	config        *ServiceConfig
 }
 
 // ServiceConfig holds configuration for the notification service
@@ -72,7 +71,8 @@ func NewService(config *ServiceConfig) *Service {
 		cleanupTicker: time.NewTicker(config.CleanupInterval),
 		ctx:           ctx,
 		cancel:        cancel,
-		logger:        logging.ForService("notification"),
+		logger:        getFileLogger(config.Debug),
+		config:        config,
 	}
 
 	// Start background cleanup

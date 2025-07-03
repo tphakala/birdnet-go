@@ -97,7 +97,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 			state:  "closed",
 			config: config,
 		},
-		logger: getLoggerSafe("notification-worker"),
+		logger: getFileLogger(config.Debug),
 	}
 	
 	// Pre-compile templates
