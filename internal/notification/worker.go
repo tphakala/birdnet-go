@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // getLoggerSafe returns a logger for the service, falling back to default if logging not initialized
@@ -152,7 +153,8 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		w.logger.Debug("processing error event",
 			"component", event.GetComponent(),
 			"category", event.GetCategory(),
-			"error_message_length", len(event.GetMessage()))
+			"error_message_length", len(event.GetMessage()),
+			"context", scrubContextMap(event.GetContext()))
 	}
 	
 	// Check circuit breaker
@@ -203,7 +205,7 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		}
 		
 		w.logger.Error("failed to create notification",
-			"error", err,
+			"error", privacy.ScrubMessage(err.Error()),
 			"component", event.GetComponent(),
 			"category", event.GetCategory(),
 		)
@@ -232,7 +234,8 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 			"component", event.GetComponent(),
 			"category", event.GetCategory(),
 			"priority", priority,
-			"metadata_count", len(event.GetContext()))
+			"metadata_count", len(event.GetContext()),
+			"scrubbed_context", scrubContextMap(event.GetContext()))
 	}
 	
 	return nil
