@@ -1368,19 +1368,31 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 
 // SaveImageCache saves an image cache entry to the database
 func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
+	start := time.Now()
+	
 	if cache.ProviderName == "" {
-		return errors.Newf("provider name cannot be empty").
+		err := errors.Newf("provider name cannot be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_image_cache").
 			Build()
+		
+		datastoreLogger.Error("Invalid image cache data: empty provider name",
+			"error", err)
+		
+		return err
 	}
 	if cache.ScientificName == "" {
-		return errors.Newf("scientific name cannot be empty").
+		err := errors.Newf("scientific name cannot be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_image_cache").
 			Build()
+			
+		datastoreLogger.Error("Invalid image cache data: empty scientific name",
+			"error", err)
+			
+		return err
 	}
 
 	// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
@@ -1389,14 +1401,41 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
 		DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
 	}).Create(cache).Error; err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_image_cache").
-			Context("scientific_name", cache.ScientificName).
-			Context("provider", cache.ProviderName).
-			Build()
+		// Detect constraint violations
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			// This is expected with UPSERT, log at debug level
+			datastoreLogger.Debug("Image cache UPSERT handled constraint",
+				"scientific_name", cache.ScientificName,
+				"provider", cache.ProviderName)
+		} else {
+			enhancedErr := errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_image_cache").
+				Context("table", "image_caches").
+				Context("scientific_name", cache.ScientificName).
+				Context("provider", cache.ProviderName).
+				Build()
+			
+			datastoreLogger.Error("Failed to save image cache",
+				"error", enhancedErr)
+			
+			// Record error metric
+			if ds.metrics != nil {
+				ds.metrics.RecordImageCacheOperation("save", "error")
+				ds.metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
+			}
+			
+			return enhancedErr
+		}
 	}
+	
+	// Record success metric
+	if ds.metrics != nil {
+		ds.metrics.RecordImageCacheOperation("save", "success")
+		ds.metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
+	}
+	
 	return nil
 }
 

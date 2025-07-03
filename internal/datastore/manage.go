@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -239,6 +240,11 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 // performAutoMigration automates database migrations with error handling.
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
+	migrationStart := time.Now()
+	logger := datastoreLogger.With("db_type", dbType)
+	
+	logger.Info("Starting database migration")
+	
 	migrator := db.Migrator()
 	var schemaCorrect bool // Declare without initial assignment
 	var err error
@@ -247,24 +253,48 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	case "sqlite":
 		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
 		if err != nil {
-			return fmt.Errorf("failed to check SQLite schema for image_caches: %w", err)
+			enhancedErr := errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "schema_validation").
+				Context("db_type", dbType).
+				Context("table", "image_caches").
+				Build()
+			
+			logger.Error("Schema validation failed", "error", enhancedErr)
+			return enhancedErr
 		}
 	case "mysql":
 		// Need to extract dbName from connectionInfo for MySQL check
 		dbName := extractDBNameFromMySQLInfo(connectionInfo) // Helper function needed
 		if dbName == "" {
-			log.Printf("WARN: Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
+			logger.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
 			schemaCorrect = true // Avoid dropping if we can't check
 		} else {
 			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
 			if err != nil {
-				return fmt.Errorf("failed to check MySQL schema for image_caches: %w", err)
+				enhancedErr := errors.New(err).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "schema_validation").
+					Context("db_type", dbType).
+					Context("table", "image_caches").
+					Context("database", dbName).
+					Build()
+				
+				logger.Error("Schema validation failed", "error", enhancedErr)
+				return enhancedErr
 			}
 		}
 	default:
-		log.Printf("WARN: Unsupported database type '%s' for image_caches schema check. Assuming schema is correct.", dbType)
+		logger.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
+			"db_type", dbType)
 		schemaCorrect = true // Avoid dropping for unsupported types
 	}
+	
+	logger.Info("Schema validation completed",
+		"schema_correct", schemaCorrect,
+		"duration", time.Since(migrationStart))
 
 	if !schemaCorrect {
 		if migrator.HasTable(&ImageCache{}) {
