@@ -77,6 +77,7 @@ type CircuitBreaker struct {
 	lastFailureTime time.Time
 	successCount    int
 	config          *WorkerConfig
+	logger          *slog.Logger
 }
 
 // NewNotificationWorker creates a new notification worker
@@ -89,6 +90,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		config = DefaultWorkerConfig()
 	}
 	
+	logger := getFileLogger(config.Debug)
 	worker := &NotificationWorker{
 		service:   service,
 		templates: make(map[string]*template.Template),
@@ -96,8 +98,9 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		circuitBreaker: &CircuitBreaker{
 			state:  "closed",
 			config: config,
+			logger: logger,
 		},
-		logger: getFileLogger(config.Debug),
+		logger: logger,
 	}
 	
 	// Pre-compile templates
@@ -130,6 +133,11 @@ func (w *NotificationWorker) initTemplates() error {
 		w.templates[name] = tmpl
 	}
 	
+	if w.config.Debug {
+		w.logger.Debug("notification templates initialized",
+			"template_count", len(templates))
+	}
+	
 	return nil
 }
 
@@ -140,6 +148,13 @@ func (w *NotificationWorker) Name() string {
 
 // ProcessEvent processes a single error event
 func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
+	if w.config.Debug {
+		w.logger.Debug("processing error event",
+			"component", event.GetComponent(),
+			"category", event.GetCategory(),
+			"error_message_length", len(event.GetMessage()))
+	}
+	
 	// Check circuit breaker
 	if !w.circuitBreaker.Allow() {
 		w.eventsDropped.Add(1)
@@ -211,12 +226,14 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		}
 	}
 	
-	w.logger.Debug("created error notification",
-		"notification_id", notification.ID,
-		"component", event.GetComponent(),
-		"category", event.GetCategory(),
-		"priority", priority,
-	)
+	if w.config.Debug {
+		w.logger.Debug("created error notification",
+			"notification_id", notification.ID,
+			"component", event.GetComponent(),
+			"category", event.GetCategory(),
+			"priority", priority,
+			"metadata_count", len(event.GetContext()))
+	}
 	
 	return nil
 }
@@ -225,6 +242,11 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
 	if len(errorEvents) == 0 {
 		return nil
+	}
+	
+	if w.config.Debug {
+		w.logger.Debug("processing event batch",
+			"batch_size", len(errorEvents))
 	}
 	
 	// Group events by component and category for aggregation
@@ -475,8 +497,15 @@ func (cb *CircuitBreaker) Allow() bool {
 	case "open":
 		// Check if we should transition to half-open
 		if time.Since(cb.lastFailureTime) > cb.config.RecoveryTimeout {
+			oldState := cb.state
 			cb.state = "half-open"
 			cb.successCount = 0
+			if cb.config.Debug && cb.logger != nil {
+				cb.logger.Debug("circuit breaker state transition",
+					"from", oldState,
+					"to", cb.state,
+					"recovery_timeout", cb.config.RecoveryTimeout)
+			}
 			return true
 		}
 		return false
@@ -500,7 +529,14 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	if cb.state == "half-open" {
 		cb.successCount++
 		if cb.successCount >= cb.config.HalfOpenMaxEvents {
+			oldState := cb.state
 			cb.state = "closed"
+			if cb.config.Debug && cb.logger != nil {
+				cb.logger.Debug("circuit breaker state transition",
+					"from", oldState,
+					"to", cb.state,
+					"reason", "successful operations threshold reached")
+			}
 		}
 	}
 }
@@ -514,11 +550,26 @@ func (cb *CircuitBreaker) RecordFailure() {
 	cb.lastFailureTime = time.Now()
 	
 	if cb.failures >= cb.config.FailureThreshold {
+		oldState := cb.state
 		cb.state = "open"
+		if cb.config.Debug && cb.logger != nil && oldState != "open" {
+			cb.logger.Debug("circuit breaker state transition",
+				"from", oldState,
+				"to", cb.state,
+				"failures", cb.failures,
+				"threshold", cb.config.FailureThreshold)
+		}
 	}
 	
 	if cb.state == "half-open" {
+		oldState := cb.state
 		cb.state = "open"
+		if cb.config.Debug && cb.logger != nil {
+			cb.logger.Debug("circuit breaker state transition",
+				"from", oldState,
+				"to", cb.state,
+				"reason", "failure in half-open state")
+		}
 	}
 }
 
