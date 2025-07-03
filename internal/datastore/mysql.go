@@ -55,7 +55,18 @@ func (store *MySQLStore) Open() error {
 	}
 
 	store.DB = db
-	return performAutoMigration(db, store.Settings.Debug, "MySQL", dsn)
+	
+	if err := performAutoMigration(db, store.Settings.Debug, "MySQL", dsn); err != nil {
+		return err
+	}
+	
+	// Start monitoring if metrics are available
+	if store.metrics != nil {
+		// Default intervals: 30s for connection pool, 5m for database stats
+		store.StartMonitoring(30*time.Second, 5*time.Minute)
+	}
+	
+	return nil
 }
 
 // Close MySQL database connections
