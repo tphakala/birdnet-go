@@ -238,6 +238,12 @@ func (s *SQLiteStore) Open() error {
 		return err
 	}
 
+	// Start monitoring if metrics are available
+	if s.metrics != nil {
+		// Default intervals: 30s for connection pool, 5m for database stats
+		s.StartMonitoring(30*time.Second, 5*time.Minute)
+	}
+
 	return nil
 }
 
