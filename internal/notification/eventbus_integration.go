@@ -24,6 +24,8 @@ func init() {
 // InitializeEventBusIntegration sets up the notification worker as an event consumer
 // This should be called after both the notification service and event bus are initialized
 func InitializeEventBusIntegration() error {
+	logger.Info("initializing notification event bus integration")
+	
 	// Check if notification service is initialized
 	if !IsInitialized() {
 		logger.Warn("notification service not initialized, skipping event bus integration")
@@ -68,8 +70,13 @@ func InitializeEventBusIntegration() error {
 	notificationWorker = worker
 	
 	logger.Info("notification worker registered with event bus",
+		"consumer", worker.Name(),
+		"supports_batching", worker.SupportsBatching(),
 		"batching_enabled", config.BatchingEnabled,
+		"batch_size", config.BatchSize,
+		"batch_timeout", config.BatchTimeout,
 		"circuit_breaker_threshold", config.FailureThreshold,
+		"recovery_timeout", config.RecoveryTimeout,
 		"debug", config.Debug,
 	)
 	
