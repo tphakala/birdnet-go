@@ -131,14 +131,21 @@ func TestInMemoryStoreDeleteExpired(t *testing.T) {
 
 	store := NewInMemoryStore(100)
 
-	// Create notifications with expiry
-	notif1 := NewNotification(TypeInfo, PriorityMedium, "Test 1", "Message 1").
-		WithExpiry(1 * time.Millisecond) // Will expire quickly
-	notif2 := NewNotification(TypeWarning, PriorityHigh, "Test 2", "Message 2").
-		WithExpiry(1 * time.Hour) // Won't expire during test
-	notif3 := NewNotification(TypeError, PriorityCritical, "Test 3", "Message 3").
-		WithExpiry(1 * time.Millisecond) // Will expire quickly
+	// Create notifications
+	notif1 := NewNotification(TypeInfo, PriorityMedium, "Test 1", "Message 1")
+	notif2 := NewNotification(TypeWarning, PriorityHigh, "Test 2", "Message 2")
+	notif3 := NewNotification(TypeError, PriorityCritical, "Test 3", "Message 3")
 	notif3.MarkAsRead() // This one is read
+
+	// Set expiry times deterministically
+	// notif1 and notif3 are expired (1 hour ago)
+	pastTime := time.Now().Add(-1 * time.Hour)
+	notif1.ExpiresAt = &pastTime
+	notif3.ExpiresAt = &pastTime
+	
+	// notif2 expires in the future (1 hour from now)
+	futureTime := time.Now().Add(1 * time.Hour)
+	notif2.ExpiresAt = &futureTime
 
 	// Save all notifications
 	for _, notif := range []*Notification{notif1, notif2, notif3} {
@@ -157,10 +164,7 @@ func TestInMemoryStoreDeleteExpired(t *testing.T) {
 		t.Errorf("Expected initial unread count to be 2, got %d", count)
 	}
 
-	// Wait for expiry
-	time.Sleep(5 * time.Millisecond)
-
-	// Delete expired notifications
+	// Delete expired notifications (no sleep needed!)
 	err = store.DeleteExpired()
 	if err != nil {
 		t.Fatalf("DeleteExpired failed: %v", err)
@@ -183,6 +187,17 @@ func TestInMemoryStoreDeleteExpired(t *testing.T) {
 	if retrieved == nil {
 		t.Error("Expected notif2 to still exist")
 	}
+	
+	// Verify notif1 and notif3 were deleted
+	retrieved1, _ := store.Get(notif1.ID)
+	if retrieved1 != nil {
+		t.Error("Expected notif1 to be deleted")
+	}
+	
+	retrieved3, _ := store.Get(notif3.ID)
+	if retrieved3 != nil {
+		t.Error("Expected notif3 to be deleted")
+	}
 }
 
 // TestInMemoryStoreMaxSize tests that unread count is maintained when old notifications are removed
@@ -193,10 +208,11 @@ func TestInMemoryStoreMaxSize(t *testing.T) {
 
 	// Create 4 notifications (more than max size)
 	notifications := make([]*Notification, 4)
+	baseTime := time.Now()
 	for i := range 4 {
 		notifications[i] = NewNotification(TypeInfo, PriorityMedium, "Test", "Message")
-		// Add small delay to ensure different timestamps
-		time.Sleep(1 * time.Millisecond)
+		// Set timestamps deterministically to ensure ordering
+		notifications[i].Timestamp = baseTime.Add(time.Duration(i) * time.Second)
 		err := store.Save(notifications[i])
 		if err != nil {
 			t.Fatalf("Failed to save notification %d: %v", i, err)

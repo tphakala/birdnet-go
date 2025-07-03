@@ -123,7 +123,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		} else {
 			c.apiLogger.Info("notification SSE client connected",
 				"clientId", clientID,
-				"ip", privacy.AnonymizeURL(ctx.RealIP()))
+				"ip", privacy.AnonymizeIP(ctx.RealIP()))
 		}
 	}
 
