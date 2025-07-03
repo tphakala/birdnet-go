@@ -316,13 +316,31 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	// Perform the auto-migration for all necessary tables.
 	// GORM's AutoMigrate will handle creating tables if they don't exist,
 	// and adding missing columns (like 'source_provider' to 'image_caches') to existing tables.
-	if err := db.AutoMigrate(&Note{}, &Results{}, &NoteReview{}, &NoteComment{}, &DailyEvents{}, &HourlyWeather{}, &NoteLock{}, &ImageCache{}); err != nil {
-		return fmt.Errorf("failed to auto-migrate %s database: %w", dbType, err)
+	tables := []interface{}{
+		&Note{}, &Results{}, &NoteReview{}, &NoteComment{},
+		&DailyEvents{}, &HourlyWeather{}, &NoteLock{}, &ImageCache{},
 	}
-
-	if debug {
-		log.Printf("%s database initialized successfully", dbType)
+	
+	migrationLogger.Info("Starting table migrations",
+		"table_count", len(tables))
+	
+	if err := db.AutoMigrate(tables...); err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "auto_migrate").
+			Context("db_type", dbType).
+			Build()
+		
+		migrationLogger.Error("Table migration failed", "error", enhancedErr)
+		return enhancedErr
 	}
+	
+	// Log successful migration completion
+	migrationLogger.Info("Database migration completed successfully",
+		"db_type", dbType,
+		"total_duration", time.Since(migrationStart),
+		"tables_migrated", len(tables))
 
 	return nil
 }
