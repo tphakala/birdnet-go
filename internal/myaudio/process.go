@@ -86,12 +86,10 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 		Source:      source,
 	}
 
-	// Create a deep copy of the Results struct
-	copyToSend := resultsMessage.Copy()
-
 	// Send the results to the queue
+	// Note: No copy needed - ownership transfers to the queue consumer
 	select {
-	case birdnet.ResultsQueue <- copyToSend:
+	case birdnet.ResultsQueue <- resultsMessage:
 		// Results enqueued successfully
 	default:
 		log.Println("❌ Results queue is full!")
