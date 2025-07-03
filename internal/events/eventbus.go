@@ -3,13 +3,50 @@ package events
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 	
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"log/slog"
 )
+
+// Package-level logger for event bus operations
+var (
+	logger      *slog.Logger
+	levelVar    = new(slog.LevelVar) // Dynamic level control
+	closeLogger func() error
+)
+
+func init() {
+	var err error
+	// Define log file path for events service
+	logFilePath := filepath.Join("logs", "events.log")
+	initialLevel := slog.LevelInfo // Default to Info, Debug when debugging
+	levelVar.Set(initialLevel)
+
+	// Initialize the service-specific file logger
+	logger, closeLogger, err = logging.NewFileLogger(logFilePath, "events", levelVar)
+	if err != nil {
+		// Fallback to standard logging with enhanced error
+		descriptiveErr := errors.Newf("events: failed to initialize file logger: %v", err).
+			Component("events").
+			Category(errors.CategoryFileIO).
+			Context("log_file", logFilePath).
+			Context("operation", "logger_initialization").
+			Build()
+		log.Printf("Failed to initialize events file logger: %v", descriptiveErr)
+		
+		// Fallback to disabled logger that respects level var
+		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: levelVar})
+		logger = slog.New(fbHandler).With("service", "events")
+		closeLogger = func() error { return nil }
+	}
+}
 
 // EventBus provides asynchronous event processing with non-blocking guarantees
 type EventBus struct {
@@ -17,6 +54,7 @@ type EventBus struct {
 	eventChan chan ErrorEvent
 	
 	// Configuration
+	config     *Config
 	bufferSize int
 	workers    int
 	
@@ -83,6 +121,7 @@ type Config struct {
 	BufferSize    int
 	Workers       int
 	Enabled       bool
+	Debug         bool // Enable debug logging
 	Deduplication *DeduplicationConfig
 }
 
@@ -106,17 +145,16 @@ func Initialize(config *Config) (*EventBus, error) {
 		return nil, nil
 	}
 	
+	// Set logger level based on debug flag
+	if config.Debug {
+		levelVar.Set(slog.LevelDebug)
+	}
+	
 	// Create new event bus
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	// Get logger (may be nil if logging not initialized yet)
-	logger := logging.ForService("events")
-	if logger == nil {
-		// Use default logger if logging system not initialized
-		logger = slog.Default().With("service", "events")
-	}
-	
 	eb := &EventBus{
+		config:     config,
 		eventChan:  make(chan ErrorEvent, config.BufferSize),
 		bufferSize: config.BufferSize,
 		workers:    config.Workers,
@@ -140,6 +178,8 @@ func Initialize(config *Config) (*EventBus, error) {
 	eb.logger.Info("event bus initialized",
 		"buffer_size", config.BufferSize,
 		"workers", config.Workers,
+		"debug", config.Debug,
+		"deduplication", config.Deduplication != nil && config.Deduplication.Enabled,
 	)
 	
 	return eb, nil
