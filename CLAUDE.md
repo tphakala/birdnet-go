@@ -289,3 +289,29 @@ When multiple PRs are being developed in parallel:
   - Update `interface{}` to `any` when touching code
   - Use modern range syntax (`for range n` instead of `for i := 0; i < n; i++`)
   - Apply consistent patterns across the codebase
+
+## Privacy Package Guidelines (Lessons from internal/privacy code review)
+
+### IP Address Parsing and Classification
+- **Use `net.ParseIP()` for correctness & simplicity**: Custom string parsing is error-prone and incomplete
+- **Leverage `ip.IsPrivate()` (Go 1.24+)**: Provides full RFC compliance with less code
+- **Address current limitations**:
+  - Prefix-checks miss important blocks such as `100.64.0.0/10` (CGNAT/carrier-grade NAT)
+  - Manual parsing mis-handles shortened IPv6 formats
+  - Using standard library functions ensures comprehensive coverage of all private IP ranges
+
+### Domain Classification Best Practices  
+- **TLD-only heuristic problems**: Current `categorizeHost()` keeps only the last label (e.g., `co.uk` → `domain-uk`)
+- **Issues with simple TLD extraction**:
+  - Loses useful context for debugging
+  - Collides unrelated domains under same generic label
+  - Mis-classifies multi-part TLDs (country code domains, etc.)
+- **Recommended solutions**:
+  - **Option 1**: Parse the public-suffix list using `golang.org/x/net/publicsuffix` for accurate domain classification
+  - **Option 2**: Handle common two-part TLDs manually (`.co.uk`, `.com.au`, etc.) for basic improvement
+  - **Benefit**: Better privacy protection while maintaining useful debugging context
+
+### Privacy Function Implementation
+- **Use standard library functions where available**: Reduces custom code complexity and improves correctness
+- **Validate against RFC specifications**: Ensure privacy functions handle edge cases correctly
+- **Consider international and modern network standards**: IPv6, CGNAT, and international domain structures

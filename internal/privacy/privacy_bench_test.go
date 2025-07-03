@@ -237,23 +237,6 @@ func BenchmarkPrivacyFunctionsComparison(b *testing.B) {
 	})
 }
 
-// BenchmarkScrubBirdWeatherID tests performance of BirdWeather ID scrubbing
-func BenchmarkScrubBirdWeatherID(b *testing.B) {
-	messages := []string{
-		"BirdWeather ID: abc123def456789",
-		"birdweather id xyz789abc012345",
-		"Upload failed for normal text without BirdWeather context",
-		"Error with BirdweatherID=test123456789",
-	}
-	
-	b.ReportAllocs()
-	
-	for b.Loop() {
-		for _, msg := range messages {
-			_ = ScrubBirdWeatherID(msg)
-		}
-	}
-}
 
 // BenchmarkScrubCoordinates tests performance of GPS coordinate scrubbing
 func BenchmarkScrubCoordinates(b *testing.B) {
@@ -293,7 +276,7 @@ func BenchmarkScrubAPITokens(b *testing.B) {
 
 // BenchmarkScrubAllSensitiveData tests performance of comprehensive scrubbing
 func BenchmarkScrubAllSensitiveData(b *testing.B) {
-	message := "Failed upload to rtsp://admin:pass@192.168.1.100:554 with BirdWeather ID abc123def456 at location 60.1699,24.9384 using api_key: secret123token"
+	message := "Failed upload to rtsp://admin:pass@192.168.1.100:554 at location 60.1699,24.9384 using api_key: secret123token"
 	
 	b.ReportAllocs()
 	
@@ -305,17 +288,9 @@ func BenchmarkScrubAllSensitiveData(b *testing.B) {
 // BenchmarkNewPrivacyFunctions compares performance of new privacy functions
 func BenchmarkNewPrivacyFunctions(b *testing.B) {
 	testData := map[string]string{
-		"BirdWeatherID": "BirdWeather ID: abc123def456789",
 		"Coordinates":   "Weather error for location 60.1699,24.9384",
 		"APIToken":      "Authentication failed with api_key: abc123XYZ789token",
 	}
-	
-	b.Run("ScrubBirdWeatherID", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			_ = ScrubBirdWeatherID(testData["BirdWeatherID"])
-		}
-	})
 	
 	b.Run("ScrubCoordinates", func(b *testing.B) {
 		b.ReportAllocs()

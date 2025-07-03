@@ -33,12 +33,6 @@ func TestScrubMessage(t *testing.T) {
 			notContains: []string{"user", "pass", "cam1.local", "api.service.com"},
 		},
 		{
-			name:     "Message with BirdWeather ID",
-			input:    "BirdWeather upload failed for ID abc123def456",
-			contains: []string{"upload failed for ID bw-[REDACTED]"},
-			notContains: []string{"abc123def456"},
-		},
-		{
 			name:     "Message with GPS coordinates",
 			input:    "Weather fetch failed for location 60.1699,24.9384",
 			contains: []string{"Weather fetch failed for location [LAT],[LON]"},
@@ -47,20 +41,20 @@ func TestScrubMessage(t *testing.T) {
 		{
 			name:     "Message with API token",
 			input:    "API call failed with token abc123XYZ789",
-			contains: []string{"API call failed with [API_TOKEN]"},
+			contains: []string{"API call failed with token [API_TOKEN]"},
 			notContains: []string{"abc123XYZ789"},
 		},
 		{
 			name:     "Complex message with multiple sensitive data",
-			input:    "Failed to upload to rtsp://admin:pass@192.168.1.100:554/stream with BirdWeather ID abc123def and coordinates 60.1699,24.9384",
-			contains: []string{"Failed to upload to url-", "with bw-[REDACTED]", "[LAT],[LON]"},
-			notContains: []string{"admin", "pass", "192.168.1.100", "abc123def", "60.1699", "24.9384"},
+			input:    "Failed to upload to rtsp://admin:pass@192.168.1.100:554/stream at coordinates 60.1699,24.9384",
+			contains: []string{"Failed to upload to url-", "[LAT],[LON]"},
+			notContains: []string{"admin", "pass", "192.168.1.100", "60.1699", "24.9384"},
 		},
 		{
 			name:     "Message without sensitive data",
 			input:    "Simple error message without any sensitive information",
 			contains: []string{"Simple error message without any sensitive information"},
-			notContains: []string{"url-", "bw-[REDACTED]", "[LAT],[LON]", "[API_TOKEN]"},
+			notContains: []string{"url-", "[LAT],[LON]", "[API_TOKEN]"},
 		},
 		{
 			name:     "Empty message",
@@ -356,6 +350,21 @@ func TestCategorizeHost(t *testing.T) {
 			expected: "domain-com",
 		},
 		{
+			name:     "Two-part TLD .co.uk",
+			input:    "example.co.uk",
+			expected: "domain-co.uk",
+		},
+		{
+			name:     "Subdomain with two-part TLD",
+			input:    "sub.example.co.uk",
+			expected: "domain-co.uk",
+		},
+		{
+			name:     "Australian domain",
+			input:    "test.com.au",
+			expected: "domain-com.au",
+		},
+		{
 			name:     "Unknown host",
 			input:    "unknown",
 			expected: "unknown-host",
@@ -487,7 +496,7 @@ func TestIsIPAddress(t *testing.T) {
 		{
 			name:     "Invalid IPv4 format",
 			input:    "999.999.999.999",
-			expected: true, // Our function doesn't validate ranges, just format
+			expected: false, // net.ParseIP validates ranges correctly
 		},
 		{
 			name:     "Not an IP",
@@ -703,7 +712,8 @@ func TestIsHexChar(t *testing.T) {
 		})
 	}
 }
-func TestScrubBirdWeatherID(t *testing.T) {
+
+func TestCategorizeDomain(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -712,39 +722,54 @@ func TestScrubBirdWeatherID(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "BirdWeather ID with label",
-			input:    "BirdWeather ID: abc123def456",
-			expected: "bw-[REDACTED]",
+			name:     "Simple .com domain",
+			input:    "example.com",
+			expected: "domain-com",
 		},
 		{
-			name:     "Birdweather id lowercase",
-			input:    "birdweather id abc123def456",
-			expected: "bw-[REDACTED]",
+			name:     "Two-part TLD .co.uk",
+			input:    "example.co.uk",
+			expected: "domain-co.uk",
 		},
 		{
-			name:     "ID without context (should not match)",
-			input:    "Upload failed for abc123def456",
-			expected: "Upload failed for abc123def456",
+			name:     "Government domain .gov.uk",
+			input:    "cabinet-office.gov.uk",
+			expected: "domain-gov.uk",
 		},
 		{
-			name:     "Multiple BirdWeather IDs",
-			input:    "BirdWeather ID abc123def456 and retry with birdweather id xyz789abc012",
-			expected: "bw-[REDACTED] and bw-[REDACTED]",
+			name:     "Australian .com.au",
+			input:    "company.com.au",
+			expected: "domain-com.au",
 		},
 		{
-			name:     "Mixed with equals sign",
-			input:    "BirdweatherID=abc123def456",
-			expected: "bw-[REDACTED]",
+			name:     "Academic .ac.uk",
+			input:    "university.ac.uk",
+			expected: "domain-ac.uk",
 		},
 		{
-			name:     "No BirdWeather ID",
-			input:    "Normal error message",
-			expected: "Normal error message",
+			name:     "Subdomain with two-part TLD",
+			input:    "sub.example.co.uk",
+			expected: "domain-co.uk",
 		},
 		{
-			name:     "Short ID (should not match)",
-			input:    "BirdWeather ID abc123",
-			expected: "BirdWeather ID abc123",
+			name:     "Regular .org domain",
+			input:    "nonprofit.org",
+			expected: "domain-org",
+		},
+		{
+			name:     "Single part (invalid)",
+			input:    "localhost",
+			expected: "unknown-host",
+		},
+		{
+			name:     "Japanese .co.jp",
+			input:    "company.co.jp",
+			expected: "domain-co.jp",
+		},
+		{
+			name:     "New Zealand .co.nz",
+			input:    "business.co.nz",
+			expected: "domain-co.nz",
 		},
 	}
 
@@ -752,9 +777,9 @@ func TestScrubBirdWeatherID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			
-			result := ScrubBirdWeatherID(tt.input)
+			result := categorizeDomain(tt.input)
 			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
+				t.Errorf("Expected categorizeDomain(%q) = %q, got %q", tt.input, tt.expected, result)
 			}
 		})
 	}
@@ -895,9 +920,9 @@ func TestScrubAllSensitiveData(t *testing.T) {
 	}{
 		{
 			name:  "Message with all sensitive data types",
-			input: "Failed upload to rtsp://admin:pass@192.168.1.100:554 with BirdWeather ID abc123def456 at location 60.1699,24.9384 using api_key: secret123token",
-			contains: []string{"Failed upload to url-", "with bw-[REDACTED]", "[LAT],[LON]", "[API_TOKEN]"},
-			notContains: []string{"admin", "pass", "192.168.1.100", "abc123def456", "60.1699", "24.9384", "secret123token"},
+			input: "Failed upload to rtsp://admin:pass@192.168.1.100:554 at location 60.1699,24.9384 using api_key: secret123token",
+			contains: []string{"Failed upload to url-", "[LAT],[LON]", "[API_TOKEN]"},
+			notContains: []string{"admin", "pass", "192.168.1.100", "60.1699", "24.9384", "secret123token"},
 		},
 		{
 			name:  "Message with partial sensitive data",
@@ -909,7 +934,7 @@ func TestScrubAllSensitiveData(t *testing.T) {
 			name:  "Clean message",
 			input: "Normal operation completed successfully",
 			contains: []string{"Normal operation completed successfully"},
-			notContains: []string{"url-", "bw-[REDACTED]", "[LAT],[LON]", "[API_TOKEN]"},
+			notContains: []string{"url-", "[LAT],[LON]", "[API_TOKEN]"},
 		},
 	}
 
