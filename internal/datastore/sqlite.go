@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -251,7 +252,8 @@ func (s *SQLiteStore) Open() error {
 	// Start monitoring if metrics are available
 	if s.metrics != nil {
 		// Default intervals: 30s for connection pool, 5m for database stats
-		s.StartMonitoring(30*time.Second, 5*time.Minute)
+		// Using background context since Open() doesn't accept context
+		s.StartMonitoring(context.Background(), 30*time.Second, 5*time.Minute)
 	}
 
 	return nil
@@ -289,9 +291,13 @@ func (s *SQLiteStore) Close() error {
 }
 
 // Optimize performs database optimization operations (VACUUM and ANALYZE)
-func (s *SQLiteStore) Optimize() error {
+func (s *SQLiteStore) Optimize(ctx context.Context) error {
 	if s.DB == nil {
-		return fmt.Errorf("database connection is not initialized")
+		return errors.Newf("database connection is not initialized").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "optimize").
+			Build()
 	}
 	
 	optimizeStart := time.Now()
@@ -299,20 +305,53 @@ func (s *SQLiteStore) Optimize() error {
 	
 	optimizeLogger.Info("Starting database optimization")
 	
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return errors.New(ctx.Err()).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "optimize").
+			Context("stage", "initialization").
+			Context("reason", "context_cancelled").
+			Build()
+	default:
+	}
+	
 	// Get database size before optimization
 	var sizeBefore int64
-	if err := s.DB.Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeBefore); err != nil {
-		optimizeLogger.Warn("Failed to get database size before optimization", "error", err)
+	if err := s.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeBefore); err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_db_size_before").
+			Build()
+		optimizeLogger.Warn("Failed to get database size before optimization", "error", enhancedErr)
 	}
 	
 	// Run ANALYZE to update SQLite's internal statistics
 	analyzeStart := time.Now()
 	optimizeLogger.Debug("Running ANALYZE to update query planner statistics")
-	if err := s.DB.Exec("ANALYZE").Error; err != nil {
+	
+	// Check for context cancellation before ANALYZE
+	select {
+	case <-ctx.Done():
+		return errors.New(ctx.Err()).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "optimize").
+			Context("stage", "before_analyze").
+			Context("reason", "context_cancelled").
+			Build()
+	default:
+	}
+	
+	if err := s.DB.WithContext(ctx).Exec("ANALYZE").Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "analyze").
+			Context("stage", "sqlite_analyze").
 			Build()
 		optimizeLogger.Error("ANALYZE failed", "error", enhancedErr)
 		return enhancedErr
@@ -322,11 +361,26 @@ func (s *SQLiteStore) Optimize() error {
 	// Run VACUUM to reclaim unused space
 	vacuumStart := time.Now()
 	optimizeLogger.Debug("Running VACUUM to reclaim unused space")
-	if err := s.DB.Exec("VACUUM").Error; err != nil {
+	
+	// Check for context cancellation before VACUUM
+	select {
+	case <-ctx.Done():
+		return errors.New(ctx.Err()).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "optimize").
+			Context("stage", "before_vacuum").
+			Context("reason", "context_cancelled").
+			Build()
+	default:
+	}
+	
+	if err := s.DB.WithContext(ctx).Exec("VACUUM").Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "vacuum").
+			Context("stage", "sqlite_vacuum").
 			Build()
 		optimizeLogger.Error("VACUUM failed", "error", enhancedErr)
 		return enhancedErr
@@ -334,8 +388,13 @@ func (s *SQLiteStore) Optimize() error {
 	
 	// Get database size after optimization
 	var sizeAfter int64
-	if err := s.DB.Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeAfter); err != nil {
-		optimizeLogger.Warn("Failed to get database size after optimization", "error", err)
+	if err := s.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeAfter); err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_db_size_after").
+			Build()
+		optimizeLogger.Warn("Failed to get database size after optimization", "error", enhancedErr)
 	}
 	
 	// Calculate space saved

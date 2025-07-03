@@ -9,6 +9,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// isDebugLoggingEnabled returns true if debug logging is enabled and logger is available
+func isDebugLoggingEnabled() bool {
+	settings := conf.GetSettings()
+	return settings != nil && settings.Debug && datastoreLogger != nil
+}
+
 // SpeciesSummaryData contains overall statistics for a bird species
 type SpeciesSummaryData struct {
 	ScientificName string
@@ -57,9 +63,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	// Track query time for performance monitoring
 	queryStart := time.Now()
 
-	// Get settings and check debug setting
-	settings := conf.GetSettings()
-	if settings != nil && settings.Debug && datastoreLogger != nil {
+	// Debug logging for query start
+	if isDebugLoggingEnabled() {
 		datastoreLogger.Debug("GetSpeciesSummaryData: Starting query",
 			"start_date", startDate,
 			"end_date", endDate)
@@ -102,7 +107,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	`
 
 	// Execute the query
-	if settings != nil && settings.Debug && datastoreLogger != nil {
+	if isDebugLoggingEnabled() {
 		datastoreLogger.Debug("GetSpeciesSummaryData: Executing query",
 			"query", queryStr,
 			"args", args)
@@ -126,7 +131,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}()
 
 	queryExecutionTime := time.Since(queryStart)
-	if settings != nil && settings.Debug && datastoreLogger != nil {
+	if isDebugLoggingEnabled() {
 		datastoreLogger.Debug("GetSpeciesSummaryData: Query executed, scanning rows",
 			"query_duration_ms", queryExecutionTime.Milliseconds())
 	}
@@ -173,7 +178,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 
 	totalDuration := time.Since(queryStart)
-	if settings != nil && settings.Debug && datastoreLogger != nil {
+	if isDebugLoggingEnabled() {
 		datastoreLogger.Debug("GetSpeciesSummaryData: Completed",
 			"total_duration_ms", totalDuration.Milliseconds(),
 			"rows_processed", rowCount)

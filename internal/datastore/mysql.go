@@ -1,9 +1,11 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +16,17 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// validTableNameRegex matches valid table names: alphanumeric, underscores, and dashes only
+var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// isValidTableName validates that a table name contains only safe characters
+func isValidTableName(tableName string) bool {
+	if tableName == "" || len(tableName) > 64 { // MySQL max table name length
+		return false
+	}
+	return validTableNameRegex.MatchString(tableName)
+}
 
 // MySQLStore implements DataStore for MySQL
 type MySQLStore struct {
@@ -79,7 +92,8 @@ func (store *MySQLStore) Open() error {
 	// Start monitoring if metrics are available
 	if store.metrics != nil {
 		// Default intervals: 30s for connection pool, 5m for database stats
-		store.StartMonitoring(30*time.Second, 5*time.Minute)
+		// Using background context since Open() doesn't accept context
+		store.StartMonitoring(context.Background(), 30*time.Second, 5*time.Minute)
 	}
 	
 	return nil
@@ -123,9 +137,13 @@ func (store *MySQLStore) Close() error {
 }
 
 // Optimize performs database optimization operations for MySQL
-func (store *MySQLStore) Optimize() error {
+func (store *MySQLStore) Optimize(ctx context.Context) error {
 	if store.DB == nil {
-		return fmt.Errorf("database connection is not initialized")
+		return errors.Newf("database connection is not initialized").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "optimize").
+			Build()
 	}
 	
 	optimizeStart := time.Now()
@@ -150,6 +168,14 @@ func (store *MySQLStore) Optimize() error {
 	// Optimize each table
 	optimizedCount := 0
 	for _, table := range tables {
+		// Validate table name to prevent SQL injection
+		if !isValidTableName(table) {
+			optimizeLogger.Error("Invalid table name detected, skipping",
+				"table", table,
+				"reason", "contains unsafe characters or exceeds length limit")
+			continue
+		}
+		
 		tableStart := time.Now()
 		optimizeLogger.Debug("Optimizing table", "table", table)
 		

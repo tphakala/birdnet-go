@@ -31,7 +31,7 @@ type Interface interface {
 	Get(id string) (Note, error)
 	Close() error
 	SetMetrics(metrics *DatastoreMetrics) // Set metrics instance for observability
-	Optimize() error // Perform database optimization (VACUUM, ANALYZE, etc.)
+	Optimize(ctx context.Context) error // Perform database optimization (VACUUM, ANALYZE, etc.)
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
