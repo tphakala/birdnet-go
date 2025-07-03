@@ -379,7 +379,10 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 	var schemaCorrect bool
 	var err error
 
-	switch dbType {
+	// Note: Database type comparison is case-insensitive. Different database drivers
+	// may return varying case formats (e.g., "sqlite" vs "SQLite", "mysql" vs "MySQL").
+	// Using strings.ToLower ensures consistent matching regardless of driver implementation.
+	switch strings.ToLower(dbType) {
 	case "sqlite":
 		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
 		if err != nil {

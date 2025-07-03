@@ -4,6 +4,7 @@ package datastore
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -111,7 +112,7 @@ func (ds *DataStore) getDatabaseSize() (int64, error) {
 	var size int64
 	
 	// SQLite-specific query
-	if ds.DB.Name() == "sqlite" {
+	if strings.ToLower(ds.DB.Name()) == "sqlite" {
 		// For SQLite, we use page_count * page_size
 		err := ds.DB.Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&size)
 		if err != nil {
@@ -121,7 +122,7 @@ func (ds *DataStore) getDatabaseSize() (int64, error) {
 	}
 	
 	// MySQL-specific query
-	if ds.DB.Name() == "mysql" {
+	if strings.ToLower(ds.DB.Name()) == "mysql" {
 		var dbName string
 		if err := ds.DB.Raw("SELECT DATABASE()").Scan(&dbName).Error; err != nil {
 			return 0, fmt.Errorf("failed to get current database name: %w", err)

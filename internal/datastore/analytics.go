@@ -3,6 +3,7 @@ package datastore
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -279,7 +280,7 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 
 	// Calculate start date based on the period
 	var startDate string
-	switch ds.Dialector().Name() {
+	switch strings.ToLower(ds.Dialector().Name()) {
 	case "sqlite":
 		startDate = fmt.Sprintf("date('now', '-%s')", interval)
 		query := fmt.Sprintf(`
