@@ -65,7 +65,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 	// Debug logging for query start
 	if isDebugLoggingEnabled() {
-		datastoreLogger.Debug("GetSpeciesSummaryData: Starting query",
+		getLogger().Debug("GetSpeciesSummaryData: Starting query",
 			"start_date", startDate,
 			"end_date", endDate)
 	}
@@ -108,7 +108,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 	// Execute the query
 	if isDebugLoggingEnabled() {
-		datastoreLogger.Debug("GetSpeciesSummaryData: Executing query",
+		getLogger().Debug("GetSpeciesSummaryData: Executing query",
 			"query", queryStr,
 			"args", args)
 	}
@@ -123,8 +123,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			Build()
 	}
 	defer func() {
-		if err := rows.Close(); err != nil && datastoreLogger != nil {
-			datastoreLogger.Error("Failed to close rows",
+		if err := rows.Close(); err != nil {
+			getLogger().Error("Failed to close rows",
 				"error", err,
 				"operation", "get_species_summary_data")
 		}
@@ -132,7 +132,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 	queryExecutionTime := time.Since(queryStart)
 	if isDebugLoggingEnabled() {
-		datastoreLogger.Debug("GetSpeciesSummaryData: Query executed, scanning rows",
+		getLogger().Debug("GetSpeciesSummaryData: Query executed, scanning rows",
 			"query_duration_ms", queryExecutionTime.Milliseconds())
 	}
 	rowCount := 0
@@ -179,7 +179,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 	totalDuration := time.Since(queryStart)
 	if isDebugLoggingEnabled() {
-		datastoreLogger.Debug("GetSpeciesSummaryData: Completed",
+		getLogger().Debug("GetSpeciesSummaryData: Completed",
 			"total_duration_ms", totalDuration.Milliseconds(),
 			"rows_processed", rowCount)
 	}
@@ -511,9 +511,9 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
 				CountInPeriod:  raw.CountInPeriod,
 			})
-		} else if datastoreLogger != nil {
+		} else {
 			// Log if a record surprisingly had an empty date after SQL filtering
-			datastoreLogger.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
+			getLogger().Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
 				"scientific_name", raw.ScientificName,
 				"operation", "get_new_species_detections")
 		}

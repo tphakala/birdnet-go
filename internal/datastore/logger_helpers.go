@@ -4,6 +4,7 @@ package datastore
 import (
 	"regexp"
 	"strings"
+	"time"
 )
 
 // SQL operation regex patterns
@@ -54,11 +55,19 @@ func categorizeError(err error) string {
 		return "none"
 	}
 	
+	// First, try to categorize based on known error types
+	// Check for PostgreSQL-specific errors using type assertions
+	// Note: pgconn.PgError would be used if this was a PostgreSQL setup
+	// For now, keeping the interface open for future database-specific error handling
+	
+	// Convert to string for pattern matching
 	errStr := strings.ToLower(err.Error())
 	
 	switch {
-	case strings.Contains(errStr, "unique constraint"):
+	case strings.Contains(errStr, "unique constraint") || strings.Contains(errStr, "duplicate key"):
 		return "constraint_violation"
+	case strings.Contains(errStr, "deadlock"):
+		return "deadlock"
 	case strings.Contains(errStr, "foreign key"):
 		return "foreign_key_violation"
 	case strings.Contains(errStr, "not null"):
@@ -128,14 +137,60 @@ func calculateFilterComplexity(filters *SearchFilters) float64 {
 
 // calculateDateRangeComplexity calculates complexity based on date range
 func calculateDateRangeComplexity(startDate, endDate string) float64 {
-	// Simple implementation - could be enhanced to calculate actual date difference
+	// Return default complexity if either date is empty
 	if startDate == "" || endDate == "" {
-		return 1
+		return 1.0
 	}
 	
-	// For now, just return a fixed complexity
-	// In a real implementation, we'd parse dates and calculate the range
-	return 5
+	// Parse start date
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		// Try alternative date format
+		start, err = time.Parse("2006-01-02 15:04:05", startDate)
+		if err != nil {
+			// Return default complexity if parsing fails
+			return 1.0
+		}
+	}
+	
+	// Parse end date
+	end, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		// Try alternative date format
+		end, err = time.Parse("2006-01-02 15:04:05", endDate)
+		if err != nil {
+			// Return default complexity if parsing fails
+			return 1.0
+		}
+	}
+	
+	// Calculate the difference in days
+	daysDiff := end.Sub(start).Hours() / 24
+	if daysDiff < 0 {
+		daysDiff = -daysDiff // Take absolute value
+	}
+	
+	// Calculate complexity based on range length
+	switch {
+	case daysDiff <= 1:
+		return 1.0 // Single day
+	case daysDiff <= 7:
+		return 2.0 // Week
+	case daysDiff <= 30:
+		return 3.0 // Month
+	case daysDiff <= 90:
+		return 4.0 // Quarter
+	case daysDiff <= 365:
+		return 5.0 // Year
+	default:
+		return 6.0 // More than a year
+	}
+}
+
+// isConstraintViolation checks if an error is a unique constraint violation
+// in a database-agnostic way using the categorizeError helper
+func isConstraintViolation(err error) bool {
+	return categorizeError(err) == "constraint_violation"
 }
 
 // getAppliedFilters returns a summary of applied filters for logging

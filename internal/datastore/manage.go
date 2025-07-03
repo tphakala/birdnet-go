@@ -242,7 +242,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	migrationStart := time.Now()
-	migrationLogger := datastoreLogger.With("db_type", dbType)
+	migrationLogger := getLogger().With("db_type", dbType)
 	
 	migrationLogger.Info("Starting database migration")
 	

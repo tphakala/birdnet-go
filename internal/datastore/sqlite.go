@@ -173,7 +173,7 @@ func (s *SQLiteStore) Open() error {
 	dbPath := s.Settings.Output.SQLite.Path
 	
 	// Log database opening
-	datastoreLogger.Info("Opening SQLite database",
+	getLogger().Info("Opening SQLite database",
 		"path", dbPath)
 
 	// Create database directory if it doesn't exist
@@ -239,7 +239,7 @@ func (s *SQLiteStore) Open() error {
 	s.DB = db
 	
 	// Log successful connection
-	datastoreLogger.Info("SQLite database opened successfully",
+	getLogger().Info("SQLite database opened successfully",
 		"path", dbPath,
 		"journal_mode", "WAL",
 		"synchronous", "NORMAL")
@@ -252,8 +252,7 @@ func (s *SQLiteStore) Open() error {
 	// Start monitoring if metrics are available
 	if s.metrics != nil {
 		// Default intervals: 30s for connection pool, 5m for database stats
-		// Using background context since Open() doesn't accept context
-		s.StartMonitoring(context.Background(), 30*time.Second, 5*time.Minute)
+		s.StartMonitoring(30*time.Second, 5*time.Minute)
 	}
 
 	return nil
@@ -262,8 +261,11 @@ func (s *SQLiteStore) Open() error {
 // Close closes the SQLite database connection
 func (s *SQLiteStore) Close() error {
 	if s.DB != nil {
+		// Stop monitoring before closing database
+		s.StopMonitoring()
+		
 		// Log database closing
-		datastoreLogger.Info("Closing SQLite database",
+		getLogger().Info("Closing SQLite database",
 			"path", s.Settings.Output.SQLite.Path)
 		
 		sqlDB, err := s.DB.DB()
@@ -276,14 +278,14 @@ func (s *SQLiteStore) Close() error {
 		}
 		
 		if err := sqlDB.Close(); err != nil {
-			datastoreLogger.Error("Failed to close SQLite database",
+			getLogger().Error("Failed to close SQLite database",
 				"path", s.Settings.Output.SQLite.Path,
 				"error", err)
 			return err
 		}
 		
 		// Log successful closure
-		datastoreLogger.Info("SQLite database closed successfully",
+		getLogger().Info("SQLite database closed successfully",
 			"path", s.Settings.Output.SQLite.Path)
 		return nil
 	}
@@ -301,7 +303,7 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 	}
 	
 	optimizeStart := time.Now()
-	optimizeLogger := datastoreLogger.With("operation", "optimize", "db_type", "SQLite")
+	optimizeLogger := getLogger().With("operation", "optimize", "db_type", "SQLite")
 	
 	optimizeLogger.Info("Starting database optimization")
 	
