@@ -241,9 +241,9 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	migrationStart := time.Now()
-	logger := datastoreLogger.With("db_type", dbType)
+	migrationLogger := datastoreLogger.With("db_type", dbType)
 	
-	logger.Info("Starting database migration")
+	migrationLogger.Info("Starting database migration")
 	
 	migrator := db.Migrator()
 	var schemaCorrect bool // Declare without initial assignment
@@ -261,14 +261,14 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 				Context("table", "image_caches").
 				Build()
 			
-			logger.Error("Schema validation failed", "error", enhancedErr)
+			migrationLogger.Error("Schema validation failed", "error", enhancedErr)
 			return enhancedErr
 		}
 	case "mysql":
 		// Need to extract dbName from connectionInfo for MySQL check
 		dbName := extractDBNameFromMySQLInfo(connectionInfo) // Helper function needed
 		if dbName == "" {
-			logger.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
+			migrationLogger.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
 			schemaCorrect = true // Avoid dropping if we can't check
 		} else {
 			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
@@ -282,17 +282,17 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 					Context("database", dbName).
 					Build()
 				
-				logger.Error("Schema validation failed", "error", enhancedErr)
+				migrationLogger.Error("Schema validation failed", "error", enhancedErr)
 				return enhancedErr
 			}
 		}
 	default:
-		logger.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
+		migrationLogger.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
 			"db_type", dbType)
 		schemaCorrect = true // Avoid dropping for unsupported types
 	}
 	
-	logger.Info("Schema validation completed",
+	migrationLogger.Info("Schema validation completed",
 		"schema_correct", schemaCorrect,
 		"duration", time.Since(migrationStart))
 
