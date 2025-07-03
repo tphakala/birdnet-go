@@ -1156,14 +1156,221 @@ When MQTT is enabled, sound level data is published to the topic:
 <base_topic>/soundlevel
 ```
 
+The MQTT message uses a compact JSON format to minimize payload size:
+
+```json
+{
+  "ts": "2024-01-15T08:30:45Z",
+  "src": "USB Audio Device",
+  "nm": "Primary Microphone",
+  "dur": 10,
+  "b": {
+    "25.0_Hz": {
+      "f": 25.0,
+      "n": -85.2,
+      "x": -78.7,
+      "m": -82.1
+    },
+    "31.5_Hz": {
+      "f": 31.5,
+      "n": -83.5,
+      "x": -76.2,
+      "m": -80.3
+    },
+    "40.0_Hz": {
+      "f": 40.0,
+      "n": -81.7,
+      "x": -74.5,
+      "m": -78.6
+    },
+    "50.0_Hz": {
+      "f": 50.0,
+      "n": -79.8,
+      "x": -72.3,
+      "m": -76.4
+    },
+    "63.0_Hz": {
+      "f": 63.0,
+      "n": -77.6,
+      "x": -70.1,
+      "m": -74.2
+    },
+    "80.0_Hz": {
+      "f": 80.0,
+      "n": -75.3,
+      "x": -67.8,
+      "m": -71.9
+    },
+    "100.0_Hz": {
+      "f": 100.0,
+      "n": -72.9,
+      "x": -65.4,
+      "m": -69.5
+    },
+    "125.0_Hz": {
+      "f": 125.0,
+      "n": -70.4,
+      "x": -62.9,
+      "m": -67.0
+    },
+    "160.0_Hz": {
+      "f": 160.0,
+      "n": -67.8,
+      "x": -60.3,
+      "m": -64.4
+    },
+    "200.0_Hz": {
+      "f": 200.0,
+      "n": -65.1,
+      "x": -57.6,
+      "m": -61.7
+    },
+    "250.0_Hz": {
+      "f": 250.0,
+      "n": -62.3,
+      "x": -54.8,
+      "m": -58.9
+    },
+    "315.0_Hz": {
+      "f": 315.0,
+      "n": -59.4,
+      "x": -51.9,
+      "m": -56.0
+    },
+    "400.0_Hz": {
+      "f": 400.0,
+      "n": -56.4,
+      "x": -48.9,
+      "m": -53.0
+    },
+    "500.0_Hz": {
+      "f": 500.0,
+      "n": -53.3,
+      "x": -45.8,
+      "m": -49.9
+    },
+    "630.0_Hz": {
+      "f": 630.0,
+      "n": -50.1,
+      "x": -42.6,
+      "m": -46.7
+    },
+    "800.0_Hz": {
+      "f": 800.0,
+      "n": -46.8,
+      "x": -39.3,
+      "m": -43.4
+    },
+    "1.0_kHz": {
+      "f": 1000.0,
+      "n": -43.3,
+      "x": -35.8,
+      "m": -39.9
+    },
+    "1.25_kHz": {
+      "f": 1250.0,
+      "n": -39.7,
+      "x": -32.2,
+      "m": -36.3
+    },
+    "1.6_kHz": {
+      "f": 1600.0,
+      "n": -36.0,
+      "x": -28.5,
+      "m": -32.6
+    },
+    "2.0_kHz": {
+      "f": 2000.0,
+      "n": -32.2,
+      "x": -24.7,
+      "m": -28.8
+    },
+    "2.5_kHz": {
+      "f": 2500.0,
+      "n": -28.3,
+      "x": -20.8,
+      "m": -24.9
+    },
+    "3.15_kHz": {
+      "f": 3150.0,
+      "n": -24.2,
+      "x": -16.7,
+      "m": -20.8
+    },
+    "4.0_kHz": {
+      "f": 4000.0,
+      "n": -20.0,
+      "x": -12.5,
+      "m": -16.6
+    },
+    "5.0_kHz": {
+      "f": 5000.0,
+      "n": -15.7,
+      "x": -8.2,
+      "m": -12.3
+    },
+    "6.3_kHz": {
+      "f": 6300.0,
+      "n": -11.2,
+      "x": -3.7,
+      "m": -7.8
+    },
+    "8.0_kHz": {
+      "f": 8000.0,
+      "n": -6.6,
+      "x": 0.9,
+      "m": -3.2
+    },
+    "10.0_kHz": {
+      "f": 10000.0,
+      "n": -1.8,
+      "x": 5.7,
+      "m": 1.6
+    },
+    "12.5_kHz": {
+      "f": 12500.0,
+      "n": 3.1,
+      "x": 10.6,
+      "m": 6.5
+    },
+    "16.0_kHz": {
+      "f": 16000.0,
+      "n": 8.1,
+      "x": 15.6,
+      "m": 11.5
+    },
+    "20.0_kHz": {
+      "f": 20000.0,
+      "n": 13.3,
+      "x": 20.8,
+      "m": 16.7
+    }
+  }
+}
+```
+
+**Field Reference:**
+- `ts`: ISO8601 timestamp
+- `src`: Audio source identifier
+- `nm`: Human-readable name of the source
+- `dur`: Measurement duration in seconds
+- `b`: Octave bands object containing measurements for each frequency band
+  - Band key format: `<frequency>_<unit>` (e.g., "1.0_kHz", "250.0_Hz")
+  - `f`: Center frequency in Hz
+  - `n`: Minimum dB level (1 decimal place)
+  - `x`: Maximum dB level (1 decimal place)
+  - `m`: Mean/average dB level (1 decimal place)
+
 Example Home Assistant configuration:
 ```yaml
 sensor:
   - platform: mqtt
     name: "Bird Station Sound Level 1kHz"
     state_topic: "birdnet/soundlevel"
-    value_template: "{{ value_json.octave_bands['1.0_kHz'].mean_db }}"
+    value_template: "{{ value_json.b['1.0_kHz'].m }}"
     unit_of_measurement: "dB"
+    device_class: "sound_pressure"
+    state_class: "measurement"
 ```
 
 ##### SSE Streaming
