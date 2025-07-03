@@ -37,7 +37,7 @@ func NotifySystemAlert(priority Priority, title, message string) {
 }
 
 // NotifyDetection creates a bird detection notification
-func NotifyDetection(species string, confidence float64, metadata map[string]interface{}) {
+func NotifyDetection(species string, confidence float64, metadata map[string]any) {
 	if !IsInitialized() {
 		return
 	}
@@ -202,12 +202,12 @@ func NotifyShutdown() {
 // Privacy scrubbing helpers
 
 // scrubContextMap sanitizes a context map for logging by removing sensitive data
-func scrubContextMap(ctx map[string]interface{}) map[string]interface{} {
+func scrubContextMap(ctx map[string]any) map[string]any {
 	if ctx == nil {
 		return nil
 	}
 
-	scrubbed := make(map[string]interface{})
+	scrubbed := make(map[string]any)
 	for k, v := range ctx {
 		switch k {
 		case "url", "endpoint", "uri", "rtsp_url", "stream_url":
