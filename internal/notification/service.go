@@ -317,13 +317,7 @@ func (s *Service) Unsubscribe(ch <-chan *Notification) {
 
 // GetUnreadCount returns the number of unread notifications
 func (s *Service) GetUnreadCount() (int, error) {
-	notifications, err := s.store.List(&FilterOptions{
-		Status: []Status{StatusUnread},
-	})
-	if err != nil {
-		return 0, err
-	}
-	return len(notifications), nil
+	return s.store.GetUnreadCount()
 }
 
 // CreateErrorNotification creates a notification from an error
@@ -476,6 +470,12 @@ func (s *Service) Stop() {
 	
 	s.logger.Info("notification service stopped",
 		"subscribers_cancelled", subscriberCount)
+	
+	// Close the logger to clean up resources
+	if err := CloseLogger(); err != nil {
+		// Use fallback logging since our logger might be closed
+		slog.Default().Error("failed to close notification logger", "error", err)
+	}
 }
 
 // RateLimiter provides rate limiting for notifications

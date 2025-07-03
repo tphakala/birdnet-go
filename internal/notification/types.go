@@ -146,6 +146,8 @@ type NotificationStore interface {
 	Delete(id string) error
 	// DeleteExpired removes all expired notifications
 	DeleteExpired() error
+	// GetUnreadCount returns the count of unread notifications
+	GetUnreadCount() (int, error)
 }
 
 // FilterOptions provides filtering capabilities for listing notifications
@@ -173,6 +175,7 @@ type InMemoryStore struct {
 	mu            sync.RWMutex
 	notifications map[string]*Notification
 	maxSize       int
+	unreadCount   int // Track unread count for optimization
 }
 
 // NewInMemoryStore creates a new in-memory notification store
@@ -199,6 +202,12 @@ func (s *InMemoryStore) Save(notification *Notification) error {
 	}
 
 	s.notifications[notification.ID] = notification
+	
+	// Update unread count if this is a new unread notification
+	if notification.Status == StatusUnread {
+		s.unreadCount++
+	}
+	
 	return nil
 }
 
@@ -208,7 +217,9 @@ func (s *InMemoryStore) Get(id string) (*Notification, error) {
 	defer s.mu.RUnlock()
 
 	if notif, exists := s.notifications[id]; exists {
-		return notif, nil
+		// Return a copy to prevent external modifications from affecting the stored notification
+		notifCopy := *notif
+		return &notifCopy, nil
 	}
 	return nil, nil
 }
@@ -221,7 +232,9 @@ func (s *InMemoryStore) List(filter *FilterOptions) ([]*Notification, error) {
 	var results []*Notification
 	for _, notif := range s.notifications {
 		if s.matchesFilter(notif, filter) {
-			results = append(results, notif)
+			// Return copies to prevent external modifications
+			notifCopy := *notif
+			results = append(results, &notifCopy)
 		}
 	}
 
@@ -249,11 +262,20 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.notifications[notification.ID]; exists {
-		s.notifications[notification.ID] = notification
-		return nil
+	oldNotif, exists := s.notifications[notification.ID]
+	if !exists {
+		return fmt.Errorf("notification not found: %s", notification.ID)
 	}
-	return fmt.Errorf("notification not found: %s", notification.ID)
+	
+	// Update unread count if status changed
+	if oldNotif.Status == StatusUnread && notification.Status != StatusUnread {
+		s.unreadCount--
+	} else if oldNotif.Status != StatusUnread && notification.Status == StatusUnread {
+		s.unreadCount++
+	}
+	
+	s.notifications[notification.ID] = notification
+	return nil
 }
 
 // Delete removes a notification
@@ -261,6 +283,13 @@ func (s *InMemoryStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check if notification exists and is unread
+	if notif, exists := s.notifications[id]; exists {
+		if notif.Status == StatusUnread {
+			s.unreadCount--
+		}
+	}
+	
 	delete(s.notifications, id)
 	return nil
 }
@@ -272,6 +301,9 @@ func (s *InMemoryStore) DeleteExpired() error {
 
 	for id, notif := range s.notifications {
 		if notif.IsExpired() {
+			if notif.Status == StatusUnread {
+				s.unreadCount--
+			}
 			delete(s.notifications, id)
 		}
 	}
@@ -291,6 +323,10 @@ func (s *InMemoryStore) removeOldest() {
 	}
 
 	if oldestID != "" {
+		// Update unread count if removing an unread notification
+		if notif, exists := s.notifications[oldestID]; exists && notif.Status == StatusUnread {
+			s.unreadCount--
+		}
 		delete(s.notifications, oldestID)
 	}
 }
@@ -357,6 +393,13 @@ func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions
 	}
 
 	return true
+}
+
+// GetUnreadCount returns the count of unread notifications
+func (s *InMemoryStore) GetUnreadCount() (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.unreadCount, nil
 }
 
 // sortNotificationsByTime sorts notifications by timestamp (newest first)

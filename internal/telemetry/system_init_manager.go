@@ -13,6 +13,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
+// Default configuration values for notification service
+const (
+	// DefaultMaxNotifications is the default maximum number of notifications to keep in memory
+	DefaultMaxNotifications = 1000
+	// DefaultCleanupInterval is the default interval for cleaning up expired notifications
+	DefaultCleanupInterval = 5 * time.Minute
+	// DefaultRateLimitWindow is the default time window for rate limiting
+	DefaultRateLimitWindow = 1 * time.Minute
+	// DefaultRateLimitMaxEvents is the default maximum number of events per rate limit window
+	DefaultRateLimitMaxEvents = 100
+)
+
 // SystemInitManager manages initialization of all async subsystems
 type SystemInitManager struct {
 	telemetryCoordinator   *InitCoordinator
@@ -121,10 +133,10 @@ func (m *SystemInitManager) initializeNotification() error {
 		// Create notification service config
 		config := &notification.ServiceConfig{
 			Debug:              debug,
-			MaxNotifications:   1000,
-			CleanupInterval:    5 * time.Minute,
-			RateLimitWindow:    1 * time.Minute,
-			RateLimitMaxEvents: 100,
+			MaxNotifications:   DefaultMaxNotifications,
+			CleanupInterval:    DefaultCleanupInterval,
+			RateLimitWindow:    DefaultRateLimitWindow,
+			RateLimitMaxEvents: DefaultRateLimitMaxEvents,
 		}
 		
 		// Initialize with config

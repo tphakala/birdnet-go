@@ -218,7 +218,7 @@ func scrubContextMap(ctx map[string]interface{}) map[string]interface{} {
 			scrubbed[k] = privacy.ScrubMessage(fmt.Sprint(v))
 		case "ip", "client_ip", "remote_addr", "source_ip":
 			// Anonymize IP addresses
-			scrubbed[k] = privacy.AnonymizeURL(fmt.Sprint(v))
+			scrubbed[k] = privacy.AnonymizeIP(fmt.Sprint(v))
 		case "path", "file_path", "directory":
 			// Scrub file paths
 			scrubbed[k] = scrubPath(fmt.Sprint(v))
@@ -235,13 +235,10 @@ func scrubContextMap(ctx map[string]interface{}) map[string]interface{} {
 
 // scrubPath sanitizes file paths by removing sensitive directory information
 func scrubPath(path string) string {
-	// For now, use a simple approach - could be enhanced
 	if path == "" {
 		return ""
 	}
-	// Return just the filename or last directory component
-	// This could be enhanced with more sophisticated path scrubbing
-	return privacy.AnonymizeURL(path)
+	return privacy.AnonymizePath(path)
 }
 
 // scrubNotificationContent scrubs sensitive data from notification content for logging
@@ -254,5 +251,5 @@ func scrubIPAddress(ip string) string {
 	if ip == "" {
 		return ""
 	}
-	return privacy.AnonymizeURL(ip)
+	return privacy.AnonymizeIP(ip)
 }
