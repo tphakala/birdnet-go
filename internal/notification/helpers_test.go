@@ -105,7 +105,6 @@ func TestScrubContextMap(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubContextMap(tt.input)
@@ -142,7 +141,6 @@ func TestScrubPath(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubPath(tt.input)
@@ -182,7 +180,6 @@ func TestScrubNotificationContent(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubNotificationContent(tt.input)
@@ -220,7 +217,6 @@ func TestScrubIPAddress(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := scrubIPAddress(tt.input)
