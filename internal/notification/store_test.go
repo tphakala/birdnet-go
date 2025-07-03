@@ -193,7 +193,7 @@ func TestInMemoryStoreMaxSize(t *testing.T) {
 
 	// Create 4 notifications (more than max size)
 	notifications := make([]*Notification, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		notifications[i] = NewNotification(TypeInfo, PriorityMedium, "Test", "Message")
 		// Add small delay to ensure different timestamps
 		time.Sleep(1 * time.Millisecond)
@@ -222,13 +222,14 @@ func TestInMemoryStoreMaxSize(t *testing.T) {
 	}
 
 	// Newer notifications should still exist
-	for i := 1; i < 4; i++ {
-		notif, err := store.Get(notifications[i].ID)
+	for i := range 3 {
+		idx := i + 1 // Start from index 1
+		notif, err := store.Get(notifications[idx].ID)
 		if err != nil {
-			t.Fatalf("Failed to get notification %d: %v", i, err)
+			t.Fatalf("Failed to get notification %d: %v", idx, err)
 		}
 		if notif == nil {
-			t.Errorf("Expected notification %d to exist", i)
+			t.Errorf("Expected notification %d to exist", idx)
 		}
 	}
 }

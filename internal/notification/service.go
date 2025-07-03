@@ -32,7 +32,15 @@ type Service struct {
 	config        *ServiceConfig
 }
 
-// ServiceConfig holds configuration for the notification service
+// ServiceConfig holds the complete configuration for the notification service.
+// This is the primary configuration struct used throughout the notification system.
+// It includes all settings needed for:
+// - Debug logging control
+// - Notification storage limits
+// - Automatic cleanup of expired notifications
+// - Rate limiting to prevent notification spam
+//
+// Use this struct when initializing the notification service via NewService().
 type ServiceConfig struct {
 	// Debug enables debug logging for the service
 	Debug bool

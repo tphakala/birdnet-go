@@ -5,6 +5,7 @@ package notification
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -73,7 +74,7 @@ type Notification struct {
 	// Timestamp indicates when the notification was created
 	Timestamp time.Time `json:"timestamp"`
 	// Metadata contains additional context-specific data
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 	// ExpiresAt indicates when the notification should be auto-removed (optional)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
@@ -88,7 +89,7 @@ func NewNotification(notifType Type, priority Priority, title, message string) *
 		Title:     title,
 		Message:   message,
 		Timestamp: time.Now(),
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 }
 
@@ -99,9 +100,9 @@ func (n *Notification) WithComponent(component string) *Notification {
 }
 
 // WithMetadata adds metadata and returns the notification for chaining
-func (n *Notification) WithMetadata(key string, value interface{}) *Notification {
+func (n *Notification) WithMetadata(key string, value any) *Notification {
 	if n.Metadata == nil {
-		n.Metadata = make(map[string]interface{})
+		n.Metadata = make(map[string]any)
 	}
 	n.Metadata[key] = value
 	return n
@@ -338,45 +339,18 @@ func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions
 	}
 
 	// Check type filter
-	if len(filter.Types) > 0 {
-		typeMatch := false
-		for _, t := range filter.Types {
-			if notif.Type == t {
-				typeMatch = true
-				break
-			}
-		}
-		if !typeMatch {
-			return false
-		}
+	if len(filter.Types) > 0 && !slices.Contains(filter.Types, notif.Type) {
+		return false
 	}
 
 	// Check priority filter
-	if len(filter.Priorities) > 0 {
-		priorityMatch := false
-		for _, p := range filter.Priorities {
-			if notif.Priority == p {
-				priorityMatch = true
-				break
-			}
-		}
-		if !priorityMatch {
-			return false
-		}
+	if len(filter.Priorities) > 0 && !slices.Contains(filter.Priorities, notif.Priority) {
+		return false
 	}
 
 	// Check status filter
-	if len(filter.Status) > 0 {
-		statusMatch := false
-		for _, s := range filter.Status {
-			if notif.Status == s {
-				statusMatch = true
-				break
-			}
-		}
-		if !statusMatch {
-			return false
-		}
+	if len(filter.Status) > 0 && !slices.Contains(filter.Status, notif.Status) {
+		return false
 	}
 
 	// Check component filter
@@ -409,7 +383,16 @@ func sortNotificationsByTime(notifications []*Notification) {
 	})
 }
 
-// Config holds configuration for the notification system
+// Config is deprecated and will be removed in a future version.
+// Use ServiceConfig in service.go for configuring the notification service.
+// ServiceConfig provides all necessary configuration options including:
+// - Debug logging control
+// - Maximum notifications limit
+// - Cleanup intervals for expired notifications
+// - Rate limiting settings
+//
+// Deprecated: This type is kept for backward compatibility only.
+// New code should use ServiceConfig instead.
 type Config struct {
 	// Debug enables debug logging for the notification system
 	Debug bool `json:"debug" yaml:"debug"`
