@@ -910,3 +910,112 @@ func TestScrubAPITokens(t *testing.T) {
 }
 
 
+
+func TestRedactUserAgent(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+		contains []string // Elements that should be in the output
+	}{
+		{
+			name:     "Empty user agent",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "Chrome on Windows",
+			input:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+			contains: []string{"Chrome", "Windows"},
+		},
+		{
+			name:     "Firefox on Mac",
+			input:    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15 Firefox/89.0",
+			contains: []string{"Firefox", "Mac"},
+		},
+		{
+			name:     "Safari on iOS",
+			input:    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+			contains: []string{"Safari", "iOS"},
+		},
+		{
+			name:     "Edge on Windows",
+			input:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
+			contains: []string{"Edge", "Windows"},
+		},
+		{
+			name:     "Android Chrome",
+			input:    "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+			contains: []string{"Chrome", "Android"},
+		},
+		{
+			name:     "Bot user agent",
+			input:    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			contains: []string{"Bot"},
+		},
+		{
+			name:     "Unknown user agent",
+			input:    "SomeRandomUserAgent/1.0",
+			expected: "ua-", // Should start with ua- followed by hash
+		},
+		{
+			name:     "Opera browser",
+			input:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 OPR/77.0.4054.203",
+			contains: []string{"Opera", "Windows"},
+		},
+		{
+			name:     "Linux Firefox",
+			input:    "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+			contains: []string{"Firefox", "Linux"},
+		},
+		{
+			name:     "Crawler",
+			input:    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+			contains: []string{"Bot"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := RedactUserAgent(tc.input)
+			
+			// Check exact match if expected is specified
+			if tc.expected != "" {
+				if tc.expected == "ua-" {
+					// For unknown user agents, just check the prefix
+					if !strings.HasPrefix(result, tc.expected) {
+						t.Errorf("Expected result to start with %q, got %q", tc.expected, result)
+					}
+				} else if result != tc.expected {
+					t.Errorf("Expected %q, got %q", tc.expected, result)
+				}
+			}
+			
+			// Check that expected components are present
+			for _, component := range tc.contains {
+				if !strings.Contains(result, component) {
+					t.Errorf("Expected result to contain %q, got %q", component, result)
+				}
+			}
+			
+			// Ensure no version numbers are present
+			if tc.input != "" && tc.expected != "" {
+				// Check that common version patterns are removed
+				versionPatterns := []string{
+					"10.0", "91.0", "14.6", "11", "89.0", "77.0",
+					"Windows NT", "Mac OS X", "Android",
+					"AppleWebKit", "Gecko", "KHTML",
+				}
+				for _, pattern := range versionPatterns {
+					if strings.Contains(tc.input, pattern) && strings.Contains(result, pattern) {
+						t.Errorf("Result should not contain version info %q, got %q", pattern, result)
+					}
+				}
+			}
+		})
+	}
+}
