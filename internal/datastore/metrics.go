@@ -1,4 +1,4 @@
-// Package datastore provides metrics placeholder until integration with observability package
+// Package datastore provides type aliases and integration with the observability metrics package
 package datastore
 
 import (
