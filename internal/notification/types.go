@@ -365,3 +365,11 @@ func sortNotificationsByTime(notifications []*Notification) {
 		return notifications[i].Timestamp.After(notifications[j].Timestamp)
 	})
 }
+
+// Config holds configuration for the notification system
+type Config struct {
+	// Debug enables debug logging for the notification system
+	Debug bool `json:"debug" yaml:"debug"`
+	// MaxNotifications sets the maximum number of notifications to keep in memory
+	MaxNotifications int `json:"max_notifications" yaml:"max_notifications"`
+}

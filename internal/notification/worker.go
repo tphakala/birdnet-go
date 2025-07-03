@@ -43,6 +43,8 @@ type NotificationWorker struct {
 
 // WorkerConfig holds configuration for the notification worker
 type WorkerConfig struct {
+	// Debug enables debug logging for the worker
+	Debug bool
 	// BatchingEnabled enables batch processing of notifications
 	BatchingEnabled bool
 	// BatchSize is the maximum number of events to process in a batch
