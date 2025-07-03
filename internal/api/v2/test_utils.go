@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -62,6 +63,15 @@ func (m *MockDataStore) Open() error {
 
 func (m *MockDataStore) Close() error {
 	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockDataStore) SetMetrics(metrics *datastore.Metrics) {
+	// Mock implementation - no-op
+}
+
+func (m *MockDataStore) Optimize(ctx context.Context) error {
+	args := m.Called(ctx)
 	return args.Error(0)
 }
 
@@ -390,6 +400,14 @@ func (m *MockDataStoreV2) Get(id string) (datastore.Note, error) {
 	return args.Get(0).(datastore.Note), args.Error(1)
 }
 func (m *MockDataStoreV2) Close() error { args := m.Called(); return args.Error(0) }
+func (m *MockDataStoreV2) SetMetrics(metrics *datastore.Metrics) {
+	// Mock implementation - no-op
+}
+
+func (m *MockDataStoreV2) Optimize(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
 func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error) {
 	args := m.Called()
 	return safeSlice[datastore.Note](args, 0), args.Error(1)

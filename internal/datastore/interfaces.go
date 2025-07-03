@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,8 @@ type Interface interface {
 	Delete(id string) error
 	Get(id string) (Note, error)
 	Close() error
+	SetMetrics(metrics *Metrics) // Set metrics instance for observability
+	Optimize(ctx context.Context) error // Perform database optimization (VACUUM, ANALYZE, etc.)
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
@@ -81,6 +84,12 @@ type DataStore struct {
 	DB            *gorm.DB         // GORM database instance
 	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
+	metrics       *Metrics // Metrics instance for tracking operations
+	
+	// Monitoring lifecycle management
+	monitoringCtx    context.Context    // Context for monitoring goroutines
+	monitoringCancel context.CancelFunc // Function to cancel monitoring
+	monitoringMu     sync.Mutex         // Mutex to protect monitoring state
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
@@ -109,10 +118,21 @@ func New(settings *conf.Settings) Interface {
 	}
 }
 
+// SetMetrics sets the metrics instance for the datastore
+func (ds *DataStore) SetMetrics(metrics *Metrics) {
+	ds.metrics = metrics
+}
+
 // Save stores a note and its associated results as a single transaction in the database.
 func (ds *DataStore) Save(note *Note, results []Results) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
+	txStart := time.Now()
+	txLogger := getLogger().With("tx_id", txID, "operation", "save_note")
+	
+	txLogger.Debug("Starting transaction",
+		"note_scientific_name", note.ScientificName,
+		"results_count", len(results))
 
 	// Retry configuration
 	maxRetries := 5
@@ -126,93 +146,38 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			lastErr = errors.New(tx.Error).
 				Component("datastore").
 				Category(errors.CategoryDatabase).
-				Context("operation", "start_transaction").
+				Context("operation", "begin_transaction").
+				Context("tx_id", txID).
 				Context("attempt", fmt.Sprintf("%d", attempt+1)).
 				Build()
+			
+			txLogger.Error("Failed to begin transaction",
+				"error", lastErr,
+				"attempt", attempt+1)
+				
 			continue
 		}
 
-		err := func() error {
-			defer func() {
-				if r := recover(); r != nil {
-					tx.Rollback()
-				}
-			}()
-
-			// Save the note and its associated results within the transaction
-			if err := tx.Create(note).Error; err != nil {
-				tx.Rollback()
-				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
-					return err
-				}
-				return errors.New(err).
-					Component("datastore").
-					Category(errors.CategoryDatabase).
-					Context("operation", "save_note").
-					Context("note_id", fmt.Sprintf("%d", note.ID)).
-					Build()
-			}
-
-			// Assign the note ID to each result and save them
-			for _, result := range results {
-				result.NoteID = note.ID
-				if err := tx.Create(&result).Error; err != nil {
-					tx.Rollback()
-					if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
-						return err
-					}
-					return errors.New(err).
-						Component("datastore").
-						Category(errors.CategoryDatabase).
-						Context("operation", "save_result").
-						Context("note_id", fmt.Sprintf("%d", note.ID)).
-						Build()
-				}
-			}
-
-			// Commit the transaction
-			if err := tx.Commit().Error; err != nil {
-				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
-					return err
-				}
-				return errors.New(err).
-					Component("datastore").
-					Category(errors.CategoryDatabase).
-					Context("operation", "commit_transaction").
-					Build()
-			}
-
-			return nil
-		}()
-
-		if err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
-				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
-				time.Sleep(delay)
-				lastErr = err
+		// Execute transaction with rollback on error
+		transactionErr := ds.executeTransaction(tx, note, results, txID, attempt+1, txLogger)
+		
+		if transactionErr != nil {
+			lastErr = transactionErr
+			if isDatabaseLocked(transactionErr) {
+				ds.handleDatabaseLockError(attempt, maxRetries, baseDelay, txLogger)
 				continue
 			}
-			return err
+			// Non-retryable error
+			return transactionErr
 		}
 
-		// Log if retry count is not 0 and transaction was successful
-		if attempt > 0 {
-			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
-		}
-
-		// If we get here, the transaction was successful
+		// Success - record metrics
+		ds.recordTransactionSuccess(txStart, attempt+1, len(results), txLogger)
 		return nil
 	}
 
-	// If we've exhausted all retries
-	return errors.New(lastErr).
-		Component("datastore").
-		Category(errors.CategoryDatabase).
-		Context("operation", "save_transaction").
-		Context("transaction_id", txID).
-		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
-		Build()
+	// All retries exhausted
+	return ds.handleMaxRetriesExhausted(lastErr, txID, txStart, txLogger)
 }
 
 // Get retrieves a note by its ID from the database.
@@ -1285,19 +1250,31 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 
 // SaveImageCache saves an image cache entry to the database
 func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
+	start := time.Now()
+	
 	if cache.ProviderName == "" {
-		return errors.Newf("provider name cannot be empty").
+		err := errors.Newf("provider name cannot be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_image_cache").
 			Build()
+		
+		getLogger().Error("Invalid image cache data: empty provider name",
+			"error", err)
+		
+		return err
 	}
 	if cache.ScientificName == "" {
-		return errors.Newf("scientific name cannot be empty").
+		err := errors.Newf("scientific name cannot be empty").
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "save_image_cache").
 			Build()
+			
+		getLogger().Error("Invalid image cache data: empty scientific name",
+			"error", err)
+			
+		return err
 	}
 
 	// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
@@ -1306,14 +1283,41 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
 		DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
 	}).Create(cache).Error; err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_image_cache").
-			Context("scientific_name", cache.ScientificName).
-			Context("provider", cache.ProviderName).
-			Build()
+		// Detect constraint violations
+		if isConstraintViolation(err) {
+			// This is expected with UPSERT, log at debug level
+			getLogger().Debug("Image cache UPSERT handled constraint",
+				"scientific_name", cache.ScientificName,
+				"provider", cache.ProviderName)
+		} else {
+			enhancedErr := errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_image_cache").
+				Context("table", "image_caches").
+				Context("scientific_name", cache.ScientificName).
+				Context("provider", cache.ProviderName).
+				Build()
+			
+			getLogger().Error("Failed to save image cache",
+				"error", enhancedErr)
+			
+			// Record error metric
+			if ds.metrics != nil {
+				ds.metrics.RecordImageCacheOperation("save", "error")
+				ds.metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
+			}
+			
+			return enhancedErr
+		}
 	}
+	
+	// Record success metric
+	if ds.metrics != nil {
+		ds.metrics.RecordImageCacheOperation("save", "success")
+		ds.metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
+	}
+	
 	return nil
 }
 
@@ -1948,4 +1952,222 @@ func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, b
 // cacheSunTimes caches sun times
 func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTimes) {
 	ds.sunTimesCache.Store(dateStr, *sunTimes)
+}
+
+// Helper functions for Save method to reduce cognitive complexity
+
+// saveNoteInTransaction saves a note within a transaction
+func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string, attempt int, txLogger *slog.Logger) error {
+	if err := tx.Create(note).Error; err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "save_note").
+			Context("table", "notes").
+			Context("note_id", fmt.Sprintf("%d", note.ID)).
+			Context("tx_id", txID).
+			Context("attempt", fmt.Sprintf("%d", attempt)).
+			Build()
+		
+		txLogger.Error("Failed to save note",
+			"error", enhancedErr,
+			"note_id", note.ID,
+			"scientific_name", note.ScientificName)
+		
+		// Record error metric
+		if ds.metrics != nil {
+			ds.metrics.RecordNoteOperation("save", "error")
+			ds.metrics.RecordDbOperationError("create", "notes", categorizeError(err))
+		}
+		
+		return enhancedErr
+	}
+	
+	// Record success metric for note
+	if ds.metrics != nil {
+		ds.metrics.RecordNoteOperation("save", "success")
+	}
+	
+	return nil
+}
+
+// saveResultsInTransaction saves results within a transaction
+func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, noteID uint, txID string, attempt int, txLogger *slog.Logger) error {
+	for i, result := range results {
+		result.NoteID = noteID
+		if err := tx.Create(&result).Error; err != nil {
+			enhancedErr := errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_result").
+				Context("note_id", fmt.Sprintf("%d", noteID)).
+				Context("result_index", fmt.Sprintf("%d", i)).
+				Context("tx_id", txID).
+				Context("attempt", fmt.Sprintf("%d", attempt)).
+				Build()
+			
+			txLogger.Error("Failed to save result",
+				"error", enhancedErr,
+				"note_id", noteID,
+				"result_index", i)
+			
+			if ds.metrics != nil {
+				ds.metrics.RecordDbOperationError("create", "results", categorizeError(err))
+			}
+			
+			return enhancedErr
+		}
+	}
+	return nil
+}
+
+// commitTransactionWithMetrics commits a transaction and records metrics
+func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, attempt int, txLogger *slog.Logger) error {
+	if err := tx.Commit().Error; err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "commit_transaction").
+			Context("tx_id", txID).
+			Context("attempt", fmt.Sprintf("%d", attempt)).
+			Build()
+		
+		txLogger.Error("Failed to commit transaction",
+			"error", enhancedErr)
+		
+		if ds.metrics != nil {
+			ds.metrics.RecordTransaction("rollback")
+			ds.metrics.RecordTransactionError("save_note", categorizeError(err))
+		}
+		
+		return enhancedErr
+	}
+	
+	// Record commit success
+	if ds.metrics != nil {
+		ds.metrics.RecordTransaction("committed")
+	}
+	
+	return nil
+}
+
+// handleDatabaseLockError handles database lock errors with backoff
+func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay time.Duration, txLogger *slog.Logger) {
+	delay := baseDelay * time.Duration(attempt+1)
+	txLogger.Warn("Database locked, scheduling retry",
+		"attempt", attempt+1,
+		"max_attempts", maxRetries,
+		"backoff_ms", delay.Milliseconds())
+	
+	// Record retry metric
+	if ds.metrics != nil {
+		ds.metrics.RecordTransactionRetry("save_note", "database_locked")
+	}
+	
+	time.Sleep(delay)
+}
+
+// isDatabaseLocked checks if an error is a database lock error for both SQLite and MySQL
+func isDatabaseLocked(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errStr := strings.ToLower(err.Error())
+	
+	// Check for SQLite lock errors
+	if strings.Contains(errStr, "database is locked") {
+		return true
+	}
+	
+	// Check for MySQL lock errors
+	if strings.Contains(errStr, "lock wait timeout exceeded") {
+		return true
+	}
+	
+	// Check for MySQL deadlock errors
+	if strings.Contains(errStr, "deadlock found") {
+		return true
+	}
+	
+	return false
+}
+
+// executeTransaction executes the save operations within a transaction
+func (ds *DataStore) executeTransaction(tx *gorm.DB, note *Note, results []Results, txID string, attempt int, txLogger *slog.Logger) error {
+	// Set up panic recovery with rollback
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Save the note
+	if err := ds.saveNoteInTransaction(tx, note, txID, attempt, txLogger); err != nil {
+		tx.Rollback()
+		if isDatabaseLocked(err) {
+			return err
+		}
+		return err
+	}
+
+	// Save the results
+	if err := ds.saveResultsInTransaction(tx, results, note.ID, txID, attempt, txLogger); err != nil {
+		tx.Rollback()
+		if isDatabaseLocked(err) {
+			return err
+		}
+		return err
+	}
+
+	// Commit the transaction
+	if err := ds.commitTransactionWithMetrics(tx, txID, attempt, txLogger); err != nil {
+		if isDatabaseLocked(err) {
+			return err
+		}
+		return err
+	}
+
+	return nil
+}
+
+// recordTransactionSuccess records success metrics for a transaction
+func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resultsCount int, txLogger *slog.Logger) {
+	duration := time.Since(txStart)
+	txLogger.Info("Transaction completed",
+		"duration", duration,
+		"attempts", attempts,
+		"rows_affected", 1+resultsCount)
+	
+	// Record success metrics
+	if ds.metrics != nil {
+		ds.metrics.RecordTransactionDuration("save_note", duration.Seconds())
+		if attempts > 1 {
+			ds.metrics.RecordLockContention("database", "retry_succeeded")
+		}
+	}
+}
+
+// handleMaxRetriesExhausted handles the case when all retries are exhausted
+func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txStart time.Time, txLogger *slog.Logger) error {
+	enhancedErr := errors.New(lastErr).
+		Component("datastore").
+		Category(errors.CategoryDatabase).
+		Context("operation", "save_transaction").
+		Context("tx_id", txID).
+		Context("max_retries_exhausted", "true").
+		Build()
+	
+	txLogger.Error("Transaction failed after max retries",
+		"error", enhancedErr,
+		"total_duration", time.Since(txStart))
+	
+	// Record failure metrics
+	if ds.metrics != nil {
+		ds.metrics.RecordTransaction("timeout")
+		ds.metrics.RecordTransactionError("save_note", "max_retries_exhausted")
+		ds.metrics.RecordLockContention("database", "max_retries_exhausted")
+	}
+	
+	return enhancedErr
 }
