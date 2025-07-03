@@ -19,13 +19,16 @@ type Results struct {
 // Default buffer size for the results queue
 const DefaultQueueSize = 100
 
-// ResultsQueue is a channel for sending analysis results
+// ResultsQueue is a channel for sending analysis results.
+// OWNERSHIP: Once a Results struct is sent to this queue, the sender must not
+// modify it. The receiver takes full ownership of the data. This allows us to
+// avoid unnecessary deep copies of the PCM audio data.
 var ResultsQueue = make(chan Results, DefaultQueueSize)
 
-// Copy creates a deep copy of the Results struct
-// This is needed because the data in the struct is a pointer to the original data
-// and if we don't make a deep copy, the original data will be overwritten when the
-// struct is reused for another detection.
+// Copy creates a deep copy of the Results struct.
+// NOTE: This method is kept for compatibility but is no longer used in the main
+// audio processing pipeline. The ownership model has been updated so that data
+// ownership transfers through the ResultsQueue without requiring copies.
 func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, avoid warning about heavy parameters
 	// Create a new Results struct with simple field copies
 	newCopy := Results{
