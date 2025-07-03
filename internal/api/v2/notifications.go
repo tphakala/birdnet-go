@@ -265,9 +265,10 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	}
 
 	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		unreadCount, _ := service.GetUnreadCount()
 		c.apiLogger.Debug("notifications retrieved",
 			"count", len(notifications),
-			"total_unread", countUnread(notifications))
+			"total_unread", unreadCount)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -432,13 +433,3 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	})
 }
 
-// countUnread counts the number of unread notifications in a slice
-func countUnread(notifications []*notification.Notification) int {
-	count := 0
-	for _, n := range notifications {
-		if n.Status == notification.StatusUnread {
-			count++
-		}
-	}
-	return count
-}
