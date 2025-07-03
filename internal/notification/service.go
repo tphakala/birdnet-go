@@ -35,6 +35,8 @@ type Service struct {
 
 // ServiceConfig holds configuration for the notification service
 type ServiceConfig struct {
+	// Debug enables debug logging for the service
+	Debug bool
 	// MaxNotifications is the maximum number of notifications to keep in memory
 	MaxNotifications int
 	// CleanupInterval is how often to clean up expired notifications
