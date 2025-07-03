@@ -270,6 +270,10 @@ When multiple PRs are being developed in parallel:
   - Batch operations when updating indices to avoid O(n) complexity in loops
   - Always utilize pre-compiled resources (templates, regexes) instead of wasting compilation effort
   - Implement proper batch processing with aggregation, not just iterating over items
+  - **Pre-compile regex patterns at package level**:
+    - Never compile regex inside loops or function calls
+    - Use `var pattern = regexp.MustCompile(...)` at package level
+    - This avoids memory leaks (see issue #825) and improves performance
 - **Error handling patterns**: Maintain consistency in error category comparisons across the codebase
 - **Code efficiency**: 
   - If you pre-compile templates or patterns, actually use them - don't leave them unused
@@ -289,6 +293,41 @@ When multiple PRs are being developed in parallel:
   - Update `interface{}` to `any` when touching code
   - Use modern range syntax (`for range n` instead of `for i := 0; i < n; i++`)
   - Apply consistent patterns across the codebase
+
+## Standard Library Usage Guidelines
+
+### Prefer Standard Library Over Custom Implementations
+- **URL Parsing**: Always use `url.Parse()` instead of manual string manipulation
+  - Handles edge cases, malformed URLs, and encoding correctly
+  - Example: Use for RTSP URL sanitization, API endpoint validation
+- **IP Address Operations**: Use `net.ParseIP()` and related functions
+  - `ip.IsPrivate()` for RFC-compliant private IP detection
+  - `ip.IsLoopback()`, `ip.IsLinkLocalUnicast()` for specific IP classifications
+  - Avoid manual string parsing or regex patterns for IP addresses
+- **Time Operations**: Use `time` package functions
+  - `time.Parse()` for parsing timestamps
+  - `time.Duration` for timeouts and intervals
+  - Avoid manual time calculations or string manipulation
+- **Path Operations**: Use `filepath` package
+  - `filepath.Join()` for cross-platform path construction
+  - `filepath.Clean()` for path normalization
+  - Never use string concatenation for file paths
+- **Encoding/Decoding**: Use standard encoding packages
+  - `encoding/json` for JSON operations
+  - `encoding/base64` for base64 encoding
+  - `encoding/hex` for hexadecimal operations
+
+### Benefits of Standard Library Usage
+- **Correctness**: Standard library handles edge cases and follows specifications
+- **Security**: Reduces attack surface by using well-tested implementations
+- **Performance**: Often optimized at the runtime level
+- **Maintainability**: Easier for other developers to understand
+- **Cross-platform**: Standard library handles OS-specific differences
+
+### When Custom Implementation May Be Needed
+- Performance-critical paths where profiling shows standard library is a bottleneck
+- Domain-specific requirements not covered by standard library
+- Always document why custom implementation was chosen over standard library
 
 ## Privacy Package Guidelines (Lessons from internal/privacy code review)
 
