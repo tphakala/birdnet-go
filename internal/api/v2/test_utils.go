@@ -69,6 +69,11 @@ func (m *MockDataStore) SetMetrics(metrics *datastore.DatastoreMetrics) {
 	// Mock implementation - no-op
 }
 
+func (m *MockDataStore) Optimize() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
 func (m *MockDataStore) Save(note *datastore.Note, results []datastore.Results) error {
 	args := m.Called(note, results)
 	return args.Error(0)
@@ -396,6 +401,11 @@ func (m *MockDataStoreV2) Get(id string) (datastore.Note, error) {
 func (m *MockDataStoreV2) Close() error { args := m.Called(); return args.Error(0) }
 func (m *MockDataStoreV2) SetMetrics(metrics *datastore.DatastoreMetrics) {
 	// Mock implementation - no-op
+}
+
+func (m *MockDataStoreV2) Optimize() error {
+	args := m.Called()
+	return args.Error(0)
 }
 func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error) {
 	args := m.Called()
