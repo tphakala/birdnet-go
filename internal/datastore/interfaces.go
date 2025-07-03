@@ -120,6 +120,12 @@ func (ds *DataStore) SetMetrics(metrics *DatastoreMetrics) {
 func (ds *DataStore) Save(note *Note, results []Results) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
+	txStart := time.Now()
+	txLogger := datastoreLogger.With("tx_id", txID, "operation", "save_note")
+	
+	txLogger.Debug("Starting transaction",
+		"note_scientific_name", note.ScientificName,
+		"results_count", len(results))
 
 	// Retry configuration
 	maxRetries := 5
@@ -127,15 +133,23 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
+		attemptStart := time.Now()
+		
 		// Begin a transaction
 		tx := ds.DB.Begin()
 		if tx.Error != nil {
 			lastErr = errors.New(tx.Error).
 				Component("datastore").
 				Category(errors.CategoryDatabase).
-				Context("operation", "start_transaction").
+				Context("operation", "begin_transaction").
+				Context("tx_id", txID).
 				Context("attempt", fmt.Sprintf("%d", attempt+1)).
 				Build()
+			
+			txLogger.Error("Failed to begin transaction",
+				"error", lastErr,
+				"attempt", attempt+1)
+				
 			continue
 		}
 
@@ -152,12 +166,31 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 				if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 					return err
 				}
-				return errors.New(err).
+				enhancedErr := errors.New(err).
 					Component("datastore").
 					Category(errors.CategoryDatabase).
 					Context("operation", "save_note").
+					Context("table", "notes").
 					Context("note_id", fmt.Sprintf("%d", note.ID)).
 					Build()
+				
+				txLogger.Error("Failed to save note",
+					"error", enhancedErr,
+					"note_id", note.ID,
+					"scientific_name", note.ScientificName)
+				
+				// Record error metric
+				if ds.metrics != nil {
+					ds.metrics.RecordNoteOperation("save", "error")
+					ds.metrics.RecordDbOperationError("create", "notes", categorizeError(err))
+				}
+				
+				return enhancedErr
+			}
+			
+			// Record success metric for note
+			if ds.metrics != nil {
+				ds.metrics.RecordNoteOperation("save", "success")
 			}
 
 			// Assign the note ID to each result and save them
@@ -195,17 +228,47 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "database is locked") {
 				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				txLogger.Warn("Database locked, scheduling retry",
+					"attempt", attempt+1,
+					"max_attempts", maxRetries,
+					"backoff_ms", delay.Milliseconds())
+				
+				// Record retry metric
+				if ds.metrics != nil {
+					ds.metrics.RecordTransactionRetry("save_note", "database_locked")
+				}
+				
 				time.Sleep(delay)
 				lastErr = err
 				continue
+			} else {
+				txLogger.Error("Transaction failed",
+					"error", err,
+					"duration", time.Since(attemptStart))
+				
+				// Record transaction error
+				if ds.metrics != nil {
+					ds.metrics.RecordTransaction("rollback")
+					ds.metrics.RecordTransactionError("save_note", categorizeError(err))
+				}
+				
+				return err
 			}
-			return err
 		}
 
-		// Log if retry count is not 0 and transaction was successful
-		if attempt > 0 {
-			log.Printf("[%s] Database transaction successful after %d attempts", txID, attempt+1)
+		// Success
+		txLogger.Info("Transaction completed",
+			"duration", time.Since(txStart),
+			"attempts", attempt+1,
+			"rows_affected", 1+len(results))
+		
+		// Record success metrics
+		if ds.metrics != nil {
+			ds.metrics.RecordTransaction("committed")
+			ds.metrics.RecordTransactionDuration("save_note", time.Since(txStart).Seconds())
+			if attempt > 0 {
+				ds.metrics.RecordLockContention("database", "retry_succeeded")
+			}
 		}
 
 		// If we get here, the transaction was successful
@@ -213,13 +276,26 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	}
 
 	// If we've exhausted all retries
-	return errors.New(lastErr).
+	enhancedErr := errors.New(lastErr).
 		Component("datastore").
 		Category(errors.CategoryDatabase).
 		Context("operation", "save_transaction").
-		Context("transaction_id", txID).
-		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
+		Context("tx_id", txID).
+		Context("max_retries_exhausted", "true").
 		Build()
+	
+	txLogger.Error("Transaction failed after max retries",
+		"error", enhancedErr,
+		"total_duration", time.Since(txStart))
+	
+	// Record failure metrics
+	if ds.metrics != nil {
+		ds.metrics.RecordTransaction("timeout")
+		ds.metrics.RecordTransactionError("save_note", "max_retries_exhausted")
+		ds.metrics.RecordLockContention("database", "max_retries_exhausted")
+	}
+	
+	return enhancedErr
 }
 
 // Get retrieves a note by its ID from the database.
