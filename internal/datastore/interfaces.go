@@ -85,6 +85,11 @@ type DataStore struct {
 	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
 	metrics       *DatastoreMetrics // Metrics instance for tracking operations
+	
+	// Monitoring lifecycle management
+	monitoringCtx    context.Context    // Context for monitoring goroutines
+	monitoringCancel context.CancelFunc // Function to cancel monitoring
+	monitoringMu     sync.Mutex         // Mutex to protect monitoring state
 }
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
@@ -123,7 +128,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 	txStart := time.Now()
-	txLogger := datastoreLogger.With("tx_id", txID, "operation", "save_note")
+	txLogger := getLogger().With("tx_id", txID, "operation", "save_note")
 	
 	txLogger.Debug("Starting transaction",
 		"note_scientific_name", note.ScientificName,
@@ -1254,7 +1259,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 			Context("operation", "save_image_cache").
 			Build()
 		
-		datastoreLogger.Error("Invalid image cache data: empty provider name",
+		getLogger().Error("Invalid image cache data: empty provider name",
 			"error", err)
 		
 		return err
@@ -1266,7 +1271,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 			Context("operation", "save_image_cache").
 			Build()
 			
-		datastoreLogger.Error("Invalid image cache data: empty scientific name",
+		getLogger().Error("Invalid image cache data: empty scientific name",
 			"error", err)
 			
 		return err
@@ -1279,9 +1284,9 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
 	}).Create(cache).Error; err != nil {
 		// Detect constraint violations
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isConstraintViolation(err) {
 			// This is expected with UPSERT, log at debug level
-			datastoreLogger.Debug("Image cache UPSERT handled constraint",
+			getLogger().Debug("Image cache UPSERT handled constraint",
 				"scientific_name", cache.ScientificName,
 				"provider", cache.ProviderName)
 		} else {
@@ -1294,7 +1299,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				Context("provider", cache.ProviderName).
 				Build()
 			
-			datastoreLogger.Error("Failed to save image cache",
+			getLogger().Error("Failed to save image cache",
 				"error", enhancedErr)
 			
 			// Record error metric

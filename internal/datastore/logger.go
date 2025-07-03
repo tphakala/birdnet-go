@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
@@ -17,28 +19,61 @@ var (
 	datastoreLogger   *slog.Logger
 	datastoreLevelVar = new(slog.LevelVar) // Dynamic level control
 	loggerCloseFunc   func() error         // Function to close the logger
+	loggerOnce        sync.Once            // Ensures logger is initialized only once
+	loggerMu          sync.RWMutex         // Protects logger access
+	defaultLogPath    = "logs/datastore.log"
 )
 
-func init() {
-	initialLevel := slog.LevelInfo
-	datastoreLevelVar.Set(initialLevel)
-
-	var err error
-	datastoreLogger, loggerCloseFunc, err = logging.NewFileLogger("logs/datastore.log", "datastore", datastoreLevelVar)
-	if err != nil {
-		// Fallback to disabled logger
-		descriptiveErr := errors.Newf("datastore: failed to initialize file logger: %v", err).
-			Component("datastore").
-			Category(errors.CategoryFileIO).
-			Context("log_file", "logs/datastore.log").
-			Context("operation", "logger_initialization").
-			Build()
-		logging.Error("Failed to initialize datastore file logger", "error", descriptiveErr)
+// InitializeLogger initializes the datastore logger with the specified log file path
+// This function is safe to call multiple times - initialization happens only once
+func InitializeLogger(logFilePath string) error {
+	var initErr error
+	
+	loggerOnce.Do(func() {
+		if logFilePath == "" {
+			logFilePath = defaultLogPath
+		}
 		
-		// Create a no-op logger
-		datastoreLogger = slog.New(slog.NewTextHandler(nil, nil))
-		loggerCloseFunc = func() error { return nil }
+		// Set initial log level
+		initialLevel := slog.LevelInfo
+		datastoreLevelVar.Set(initialLevel)
+		
+		// Attempt to create file logger
+		var err error
+		datastoreLogger, loggerCloseFunc, err = logging.NewFileLogger(logFilePath, "datastore", datastoreLevelVar)
+		if err != nil {
+			// Create fallback no-op logger instead of failing
+			datastoreLogger = slog.New(slog.NewTextHandler(nil, nil))
+			loggerCloseFunc = func() error { return nil }
+			
+			// Return the error but don't fail completely
+			initErr = errors.Newf("datastore: failed to initialize file logger: %v", err).
+				Component("datastore").
+				Category(errors.CategoryFileIO).
+				Context("log_file", logFilePath).
+				Context("operation", "logger_initialization").
+				Build()
+		}
+	})
+	
+	return initErr
+}
+
+// getLogger returns the logger, initializing it with default path if needed
+func getLogger() *slog.Logger {
+	loggerMu.RLock()
+	if datastoreLogger != nil {
+		defer loggerMu.RUnlock()
+		return datastoreLogger
 	}
+	loggerMu.RUnlock()
+	
+	// Initialize with default path if not already initialized
+	_ = InitializeLogger(defaultLogPath)
+	
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	return datastoreLogger
 }
 
 // CloseLogger closes the datastore logger
@@ -80,21 +115,21 @@ func (l *GormLogger) LogMode(level logger.LogLevel) logger.Interface {
 // Info implements logger.Interface
 func (l *GormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Info {
-		datastoreLogger.InfoContext(ctx, fmt.Sprintf(msg, data...))
+		getLogger().InfoContext(ctx, fmt.Sprintf(msg, data...))
 	}
 }
 
 // Warn implements logger.Interface
 func (l *GormLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Warn {
-		datastoreLogger.WarnContext(ctx, fmt.Sprintf(msg, data...))
+		getLogger().WarnContext(ctx, fmt.Sprintf(msg, data...))
 	}
 }
 
 // Error implements logger.Interface
 func (l *GormLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= logger.Error {
-		datastoreLogger.ErrorContext(ctx, "GORM error", 
+		getLogger().ErrorContext(ctx, "GORM error", 
 			"msg", fmt.Sprintf(msg, data...))
 		
 		// Record error metric if available
@@ -123,7 +158,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	}
 	
 	switch {
-	case err != nil && !errors.Is(err, logger.ErrRecordNotFound):
+	case err != nil && !errors.Is(err, gorm.ErrRecordNotFound):
 		// Log and create enhanced error
 		enhancedErr := errors.New(err).
 			Component("datastore").
@@ -131,9 +166,10 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 			Context("operation", "sql_query").
 			Context("sql", sql).
 			Context("duration_ms", elapsed.Milliseconds()).
+			Context("original_error_type", fmt.Sprintf("%T", err)).
 			Build()
 		
-		datastoreLogger.ErrorContext(ctx, "Database query failed",
+		getLogger().ErrorContext(ctx, "Database query failed",
 			"error", enhancedErr,
 			"sql", sql,
 			"duration", elapsed,
@@ -147,7 +183,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 			
 	case elapsed > l.SlowThreshold && l.SlowThreshold != 0:
 		// Log slow query with warning
-		datastoreLogger.WarnContext(ctx, "Slow query detected",
+		getLogger().WarnContext(ctx, "Slow query detected",
 			"sql", sql,
 			"duration", elapsed,
 			"rows_affected", rows,
@@ -160,7 +196,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 			
 	case l.LogLevel >= logger.Info:
 		// Log normal queries at debug level
-		datastoreLogger.DebugContext(ctx, "Query executed",
+		getLogger().DebugContext(ctx, "Query executed",
 			"sql", sql,
 			"duration", elapsed,
 			"rows_affected", rows)
