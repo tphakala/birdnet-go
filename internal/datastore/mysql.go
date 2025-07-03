@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -117,6 +119,70 @@ func (store *MySQLStore) Close() error {
 		"host", store.Settings.Output.MySQL.Host,
 		"database", store.Settings.Output.MySQL.Database)
 
+	return nil
+}
+
+// Optimize performs database optimization operations for MySQL
+func (store *MySQLStore) Optimize() error {
+	if store.DB == nil {
+		return fmt.Errorf("database connection is not initialized")
+	}
+	
+	optimizeStart := time.Now()
+	optimizeLogger := datastoreLogger.With("operation", "optimize", "db_type", "MySQL")
+	
+	optimizeLogger.Info("Starting database optimization")
+	
+	// Get list of tables in the database
+	var tables []string
+	if err := store.DB.Raw("SHOW TABLES").Pluck("Tables_in_"+store.Settings.Output.MySQL.Database, &tables).Error; err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "show_tables").
+			Build()
+		optimizeLogger.Error("Failed to get table list", "error", enhancedErr)
+		return enhancedErr
+	}
+	
+	optimizeLogger.Info("Found tables to optimize", "table_count", len(tables))
+	
+	// Optimize each table
+	optimizedCount := 0
+	for _, table := range tables {
+		tableStart := time.Now()
+		optimizeLogger.Debug("Optimizing table", "table", table)
+		
+		// Run OPTIMIZE TABLE
+		if err := store.DB.Exec(fmt.Sprintf("OPTIMIZE TABLE `%s`", table)).Error; err != nil {
+			// MySQL may return a note/warning for InnoDB tables, which is not an error
+			if !strings.Contains(err.Error(), "Table does not support optimize") {
+				optimizeLogger.Warn("Failed to optimize table",
+					"table", table,
+					"error", err,
+					"note", "This is often normal for InnoDB tables")
+			}
+		} else {
+			optimizedCount++
+		}
+		
+		// Run ANALYZE TABLE to update statistics
+		if err := store.DB.Exec(fmt.Sprintf("ANALYZE TABLE `%s`", table)).Error; err != nil {
+			optimizeLogger.Warn("Failed to analyze table",
+				"table", table,
+				"error", err)
+		} else {
+			optimizeLogger.Info("Table optimization completed",
+				"table", table,
+				"duration", time.Since(tableStart))
+		}
+	}
+	
+	optimizeLogger.Info("Database optimization completed",
+		"total_duration", time.Since(optimizeStart),
+		"tables_processed", len(tables),
+		"tables_optimized", optimizedCount)
+	
 	return nil
 }
 

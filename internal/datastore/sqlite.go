@@ -288,6 +288,74 @@ func (s *SQLiteStore) Close() error {
 	return nil
 }
 
+// Optimize performs database optimization operations (VACUUM and ANALYZE)
+func (s *SQLiteStore) Optimize() error {
+	if s.DB == nil {
+		return fmt.Errorf("database connection is not initialized")
+	}
+	
+	optimizeStart := time.Now()
+	optimizeLogger := datastoreLogger.With("operation", "optimize", "db_type", "SQLite")
+	
+	optimizeLogger.Info("Starting database optimization")
+	
+	// Get database size before optimization
+	var sizeBefore int64
+	if err := s.DB.Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeBefore); err != nil {
+		optimizeLogger.Warn("Failed to get database size before optimization", "error", err)
+	}
+	
+	// Run ANALYZE to update SQLite's internal statistics
+	analyzeStart := time.Now()
+	optimizeLogger.Debug("Running ANALYZE to update query planner statistics")
+	if err := s.DB.Exec("ANALYZE").Error; err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "analyze").
+			Build()
+		optimizeLogger.Error("ANALYZE failed", "error", enhancedErr)
+		return enhancedErr
+	}
+	optimizeLogger.Info("ANALYZE completed", "duration", time.Since(analyzeStart))
+	
+	// Run VACUUM to reclaim unused space
+	vacuumStart := time.Now()
+	optimizeLogger.Debug("Running VACUUM to reclaim unused space")
+	if err := s.DB.Exec("VACUUM").Error; err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "vacuum").
+			Build()
+		optimizeLogger.Error("VACUUM failed", "error", enhancedErr)
+		return enhancedErr
+	}
+	
+	// Get database size after optimization
+	var sizeAfter int64
+	if err := s.DB.Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeAfter); err != nil {
+		optimizeLogger.Warn("Failed to get database size after optimization", "error", err)
+	}
+	
+	// Calculate space saved
+	spaceSaved := sizeBefore - sizeAfter
+	percentSaved := float64(0)
+	if sizeBefore > 0 {
+		percentSaved = float64(spaceSaved) / float64(sizeBefore) * 100
+	}
+	
+	optimizeLogger.Info("Database optimization completed",
+		"total_duration", time.Since(optimizeStart),
+		"vacuum_duration", time.Since(vacuumStart),
+		"size_before_bytes", sizeBefore,
+		"size_after_bytes", sizeAfter,
+		"space_saved_bytes", spaceSaved,
+		"space_saved_percent", fmt.Sprintf("%.2f%%", percentSaved))
+	
+	return nil
+}
+
 // UpdateNote updates specific fields of a note in SQLite
 func (s *SQLiteStore) UpdateNote(id string, updates map[string]interface{}) error {
 	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
