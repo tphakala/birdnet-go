@@ -91,7 +91,11 @@ func (store *MySQLStore) Open() error {
 	
 	// Start monitoring if metrics are available
 	if store.metrics != nil {
-		// Default intervals: 30s for connection pool, 5m for database stats
+		// Monitoring intervals:
+		// - 30s for connection pool: Provides timely visibility into connection usage patterns
+		//   and potential exhaustion without overwhelming the metrics system
+		// - 5m for database stats: Table sizes and row counts change less frequently,
+		//   so a longer interval reduces overhead while still capturing growth trends
 		store.StartMonitoring(30*time.Second, 5*time.Minute)
 	}
 	
