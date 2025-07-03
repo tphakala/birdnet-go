@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -15,14 +14,9 @@ import (
 
 // createGormLogger configures and returns a new GORM logger instance.
 func createGormLogger() logger.Interface {
-	return logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
-		logger.Config{
-			SlowThreshold: 200 * time.Millisecond,
-			LogLevel:      logger.Warn,
-			Colorful:      true,
-		},
-	)
+	// Use our custom GORM logger with metrics support
+	// Default to WARN level with 200ms slow query threshold
+	return NewGormLogger(200*time.Millisecond, logger.Warn, nil)
 }
 
 // getSQLiteIndexInfo executes PRAGMA index_info for a given SQLite index name,
