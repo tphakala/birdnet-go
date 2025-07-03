@@ -401,3 +401,72 @@ func AnonymizePath(path string) string {
 	
 	return result
 }
+
+// RedactUserAgent anonymizes user agent strings to prevent tracking
+// It preserves browser and OS type information while removing version details
+func RedactUserAgent(userAgent string) string {
+	if userAgent == "" {
+		return ""
+	}
+	
+	// Common patterns to extract browser/OS info
+	// These patterns match major browsers and operating systems
+	// Order matters - check more specific patterns first
+	patterns := []struct {
+		name    string
+		pattern *regexp.Regexp
+		isBrowser bool
+	}{
+		// Browsers (check Edge before Chrome since Edge contains Chrome string)
+		{"Edge", regexp.MustCompile(`(?i)Edg/[\d.]+`), true},
+		{"Opera", regexp.MustCompile(`(?i)Opera/[\d.]+|OPR/[\d.]+`), true},
+		{"Chrome", regexp.MustCompile(`(?i)Chrome/[\d.]+`), true},
+		{"Firefox", regexp.MustCompile(`(?i)Firefox/[\d.]+`), true},
+		{"Safari", regexp.MustCompile(`(?i)Safari/[\d.]+`), true},
+		// Operating Systems
+		{"Windows", regexp.MustCompile(`(?i)Windows NT [\d.]+`), false},
+		{"Mac", regexp.MustCompile(`(?i)Mac OS X [\d._]+`), false},
+		{"Android", regexp.MustCompile(`(?i)Android [\d.]+`), false},
+		{"iOS", regexp.MustCompile(`(?i)iPhone OS [\d._]+`), false},
+		{"Linux", regexp.MustCompile(`(?i)Linux`), false},
+	}
+	
+	// Extract basic browser and OS info
+	var components []string
+	var foundBrowser, foundOS bool
+	
+	// Check for bot/crawler patterns
+	if strings.Contains(strings.ToLower(userAgent), "bot") ||
+		strings.Contains(strings.ToLower(userAgent), "crawler") ||
+		strings.Contains(strings.ToLower(userAgent), "spider") {
+		components = append(components, "Bot")
+		foundBrowser = true // Bot is considered a browser type
+	}
+	
+	// Extract browser and OS type
+	for _, p := range patterns {
+		if p.pattern.MatchString(userAgent) {
+			if p.isBrowser && !foundBrowser {
+				components = append(components, p.name)
+				foundBrowser = true
+			} else if !p.isBrowser && !foundOS {
+				components = append(components, p.name)
+				foundOS = true
+			}
+			
+			// Stop if we found both browser and OS
+			if foundBrowser && foundOS {
+				break
+			}
+		}
+	}
+	
+	// If no components found, return a generic hash
+	if len(components) == 0 {
+		hash := sha256.Sum256([]byte(userAgent))
+		return fmt.Sprintf("ua-%x", hash[:8])
+	}
+	
+	// Return redacted user agent with basic info only
+	return strings.Join(components, " ")
+}

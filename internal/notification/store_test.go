@@ -5,6 +5,72 @@ import (
 	"time"
 )
 
+// Test helper functions
+
+// assertUnreadCount checks the unread count and fails the test if it doesn't match expected value
+func assertUnreadCount(t *testing.T, store *InMemoryStore, expected int, message string) {
+	t.Helper()
+	count, err := store.GetUnreadCount()
+	if err != nil {
+		t.Fatalf("GetUnreadCount failed: %v", err)
+	}
+	if count != expected {
+		t.Errorf("%s: expected %d, got %d", message, expected, count)
+	}
+}
+
+// mustGetNotification retrieves a notification and fails the test if an error occurs
+func mustGetNotification(t *testing.T, store *InMemoryStore, id string) *Notification {
+	t.Helper()
+	notif, err := store.Get(id)
+	if err != nil {
+		t.Fatalf("Failed to get notification %s: %v", id, err)
+	}
+	if notif == nil {
+		t.Fatalf("Notification %s not found", id)
+	}
+	return notif
+}
+
+// mustSaveNotification saves a notification and fails the test if an error occurs
+func mustSaveNotification(t *testing.T, store *InMemoryStore, notif *Notification) {
+	t.Helper()
+	if err := store.Save(notif); err != nil {
+		t.Fatalf("Failed to save notification: %v", err)
+	}
+}
+
+// mustUpdateNotification updates a notification and fails the test if an error occurs
+func mustUpdateNotification(t *testing.T, store *InMemoryStore, notif *Notification) {
+	t.Helper()
+	if err := store.Update(notif); err != nil {
+		t.Fatalf("Failed to update notification: %v", err)
+	}
+}
+
+// mustDeleteNotification deletes a notification and fails the test if an error occurs
+func mustDeleteNotification(t *testing.T, store *InMemoryStore, id string) {
+	t.Helper()
+	if err := store.Delete(id); err != nil {
+		t.Fatalf("Failed to delete notification %s: %v", id, err)
+	}
+}
+
+// assertNotificationExists checks if a notification exists in the store
+func assertNotificationExists(t *testing.T, store *InMemoryStore, id string, shouldExist bool) {
+	t.Helper()
+	notif, err := store.Get(id)
+	if err != nil {
+		t.Fatalf("Failed to get notification %s: %v", id, err)
+	}
+	if shouldExist && notif == nil {
+		t.Errorf("Expected notification %s to exist, but it doesn't", id)
+	}
+	if !shouldExist && notif != nil {
+		t.Errorf("Expected notification %s to not exist, but it does", id)
+	}
+}
+
 // TestInMemoryStoreUnreadCount tests the optimized unread count tracking
 func TestInMemoryStoreUnreadCount(t *testing.T) {
 	t.Parallel()
@@ -12,117 +78,40 @@ func TestInMemoryStoreUnreadCount(t *testing.T) {
 	store := NewInMemoryStore(100)
 
 	// Test 1: Initial count should be 0
-	count, err := store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("Expected initial unread count to be 0, got %d", count)
-	}
+	assertUnreadCount(t, store, 0, "Initial unread count")
 
 	// Test 2: Save unread notifications
 	notif1 := NewNotification(TypeInfo, PriorityMedium, "Test 1", "Message 1")
 	notif2 := NewNotification(TypeWarning, PriorityHigh, "Test 2", "Message 2")
 	
-	err = store.Save(notif1)
-	if err != nil {
-		t.Fatalf("Failed to save notification 1: %v", err)
-	}
-	
-	err = store.Save(notif2)
-	if err != nil {
-		t.Fatalf("Failed to save notification 2: %v", err)
-	}
-
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("Expected unread count to be 2, got %d", count)
-	}
+	mustSaveNotification(t, store, notif1)
+	mustSaveNotification(t, store, notif2)
+	assertUnreadCount(t, store, 2, "Unread count after saving 2 notifications")
 
 	// Test 3: Update notification to read
-	// Get a fresh copy from the store to avoid pointer issues
-	notif1Copy, _ := store.Get(notif1.ID)
+	notif1Copy := mustGetNotification(t, store, notif1.ID)
 	notif1Copy.MarkAsRead()
-	err = store.Update(notif1Copy)
-	if err != nil {
-		t.Fatalf("Failed to update notification: %v", err)
-	}
-
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("Expected unread count to be 1 after marking one as read, got %d", count)
-	}
+	mustUpdateNotification(t, store, notif1Copy)
+	assertUnreadCount(t, store, 1, "Unread count after marking one as read")
 
 	// Test 4: Update read notification back to unread
-	// First, get the notification from the store to ensure we have the current state
-	storedNotif1, err := store.Get(notif1.ID)
-	if err != nil {
-		t.Fatalf("Failed to get notification: %v", err)
-	}
+	storedNotif1 := mustGetNotification(t, store, notif1.ID)
 	storedNotif1.Status = StatusUnread
-	err = store.Update(storedNotif1)
-	if err != nil {
-		t.Fatalf("Failed to update notification: %v", err)
-	}
+	mustUpdateNotification(t, store, storedNotif1)
+	assertUnreadCount(t, store, 2, "Unread count after marking back to unread")
 
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("Expected unread count to be 2 after marking back to unread, got %d", count)
-	}
-
-	// Test 5: Delete unread notification (use storedNotif1's ID)
-	err = store.Delete(storedNotif1.ID)
-	if err != nil {
-		t.Fatalf("Failed to delete notification: %v", err)
-	}
-
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("Expected unread count to be 1 after deleting unread notification, got %d", count)
-	}
+	// Test 5: Delete unread notification
+	mustDeleteNotification(t, store, storedNotif1.ID)
+	assertUnreadCount(t, store, 1, "Unread count after deleting unread notification")
 
 	// Test 6: Delete read notification (should not affect count)
-	// Get a fresh copy to avoid pointer issues
-	notif2Copy, _ := store.Get(notif2.ID)
+	notif2Copy := mustGetNotification(t, store, notif2.ID)
 	notif2Copy.MarkAsAcknowledged()
-	err = store.Update(notif2Copy)
-	if err != nil {
-		t.Fatalf("Failed to update notification: %v", err)
-	}
+	mustUpdateNotification(t, store, notif2Copy)
+	assertUnreadCount(t, store, 0, "Unread count after marking as acknowledged")
 
-	// Count should be 0 now
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("Expected unread count to be 0 after marking as acknowledged, got %d", count)
-	}
-
-	err = store.Delete(notif2.ID)
-	if err != nil {
-		t.Fatalf("Failed to delete notification: %v", err)
-	}
-
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("Expected unread count to still be 0 after deleting read notification, got %d", count)
-	}
+	mustDeleteNotification(t, store, notif2.ID)
+	assertUnreadCount(t, store, 0, "Unread count after deleting read notification")
 }
 
 // TestInMemoryStoreDeleteExpired tests that unread count is updated when expired notifications are deleted
@@ -149,55 +138,26 @@ func TestInMemoryStoreDeleteExpired(t *testing.T) {
 
 	// Save all notifications
 	for _, notif := range []*Notification{notif1, notif2, notif3} {
-		err := store.Save(notif)
-		if err != nil {
-			t.Fatalf("Failed to save notification: %v", err)
-		}
+		mustSaveNotification(t, store, notif)
 	}
 
 	// Initial count should be 2 (notif1 and notif2 are unread)
-	count, err := store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("Expected initial unread count to be 2, got %d", count)
-	}
+	assertUnreadCount(t, store, 2, "Initial unread count")
 
 	// Delete expired notifications (no sleep needed!)
-	err = store.DeleteExpired()
-	if err != nil {
+	if err := store.DeleteExpired(); err != nil {
 		t.Fatalf("DeleteExpired failed: %v", err)
 	}
 
 	// Count should be 1 now (only notif2 remains and is unread)
-	count, err = store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("Expected unread count to be 1 after deleting expired, got %d", count)
-	}
+	assertUnreadCount(t, store, 1, "Unread count after deleting expired")
 
 	// Verify notif2 still exists
-	retrieved, err := store.Get(notif2.ID)
-	if err != nil {
-		t.Fatalf("Failed to get notification: %v", err)
-	}
-	if retrieved == nil {
-		t.Error("Expected notif2 to still exist")
-	}
+	assertNotificationExists(t, store, notif2.ID, true)
 	
 	// Verify notif1 and notif3 were deleted
-	retrieved1, _ := store.Get(notif1.ID)
-	if retrieved1 != nil {
-		t.Error("Expected notif1 to be deleted")
-	}
-	
-	retrieved3, _ := store.Get(notif3.ID)
-	if retrieved3 != nil {
-		t.Error("Expected notif3 to be deleted")
-	}
+	assertNotificationExists(t, store, notif1.ID, false)
+	assertNotificationExists(t, store, notif3.ID, false)
 }
 
 // TestInMemoryStoreMaxSize tests that unread count is maintained when old notifications are removed
@@ -213,39 +173,18 @@ func TestInMemoryStoreMaxSize(t *testing.T) {
 		notifications[i] = NewNotification(TypeInfo, PriorityMedium, "Test", "Message")
 		// Set timestamps deterministically to ensure ordering
 		notifications[i].Timestamp = baseTime.Add(time.Duration(i) * time.Second)
-		err := store.Save(notifications[i])
-		if err != nil {
-			t.Fatalf("Failed to save notification %d: %v", i, err)
-		}
+		mustSaveNotification(t, store, notifications[i])
 	}
 
 	// Should have 3 notifications (max size), all unread
-	count, err := store.GetUnreadCount()
-	if err != nil {
-		t.Fatalf("GetUnreadCount failed: %v", err)
-	}
-	if count != 3 {
-		t.Errorf("Expected unread count to be 3 (max size), got %d", count)
-	}
+	assertUnreadCount(t, store, 3, "Unread count at max size")
 
 	// Oldest notification should have been removed
-	oldest, err := store.Get(notifications[0].ID)
-	if err != nil {
-		t.Fatalf("Failed to get notification: %v", err)
-	}
-	if oldest != nil {
-		t.Error("Expected oldest notification to be removed")
-	}
+	assertNotificationExists(t, store, notifications[0].ID, false)
 
 	// Newer notifications should still exist
 	for i := range 3 {
 		idx := i + 1 // Start from index 1
-		notif, err := store.Get(notifications[idx].ID)
-		if err != nil {
-			t.Fatalf("Failed to get notification %d: %v", idx, err)
-		}
-		if notif == nil {
-			t.Errorf("Expected notification %d to exist", idx)
-		}
+		assertNotificationExists(t, store, notifications[idx].ID, true)
 	}
 }

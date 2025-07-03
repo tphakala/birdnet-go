@@ -119,7 +119,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 			c.apiLogger.Debug("notification SSE client connected",
 				"clientId", clientID,
 				"ip", privacy.AnonymizeIP(ctx.RealIP()),
-				"user_agent", ctx.Request().UserAgent())
+				"user_agent", privacy.RedactUserAgent(ctx.Request().UserAgent()))
 		} else {
 			c.apiLogger.Info("notification SSE client connected",
 				"clientId", clientID,
@@ -136,10 +136,12 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 			if c.Settings != nil && c.Settings.WebServer.Debug {
 				c.apiLogger.Debug("notification SSE client disconnected",
 					"clientId", clientID,
+					"ip", privacy.AnonymizeIP(ctx.RealIP()),
 					"reason", "context_done")
 			} else {
 				c.apiLogger.Info("notification SSE client disconnected",
-					"clientId", clientID)
+					"clientId", clientID,
+					"ip", privacy.AnonymizeIP(ctx.RealIP()))
 			}
 		}
 	}()
@@ -265,7 +267,11 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	}
 
 	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
-		unreadCount, _ := service.GetUnreadCount()
+		unreadCount, err := service.GetUnreadCount()
+		if err != nil {
+			c.apiLogger.Error("failed to get unread count", "error", err)
+			unreadCount = -1 // Indicate error in debug log
+		}
 		c.apiLogger.Debug("notifications retrieved",
 			"count", len(notifications),
 			"total_unread", unreadCount)
@@ -331,10 +337,6 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 
 	service := notification.GetService()
 	
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
-		c.apiLogger.Debug("marking notification as read", "id", id)
-	}
-	
 	if err := service.MarkAsRead(id); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
@@ -342,6 +344,10 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to mark notification as read",
 		})
+	}
+	
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("notification marked as read", "id", id)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{
