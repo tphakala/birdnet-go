@@ -9,8 +9,6 @@ import (
 	"log/slog"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // Subscriber represents a notification subscriber
@@ -31,10 +29,21 @@ type Service struct {
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
 	logger        *slog.Logger
+	config        *ServiceConfig
 }
 
-// ServiceConfig holds configuration for the notification service
+// ServiceConfig holds the complete configuration for the notification service.
+// This is the primary configuration struct used throughout the notification system.
+// It includes all settings needed for:
+// - Debug logging control
+// - Notification storage limits
+// - Automatic cleanup of expired notifications
+// - Rate limiting to prevent notification spam
+//
+// Use this struct when initializing the notification service via NewService().
 type ServiceConfig struct {
+	// Debug enables debug logging for the service
+	Debug bool
 	// MaxNotifications is the maximum number of notifications to keep in memory
 	MaxNotifications int
 	// CleanupInterval is how often to clean up expired notifications
@@ -70,12 +79,24 @@ func NewService(config *ServiceConfig) *Service {
 		cleanupTicker: time.NewTicker(config.CleanupInterval),
 		ctx:           ctx,
 		cancel:        cancel,
-		logger:        logging.ForService("notification"),
+		logger:        getFileLogger(config.Debug),
+		config:        config,
 	}
+
+	// Log service initialization
+	service.logger.Info("notification service initialized",
+		"max_notifications", config.MaxNotifications,
+		"cleanup_interval", config.CleanupInterval,
+		"rate_limit_window", config.RateLimitWindow,
+		"rate_limit_max_events", config.RateLimitMaxEvents,
+		"debug", config.Debug)
 
 	// Start background cleanup
 	service.wg.Add(1)
 	go service.cleanupLoop()
+
+	service.logger.Info("notification cleanup worker started",
+		"interval", config.CleanupInterval)
 
 	return service
 }
@@ -84,6 +105,12 @@ func NewService(config *ServiceConfig) *Service {
 func (s *Service) Create(notifType Type, priority Priority, title, message string) (*Notification, error) {
 	// Check rate limit
 	if !s.rateLimiter.Allow() {
+		if s.config.Debug {
+			s.logger.Debug("notification rate limit exceeded",
+				"type", notifType,
+				"priority", priority,
+				"title_length", len(title))
+		}
 		return nil, errors.Newf("rate limit exceeded").
 			Component("notification").
 			Category(errors.CategorySystem).
@@ -91,6 +118,15 @@ func (s *Service) Create(notifType Type, priority Priority, title, message strin
 	}
 
 	notification := NewNotification(notifType, priority, title, message)
+
+	if s.config.Debug {
+		s.logger.Debug("creating notification",
+			"id", notification.ID,
+			"type", notifType,
+			"priority", priority,
+			"title_length", len(title),
+			"message_length", len(message))
+	}
 
 	// Save to store
 	if err := s.store.Save(notification); err != nil {
@@ -103,6 +139,12 @@ func (s *Service) Create(notifType Type, priority Priority, title, message strin
 
 	// Broadcast to subscribers
 	s.broadcast(notification)
+
+	if s.config.Debug {
+		s.logger.Debug("notification created and broadcast",
+			"id", notification.ID,
+			"subscriber_count", len(s.subscribers))
+	}
 
 	return notification, nil
 }
@@ -250,6 +292,12 @@ func (s *Service) Subscribe() (<-chan *Notification, context.Context) {
 		cancel: cancel,
 	}
 	s.subscribers = append(s.subscribers, sub)
+	
+	if s.config.Debug {
+		s.logger.Debug("new subscriber added",
+			"total_subscribers", len(s.subscribers))
+	}
+	
 	return sub.ch, ctx
 }
 
@@ -264,6 +312,12 @@ func (s *Service) Unsubscribe(ch <-chan *Notification) {
 		if subscriber.ch == ch {
 			subscriber.cancel()
 			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+			
+			if s.config.Debug {
+				s.logger.Debug("subscriber removed",
+					"remaining_subscribers", len(s.subscribers))
+			}
+			
 			break
 		}
 	}
@@ -271,13 +325,7 @@ func (s *Service) Unsubscribe(ch <-chan *Notification) {
 
 // GetUnreadCount returns the number of unread notifications
 func (s *Service) GetUnreadCount() (int, error) {
-	notifications, err := s.store.List(&FilterOptions{
-		Status: []Status{StatusUnread},
-	})
-	if err != nil {
-		return 0, err
-	}
-	return len(notifications), nil
+	return s.store.GetUnreadCount()
 }
 
 // CreateErrorNotification creates a notification from an error
@@ -321,13 +369,22 @@ func (s *Service) broadcast(notification *Notification) {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
 
+	if s.config.Debug && len(s.subscribers) > 0 {
+		s.logger.Debug("broadcasting notification",
+			"notification_id", notification.ID,
+			"type", notification.Type,
+			"subscriber_count", len(s.subscribers))
+	}
+
 	// Track which subscribers are still active
 	activeSubscribers := make([]*Subscriber, 0, len(s.subscribers))
+	var successCount, failedCount, cancelledCount int
 
 	for _, sub := range s.subscribers {
 		select {
 		case <-sub.ctx.Done():
 			// Subscriber cancelled, don't add to active list
+			cancelledCount++
 			continue
 		default:
 			// Subscriber is still active
@@ -337,8 +394,10 @@ func (s *Service) broadcast(notification *Notification) {
 			select {
 			case sub.ch <- notification:
 				// Successfully sent
+				successCount++
 			default:
 				// Channel is full, skip this subscriber
+				failedCount++
 				if s.logger != nil {
 					s.logger.Debug("notification channel full, skipping subscriber")
 				}
@@ -348,6 +407,15 @@ func (s *Service) broadcast(notification *Notification) {
 
 	// Update the subscribers list to only include active ones
 	s.subscribers = activeSubscribers
+
+	if s.config.Debug && (successCount > 0 || failedCount > 0 || cancelledCount > 0) {
+		s.logger.Debug("broadcast completed",
+			"notification_id", notification.ID,
+			"success_count", successCount,
+			"failed_count", failedCount,
+			"cancelled_count", cancelledCount,
+			"active_subscribers", len(activeSubscribers))
+	}
 }
 
 // cleanupLoop periodically removes expired notifications
@@ -357,13 +425,35 @@ func (s *Service) cleanupLoop() {
 	for {
 		select {
 		case <-s.cleanupTicker.C:
+			if s.config.Debug {
+				// Count expired notifications before cleanup
+				filter := &FilterOptions{}
+				notifications, _ := s.store.List(filter)
+				var expiredCount int
+				for _, n := range notifications {
+					if n.IsExpired() {
+						expiredCount++
+					}
+				}
+				if expiredCount > 0 {
+					s.logger.Debug("starting notification cleanup",
+						"expired_count", expiredCount,
+						"total_count", len(notifications))
+				}
+			}
+			
 			if err := s.store.DeleteExpired(); err != nil {
 				// Log error but don't stop the cleanup loop
 				if s.logger != nil {
 					s.logger.Error("error cleaning up expired notifications", "error", err)
 				}
+			} else if s.config.Debug {
+				s.logger.Debug("notification cleanup completed")
 			}
 		case <-s.ctx.Done():
+			if s.config.Debug {
+				s.logger.Debug("notification cleanup loop shutting down")
+			}
 			return
 		}
 	}
@@ -371,17 +461,29 @@ func (s *Service) cleanupLoop() {
 
 // Stop gracefully shuts down the notification service
 func (s *Service) Stop() {
+	s.logger.Info("notification service shutting down")
+	
 	s.cancel()
 	s.cleanupTicker.Stop()
 	s.wg.Wait()
 
 	// Cancel all subscriber contexts
 	s.subscribersMu.Lock()
-	defer s.subscribersMu.Unlock()
+	subscriberCount := len(s.subscribers)
 	for _, sub := range s.subscribers {
 		sub.cancel()
 	}
 	s.subscribers = nil
+	s.subscribersMu.Unlock()
+	
+	s.logger.Info("notification service stopped",
+		"subscribers_cancelled", subscriberCount)
+	
+	// Close the logger to clean up resources
+	if err := CloseLogger(); err != nil {
+		// Use fallback logging since our logger might be closed
+		slog.Default().Error("failed to close notification logger", "error", err)
+	}
 }
 
 // RateLimiter provides rate limiting for notifications

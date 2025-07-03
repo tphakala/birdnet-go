@@ -3,6 +3,8 @@ package notification
 import (
 	"fmt"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // NotifyError creates an error notification with appropriate priority
@@ -35,7 +37,7 @@ func NotifySystemAlert(priority Priority, title, message string) {
 }
 
 // NotifyDetection creates a bird detection notification
-func NotifyDetection(species string, confidence float64, metadata map[string]interface{}) {
+func NotifyDetection(species string, confidence float64, metadata map[string]any) {
 	if !IsInitialized() {
 		return
 	}
@@ -195,4 +197,59 @@ func NotifyShutdown() {
 	message := "Application is shutting down gracefully"
 
 	_, _ = service.CreateWithComponent(TypeInfo, PriorityMedium, title, message, "system")
+}
+
+// Privacy scrubbing helpers
+
+// scrubContextMap sanitizes a context map for logging by removing sensitive data
+func scrubContextMap(ctx map[string]any) map[string]any {
+	if ctx == nil {
+		return nil
+	}
+
+	scrubbed := make(map[string]any)
+	for k, v := range ctx {
+		switch k {
+		case "url", "endpoint", "uri", "rtsp_url", "stream_url":
+			// Scrub URLs
+			scrubbed[k] = privacy.AnonymizeURL(fmt.Sprint(v))
+		case "error", "message", "description", "reason":
+			// Scrub error messages
+			scrubbed[k] = privacy.ScrubMessage(fmt.Sprint(v))
+		case "ip", "client_ip", "remote_addr", "source_ip":
+			// Anonymize IP addresses
+			scrubbed[k] = privacy.AnonymizeIP(fmt.Sprint(v))
+		case "path", "file_path", "directory":
+			// Scrub file paths
+			scrubbed[k] = scrubPath(fmt.Sprint(v))
+		case "token", "api_key", "password", "secret":
+			// Never log sensitive credentials
+			scrubbed[k] = "[REDACTED]"
+		default:
+			// Keep other values as-is
+			scrubbed[k] = v
+		}
+	}
+	return scrubbed
+}
+
+// scrubPath sanitizes file paths by removing sensitive directory information
+func scrubPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	return privacy.AnonymizePath(path)
+}
+
+// scrubNotificationContent scrubs sensitive data from notification content for logging
+func scrubNotificationContent(content string) string {
+	return privacy.ScrubMessage(content)
+}
+
+// scrubIPAddress anonymizes IP addresses for logging
+func scrubIPAddress(ip string) string {
+	if ip == "" {
+		return ""
+	}
+	return privacy.AnonymizeIP(ip)
 }

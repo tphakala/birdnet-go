@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // getLoggerSafe returns a logger for the service, falling back to default if logging not initialized
@@ -43,6 +44,8 @@ type NotificationWorker struct {
 
 // WorkerConfig holds configuration for the notification worker
 type WorkerConfig struct {
+	// Debug enables debug logging for the worker
+	Debug bool
 	// BatchingEnabled enables batch processing of notifications
 	BatchingEnabled bool
 	// BatchSize is the maximum number of events to process in a batch
@@ -75,6 +78,7 @@ type CircuitBreaker struct {
 	lastFailureTime time.Time
 	successCount    int
 	config          *WorkerConfig
+	logger          *slog.Logger
 }
 
 // NewNotificationWorker creates a new notification worker
@@ -87,6 +91,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		config = DefaultWorkerConfig()
 	}
 	
+	logger := getFileLogger(config.Debug)
 	worker := &NotificationWorker{
 		service:   service,
 		templates: make(map[string]*template.Template),
@@ -94,8 +99,9 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		circuitBreaker: &CircuitBreaker{
 			state:  "closed",
 			config: config,
+			logger: logger,
 		},
-		logger: getLoggerSafe("notification-worker"),
+		logger: logger,
 	}
 	
 	// Pre-compile templates
@@ -106,6 +112,15 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 			Context("operation", "init_templates").
 			Build()
 	}
+	
+	// Log worker initialization
+	logger.Info("notification worker initialized",
+		"batch_size", config.BatchSize,
+		"batch_timeout", config.BatchTimeout,
+		"failure_threshold", config.FailureThreshold,
+		"recovery_timeout", config.RecoveryTimeout,
+		"half_open_max_events", config.HalfOpenMaxEvents,
+		"debug", config.Debug)
 	
 	return worker, nil
 }
@@ -128,6 +143,11 @@ func (w *NotificationWorker) initTemplates() error {
 		w.templates[name] = tmpl
 	}
 	
+	if w.config.Debug {
+		w.logger.Debug("notification templates initialized",
+			"template_count", len(templates))
+	}
+	
 	return nil
 }
 
@@ -138,6 +158,14 @@ func (w *NotificationWorker) Name() string {
 
 // ProcessEvent processes a single error event
 func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
+	if w.config.Debug {
+		w.logger.Debug("processing error event",
+			"component", event.GetComponent(),
+			"category", event.GetCategory(),
+			"error_message_length", len(event.GetMessage()),
+			"context", scrubContextMap(event.GetContext()))
+	}
+	
 	// Check circuit breaker
 	if !w.circuitBreaker.Allow() {
 		w.eventsDropped.Add(1)
@@ -186,7 +214,7 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		}
 		
 		w.logger.Error("failed to create notification",
-			"error", err,
+			"error", privacy.ScrubMessage(err.Error()),
 			"component", event.GetComponent(),
 			"category", event.GetCategory(),
 		)
@@ -209,12 +237,15 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		}
 	}
 	
-	w.logger.Debug("created error notification",
-		"notification_id", notification.ID,
-		"component", event.GetComponent(),
-		"category", event.GetCategory(),
-		"priority", priority,
-	)
+	if w.config.Debug {
+		w.logger.Debug("created error notification",
+			"notification_id", notification.ID,
+			"component", event.GetComponent(),
+			"category", event.GetCategory(),
+			"priority", priority,
+			"metadata_count", len(event.GetContext()),
+			"scrubbed_context", scrubContextMap(event.GetContext()))
+	}
 	
 	return nil
 }
@@ -223,6 +254,11 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
 	if len(errorEvents) == 0 {
 		return nil
+	}
+	
+	if w.config.Debug {
+		w.logger.Debug("processing event batch",
+			"batch_size", len(errorEvents))
 	}
 	
 	// Group events by component and category for aggregation
@@ -473,8 +509,15 @@ func (cb *CircuitBreaker) Allow() bool {
 	case "open":
 		// Check if we should transition to half-open
 		if time.Since(cb.lastFailureTime) > cb.config.RecoveryTimeout {
+			oldState := cb.state
 			cb.state = "half-open"
 			cb.successCount = 0
+			if cb.config.Debug && cb.logger != nil {
+				cb.logger.Debug("circuit breaker state transition",
+					"from", oldState,
+					"to", cb.state,
+					"recovery_timeout", cb.config.RecoveryTimeout)
+			}
 			return true
 		}
 		return false
@@ -498,7 +541,14 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	if cb.state == "half-open" {
 		cb.successCount++
 		if cb.successCount >= cb.config.HalfOpenMaxEvents {
+			oldState := cb.state
 			cb.state = "closed"
+			if cb.config.Debug && cb.logger != nil {
+				cb.logger.Debug("circuit breaker state transition",
+					"from", oldState,
+					"to", cb.state,
+					"reason", "successful operations threshold reached")
+			}
 		}
 	}
 }
@@ -512,11 +562,26 @@ func (cb *CircuitBreaker) RecordFailure() {
 	cb.lastFailureTime = time.Now()
 	
 	if cb.failures >= cb.config.FailureThreshold {
+		oldState := cb.state
 		cb.state = "open"
+		if cb.config.Debug && cb.logger != nil && oldState != "open" {
+			cb.logger.Debug("circuit breaker state transition",
+				"from", oldState,
+				"to", cb.state,
+				"failures", cb.failures,
+				"threshold", cb.config.FailureThreshold)
+		}
 	}
 	
 	if cb.state == "half-open" {
+		oldState := cb.state
 		cb.state = "open"
+		if cb.config.Debug && cb.logger != nil {
+			cb.logger.Debug("circuit breaker state transition",
+				"from", oldState,
+				"to", cb.state,
+				"reason", "failure in half-open state")
+		}
 	}
 }
 

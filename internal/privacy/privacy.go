@@ -322,3 +322,151 @@ func isNumeric(s string) bool {
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')
 }
+
+// AnonymizeIP anonymizes IP addresses while preserving type information
+// It distinguishes between private and public IPs and applies consistent hashing
+func AnonymizeIP(ipStr string) string {
+	if ipStr == "" {
+		return ""
+	}
+	
+	// Try to parse as IP first
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		// Not a valid IP, return a generic hash
+		hash := sha256.Sum256([]byte(ipStr))
+		return fmt.Sprintf("invalid-ip-%x", hash[:8])
+	}
+	
+	// Categorize the IP
+	category := categorizeHost(ip.String())
+	
+	// Create a hash of the IP
+	hash := sha256.Sum256([]byte(ip.String()))
+	
+	// Return categorized anonymized IP
+	return fmt.Sprintf("%s-%x", category, hash[:8])
+}
+
+// AnonymizePath anonymizes file paths while preserving structure information
+// It replaces path segments with hashes but maintains the path hierarchy
+func AnonymizePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	
+	// Preserve absolute/relative nature of the path
+	isAbsolute := strings.HasPrefix(path, "/") || (len(path) > 2 && path[1] == ':') // Unix or Windows
+	
+	// Split path into segments
+	segments := strings.FieldsFunc(path, func(r rune) bool {
+		return r == '/' || r == '\\'
+	})
+	
+	if len(segments) == 0 {
+		return "empty-path"
+	}
+	
+	// Anonymize each segment
+	anonymized := make([]string, len(segments))
+	for i, segment := range segments {
+		if segment == "" {
+			continue
+		}
+		
+		// Keep file extensions visible for debugging
+		ext := ""
+		if i == len(segments)-1 { // Last segment (filename)
+			if idx := strings.LastIndex(segment, "."); idx > 0 {
+				ext = segment[idx:]
+				segment = segment[:idx]
+			}
+		}
+		
+		// Hash the segment
+		hash := sha256.Sum256([]byte(segment))
+		anonymized[i] = fmt.Sprintf("path-%x%s", hash[:4], ext)
+	}
+	
+	// Reconstruct path with appropriate separator
+	separator := "/"
+	if strings.Contains(path, "\\") {
+		separator = "\\"
+	}
+	
+	result := strings.Join(anonymized, separator)
+	if isAbsolute && !strings.HasPrefix(result, separator) {
+		result = separator + result
+	}
+	
+	return result
+}
+
+// RedactUserAgent anonymizes user agent strings to prevent tracking
+// It preserves browser and OS type information while removing version details
+func RedactUserAgent(userAgent string) string {
+	if userAgent == "" {
+		return ""
+	}
+	
+	// Common patterns to extract browser/OS info
+	// These patterns match major browsers and operating systems
+	// Order matters - check more specific patterns first
+	patterns := []struct {
+		name    string
+		pattern *regexp.Regexp
+		isBrowser bool
+	}{
+		// Browsers (check Edge before Chrome since Edge contains Chrome string)
+		{"Edge", regexp.MustCompile(`(?i)Edg/[\d.]+`), true},
+		{"Opera", regexp.MustCompile(`(?i)Opera/[\d.]+|OPR/[\d.]+`), true},
+		{"Chrome", regexp.MustCompile(`(?i)Chrome/[\d.]+`), true},
+		{"Firefox", regexp.MustCompile(`(?i)Firefox/[\d.]+`), true},
+		{"Safari", regexp.MustCompile(`(?i)Safari/[\d.]+`), true},
+		// Operating Systems
+		{"Windows", regexp.MustCompile(`(?i)Windows NT [\d.]+`), false},
+		{"Mac", regexp.MustCompile(`(?i)Mac OS X [\d._]+`), false},
+		{"Android", regexp.MustCompile(`(?i)Android [\d.]+`), false},
+		{"iOS", regexp.MustCompile(`(?i)iPhone OS [\d._]+`), false},
+		{"Linux", regexp.MustCompile(`(?i)Linux`), false},
+	}
+	
+	// Extract basic browser and OS info
+	var components []string
+	var foundBrowser, foundOS bool
+	
+	// Check for bot/crawler patterns
+	if strings.Contains(strings.ToLower(userAgent), "bot") ||
+		strings.Contains(strings.ToLower(userAgent), "crawler") ||
+		strings.Contains(strings.ToLower(userAgent), "spider") {
+		components = append(components, "Bot")
+		foundBrowser = true // Bot is considered a browser type
+	}
+	
+	// Extract browser and OS type
+	for _, p := range patterns {
+		if p.pattern.MatchString(userAgent) {
+			if p.isBrowser && !foundBrowser {
+				components = append(components, p.name)
+				foundBrowser = true
+			} else if !p.isBrowser && !foundOS {
+				components = append(components, p.name)
+				foundOS = true
+			}
+			
+			// Stop if we found both browser and OS
+			if foundBrowser && foundOS {
+				break
+			}
+		}
+	}
+	
+	// If no components found, return a generic hash
+	if len(components) == 0 {
+		hash := sha256.Sum256([]byte(userAgent))
+		return fmt.Sprintf("ua-%x", hash[:8])
+	}
+	
+	// Return redacted user agent with basic info only
+	return strings.Join(components, " ")
+}

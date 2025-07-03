@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // SSENotificationData represents notification data sent via SSE
@@ -91,6 +92,11 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Subscribe to notifications
 	service := notification.GetService()
 	notificationCh, notificationCtx := service.Subscribe()
+	
+	// Ensure cleanup happens regardless of how we exit (client disconnect, service shutdown, or error)
+	// Note: Unsubscribe is idempotent (safe to call multiple times) and doesn't return an error,
+	// making it ideal for defer. If the channel isn't found, it simply does nothing.
+	defer service.Unsubscribe(notificationCh)
 
 	// Create notification client
 	client := &NotificationClient{
@@ -108,27 +114,40 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		"clientId": clientID,
 		"message":  "Connected to notification stream",
 	}); err != nil {
-		service.Unsubscribe(notificationCh)
+		// No need to unsubscribe here - defer will handle it
 		return err
 	}
 
 	// Log the connection
 	if c.apiLogger != nil {
-		c.apiLogger.Info("notification SSE client connected",
-			"clientId", clientID,
-			"ip", ctx.RealIP(),
-		)
+		if c.Settings != nil && c.Settings.WebServer.Debug {
+			c.apiLogger.Debug("notification SSE client connected",
+				"clientId", clientID,
+				"ip", privacy.AnonymizeIP(ctx.RealIP()),
+				"user_agent", privacy.RedactUserAgent(ctx.Request().UserAgent()))
+		} else {
+			c.apiLogger.Info("notification SSE client connected",
+				"clientId", clientID,
+				"ip", privacy.AnonymizeIP(ctx.RealIP()))
+		}
 	}
 
 	// Handle client disconnect
 	go func() {
 		<-ctx.Request().Context().Done()
 		client.Done <- true
-		service.Unsubscribe(notificationCh)
+		// No need to unsubscribe here - defer will handle it
 		if c.apiLogger != nil {
-			c.apiLogger.Info("notification SSE client disconnected",
-				"clientId", clientID,
-			)
+			if c.Settings != nil && c.Settings.WebServer.Debug {
+				c.apiLogger.Debug("notification SSE client disconnected",
+					"clientId", clientID,
+					"ip", privacy.AnonymizeIP(ctx.RealIP()),
+					"reason", "context_done")
+			} else {
+				c.apiLogger.Info("notification SSE client disconnected",
+					"clientId", clientID,
+					"ip", privacy.AnonymizeIP(ctx.RealIP()))
+			}
 		}
 	}()
 
@@ -159,6 +178,14 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 					)
 				}
 				return err
+			}
+			
+			if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+				c.apiLogger.Debug("notification sent via SSE",
+					"clientId", clientID,
+					"notification_id", notif.ID,
+					"type", notif.Type,
+					"priority", notif.Priority)
 			}
 
 		case <-ticker.C:
@@ -224,6 +251,15 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		}
 	}
 
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("listing notifications",
+			"status", filter.Status,
+			"types", filter.Types,
+			"priorities", filter.Priorities,
+			"limit", filter.Limit,
+			"offset", filter.Offset)
+	}
+
 	// Get notifications
 	notifications, err := service.List(filter)
 	if err != nil {
@@ -233,6 +269,17 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notifications",
 		})
+	}
+
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		unreadCount, err := service.GetUnreadCount()
+		if err != nil {
+			c.apiLogger.Error("failed to get unread count", "error", err)
+			unreadCount = -1 // Indicate error in debug log
+		}
+		c.apiLogger.Debug("notifications retrieved",
+			"count", len(notifications),
+			"total_unread", unreadCount)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -294,6 +341,7 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	}
 
 	service := notification.GetService()
+	
 	if err := service.MarkAsRead(id); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
@@ -301,6 +349,10 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to mark notification as read",
 		})
+	}
+	
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("notification marked as read", "id", id)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{
@@ -391,3 +443,4 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 		"unreadCount": count,
 	})
 }
+
