@@ -19,12 +19,26 @@ var (
 	
 	// IPv4 pattern for IP address detection
 	ipv4Pattern = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
+	
+	// BirdWeather ID pattern - matches IDs with explicit BirdWeather context
+	birdWeatherIDPattern = regexp.MustCompile(`(?i)birdweather\s*(?:id|identifier)?[:=]?\s*([A-Za-z0-9]{8,32})`)
+	
+	// GPS coordinates pattern - matches decimal degree coordinates
+	coordinatesPattern = regexp.MustCompile(`(?:(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
+	
+	// Generic API token/key pattern - matches tokens with clear context
+	apiTokenPattern = regexp.MustCompile(`(?:api[_-]?key|token|secret|auth)[:=]\s*([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
 )
 
 // ScrubMessage removes or anonymizes sensitive information from telemetry messages
-// It finds URLs in the message and replaces them with anonymized versions
+// It finds URLs and other sensitive data in the message and replaces them with anonymized versions
 func ScrubMessage(message string) string {
-	return urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
+	// Apply all scrubbing functions in sequence
+	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
+	result = ScrubBirdWeatherID(result)
+	result = ScrubCoordinates(result)
+	result = ScrubAPITokens(result)
+	return result
 }
 
 // AnonymizeURL converts a URL to an anonymized form while preserving debugging value
@@ -153,6 +167,51 @@ func IsValidSystemID(id string) bool {
 	}
 
 	return true
+}
+
+// ScrubBirdWeatherID removes or anonymizes BirdWeather IDs from text messages
+// It replaces BirdWeather IDs with a generic placeholder while preserving message structure
+func ScrubBirdWeatherID(message string) string {
+	return birdWeatherIDPattern.ReplaceAllStringFunc(message, func(match string) string {
+		// Check if this is a BirdWeather context match
+		if strings.Contains(strings.ToLower(match), "birdweather") || strings.Contains(strings.ToLower(match), "id") {
+			return "bw-[REDACTED]"
+		}
+		// For standalone alphanumeric strings that might be BirdWeather IDs, be more conservative
+		return "bw-[REDACTED]"
+	})
+}
+
+// ScrubCoordinates removes or anonymizes GPS coordinates from text messages
+// It replaces coordinate pairs with generic placeholders while preserving message structure
+func ScrubCoordinates(message string) string {
+	return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+}
+
+// ScrubAPITokens removes or anonymizes API tokens, keys, and secrets from text messages
+// It replaces tokens with generic placeholders while preserving message structure
+func ScrubAPITokens(message string) string {
+	return apiTokenPattern.ReplaceAllStringFunc(message, func(match string) string {
+		// Replace the entire match with a placeholder, preserving any prefixes
+		if strings.Contains(match, ":") || strings.Contains(match, "=") {
+			parts := strings.FieldsFunc(match, func(r rune) bool { return r == ':' || r == '=' })
+			if len(parts) >= 2 {
+				return parts[0] + ": [API_TOKEN]"
+			}
+		}
+		return "[API_TOKEN]"
+	})
+}
+
+// ScrubAllSensitiveData applies all privacy scrubbing functions to the input message
+// This is a convenience function that applies URL, BirdWeather ID, coordinate, and token scrubbing
+func ScrubAllSensitiveData(message string) string {
+	// Apply all scrubbing functions in sequence
+	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
+	result = ScrubBirdWeatherID(result)
+	result = ScrubCoordinates(result)
+	result = ScrubAPITokens(result)
+	return result
 }
 
 // categorizeHost anonymizes hostnames while preserving useful categorization
