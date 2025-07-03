@@ -13,6 +13,7 @@ import (
 // DeduplicationConfig holds configuration for error deduplication
 type DeduplicationConfig struct {
 	Enabled         bool
+	Debug           bool // Enable debug logging
 	TTL             time.Duration
 	MaxEntries      int
 	CleanupInterval time.Duration
@@ -99,6 +100,17 @@ func (ed *ErrorDeduplicator) ShouldProcess(event ErrorEvent) bool {
 	
 	// Calculate hash for the error
 	hash := ed.calculateHash(event)
+	
+	// Debug logging
+	if ed.config.Debug {
+		ed.logger.Debug("checking deduplication",
+			"component", event.GetComponent(),
+			"category", event.GetCategory(),
+			"error_message", event.GetMessage(),
+			"cache_size", len(ed.cache),
+			"hash", hash,
+		)
+	}
 	
 	ed.mu.Lock()
 	defer ed.mu.Unlock()

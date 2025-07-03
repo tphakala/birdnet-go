@@ -73,7 +73,8 @@ type EventBus struct {
 	deduplicator *ErrorDeduplicator
 	
 	// Metrics
-	stats EventBusStats
+	stats     EventBusStats
+	startTime time.Time
 	
 	// Logging
 	logger *slog.Logger
@@ -162,6 +163,7 @@ func Initialize(config *Config) (*EventBus, error) {
 		cancel:     cancel,
 		consumers:  make([]EventConsumer, 0),
 		logger:     logger,
+		startTime:  time.Now(),
 	}
 	
 	// Initialize deduplicator if enabled
@@ -201,6 +203,8 @@ func IsInitialized() bool {
 
 // RegisterConsumer adds a new event consumer
 func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
+	start := time.Now()
+	
 	if eb == nil {
 		return fmt.Errorf("event bus not initialized")
 	}
@@ -220,9 +224,12 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 	// Update global flag for fast path optimization
 	hasActiveConsumers.Store(true)
 	
+	duration := time.Since(start)
 	eb.logger.Info("registered event consumer",
 		"consumer", consumer.Name(),
 		"supports_batching", consumer.SupportsBatching(),
+		"duration_ms", duration.Milliseconds(),
+		"total_consumers", len(eb.consumers),
 	)
 	
 	// Start workers if this is the first consumer and not already running
@@ -246,6 +253,18 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 	
 	if eb == nil || !eb.initialized.Load() || !eb.running.Load() {
 		return false
+	}
+	
+	// Debug logging for event publishing
+	if eb.config != nil && eb.config.Debug {
+		eb.logger.Debug("publishing event",
+			"event_type", fmt.Sprintf("%T", event),
+			"component", event.GetComponent(),
+			"category", event.GetCategory(),
+			"buffer_used", len(eb.eventChan),
+			"buffer_capacity", cap(eb.eventChan),
+			"active_consumers", len(eb.consumers),
+		)
 	}
 	
 	// Fast path - check if we have consumers
@@ -324,7 +343,19 @@ func (eb *EventBus) worker(id int) {
 				return
 			}
 			
-			eb.processEvent(event, logger)
+			// Add timing for debug mode
+			if eb.config != nil && eb.config.Debug {
+				start := time.Now()
+				eb.processEvent(event, logger)
+				duration := time.Since(start)
+				logger.Debug("event processed",
+					"event_type", fmt.Sprintf("%T", event),
+					"component", event.GetComponent(),
+					"duration_ms", duration.Milliseconds(),
+				)
+			} else {
+				eb.processEvent(event, logger)
+			}
 		}
 	}
 }
@@ -351,7 +382,20 @@ func (eb *EventBus) processEvent(event ErrorEvent, logger *slog.Logger) {
 				}
 			}()
 			
+			// Time consumer processing
+			consumerStart := time.Now()
 			err := consumer.ProcessEvent(event)
+			consumerDuration := time.Since(consumerStart)
+			
+			// Warn about slow consumers
+			if consumerDuration > 100*time.Millisecond {
+				logger.Warn("slow consumer detected",
+					"consumer", consumer.Name(),
+					"duration_ms", consumerDuration.Milliseconds(),
+					"component", event.GetComponent(),
+				)
+			}
+			
 			if err != nil {
 				atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
 				logger.Error("consumer error",
@@ -395,7 +439,12 @@ func (eb *EventBus) Shutdown(timeout time.Duration) error {
 	
 	select {
 	case <-done:
-		eb.logger.Info("event bus shutdown complete")
+		eb.logger.Info("event bus shutdown complete",
+			"total_events_processed", atomic.LoadUint64(&eb.stats.EventsProcessed),
+			"total_events_dropped", atomic.LoadUint64(&eb.stats.EventsDropped),
+			"final_buffer_size", len(eb.eventChan),
+			"uptime_seconds", time.Since(eb.startTime).Seconds(),
+		)
 		return nil
 	case <-time.After(timeout):
 		eb.logger.Warn("event bus shutdown timeout exceeded")
@@ -453,11 +502,21 @@ func (eb *EventBus) logMetrics(reason string) {
 	stats := eb.GetStats()
 	dedupStats := eb.GetDeduplicationStats()
 	
+	// Calculate rates
+	uptime := time.Since(eb.startTime).Seconds()
+	eventsPerSecond := float64(0)
+	if uptime > 0 {
+		eventsPerSecond = float64(stats.EventsProcessed) / uptime
+	}
+	
 	totalAttempts := stats.EventsReceived + stats.EventsDropped + stats.FastPathHits
 	fastPathPercent := float64(0)
 	if totalAttempts > 0 {
 		fastPathPercent = float64(stats.FastPathHits) / float64(totalAttempts) * 100
 	}
+	
+	// Calculate buffer utilization
+	bufferUtilization := float64(len(eb.eventChan)) / float64(cap(eb.eventChan)) * 100
 	
 	eb.logger.Info("event bus performance metrics",
 		"reason", reason,
@@ -465,11 +524,15 @@ func (eb *EventBus) logMetrics(reason string) {
 		"events_processed", stats.EventsProcessed,
 		"events_dropped", stats.EventsDropped,
 		"events_suppressed", stats.EventsSuppressed,
+		"events_per_second", fmt.Sprintf("%.2f", eventsPerSecond),
 		"consumer_errors", stats.ConsumerErrors,
 		"fast_path_hits", stats.FastPathHits,
 		"fast_path_percent", fmt.Sprintf("%.2f%%", fastPathPercent),
+		"active_consumers", len(eb.consumers),
+		"buffer_utilization", fmt.Sprintf("%.1f%%", bufferUtilization),
 		"dedup_total_seen", dedupStats.TotalSeen,
 		"dedup_total_suppressed", dedupStats.TotalSuppressed,
 		"dedup_cache_size", dedupStats.CacheSize,
+		"uptime_hours", fmt.Sprintf("%.2f", uptime/3600),
 	)
 }
