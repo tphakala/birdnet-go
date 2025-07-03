@@ -111,8 +111,24 @@ func (m *SystemInitManager) initializeNotification() error {
 	m.notificationInitOnce.Do(func() {
 		m.logger.Debug("initializing notification service")
 		
-		// Initialize with default config
-		notification.Initialize(nil)
+		// Get settings for debug flag
+		settings := conf.GetSettings()
+		debug := false
+		if settings != nil {
+			debug = settings.Debug
+		}
+		
+		// Create notification service config
+		config := &notification.ServiceConfig{
+			Debug:              debug,
+			MaxNotifications:   1000,
+			CleanupInterval:    5 * time.Minute,
+			RateLimitWindow:    1 * time.Minute,
+			RateLimitMaxEvents: 100,
+		}
+		
+		// Initialize with config
+		notification.Initialize(config)
 		
 		// Verify initialization
 		if !notification.IsInitialized() {
@@ -120,7 +136,7 @@ func (m *SystemInitManager) initializeNotification() error {
 			return
 		}
 		
-		m.logger.Info("notification service initialized successfully")
+		m.logger.Info("notification service initialized successfully", "debug", debug)
 	})
 	
 	return m.notificationErr
