@@ -131,13 +131,22 @@ func (m *SystemInitManager) initializeEventBus() error {
 	m.eventBusInitOnce.Do(func() {
 		m.logger.Debug("initializing event bus")
 		
+		// Get settings for debug flag
+		settings := conf.GetSettings()
+		debug := false
+		if settings != nil {
+			debug = settings.Debug
+		}
+		
 		// Initialize event bus for async error processing
 		eventBusConfig := &events.Config{
 			BufferSize: 10000,
 			Workers:    4,
 			Enabled:    true,
+			Debug:      debug,
 			Deduplication: &events.DeduplicationConfig{
 				Enabled:         true,
+				Debug:           debug,
 				TTL:             5 * time.Minute,
 				MaxEntries:      1000,
 				CleanupInterval: 1 * time.Minute,
