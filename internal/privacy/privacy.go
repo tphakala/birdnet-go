@@ -322,3 +322,82 @@ func isNumeric(s string) bool {
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')
 }
+
+// AnonymizeIP anonymizes IP addresses while preserving type information
+// It distinguishes between private and public IPs and applies consistent hashing
+func AnonymizeIP(ipStr string) string {
+	if ipStr == "" {
+		return ""
+	}
+	
+	// Try to parse as IP first
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		// Not a valid IP, return a generic hash
+		hash := sha256.Sum256([]byte(ipStr))
+		return fmt.Sprintf("invalid-ip-%x", hash[:8])
+	}
+	
+	// Categorize the IP
+	category := categorizeHost(ip.String())
+	
+	// Create a hash of the IP
+	hash := sha256.Sum256([]byte(ip.String()))
+	
+	// Return categorized anonymized IP
+	return fmt.Sprintf("%s-%x", category, hash[:8])
+}
+
+// AnonymizePath anonymizes file paths while preserving structure information
+// It replaces path segments with hashes but maintains the path hierarchy
+func AnonymizePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	
+	// Preserve absolute/relative nature of the path
+	isAbsolute := strings.HasPrefix(path, "/") || (len(path) > 2 && path[1] == ':') // Unix or Windows
+	
+	// Split path into segments
+	segments := strings.FieldsFunc(path, func(r rune) bool {
+		return r == '/' || r == '\\'
+	})
+	
+	if len(segments) == 0 {
+		return "empty-path"
+	}
+	
+	// Anonymize each segment
+	anonymized := make([]string, len(segments))
+	for i, segment := range segments {
+		if segment == "" {
+			continue
+		}
+		
+		// Keep file extensions visible for debugging
+		ext := ""
+		if i == len(segments)-1 { // Last segment (filename)
+			if idx := strings.LastIndex(segment, "."); idx > 0 {
+				ext = segment[idx:]
+				segment = segment[:idx]
+			}
+		}
+		
+		// Hash the segment
+		hash := sha256.Sum256([]byte(segment))
+		anonymized[i] = fmt.Sprintf("path-%x%s", hash[:4], ext)
+	}
+	
+	// Reconstruct path with appropriate separator
+	separator := "/"
+	if strings.Contains(path, "\\") {
+		separator = "\\"
+	}
+	
+	result := strings.Join(anonymized, separator)
+	if isAbsolute && !strings.HasPrefix(result, separator) {
+		result = separator + result
+	}
+	
+	return result
+}

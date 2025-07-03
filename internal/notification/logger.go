@@ -12,6 +12,8 @@ var (
 	fileLogger *slog.Logger
 	// levelVar allows dynamic log level adjustment
 	levelVar   *slog.LevelVar
+	// loggerCloser stores the cleanup function for the log file
+	loggerCloser func() error
 	loggerOnce sync.Once
 )
 
@@ -35,10 +37,7 @@ func initFileLogger(debug bool) {
 		}
 		
 		fileLogger = logger
-		// Note: We don't store the closer function since the logger will persist
-		// throughout the application lifecycle. If needed, we could add a cleanup
-		// function to be called on shutdown.
-		_ = closer
+		loggerCloser = closer
 	})
 }
 
@@ -59,4 +58,12 @@ func SetDebugLevel(debug bool) {
 			levelVar.Set(slog.LevelInfo)
 		}
 	}
+}
+
+// CloseLogger closes the log file and cleans up resources
+func CloseLogger() error {
+	if loggerCloser != nil {
+		return loggerCloser()
+	}
+	return nil
 }
