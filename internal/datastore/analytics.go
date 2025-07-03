@@ -506,13 +506,11 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
 				CountInPeriod:  raw.CountInPeriod,
 			})
-		} else {
+		} else if datastoreLogger != nil {
 			// Log if a record surprisingly had an empty date after SQL filtering
-			if datastoreLogger != nil {
-				datastoreLogger.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
-					"scientific_name", raw.ScientificName,
-					"operation", "get_new_species_detections")
-			}
+			datastoreLogger.Warn("GetNewSpeciesDetections: Skipped record due to empty first_detection_date",
+				"scientific_name", raw.ScientificName,
+				"operation", "get_new_species_detections")
 		}
 	}
 
