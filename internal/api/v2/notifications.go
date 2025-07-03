@@ -93,7 +93,9 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	service := notification.GetService()
 	notificationCh, notificationCtx := service.Subscribe()
 	
-	// Ensure cleanup happens regardless of how we exit
+	// Ensure cleanup happens regardless of how we exit (client disconnect, service shutdown, or error)
+	// Note: Unsubscribe is idempotent (safe to call multiple times) and doesn't return an error,
+	// making it ideal for defer. If the channel isn't found, it simply does nothing.
 	defer service.Unsubscribe(notificationCh)
 
 	// Create notification client
