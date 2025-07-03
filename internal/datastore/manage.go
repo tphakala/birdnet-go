@@ -3,6 +3,7 @@ package datastore
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -245,102 +246,22 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	
 	migrationLogger.Info("Starting database migration")
 	
-	migrator := db.Migrator()
-	var schemaCorrect bool // Declare without initial assignment
-	var err error
-
-	switch dbType {
-	case "sqlite":
-		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
-		if err != nil {
-			enhancedErr := errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "schema_validation").
-				Context("db_type", dbType).
-				Context("table", "image_caches").
-				Build()
-			
-			migrationLogger.Error("Schema validation failed", "error", enhancedErr)
-			return enhancedErr
-		}
-	case "mysql":
-		// Need to extract dbName from connectionInfo for MySQL check
-		dbName := extractDBNameFromMySQLInfo(connectionInfo) // Helper function needed
-		if dbName == "" {
-			migrationLogger.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
-			schemaCorrect = true // Avoid dropping if we can't check
-		} else {
-			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
-			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("datastore").
-					Category(errors.CategoryDatabase).
-					Context("operation", "schema_validation").
-					Context("db_type", dbType).
-					Context("table", "image_caches").
-					Context("database", dbName).
-					Build()
-				
-				migrationLogger.Error("Schema validation failed", "error", enhancedErr)
-				return enhancedErr
-			}
-		}
-	default:
-		migrationLogger.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
-			"db_type", dbType)
-		schemaCorrect = true // Avoid dropping for unsupported types
-	}
-	
-	migrationLogger.Info("Schema validation completed",
-		"schema_correct", schemaCorrect,
-		"duration", time.Since(migrationStart))
-
-	if !schemaCorrect {
-		if migrator.HasTable(&ImageCache{}) {
-			if debug {
-				log.Printf("Debug: Incorrect schema detected for 'image_caches'. Dropping table.")
-			}
-			if err := migrator.DropTable(&ImageCache{}); err != nil {
-				return fmt.Errorf("failed to drop existing 'image_caches' table with incorrect schema: %w", err)
-			}
-		} else if debug {
-			log.Printf("Debug: 'image_caches' table does not exist. AutoMigrate will create it.")
-		}
-	} else {
-		if debug {
-			log.Printf("Debug: Schema for 'image_caches' appears correct. Skipping drop.")
-		}
+	// Validate and fix schema if needed
+	if err := validateAndFixSchema(db, dbType, connectionInfo, debug, migrationLogger); err != nil {
+		return err
 	}
 
-	// Perform the auto-migration for all necessary tables.
-	// GORM's AutoMigrate will handle creating tables if they don't exist,
-	// and adding missing columns (like 'source_provider' to 'image_caches') to existing tables.
-	tables := []interface{}{
-		&Note{}, &Results{}, &NoteReview{}, &NoteComment{},
-		&DailyEvents{}, &HourlyWeather{}, &NoteLock{}, &ImageCache{},
-	}
-	
-	migrationLogger.Info("Starting table migrations",
-		"table_count", len(tables))
-	
-	if err := db.AutoMigrate(tables...); err != nil {
-		enhancedErr := errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "auto_migrate").
-			Context("db_type", dbType).
-			Build()
-		
-		migrationLogger.Error("Table migration failed", "error", enhancedErr)
-		return enhancedErr
+	// Perform table migrations
+	successCount, err := migrateTables(db, dbType, migrationLogger)
+	if err != nil {
+		return err
 	}
 	
 	// Log successful migration completion
 	migrationLogger.Info("Database migration completed successfully",
 		"db_type", dbType,
 		"total_duration", time.Since(migrationStart),
-		"tables_migrated", len(tables))
+		"tables_migrated", successCount)
 
 	return nil
 }
@@ -438,4 +359,222 @@ func redactSensitiveInfo(dsn string) string {
 	}
 
 	return sanitized
+}
+
+// validateAndFixSchema checks and fixes the database schema if needed
+func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool, lgr *slog.Logger) error {
+	migrator := db.Migrator()
+	var schemaCorrect bool
+	var err error
+
+	switch dbType {
+	case "sqlite":
+		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
+		if err != nil {
+			enhancedErr := errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "schema_validation").
+				Context("db_type", dbType).
+				Context("table", "image_caches").
+				Build()
+			
+			lgr.Error("Schema validation failed", "error", enhancedErr)
+			return enhancedErr
+		}
+	case "mysql":
+		// Need to extract dbName from connectionInfo for MySQL check
+		dbName := extractDBNameFromMySQLInfo(connectionInfo)
+		if dbName == "" {
+			lgr.Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
+			schemaCorrect = true // Avoid dropping if we can't check
+		} else {
+			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
+			if err != nil {
+				enhancedErr := errors.New(err).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "schema_validation").
+					Context("db_type", dbType).
+					Context("table", "image_caches").
+					Context("database", dbName).
+					Build()
+				
+				lgr.Error("Schema validation failed", "error", enhancedErr)
+				return enhancedErr
+			}
+		}
+	default:
+		lgr.Warn("Unsupported database type for image_caches schema check. Assuming schema is correct.",
+			"db_type", dbType)
+		schemaCorrect = true // Avoid dropping for unsupported types
+	}
+	
+	lgr.Info("Schema validation completed",
+		"schema_correct", schemaCorrect)
+
+	if !schemaCorrect {
+		if migrator.HasTable(&ImageCache{}) {
+			if debug {
+				lgr.Debug("Incorrect schema detected for 'image_caches'. Dropping table")
+			}
+			if err := migrator.DropTable(&ImageCache{}); err != nil {
+				return fmt.Errorf("failed to drop existing 'image_caches' table with incorrect schema: %w", err)
+			}
+		} else if debug {
+			lgr.Debug("'image_caches' table does not exist. AutoMigrate will create it")
+		}
+	} else {
+		if debug {
+			lgr.Debug("Schema for 'image_caches' appears correct. Skipping drop")
+		}
+	}
+	
+	return nil
+}
+
+// migrateTables performs the actual table migrations
+func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
+	tableMappings := []struct {
+		model interface{}
+		name  string
+	}{
+		{&Note{}, "notes"},
+		{&Results{}, "results"},
+		{&NoteReview{}, "note_reviews"},
+		{&NoteComment{}, "note_comments"},
+		{&DailyEvents{}, "daily_events"},
+		{&HourlyWeather{}, "hourly_weather"},
+		{&NoteLock{}, "note_locks"},
+		{&ImageCache{}, "image_caches"},
+	}
+	
+	lgr.Info("Starting table migrations",
+		"table_count", len(tableMappings))
+	
+	// Migrate each table individually for better logging
+	successCount := 0
+	for _, table := range tableMappings {
+		if err := migrateTable(db, table.model, table.name, dbType, lgr); err != nil {
+			return successCount, err
+		}
+		successCount++
+	}
+	
+	return successCount, nil
+}
+
+// migrateTable migrates a single table with detailed logging
+func migrateTable(db *gorm.DB, model interface{}, tableName, dbType string, lgr *slog.Logger) error {
+	tableStart := time.Now()
+	
+	// Check if table exists before migration
+	tableExists := db.Migrator().HasTable(model)
+	
+	lgr.Debug("Migrating table",
+		"table", tableName,
+		"exists", tableExists)
+	
+	// Get column information before migration (if table exists)
+	columnsBefore := getTableColumns(db, model, tableExists)
+	
+	if err := db.AutoMigrate(model); err != nil {
+		enhancedErr := errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "auto_migrate_table").
+			Context("db_type", dbType).
+			Context("table", tableName).
+			Build()
+		
+		lgr.Error("Table migration failed",
+			"table", tableName,
+			"error", enhancedErr)
+		return enhancedErr
+	}
+	
+	// Determine what changed
+	action, addedColumns := determineTableChanges(db, model, tableExists, columnsBefore)
+	
+	// Log migration result
+	logTableMigration(lgr, tableName, action, addedColumns, time.Since(tableStart))
+	
+	return nil
+}
+
+// getTableColumns retrieves column names for a table
+func getTableColumns(db *gorm.DB, model interface{}, tableExists bool) []string {
+	var columns []string
+	if tableExists {
+		if cols, err := db.Migrator().ColumnTypes(model); err == nil {
+			for _, col := range cols {
+				columns = append(columns, col.Name())
+			}
+		}
+	}
+	return columns
+}
+
+// determineTableChanges checks what changed after migration
+func determineTableChanges(db *gorm.DB, model interface{}, tableExists bool, columnsBefore []string) (action string, addedColumns []string) {
+	action = "updated"
+	
+	if !tableExists {
+		action = "created"
+		// Get all columns for newly created table
+		if cols, err := db.Migrator().ColumnTypes(model); err == nil {
+			for _, col := range cols {
+				addedColumns = append(addedColumns, col.Name())
+			}
+		}
+	} else {
+		// Check for new columns added
+		addedColumns = findNewColumns(db, model, columnsBefore)
+		if len(addedColumns) == 0 {
+			action = "unchanged"
+		}
+	}
+	
+	return action, addedColumns
+}
+
+// findNewColumns identifies columns added during migration
+func findNewColumns(db *gorm.DB, model interface{}, columnsBefore []string) []string {
+	var addedColumns []string
+	
+	if cols, err := db.Migrator().ColumnTypes(model); err == nil {
+		for _, col := range cols {
+			colName := col.Name()
+			found := false
+			for _, oldCol := range columnsBefore {
+				if oldCol == colName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				addedColumns = append(addedColumns, colName)
+			}
+		}
+	}
+	
+	return addedColumns
+}
+
+// logTableMigration logs the result of a table migration
+func logTableMigration(lgr *slog.Logger, tableName, action string, addedColumns []string, duration time.Duration) {
+	logFields := []any{
+		"table", tableName,
+		"action", action,
+		"duration", duration,
+	}
+	
+	if len(addedColumns) > 0 {
+		logFields = append(logFields, "columns_added", len(addedColumns))
+		if len(addedColumns) <= 5 { // Only show column names if not too many
+			logFields = append(logFields, "new_columns", addedColumns)
+		}
+	}
+	
+	lgr.Info("Table migration completed", logFields...)
 }
