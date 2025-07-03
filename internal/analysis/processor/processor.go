@@ -143,8 +143,8 @@ func (p *Processor) startDetectionProcessor() {
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range birdnet.ResultsQueue {
-			itemCopy := item
-			p.processDetections(&itemCopy)
+			// Process directly without copying - we own this data
+			p.processDetections(&item)
 		}
 	}()
 }
