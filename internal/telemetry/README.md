@@ -100,26 +100,27 @@ type WorkerConfig struct {
 
 ### Privacy Protection
 
-The system implements comprehensive privacy protection:
+The telemetry package leverages the centralized `internal/privacy` package for all privacy-related operations:
 
-1. **URL Anonymization**
+1. **URL Anonymization** (via `privacy.AnonymizeURL()`)
    - URLs are hashed using SHA256
    - Query parameters are removed
    - Path structure is preserved without exposing content
 
-2. **IP Address Categorization**
-   - Private IPs: RFC1918 ranges, loopback, link-local
-   - Public IPs: Categorized by region when possible
-   - Localhost: Special handling for 127.0.0.1
+2. **Message Scrubbing** (via `privacy.ScrubMessage()`)
+   - Automatically finds and anonymizes URLs in messages
+   - Removes sensitive information from error messages
+   - Consistent anonymization across all telemetry
 
-3. **Data Scrubbing**
-   - Sensitive patterns removed from messages
-   - User data anonymized
-   - File paths sanitized
+3. **System ID Generation** (via `privacy.GenerateSystemID()`)
+   - Cryptographically secure unique identifiers
+   - Format: `XXXX-XXXX-XXXX` (14 characters)
+   - URL-safe and case-insensitive
 
 4. **Context Filtering**
    - Only safe context values transmitted
    - PII automatically detected and removed
+   - Privacy scrubbing applied before sending to Sentry
 
 ### Optimized Capture
 
@@ -384,6 +385,7 @@ export LOG_LEVEL=debug
 6. **Handle Failures**: Check return values and log errors
 7. **Test with Mocks**: Use test helpers for unit testing
 8. **Review Privacy**: Ensure sensitive data is scrubbed
+9. **Use Privacy Package**: All privacy operations use `internal/privacy` package
 
 ## Environment Variables
 
@@ -395,19 +397,32 @@ export LOG_LEVEL=debug
 | `SENTRY_DEBUG` | Enable debug mode | false |
 | `LOG_LEVEL` | Logging level | "info" |
 
+## Dependencies and Integration
+
+### Privacy Package Integration
+
+The telemetry package depends on `internal/privacy` for all privacy-related operations:
+
+- **Message Scrubbing**: `privacy.ScrubMessage()` - Anonymizes sensitive data in error messages
+- **URL Anonymization**: `privacy.AnonymizeURL()` - Consistent URL hashing for telemetry
+- **System ID**: `privacy.GenerateSystemID()` and `privacy.IsValidSystemID()` - Secure ID generation
+
+This integration eliminates code duplication and ensures consistent privacy handling across BirdNET-Go.
+
 ## File Structure
 
 ```
 telemetry/
 ├── README.md                    # This file
 ├── worker.go                    # Main telemetry worker
-├── sentry.go                   # Sentry integration
+├── sentry.go                   # Sentry integration (uses privacy package)
+├── systemid.go                 # System ID management (delegates to privacy package)
 ├── optimized_capture.go        # Fast-path capture
 ├── attachments.go              # Support dump handling
 ├── deferred_init.go            # Deferred initialization
 ├── init_manager.go             # Component initialization
 ├── system_init_manager.go      # System-wide coordination
-├── error_integration.go        # Error package integration
+├── error_integration.go        # Error package integration (configures privacy scrubbing)
 ├── eventbus_integration.go     # Event bus integration
 ├── health.go                   # Health monitoring
 ├── test_helpers.go             # Testing utilities
