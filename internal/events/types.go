@@ -90,4 +90,7 @@ type ResourceEvent interface {
 	
 	// GetMessage returns a human-readable message
 	GetMessage() string
+	
+	// GetPath returns the path (for disk resources) or empty string
+	GetPath() string
 }
