@@ -91,7 +91,7 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		logger:      logger, // Use package-level logger
 	}
 
-	// Log creation
+	// Always log creation to monitor.log (use package-level logger)
 	logger.Info("System monitor instance created",
 		"enabled", config.Realtime.Monitoring.Enabled,
 		"interval", interval,
@@ -99,6 +99,8 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		"memory_enabled", config.Realtime.Monitoring.Memory.Enabled,
 		"disk_enabled", config.Realtime.Monitoring.Disk.Enabled,
 		"disk_path", config.Realtime.Monitoring.Disk.Path,
+		"disk_warning", config.Realtime.Monitoring.Disk.Warning,
+		"disk_critical", config.Realtime.Monitoring.Disk.Critical,
 	)
 
 	return monitor
@@ -106,12 +108,16 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 
 // Start begins monitoring system resources
 func (m *SystemMonitor) Start() {
-	m.logger.Info("Start() called",
+	// Always log to monitor.log, even if disabled
+	logger.Info("Start() called",
 		"monitoring_enabled", m.config.Realtime.Monitoring.Enabled,
 	)
 
 	if !m.config.Realtime.Monitoring.Enabled {
-		m.logger.Warn("System monitoring is disabled in configuration")
+		logger.Warn("System monitoring is disabled in configuration",
+			"config_path", "realtime.monitoring.enabled",
+			"suggestion", "Set 'realtime.monitoring.enabled: true' in your configuration to enable monitoring",
+		)
 		return
 	}
 
@@ -463,4 +469,12 @@ func (m *SystemMonitor) TriggerCheck() {
 	}
 	m.logger.Info("Manually triggering resource check")
 	m.checkAllResources()
+}
+
+// CloseLogger closes the monitor log file if it was opened
+func CloseLogger() error {
+	if loggerCloseFunc != nil {
+		return loggerCloseFunc()
+	}
+	return nil
 }
