@@ -103,7 +103,7 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		"cpu_enabled", config.Realtime.Monitoring.CPU.Enabled,
 		"memory_enabled", config.Realtime.Monitoring.Memory.Enabled,
 		"disk_enabled", config.Realtime.Monitoring.Disk.Enabled,
-		"disk_path", config.Realtime.Monitoring.Disk.Path,
+		"disk_paths", config.Realtime.Monitoring.Disk.Paths,
 		"disk_warning", config.Realtime.Monitoring.Disk.Warning,
 		"disk_critical", config.Realtime.Monitoring.Disk.Critical,
 	)
@@ -134,7 +134,7 @@ func (m *SystemMonitor) Start() {
 		"memory_critical", m.config.Realtime.Monitoring.Memory.Critical,
 		"disk_warning", m.config.Realtime.Monitoring.Disk.Warning,
 		"disk_critical", m.config.Realtime.Monitoring.Disk.Critical,
-		"disk_path", m.config.Realtime.Monitoring.Disk.Path,
+		"disk_paths", m.config.Realtime.Monitoring.Disk.Paths,
 	)
 
 	m.wg.Add(1)
@@ -234,14 +234,24 @@ func (m *SystemMonitor) checkMemory() {
 		m.config.Realtime.Monitoring.Memory.Critical)
 }
 
-// checkDisk monitors disk usage
+// checkDisk monitors disk usage for all configured paths
 func (m *SystemMonitor) checkDisk() {
-	// Get disk usage for the configured path (default to root)
-	path := m.config.Realtime.Monitoring.Disk.Path
-	if path == "" {
-		path = "/"
+	// Get configured paths or default to root
+	paths := m.config.Realtime.Monitoring.Disk.Paths
+	if len(paths) == 0 {
+		paths = []string{"/"}
 	}
 
+	m.logger.Debug("Starting disk usage checks", "paths", paths)
+
+	// Check each configured path
+	for _, path := range paths {
+		m.checkDiskPath(path)
+	}
+}
+
+// checkDiskPath monitors disk usage for a single path
+func (m *SystemMonitor) checkDiskPath(path string) {
 	m.logger.Debug("Starting disk usage check", "path", path)
 
 	// Check if path is already validated

@@ -187,7 +187,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.monitoring.disk.enabled", true)
 	viper.SetDefault("realtime.monitoring.disk.warning", 85.0)
 	viper.SetDefault("realtime.monitoring.disk.critical", 95.0)
-	viper.SetDefault("realtime.monitoring.disk.path", "/")
+	viper.SetDefault("realtime.monitoring.disk.paths", []string{"/"})
 
 	// Webserver configuration
 	viper.SetDefault("webserver.debug", false)

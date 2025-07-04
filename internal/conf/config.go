@@ -203,10 +203,12 @@ type ThresholdSettings struct {
 	Critical float64 // critical threshold percentage
 }
 
-// DiskThresholdSettings extends ThresholdSettings with disk-specific options
+// DiskThresholdSettings contains disk monitoring configuration for multiple paths
 type DiskThresholdSettings struct {
-	ThresholdSettings
-	Path string // filesystem path to monitor (default: "/")
+	Enabled  bool     // true to enable disk monitoring
+	Warning  float64  // warning threshold percentage
+	Critical float64  // critical threshold percentage
+	Paths    []string // filesystem paths to monitor
 }
 
 // SentrySettings contains settings for Sentry error tracking
