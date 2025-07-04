@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // SimpleDeduplicator provides basic error deduplication using a map
@@ -181,7 +183,7 @@ func BenchmarkHashingStrategies(b *testing.B) {
 		
 		for b.Loop() {
 			// Simplified: remove URLs and numbers
-			_ = ScrubMessage(err.Error())
+			_ = privacy.ScrubMessage(err.Error())
 		}
 	})
 }
