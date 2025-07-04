@@ -53,10 +53,13 @@ const (
 
 // AlertState tracks the current alert state for a resource
 type AlertState struct {
-	InWarning  bool
-	InCritical bool
-	LastValue  float64
-	LastCheck  time.Time
+	InWarning           bool
+	InCritical          bool
+	LastValue           float64
+	LastCheck           time.Time
+	LastNotificationID  string    // ID of the last notification sent
+	LastNotificationTime time.Time // When the last notification was sent
+	CriticalStartTime   time.Time // When resource first entered critical state
 }
 
 // SystemMonitor monitors system resources and sends notifications when thresholds are exceeded
@@ -291,19 +294,31 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 	switch {
 	case current >= criticalThreshold:
 		if !state.InCritical {
+			// First time entering critical state
 			m.logger.Warn("Critical threshold exceeded",
 				"resource", resource,
 				"current", fmt.Sprintf("%.2f%%", current),
 				"threshold", fmt.Sprintf("%.2f%%", criticalThreshold),
 			)
-			m.sendNotification(resource, current, criticalThreshold, notification.PriorityCritical)
+			m.sendNotification(resource, current, criticalThreshold, notification.PriorityCritical, state)
 			state.InCritical = true
 			state.InWarning = true // Critical implies warning
+			state.CriticalStartTime = time.Now()
 		} else {
-			m.logger.Debug("Resource still in critical state",
-				"resource", resource,
-				"current", fmt.Sprintf("%.2f%%", current),
-			)
+			// Still in critical state - check if we need to resend notification
+			if resource == ResourceDisk && time.Since(state.LastNotificationTime) > 30*time.Minute {
+				m.logger.Info("Resending critical disk notification after expiry",
+					"resource", resource,
+					"current", fmt.Sprintf("%.2f%%", current),
+					"last_notification", state.LastNotificationTime.Format(time.RFC3339),
+				)
+				m.sendNotification(resource, current, criticalThreshold, notification.PriorityCritical, state)
+			} else {
+				m.logger.Debug("Resource still in critical state",
+					"resource", resource,
+					"current", fmt.Sprintf("%.2f%%", current),
+				)
+			}
 		}
 	case current >= warningThreshold:
 		// Check warning threshold
@@ -313,7 +328,7 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 				"current", fmt.Sprintf("%.2f%%", current),
 				"threshold", fmt.Sprintf("%.2f%%", warningThreshold),
 			)
-			m.sendNotification(resource, current, warningThreshold, notification.PriorityHigh)
+			m.sendNotification(resource, current, warningThreshold, notification.PriorityHigh, state)
 			state.InWarning = true
 		} else {
 			m.logger.Debug("Resource still in warning state",
@@ -323,15 +338,17 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 		}
 		// Clear critical if we're below critical threshold (with hysteresis)
 		if state.InCritical && current < (criticalThreshold-5.0) {
-			m.sendRecoveryNotification(resource, current, "critical")
+			m.sendRecoveryNotification(resource, current, "critical", state)
 			state.InCritical = false
+			state.CriticalStartTime = time.Time{} // Reset
 		}
 	default:
 		// Below all thresholds - send recovery notifications if needed
 		if state.InWarning && current < (warningThreshold-5.0) {
-			m.sendRecoveryNotification(resource, current, "warning")
+			m.sendRecoveryNotification(resource, current, "warning", state)
 			state.InWarning = false
 			state.InCritical = false
+			state.CriticalStartTime = time.Time{} // Reset
 		}
 	}
 
@@ -347,7 +364,7 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 }
 
 // sendNotification sends a threshold exceeded notification
-func (m *SystemMonitor) sendNotification(resource ResourceType, current, threshold float64, priority notification.Priority) {
+func (m *SystemMonitor) sendNotification(resource ResourceType, current, threshold float64, priority notification.Priority, state *AlertState) {
 	// Determine severity based on priority
 	var severity string
 	if priority == notification.PriorityCritical {
@@ -366,6 +383,8 @@ func (m *SystemMonitor) sendNotification(resource ResourceType, current, thresho
 				"threshold", fmt.Sprintf("%.1f%%", threshold),
 				"severity", severity,
 			)
+			// Update state with notification time
+			state.LastNotificationTime = time.Now()
 			return
 		} else {
 			m.logger.Warn("Failed to publish resource event to event bus",
@@ -400,17 +419,36 @@ func (m *SystemMonitor) sendNotification(resource ResourceType, current, thresho
 }
 
 // sendRecoveryNotification sends a notification when resource usage returns to normal
-func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current float64, level string) {
+func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current float64, level string, state *AlertState) {
+	// Calculate duration if recovering from critical
+	var duration time.Duration
+	if level == "critical" && !state.CriticalStartTime.IsZero() {
+		duration = time.Since(state.CriticalStartTime)
+	}
+
 	// Try to publish via event bus first
 	if eventBus := events.GetEventBus(); eventBus != nil {
 		// For recovery, threshold is not applicable, use 0
 		event := events.NewResourceEvent(string(resource), current, 0, events.SeverityRecovery)
+		
+		// Add duration metadata if available
+		if duration > 0 {
+			if metadata := event.GetMetadata(); metadata != nil {
+				metadata["duration"] = duration.String()
+				metadata["duration_minutes"] = int(duration.Minutes())
+			}
+		}
+		
 		if eventBus.TryPublishResource(event) {
-			m.logger.Debug("Resource recovery event published to event bus",
+			m.logger.Info("Resource recovery event published to event bus",
 				"resource", resource,
 				"current", fmt.Sprintf("%.1f%%", current),
 				"recovered_from", level,
+				"duration", duration,
 			)
+			// Clear notification tracking
+			state.LastNotificationID = ""
+			state.LastNotificationTime = time.Time{}
 			return
 		}
 	}
@@ -434,8 +472,18 @@ func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current 
 
 	title := fmt.Sprintf("%s Usage Recovered", resourceName)
 	message := fmt.Sprintf("%s usage has returned to normal (%.1f%%)", resourceName, current)
+	
+	// Add duration info if available
+	if duration > 0 {
+		message += fmt.Sprintf(" after %s in %s state", duration.Round(time.Minute), level)
+	}
 
-	notification.NotifyInfo(title, message)
+	// Use higher priority for recovery from critical state
+	if level == "critical" {
+		notification.NotifyWarning("system", title, message)
+	} else {
+		notification.NotifyInfo(title, message)
+	}
 
 	m.logger.Info("Resource usage recovered",
 		"resource", resource,
