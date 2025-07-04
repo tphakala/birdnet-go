@@ -2,19 +2,16 @@
 package telemetry
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"log"
-	"net/url"
-	"regexp"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // DeferredMessage represents a message that was captured before Sentry initialization
@@ -206,7 +203,7 @@ func CaptureError(err error, component string) {
 	}
 
 	// Create a scrubbed error for privacy
-	scrubbedErrorMsg := ScrubMessage(err.Error())
+	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
@@ -232,7 +229,7 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	}
 
 	// Scrub sensitive information from the message
-	scrubbedMessage := ScrubMessage(message)
+	scrubbedMessage := privacy.ScrubMessage(message)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
@@ -285,166 +282,6 @@ func Flush(timeout time.Duration) {
 	sentry.Flush(timeout)
 }
 
-// anonymizeURL creates a consistent, privacy-safe identifier for URLs
-// This allows tracking of the same URL across telemetry without exposing sensitive information
-func anonymizeURL(rawURL string) string {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		// If parsing fails, create a hash of the raw string
-		hash := sha256.Sum256([]byte(rawURL))
-		return fmt.Sprintf("url-hash-%x", hash[:8])
-	}
-
-	// Create a normalized version for hashing
-	// Include scheme, host pattern, and path structure but remove sensitive data
-	var normalizedParts []string
-
-	// Include scheme (rtsp, http, etc.)
-	if parsedURL.Scheme != "" {
-		normalizedParts = append(normalizedParts, parsedURL.Scheme)
-	}
-
-	// Anonymize hostname/IP
-	host := parsedURL.Hostname()
-	if host != "" {
-		hostType := categorizeHost(host)
-		normalizedParts = append(normalizedParts, hostType)
-	}
-
-	// Include port if present
-	if parsedURL.Port() != "" {
-		normalizedParts = append(normalizedParts, "port-"+parsedURL.Port())
-	}
-
-	// Include path structure (without sensitive details)
-	if parsedURL.Path != "" && parsedURL.Path != "/" {
-		pathStructure := anonymizePath(parsedURL.Path)
-		normalizedParts = append(normalizedParts, pathStructure)
-	}
-
-	// Create consistent hash
-	normalized := strings.Join(normalizedParts, ":")
-	hash := sha256.Sum256([]byte(normalized))
-
-	return fmt.Sprintf("url-%x", hash[:12])
-}
-
-// categorizeHost anonymizes hostnames while preserving useful categorization
-func categorizeHost(host string) string {
-	// Check for localhost patterns
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-		return "localhost"
-	}
-
-	// Check for private IP ranges
-	if isPrivateIP(host) {
-		return "private-ip"
-	}
-
-	// Check for public IP
-	if isIPAddress(host) {
-		return "public-ip"
-	}
-
-	// For domain names, preserve TLD only
-	parts := strings.Split(host, ".")
-	if len(parts) >= 2 {
-		tld := parts[len(parts)-1]
-		return "domain-" + tld
-	}
-
-	return "unknown-host"
-}
-
-// anonymizePath creates a structure-preserving but privacy-safe path representation
-func anonymizePath(path string) string {
-	// Remove leading/trailing slashes for processing
-	path = strings.Trim(path, "/")
-	if path == "" {
-		return "root"
-	}
-
-	// Split path into segments
-	segments := strings.Split(path, "/")
-	var anonymizedSegments []string
-
-	for _, segment := range segments {
-		if segment == "" {
-			continue
-		}
-
-		// Check for common patterns that might be safe to preserve
-		switch {
-		case isCommonStreamName(segment):
-			anonymizedSegments = append(anonymizedSegments, "stream")
-		case isNumeric(segment):
-			anonymizedSegments = append(anonymizedSegments, "numeric")
-		default:
-			// Hash individual segments to maintain path structure
-			hash := sha256.Sum256([]byte(segment))
-			anonymizedSegments = append(anonymizedSegments, fmt.Sprintf("seg-%x", hash[:4]))
-		}
-	}
-
-	return "path-" + strings.Join(anonymizedSegments, "-")
-}
-
-// isPrivateIP checks if the host is a private IP address (both IPv4 and IPv6)
-func isPrivateIP(host string) bool {
-	privateRanges := []string{
-		// IPv4 private ranges
-		"10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
-		"172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-		"192.168.", "169.254.",
-		// IPv6 private ranges
-		"fc00:", "fd00:", // Unique local addresses
-		"fe80:",                   // Link-local addresses
-		"::1",                     // Loopback
-		"ff00:", "ff01:", "ff02:", // Multicast
-	}
-
-	for _, prefix := range privateRanges {
-		if strings.HasPrefix(strings.ToLower(host), strings.ToLower(prefix)) {
-			return true
-		}
-	}
-	return false
-}
-
-// isIPAddress checks if the host looks like an IP address
-func isIPAddress(host string) bool {
-	// Simple regex for IPv4
-	ipv4Regex := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
-	if ipv4Regex.MatchString(host) {
-		return true
-	}
-
-	// Check for IPv6 (contains colons)
-	return strings.Contains(host, ":")
-}
-
-// isCommonStreamName checks if a path segment is a common, non-sensitive stream name
-func isCommonStreamName(segment string) bool {
-	commonNames := []string{"stream", "live", "rtsp", "video", "audio", "feed", "cam", "camera"}
-	segment = strings.ToLower(segment)
-
-	for _, name := range commonNames {
-		if strings.Contains(segment, name) {
-			return true
-		}
-	}
-	return false
-}
-
-// isNumeric checks if a string is purely numeric
-func isNumeric(s string) bool {
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return s != ""
-}
 
 // GetAttachmentUploader returns the global attachment uploader instance
 func GetAttachmentUploader() *AttachmentUploader {
@@ -459,13 +296,3 @@ func GetAttachmentUploader() *AttachmentUploader {
 	return attachmentUploader
 }
 
-// ScrubMessage removes or anonymizes sensitive information from telemetry messages
-func ScrubMessage(message string) string {
-	// Find URLs in the message and replace them with anonymized versions
-	urlRegex := regexp.MustCompile(`\b(?:https?|rtsp|rtmp)://\S+`)
-
-	return urlRegex.ReplaceAllStringFunc(message, func(foundURL string) string {
-		anonymized := anonymizeURL(foundURL)
-		return anonymized
-	})
-}
