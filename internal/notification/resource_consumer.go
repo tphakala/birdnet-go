@@ -72,7 +72,7 @@ func (w *ResourceEventWorker) ProcessEvent(event events.ErrorEvent) error {
 }
 
 // ProcessBatch processes multiple error events (required by EventConsumer interface)
-func (w *ResourceEventWorker) ProcessBatch(events []events.ErrorEvent) error {
+func (w *ResourceEventWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
 	// This worker only handles resource events
 	return nil
 }

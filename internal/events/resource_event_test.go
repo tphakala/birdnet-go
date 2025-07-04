@@ -51,7 +51,6 @@ func TestNewResourceEvent(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -176,14 +175,13 @@ func TestResourceEventMessage(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			event := NewResourceEvent(tt.resourceType, 50.0, 40.0, tt.severity)
 			message := event.GetMessage()
 
-			if len(message) == 0 {
+			if message == "" {
 				t.Error("GetMessage() returned empty string")
 			}
 

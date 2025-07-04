@@ -166,11 +166,12 @@ func TestEventBusPublish(t *testing.T) {
 		
 		// Create isolated event bus
 		eb := &EventBus{
-			eventChan:  make(chan ErrorEvent, 100),
-			bufferSize: 100,
-			workers:    2,
-			consumers:  make([]EventConsumer, 0),
-			logger:     logging.ForService("test"),
+			errorEventChan:    make(chan ErrorEvent, 100),
+			resourceEventChan: make(chan ResourceEvent, 100),
+			bufferSize:        100,
+			workers:           2,
+			consumers:         make([]EventConsumer, 0),
+			logger:            logging.ForService("test"),
 		}
 		eb.initialized.Store(true)
 		eb.running.Store(true)
@@ -196,7 +197,8 @@ func TestEventBusPublish(t *testing.T) {
 		defer cancel()
 		
 		eb := &EventBus{
-			eventChan:  make(chan ErrorEvent, 100),
+			errorEventChan:    make(chan ErrorEvent, 100),
+			resourceEventChan: make(chan ResourceEvent, 100),
 			bufferSize: 100,
 			workers:    2,
 			consumers:  make([]EventConsumer, 0),
@@ -255,7 +257,8 @@ func TestEventBusOverflow(t *testing.T) {
 	defer cancel()
 	
 	eb := &EventBus{
-		eventChan:  make(chan ErrorEvent, 10), // Small buffer
+		errorEventChan:    make(chan ErrorEvent, 10), // Small buffer
+		resourceEventChan: make(chan ResourceEvent, 10),
 		bufferSize: 10,
 		workers:    1,
 		consumers:  make([]EventConsumer, 0),
@@ -317,8 +320,9 @@ func TestEventBusShutdown(t *testing.T) {
 	defer cancel()
 	
 	eb := &EventBus{
-		eventChan:  make(chan ErrorEvent, 100),
-		bufferSize: 100,
+		errorEventChan:    make(chan ErrorEvent, 100),
+		resourceEventChan: make(chan ResourceEvent, 100),
+		bufferSize:        100,
 		workers:    2,
 		consumers:  make([]EventConsumer, 0),
 		ctx:        ctx,
@@ -379,8 +383,9 @@ func TestConsumerPanic(t *testing.T) {
 	defer cancel()
 	
 	eb := &EventBus{
-		eventChan:  make(chan ErrorEvent, 100),
-		bufferSize: 100,
+		errorEventChan:    make(chan ErrorEvent, 100),
+		resourceEventChan: make(chan ResourceEvent, 100),
+		bufferSize:        100,
 		workers:    1,
 		consumers:  make([]EventConsumer, 0),
 		ctx:        ctx,
