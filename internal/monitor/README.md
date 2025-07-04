@@ -62,6 +62,7 @@ realtime:
       enabled: true
       warning: 85.0
       critical: 95.0
+      # Paths MAY be quoted to avoid '/' being interpreted as an alias anchor
       paths:                        # Disk paths to monitor
         - "/"                       # Root filesystem
         - "/home"                   # Home partition
@@ -74,7 +75,7 @@ realtime:
 - CPU thresholds: 85% warning, 95% critical
 - Memory thresholds: 85% warning, 95% critical
 - Disk thresholds: 85% warning, 95% critical
-- Disk paths: ["/"] (defaults to root filesystem only)
+- Disk paths: ["/"] (defaults to root filesystem only, override with MONITOR_DISK_PATHS=)
 
 ## Usage
 
@@ -136,7 +137,7 @@ status := systemMonitor.GetResourceStatus()
 - Includes both RAM and swap usage
 - Helps identify memory exhaustion scenarios
 
-### Disk Monitoring
+### Disk Monitoring (Multi-Path)
 
 - Monitors multiple disk paths simultaneously
 - Each path maintains independent alert states
@@ -218,7 +219,7 @@ System monitoring is disabled in configuration
 
 ## Multi-Path Disk Monitoring
 
-The monitor supports monitoring multiple disk paths simultaneously:
+The monitor supports monitoring multiple disk paths simultaneously (see 'Configuration', lines 61-69):
 
 ### Features
 
