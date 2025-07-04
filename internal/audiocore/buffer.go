@@ -81,14 +81,13 @@ func (b *bufferImpl) Slice(start, end int) ([]byte, error) {
 	defer b.mu.Unlock()
 
 	if start < 0 || end > b.length || start > end {
-		return nil, errors.New(nil).
+		return nil, errors.Newf("invalid slice bounds [%d:%d] for buffer of length %d", start, end, b.length).
 			Component(ComponentAudioCore).
 			Category(errors.CategoryValidation).
 			Context("operation", "buffer_slice").
 			Context("start", start).
 			Context("end", end).
 			Context("length", b.length).
-			Context("error", "invalid slice bounds").
 			Build()
 	}
 

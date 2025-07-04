@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"time"
 
@@ -234,8 +235,8 @@ func (a *MyAudioCompatAdapter) calculateAudioLevel(buffer []byte) float32 {
 	}
 
 	// Calculate RMS
-	rms := float32(sum / float64(samples))
-	return rms / 32768.0 // Normalize to 0-1 range
+	rms := math.Sqrt(sum / float64(samples))
+	return float32(rms / 32768.0) // Normalize to 0-1 range
 }
 
 // TimeProvider interface allows for time mocking in tests

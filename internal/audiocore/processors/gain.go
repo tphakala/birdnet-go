@@ -24,11 +24,10 @@ type GainProcessor struct {
 // NewGainProcessor creates a new gain processor
 func NewGainProcessor(id string, initialGain float64) (audiocore.AudioProcessor, error) {
 	if initialGain < 0.0 || initialGain > 10.0 {
-		return nil, errors.New(nil).
+		return nil, errors.Newf("gain must be between 0.0 and 10.0, got %f", initialGain).
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryValidation).
 			Context("gain", initialGain).
-			Context("error", "gain must be between 0.0 and 10.0").
 			Build()
 	}
 
@@ -60,10 +59,9 @@ func (gp *GainProcessor) ID() string {
 // Process transforms audio data by applying gain
 func (gp *GainProcessor) Process(ctx context.Context, input *audiocore.AudioData) (*audiocore.AudioData, error) {
 	if input == nil {
-		return nil, errors.New(nil).
+		return nil, errors.Newf("input audio data is nil").
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryValidation).
-			Context("error", "input audio data is nil").
 			Build()
 	}
 
@@ -138,11 +136,10 @@ func (gp *GainProcessor) GetOutputFormat(inputFormat audiocore.AudioFormat) audi
 // SetGain updates the gain value
 func (gp *GainProcessor) SetGain(gain float64) error {
 	if gain < 0.0 || gain > 10.0 {
-		return errors.New(nil).
+		return errors.Newf("gain must be between 0.0 and 10.0, got %f", gain).
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryValidation).
 			Context("gain", gain).
-			Context("error", "gain must be between 0.0 and 10.0").
 			Build()
 	}
 
