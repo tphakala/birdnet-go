@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -9,119 +10,112 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-func TestDiskMonitoringMultiplePaths(t *testing.T) {
-	// Create config with multiple disk paths
-	config := &conf.Settings{
-		Realtime: conf.RealtimeSettings{
-			Monitoring: conf.MonitoringSettings{
-				Enabled:       true,
-				CheckInterval: 1, // 1 second for testing
-				Disk: conf.DiskThresholdSettings{
-					Enabled:  true,
-					Warning:  80.0,
-					Critical: 90.0,
-					Paths:    []string{"/", "/tmp"}, // Monitor root and /tmp
-				},
+func TestDiskMonitoring(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		paths          []string
+		checkFunc      func(t *testing.T, monitor *SystemMonitor)
+		skipCheckDisk  bool // Some tests need custom threshold checks
+	}{
+		{
+			name:  "multiple paths",
+			paths: []string{"/", "/tmp"},
+			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
+				// Verify that validated paths include both configured paths
+				monitor.mu.RLock()
+				_, rootValidated := monitor.validatedPaths["/"]
+				_, tmpValidated := monitor.validatedPaths["/tmp"]
+				monitor.mu.RUnlock()
+
+				assert.True(t, rootValidated, "Root path should be validated")
+				assert.True(t, tmpValidated, "/tmp path should be validated")
+
+				// Verify alert states are created for both paths
+				monitor.mu.RLock()
+				_, rootState := monitor.alertStates["disk|/"]
+				_, tmpState := monitor.alertStates["disk|/tmp"]
+				monitor.mu.RUnlock()
+
+				assert.True(t, rootState, "Alert state should exist for root path")
+				assert.True(t, tmpState, "Alert state should exist for /tmp path")
+			},
+		},
+		{
+			name:  "empty paths defaults to root",
+			paths: []string{},
+			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
+				// Verify that root path is validated
+				monitor.mu.RLock()
+				validated, exists := monitor.validatedPaths["/"]
+				monitor.mu.RUnlock()
+
+				assert.True(t, exists && validated, "Root path should be validated when paths is empty")
+			},
+		},
+		{
+			name:  "invalid path handling",
+			paths: []string{"/", "/this/path/does/not/exist"},
+			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
+				// Verify that valid path is marked as validated
+				monitor.mu.RLock()
+				rootValidated, rootExists := monitor.validatedPaths["/"]
+				invalidValidated, invalidExists := monitor.validatedPaths["/this/path/does/not/exist"]
+				monitor.mu.RUnlock()
+
+				assert.True(t, rootExists && rootValidated, "Root path should be validated")
+				assert.True(t, invalidExists && !invalidValidated, "Invalid path should be marked as not validated")
 			},
 		},
 	}
 
-	// Create monitor
-	monitor := NewSystemMonitor(config)
-	require.NotNil(t, monitor)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// Test that multiple paths are configured
-	assert.Equal(t, []string{"/", "/tmp"}, config.Realtime.Monitoring.Disk.Paths)
-
-	// Test checkDisk with multiple paths
-	monitor.checkDisk()
-
-	// Verify that validated paths include both configured paths
-	monitor.mu.RLock()
-	_, rootValidated := monitor.validatedPaths["/"]
-	_, tmpValidated := monitor.validatedPaths["/tmp"]
-	monitor.mu.RUnlock()
-
-	assert.True(t, rootValidated, "Root path should be validated")
-	assert.True(t, tmpValidated, "/tmp path should be validated")
-
-	// Verify alert states are created for both paths
-	monitor.mu.RLock()
-	_, rootState := monitor.alertStates["disk|/"]
-	_, tmpState := monitor.alertStates["disk|/tmp"]
-	monitor.mu.RUnlock()
-
-	assert.True(t, rootState, "Alert state should exist for root path")
-	assert.True(t, tmpState, "Alert state should exist for /tmp path")
-}
-
-func TestDiskMonitoringEmptyPaths(t *testing.T) {
-	// Create config with empty disk paths
-	config := &conf.Settings{
-		Realtime: conf.RealtimeSettings{
-			Monitoring: conf.MonitoringSettings{
-				Enabled:       true,
-				CheckInterval: 1,
-				Disk: conf.DiskThresholdSettings{
-					Enabled:  true,
-					Warning:  80.0,
-					Critical: 90.0,
-					Paths:    []string{}, // Empty paths
+			// Create config
+			config := &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Monitoring: conf.MonitoringSettings{
+						Enabled:       true,
+						CheckInterval: 1,
+						Disk: conf.DiskThresholdSettings{
+							Enabled:  true,
+							Warning:  80.0,
+							Critical: 90.0,
+							Paths:    tt.paths,
+						},
+					},
 				},
-			},
-		},
+			}
+
+			// Create monitor
+			monitor := NewSystemMonitor(config)
+			require.NotNil(t, monitor)
+
+			// Test that paths are configured correctly
+			if len(tt.paths) > 0 {
+				// Note: NewSystemMonitor may add auto-detected paths
+				for _, path := range tt.paths {
+					assert.Contains(t, config.Realtime.Monitoring.Disk.Paths, path)
+				}
+			}
+
+			// Run checkDisk unless test needs custom behavior
+			if !tt.skipCheckDisk {
+				monitor.checkDisk()
+			}
+
+			// Run test-specific checks
+			tt.checkFunc(t, monitor)
+		})
 	}
-
-	// Create monitor
-	monitor := NewSystemMonitor(config)
-	require.NotNil(t, monitor)
-
-	// Test checkDisk with empty paths (should default to "/")
-	monitor.checkDisk()
-
-	// Verify that root path is validated
-	monitor.mu.RLock()
-	validated, exists := monitor.validatedPaths["/"]
-	monitor.mu.RUnlock()
-
-	assert.True(t, exists && validated, "Root path should be validated when paths is empty")
-}
-
-func TestDiskMonitoringInvalidPath(t *testing.T) {
-	// Create config with an invalid path
-	config := &conf.Settings{
-		Realtime: conf.RealtimeSettings{
-			Monitoring: conf.MonitoringSettings{
-				Enabled:       true,
-				CheckInterval: 1,
-				Disk: conf.DiskThresholdSettings{
-					Enabled:  true,
-					Warning:  80.0,
-					Critical: 90.0,
-					Paths:    []string{"/", "/this/path/does/not/exist"},
-				},
-			},
-		},
-	}
-
-	// Create monitor
-	monitor := NewSystemMonitor(config)
-	require.NotNil(t, monitor)
-
-	// Test checkDisk with invalid path
-	monitor.checkDisk()
-
-	// Verify that valid path is marked as validated
-	monitor.mu.RLock()
-	rootValidated, rootExists := monitor.validatedPaths["/"]
-	invalidValidated, invalidExists := monitor.validatedPaths["/this/path/does/not/exist"]
-	monitor.mu.RUnlock()
-
-	assert.True(t, rootExists && rootValidated, "Root path should be validated")
-	assert.True(t, invalidExists && !invalidValidated, "Invalid path should be marked as not validated")
 }
 
 func TestDiskMonitoringPathSpecificStates(t *testing.T) {
+	t.Parallel()
+
 	// Create config
 	config := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
@@ -163,6 +157,8 @@ func TestDiskMonitoringPathSpecificStates(t *testing.T) {
 }
 
 func TestDiskMonitoringRecoveryPerPath(t *testing.T) {
+	t.Parallel()
+
 	// Create config
 	config := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
@@ -211,6 +207,9 @@ func TestDiskMonitoringRecoveryPerPath(t *testing.T) {
 }
 
 func TestSystemMonitorLifecycle(t *testing.T) {
+	// Note: This test cannot be run in parallel as it starts a goroutine
+	// that could interfere with other tests if the monitor is not properly stopped
+
 	// Create config
 	config := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
@@ -231,15 +230,53 @@ func TestSystemMonitorLifecycle(t *testing.T) {
 	monitor := NewSystemMonitor(config)
 	require.NotNil(t, monitor)
 
-	monitor.Start()
+	// Use a channel to signal when the monitor has started
+	started := make(chan struct{})
+	
+	// Wrap Start() to signal when it's running
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		monitor.Start()
+		close(started)
+	}()
 
-	// Let it run for a short time
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the monitor to start or timeout
+	select {
+	case <-started:
+		// Monitor started
+	case <-time.After(1 * time.Second):
+		t.Fatal("Monitor failed to start within timeout")
+	}
+
+	// Give the monitor loop a chance to run at least once
+	// Since CheckInterval is 1 second, wait slightly longer
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	
+	// Wait for one tick to ensure monitor is running
+	<-ticker.C
 
 	// Stop monitor
 	monitor.Stop()
 
+	// Wait for the goroutine to finish
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
 	// Verify monitor stopped properly
+	select {
+	case <-done:
+		// Monitor stopped successfully
+	case <-time.After(2 * time.Second):
+		t.Fatal("Monitor failed to stop within timeout")
+	}
+
+	// Verify context is cancelled
 	select {
 	case <-monitor.ctx.Done():
 		// Context should be cancelled
