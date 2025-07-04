@@ -430,7 +430,7 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	if serviceLogger != nil {
 		serviceLogger.Debug("sending message event",
 			"event_type", "message",
-			"level", string(level),
+			"sentry_level", string(level),
 			"component", component,
 			"scrubbed_message", scrubbedMessage,
 		)
@@ -446,7 +446,7 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	if serviceLogger != nil {
 		serviceLogger.Debug("message event sent successfully",
 			"component", component,
-			"level", string(level),
+			"sentry_level", string(level),
 		)
 	}
 }
@@ -486,7 +486,7 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 		scrubbedMessage := privacy.ScrubMessage(message)
 		serviceLogger.Debug("deferring message for later processing",
 			"event_type", "deferred_message",
-			"level", string(level),
+			"sentry_level", string(level),
 			"component", component,
 			"scrubbed_message", scrubbedMessage,
 			"deferred_count", len(deferredMessages),
