@@ -343,7 +343,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		info.DockerInfo = &DockerInfo{}
 		// Try to get container ID
 		if data, err := os.ReadFile("/proc/self/cgroup"); err == nil {
-			for _, line := range strings.Split(string(data), "\n") {
+			for line := range strings.SplitSeq(string(data), "\n") {
 				if strings.Contains(line, "docker") {
 					parts := strings.Split(line, "/")
 					if len(parts) > 0 {
