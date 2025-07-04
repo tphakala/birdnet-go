@@ -114,8 +114,10 @@ type bufferPoolImpl struct {
 	largePool  sync.Pool // For buffers up to largeSize
 	config     BufferPoolConfig
 	stats      BufferPoolStats
-	statsMu    sync.RWMutex
-	logger     *slog.Logger
+	// Per-tier statistics
+	tierStats map[string]*BufferPoolStats
+	statsMu   sync.RWMutex
+	logger    *slog.Logger
 }
 
 // NewBufferPool creates a new buffer pool
@@ -129,6 +131,12 @@ func NewBufferPool(config BufferPoolConfig) BufferPool {
 	pool := &bufferPoolImpl{
 		config: config,
 		logger: logger,
+		tierStats: map[string]*BufferPoolStats{
+			"small":  &BufferPoolStats{},
+			"medium": &BufferPoolStats{},
+			"large":  &BufferPoolStats{},
+			"custom": &BufferPoolStats{},
+		},
 	}
 
 	// Initialize sync.Pools with constructors
@@ -164,11 +172,6 @@ func NewBufferPool(config BufferPoolConfig) BufferPool {
 
 // Get retrieves a buffer of at least the specified size
 func (p *bufferPoolImpl) Get(size int) AudioBuffer {
-	p.updateStats(func() {
-		p.stats.TotalBuffers++
-		p.stats.ActiveBuffers++
-	})
-
 	var buf *bufferImpl
 	var poolTier string
 
@@ -194,6 +197,16 @@ func (p *bufferPoolImpl) Get(size int) AudioBuffer {
 			"size", size)
 	}
 
+	// Update both global and per-tier stats
+	p.updateStats(func() {
+		p.stats.TotalBuffers++
+		p.stats.ActiveBuffers++
+		if tierStat, ok := p.tierStats[poolTier]; ok {
+			tierStat.TotalBuffers++
+			tierStat.ActiveBuffers++
+		}
+	})
+
 	// Initialize buffer state
 	buf.length = size
 	buf.refCount = 1
@@ -214,10 +227,6 @@ func (p *bufferPoolImpl) Put(buffer AudioBuffer) {
 	if !ok {
 		return
 	}
-
-	p.updateStats(func() {
-		p.stats.ActiveBuffers--
-	})
 
 	// Reset buffer state
 	buf.Reset()
@@ -243,6 +252,19 @@ func (p *bufferPoolImpl) Put(buffer AudioBuffer) {
 			"capacity", capacity)
 	}
 
+	// Update both global and per-tier stats
+	p.updateStats(func() {
+		p.stats.ActiveBuffers--
+		if poolTier != "custom_discarded" {
+			if tierStat, ok := p.tierStats[poolTier]; ok {
+				tierStat.ActiveBuffers--
+			}
+		} else if tierStat, ok := p.tierStats["custom"]; ok {
+			// For discarded custom buffers, we still decrement the active count
+			tierStat.ActiveBuffers--
+		}
+	})
+
 	if p.logger.Enabled(context.TODO(), slog.LevelDebug) && poolTier != "custom_discarded" {
 		p.logger.Debug("buffer returned to pool",
 			"tier", poolTier,
@@ -257,9 +279,36 @@ func (p *bufferPoolImpl) Stats() BufferPoolStats {
 	return p.stats
 }
 
+// TierStats returns statistics for a specific tier
+func (p *bufferPoolImpl) TierStats(tier string) (BufferPoolStats, bool) {
+	p.statsMu.RLock()
+	defer p.statsMu.RUnlock()
+	if stats, ok := p.tierStats[tier]; ok {
+		return *stats, true
+	}
+	return BufferPoolStats{}, false
+}
+
 // updateStats safely updates pool statistics
 func (p *bufferPoolImpl) updateStats(fn func()) {
 	p.statsMu.Lock()
 	defer p.statsMu.Unlock()
 	fn()
+}
+
+// ReportMetrics reports per-tier buffer pool metrics to the metrics collector
+func (p *bufferPoolImpl) ReportMetrics() {
+	p.statsMu.RLock()
+	defer p.statsMu.RUnlock()
+
+	// Get the global metrics collector
+	mc := GetMetrics()
+	if mc == nil {
+		return
+	}
+
+	// Report per-tier statistics
+	for tier, stats := range p.tierStats {
+		mc.RecordBufferPoolStats(tier, *stats)
+	}
 }

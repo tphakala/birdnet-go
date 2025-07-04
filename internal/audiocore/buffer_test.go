@@ -118,7 +118,8 @@ func TestBufferOperations(t *testing.T) {
 	})
 
 	t.Run("Slice", func(t *testing.T) {
-		buf.Resize(100)
+		err := buf.Resize(100)
+		assert.NoError(t, err)
 		
 		// Valid slice
 		slice, err := buf.Slice(10, 20)

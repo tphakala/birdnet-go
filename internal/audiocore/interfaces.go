@@ -124,6 +124,12 @@ type BufferPool interface {
 
 	// Stats returns statistics about the pool
 	Stats() BufferPoolStats
+
+	// TierStats returns statistics for a specific tier
+	TierStats(tier string) (BufferPoolStats, bool)
+
+	// ReportMetrics reports per-tier metrics to the metrics collector
+	ReportMetrics()
 }
 
 // BufferPoolStats contains statistics about buffer pool usage

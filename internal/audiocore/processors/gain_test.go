@@ -47,7 +47,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("Unity Gain", func(t *testing.T) {
 		gainProc := proc.(*GainProcessor)
-		gainProc.SetGain(1.0)
+		err := gainProc.SetGain(1.0)
+		assert.NoError(t, err)
 
 		input := &audiocore.AudioData{
 			Buffer: []byte{0, 0, 0, 0},
@@ -68,7 +69,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM S16LE Processing", func(t *testing.T) {
 		gainProc := proc.(*GainProcessor)
-		gainProc.SetGain(2.0)
+		err := gainProc.SetGain(2.0)
+		assert.NoError(t, err)
 
 		// Create test buffer with known values
 		buffer := make([]byte, 8)
@@ -104,7 +106,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM S16LE Clipping", func(t *testing.T) {
 		gainProc := proc.(*GainProcessor)
-		gainProc.SetGain(3.0)
+		err := gainProc.SetGain(3.0)
+		assert.NoError(t, err)
 
 		// Create test buffer with values that will clip
 		buffer := make([]byte, 4)
@@ -135,7 +138,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM F32LE Processing", func(t *testing.T) {
 		gainProc := proc.(*GainProcessor)
-		gainProc.SetGain(0.5)
+		err := gainProc.SetGain(0.5)
+		assert.NoError(t, err)
 
 		// Create test buffer with known float values
 		buffer := make([]byte, 16)
@@ -169,7 +173,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM F32LE Clipping", func(t *testing.T) {
 		gainProc := proc.(*GainProcessor)
-		gainProc.SetGain(2.0)
+		err := gainProc.SetGain(2.0)
+		assert.NoError(t, err)
 
 		// Create test buffer with values that will clip
 		buffer := make([]byte, 8)

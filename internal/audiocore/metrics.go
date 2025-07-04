@@ -190,8 +190,8 @@ func (mc *MetricsCollector) UpdateSourceGain(sourceID, sourceType string, gain f
 	mc.metrics.UpdateSourceGainLevel(sourceID, sourceType, gain)
 }
 
-// RecordBufferPoolStats records buffer pool statistics
-func (mc *MetricsCollector) RecordBufferPoolStats(stats BufferPoolStats) {
+// RecordBufferPoolStats records buffer pool statistics for a specific tier
+func (mc *MetricsCollector) RecordBufferPoolStats(tier string, stats BufferPoolStats) {
 	if !mc.enabled || mc.metrics == nil {
 		return
 	}
@@ -199,9 +199,8 @@ func (mc *MetricsCollector) RecordBufferPoolStats(stats BufferPoolStats) {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	// Update buffer pool metrics based on stats
-	// This is a simplified version - in production you'd track per-tier stats
-	mc.metrics.UpdateBuffersInUse("all", stats.ActiveBuffers)
+	// Update buffer pool metrics based on stats for the specific tier
+	mc.metrics.UpdateBuffersInUse(tier, stats.ActiveBuffers)
 }
 
 // RecordBufferAllocation records a buffer allocation
