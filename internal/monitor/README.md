@@ -252,7 +252,16 @@ When disk monitoring is enabled, the system automatically detects and monitors p
 - **Configuration Path**: Directory containing `config.yaml`
 - **Container Volumes**: `/data` and `/config` when running in Docker/Podman
 
-These paths are automatically added to your configured paths, ensuring critical application directories are always monitored.
+**Important Notes:**
+- Auto-detected paths are added at runtime only (not persisted to config file)
+- They are merged with your configured paths for monitoring
+- The monitor log shows both configured and auto-detected paths
+- To make auto-detected paths permanent, manually add them to your `config.yaml`
+
+**Example Log Output:**
+```
+Disk monitoring paths configured user_configured=[] auto_detected=[/ /home/user/.config/birdnet-go ./clips] total_monitored=[/ /home/user/.config/birdnet-go ./clips]
+```
 
 ### Notification Examples
 
@@ -338,6 +347,9 @@ func (m *SystemMonitor) TriggerCheck()
 
 // Get current resource status
 func (m *SystemMonitor) GetResourceStatus() map[string]any
+
+// Get list of monitored disk paths
+func (m *SystemMonitor) GetMonitoredPaths() []string
 ```
 
 ### Configuration Structure

@@ -8,7 +8,8 @@ import (
 )
 
 // GetCriticalPaths returns filesystem paths critical to BirdNET-Go operation
-// that should be automatically monitored for disk usage
+// that should be automatically monitored for disk usage.
+// These paths are added at runtime and not persisted to the configuration file.
 func GetCriticalPaths(settings *conf.Settings) []string {
 	paths := make([]string, 0)
 
@@ -163,4 +164,12 @@ func filterRedundantPaths(paths []string) []string {
 	}
 	
 	return filtered
+}
+
+// GetMonitoringPathsInfo returns information about configured and auto-detected paths
+func GetMonitoringPathsInfo(settings *conf.Settings) (configured, autoDetected, merged []string) {
+	configured = settings.Realtime.Monitoring.Disk.Paths
+	autoDetected = GetCriticalPaths(settings)
+	merged = mergePaths(configured, autoDetected)
+	return configured, autoDetected, merged
 }

@@ -87,15 +87,24 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 
 	// Auto-append critical paths if disk monitoring is enabled
 	if config.Realtime.Monitoring.Disk.Enabled {
-		criticalPaths := GetCriticalPaths(config)
-		config.Realtime.Monitoring.Disk.Paths = mergePaths(
-			config.Realtime.Monitoring.Disk.Paths,
-			criticalPaths,
+		// Get information about paths
+		userConfigured, autoDetected, merged := GetMonitoringPathsInfo(config)
+		
+		// Update the runtime configuration with merged paths
+		config.Realtime.Monitoring.Disk.Paths = merged
+		
+		// Log detailed information about path monitoring
+		logger.Info("Disk monitoring paths configured",
+			"user_configured", userConfigured,
+			"auto_detected", autoDetected,
+			"total_monitored", merged,
+			"note", "Auto-detected paths are added at runtime only",
 		)
-		logger.Info("Auto-detected critical paths for monitoring",
-			"critical_paths", criticalPaths,
-			"merged_paths", config.Realtime.Monitoring.Disk.Paths,
-		)
+		
+		// If there are auto-detected paths, provide guidance
+		if len(autoDetected) > 0 && len(userConfigured) == 0 {
+			logger.Info("To persist auto-detected paths, add them to your config.yaml under realtime.monitoring.disk.paths")
+		}
 	}
 
 	// Use the package-level logger instead of creating a new one
@@ -603,6 +612,14 @@ func (m *SystemMonitor) TriggerCheck() {
 	}
 	m.logger.Info("Manually triggering resource check")
 	m.checkAllResources()
+}
+
+// GetMonitoredPaths returns the list of paths being monitored for disk usage
+func (m *SystemMonitor) GetMonitoredPaths() []string {
+	if m.config.Realtime.Monitoring.Disk.Enabled {
+		return m.config.Realtime.Monitoring.Disk.Paths
+	}
+	return nil
 }
 
 // CloseLogger closes the monitor log file if it was opened
