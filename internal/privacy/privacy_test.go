@@ -41,7 +41,7 @@ func TestScrubMessage(t *testing.T) {
 		{
 			name:     "Message with API token",
 			input:    "API call failed with token abc123XYZ789",
-			contains: []string{"API call failed with token [API_TOKEN]"},
+			contains: []string{"API call failed with token [TOKEN]"},
 			notContains: []string{"abc123XYZ789"},
 		},
 		{
@@ -54,7 +54,7 @@ func TestScrubMessage(t *testing.T) {
 			name:     "Message without sensitive data",
 			input:    "Simple error message without any sensitive information",
 			contains: []string{"Simple error message without any sensitive information"},
-			notContains: []string{"url-", "[LAT],[LON]", "[API_TOKEN]"},
+			notContains: []string{"url-", "[LAT],[LON]", "[TOKEN]"},
 		},
 		{
 			name:     "Empty message",
@@ -452,7 +452,7 @@ func TestIsPrivateIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			
-			result := isPrivateIP(tt.input)
+			result := IsPrivateIP(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected isPrivateIP(%q) = %v, got %v", tt.input, tt.expected, result)
 			}
@@ -858,12 +858,12 @@ func TestScrubAPITokens(t *testing.T) {
 		{
 			name:     "API key with colon",
 			input:    "api_key: abc123XYZ789",
-			expected: "api_key: [API_TOKEN]",
+			expected: "api_key: [TOKEN]",
 		},
 		{
 			name:     "Token with equals",
 			input:    "token=abc123XYZ789+/==",
-			expected: "token: [API_TOKEN]",
+			expected: "token: [TOKEN]",
 		},
 		{
 			name:     "API-key with hyphen (no space)",
@@ -873,17 +873,17 @@ func TestScrubAPITokens(t *testing.T) {
 		{
 			name:     "Secret token",
 			input:    "secret: abc123XYZ789+/",
-			expected: "secret: [API_TOKEN]",
+			expected: "secret: [TOKEN]",
 		},
 		{
 			name:     "Auth token",
 			input:    "auth=abc123XYZ789",
-			expected: "auth: [API_TOKEN]",
+			expected: "auth: [TOKEN]",
 		},
 		{
 			name:     "Multiple tokens",
 			input:    "Using api_key: abc123token and token=xyz789token",
-			expected: "Using api_key: [API_TOKEN] and token: [API_TOKEN]",
+			expected: "Using api_key: [TOKEN] and token: [TOKEN]",
 		},
 		{
 			name:     "No tokens",
@@ -910,6 +910,199 @@ func TestScrubAPITokens(t *testing.T) {
 }
 
 
+
+func TestScrubEmails(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple email",
+			input:    "Contact user@example.com for help",
+			expected: "Contact [EMAIL] for help",
+		},
+		{
+			name:     "Multiple emails",
+			input:    "Send from admin@company.com to support@customer.org",
+			expected: "Send from [EMAIL] to [EMAIL]",
+		},
+		{
+			name:     "Email with dots",
+			input:    "john.doe@example.co.uk is the contact",
+			expected: "[EMAIL] is the contact",
+		},
+		{
+			name:     "No email",
+			input:    "No email address here",
+			expected: "No email address here",
+		},
+		{
+			name:     "Email with numbers",
+			input:    "user123@test456.com sent message",
+			expected: "[EMAIL] sent message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubEmails(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestScrubUUIDs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Standard UUID",
+			input:    "Request ID: 550e8400-e29b-41d4-a716-446655440000",
+			expected: "Request ID: [UUID]",
+		},
+		{
+			name:     "UUID in URL",
+			input:    "Access /api/v1/users/123e4567-e89b-12d3-a456-426614174000/profile",
+			expected: "Access /api/v1/users/[UUID]/profile",
+		},
+		{
+			name:     "Multiple UUIDs",
+			input:    "From a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6 to 98765432-1234-5678-9abc-def012345678",
+			expected: "From [UUID] to [UUID]",
+		},
+		{
+			name:     "No UUID",
+			input:    "No identifiers in this message",
+			expected: "No identifiers in this message",
+		},
+		{
+			name:     "Uppercase UUID",
+			input:    "ID: 550E8400-E29B-41D4-A716-446655440000",
+			expected: "ID: [UUID]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubUUIDs(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestScrubStandaloneIPs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		input       string
+		contains    []string
+		notContains []string
+	}{
+		{
+			name:        "Standalone IPv4",
+			input:       "Server at 192.168.1.100 is down",
+			contains:    []string{"Server at", "is down"},
+			notContains: []string{"192.168.1.100"},
+		},
+		{
+			name:        "IP in URL should not be replaced",
+			input:       "Connect to https://192.168.1.100:8080/api",
+			contains:    []string{"Connect to", "192.168.1.100"},
+			notContains: []string{"private-ip"},
+		},
+		{
+			name:        "Multiple standalone IPs",
+			input:       "From 10.0.1.50 to 10.0.1.60",
+			contains:    []string{"From", "to", "private-ip-"},
+			notContains: []string{"10.0.1.50", "10.0.1.60"},
+		},
+		{
+			name:        "IPv6 address",
+			input:       "IPv6 address 2001:db8::1 is reachable",
+			contains:    []string{"IPv6 address", "is reachable", "public-ip-"},
+			notContains: []string{"2001:db8::1"},
+		},
+		{
+			name:        "Mixed IPs and URLs",
+			input:       "Server 192.168.1.1 connects to http://10.0.0.1:80/status",
+			contains:    []string{"Server", "private-ip-", "connects to", "10.0.0.1"},
+			notContains: []string{"192.168.1.1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubStandaloneIPs(tt.input)
+			
+			for _, expected := range tt.contains {
+				if !strings.Contains(result, expected) {
+					t.Errorf("Expected result to contain %q, but got: %s", expected, result)
+				}
+			}
+			
+			for _, unexpected := range tt.notContains {
+				if strings.Contains(result, unexpected) {
+					t.Errorf("Expected result to NOT contain %q, but got: %s", unexpected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestBearerTokenScrubbing(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Bearer token",
+			input:    "Authorization: Bearer abc123XYZ789",
+			expected: "Authorization: Bearer [TOKEN]",
+		},
+		{
+			name:     "Bearer lowercase",
+			input:    "Using bearer token abc123XYZ789 for auth",
+			expected: "Using Bearer [TOKEN] for auth",
+		},
+		{
+			name:     "Mixed case Bearer",
+			input:    "BEARER=abc123XYZ789 in header",
+			expected: "Bearer [TOKEN] in header",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := ScrubAPITokens(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
 
 func TestRedactUserAgent(t *testing.T) {
 	t.Parallel()
