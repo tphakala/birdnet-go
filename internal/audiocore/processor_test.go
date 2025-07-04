@@ -186,8 +186,10 @@ func TestProcessorChainGetProcessors(t *testing.T) {
 	proc1 := &mockProcessor{id: "proc1"}
 	proc2 := &mockProcessor{id: "proc2"}
 
-	chain.AddProcessor(proc1)
-	chain.AddProcessor(proc2)
+	err := chain.AddProcessor(proc1)
+	assert.NoError(t, err)
+	err = chain.AddProcessor(proc2)
+	assert.NoError(t, err)
 
 	// Get processors should return a copy
 	processors := chain.GetProcessors()

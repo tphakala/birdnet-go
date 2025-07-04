@@ -449,6 +449,10 @@ func (m *managerImpl) collectMetrics() {
 		case <-ticker.C:
 			// Metrics are updated continuously, just trigger an update
 			m.Metrics()
+			// Report per-tier buffer pool metrics
+			if m.bufferPool != nil {
+				m.bufferPool.ReportMetrics()
+			}
 		}
 	}
 }
