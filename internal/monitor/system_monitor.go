@@ -21,11 +21,24 @@ import (
 
 // Package-level logger following the common pattern
 var logger *slog.Logger
+var loggerCloseFunc func() error
 
 func init() {
-	logger = logging.ForService("system-monitor")
-	if logger == nil {
-		logger = slog.Default().With("service", "system-monitor")
+	// Create a dedicated log file for system monitor
+	// Create a new LevelVar with Info level as default
+	levelVar := new(slog.LevelVar)
+	levelVar.Set(slog.LevelInfo)
+	
+	fileLogger, closeFunc, err := logging.NewFileLogger("logs/monitor.log", "system-monitor", levelVar)
+	if err != nil {
+		// Fallback to using the main logger
+		logger = logging.ForService("system-monitor")
+		if logger == nil {
+			logger = slog.Default().With("service", "system-monitor")
+		}
+	} else {
+		logger = fileLogger
+		loggerCloseFunc = closeFunc
 	}
 }
 
@@ -68,20 +81,37 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		interval = time.Duration(config.Realtime.Monitoring.CheckInterval) * time.Second
 	}
 
-	return &SystemMonitor{
+	// Use the package-level logger instead of creating a new one
+	monitor := &SystemMonitor{
 		config:      config,
 		interval:    interval,
 		alertStates: make(map[string]*AlertState),
 		ctx:         ctx,
 		cancel:      cancel,
-		logger:      logging.ForService("system-monitor"),
+		logger:      logger, // Use package-level logger
 	}
+
+	// Log creation
+	logger.Info("System monitor instance created",
+		"enabled", config.Realtime.Monitoring.Enabled,
+		"interval", interval,
+		"cpu_enabled", config.Realtime.Monitoring.CPU.Enabled,
+		"memory_enabled", config.Realtime.Monitoring.Memory.Enabled,
+		"disk_enabled", config.Realtime.Monitoring.Disk.Enabled,
+		"disk_path", config.Realtime.Monitoring.Disk.Path,
+	)
+
+	return monitor
 }
 
 // Start begins monitoring system resources
 func (m *SystemMonitor) Start() {
+	m.logger.Info("Start() called",
+		"monitoring_enabled", m.config.Realtime.Monitoring.Enabled,
+	)
+
 	if !m.config.Realtime.Monitoring.Enabled {
-		m.logger.Info("System monitoring disabled")
+		m.logger.Warn("System monitoring is disabled in configuration")
 		return
 	}
 
@@ -93,10 +123,12 @@ func (m *SystemMonitor) Start() {
 		"memory_critical", m.config.Realtime.Monitoring.Memory.Critical,
 		"disk_warning", m.config.Realtime.Monitoring.Disk.Warning,
 		"disk_critical", m.config.Realtime.Monitoring.Disk.Critical,
+		"disk_path", m.config.Realtime.Monitoring.Disk.Path,
 	)
 
 	m.wg.Add(1)
 	go m.monitorLoop()
+	m.logger.Info("Monitor goroutine started")
 }
 
 // Stop stops the system monitor
