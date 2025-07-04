@@ -15,6 +15,7 @@ type ResourceEventWorker struct {
 	logger           *slog.Logger
 	lastAlertTime    map[string]time.Time
 	alertThrottle    time.Duration
+	resourceThrottles map[string]time.Duration // Per-resource type throttles
 	mu               sync.RWMutex
 	processedCount   uint64
 	suppressedCount  uint64
@@ -24,6 +25,9 @@ type ResourceEventWorker struct {
 type ResourceWorkerConfig struct {
 	// AlertThrottle is the minimum time between alerts for the same resource
 	AlertThrottle time.Duration
+	// ResourceThrottles allows per-resource type throttle overrides
+	// If not specified for a resource type, AlertThrottle is used
+	ResourceThrottles map[string]time.Duration
 	// Debug enables debug logging
 	Debug bool
 }
@@ -31,8 +35,9 @@ type ResourceWorkerConfig struct {
 // DefaultResourceWorkerConfig returns default configuration
 func DefaultResourceWorkerConfig() *ResourceWorkerConfig {
 	return &ResourceWorkerConfig{
-		AlertThrottle: 5 * time.Minute, // Don't spam alerts for same resource
-		Debug:         false,
+		AlertThrottle:     5 * time.Minute, // Don't spam alerts for same resource
+		ResourceThrottles: make(map[string]time.Duration), // Empty by default, can be customized
+		Debug:             false,
 	}
 }
 
@@ -52,11 +57,18 @@ func NewResourceEventWorker(service *Service, config *ResourceWorkerConfig) (*Re
 	}
 	logger = logger.With("component", "resource-worker")
 
+	// Copy resource throttles to avoid mutation
+	resourceThrottles := make(map[string]time.Duration)
+	for k, v := range config.ResourceThrottles {
+		resourceThrottles[k] = v
+	}
+
 	return &ResourceEventWorker{
-		service:       service,
-		logger:        logger,
-		lastAlertTime: make(map[string]time.Time),
-		alertThrottle: config.AlertThrottle,
+		service:           service,
+		logger:            logger,
+		lastAlertTime:     make(map[string]time.Time),
+		alertThrottle:     config.AlertThrottle,
+		resourceThrottles: resourceThrottles,
 	}, nil
 }
 
@@ -95,7 +107,7 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 	}
 
 	// Check if we should throttle this alert
-	if w.shouldThrottle(alertKey) {
+	if w.shouldThrottle(alertKey, event.GetResourceType()) {
 		w.suppressedCount++
 		if w.logger != nil {
 			w.logger.Debug("suppressing duplicate resource alert",
@@ -215,16 +227,22 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 }
 
 // shouldThrottle checks if an alert should be throttled
-func (w *ResourceEventWorker) shouldThrottle(alertKey string) bool {
+func (w *ResourceEventWorker) shouldThrottle(alertKey, resourceType string) bool {
 	w.mu.RLock()
 	lastTime, exists := w.lastAlertTime[alertKey]
+	throttleDuration := w.alertThrottle
+	
+	// Check if there's a specific throttle for this resource type
+	if duration, ok := w.resourceThrottles[resourceType]; ok {
+		throttleDuration = duration
+	}
 	w.mu.RUnlock()
 
 	if !exists {
 		return false
 	}
 
-	return time.Since(lastTime) < w.alertThrottle
+	return time.Since(lastTime) < throttleDuration
 }
 
 // updateLastAlertTime updates the last alert time for a key
