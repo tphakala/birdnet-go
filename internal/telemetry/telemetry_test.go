@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 func TestMockTransport(t *testing.T) {
@@ -174,7 +175,7 @@ func TestURLAnonymization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			scrubbed := ScrubMessage(tt.input)
+			scrubbed := privacy.ScrubMessage(tt.input)
 			
 			if tt.notContains != "" && strings.Contains(scrubbed, tt.notContains) {
 				t.Errorf("Scrubbed message should not contain %q, got: %s", tt.notContains, scrubbed)

@@ -7,6 +7,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // BenchmarkTelemetryDisabled measures performance when telemetry is disabled
@@ -140,7 +141,7 @@ func BenchmarkScrubMessage(b *testing.B) {
 			b.ResetTimer()
 			
 			for b.Loop() {
-				_ = ScrubMessage(tc.message)
+				_ = privacy.ScrubMessage(tc.message)
 			}
 		})
 	}

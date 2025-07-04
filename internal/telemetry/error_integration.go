@@ -4,6 +4,7 @@ package telemetry
 import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // InitializeErrorIntegration sets up the error package to use telemetry when enabled
@@ -14,7 +15,7 @@ func InitializeErrorIntegration() {
 		// If settings are not available, disable telemetry
 		reporter := errors.NewSentryReporter(false)
 		errors.SetTelemetryReporter(reporter)
-		errors.SetPrivacyScrubber(ScrubMessage)
+		errors.SetPrivacyScrubber(privacy.ScrubMessage)
 		return
 	}
 
@@ -26,7 +27,7 @@ func InitializeErrorIntegration() {
 	errors.SetTelemetryReporter(reporter)
 
 	// Set the privacy scrubbing function
-	errors.SetPrivacyScrubber(ScrubMessage)
+	errors.SetPrivacyScrubber(privacy.ScrubMessage)
 }
 
 // UpdateErrorIntegration updates the error integration when telemetry settings change
@@ -43,5 +44,5 @@ func UpdateErrorIntegration(enabled bool) {
 // The returned function removes or masks personal data, file paths, and other
 // potentially sensitive information before errors are reported or logged.
 func GetPrivacyScrubFunction() func(string) string {
-	return ScrubMessage
+	return privacy.ScrubMessage
 }
