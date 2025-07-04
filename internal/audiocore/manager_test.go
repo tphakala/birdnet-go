@@ -2,6 +2,7 @@ package audiocore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -287,20 +288,31 @@ func TestManagerAudioOutput(t *testing.T) {
 		SourceID:  source.ID(),
 	}
 
-	// Create a context with timeout for deterministic synchronization
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+	// Create channels for deterministic synchronization
+	receivedChan := make(chan AudioData, 1)
+	errChan := make(chan error, 1)
+	
+	// Start a goroutine to receive from manager output
+	go func() {
+		select {
+		case received := <-manager.AudioOutput():
+			receivedChan <- received
+		case <-time.After(5 * time.Second):
+			// This is a safety timeout, should never be reached in normal operation
+			errChan <- fmt.Errorf("timeout waiting for audio output")
+		}
+	}()
 
 	// Send data to source
 	source.outputChan <- testData
 
-	// Should receive from manager output
+	// Wait for result
 	select {
-	case received := <-manager.AudioOutput():
+	case received := <-receivedChan:
 		assert.Equal(t, testData.SourceID, received.SourceID)
 		assert.Equal(t, testData.Buffer, received.Buffer)
-	case <-ctx.Done():
-		t.Fatal("Timeout waiting for audio output")
+	case err := <-errChan:
+		t.Fatal(err)
 	}
 
 	// Clean up

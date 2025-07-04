@@ -698,13 +698,19 @@ func testDNSResolutionForTest(t *testing.T) {
 
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
 func createTestClient(t *testing.T, broker string) (Client, *observability.Metrics) {
+	// Use test name as client ID to ensure uniqueness when running tests in parallel
+	clientID := "TestNode"
+	if t != nil {
+		clientID = t.Name()
+	}
+	
 	testSettings := &conf.Settings{
 		Main: struct {
 			Name      string
 			TimeAs24h bool
 			Log       conf.LogConfig
 		}{
-			Name: "TestNode",
+			Name: clientID,
 		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{

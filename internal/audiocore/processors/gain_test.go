@@ -13,6 +13,7 @@ import (
 )
 
 func TestGainProcessorCreation(t *testing.T) {
+	t.Parallel()
 	// Valid gain
 	proc, err := NewGainProcessor("test-gain", 1.5)
 	assert.NoError(t, err)
@@ -34,18 +35,21 @@ func TestGainProcessorCreation(t *testing.T) {
 }
 
 func TestGainProcessorProcess(t *testing.T) {
+	t.Parallel()
 	proc, err := NewGainProcessor("test-gain", 2.0)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	t.Run("NilInput", func(t *testing.T) {
+		t.Parallel()
 		output, err := proc.Process(ctx, nil)
 		assert.Error(t, err)
 		assert.Nil(t, output)
 	})
 
 	t.Run("Unity Gain", func(t *testing.T) {
+		t.Parallel()
 		gainProc := proc.(*GainProcessor)
 		err := gainProc.SetGain(1.0)
 		assert.NoError(t, err)
@@ -68,6 +72,7 @@ func TestGainProcessorProcess(t *testing.T) {
 	})
 
 	t.Run("PCM S16LE Processing", func(t *testing.T) {
+		t.Parallel()
 		gainProc := proc.(*GainProcessor)
 		err := gainProc.SetGain(2.0)
 		assert.NoError(t, err)
@@ -105,6 +110,7 @@ func TestGainProcessorProcess(t *testing.T) {
 	})
 
 	t.Run("PCM S16LE Clipping", func(t *testing.T) {
+		t.Parallel()
 		gainProc := proc.(*GainProcessor)
 		err := gainProc.SetGain(3.0)
 		assert.NoError(t, err)
@@ -137,6 +143,7 @@ func TestGainProcessorProcess(t *testing.T) {
 	})
 
 	t.Run("PCM F32LE Processing", func(t *testing.T) {
+		t.Parallel()
 		gainProc := proc.(*GainProcessor)
 		err := gainProc.SetGain(0.5)
 		assert.NoError(t, err)
@@ -172,6 +179,7 @@ func TestGainProcessorProcess(t *testing.T) {
 	})
 
 	t.Run("PCM F32LE Clipping", func(t *testing.T) {
+		t.Parallel()
 		gainProc := proc.(*GainProcessor)
 		err := gainProc.SetGain(2.0)
 		assert.NoError(t, err)
@@ -203,6 +211,7 @@ func TestGainProcessorProcess(t *testing.T) {
 	})
 
 	t.Run("Unsupported Encoding", func(t *testing.T) {
+		t.Parallel()
 		input := &audiocore.AudioData{
 			Buffer: []byte{0, 0, 0, 0},
 			Format: audiocore.AudioFormat{
@@ -221,6 +230,7 @@ func TestGainProcessorProcess(t *testing.T) {
 	})
 
 	t.Run("Context Cancellation", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -244,6 +254,7 @@ func TestGainProcessorProcess(t *testing.T) {
 }
 
 func TestGainProcessorSetGain(t *testing.T) {
+	t.Parallel()
 	proc, err := NewGainProcessor("test-gain", 1.0)
 	require.NoError(t, err)
 
