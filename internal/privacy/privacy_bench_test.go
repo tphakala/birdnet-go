@@ -168,7 +168,7 @@ func BenchmarkIsPrivateIP(b *testing.B) {
 	
 	for b.Loop() {
 		for _, ip := range ips {
-			_ = isPrivateIP(ip)
+			_ = IsPrivateIP(ip)
 		}
 	}
 }
