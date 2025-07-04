@@ -173,6 +173,8 @@ func setDefaultConfig() {
 	// System monitoring configuration
 	viper.SetDefault("realtime.monitoring.enabled", true)
 	viper.SetDefault("realtime.monitoring.checkinterval", 60)
+	viper.SetDefault("realtime.monitoring.criticalresendinterval", 30)
+	viper.SetDefault("realtime.monitoring.hysteresispercent", 5.0)
 	// CPU monitoring
 	viper.SetDefault("realtime.monitoring.cpu.enabled", true)
 	viper.SetDefault("realtime.monitoring.cpu.warning", 85.0)

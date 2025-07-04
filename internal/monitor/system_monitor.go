@@ -64,14 +64,15 @@ type AlertState struct {
 
 // SystemMonitor monitors system resources and sends notifications when thresholds are exceeded
 type SystemMonitor struct {
-	config      *conf.Settings
-	interval    time.Duration
-	alertStates map[string]*AlertState
-	mu          sync.RWMutex
-	ctx         context.Context
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
-	logger      *slog.Logger
+	config         *conf.Settings
+	interval       time.Duration
+	alertStates    map[string]*AlertState
+	validatedPaths map[string]bool // Cache for validated disk paths
+	mu             sync.RWMutex
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	logger         *slog.Logger
 }
 
 // NewSystemMonitor creates a new system monitor instance
@@ -86,12 +87,13 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 
 	// Use the package-level logger instead of creating a new one
 	monitor := &SystemMonitor{
-		config:      config,
-		interval:    interval,
-		alertStates: make(map[string]*AlertState),
-		ctx:         ctx,
-		cancel:      cancel,
-		logger:      logger, // Use package-level logger
+		config:         config,
+		interval:       interval,
+		alertStates:    make(map[string]*AlertState),
+		validatedPaths: make(map[string]bool),
+		ctx:            ctx,
+		cancel:         cancel,
+		logger:         logger, // Use package-level logger
 	}
 
 	// Always log creation to monitor.log (use package-level logger)
@@ -242,12 +244,30 @@ func (m *SystemMonitor) checkDisk() {
 
 	m.logger.Debug("Starting disk usage check", "path", path)
 
-	// Verify the path exists
-	if _, err := os.Stat(path); err != nil {
-		m.logger.Error("Disk monitoring path does not exist or is not accessible", 
-			"path", path, 
-			"error", err,
-		)
+	// Check if path is already validated
+	m.mu.RLock()
+	validated, exists := m.validatedPaths[path]
+	m.mu.RUnlock()
+	
+	if !exists || !validated {
+		// Verify the path exists
+		if _, err := os.Stat(path); err != nil {
+			m.logger.Error("Disk monitoring path does not exist or is not accessible", 
+				"path", path, 
+				"error", err,
+			)
+			// Mark as validated (even if invalid) to avoid repeated checks
+			m.mu.Lock()
+			m.validatedPaths[path] = false
+			m.mu.Unlock()
+			return
+		}
+		// Mark as validated
+		m.mu.Lock()
+		m.validatedPaths[path] = true
+		m.mu.Unlock()
+	} else if !validated {
+		// Path was previously checked and found invalid
 		return
 	}
 
@@ -282,9 +302,10 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 // checkThresholdsWithPath evaluates resource usage against configured thresholds with optional path
 func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, warningThreshold, criticalThreshold float64, path string) {
 	// Create state key that includes path for disk resources
+	// Use "|" as separator since it cannot appear in file paths
 	stateKey := string(resource)
 	if resource == ResourceDisk && path != "" {
-		stateKey = fmt.Sprintf("%s:%s", resource, path)
+		stateKey = fmt.Sprintf("%s|%s", resource, path)
 	}
 
 	m.mu.Lock()
@@ -316,7 +337,11 @@ func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, 
 			state.CriticalStartTime = time.Now()
 		} else {
 			// Still in critical state - check if we need to resend notification
-			if resource == ResourceDisk && time.Since(state.LastNotificationTime) > 30*time.Minute {
+			resendInterval := time.Duration(m.config.Realtime.Monitoring.CriticalResendInterval) * time.Minute
+			if resendInterval == 0 {
+				resendInterval = 30 * time.Minute // Default fallback
+			}
+			if resource == ResourceDisk && time.Since(state.LastNotificationTime) > resendInterval {
 				m.logger.Info("Resending critical disk notification after expiry",
 					"resource", resource,
 					"current", fmt.Sprintf("%.2f%%", current),
@@ -347,14 +372,22 @@ func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, 
 			)
 		}
 		// Clear critical if we're below critical threshold (with hysteresis)
-		if state.InCritical && current < (criticalThreshold-5.0) {
+		hysteresis := m.config.Realtime.Monitoring.HysteresisPercent
+		if hysteresis == 0 {
+			hysteresis = 5.0 // Default fallback
+		}
+		if state.InCritical && current < (criticalThreshold-hysteresis) {
 			m.sendRecoveryNotificationWithPath(resource, current, "critical", state, path)
 			state.InCritical = false
 			state.CriticalStartTime = time.Time{} // Reset
 		}
 	default:
 		// Below all thresholds - send recovery notifications if needed
-		if state.InWarning && current < (warningThreshold-5.0) {
+		hysteresis := m.config.Realtime.Monitoring.HysteresisPercent
+		if hysteresis == 0 {
+			hysteresis = 5.0 // Default fallback
+		}
+		if state.InWarning && current < (warningThreshold-hysteresis) {
 			m.sendRecoveryNotificationWithPath(resource, current, "warning", state, path)
 			state.InWarning = false
 			state.InCritical = false

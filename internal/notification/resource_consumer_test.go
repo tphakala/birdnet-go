@@ -2,42 +2,11 @@ package notification
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/events"
 )
-
-// mockTimeSource allows controlling time in tests
-type mockTimeSource struct {
-	currentTime time.Time
-	mu          sync.Mutex
-}
-
-func (m *mockTimeSource) Now() time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.currentTime
-}
-
-func (m *mockTimeSource) Advance(d time.Duration) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.currentTime = m.currentTime.Add(d)
-}
-
-// timeSource interface for dependency injection
-type timeSource interface {
-	Now() time.Time
-}
-
-// realTimeSource uses actual time
-type realTimeSource struct{}
-
-func (r realTimeSource) Now() time.Time {
-	return time.Now()
-}
 
 func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 	t.Parallel()
@@ -150,7 +119,7 @@ func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 				
 				// Manually update the last alert time to simulate throttle expiry
 				worker.mu.Lock()
-				alertKey := fmt.Sprintf("%s-%s", events.ResourceCPU, events.SeverityWarning)
+				alertKey := fmt.Sprintf("%s|%s", events.ResourceCPU, events.SeverityWarning)
 				worker.lastAlertTime[alertKey] = time.Now().Add(-200 * time.Millisecond)
 				worker.mu.Unlock()
 			}
@@ -249,6 +218,7 @@ func TestResourceEventWorker_PerResourceThrottle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create worker: %v", err)
 	}
+	defer worker.Stop()
 
 	// Test CPU with 1-minute throttle
 	cpuEvent := events.NewResourceEvent(events.ResourceCPU, 90.0, 80.0, events.SeverityWarning)
