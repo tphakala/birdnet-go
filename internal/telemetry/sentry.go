@@ -103,7 +103,7 @@ func InitSentry(settings *conf.Settings) error {
 // enableDebugLogging enables debug logging for telemetry
 func enableDebugLogging() {
 	serviceLevelVar.Set(slog.LevelDebug)
-	serviceLogger.Info("telemetry debug logging enabled")
+	logTelemetryInfo(nil, "telemetry debug logging enabled")
 }
 
 // initializeSentrySDK initializes the Sentry SDK with privacy-compliant options
@@ -219,7 +219,7 @@ func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
 
 // logEventBeforeFiltering logs event details before privacy filtering
 func logEventBeforeFiltering(event *sentry.Event) {
-	serviceLogger.Debug("applying privacy filters to event",
+	logTelemetryDebug(nil, "applying privacy filters to event",
 		"event_id", event.EventID,
 		"has_user_data", !event.User.IsEmpty(),
 		"has_server_name", event.ServerName != "",
@@ -231,7 +231,7 @@ func logEventBeforeFiltering(event *sentry.Event) {
 
 // logEventAfterFiltering logs event details after privacy filtering
 func logEventAfterFiltering(event *sentry.Event, filtersApplied []string) {
-	serviceLogger.Debug("privacy filters applied",
+	logTelemetryDebug(nil, "privacy filters applied",
 		"event_id", event.EventID,
 		"filters_applied", filtersApplied,
 		"remaining_contexts", len(event.Contexts),
@@ -347,16 +347,14 @@ func processDeferredMessages() int {
 func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
 	platformInfo := collectPlatformInfo()
 
-	if serviceLogger != nil {
-		serviceLogger.Info("Sentry telemetry initialized",
-			"system_id", settings.SystemID,
-			"version", settings.Version,
-			"debug", settings.Sentry.Debug,
-			"platform", platformInfo.OS,
-			"arch", platformInfo.Architecture,
-			"deferred_messages", deferredCount,
-		)
-	}
+	logTelemetryInfo(nil, "Sentry telemetry initialized",
+		"system_id", settings.SystemID,
+		"version", settings.Version,
+		"debug", settings.Sentry.Debug,
+		"platform", platformInfo.OS,
+		"arch", platformInfo.Architecture,
+		"deferred_messages", deferredCount,
+	)
 
 	if deferredCount > 0 {
 		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)",
@@ -380,14 +378,12 @@ func CaptureError(err error, component string) {
 	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
 
 	// Log the error being sent (privacy-safe)
-	if serviceLogger != nil {
-		serviceLogger.Debug("sending error event",
-			"event_type", "error",
-			"component", component,
-			"error_type", fmt.Sprintf("%T", err),
-			"scrubbed_message", scrubbedErrorMsg,
-		)
-	}
+	logTelemetryDebug(nil, "sending error event",
+		"event_type", "error",
+		"component", component,
+		"error_type", fmt.Sprintf("%T", err),
+		"scrubbed_message", scrubbedErrorMsg,
+	)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
@@ -402,11 +398,9 @@ func CaptureError(err error, component string) {
 	})
 
 	// Log successful submission
-	if serviceLogger != nil {
-		serviceLogger.Debug("error event sent successfully",
-			"component", component,
-		)
-	}
+	logTelemetryDebug(nil, "error event sent successfully",
+		"component", component,
+	)
 }
 
 // CaptureMessage captures a message with privacy-compliant context
@@ -423,14 +417,12 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	scrubbedMessage := privacy.ScrubMessage(message)
 
 	// Log the message being sent (privacy-safe)
-	if serviceLogger != nil {
-		serviceLogger.Debug("sending message event",
-			"event_type", "message",
-			"sentry_level", string(level),
-			"component", component,
-			"scrubbed_message", scrubbedMessage,
-		)
-	}
+	logTelemetryDebug(nil, "sending message event",
+		"event_type", "message",
+		"sentry_level", string(level),
+		"component", component,
+		"scrubbed_message", scrubbedMessage,
+	)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
@@ -439,12 +431,10 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	})
 
 	// Log successful submission
-	if serviceLogger != nil {
-		serviceLogger.Debug("message event sent successfully",
-			"component", component,
-			"sentry_level", string(level),
-		)
-	}
+	logTelemetryDebug(nil, "message event sent successfully",
+		"component", component,
+		"sentry_level", string(level),
+	)
 }
 
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
@@ -478,16 +468,14 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 	deferredMessages = append(deferredMessages, deferredMessage)
 
 	// Log deferred message
-	if serviceLogger != nil {
-		scrubbedMessage := privacy.ScrubMessage(message)
-		serviceLogger.Debug("deferring message for later processing",
-			"event_type", "deferred_message",
-			"sentry_level", string(level),
-			"component", component,
-			"scrubbed_message", scrubbedMessage,
-			"deferred_count", len(deferredMessages),
-		)
-	}
+	scrubbedMessage := privacy.ScrubMessage(message)
+	logTelemetryDebug(nil, "deferring message for later processing",
+		"event_type", "deferred_message",
+		"sentry_level", string(level),
+		"component", component,
+		"scrubbed_message", scrubbedMessage,
+		"deferred_count", len(deferredMessages),
+	)
 }
 
 // Flush ensures all buffered events are sent to Sentry

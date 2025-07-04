@@ -81,8 +81,7 @@ func InitializeEventBusIntegration() error {
 	telemetryWorker = worker
 
 	// Log registration details
-	logMessage := "telemetry worker registered with event bus"
-	logAttrs := []any{
+	logTelemetryInfo(logger, "telemetry worker registered with event bus",
 		"consumer", worker.Name(),
 		"supports_batching", worker.SupportsBatching(),
 		"batching_enabled", config.BatchingEnabled,
@@ -92,15 +91,7 @@ func InitializeEventBusIntegration() error {
 		"recovery_timeout", config.RecoveryTimeout,
 		"rate_limit", config.RateLimitMaxEvents,
 		"sampling_rate", config.SamplingRate,
-	}
-
-	// Always log to integration logger first for visibility
-	logger.Info(logMessage, logAttrs...)
-	
-	// Also log to service logger if available
-	if serviceLogger != nil {
-		serviceLogger.Info(logMessage, logAttrs...)
-	}
+	)
 
 	return nil
 }
@@ -133,12 +124,8 @@ func UpdateSamplingRate(rate float64) error {
 	telemetryWorker.config.SamplingRate = rate
 	telemetryWorker.configMu.Unlock()
 
-	// Log to service logger (telemetry.log)
-	if serviceLogger != nil {
-		serviceLogger.Info("updated telemetry sampling rate", "rate", rate)
-	} else {
-		logger.Info("updated telemetry sampling rate", "rate", rate)
-	}
+	// Log the update
+	logTelemetryInfo(logger, "updated telemetry sampling rate", "rate", rate)
 
 	return nil
 }
