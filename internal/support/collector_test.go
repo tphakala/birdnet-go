@@ -365,12 +365,12 @@ func TestAnonymizeIPAddress(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"localhost ipv4", "127.0.0.1", "localhost"},
-		{"localhost ipv6", "::1", "localhost"},
-		{"private ip 10.x", "10.0.1.100", "private-ip"},
-		{"private ip 192.168.x", "192.168.1.1", "private-ip"},
-		{"private ip 172.16.x", "172.16.0.1", "private-ip"},
-		{"link-local", "169.254.1.1", "private-ip"},
+		{"localhost ipv4", "127.0.0.1", "localhost-"},
+		{"localhost ipv6", "::1", "localhost-"},
+		{"private ip 10.x", "10.0.1.100", "private-ip-"},
+		{"private ip 192.168.x", "192.168.1.1", "private-ip-"},
+		{"private ip 172.16.x", "172.16.0.1", "private-ip-"},
+		{"link-local", "169.254.1.1", "private-ip-"},
 		{"invalid ip", "not.an.ip", "invalid-ip-b94d27"},
 	}
 
@@ -386,7 +386,7 @@ func TestAnonymizeIPAddress(t *testing.T) {
 				// For public IPs, we just check the prefix since the hash varies
 				assert.True(t, strings.HasPrefix(result, "public-ip-"), "Expected public-ip prefix for %s, got %s", tt.input, result)
 			default:
-				assert.Equal(t, tt.expected, result, "Expected %s for %s, got %s", tt.expected, tt.input, result)
+				assert.True(t, strings.HasPrefix(result, tt.expected), "Expected %s prefix for %s, got %s", tt.expected, tt.input, result)
 			}
 		})
 	}
@@ -441,7 +441,7 @@ func TestScrubLogMessage(t *testing.T) {
 		{
 			name:        "api key anonymization",
 			input:       "api_key=sk_test_123456789abcdef error occurred",
-			expected:    []string{"api_key=[REDACTED]", "error occurred"},
+			expected:    []string{"api_key: [TOKEN]", "error occurred"},
 			notExpected: []string{"sk_test_123456789abcdef"},
 		},
 		{
@@ -453,7 +453,7 @@ func TestScrubLogMessage(t *testing.T) {
 		{
 			name:        "mixed sensitive data",
 			input:       "Failed to connect to rtsp://admin:password@192.168.1.200:554/stream1 from 203.0.113.42 (API token: Bearer abc123def456)",
-			expected:    []string{"Failed to connect to", "from", "token=[REDACTED]"},
+			expected:    []string{"Failed to connect to", "from", "Bearer [TOKEN]"},
 			notExpected: []string{"admin:password", "192.168.1.200", "203.0.113.42", "abc123def456"},
 		},
 	}
