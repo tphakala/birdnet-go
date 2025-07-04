@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
@@ -53,9 +54,7 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 		// Timeout is OK for this test
 	case data := <-unifiedAudioChan:
 		dataReceived = true
-		if data.Timestamp.IsZero() {
-			t.Error("Received audio data with zero timestamp")
-		}
+		assert.False(t, data.Timestamp.IsZero(), "Received audio data should have non-zero timestamp")
 	}
 
 	// Signal quit
@@ -72,7 +71,7 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 	case <-done:
 		// Good, cleanup completed
 	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for adapter to stop")
+		assert.Fail(t, "Timeout waiting for adapter to stop")
 	}
 
 	// In a real test with actual audio hardware, we would verify dataReceived
@@ -116,18 +115,9 @@ func TestCalculateAudioLevel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := adapter.calculateAudioLevel(tt.buffer)
 			if tt.expected == 0 {
-				if result != 0 {
-					t.Errorf("Expected 0, got %f", result)
-				}
+				assert.Equal(t, float32(0), result, "Expected zero audio level")
 			} else {
-				// Allow some tolerance for floating point comparison
-				diff := result - tt.expected
-				if diff < 0 {
-					diff = -diff
-				}
-				if diff > 0.001 {
-					t.Errorf("Expected %f, got %f (diff: %f)", tt.expected, result, diff)
-				}
+				assert.InDelta(t, tt.expected, result, 0.001, "Audio level calculation mismatch")
 			}
 		})
 	}
@@ -140,28 +130,23 @@ func TestSoundLevelAnalyzer(t *testing.T) {
 
 	// First process should return nil (not enough time passed)
 	result := analyzer.Process([]byte{0, 0, 0, 0})
-	if result != nil {
-		t.Error("Expected nil on first process call")
-	}
+	assert.Nil(t, result, "Expected nil on first process call")
 
 	// Update last update time to simulate time passing
 	analyzer.lastUpdate = time.Now().Add(-2 * time.Second)
 
 	// Now process should return data
 	result = analyzer.Process([]byte{0, 0, 0, 0})
-	if result == nil {
-		t.Error("Expected sound level data after interval")
-	} else {
-		if len(result.OctaveBands) != 6 {
-			t.Errorf("Expected 6 octave band levels, got %d", len(result.OctaveBands))
-		}
+	assert.NotNil(t, result, "Expected sound level data after interval")
+	
+	if result != nil {
+		assert.Len(t, result.OctaveBands, 6, "Expected 6 octave band levels")
+		
 		// Check one octave band
-		if band, ok := result.OctaveBands["1000"]; ok {
-			if band.Mean != 60.0 {
-				t.Errorf("Expected mean 60.0 for 1000Hz band, got %f", band.Mean)
-			}
-		} else {
-			t.Error("Missing 1000Hz octave band")
+		band, ok := result.OctaveBands["1000"]
+		assert.True(t, ok, "Expected 1000Hz octave band to be present")
+		if ok {
+			assert.Equal(t, 60.0, band.Mean, "Expected mean 60.0 for 1000Hz band")
 		}
 	}
 }
@@ -205,7 +190,7 @@ func TestRestartHandling(t *testing.T) {
 	case <-done:
 		// Good, adapter exited on restart
 	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for adapter to handle restart")
+		assert.Fail(t, "Timeout waiting for adapter to handle restart")
 	}
 
 	close(quitChan)
