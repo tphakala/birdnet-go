@@ -13,7 +13,7 @@ The system monitor continuously tracks resource usage and publishes events when 
 - **Event Bus Integration**: Non-blocking event publishing
 - **Persistent Notifications**: Critical disk alerts resubmit every 30 minutes
 - **Recovery Tracking**: Monitors recovery duration and sends notifications
-- **Path-Aware Disk Monitoring**: Foundation for multi-disk support
+- **Multi-Path Disk Monitoring**: Monitor multiple disk paths simultaneously
 - **Dedicated Logging**: Separate `monitor.log` file for troubleshooting
 
 ## Architecture
@@ -62,7 +62,10 @@ realtime:
       enabled: true
       warning: 85.0
       critical: 95.0
-      path: "/"                     # Disk path to monitor
+      paths:                        # Disk paths to monitor
+        - "/"                       # Root filesystem
+        - "/home"                   # Home partition
+        - "/var"                    # Var partition
 ```
 
 ### Default Values
@@ -71,7 +74,7 @@ realtime:
 - CPU thresholds: 85% warning, 95% critical
 - Memory thresholds: 85% warning, 95% critical
 - Disk thresholds: 85% warning, 95% critical
-- Disk path: "/" (root filesystem)
+- Disk paths: ["/"] (defaults to root filesystem only)
 
 ## Usage
 
@@ -135,9 +138,10 @@ status := systemMonitor.GetResourceStatus()
 
 ### Disk Monitoring
 
-- Monitors specified disk path (default: "/")
-- Supports path-aware monitoring (prepared for multi-disk)
-- Logs detailed disk information on each check
+- Monitors multiple disk paths simultaneously
+- Each path maintains independent alert states
+- Path information included in notifications
+- Logs detailed disk information for each path
 - Critical alerts persist until resolved
 
 ## Alert Behavior
@@ -212,23 +216,43 @@ Resource usage recovered
 System monitoring is disabled in configuration
 ```
 
-## Multi-Path Support
+## Multi-Path Disk Monitoring
 
-The monitor is designed to support multiple disk paths (future enhancement):
+The monitor supports monitoring multiple disk paths simultaneously:
 
-### Current Implementation
+### Features
 
-- Single disk path monitoring (configured path)
-- Path-aware state management ready
-- Path included in notifications
+- Configure multiple disk paths in the `paths` array
+- Each path maintains independent alert states
+- Path information included in notification titles
+- Separate throttling for each path's alerts
+- Recovery notifications per path
 
-### Future Multi-Path
+### Configuration Example
 
-When implemented, the monitor will:
-- Track multiple disk paths independently
-- Maintain separate alert states per path
-- Show path in notification titles
-- Support path-specific thresholds
+```yaml
+disk:
+  enabled: true
+  warning: 85.0
+  critical: 95.0
+  paths:
+    - "/"
+    - "/home"
+    - "/var"
+    - "/data"
+```
+
+### Notification Examples
+
+- Warning: "High Disk (/home) Usage: 86.5% (threshold: 85.0%)"
+- Critical: "Critical Disk (/) Usage: 95.2% (threshold: 90.0%)"
+- Recovery: "Disk (/var) Usage Recovered: 78.0%"
+
+### Path Validation
+
+- Invalid paths are logged and skipped
+- Valid paths are cached to avoid repeated filesystem checks
+- Monitoring continues for all valid paths
 
 ## Troubleshooting
 
@@ -321,14 +345,17 @@ type ResourceConfig struct {
 }
 
 type DiskConfig struct {
-    ResourceConfig
-    Path string
+    Enabled  bool
+    Warning  float64
+    Critical float64
+    Paths    []string
 }
 ```
 
 ## Future Enhancements
 
-- [ ] Multiple disk path monitoring
+- [x] Multiple disk path monitoring
+- [ ] Path-specific thresholds
 - [ ] Network interface monitoring
 - [ ] Process-specific monitoring
 - [ ] Custom metric support
