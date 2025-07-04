@@ -227,6 +227,7 @@ The monitor supports monitoring multiple disk paths simultaneously:
 - Path information included in notification titles
 - Separate throttling for each path's alerts
 - Recovery notifications per path
+- **Automatic Critical Path Detection**: Automatically monitors paths critical to BirdNET-Go operation
 
 ### Configuration Example
 
@@ -242,6 +243,17 @@ disk:
     - "/data"
 ```
 
+### Automatic Path Monitoring
+
+When disk monitoring is enabled, the system automatically detects and monitors paths critical to application operation:
+
+- **Database Path**: Location of `birdnet.db` (if SQLite is enabled)
+- **Audio Clips Path**: Where audio clips are stored (if export is enabled)
+- **Configuration Path**: Directory containing `config.yaml`
+- **Container Volumes**: `/data` and `/config` when running in Docker/Podman
+
+These paths are automatically added to your configured paths, ensuring critical application directories are always monitored.
+
 ### Notification Examples
 
 - Warning: "High Disk (/home) Usage: 86.5% (threshold: 85.0%)"
@@ -253,6 +265,7 @@ disk:
 - Invalid paths are logged and skipped
 - Valid paths are cached to avoid repeated filesystem checks
 - Monitoring continues for all valid paths
+- Duplicate paths are automatically removed
 
 ## Troubleshooting
 
