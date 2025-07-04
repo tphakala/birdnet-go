@@ -63,7 +63,7 @@ func TestResourceEventWorker_ProcessResourceEvent(t *testing.T) {
 				events.SeverityRecovery,
 			),
 			wantNotifType: TypeInfo,
-			wantPriority:  PriorityLow,
+			wantPriority:  PriorityMedium,
 		},
 		{
 			name: "Throttled CPU warning",
