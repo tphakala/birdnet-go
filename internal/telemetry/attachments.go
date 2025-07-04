@@ -115,7 +115,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	// Add custom context
 	supportContext := map[string]interface{}{
 		"system_id":    systemID,
-		"user_message": userMessage,
+		"user_message": scrubbedMessage,
 		"dump_size":    len(dumpData),
 		"upload_time":  now.Format(time.RFC3339),
 	}
@@ -162,7 +162,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 			scope.AddBreadcrumb(&sentry.Breadcrumb{
 				Type:      "user",
 				Category:  "support",
-				Message:   userMessage,
+				Message:   scrubbedMessage,
 				Level:     sentry.LevelInfo,
 				Timestamp: time.Now(),
 			}, maxBreadcrumbs)
@@ -190,7 +190,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	serviceLogger.Debug("telemetry: flushing event to Sentry")
 	flushDone := make(chan struct{})
 	go func() {
-		Flush(5 * time.Second)
+		sentry.Flush(5 * time.Second)
 		close(flushDone)
 	}()
 
@@ -248,6 +248,9 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 		})
 	}
 
+	// Scrub message for privacy
+	scrubbedMessage := privacy.ScrubMessage(message)
+
 	if !au.enabled {
 		serviceLogger.Warn("telemetry: support event blocked - telemetry not enabled")
 		return errors.Newf("telemetry is not enabled - cannot create support event").
@@ -270,7 +273,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 		supportContext[k] = v
 	}
 	supportContext["system_id"] = systemID
-	supportContext["message"] = message
+	supportContext["message"] = scrubbedMessage
 	if traceID != "" {
 		supportContext["trace_id"] = traceID
 	}
@@ -308,7 +311,7 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	serviceLogger.Debug("telemetry: flushing support event to Sentry")
 	flushDone := make(chan struct{})
 	go func() {
-		Flush(5 * time.Second)
+		sentry.Flush(5 * time.Second)
 		close(flushDone)
 	}()
 
