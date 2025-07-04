@@ -3,7 +3,6 @@ package sources
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +23,8 @@ type SoundcardSource struct {
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 	mu          sync.RWMutex
+	closeOnce   sync.Once
+	closed      bool
 
 	// Device-specific fields (to be implemented with actual audio library)
 	deviceID   string
@@ -135,9 +136,12 @@ func (s *SoundcardSource) Stop() error {
 	// Mark as inactive
 	s.isActive.Store(false)
 
-	// Close channels
-	close(s.audioOutput)
-	close(s.errorOutput)
+	// Close channels only once
+	s.closeOnce.Do(func() {
+		close(s.audioOutput)
+		close(s.errorOutput)
+		s.closed = true
+	})
 
 	return nil
 }
@@ -227,8 +231,15 @@ func (s *SoundcardSource) captureAudio() {
 				return
 			default:
 				// Channel full, report error
+				err := errors.New(nil).
+					Component(audiocore.ComponentAudioCore).
+					Category(errors.CategoryResource).
+					Context("operation", "audio_output").
+					Context("frame", frameCount).
+					Context("error", "audio output channel full, dropping frame").
+					Build()
 				select {
-				case s.errorOutput <- fmt.Errorf("audio output channel full, dropping frame %d", frameCount):
+				case s.errorOutput <- err:
 				default:
 				}
 			}
@@ -246,7 +257,17 @@ func (s *SoundcardSource) applyGain(buffer []byte, gain float64) {
 			sample := int16(buffer[i]) | (int16(buffer[i+1]) << 8)
 			
 			// Apply gain
-			sample = int16(float64(sample) * gain)
+			amplified := float64(sample) * gain
+			
+			// Clamp to prevent overflow
+			if amplified > 32767 {
+				amplified = 32767
+			} else if amplified < -32768 {
+				amplified = -32768
+			}
+			
+			// Convert back to int16
+			sample = int16(amplified)
 			
 			// Convert back to bytes
 			buffer[i] = byte(sample)

@@ -105,7 +105,7 @@ type AudioBuffer interface {
 	Resize(newSize int) error
 
 	// Slice returns a slice of the buffer
-	Slice(start, end int) []byte
+	Slice(start, end int) ([]byte, error)
 
 	// Acquire increments the reference count
 	Acquire()

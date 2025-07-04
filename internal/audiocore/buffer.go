@@ -73,15 +73,23 @@ func (b *bufferImpl) Resize(newSize int) error {
 }
 
 // Slice returns a slice of the buffer
-func (b *bufferImpl) Slice(start, end int) []byte {
+func (b *bufferImpl) Slice(start, end int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if start < 0 || end > b.length || start > end {
-		return nil
+		return nil, errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("operation", "buffer_slice").
+			Context("start", start).
+			Context("end", end).
+			Context("length", b.length).
+			Context("error", "invalid slice bounds").
+			Build()
 	}
 
-	return b.data[start:end]
+	return b.data[start:end], nil
 }
 
 // Acquire increments the reference count
@@ -114,21 +122,21 @@ func NewBufferPool(config BufferPoolConfig) BufferPool {
 	}
 
 	// Initialize sync.Pools with constructors
-	pool.smallPool.New = func() interface{} {
+	pool.smallPool.New = func() any {
 		return &bufferImpl{
 			data: make([]byte, config.SmallBufferSize),
 			pool: pool,
 		}
 	}
 
-	pool.mediumPool.New = func() interface{} {
+	pool.mediumPool.New = func() any {
 		return &bufferImpl{
 			data: make([]byte, config.MediumBufferSize),
 			pool: pool,
 		}
 	}
 
-	pool.largePool.New = func() interface{} {
+	pool.largePool.New = func() any {
 		return &bufferImpl{
 			data: make([]byte, config.LargeBufferSize),
 			pool: pool,
