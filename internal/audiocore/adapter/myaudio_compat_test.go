@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -45,11 +46,12 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 	// Start capture in goroutine
 	go adapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 
-	// Wait for some data
-	timeout := time.After(100 * time.Millisecond)
+	// Wait for some data with context timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
 
 	select {
-	case <-timeout:
+	case <-ctx.Done():
 		// Timeout is OK for this test
 	case data := <-unifiedAudioChan:
 		assert.False(t, data.Timestamp.IsZero(), "Received audio data should have non-zero timestamp")
@@ -65,10 +67,13 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 		close(done)
 	}()
 
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cleanupCancel()
+
 	select {
 	case <-done:
 		// Good, cleanup completed
-	case <-time.After(1 * time.Second):
+	case <-cleanupCtx.Done():
 		assert.Fail(t, "Timeout waiting for adapter to stop")
 	}
 }
@@ -196,10 +201,13 @@ func TestRestartHandling(t *testing.T) {
 		close(done)
 	}()
 
+	restartCtx, restartCancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer restartCancel()
+
 	select {
 	case <-done:
 		// Good, adapter exited on restart
-	case <-time.After(1 * time.Second):
+	case <-restartCtx.Done():
 		assert.Fail(t, "Timeout waiting for adapter to handle restart")
 	}
 

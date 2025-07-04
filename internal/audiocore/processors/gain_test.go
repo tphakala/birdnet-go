@@ -266,6 +266,7 @@ func TestGainProcessorSetGain(t *testing.T) {
 }
 
 func TestGainProcessorFormats(t *testing.T) {
+	t.Parallel()
 	proc, err := NewGainProcessor("test-gain", 1.0)
 	require.NoError(t, err)
 
