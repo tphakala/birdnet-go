@@ -81,10 +81,31 @@ func InitializeEventBusIntegration() error {
 	telemetryWorker = worker
 
 	logger.Info("telemetry worker registered with event bus",
+		"consumer", worker.Name(),
+		"supports_batching", worker.SupportsBatching(),
 		"batching_enabled", config.BatchingEnabled,
+		"batch_size", config.BatchSize,
+		"batch_timeout", config.BatchTimeout,
+		"circuit_breaker_threshold", config.FailureThreshold,
+		"recovery_timeout", config.RecoveryTimeout,
 		"rate_limit", config.RateLimitMaxEvents,
 		"sampling_rate", config.SamplingRate,
 	)
+
+	// Also log to service logger if available
+	if serviceLogger != nil {
+		serviceLogger.Info("telemetry worker registered with event bus",
+			"consumer", worker.Name(),
+			"supports_batching", worker.SupportsBatching(),
+			"batching_enabled", config.BatchingEnabled,
+			"batch_size", config.BatchSize,
+			"batch_timeout", config.BatchTimeout,
+			"circuit_breaker_threshold", config.FailureThreshold,
+			"recovery_timeout", config.RecoveryTimeout,
+			"rate_limit", config.RateLimitMaxEvents,
+			"sampling_rate", config.SamplingRate,
+		)
+	}
 
 	return nil
 }
