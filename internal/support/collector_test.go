@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // TestLogFileCollector_isLogFile tests the log file detection
@@ -376,7 +377,7 @@ func TestAnonymizeIPAddress(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := anonymizeIPAddress(tt.input)
+			result := privacy.AnonymizeIP(tt.input)
 			switch {
 			case tt.name == "invalid ip":
 				// For invalid IPs, we just check the prefix
@@ -409,7 +410,7 @@ func TestAnonymizeURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := anonymizeURL(tt.input)
+			result := privacy.AnonymizeURL(tt.input)
 			assert.True(t, strings.HasPrefix(result, tt.expected), "Expected %s prefix for %s, got %s", tt.expected, tt.input, result)
 		})
 	}
@@ -460,7 +461,7 @@ func TestScrubLogMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := scrubLogMessage(tt.input)
+			result := privacy.ScrubMessage(tt.input)
 
 			for _, expected := range tt.expected {
 				assert.Contains(t, result, expected, "Expected '%s' to be in result: %s", expected, result)
