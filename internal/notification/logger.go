@@ -43,9 +43,7 @@ func initFileLogger(debug bool) {
 
 // getFileLogger returns the file logger, initializing it if necessary
 func getFileLogger(debug bool) *slog.Logger {
-	if fileLogger == nil {
-		initFileLogger(debug)
-	}
+	initFileLogger(debug)
 	return fileLogger
 }
 

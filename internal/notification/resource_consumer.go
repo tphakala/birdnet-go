@@ -2,7 +2,10 @@ package notification
 
 import (
 	"fmt"
+	"maps"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -17,8 +20,11 @@ type ResourceEventWorker struct {
 	alertThrottle    time.Duration
 	resourceThrottles map[string]time.Duration // Per-resource type throttles
 	mu               sync.RWMutex
-	processedCount   uint64
-	suppressedCount  uint64
+	processedCount   atomic.Uint64  // Thread-safe counter
+	suppressedCount  atomic.Uint64  // Thread-safe counter
+	cleanupTicker    *time.Ticker   // For periodic cleanup of lastAlertTime
+	stopCleanup      chan struct{}  // Signal to stop cleanup goroutine
+	wg               sync.WaitGroup // Wait for cleanup to finish
 }
 
 // ResourceWorkerConfig holds configuration for the resource event worker
@@ -59,17 +65,23 @@ func NewResourceEventWorker(service *Service, config *ResourceWorkerConfig) (*Re
 
 	// Copy resource throttles to avoid mutation
 	resourceThrottles := make(map[string]time.Duration)
-	for k, v := range config.ResourceThrottles {
-		resourceThrottles[k] = v
-	}
+	maps.Copy(resourceThrottles, config.ResourceThrottles)
 
-	return &ResourceEventWorker{
+	worker := &ResourceEventWorker{
 		service:           service,
 		logger:            logger,
 		lastAlertTime:     make(map[string]time.Time),
 		alertThrottle:     config.AlertThrottle,
 		resourceThrottles: resourceThrottles,
-	}, nil
+		cleanupTicker:     time.NewTicker(5 * time.Minute), // Cleanup every 5 minutes
+		stopCleanup:       make(chan struct{}),
+	}
+
+	// Start cleanup goroutine
+	worker.wg.Add(1)
+	go worker.cleanupLoop()
+
+	return worker, nil
 }
 
 // Name returns the consumer name
@@ -101,14 +113,17 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 	}
 
 	// Create alert key for throttling - include path for disk resources
-	alertKey := fmt.Sprintf("%s-%s", event.GetResourceType(), event.GetSeverity())
+	// Use "|" as separator since it cannot appear in file paths
+	alertKey := fmt.Sprintf("%s|%s", event.GetResourceType(), event.GetSeverity())
 	if event.GetResourceType() == events.ResourceDisk && event.GetPath() != "" {
-		alertKey = fmt.Sprintf("%s-%s-%s", event.GetResourceType(), event.GetPath(), event.GetSeverity())
+		// Sanitize path by replacing any "|" characters (though they shouldn't exist)
+		sanitizedPath := strings.ReplaceAll(event.GetPath(), "|", "_")
+		alertKey = fmt.Sprintf("%s|%s|%s", event.GetResourceType(), sanitizedPath, event.GetSeverity())
 	}
 
 	// Check if we should throttle this alert
 	if w.shouldThrottle(alertKey, event.GetResourceType()) {
-		w.suppressedCount++
+		w.suppressedCount.Add(1)
 		if w.logger != nil {
 			w.logger.Debug("suppressing duplicate resource alert",
 				"resource_type", event.GetResourceType(),
@@ -211,7 +226,7 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 		_ = w.service.store.Update(notification)
 	}
 
-	w.processedCount++
+	w.processedCount.Add(1)
 
 	if w.logger != nil {
 		w.logger.Info("resource alert notification created",
@@ -275,7 +290,60 @@ func (w *ResourceEventWorker) GetStats() struct {
 		ProcessedCount  uint64
 		SuppressedCount uint64
 	}{
-		ProcessedCount:  w.processedCount,
-		SuppressedCount: w.suppressedCount,
+		ProcessedCount:  w.processedCount.Load(),
+		SuppressedCount: w.suppressedCount.Load(),
 	}
+}
+
+// cleanupLoop periodically removes old entries from lastAlertTime map
+func (w *ResourceEventWorker) cleanupLoop() {
+	defer w.wg.Done()
+	
+	for {
+		select {
+		case <-w.cleanupTicker.C:
+			w.cleanupOldAlerts()
+		case <-w.stopCleanup:
+			return
+		}
+	}
+}
+
+// cleanupOldAlerts removes entries older than the maximum throttle duration
+func (w *ResourceEventWorker) cleanupOldAlerts() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	
+	now := time.Now()
+	maxAge := w.alertThrottle
+	
+	// Check all resource-specific throttles to find the maximum
+	for _, duration := range w.resourceThrottles {
+		if duration > maxAge {
+			maxAge = duration
+		}
+	}
+	
+	// Add some buffer to ensure we don't remove entries too early
+	maxAge *= 2
+	
+	// Remove old entries
+	for key, lastTime := range w.lastAlertTime {
+		if now.Sub(lastTime) > maxAge {
+			delete(w.lastAlertTime, key)
+			if w.logger != nil {
+				w.logger.Debug("cleaned up old alert time entry",
+					"key", key,
+					"age", now.Sub(lastTime),
+				)
+			}
+		}
+	}
+}
+
+// Stop stops the worker and cleans up resources
+func (w *ResourceEventWorker) Stop() {
+	close(w.stopCleanup)
+	w.cleanupTicker.Stop()
+	w.wg.Wait()
 }
