@@ -43,6 +43,12 @@ const (
 	CategoryImageCache     ErrorCategory = "image-cache"
 	CategoryImageProvider  ErrorCategory = "image-provider"
 	CategoryGeneric        ErrorCategory = "generic"
+	CategoryNotFound       ErrorCategory = "not-found"
+	CategoryConflict       ErrorCategory = "conflict"
+	CategoryProcessing     ErrorCategory = "processing"
+	CategoryState          ErrorCategory = "state"
+	CategoryLimit          ErrorCategory = "limit"
+	CategoryResource       ErrorCategory = "resource"
 )
 
 // EnhancedError wraps an error with additional context and metadata
@@ -338,6 +344,7 @@ func init() {
 	RegisterComponent("telemetry", "telemetry")
 	RegisterComponent("birdweather", "birdweather")
 	RegisterComponent("backup", "backup")
+	RegisterComponent("audiocore", "audiocore")
 }
 
 // Helper functions for auto-detection and categorization
