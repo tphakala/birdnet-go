@@ -57,8 +57,16 @@ func main() {
 	log.Println("Event bus initialized")
 
 	// Initialize notification system
-	notification.Init(settings)
+	notificationConfig := notification.DefaultServiceConfig()
+	notificationConfig.Debug = true
+	notification.Initialize(notificationConfig)
 	log.Println("Notification system initialized")
+	
+	// Register notification workers with event bus
+	if err := notification.InitializeEventBusIntegration(); err != nil {
+		log.Fatalf("Failed to register notification workers: %v", err)
+	}
+	log.Println("Notification workers registered with event bus")
 
 	// Create and start system monitor
 	systemMonitor := monitor.NewSystemMonitor(settings)
