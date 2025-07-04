@@ -269,14 +269,23 @@ func (m *SystemMonitor) checkDisk() {
 		"critical_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Critical),
 	)
 
-	m.checkThresholds(ResourceDisk, usage.UsedPercent,
+	m.checkThresholdsWithPath(ResourceDisk, usage.UsedPercent,
 		m.config.Realtime.Monitoring.Disk.Warning,
-		m.config.Realtime.Monitoring.Disk.Critical)
+		m.config.Realtime.Monitoring.Disk.Critical, path)
 }
 
 // checkThresholds evaluates resource usage against configured thresholds
 func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningThreshold, criticalThreshold float64) {
+	m.checkThresholdsWithPath(resource, current, warningThreshold, criticalThreshold, "")
+}
+
+// checkThresholdsWithPath evaluates resource usage against configured thresholds with optional path
+func (m *SystemMonitor) checkThresholdsWithPath(resource ResourceType, current, warningThreshold, criticalThreshold float64, path string) {
+	// Create state key that includes path for disk resources
 	stateKey := string(resource)
+	if resource == ResourceDisk && path != "" {
+		stateKey = fmt.Sprintf("%s:%s", resource, path)
+	}
 
 	m.mu.Lock()
 	state, exists := m.alertStates[stateKey]
@@ -297,10 +306,11 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 			// First time entering critical state
 			m.logger.Warn("Critical threshold exceeded",
 				"resource", resource,
+				"path", path,
 				"current", fmt.Sprintf("%.2f%%", current),
 				"threshold", fmt.Sprintf("%.2f%%", criticalThreshold),
 			)
-			m.sendNotification(resource, current, criticalThreshold, notification.PriorityCritical, state)
+			m.sendNotificationWithPath(resource, current, criticalThreshold, notification.PriorityCritical, state, path)
 			state.InCritical = true
 			state.InWarning = true // Critical implies warning
 			state.CriticalStartTime = time.Now()
@@ -312,7 +322,7 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 					"current", fmt.Sprintf("%.2f%%", current),
 					"last_notification", state.LastNotificationTime.Format(time.RFC3339),
 				)
-				m.sendNotification(resource, current, criticalThreshold, notification.PriorityCritical, state)
+				m.sendNotificationWithPath(resource, current, criticalThreshold, notification.PriorityCritical, state, path)
 			} else {
 				m.logger.Debug("Resource still in critical state",
 					"resource", resource,
@@ -328,7 +338,7 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 				"current", fmt.Sprintf("%.2f%%", current),
 				"threshold", fmt.Sprintf("%.2f%%", warningThreshold),
 			)
-			m.sendNotification(resource, current, warningThreshold, notification.PriorityHigh, state)
+			m.sendNotificationWithPath(resource, current, warningThreshold, notification.PriorityHigh, state, path)
 			state.InWarning = true
 		} else {
 			m.logger.Debug("Resource still in warning state",
@@ -338,14 +348,14 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 		}
 		// Clear critical if we're below critical threshold (with hysteresis)
 		if state.InCritical && current < (criticalThreshold-5.0) {
-			m.sendRecoveryNotification(resource, current, "critical", state)
+			m.sendRecoveryNotificationWithPath(resource, current, "critical", state, path)
 			state.InCritical = false
 			state.CriticalStartTime = time.Time{} // Reset
 		}
 	default:
 		// Below all thresholds - send recovery notifications if needed
 		if state.InWarning && current < (warningThreshold-5.0) {
-			m.sendRecoveryNotification(resource, current, "warning", state)
+			m.sendRecoveryNotificationWithPath(resource, current, "warning", state, path)
 			state.InWarning = false
 			state.InCritical = false
 			state.CriticalStartTime = time.Time{} // Reset
@@ -363,8 +373,13 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 	)
 }
 
-// sendNotification sends a threshold exceeded notification
+// sendNotification sends a threshold exceeded notification (backward compatibility)
 func (m *SystemMonitor) sendNotification(resource ResourceType, current, threshold float64, priority notification.Priority, state *AlertState) {
+	m.sendNotificationWithPath(resource, current, threshold, priority, state, "")
+}
+
+// sendNotificationWithPath sends a threshold exceeded notification with optional path
+func (m *SystemMonitor) sendNotificationWithPath(resource ResourceType, current, threshold float64, priority notification.Priority, state *AlertState, path string) {
 	// Determine severity based on priority
 	var severity string
 	if priority == notification.PriorityCritical {
@@ -375,7 +390,12 @@ func (m *SystemMonitor) sendNotification(resource ResourceType, current, thresho
 
 	// Try to publish via event bus first
 	if eventBus := events.GetEventBus(); eventBus != nil {
-		event := events.NewResourceEvent(string(resource), current, threshold, severity)
+		var event events.ResourceEvent
+		if resource == ResourceDisk && path != "" {
+			event = events.NewResourceEventWithPath(string(resource), current, threshold, severity, path)
+		} else {
+			event = events.NewResourceEvent(string(resource), current, threshold, severity)
+		}
 		if eventBus.TryPublishResource(event) {
 			m.logger.Info("Resource event published to event bus",
 				"resource", resource,
@@ -418,8 +438,13 @@ func (m *SystemMonitor) sendNotification(resource ResourceType, current, thresho
 	)
 }
 
-// sendRecoveryNotification sends a notification when resource usage returns to normal
+// sendRecoveryNotification sends a notification when resource usage returns to normal (backward compatibility)
 func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current float64, level string, state *AlertState) {
+	m.sendRecoveryNotificationWithPath(resource, current, level, state, "")
+}
+
+// sendRecoveryNotificationWithPath sends a notification when resource usage returns to normal with optional path
+func (m *SystemMonitor) sendRecoveryNotificationWithPath(resource ResourceType, current float64, level string, state *AlertState, path string) {
 	// Calculate duration if recovering from critical
 	var duration time.Duration
 	if level == "critical" && !state.CriticalStartTime.IsZero() {
@@ -429,7 +454,12 @@ func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current 
 	// Try to publish via event bus first
 	if eventBus := events.GetEventBus(); eventBus != nil {
 		// For recovery, threshold is not applicable, use 0
-		event := events.NewResourceEvent(string(resource), current, 0, events.SeverityRecovery)
+		var event events.ResourceEvent
+		if resource == ResourceDisk && path != "" {
+			event = events.NewResourceEventWithPath(string(resource), current, 0, events.SeverityRecovery, path)
+		} else {
+			event = events.NewResourceEvent(string(resource), current, 0, events.SeverityRecovery)
+		}
 		
 		// Add duration metadata if available
 		if duration > 0 {

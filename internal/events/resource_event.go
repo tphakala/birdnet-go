@@ -13,6 +13,7 @@ type resourceEventImpl struct {
 	severity     string
 	timestamp    time.Time
 	metadata     map[string]interface{}
+	path         string // Path for disk resources
 }
 
 // NewResourceEvent creates a new resource monitoring event
@@ -40,6 +41,24 @@ func NewResourceEventWithMetadata(resourceType string, currentValue, threshold f
 		timestamp:    time.Now(),
 		metadata:     metadata,
 	}
+}
+
+// NewResourceEventWithPath creates a new resource event with path (for disk resources)
+func NewResourceEventWithPath(resourceType string, currentValue, threshold float64, severity, path string) ResourceEvent {
+	event := &resourceEventImpl{
+		resourceType: resourceType,
+		currentValue: currentValue,
+		threshold:    threshold,
+		severity:     severity,
+		timestamp:    time.Now(),
+		metadata:     make(map[string]interface{}),
+		path:         path,
+	}
+	// Also store path in metadata for backward compatibility
+	if path != "" {
+		event.metadata["path"] = path
+	}
+	return event
 }
 
 // GetResourceType returns the type of resource
@@ -86,6 +105,11 @@ func (e *resourceEventImpl) GetMessage() string {
 		resourceName = e.resourceType
 	}
 
+	// Include path in message for disk resources
+	if e.resourceType == "disk" && e.path != "" {
+		resourceName = fmt.Sprintf("%s (%s)", resourceName, e.path)
+	}
+
 	switch e.severity {
 	case "recovery":
 		return fmt.Sprintf("%s usage has returned to normal (%.1f%%)", resourceName, e.currentValue)
@@ -96,6 +120,11 @@ func (e *resourceEventImpl) GetMessage() string {
 	default:
 		return fmt.Sprintf("%s usage: %.1f%%", resourceName, e.currentValue)
 	}
+}
+
+// GetPath returns the path for disk resources or empty string for others
+func (e *resourceEventImpl) GetPath() string {
+	return e.path
 }
 
 // Severity constants for resource events

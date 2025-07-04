@@ -88,8 +88,11 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 		return nil
 	}
 
-	// Create alert key for throttling
+	// Create alert key for throttling - include path for disk resources
 	alertKey := fmt.Sprintf("%s-%s", event.GetResourceType(), event.GetSeverity())
+	if event.GetResourceType() == events.ResourceDisk && event.GetPath() != "" {
+		alertKey = fmt.Sprintf("%s-%s-%s", event.GetResourceType(), event.GetPath(), event.GetSeverity())
+	}
 
 	// Check if we should throttle this alert
 	if w.shouldThrottle(alertKey) {
@@ -113,6 +116,11 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 	var title string
 
 	resourceName := getResourceDisplayName(event.GetResourceType())
+
+	// Include path in resource name for disk resources
+	if event.GetResourceType() == events.ResourceDisk && event.GetPath() != "" {
+		resourceName = fmt.Sprintf("%s (%s)", resourceName, event.GetPath())
+	}
 
 	switch event.GetSeverity() {
 	case events.SeverityRecovery:
@@ -164,6 +172,11 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 			WithMetadata("current_value", event.GetCurrentValue()).
 			WithMetadata("threshold", event.GetThreshold()).
 			WithMetadata("severity", event.GetSeverity())
+		
+		// Add path metadata for disk resources
+		if event.GetPath() != "" {
+			notification.WithMetadata("path", event.GetPath())
+		}
 
 		// Set expiry for resource alerts
 		if event.GetSeverity() != events.SeverityRecovery {
