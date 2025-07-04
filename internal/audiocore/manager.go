@@ -25,6 +25,7 @@ type managerImpl struct {
 	metrics         ManagerMetrics
 	metricsMu       sync.RWMutex
 	startupErrors   chan error
+	startupComplete chan struct{} // Signals when all sources have reported their startup status
 	logger          *slog.Logger
 }
 
@@ -43,9 +44,9 @@ func NewAudioManager(config *ManagerConfig) AudioManager {
 
 	// Create buffer pool with default config if not specified
 	if config.BufferPoolConfig.SmallBufferSize == 0 {
-		config.BufferPoolConfig.SmallBufferSize = 4 * 1024     // 4KB
-		config.BufferPoolConfig.MediumBufferSize = 64 * 1024   // 64KB
-		config.BufferPoolConfig.LargeBufferSize = 1024 * 1024  // 1MB
+		config.BufferPoolConfig.SmallBufferSize = 4 * 1024    // 4KB
+		config.BufferPoolConfig.MediumBufferSize = 64 * 1024  // 64KB
+		config.BufferPoolConfig.LargeBufferSize = 1024 * 1024 // 1MB
 		config.BufferPoolConfig.MaxBuffersPerSize = 100
 	}
 
@@ -62,6 +63,7 @@ func NewAudioManager(config *ManagerConfig) AudioManager {
 		bufferPool:      NewBufferPool(config.BufferPoolConfig),
 		audioOutput:     make(chan AudioData, 100),
 		startupErrors:   make(chan error, 10), // Buffered to avoid blocking
+		startupComplete: make(chan struct{}),
 		logger:          logger,
 	}
 }
@@ -101,7 +103,13 @@ func (m *managerImpl) AddSource(source AudioSource) error {
 	if m.started {
 		m.logger.Debug("starting newly added source",
 			"source_id", source.ID())
-		go m.processSource(source)
+		// Create a dummy channel since we're not in the startup phase
+		dummyReport := make(chan struct{}, 1)
+		go m.processSource(source, dummyReport)
+		// Drain the dummy channel to avoid goroutine leak
+		go func() {
+			<-dummyReport
+		}()
 	}
 
 	return nil
@@ -211,37 +219,46 @@ func (m *managerImpl) Start(ctx context.Context) error {
 		go m.collectMetrics()
 	}
 
+	// Track startup completion for all sources
+	sourceCount := len(m.sources)
+	startupReports := make(chan struct{}, sourceCount)
+
 	// Start processing each source
 	for _, source := range m.sources {
 		m.wg.Add(1)
-		go m.processSource(source)
+		go m.processSource(source, startupReports)
 	}
 
-	// Collect startup errors with timeout
+	// Wait for all sources to report their startup status
+	var startupErrs []error
 	errorTimeout := time.NewTimer(2 * time.Second)
 	defer errorTimeout.Stop()
 
-	var startupErrs []error
+	reportsReceived := 0
 	collecting := true
-	
-	for collecting {
+
+	for collecting && reportsReceived < sourceCount {
 		select {
 		case err := <-m.startupErrors:
 			if err != nil {
 				startupErrs = append(startupErrs, err)
 			}
-		case <-errorTimeout.C:
-			collecting = false
-		default:
-			// No more errors immediately available
-			if len(m.sources) == 0 {
+		case <-startupReports:
+			reportsReceived++
+			if reportsReceived >= sourceCount {
+				// All sources have reported
 				collecting = false
-			} else {
-				// Give sources a bit more time to start
-				time.Sleep(10 * time.Millisecond)
 			}
+		case <-errorTimeout.C:
+			m.logger.Warn("startup timeout reached",
+				"sources_total", sourceCount,
+				"sources_reported", reportsReceived)
+			collecting = false
 		}
 	}
+
+	// Signal that startup phase is complete
+	close(m.startupComplete)
 
 	// Return aggregated errors if any sources failed to start
 	if len(startupErrs) > 0 {
@@ -321,8 +338,16 @@ func (m *managerImpl) Metrics() ManagerMetrics {
 }
 
 // processSource handles audio processing for a single source
-func (m *managerImpl) processSource(source AudioSource) {
+func (m *managerImpl) processSource(source AudioSource, startupReport chan<- struct{}) {
 	defer m.wg.Done()
+
+	// Ensure we always report startup completion
+	startupReported := false
+	defer func() {
+		if !startupReported {
+			startupReport <- struct{}{}
+		}
+	}()
 
 	m.logger.Debug("starting audio processing for source",
 		"source_id", source.ID(),
@@ -347,6 +372,9 @@ func (m *managerImpl) processSource(source AudioSource) {
 			m.logger.Warn("startup error channel full, error discarded",
 				"source_id", source.ID())
 		}
+		// Report startup completion (even though it failed)
+		startupReport <- struct{}{}
+		startupReported = true
 		return
 	}
 
@@ -358,6 +386,10 @@ func (m *managerImpl) processSource(source AudioSource) {
 	m.logger.Info("audio source started successfully",
 		"source_id", source.ID(),
 		"source_name", source.Name())
+
+	// Report successful startup
+	startupReport <- struct{}{}
+	startupReported = true
 
 	// Process audio from this source
 	for {

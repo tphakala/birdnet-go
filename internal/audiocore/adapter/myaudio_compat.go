@@ -17,14 +17,14 @@ import (
 
 // MyAudioCompatAdapter bridges audiocore with the existing myaudio interface
 type MyAudioCompatAdapter struct {
-	manager      audiocore.AudioManager
-	settings     *conf.Settings
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           *sync.WaitGroup
-	outputChan   chan myaudio.UnifiedAudioData
-	quitChan     chan struct{}
-	restartChan  chan struct{}
+	manager     audiocore.AudioManager
+	settings    *conf.Settings
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          *sync.WaitGroup
+	outputChan  chan myaudio.UnifiedAudioData
+	quitChan    chan struct{}
+	restartChan chan struct{}
 }
 
 // NewMyAudioCompatAdapter creates a new adapter that implements myaudio.CaptureAudio interface using audiocore
@@ -175,12 +175,12 @@ func (a *MyAudioCompatAdapter) processAudioData() {
 
 		case audioData := <-a.manager.AudioOutput():
 			// Convert audiocore.AudioData to myaudio format
-			
+
 			// Write to analysis buffer (myaudio compatibility)
 			if err := myaudio.WriteToAnalysisBuffer(audioData.SourceID, audioData.Buffer); err != nil {
 				log.Printf("Error writing to analysis buffer: %v", err)
 			}
-			
+
 			// Write to capture buffer
 			if err := myaudio.WriteToCaptureBuffer(audioData.SourceID, audioData.Buffer); err != nil {
 				log.Printf("Error writing to capture buffer: %v", err)
@@ -253,10 +253,10 @@ func (RealTimeProvider) Now() time.Time {
 
 // SoundLevelAnalyzer provides compatibility for sound level monitoring
 type SoundLevelAnalyzer struct {
-	interval      int
-	buffer        []float32
-	lastUpdate    time.Time
-	timeProvider  TimeProvider
+	interval     int
+	buffer       []float32
+	lastUpdate   time.Time
+	timeProvider TimeProvider
 }
 
 // NewSoundLevelAnalyzer creates a new sound level analyzer
@@ -278,7 +278,7 @@ func NewSoundLevelAnalyzerWithTimeProvider(interval int, timeProvider TimeProvid
 func (s *SoundLevelAnalyzer) Process(audioData []byte) *myaudio.SoundLevelData {
 	// This is a simplified implementation
 	// In production, you would implement proper 1/3 octave band analysis
-	
+
 	now := s.timeProvider.Now()
 	if now.Sub(s.lastUpdate) < time.Duration(s.interval)*time.Second {
 		return nil
@@ -300,7 +300,7 @@ func (s *SoundLevelAnalyzer) Process(audioData []byte) *myaudio.SoundLevelData {
 			SampleCount: 100,
 		}
 	}
-	
+
 	return &myaudio.SoundLevelData{
 		Timestamp:   now,
 		Source:      "audiocore",

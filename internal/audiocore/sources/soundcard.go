@@ -301,20 +301,20 @@ func (s *SoundcardSource) applyGain(buffer []byte, gain float64) {
 		for i := 0; i < len(buffer)-1; i += 2 {
 			// Convert bytes to int16
 			sample := int16(buffer[i]) | (int16(buffer[i+1]) << 8)
-			
+
 			// Apply gain
 			amplified := float64(sample) * gain
-			
+
 			// Clamp to prevent overflow
 			if amplified > 32767 {
 				amplified = 32767
 			} else if amplified < -32768 {
 				amplified = -32768
 			}
-			
+
 			// Convert back to int16
 			sample = int16(amplified)
-			
+
 			// Convert back to bytes
 			buffer[i] = byte(sample)
 			buffer[i+1] = byte(sample >> 8)

@@ -148,10 +148,10 @@ func TestSoundLevelAnalyzer(t *testing.T) {
 	// Now process should return data
 	result = analyzer.Process([]byte{0, 0, 0, 0})
 	assert.NotNil(t, result, "Expected sound level data after interval")
-	
+
 	if result != nil {
 		assert.Len(t, result.OctaveBands, 6, "Expected 6 octave band levels")
-		
+
 		// Check one octave band
 		band, ok := result.OctaveBands["1000"]
 		assert.True(t, ok, "Expected 1000Hz octave band to be present")

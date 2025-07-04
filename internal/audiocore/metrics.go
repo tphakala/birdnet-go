@@ -30,19 +30,19 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 	globalMetricsOnce.Do(func() {
 		globalMetricsMu.Lock()
 		defer globalMetricsMu.Unlock()
-		
+
 		// Initialize logger
 		metricsLogger = logging.ForService("audiocore")
 		if metricsLogger == nil {
 			metricsLogger = slog.Default()
 		}
 		metricsLogger = metricsLogger.With("component", "metrics")
-		
+
 		globalMetrics = &MetricsCollector{
 			metrics: metricsInstance,
 			enabled: metricsInstance != nil,
 		}
-		
+
 		if metricsInstance != nil {
 			metricsLogger.Info("metrics collector initialized")
 		} else {
@@ -55,7 +55,7 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 func GetMetrics() *MetricsCollector {
 	globalMetricsMu.RLock()
 	defer globalMetricsMu.RUnlock()
-	
+
 	if globalMetrics == nil {
 		// Return a no-op collector if metrics not initialized
 		return &MetricsCollector{enabled: false}
@@ -100,7 +100,7 @@ func (mc *MetricsCollector) RecordFrameDropped(sourceID, reason string) {
 	defer mc.mu.RUnlock()
 
 	mc.metrics.RecordAudioDataDropped(sourceID, reason)
-	
+
 	if metricsLogger != nil {
 		metricsLogger.Warn("audio frame dropped",
 			"source_id", sourceID,
@@ -134,7 +134,7 @@ func (mc *MetricsCollector) RecordSourceStart(sourceID, sourceType string, succe
 		status = "failure"
 	}
 	mc.metrics.RecordSourceStart(sourceID, sourceType, status)
-	
+
 	if metricsLogger != nil && metricsLogger.Enabled(context.TODO(), slog.LevelDebug) {
 		metricsLogger.Debug("source start recorded",
 			"source_id", sourceID,
@@ -169,7 +169,7 @@ func (mc *MetricsCollector) RecordSourceError(sourceID, sourceType, errorType st
 	defer mc.mu.RUnlock()
 
 	mc.metrics.RecordSourceError(sourceID, sourceType, errorType)
-	
+
 	if metricsLogger != nil {
 		metricsLogger.Info("source error recorded",
 			"source_id", sourceID,
