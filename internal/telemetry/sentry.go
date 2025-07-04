@@ -224,6 +224,16 @@ func CaptureError(err error, component string) {
 	// Create a scrubbed error for privacy
 	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
 
+	// Log the error being sent (privacy-safe)
+	if serviceLogger != nil {
+		serviceLogger.Debug("sending error event",
+			"event_type", "error",
+			"component", component,
+			"error_type", fmt.Sprintf("%T", err),
+			"scrubbed_message", scrubbedErrorMsg,
+		)
+	}
+
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetContext("error", map[string]any{
@@ -235,6 +245,13 @@ func CaptureError(err error, component string) {
 		scrubbedErr := fmt.Errorf("%s", scrubbedErrorMsg)
 		sentry.CaptureException(scrubbedErr)
 	})
+
+	// Log successful submission
+	if serviceLogger != nil {
+		serviceLogger.Debug("error event sent successfully",
+			"component", component,
+		)
+	}
 }
 
 // CaptureMessage captures a message with privacy-compliant context
@@ -250,11 +267,29 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	// Scrub sensitive information from the message
 	scrubbedMessage := privacy.ScrubMessage(message)
 
+	// Log the message being sent (privacy-safe)
+	if serviceLogger != nil {
+		serviceLogger.Debug("sending message event",
+			"event_type", "message",
+			"level", string(level),
+			"component", component,
+			"scrubbed_message", scrubbedMessage,
+		)
+	}
+
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetLevel(level)
 		sentry.CaptureMessage(scrubbedMessage)
 	})
+
+	// Log successful submission
+	if serviceLogger != nil {
+		serviceLogger.Debug("message event sent successfully",
+			"component", component,
+			"level", string(level),
+		)
+	}
 }
 
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
@@ -286,6 +321,18 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 	}
 
 	deferredMessages = append(deferredMessages, deferredMessage)
+
+	// Log deferred message
+	if serviceLogger != nil {
+		scrubbedMessage := privacy.ScrubMessage(message)
+		serviceLogger.Debug("deferring message for later processing",
+			"event_type", "deferred_message",
+			"level", string(level),
+			"component", component,
+			"scrubbed_message", scrubbedMessage,
+			"deferred_count", len(deferredMessages),
+		)
+	}
 }
 
 // Flush ensures all buffered events are sent to Sentry
