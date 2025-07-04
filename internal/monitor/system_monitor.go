@@ -13,6 +13,7 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -242,28 +243,60 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 
 // sendNotification sends a threshold exceeded notification
 func (m *SystemMonitor) sendNotification(resource ResourceType, current, threshold float64, priority notification.Priority) {
+	// Determine severity based on priority
+	var severity string
+	if priority == notification.PriorityCritical {
+		severity = events.SeverityCritical
+	} else {
+		severity = events.SeverityWarning
+	}
+
+	// Try to publish via event bus first
+	if eventBus := events.GetEventBus(); eventBus != nil {
+		event := events.NewResourceEvent(string(resource), current, threshold, severity)
+		if eventBus.TryPublishResource(event) {
+			m.logger.Debug("Resource event published to event bus",
+				"resource", resource,
+				"current", fmt.Sprintf("%.1f%%", current),
+				"threshold", fmt.Sprintf("%.1f%%", threshold),
+				"severity", severity,
+			)
+			return
+		}
+	}
+
+	// Fallback to direct notification if event bus unavailable or failed
 	if !notification.IsInitialized() {
 		return
 	}
 
-	level := "Warning"
-	if priority == notification.PriorityCritical {
-		level = "Critical"
-	}
-
-	// NotifyResourceAlert will format the message internally
 	notification.NotifyResourceAlert(string(resource), current, threshold, "%")
 
 	m.logger.Warn("Resource threshold exceeded",
 		"resource", resource,
 		"current", fmt.Sprintf("%.1f%%", current),
 		"threshold", fmt.Sprintf("%.1f%%", threshold),
-		"level", level,
+		"severity", severity,
 	)
 }
 
 // sendRecoveryNotification sends a notification when resource usage returns to normal
 func (m *SystemMonitor) sendRecoveryNotification(resource ResourceType, current float64, level string) {
+	// Try to publish via event bus first
+	if eventBus := events.GetEventBus(); eventBus != nil {
+		// For recovery, threshold is not applicable, use 0
+		event := events.NewResourceEvent(string(resource), current, 0, events.SeverityRecovery)
+		if eventBus.TryPublishResource(event) {
+			m.logger.Debug("Resource recovery event published to event bus",
+				"resource", resource,
+				"current", fmt.Sprintf("%.1f%%", current),
+				"recovered_from", level,
+			)
+			return
+		}
+	}
+
+	// Fallback to direct notification if event bus unavailable or failed
 	if !notification.IsInitialized() {
 		return
 	}
