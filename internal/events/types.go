@@ -50,6 +50,14 @@ type EventConsumer interface {
 	SupportsBatching() bool
 }
 
+// ResourceEventConsumer represents a consumer that processes resource monitoring events
+type ResourceEventConsumer interface {
+	EventConsumer
+	
+	// ProcessResourceEvent processes a single resource event
+	ProcessResourceEvent(event ResourceEvent) error
+}
+
 // EventBusStats contains runtime statistics for monitoring
 type EventBusStats struct {
 	EventsReceived   uint64
@@ -58,4 +66,31 @@ type EventBusStats struct {
 	EventsDropped    uint64
 	ConsumerErrors   uint64
 	FastPathHits     uint64 // Number of times fast path was taken (no consumers)
+}
+
+// ResourceEvent represents a system resource monitoring event
+type ResourceEvent interface {
+	// GetResourceType returns the type of resource (cpu, memory, disk)
+	GetResourceType() string
+	
+	// GetCurrentValue returns the current usage percentage
+	GetCurrentValue() float64
+	
+	// GetThreshold returns the threshold that was crossed
+	GetThreshold() float64
+	
+	// GetSeverity returns the severity level (warning, critical, recovery)
+	GetSeverity() string
+	
+	// GetTimestamp returns when the event occurred
+	GetTimestamp() time.Time
+	
+	// GetMetadata returns additional context data
+	GetMetadata() map[string]interface{}
+	
+	// GetMessage returns a human-readable message
+	GetMessage() string
+	
+	// GetPath returns the path (for disk resources) or empty string
+	GetPath() string
 }

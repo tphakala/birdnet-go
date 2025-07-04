@@ -896,12 +896,27 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 
 // initializeSystemMonitor initializes and starts the system resource monitor if enabled
 func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
+	logging.Info("initializeSystemMonitor called",
+		"monitoring_enabled", settings.Realtime.Monitoring.Enabled,
+		"check_interval", settings.Realtime.Monitoring.CheckInterval,
+	)
+	
 	if !settings.Realtime.Monitoring.Enabled {
+		logging.Warn("System monitoring is disabled in settings")
 		return nil
 	}
+	
+	logging.Info("Creating system monitor instance")
 	systemMonitor := monitor.NewSystemMonitor(settings)
+	if systemMonitor == nil {
+		logging.Error("Failed to create system monitor instance")
+		return nil
+	}
+	
+	logging.Info("Starting system monitor")
 	systemMonitor.Start()
-	logging.Info("System resource monitoring started",
+	
+	logging.Info("System resource monitoring initialized",
 		"component", "monitor",
 		"interval", settings.Realtime.Monitoring.CheckInterval)
 	return systemMonitor
