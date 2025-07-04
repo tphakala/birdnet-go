@@ -159,14 +159,14 @@ type RTSPSettings struct {
 
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
-	Enabled       bool          // true to enable MQTT
-	Debug         bool          // true to enable MQTT debug
-	Broker        string        // MQTT broker URL
-	Topic         string        // MQTT topic
-	Username      string        // MQTT username
-	Password      string        // MQTT password
-	Retain        bool          // true to retain messages
-	RetrySettings RetrySettings // settings for retry mechanism
+	Enabled       bool            // true to enable MQTT
+	Debug         bool            // true to enable MQTT debug
+	Broker        string          // MQTT broker URL
+	Topic         string          // MQTT topic
+	Username      string          // MQTT username
+	Password      string          // MQTT password
+	Retain        bool            // true to retain messages
+	RetrySettings RetrySettings   // settings for retry mechanism
 	TLS           MQTTTLSSettings // TLS/SSL configuration
 }
 
@@ -210,6 +210,7 @@ type DiskThresholdSettings struct {
 // SentrySettings contains settings for Sentry error tracking
 type SentrySettings struct {
 	Enabled bool // true to enable Sentry error tracking (opt-in)
+	Debug   bool // true to enable transparent telemetry logging
 }
 
 // RealtimeSettings contains all settings related to realtime processing.
