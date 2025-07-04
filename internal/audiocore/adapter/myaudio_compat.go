@@ -238,19 +238,39 @@ func (a *MyAudioCompatAdapter) calculateAudioLevel(buffer []byte) float32 {
 	return rms / 32768.0 // Normalize to 0-1 range
 }
 
+// TimeProvider interface allows for time mocking in tests
+type TimeProvider interface {
+	Now() time.Time
+}
+
+// RealTimeProvider implements TimeProvider using actual time
+type RealTimeProvider struct{}
+
+// Now returns the current time
+func (RealTimeProvider) Now() time.Time {
+	return time.Now()
+}
+
 // SoundLevelAnalyzer provides compatibility for sound level monitoring
 type SoundLevelAnalyzer struct {
 	interval      int
 	buffer        []float32
 	lastUpdate    time.Time
+	timeProvider  TimeProvider
 }
 
 // NewSoundLevelAnalyzer creates a new sound level analyzer
 func NewSoundLevelAnalyzer(interval int) *SoundLevelAnalyzer {
+	return NewSoundLevelAnalyzerWithTimeProvider(interval, RealTimeProvider{})
+}
+
+// NewSoundLevelAnalyzerWithTimeProvider creates a new sound level analyzer with custom time provider
+func NewSoundLevelAnalyzerWithTimeProvider(interval int, timeProvider TimeProvider) *SoundLevelAnalyzer {
 	return &SoundLevelAnalyzer{
-		interval:   interval,
-		buffer:     make([]float32, 0),
-		lastUpdate: time.Now(),
+		interval:     interval,
+		buffer:       make([]float32, 0),
+		lastUpdate:   timeProvider.Now(),
+		timeProvider: timeProvider,
 	}
 }
 
@@ -259,7 +279,7 @@ func (s *SoundLevelAnalyzer) Process(audioData []byte) *myaudio.SoundLevelData {
 	// This is a simplified implementation
 	// In production, you would implement proper 1/3 octave band analysis
 	
-	now := time.Now()
+	now := s.timeProvider.Now()
 	if now.Sub(s.lastUpdate) < time.Duration(s.interval)*time.Second {
 		return nil
 	}

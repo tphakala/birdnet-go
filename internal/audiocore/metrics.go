@@ -18,11 +18,15 @@ type MetricsCollector struct {
 var (
 	globalMetrics     *MetricsCollector
 	globalMetricsOnce sync.Once
+	globalMetricsMu   sync.RWMutex
 )
 
 // InitMetrics initializes the global metrics collector
 func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 	globalMetricsOnce.Do(func() {
+		globalMetricsMu.Lock()
+		defer globalMetricsMu.Unlock()
+		
 		globalMetrics = &MetricsCollector{
 			metrics: metricsInstance,
 			enabled: metricsInstance != nil,
@@ -32,6 +36,9 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 
 // GetMetrics returns the global metrics collector
 func GetMetrics() *MetricsCollector {
+	globalMetricsMu.RLock()
+	defer globalMetricsMu.RUnlock()
+	
 	if globalMetrics == nil {
 		// Return a no-op collector if metrics not initialized
 		return &MetricsCollector{enabled: false}
@@ -234,7 +241,6 @@ func (mc *MetricsCollector) RecordGainProcessing(processorID string, gainLevel f
 	defer mc.mu.RUnlock()
 
 	mc.metrics.RecordGainLevel(processorID, gainLevel)
-	
 	// Determine adjustment type
 	adjustmentType := "no_change"
 	if gainLevel > 1.0 {

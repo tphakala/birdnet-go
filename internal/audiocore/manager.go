@@ -22,6 +22,7 @@ type managerImpl struct {
 	started         bool
 	metrics         ManagerMetrics
 	metricsMu       sync.RWMutex
+	startupErrors   chan error
 }
 
 // NewAudioManager creates a new audio manager
@@ -51,6 +52,7 @@ func NewAudioManager(config *ManagerConfig) AudioManager {
 		processorChains: make(map[string]ProcessorChain),
 		bufferPool:      NewBufferPool(config.BufferPoolConfig),
 		audioOutput:     make(chan AudioData, 100),
+		startupErrors:   make(chan error, 10), // Buffered to avoid blocking
 	}
 }
 
@@ -180,6 +182,37 @@ func (m *managerImpl) Start(ctx context.Context) error {
 		go m.processSource(source)
 	}
 
+	// Collect startup errors with timeout
+	errorTimeout := time.NewTimer(2 * time.Second)
+	defer errorTimeout.Stop()
+
+	var startupErrs []error
+	collecting := true
+	
+	for collecting {
+		select {
+		case err := <-m.startupErrors:
+			if err != nil {
+				startupErrs = append(startupErrs, err)
+			}
+		case <-errorTimeout.C:
+			collecting = false
+		default:
+			// No more errors immediately available
+			if len(m.sources) == 0 {
+				collecting = false
+			} else {
+				// Give sources a bit more time to start
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
+
+	// Return aggregated errors if any sources failed to start
+	if len(startupErrs) > 0 {
+		return errors.Join(startupErrs...)
+	}
+
 	return nil
 }
 
@@ -245,7 +278,17 @@ func (m *managerImpl) processSource(source AudioSource) {
 
 	// Start the source
 	if err := source.Start(m.ctx); err != nil {
-		// Log error but continue with other sources
+		// Send startup error to channel
+		select {
+		case m.startupErrors <- errors.New(err).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryAudio).
+			Context("operation", "source_start").
+			Context("source_id", source.ID()).
+			Build():
+		default:
+			// Channel full, error will be lost but we avoid blocking
+		}
 		return
 	}
 
@@ -268,7 +311,11 @@ func (m *managerImpl) processSource(source AudioSource) {
 			// Process through chain if available
 			if chain != nil {
 				processedData, err := chain.Process(m.ctx, &audioData)
-				if err == nil {
+				if err != nil {
+					// Log processing error and increment error metrics
+					m.incrementErrorCount()
+					// Continue with unprocessed audio data
+				} else {
 					audioData = *processedData
 				}
 			}

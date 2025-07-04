@@ -47,13 +47,11 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 
 	// Wait for some data
 	timeout := time.After(100 * time.Millisecond)
-	dataReceived := false
 
 	select {
 	case <-timeout:
 		// Timeout is OK for this test
 	case data := <-unifiedAudioChan:
-		dataReceived = true
 		assert.False(t, data.Timestamp.IsZero(), "Received audio data should have non-zero timestamp")
 	}
 
@@ -73,10 +71,6 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		assert.Fail(t, "Timeout waiting for adapter to stop")
 	}
-
-	// In a real test with actual audio hardware, we would verify dataReceived
-	// For this unit test without hardware, not receiving data is acceptable
-	_ = dataReceived
 }
 
 func TestCalculateAudioLevel(t *testing.T) {
@@ -123,17 +117,33 @@ func TestCalculateAudioLevel(t *testing.T) {
 	}
 }
 
+// MockTimeProvider is a test time provider that can be controlled
+type MockTimeProvider struct {
+	currentTime time.Time
+}
+
+// Now returns the mocked current time
+func (m *MockTimeProvider) Now() time.Time {
+	return m.currentTime
+}
+
+// Advance moves time forward by the given duration
+func (m *MockTimeProvider) Advance(d time.Duration) {
+	m.currentTime = m.currentTime.Add(d)
+}
+
 func TestSoundLevelAnalyzer(t *testing.T) {
 	t.Parallel()
 
-	analyzer := NewSoundLevelAnalyzer(1) // 1 second interval
+	mockTime := &MockTimeProvider{currentTime: time.Now()}
+	analyzer := NewSoundLevelAnalyzerWithTimeProvider(1, mockTime) // 1 second interval
 
 	// First process should return nil (not enough time passed)
 	result := analyzer.Process([]byte{0, 0, 0, 0})
 	assert.Nil(t, result, "Expected nil on first process call")
 
-	// Update last update time to simulate time passing
-	analyzer.lastUpdate = time.Now().Add(-2 * time.Second)
+	// Advance time by 2 seconds
+	mockTime.Advance(2 * time.Second)
 
 	// Now process should return data
 	result = analyzer.Process([]byte{0, 0, 0, 0})

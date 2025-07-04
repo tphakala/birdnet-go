@@ -183,7 +183,7 @@ type SourceConfig struct {
 	BufferSize  int
 	Gain        float64
 	ModelID     string // BirdNET model to use for this source
-	ExtraConfig map[string]interface{}
+	ExtraConfig map[string]any
 }
 
 // ManagerConfig contains configuration for the audio manager
