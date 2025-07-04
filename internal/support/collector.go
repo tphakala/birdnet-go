@@ -5,18 +5,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"log/slog"
-	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -28,6 +23,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -76,194 +72,6 @@ func defaultSensitiveKeys() []string {
 	}
 }
 
-// anonymizeIPAddress anonymizes IP addresses while preserving useful categorization
-func anonymizeIPAddress(ipStr string) string {
-	// Parse the IP
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		// If it's not a valid IP, hash the string
-		hash := sha256.Sum256([]byte(ipStr))
-		return fmt.Sprintf("invalid-ip-%x", hash[:6])
-	}
-
-	// Check for localhost patterns
-	if ip.IsLoopback() {
-		return "localhost"
-	}
-
-	// Check for private IP ranges
-	if isPrivateIP(ipStr) {
-		return "private-ip"
-	}
-
-	// For public IPs, return a consistent anonymized hash
-	hash := sha256.Sum256([]byte(ip.String()))
-	return fmt.Sprintf("public-ip-%x", hash[:8])
-}
-
-// isPrivateIP checks if the given IP address is in a private range
-func isPrivateIP(ipStr string) bool {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return false
-	}
-
-	// Check IPv4 private ranges
-	if ip.To4() != nil {
-		// 10.0.0.0/8
-		if ip[12] == 10 {
-			return true
-		}
-		// 172.16.0.0/12
-		if ip[12] == 172 && ip[13] >= 16 && ip[13] <= 31 {
-			return true
-		}
-		// 192.168.0.0/16
-		if ip[12] == 192 && ip[13] == 168 {
-			return true
-		}
-		// 169.254.0.0/16 (link-local)
-		if ip[12] == 169 && ip[13] == 254 {
-			return true
-		}
-	} else {
-		// Check IPv6 private ranges
-		// fc00::/7 (unique local)
-		if len(ip) >= 2 && (ip[0]&0xfe) == 0xfc {
-			return true
-		}
-		// fe80::/10 (link-local)
-		if len(ip) >= 2 && ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 {
-			return true
-		}
-	}
-
-	return false
-}
-
-// anonymizeURL creates a consistent, privacy-safe identifier for URLs
-func anonymizeURL(rawURL string) string {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		// If parsing fails, create a hash of the raw string
-		hash := sha256.Sum256([]byte(rawURL))
-		return fmt.Sprintf("url-hash-%x", hash[:8])
-	}
-
-	// Create a normalized version for hashing
-	var normalizedParts []string
-
-	// Include scheme (rtsp, http, etc.)
-	if parsedURL.Scheme != "" {
-		normalizedParts = append(normalizedParts, parsedURL.Scheme)
-	}
-
-	// Anonymize hostname/IP
-	host := parsedURL.Hostname()
-	if host != "" {
-		hostType := categorizeHost(host)
-		normalizedParts = append(normalizedParts, hostType)
-	}
-
-	// Include port if present
-	if parsedURL.Port() != "" {
-		normalizedParts = append(normalizedParts, "port-"+parsedURL.Port())
-	}
-
-	// Include path structure (without sensitive details)
-	if parsedURL.Path != "" && parsedURL.Path != "/" {
-		pathStructure := anonymizePath(parsedURL.Path)
-		normalizedParts = append(normalizedParts, pathStructure)
-	}
-
-	// Create consistent hash
-	normalized := strings.Join(normalizedParts, ":")
-	hash := sha256.Sum256([]byte(normalized))
-
-	return fmt.Sprintf("url-%x", hash[:12])
-}
-
-// categorizeHost anonymizes hostnames while preserving useful categorization
-func categorizeHost(host string) string {
-	// Check for localhost patterns
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-		return "localhost"
-	}
-
-	// Check for private IP ranges
-	if isPrivateIP(host) {
-		return "private-ip"
-	}
-
-	// Check if it's a public IP
-	if net.ParseIP(host) != nil {
-		return "public-ip"
-	}
-
-	// For domain names, categorize by TLD
-	parts := strings.Split(host, ".")
-	if len(parts) >= 2 {
-		tld := parts[len(parts)-1]
-		return fmt.Sprintf("domain-%s", tld)
-	}
-
-	return "unknown-host"
-}
-
-// anonymizePath creates structure-preserving but privacy-safe path representation
-func anonymizePath(path string) string {
-	if path == "" || path == "/" {
-		return path
-	}
-
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	anonymizedSegments := make([]string, len(segments))
-
-	for i, segment := range segments {
-		if segment == "" {
-			continue
-		}
-
-		// Hash each path segment for privacy while preserving structure
-		hash := sha256.Sum256([]byte(segment))
-		anonymizedSegments[i] = fmt.Sprintf("seg-%x", hash[:4])
-	}
-
-	return "/" + strings.Join(anonymizedSegments, "/")
-}
-
-// scrubLogMessage removes or anonymizes sensitive information from log messages
-func scrubLogMessage(message string) string {
-	// Find and anonymize URLs
-	urlRegex := regexp.MustCompile(`\b(?:https?|rtsp|rtmp|ftp)://\S+`)
-	message = urlRegex.ReplaceAllStringFunc(message, anonymizeURL)
-
-	// Find and anonymize IP addresses
-	ipRegex := regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b`)
-	message = ipRegex.ReplaceAllStringFunc(message, anonymizeIPAddress)
-
-	// Anonymize common sensitive patterns
-	patterns := map[string]string{
-		// Email addresses
-		`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b`: "[EMAIL]",
-		// API keys (common patterns)
-		`\b[Aa]pi[_-]?[Kk]ey[:\s=]\s*['\"]?[A-Za-z0-9_-]{16,}['\"]?`: "api_key=[REDACTED]",
-		// Tokens (including Bearer tokens)
-		`\b[Tt]oken[:\s=]\s*(?:Bearer\s+)?['\"]?[A-Za-z0-9_-]{12,}['\"]?`: "token=[REDACTED]",
-		// Bearer tokens specifically
-		`\bBearer\s+[A-Za-z0-9_-]{12,}`: "Bearer [REDACTED]",
-		// UUIDs (potential sensitive identifiers)
-		`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`: "[UUID]",
-	}
-
-	for pattern, replacement := range patterns {
-		if regex, err := regexp.Compile(pattern); err == nil {
-			message = regex.ReplaceAllString(message, replacement)
-		}
-	}
-
-	return message
-}
 
 // NewCollector creates a new support data collector
 func NewCollector(configPath, dataPath, systemID, version string) *Collector {
@@ -409,7 +217,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Build()
 	}
 	// Only include basic metadata, not the full dump content
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"id":        dump.ID,
 		"timestamp": dump.Timestamp,
 		"system_id": dump.SystemID,
@@ -535,8 +343,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		info.DockerInfo = &DockerInfo{}
 		// Try to get container ID
 		if data, err := os.ReadFile("/proc/self/cgroup"); err == nil {
-			lines := strings.Split(string(data), "\n")
-			for _, line := range lines {
+			for line := range strings.SplitSeq(string(data), "\n") {
 				if strings.Contains(line, "docker") {
 					parts := strings.Split(line, "/")
 					if len(parts) > 0 {
@@ -706,7 +513,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 
 		// Apply anonymization if requested
 		if anonymizePII {
-			message = scrubLogMessage(message)
+			message = privacy.ScrubMessage(message)
 		}
 
 		logs = append(logs, LogEntry{
@@ -837,7 +644,7 @@ func (c *Collector) parseLogLine(line string, anonymizePII bool) *LogEntry {
 		// Parse message and anonymize if requested
 		if msg, ok := jsonLog["msg"].(string); ok {
 			if anonymizePII {
-				entry.Message = scrubLogMessage(msg)
+				entry.Message = privacy.ScrubMessage(msg)
 			} else {
 				entry.Message = msg
 			}
@@ -871,7 +678,7 @@ func (c *Collector) parseLogLine(line string, anonymizePII bool) *LogEntry {
 
 	message := parts[3]
 	if anonymizePII {
-		message = scrubLogMessage(message)
+		message = privacy.ScrubMessage(message)
 	}
 
 	return &LogEntry{
@@ -1201,7 +1008,7 @@ func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Durati
 		lines := strings.Split(journalLogs, "\n")
 		anonymizedLines := make([]string, len(lines))
 		for i, line := range lines {
-			anonymizedLines[i] = scrubLogMessage(line)
+			anonymizedLines[i] = privacy.ScrubMessage(line)
 		}
 		journalLogs = strings.Join(anonymizedLines, "\n")
 	}
@@ -1310,7 +1117,7 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		anonymizedLine := scrubLogMessage(line)
+		anonymizedLine := privacy.ScrubMessage(line)
 
 		if _, err := writer.Write([]byte(anonymizedLine + "\n")); err != nil {
 			return err
