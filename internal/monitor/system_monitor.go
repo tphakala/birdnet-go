@@ -4,6 +4,7 @@ package monitor
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -17,6 +18,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+// Package-level logger following the common pattern
+var logger *slog.Logger
+
+func init() {
+	logger = logging.ForService("system-monitor")
+	if logger == nil {
+		logger = slog.Default().With("service", "system-monitor")
+	}
+}
 
 // ResourceType represents the type of system resource being monitored
 type ResourceType string
@@ -99,6 +110,8 @@ func (m *SystemMonitor) Stop() {
 func (m *SystemMonitor) monitorLoop() {
 	defer m.wg.Done()
 
+	m.logger.Info("System monitor loop started", "check_interval", m.interval)
+
 	// Perform initial check
 	m.checkAllResources()
 
@@ -110,6 +123,7 @@ func (m *SystemMonitor) monitorLoop() {
 		case <-ticker.C:
 			m.checkAllResources()
 		case <-m.ctx.Done():
+			m.logger.Info("System monitor loop stopping")
 			return
 		}
 	}
@@ -117,6 +131,12 @@ func (m *SystemMonitor) monitorLoop() {
 
 // checkAllResources checks all monitored resources
 func (m *SystemMonitor) checkAllResources() {
+	m.logger.Debug("Starting resource checks",
+		"cpu_enabled", m.config.Realtime.Monitoring.CPU.Enabled,
+		"memory_enabled", m.config.Realtime.Monitoring.Memory.Enabled,
+		"disk_enabled", m.config.Realtime.Monitoring.Disk.Enabled,
+	)
+
 	// Check CPU usage
 	if m.config.Realtime.Monitoring.CPU.Enabled {
 		m.checkCPU()
@@ -130,7 +150,11 @@ func (m *SystemMonitor) checkAllResources() {
 	// Check disk usage
 	if m.config.Realtime.Monitoring.Disk.Enabled {
 		m.checkDisk()
+	} else {
+		m.logger.Debug("Disk monitoring is disabled")
 	}
+
+	m.logger.Debug("Completed resource checks")
 }
 
 // checkCPU monitors CPU usage
@@ -175,11 +199,34 @@ func (m *SystemMonitor) checkDisk() {
 		path = "/"
 	}
 
+	m.logger.Debug("Starting disk usage check", "path", path)
+
+	// Verify the path exists
+	if _, err := os.Stat(path); err != nil {
+		m.logger.Error("Disk monitoring path does not exist or is not accessible", 
+			"path", path, 
+			"error", err,
+		)
+		return
+	}
+
 	usage, err := disk.Usage(path)
 	if err != nil {
 		m.logger.Error("Failed to get disk usage", "error", err, "path", path)
 		return
 	}
+
+	// Log detailed disk information - use Info level for visibility
+	m.logger.Info("Disk usage check completed",
+		"path", path,
+		"total_gb", fmt.Sprintf("%.2f", float64(usage.Total)/(1024*1024*1024)),
+		"used_gb", fmt.Sprintf("%.2f", float64(usage.Used)/(1024*1024*1024)),
+		"free_gb", fmt.Sprintf("%.2f", float64(usage.Free)/(1024*1024*1024)),
+		"used_percent", fmt.Sprintf("%.2f%%", usage.UsedPercent),
+		"filesystem", usage.Fstype,
+		"warning_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Warning),
+		"critical_threshold", fmt.Sprintf("%.2f%%", m.config.Realtime.Monitoring.Disk.Critical),
+	)
 
 	m.checkThresholds(ResourceDisk, usage.UsedPercent,
 		m.config.Realtime.Monitoring.Disk.Warning,
@@ -206,15 +253,35 @@ func (m *SystemMonitor) checkThresholds(resource ResourceType, current, warningT
 	switch {
 	case current >= criticalThreshold:
 		if !state.InCritical {
+			m.logger.Warn("Critical threshold exceeded",
+				"resource", resource,
+				"current", fmt.Sprintf("%.2f%%", current),
+				"threshold", fmt.Sprintf("%.2f%%", criticalThreshold),
+			)
 			m.sendNotification(resource, current, criticalThreshold, notification.PriorityCritical)
 			state.InCritical = true
 			state.InWarning = true // Critical implies warning
+		} else {
+			m.logger.Debug("Resource still in critical state",
+				"resource", resource,
+				"current", fmt.Sprintf("%.2f%%", current),
+			)
 		}
 	case current >= warningThreshold:
 		// Check warning threshold
 		if !state.InWarning {
+			m.logger.Warn("Warning threshold exceeded",
+				"resource", resource,
+				"current", fmt.Sprintf("%.2f%%", current),
+				"threshold", fmt.Sprintf("%.2f%%", warningThreshold),
+			)
 			m.sendNotification(resource, current, warningThreshold, notification.PriorityHigh)
 			state.InWarning = true
+		} else {
+			m.logger.Debug("Resource still in warning state",
+				"resource", resource,
+				"current", fmt.Sprintf("%.2f%%", current),
+			)
 		}
 		// Clear critical if we're below critical threshold (with hysteresis)
 		if state.InCritical && current < (criticalThreshold-5.0) {
@@ -255,14 +322,28 @@ func (m *SystemMonitor) sendNotification(resource ResourceType, current, thresho
 	if eventBus := events.GetEventBus(); eventBus != nil {
 		event := events.NewResourceEvent(string(resource), current, threshold, severity)
 		if eventBus.TryPublishResource(event) {
-			m.logger.Debug("Resource event published to event bus",
+			m.logger.Info("Resource event published to event bus",
 				"resource", resource,
 				"current", fmt.Sprintf("%.1f%%", current),
 				"threshold", fmt.Sprintf("%.1f%%", threshold),
 				"severity", severity,
 			)
 			return
+		} else {
+			m.logger.Warn("Failed to publish resource event to event bus",
+				"resource", resource,
+				"current", fmt.Sprintf("%.1f%%", current),
+				"threshold", fmt.Sprintf("%.1f%%", threshold),
+				"severity", severity,
+			)
 		}
+	} else {
+		m.logger.Debug("Event bus not available for resource notification",
+			"resource", resource,
+			"current", fmt.Sprintf("%.1f%%", current),
+			"threshold", fmt.Sprintf("%.1f%%", threshold),
+			"severity", severity,
+		)
 	}
 
 	// Fallback to direct notification if event bus unavailable or failed
@@ -340,4 +421,14 @@ func (m *SystemMonitor) GetResourceStatus() map[string]any {
 		}
 	}
 	return status
+}
+
+// TriggerCheck manually triggers a resource check (useful for testing)
+func (m *SystemMonitor) TriggerCheck() {
+	if !m.config.Realtime.Monitoring.Enabled {
+		m.logger.Info("System monitoring is disabled, cannot trigger check")
+		return
+	}
+	m.logger.Info("Manually triggering resource check")
+	m.checkAllResources()
 }
