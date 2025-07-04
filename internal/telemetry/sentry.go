@@ -74,10 +74,44 @@ func InitSentry(settings *conf.Settings) error {
 
 	// Enable debug logging if configured
 	if settings.Sentry.Debug {
-		serviceLevelVar.Set(slog.LevelDebug)
-		serviceLogger.Info("telemetry debug logging enabled")
+		enableDebugLogging()
 	}
 
+	// Initialize Sentry SDK
+	if err := initializeSentrySDK(settings); err != nil {
+		return err
+	}
+
+	// Configure global scope
+	configureSentryScope(settings)
+
+	// Initialize attachment uploader
+	attachmentUploader = NewAttachmentUploader(true)
+
+	// Process deferred messages
+	deferredCount := processDeferredMessages()
+
+	// Log initialization success
+	logInitializationSuccess(settings, deferredCount)
+
+	// Initialize event bus integration for async telemetry
+	if err := InitializeEventBusIntegration(); err != nil {
+		log.Printf("Failed to initialize telemetry event bus integration: %v", err)
+		// Don't fail initialization if event bus integration fails
+		// Telemetry will still work synchronously
+	}
+
+	return nil
+}
+
+// enableDebugLogging enables debug logging for telemetry
+func enableDebugLogging() {
+	serviceLevelVar.Set(slog.LevelDebug)
+	serviceLogger.Info("telemetry debug logging enabled")
+}
+
+// initializeSentrySDK initializes the Sentry SDK with privacy-compliant options
+func initializeSentrySDK(settings *conf.Settings) error {
 	// Use hardcoded DSN for BirdNET-Go project
 	const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
 
@@ -96,117 +130,175 @@ func InitSentry(settings *conf.Settings) error {
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
 
 		// BeforeSend allows us to filter sensitive data
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Log what privacy filters are being applied if debug is enabled
-			if serviceLogger != nil && settings.Sentry.Debug {
-				var filtersApplied []string
-
-				// Log before filtering
-				serviceLogger.Debug("applying privacy filters to event",
-					"event_id", event.EventID,
-					"has_user_data", !event.User.IsEmpty(),
-					"has_server_name", event.ServerName != "",
-					"contexts_count", len(event.Contexts),
-					"extra_count", len(event.Extra),
-					"tags_count", len(event.Tags),
-				)
-
-				// Apply filters and track what was removed
-				if !event.User.IsEmpty() {
-					filtersApplied = append(filtersApplied, "remove_user_data")
-				}
-				if event.ServerName != "" {
-					filtersApplied = append(filtersApplied, "remove_server_name")
-				}
-
-				// Remove any potentially sensitive information
-				event.User = sentry.User{} // Clear user data
-				event.ServerName = ""      // Ensure server name is not included
-
-				// Clear sensitive contexts while preserving our privacy-safe platform info
-				if event.Contexts != nil {
-					// Track which contexts we're removing
-					for key := range event.Contexts {
-						if key == "device" || key == "os" || key == "runtime" {
-							filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%s_context", key))
-						}
-					}
-
-					// Remove potentially sensitive default Sentry contexts
-					delete(event.Contexts, "device")  // Contains detailed device info
-					delete(event.Contexts, "os")      // Contains detailed OS info
-					delete(event.Contexts, "runtime") // Contains detailed runtime info
-					// Keep our custom "platform" and "application" contexts as they're privacy-safe
-				}
-
-				// Track extra fields being removed
-				extraRemoved := 0
-				for k := range event.Extra {
-					// Remove any extra data that might contain sensitive info
-					if k != "error_type" && k != "component" {
-						extraRemoved++
-						delete(event.Extra, k)
-					}
-				}
-				if extraRemoved > 0 {
-					filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%d_extra_fields", extraRemoved))
-				}
-
-				// Remove hostname from tags if present
-				if event.Tags != nil {
-					if _, hasServerName := event.Tags["server_name"]; hasServerName {
-						filtersApplied = append(filtersApplied, "remove_server_name_tag")
-						delete(event.Tags, "server_name")
-					}
-					if _, hasHostname := event.Tags["hostname"]; hasHostname {
-						filtersApplied = append(filtersApplied, "remove_hostname_tag")
-						delete(event.Tags, "hostname")
-					}
-				}
-
-				// Log after filtering
-				serviceLogger.Debug("privacy filters applied",
-					"event_id", event.EventID,
-					"filters_applied", filtersApplied,
-					"remaining_contexts", len(event.Contexts),
-					"remaining_extra", len(event.Extra),
-					"remaining_tags", len(event.Tags),
-				)
-			} else {
-				// Apply filters without logging when debug is disabled
-				event.User = sentry.User{}
-				event.ServerName = ""
-
-				if event.Contexts != nil {
-					delete(event.Contexts, "device")
-					delete(event.Contexts, "os")
-					delete(event.Contexts, "runtime")
-				}
-
-				for k := range event.Extra {
-					if k != "error_type" && k != "component" {
-						delete(event.Extra, k)
-					}
-				}
-
-				if event.Tags != nil {
-					delete(event.Tags, "server_name")
-					delete(event.Tags, "hostname")
-				}
-			}
-
-			return event
-		},
+		BeforeSend: createBeforeSendHook(settings),
 	})
 
 	if err != nil {
 		return fmt.Errorf("sentry initialization failed: %w", err)
 	}
 
-	// Collect platform information for telemetry
+	return nil
+}
+
+// createBeforeSendHook creates the BeforeSend hook for privacy filtering
+func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
+	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		if serviceLogger != nil && settings.Sentry.Debug {
+			return applyPrivacyFiltersWithLogging(event)
+		}
+		return applyPrivacyFilters(event)
+	}
+}
+
+// applyPrivacyFilters applies privacy filters to a Sentry event
+func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
+	// Clear user data and server name
+	event.User = sentry.User{}
+	event.ServerName = ""
+
+	// Remove sensitive contexts
+	if event.Contexts != nil {
+		delete(event.Contexts, "device")
+		delete(event.Contexts, "os")
+		delete(event.Contexts, "runtime")
+	}
+
+	// Remove extra fields except allowed ones
+	for k := range event.Extra {
+		if k != "error_type" && k != "component" {
+			delete(event.Extra, k)
+		}
+	}
+
+	// Remove sensitive tags
+	if event.Tags != nil {
+		delete(event.Tags, "server_name")
+		delete(event.Tags, "hostname")
+	}
+
+	return event
+}
+
+// applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
+func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
+	var filtersApplied []string
+
+	// Log before filtering
+	logEventBeforeFiltering(event)
+
+	// Track and apply user data removal
+	if !event.User.IsEmpty() {
+		filtersApplied = append(filtersApplied, "remove_user_data")
+	}
+	if event.ServerName != "" {
+		filtersApplied = append(filtersApplied, "remove_server_name")
+	}
+
+	// Apply basic filters
+	event.User = sentry.User{}
+	event.ServerName = ""
+
+	// Handle contexts with tracking
+	if event.Contexts != nil {
+		contextsRemoved := removePrivacyContexts(event.Contexts)
+		filtersApplied = append(filtersApplied, contextsRemoved...)
+	}
+
+	// Handle extra fields with tracking
+	if extraRemoved := removePrivacyExtraFields(event.Extra); extraRemoved > 0 {
+		filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%d_extra_fields", extraRemoved))
+	}
+
+	// Handle tags with tracking
+	if event.Tags != nil {
+		tagsRemoved := removePrivacyTags(event.Tags)
+		filtersApplied = append(filtersApplied, tagsRemoved...)
+	}
+
+	// Log after filtering
+	logEventAfterFiltering(event, filtersApplied)
+
+	return event
+}
+
+// logEventBeforeFiltering logs event details before privacy filtering
+func logEventBeforeFiltering(event *sentry.Event) {
+	serviceLogger.Debug("applying privacy filters to event",
+		"event_id", event.EventID,
+		"has_user_data", !event.User.IsEmpty(),
+		"has_server_name", event.ServerName != "",
+		"contexts_count", len(event.Contexts),
+		"extra_count", len(event.Extra),
+		"tags_count", len(event.Tags),
+	)
+}
+
+// logEventAfterFiltering logs event details after privacy filtering
+func logEventAfterFiltering(event *sentry.Event, filtersApplied []string) {
+	serviceLogger.Debug("privacy filters applied",
+		"event_id", event.EventID,
+		"filters_applied", filtersApplied,
+		"remaining_contexts", len(event.Contexts),
+		"remaining_extra", len(event.Extra),
+		"remaining_tags", len(event.Tags),
+	)
+}
+
+// removePrivacyContexts removes sensitive contexts and returns what was removed
+func removePrivacyContexts(contexts map[string]sentry.Context) []string {
+	var removed []string
+	sensitiveContexts := []string{"device", "os", "runtime"}
+
+	for _, key := range sensitiveContexts {
+		if _, exists := contexts[key]; exists {
+			removed = append(removed, fmt.Sprintf("remove_%s_context", key))
+			delete(contexts, key)
+		}
+	}
+
+	return removed
+}
+
+// removePrivacyExtraFields removes sensitive extra fields and returns count
+func removePrivacyExtraFields(extra map[string]any) int {
+	removed := 0
+	allowedFields := map[string]bool{
+		"error_type": true,
+		"component":  true,
+	}
+
+	for k := range extra {
+		if !allowedFields[k] {
+			removed++
+			delete(extra, k)
+		}
+	}
+
+	return removed
+}
+
+// removePrivacyTags removes sensitive tags and returns what was removed
+func removePrivacyTags(tags map[string]string) []string {
+	var removed []string
+	sensitiveTags := map[string]string{
+		"server_name": "remove_server_name_tag",
+		"hostname":    "remove_hostname_tag",
+	}
+
+	for tag, filterName := range sensitiveTags {
+		if _, exists := tags[tag]; exists {
+			removed = append(removed, filterName)
+			delete(tags, tag)
+		}
+	}
+
+	return removed
+}
+
+// configureSentryScope configures the global Sentry scope with system information
+func configureSentryScope(settings *conf.Settings) {
 	platformInfo := collectPlatformInfo()
 
-	// Configure global scope with system ID and platform information
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		// Set system ID as a tag for all events
 		scope.SetTag("system_id", settings.SystemID)
@@ -236,11 +328,10 @@ func InitSentry(settings *conf.Settings) error {
 			"go_version":   platformInfo.GoVersion,
 		})
 	})
+}
 
-	// Initialize attachment uploader
-	attachmentUploader = NewAttachmentUploader(true)
-
-	// Mark Sentry as initialized and process any deferred messages
+// processDeferredMessages processes any messages that were captured before Sentry was ready
+func processDeferredMessages() int {
 	deferredMutex.Lock()
 	sentryInitialized = true
 	messagesToProcess := make([]DeferredMessage, len(deferredMessages))
@@ -253,7 +344,13 @@ func InitSentry(settings *conf.Settings) error {
 		CaptureMessage(msg.Message, msg.Level, msg.Component)
 	}
 
-	// Log initialization success with debug details
+	return len(messagesToProcess)
+}
+
+// logInitializationSuccess logs the successful initialization of Sentry
+func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
+	platformInfo := collectPlatformInfo()
+
 	if serviceLogger != nil {
 		serviceLogger.Info("Sentry telemetry initialized",
 			"system_id", settings.SystemID,
@@ -261,25 +358,16 @@ func InitSentry(settings *conf.Settings) error {
 			"debug", settings.Sentry.Debug,
 			"platform", platformInfo.OS,
 			"arch", platformInfo.Architecture,
-			"deferred_messages", len(messagesToProcess),
+			"deferred_messages", deferredCount,
 		)
 	}
 
-	if len(messagesToProcess) > 0 {
+	if deferredCount > 0 {
 		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)",
-			len(messagesToProcess), settings.SystemID)
+			deferredCount, settings.SystemID)
 	} else {
 		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
 	}
-
-	// Initialize event bus integration for async telemetry
-	if err := InitializeEventBusIntegration(); err != nil {
-		log.Printf("Failed to initialize telemetry event bus integration: %v", err)
-		// Don't fail initialization if event bus integration fails
-		// Telemetry will still work synchronously
-	}
-
-	return nil
 }
 
 // CaptureError captures an error with privacy-compliant context
