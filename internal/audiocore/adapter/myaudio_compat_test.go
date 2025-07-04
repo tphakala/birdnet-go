@@ -35,7 +35,7 @@ func TestMyAudioCompatAdapter(t *testing.T) {
 	// Create channels and sync primitives
 	wg := &sync.WaitGroup{}
 	quitChan := make(chan struct{})
-	restartChan := make(chan bool, 1)
+	restartChan := make(chan struct{}, 1)
 	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 10)
 
 	// Create adapter
@@ -183,7 +183,7 @@ func TestRestartHandling(t *testing.T) {
 
 	wg := &sync.WaitGroup{}
 	quitChan := make(chan struct{})
-	restartChan := make(chan bool, 1)
+	restartChan := make(chan struct{}, 1)
 	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 10)
 
 	adapter := NewMyAudioCompatAdapter(settings)
@@ -192,7 +192,7 @@ func TestRestartHandling(t *testing.T) {
 	go adapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 
 	// Send restart signal
-	restartChan <- true
+	restartChan <- struct{}{}
 
 	// Wait for adapter to exit
 	done := make(chan struct{})
