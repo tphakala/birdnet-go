@@ -68,7 +68,8 @@ type EventBus struct {
 	mu          sync.Mutex
 	
 	// Consumers
-	consumers []EventConsumer
+	consumers         []EventConsumer
+	resourceConsumers []ResourceEventConsumer  // Separate slice for resource event consumers
 	
 	// Deduplication
 	deduplicator *ErrorDeduplicator
@@ -120,11 +121,12 @@ func DefaultConfig() *Config {
 
 // Config holds event bus configuration
 type Config struct {
-	BufferSize    int
-	Workers       int
-	Enabled       bool
-	Debug         bool // Enable debug logging
-	Deduplication *DeduplicationConfig
+	BufferSize         int  // Buffer size for error events
+	ResourceBufferSize int  // Buffer size for resource events (if 0, uses BufferSize)
+	Workers            int
+	Enabled            bool
+	Debug              bool // Enable debug logging
+	Deduplication      *DeduplicationConfig
 }
 
 // Initialize creates or returns the global event bus instance
@@ -155,15 +157,22 @@ func Initialize(config *Config) (*EventBus, error) {
 	// Create new event bus
 	ctx, cancel := context.WithCancel(context.Background())
 	
+	// Use ResourceBufferSize if specified, otherwise fall back to BufferSize
+	resourceBufSize := config.ResourceBufferSize
+	if resourceBufSize == 0 {
+		resourceBufSize = config.BufferSize
+	}
+	
 	eb := &EventBus{
 		config:            config,
 		errorEventChan:    make(chan ErrorEvent, config.BufferSize),
-		resourceEventChan: make(chan ResourceEvent, config.BufferSize),
+		resourceEventChan: make(chan ResourceEvent, resourceBufSize),
 		bufferSize:        config.BufferSize,
 		workers:           config.Workers,
 		ctx:               ctx,
 		cancel:            cancel,
 		consumers:         make([]EventConsumer, 0),
+		resourceConsumers: make([]ResourceEventConsumer, 0),
 		logger:            logger,
 		startTime:         time.Now(),
 	}
@@ -222,6 +231,11 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 	}
 	
 	eb.consumers = append(eb.consumers, consumer)
+	
+	// Check if consumer also implements ResourceEventConsumer
+	if resourceConsumer, ok := consumer.(ResourceEventConsumer); ok {
+		eb.resourceConsumers = append(eb.resourceConsumers, resourceConsumer)
+	}
 	
 	// Update global flag for fast path optimization
 	hasActiveConsumers.Store(true)
@@ -491,57 +505,55 @@ func (eb *EventBus) processErrorEvent(event ErrorEvent, logger *slog.Logger) {
 	}
 }
 
-// processResourceEvent sends the resource event to all registered consumers
+// processResourceEvent sends the resource event to all registered resource consumers
 func (eb *EventBus) processResourceEvent(event ResourceEvent, logger *slog.Logger) {
 	eb.mu.Lock()
-	consumers := make([]EventConsumer, len(eb.consumers))
-	copy(consumers, eb.consumers)
+	resourceConsumers := make([]ResourceEventConsumer, len(eb.resourceConsumers))
+	copy(resourceConsumers, eb.resourceConsumers)
 	eb.mu.Unlock()
 	
-	for _, consumer := range consumers {
-		// Check if consumer supports resource events
-		if resourceConsumer, ok := consumer.(ResourceEventConsumer); ok {
-			// Process in a recovery wrapper to prevent panics
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-						logger.Error("consumer panicked",
-							"consumer", consumer.Name(),
-							"panic", r,
-							"resource_type", event.GetResourceType(),
-							"severity", event.GetSeverity(),
-						)
-					}
-				}()
-				
-				// Time consumer processing
-				consumerStart := time.Now()
-				err := resourceConsumer.ProcessResourceEvent(event)
-				consumerDuration := time.Since(consumerStart)
-				
-				// Warn about slow consumers
-				if consumerDuration > 100*time.Millisecond {
-					logger.Warn("slow consumer detected",
-						"consumer", consumer.Name(),
-						"duration_ms", consumerDuration.Milliseconds(),
-						"resource_type", event.GetResourceType(),
-					)
-				}
-				
-				if err != nil {
+	// No type assertions needed - iterate directly over resource consumers
+	for _, consumer := range resourceConsumers {
+		// Process in a recovery wrapper to prevent panics
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
 					atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-					logger.Error("consumer error",
+					logger.Error("consumer panicked",
 						"consumer", consumer.Name(),
-						"error", err,
+						"panic", r,
 						"resource_type", event.GetResourceType(),
 						"severity", event.GetSeverity(),
 					)
-				} else {
-					atomic.AddUint64(&eb.stats.EventsProcessed, 1)
 				}
 			}()
-		}
+			
+			// Time consumer processing
+			consumerStart := time.Now()
+			err := consumer.ProcessResourceEvent(event)
+			consumerDuration := time.Since(consumerStart)
+			
+			// Warn about slow consumers
+			if consumerDuration > 100*time.Millisecond {
+				logger.Warn("slow consumer detected",
+					"consumer", consumer.Name(),
+					"duration_ms", consumerDuration.Milliseconds(),
+					"resource_type", event.GetResourceType(),
+				)
+			}
+			
+			if err != nil {
+				atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
+				logger.Error("consumer error",
+					"consumer", consumer.Name(),
+					"error", err,
+					"resource_type", event.GetResourceType(),
+					"severity", event.GetSeverity(),
+				)
+			} else {
+				atomic.AddUint64(&eb.stats.EventsProcessed, 1)
+			}
+		}()
 	}
 }
 
@@ -650,10 +662,14 @@ func (eb *EventBus) logMetrics(reason string) {
 		fastPathPercent = float64(stats.FastPathHits) / float64(totalAttempts) * 100
 	}
 	
-	// Calculate buffer utilization (average of both channels)
+	// Calculate buffer utilization for both channels
 	errorBufferUtil := float64(len(eb.errorEventChan)) / float64(cap(eb.errorEventChan)) * 100
 	resourceBufferUtil := float64(len(eb.resourceEventChan)) / float64(cap(eb.resourceEventChan)) * 100
 	avgBufferUtilization := (errorBufferUtil + resourceBufferUtil) / 2
+	maxBufferUtilization := errorBufferUtil
+	if resourceBufferUtil > maxBufferUtilization {
+		maxBufferUtilization = resourceBufferUtil
+	}
 	
 	eb.logger.Info("event bus performance metrics",
 		"reason", reason,
@@ -667,6 +683,7 @@ func (eb *EventBus) logMetrics(reason string) {
 		"fast_path_percent", fmt.Sprintf("%.2f%%", fastPathPercent),
 		"active_consumers", len(eb.consumers),
 		"avg_buffer_utilization", fmt.Sprintf("%.1f%%", avgBufferUtilization),
+		"max_buffer_utilization", fmt.Sprintf("%.1f%%", maxBufferUtilization),
 		"error_buffer_utilization", fmt.Sprintf("%.1f%%", errorBufferUtil),
 		"resource_buffer_utilization", fmt.Sprintf("%.1f%%", resourceBufferUtil),
 		"dedup_total_seen", dedupStats.TotalSeen,
