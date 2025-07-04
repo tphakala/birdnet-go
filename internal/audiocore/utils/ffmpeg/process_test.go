@@ -17,7 +17,7 @@ func TestNewProcess(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process := NewProcess(config)
@@ -42,7 +42,7 @@ func TestProcessMetrics(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process := NewProcess(config)
@@ -68,7 +68,7 @@ func TestProcessChannels(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process := NewProcess(config)
@@ -97,7 +97,7 @@ func TestProcessStopBeforeStart(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process := NewProcess(config)
@@ -120,7 +120,7 @@ func TestBuildFFmpegArgs(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 		ExtraArgs:    []string{"-analyzeduration", "1000000"},
 	}
 
@@ -232,7 +232,7 @@ func TestProcessDoubleStart(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process := NewProcess(config)
@@ -263,7 +263,7 @@ func TestProcessDoubleStop(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process := NewProcess(config)
