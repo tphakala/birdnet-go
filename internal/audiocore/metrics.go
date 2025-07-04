@@ -1,9 +1,12 @@
 package audiocore
 
 import (
+	"context"
+	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -19,6 +22,7 @@ var (
 	globalMetrics     *MetricsCollector
 	globalMetricsOnce sync.Once
 	globalMetricsMu   sync.RWMutex
+	metricsLogger     *slog.Logger
 )
 
 // InitMetrics initializes the global metrics collector
@@ -27,9 +31,22 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 		globalMetricsMu.Lock()
 		defer globalMetricsMu.Unlock()
 		
+		// Initialize logger
+		metricsLogger = logging.ForService("audiocore")
+		if metricsLogger == nil {
+			metricsLogger = slog.Default()
+		}
+		metricsLogger = metricsLogger.With("component", "metrics")
+		
 		globalMetrics = &MetricsCollector{
 			metrics: metricsInstance,
 			enabled: metricsInstance != nil,
+		}
+		
+		if metricsInstance != nil {
+			metricsLogger.Info("metrics collector initialized")
+		} else {
+			metricsLogger.Debug("metrics collector disabled")
 		}
 	})
 }
@@ -83,6 +100,12 @@ func (mc *MetricsCollector) RecordFrameDropped(sourceID, reason string) {
 	defer mc.mu.RUnlock()
 
 	mc.metrics.RecordAudioDataDropped(sourceID, reason)
+	
+	if metricsLogger != nil {
+		metricsLogger.Warn("audio frame dropped",
+			"source_id", sourceID,
+			"reason", reason)
+	}
 }
 
 // RecordProcessingError records a processing error
@@ -111,6 +134,13 @@ func (mc *MetricsCollector) RecordSourceStart(sourceID, sourceType string, succe
 		status = "failure"
 	}
 	mc.metrics.RecordSourceStart(sourceID, sourceType, status)
+	
+	if metricsLogger != nil && metricsLogger.Enabled(context.TODO(), slog.LevelDebug) {
+		metricsLogger.Debug("source start recorded",
+			"source_id", sourceID,
+			"source_type", sourceType,
+			"status", status)
+	}
 }
 
 // RecordSourceStop records a source stop event
@@ -139,6 +169,13 @@ func (mc *MetricsCollector) RecordSourceError(sourceID, sourceType, errorType st
 	defer mc.mu.RUnlock()
 
 	mc.metrics.RecordSourceError(sourceID, sourceType, errorType)
+	
+	if metricsLogger != nil {
+		metricsLogger.Info("source error recorded",
+			"source_id", sourceID,
+			"source_type", sourceType,
+			"error_type", errorType)
+	}
 }
 
 // UpdateSourceGain updates the gain level metric for a source

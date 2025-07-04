@@ -3,12 +3,14 @@ package sources
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // SoundcardSource represents an audio source from a system soundcard
@@ -25,6 +27,7 @@ type SoundcardSource struct {
 	mu          sync.RWMutex
 	closeOnce   sync.Once
 	closed      bool
+	logger      *slog.Logger
 
 	// Device-specific fields (to be implemented with actual audio library)
 	deviceID   string
@@ -63,6 +66,16 @@ func NewSoundcardSource(config *audiocore.SourceConfig) (audiocore.AudioSource, 
 		config.Gain = 1.0
 	}
 
+	// Create logger
+	logger := logging.ForService("audiocore")
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With(
+		"component", "soundcard_source",
+		"source_id", config.ID,
+		"device", config.Device)
+
 	source := &SoundcardSource{
 		config:      *config,
 		format:      config.Format,
@@ -70,10 +83,16 @@ func NewSoundcardSource(config *audiocore.SourceConfig) (audiocore.AudioSource, 
 		errorOutput: make(chan error, 10),
 		deviceID:    config.Device,
 		bufferSize:  bufferSize,
+		logger:      logger,
 	}
 
 	// Store initial gain
 	source.gain.Store(config.Gain)
+
+	logger.Info("soundcard source created",
+		"format", config.Format,
+		"buffer_size", bufferSize,
+		"gain", config.Gain)
 
 	return source, nil
 }
@@ -94,6 +113,7 @@ func (s *SoundcardSource) Start(ctx context.Context) error {
 	defer s.mu.Unlock()
 
 	if s.isActive.Load() {
+		s.logger.Warn("attempted to start already active source")
 		return errors.New(nil).
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryState).
@@ -108,6 +128,8 @@ func (s *SoundcardSource) Start(ctx context.Context) error {
 	// Mark as active
 	s.isActive.Store(true)
 
+	s.logger.Info("starting audio capture")
+
 	// Start capture goroutine
 	s.wg.Add(1)
 	go s.captureAudio()
@@ -121,6 +143,7 @@ func (s *SoundcardSource) Stop() error {
 	defer s.mu.Unlock()
 
 	if !s.isActive.Load() {
+		s.logger.Warn("attempted to stop inactive source")
 		return errors.New(audiocore.ErrSourceNotActive).
 			Component(audiocore.ComponentAudioCore).
 			Context("source_id", s.ID()).
@@ -128,6 +151,7 @@ func (s *SoundcardSource) Stop() error {
 	}
 
 	// Cancel context to stop capture
+	s.logger.Info("stopping audio capture")
 	s.cancel()
 
 	// Wait for capture to stop
@@ -141,8 +165,10 @@ func (s *SoundcardSource) Stop() error {
 		close(s.audioOutput)
 		close(s.errorOutput)
 		s.closed = true
+		s.logger.Debug("channels closed")
 	})
 
+	s.logger.Info("audio capture stopped")
 	return nil
 }
 
@@ -171,6 +197,9 @@ func (s *SoundcardSource) GetFormat() audiocore.AudioFormat {
 // SetGain sets the audio gain level (0.0 to 1.0)
 func (s *SoundcardSource) SetGain(gain float64) error {
 	if gain < 0.0 || gain > 2.0 {
+		s.logger.Error("invalid gain value",
+			"gain", gain,
+			"valid_range", "0.0-2.0")
 		return errors.New(nil).
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryValidation).
@@ -180,12 +209,16 @@ func (s *SoundcardSource) SetGain(gain float64) error {
 	}
 
 	s.gain.Store(gain)
+	s.logger.Debug("gain updated",
+		"new_gain", gain)
 	return nil
 }
 
 // captureAudio is the main capture loop
 func (s *SoundcardSource) captureAudio() {
 	defer s.wg.Done()
+
+	s.logger.Debug("audio capture goroutine started")
 
 	// Calculate frame duration based on buffer size and sample rate
 	samplesPerBuffer := s.bufferSize / (s.format.BitDepth / 8) / s.format.Channels
@@ -198,10 +231,16 @@ func (s *SoundcardSource) captureAudio() {
 	ticker := time.NewTicker(frameDuration)
 	defer ticker.Stop()
 
+	s.logger.Debug("audio capture initialized",
+		"frame_duration", frameDuration,
+		"samples_per_buffer", samplesPerBuffer)
+
 	frameCount := 0
 	for {
 		select {
 		case <-s.ctx.Done():
+			s.logger.Debug("audio capture goroutine stopping",
+				"frames_captured", frameCount)
 			return
 
 		case <-ticker.C:
@@ -227,10 +266,16 @@ func (s *SoundcardSource) captureAudio() {
 			select {
 			case s.audioOutput <- audioData:
 				frameCount++
+				if frameCount%1000 == 0 {
+					s.logger.Debug("audio capture progress",
+						"frames_captured", frameCount)
+				}
 			case <-s.ctx.Done():
 				return
 			default:
 				// Channel full, report error
+				s.logger.Warn("audio output channel full, dropping frame",
+					"frame", frameCount)
 				err := errors.New(nil).
 					Component(audiocore.ComponentAudioCore).
 					Category(errors.CategoryResource).
@@ -241,6 +286,7 @@ func (s *SoundcardSource) captureAudio() {
 				select {
 				case s.errorOutput <- err:
 				default:
+					s.logger.Debug("error channel also full")
 				}
 			}
 		}

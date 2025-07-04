@@ -2,21 +2,31 @@ package audiocore
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // processorChainImpl implements the ProcessorChain interface
 type processorChainImpl struct {
 	processors []AudioProcessor
 	mu         sync.RWMutex
+	logger     *slog.Logger
 }
 
 // NewProcessorChain creates a new processor chain
 func NewProcessorChain() ProcessorChain {
+	logger := logging.ForService("audiocore")
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With("component", "processor_chain")
+
 	return &processorChainImpl{
 		processors: make([]AudioProcessor, 0),
+		logger:     logger,
 	}
 }
 
@@ -36,6 +46,8 @@ func (pc *processorChainImpl) AddProcessor(processor AudioProcessor) error {
 	// Check if processor with same ID already exists
 	for _, p := range pc.processors {
 		if p.ID() == processor.ID() {
+			pc.logger.Warn("processor already exists in chain",
+				"processor_id", processor.ID())
 			return errors.New(nil).
 				Component(ComponentAudioCore).
 				Category(errors.CategoryConflict).
@@ -46,6 +58,9 @@ func (pc *processorChainImpl) AddProcessor(processor AudioProcessor) error {
 	}
 
 	pc.processors = append(pc.processors, processor)
+	pc.logger.Info("processor added to chain",
+		"processor_id", processor.ID(),
+		"chain_length", len(pc.processors))
 	return nil
 }
 
@@ -58,10 +73,15 @@ func (pc *processorChainImpl) RemoveProcessor(id string) error {
 		if p.ID() == id {
 			// Remove processor while maintaining order
 			pc.processors = append(pc.processors[:i], pc.processors[i+1:]...)
+			pc.logger.Info("processor removed from chain",
+				"processor_id", id,
+				"remaining_processors", len(pc.processors))
 			return nil
 		}
 	}
 
+	pc.logger.Warn("processor not found for removal",
+		"processor_id", id)
 	return errors.New(ErrProcessorNotFound).
 		Component(ComponentAudioCore).
 		Context("processor_id", id).
@@ -75,15 +95,25 @@ func (pc *processorChainImpl) Process(ctx context.Context, input *AudioData) (*A
 
 	// If no processors, return input unchanged
 	if len(pc.processors) == 0 {
+		pc.logger.Debug("no processors in chain, returning input unchanged")
 		return input, nil
 	}
 
 	// Process through each processor in sequence
 	current := input
+
+	if pc.logger.Enabled(context.TODO(), slog.LevelDebug) {
+		pc.logger.Debug("starting processor chain execution",
+			"processor_count", len(pc.processors),
+			"source_id", input.SourceID)
+	}
+
 	for _, processor := range pc.processors {
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
+			pc.logger.Debug("processor chain cancelled",
+				"processor_id", processor.ID())
 			return nil, ctx.Err()
 		default:
 		}
@@ -91,6 +121,9 @@ func (pc *processorChainImpl) Process(ctx context.Context, input *AudioData) (*A
 		// Process audio
 		processed, err := processor.Process(ctx, current)
 		if err != nil {
+			pc.logger.Error("processor failed",
+				"processor_id", processor.ID(),
+				"error", err)
 			return nil, errors.New(err).
 				Component(ComponentAudioCore).
 				Category(errors.CategoryProcessing).
@@ -99,7 +132,17 @@ func (pc *processorChainImpl) Process(ctx context.Context, input *AudioData) (*A
 				Build()
 		}
 
+		if pc.logger.Enabled(context.TODO(), slog.LevelDebug) {
+			pc.logger.Debug("processor executed successfully",
+				"processor_id", processor.ID())
+		}
+
 		current = processed
+	}
+
+	if pc.logger.Enabled(context.TODO(), slog.LevelDebug) {
+		pc.logger.Debug("processor chain completed successfully",
+			"processor_count", len(pc.processors))
 	}
 
 	return current, nil
