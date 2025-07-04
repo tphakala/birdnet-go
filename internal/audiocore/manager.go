@@ -2,10 +2,12 @@ package audiocore
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // managerImpl is the concrete implementation of AudioManager
@@ -23,6 +25,7 @@ type managerImpl struct {
 	metrics         ManagerMetrics
 	metricsMu       sync.RWMutex
 	startupErrors   chan error
+	logger          *slog.Logger
 }
 
 // NewAudioManager creates a new audio manager
@@ -46,6 +49,12 @@ func NewAudioManager(config *ManagerConfig) AudioManager {
 		config.BufferPoolConfig.MaxBuffersPerSize = 100
 	}
 
+	logger := logging.ForService("audiocore")
+	if logger == nil {
+		// Fallback to default slog if logging not initialized
+		logger = slog.Default()
+	}
+
 	return &managerImpl{
 		config:          *config,
 		sources:         make(map[string]AudioSource),
@@ -53,6 +62,7 @@ func NewAudioManager(config *ManagerConfig) AudioManager {
 		bufferPool:      NewBufferPool(config.BufferPoolConfig),
 		audioOutput:     make(chan AudioData, 100),
 		startupErrors:   make(chan error, 10), // Buffered to avoid blocking
+		logger:          logger,
 	}
 }
 
@@ -72,6 +82,9 @@ func (m *managerImpl) AddSource(source AudioSource) error {
 
 	// Check if source already exists
 	if _, exists := m.sources[source.ID()]; exists {
+		m.logger.Warn("source already exists",
+			"source_id", source.ID(),
+			"source_name", source.Name())
 		return errors.New(ErrSourceAlreadyExists).
 			Component(ComponentAudioCore).
 			Context("source_id", source.ID()).
@@ -79,9 +92,15 @@ func (m *managerImpl) AddSource(source AudioSource) error {
 	}
 
 	m.sources[source.ID()] = source
+	m.logger.Info("audio source added",
+		"source_id", source.ID(),
+		"source_name", source.Name(),
+		"total_sources", len(m.sources))
 
 	// If manager is already started, start this source too
 	if m.started {
+		m.logger.Debug("starting newly added source",
+			"source_id", source.ID())
 		go m.processSource(source)
 	}
 
@@ -95,6 +114,8 @@ func (m *managerImpl) RemoveSource(id string) error {
 
 	source, exists := m.sources[id]
 	if !exists {
+		m.logger.Warn("source not found for removal",
+			"source_id", id)
 		return errors.New(ErrSourceNotFound).
 			Component(ComponentAudioCore).
 			Context("source_id", id).
@@ -103,6 +124,9 @@ func (m *managerImpl) RemoveSource(id string) error {
 
 	// Stop the source
 	if err := source.Stop(); err != nil {
+		m.logger.Error("failed to stop source",
+			"source_id", id,
+			"error", err)
 		return errors.New(err).
 			Component(ComponentAudioCore).
 			Category(errors.CategoryAudio).
@@ -113,6 +137,10 @@ func (m *managerImpl) RemoveSource(id string) error {
 
 	delete(m.sources, id)
 	delete(m.processorChains, id)
+
+	m.logger.Info("audio source removed",
+		"source_id", id,
+		"remaining_sources", len(m.sources))
 
 	return nil
 }
@@ -160,6 +188,7 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	if m.started {
+		m.logger.Warn("audio manager already started")
 		return errors.New(nil).
 			Component(ComponentAudioCore).
 			Category(errors.CategoryState).
@@ -170,8 +199,14 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.started = true
 
+	m.logger.Info("starting audio manager",
+		"sources_count", len(m.sources),
+		"metrics_enabled", m.config.EnableMetrics)
+
 	// Start metrics collection if enabled
 	if m.config.EnableMetrics {
+		m.logger.Debug("starting metrics collection",
+			"interval", m.config.MetricsInterval)
 		m.wg.Add(1)
 		go m.collectMetrics()
 	}
@@ -210,9 +245,12 @@ func (m *managerImpl) Start(ctx context.Context) error {
 
 	// Return aggregated errors if any sources failed to start
 	if len(startupErrs) > 0 {
+		m.logger.Error("some sources failed to start",
+			"failed_count", len(startupErrs))
 		return errors.Join(startupErrs...)
 	}
 
+	m.logger.Info("audio manager started successfully")
 	return nil
 }
 
@@ -222,18 +260,25 @@ func (m *managerImpl) Stop() error {
 	defer m.mu.Unlock()
 
 	if !m.started {
+		m.logger.Warn("attempted to stop non-started manager")
 		return errors.New(ErrManagerNotStarted).
 			Component(ComponentAudioCore).
 			Build()
 	}
 
 	// Cancel context to signal all goroutines to stop
+	m.logger.Info("stopping audio manager")
 	m.cancel()
 
 	// Stop all sources
 	var errs []error
 	for _, source := range m.sources {
+		m.logger.Debug("stopping source",
+			"source_id", source.ID())
 		if err := source.Stop(); err != nil {
+			m.logger.Error("error stopping source",
+				"source_id", source.ID(),
+				"error", err)
 			errs = append(errs, err)
 		}
 	}
@@ -248,9 +293,12 @@ func (m *managerImpl) Stop() error {
 
 	// Return any errors that occurred
 	if len(errs) > 0 {
+		m.logger.Error("errors occurred while stopping sources",
+			"error_count", len(errs))
 		return errors.Join(errs...)
 	}
 
+	m.logger.Info("audio manager stopped successfully")
 	return nil
 }
 
@@ -276,8 +324,16 @@ func (m *managerImpl) Metrics() ManagerMetrics {
 func (m *managerImpl) processSource(source AudioSource) {
 	defer m.wg.Done()
 
+	m.logger.Debug("starting audio processing for source",
+		"source_id", source.ID(),
+		"source_name", source.Name())
+
 	// Start the source
 	if err := source.Start(m.ctx); err != nil {
+		m.logger.Error("failed to start audio source",
+			"source_id", source.ID(),
+			"source_name", source.Name(),
+			"error", err)
 		// Send startup error to channel
 		select {
 		case m.startupErrors <- errors.New(err).
@@ -288,6 +344,8 @@ func (m *managerImpl) processSource(source AudioSource) {
 			Build():
 		default:
 			// Channel full, error will be lost but we avoid blocking
+			m.logger.Warn("startup error channel full, error discarded",
+				"source_id", source.ID())
 		}
 		return
 	}
@@ -297,14 +355,22 @@ func (m *managerImpl) processSource(source AudioSource) {
 	chain := m.processorChains[source.ID()]
 	m.mu.RUnlock()
 
+	m.logger.Info("audio source started successfully",
+		"source_id", source.ID(),
+		"source_name", source.Name())
+
 	// Process audio from this source
 	for {
 		select {
 		case <-m.ctx.Done():
+			m.logger.Debug("stopping audio processing for source",
+				"source_id", source.ID())
 			return
 
 		case audioData, ok := <-source.AudioOutput():
 			if !ok {
+				m.logger.Debug("audio source channel closed",
+					"source_id", source.ID())
 				return
 			}
 
@@ -313,6 +379,9 @@ func (m *managerImpl) processSource(source AudioSource) {
 				processedData, err := chain.Process(m.ctx, &audioData)
 				if err != nil {
 					// Log processing error and increment error metrics
+					m.logger.Error("processor chain error",
+						"source_id", source.ID(),
+						"error", err)
 					m.incrementErrorCount()
 					// Continue with unprocessed audio data
 				} else {
@@ -328,12 +397,18 @@ func (m *managerImpl) processSource(source AudioSource) {
 				return
 			default:
 				// Channel full, drop frame
+				m.logger.Warn("audio output channel full, dropping frame",
+					"source_id", source.ID(),
+					"timestamp", audioData.Timestamp)
 				m.updateMetrics(false)
 			}
 
 		case err := <-source.Errors():
 			// Handle source errors
 			if err != nil {
+				m.logger.Error("audio source error",
+					"source_id", source.ID(),
+					"error", err)
 				m.incrementErrorCount()
 			}
 		}

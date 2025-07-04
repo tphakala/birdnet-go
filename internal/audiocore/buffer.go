@@ -1,10 +1,13 @@
 package audiocore
 
 import (
+	"context"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // bufferImpl is the concrete implementation of AudioBuffer
@@ -113,12 +116,20 @@ type bufferPoolImpl struct {
 	config     BufferPoolConfig
 	stats      BufferPoolStats
 	statsMu    sync.RWMutex
+	logger     *slog.Logger
 }
 
 // NewBufferPool creates a new buffer pool
 func NewBufferPool(config BufferPoolConfig) BufferPool {
+	logger := logging.ForService("audiocore")
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With("component", "buffer_pool")
+
 	pool := &bufferPoolImpl{
 		config: config,
+		logger: logger,
 	}
 
 	// Initialize sync.Pools with constructors
@@ -143,6 +154,12 @@ func NewBufferPool(config BufferPoolConfig) BufferPool {
 		}
 	}
 
+	logger.Info("buffer pool created",
+		"small_size", config.SmallBufferSize,
+		"medium_size", config.MediumBufferSize,
+		"large_size", config.LargeBufferSize,
+		"max_per_size", config.MaxBuffersPerSize)
+
 	return pool
 }
 
@@ -154,26 +171,40 @@ func (p *bufferPoolImpl) Get(size int) AudioBuffer {
 	})
 
 	var buf *bufferImpl
+	var poolTier string
 
 	// Select appropriate pool based on size
 	switch {
 	case size <= p.config.SmallBufferSize:
 		buf = p.smallPool.Get().(*bufferImpl)
+		poolTier = "small"
 	case size <= p.config.MediumBufferSize:
 		buf = p.mediumPool.Get().(*bufferImpl)
+		poolTier = "medium"
 	case size <= p.config.LargeBufferSize:
 		buf = p.largePool.Get().(*bufferImpl)
+		poolTier = "large"
 	default:
 		// Create a custom-sized buffer for very large requests
 		buf = &bufferImpl{
 			data: make([]byte, size),
 			pool: p,
 		}
+		poolTier = "custom"
+		p.logger.Debug("allocated custom-sized buffer",
+			"size", size)
 	}
 
 	// Initialize buffer state
 	buf.length = size
 	buf.refCount = 1
+
+	if p.logger.Enabled(context.TODO(), slog.LevelDebug) {
+		p.logger.Debug("buffer allocated",
+			"tier", poolTier,
+			"requested_size", size,
+			"actual_capacity", cap(buf.data))
+	}
 
 	return buf
 }
@@ -195,15 +226,28 @@ func (p *bufferPoolImpl) Put(buffer AudioBuffer) {
 
 	// Return to appropriate pool
 	capacity := cap(buf.data)
+	var poolTier string
 	switch {
 	case capacity <= p.config.SmallBufferSize:
 		p.smallPool.Put(buf)
+		poolTier = "small"
 	case capacity <= p.config.MediumBufferSize:
 		p.mediumPool.Put(buf)
+		poolTier = "medium"
 	case capacity <= p.config.LargeBufferSize:
 		p.largePool.Put(buf)
+		poolTier = "large"
 	default:
 		// Don't pool very large buffers
+		poolTier = "custom_discarded"
+		p.logger.Debug("discarding custom-sized buffer",
+			"capacity", capacity)
+	}
+
+	if p.logger.Enabled(context.TODO(), slog.LevelDebug) && poolTier != "custom_discarded" {
+		p.logger.Debug("buffer returned to pool",
+			"tier", poolTier,
+			"capacity", capacity)
 	}
 }
 

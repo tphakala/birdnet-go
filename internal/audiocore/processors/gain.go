@@ -4,11 +4,13 @@ package processors
 import (
 	"context"
 	"encoding/binary"
+	"log/slog"
 	"math"
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // GainProcessor applies gain adjustment to audio data
@@ -16,6 +18,7 @@ type GainProcessor struct {
 	id           string
 	gain         atomic.Value // stores float64
 	outputFormat audiocore.AudioFormat
+	logger       *slog.Logger
 }
 
 // NewGainProcessor creates a new gain processor
@@ -29,10 +32,22 @@ func NewGainProcessor(id string, initialGain float64) (audiocore.AudioProcessor,
 			Build()
 	}
 
+	logger := logging.ForService("audiocore")
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With(
+		"component", "gain_processor",
+		"processor_id", id)
+
 	processor := &GainProcessor{
-		id: id,
+		id:     id,
+		logger: logger,
 	}
 	processor.gain.Store(initialGain)
+
+	logger.Info("gain processor created",
+		"initial_gain", initialGain)
 
 	return processor, nil
 }
@@ -63,6 +78,9 @@ func (gp *GainProcessor) Process(ctx context.Context, input *audiocore.AudioData
 
 	// If gain is 1.0, return input unchanged
 	if gain == 1.0 {
+		if gp.logger.Enabled(context.TODO(), slog.LevelDebug) {
+			gp.logger.Debug("gain is 1.0, returning input unchanged")
+		}
 		return input, nil
 	}
 
@@ -82,9 +100,21 @@ func (gp *GainProcessor) Process(ctx context.Context, input *audiocore.AudioData
 	switch input.Format.Encoding {
 	case "pcm_s16le":
 		gp.applyGainS16LE(output.Buffer, gain)
+		if gp.logger.Enabled(context.TODO(), slog.LevelDebug) {
+			gp.logger.Debug("applied gain to PCM S16LE audio",
+				"gain", gain,
+				"buffer_size", len(output.Buffer))
+		}
 	case "pcm_f32le":
 		gp.applyGainF32LE(output.Buffer, gain)
+		if gp.logger.Enabled(context.TODO(), slog.LevelDebug) {
+			gp.logger.Debug("applied gain to PCM F32LE audio",
+				"gain", gain,
+				"buffer_size", len(output.Buffer))
+		}
 	default:
+		gp.logger.Error("unsupported audio encoding",
+			"encoding", input.Format.Encoding)
 		return nil, errors.New(audiocore.ErrInvalidAudioFormat).
 			Component(audiocore.ComponentAudioCore).
 			Context("encoding", input.Format.Encoding).
@@ -117,6 +147,8 @@ func (gp *GainProcessor) SetGain(gain float64) error {
 	}
 
 	gp.gain.Store(gain)
+	gp.logger.Info("gain updated",
+		"new_gain", gain)
 	return nil
 }
 
