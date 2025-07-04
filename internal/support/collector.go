@@ -217,7 +217,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Build()
 	}
 	// Only include basic metadata, not the full dump content
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"id":        dump.ID,
 		"timestamp": dump.Timestamp,
 		"system_id": dump.SystemID,
@@ -343,8 +343,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		info.DockerInfo = &DockerInfo{}
 		// Try to get container ID
 		if data, err := os.ReadFile("/proc/self/cgroup"); err == nil {
-			lines := strings.Split(string(data), "\n")
-			for _, line := range lines {
+			for _, line := range strings.Split(string(data), "\n") {
 				if strings.Contains(line, "docker") {
 					parts := strings.Split(line, "/")
 					if len(parts) > 0 {
