@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,8 @@ import (
 )
 
 func TestGetCriticalPaths(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		setupConfig  func() *conf.Settings
@@ -74,6 +77,8 @@ func TestGetCriticalPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
 			settings := tt.setupConfig()
 			paths := GetCriticalPaths(settings)
 
@@ -102,6 +107,8 @@ func TestGetCriticalPaths(t *testing.T) {
 }
 
 func TestDeduplicatePaths(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input []string
@@ -131,6 +138,8 @@ func TestDeduplicatePaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
 			result := deduplicatePaths(tt.input)
 			assert.Len(t, result, tt.want, "Unexpected number of deduplicated paths")
 
@@ -145,6 +154,8 @@ func TestDeduplicatePaths(t *testing.T) {
 }
 
 func TestMergePaths(t *testing.T) {
+	t.Parallel()
+
 	configured := []string{"/custom", "/data"}
 	critical := []string{"/", "/data", "/config"}
 
@@ -161,6 +172,8 @@ func TestMergePaths(t *testing.T) {
 }
 
 func TestSystemMonitorIntegration(t *testing.T) {
+	t.Parallel()
+
 	// Create a test configuration
 	config := &conf.Settings{}
 	config.Realtime.Monitoring.Enabled = true
@@ -181,6 +194,9 @@ func TestSystemMonitorIntegration(t *testing.T) {
 	// Create monitor (this will auto-append critical paths)
 	monitor := NewSystemMonitor(config)
 	require.NotNil(t, monitor)
+	
+	// Important: The monitor is not started, so no cleanup is needed
+	// NewSystemMonitor only creates the instance, it doesn't start goroutines
 
 	// Check that paths include both user-configured and critical paths
 	paths := config.Realtime.Monitoring.Disk.Paths
@@ -192,6 +208,8 @@ func TestSystemMonitorIntegration(t *testing.T) {
 }
 
 func TestGetMonitoringPathsInfo(t *testing.T) {
+	t.Parallel()
+
 	settings := &conf.Settings{}
 	settings.Realtime.Monitoring.Disk.Paths = []string{"/custom", "/data"}
 	settings.Output.SQLite.Enabled = true
@@ -222,6 +240,8 @@ func TestGetMonitoringPathsInfo(t *testing.T) {
 }
 
 func TestGetMonitoredPaths(t *testing.T) {
+	t.Parallel()
+
 	config := &conf.Settings{}
 	config.Realtime.Monitoring.Disk.Enabled = true
 	config.Realtime.Monitoring.Disk.Paths = []string{"/", "/home"}
@@ -238,4 +258,145 @@ func TestGetMonitoredPaths(t *testing.T) {
 	config.Realtime.Monitoring.Disk.Enabled = false
 	paths = monitor.GetMonitoredPaths()
 	assert.Nil(t, paths)
+}
+
+// Benchmark tests for path deduplication and merging functions
+
+func BenchmarkDeduplicatePaths(b *testing.B) {
+	// Test cases with different sizes and characteristics
+	benchmarks := []struct {
+		name  string
+		paths []string
+	}{
+		{
+			name:  "small-no-duplicates",
+			paths: []string{"/", "/home", "/var", "/tmp", "/usr"},
+		},
+		{
+			name:  "small-with-duplicates",
+			paths: []string{"/", "/home", "/", "/var", "/home", "/tmp", "/var"},
+		},
+		{
+			name:  "medium-mixed",
+			paths: generatePaths(50, true),
+		},
+		{
+			name:  "large-no-duplicates",
+			paths: generatePaths(1000, false),
+		},
+		{
+			name:  "large-with-duplicates",
+			paths: generatePaths(1000, true),
+		},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = deduplicatePaths(bm.paths)
+			}
+		})
+	}
+}
+
+func BenchmarkMergePaths(b *testing.B) {
+	benchmarks := []struct {
+		name       string
+		configured []string
+		critical   []string
+	}{
+		{
+			name:       "small-sets",
+			configured: []string{"/custom1", "/custom2"},
+			critical:   []string{"/", "/data", "/config"},
+		},
+		{
+			name:       "medium-overlap",
+			configured: generatePaths(20, false),
+			critical:   generatePaths(20, false),
+		},
+		{
+			name:       "large-sets",
+			configured: generatePaths(500, false),
+			critical:   generatePaths(500, false),
+		},
+		{
+			name:       "large-with-duplicates",
+			configured: generatePaths(500, true),
+			critical:   generatePaths(500, true),
+		},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = mergePaths(bm.configured, bm.critical)
+			}
+		})
+	}
+}
+
+func BenchmarkGetCriticalPaths(b *testing.B) {
+	// Create different configurations to benchmark
+	configs := []struct {
+		name  string
+		setup func() *conf.Settings
+	}{
+		{
+			name: "minimal",
+			setup: func() *conf.Settings {
+				return &conf.Settings{}
+			},
+		},
+		{
+			name: "typical",
+			setup: func() *conf.Settings {
+				s := &conf.Settings{}
+				s.Output.SQLite.Enabled = true
+				s.Output.SQLite.Path = "/var/lib/birdnet/birdnet.db"
+				s.Realtime.Audio.Export.Enabled = true
+				s.Realtime.Audio.Export.Path = "/var/lib/birdnet/clips"
+				return s
+			},
+		},
+		{
+			name: "everything-enabled",
+			setup: func() *conf.Settings {
+				s := &conf.Settings{}
+				s.Output.SQLite.Enabled = true
+				s.Output.SQLite.Path = "/data/birdnet.db"
+				s.Output.MySQL.Enabled = true
+				s.Realtime.Audio.Export.Enabled = true
+				s.Realtime.Audio.Export.Path = "/data/clips"
+				return s
+			},
+		},
+	}
+
+	for _, cfg := range configs {
+		b.Run(cfg.name, func(b *testing.B) {
+			settings := cfg.setup()
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = GetCriticalPaths(settings)
+			}
+		})
+	}
+}
+
+// Helper function to generate test paths
+func generatePaths(count int, withDuplicates bool) []string {
+	paths := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		if withDuplicates && i%3 == 0 && i > 0 {
+			// Add duplicate of a previous path
+			paths = append(paths, paths[i/3])
+		} else {
+			// Generate unique path
+			paths = append(paths, fmt.Sprintf("/path/to/dir%d", i))
+		}
+	}
+	return paths
 }
