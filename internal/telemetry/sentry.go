@@ -4,6 +4,7 @@ package telemetry
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -69,6 +70,12 @@ func InitSentry(settings *conf.Settings) error {
 	if !settings.Sentry.Enabled {
 		log.Println("Sentry telemetry is disabled (opt-in required)")
 		return nil
+	}
+
+	// Enable debug logging if configured
+	if settings.Sentry.Debug {
+		serviceLevelVar.Set(slog.LevelDebug)
+		serviceLogger.Info("telemetry debug logging enabled")
 	}
 
 	// Use hardcoded DSN for BirdNET-Go project
@@ -173,6 +180,18 @@ func InitSentry(settings *conf.Settings) error {
 	// Process any messages that were captured before Sentry was ready
 	for _, msg := range messagesToProcess {
 		CaptureMessage(msg.Message, msg.Level, msg.Component)
+	}
+
+	// Log initialization success with debug details
+	if serviceLogger != nil {
+		serviceLogger.Info("Sentry telemetry initialized",
+			"system_id", settings.SystemID,
+			"version", settings.Version,
+			"debug", settings.Sentry.Debug,
+			"platform", platformInfo.OS,
+			"arch", platformInfo.Architecture,
+			"deferred_messages", len(messagesToProcess),
+		)
 	}
 
 	if len(messagesToProcess) > 0 {
@@ -282,7 +301,6 @@ func Flush(timeout time.Duration) {
 	sentry.Flush(timeout)
 }
 
-
 // GetAttachmentUploader returns the global attachment uploader instance
 func GetAttachmentUploader() *AttachmentUploader {
 	deferredMutex.Lock()
@@ -295,4 +313,3 @@ func GetAttachmentUploader() *AttachmentUploader {
 
 	return attachmentUploader
 }
-
