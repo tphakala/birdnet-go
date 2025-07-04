@@ -18,18 +18,29 @@ var (
 	// URL pattern for finding URLs in text
 	urlPattern = regexp.MustCompile(`\b(?:https?|rtsp|rtmp)://\S+`)
 	
+	// Email pattern - matches standard email addresses
+	emailPattern = regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b`)
+	
+	// UUID pattern - matches standard UUID formats (8-4-4-4-12)
+	uuidPattern = regexp.MustCompile(`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`)
+	
+	// Standalone IP address pattern - matches IPv4 and IPv6 addresses not in URLs
+	// We use word boundaries and check context in the replacement function
+	ipv4Pattern = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`)
+	ipv6Pattern = regexp.MustCompile(`\b(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\b`)
 	
 	// GPS coordinates pattern - matches decimal degree coordinates  
 	coordinatesPattern = regexp.MustCompile(`(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*[,\s]+(?:lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*|(?:lat(?:itude)?[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
 	
-	// Generic API token/key pattern - matches tokens with clear context
-	apiTokenPattern = regexp.MustCompile(`(?:api[_-]?key|token|secret|auth)[:=]\s*([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)|(?:with\s+(?:token|key|secret|auth)\s+)([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+	// Enhanced API token/key pattern - includes bearer tokens and more formats
+	// Requires a separator (: or =) between the key name and the token value
+	apiTokenPattern = regexp.MustCompile(`(?i)(?:(?:api[_-]?key|token|secret|auth)[:=]\s*|(?:bearer)(?:\s+token)?[:=\s]+|(?:with\s+(?:token|key|secret|auth))\s+)([A-Za-z0-9+/\-_]{8,}[A-Za-z0-9+/=]*)`)
 	
 	// Token extraction pattern for replacing just the token part
-	tokenRegex = regexp.MustCompile(`([A-Za-z0-9+/]{8,}[A-Za-z0-9+/=]*)`)
+	tokenRegex = regexp.MustCompile(`([A-Za-z0-9+/\-_]{8,}[A-Za-z0-9+/=]*)`)
 	
 	// Separator normalization pattern for API tokens
-	separatorRegex = regexp.MustCompile(`=\s*`)
+	separatorRegex = regexp.MustCompile(`[:=]\s*`)
 )
 
 // Common two-part TLDs that need special handling
@@ -45,6 +56,9 @@ var commonTwoPartTLDs = map[string]bool{
 func ScrubMessage(message string) string {
 	// Apply all scrubbing functions in sequence
 	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
+	result = ScrubEmails(result)
+	result = ScrubUUIDs(result)
+	result = ScrubStandaloneIPs(result)
 	result = ScrubCoordinates(result)
 	result = ScrubAPITokens(result)
 	return result
@@ -168,6 +182,73 @@ func IsValidSystemID(id string) bool {
 }
 
 
+// ScrubEmails removes or anonymizes email addresses from text messages
+// It replaces email addresses with [EMAIL] placeholder
+func ScrubEmails(message string) string {
+	return emailPattern.ReplaceAllString(message, "[EMAIL]")
+}
+
+// ScrubUUIDs removes or anonymizes UUIDs from text messages
+// It replaces UUIDs with [UUID] placeholder
+func ScrubUUIDs(message string) string {
+	return uuidPattern.ReplaceAllString(message, "[UUID]")
+}
+
+// ScrubStandaloneIPs removes or anonymizes standalone IP addresses from text messages
+// It handles both IPv4 and IPv6 addresses that are not part of URLs
+func ScrubStandaloneIPs(message string) string {
+	// First mark all URLs to avoid processing IPs within them
+	urlPositions := make(map[int]int) // start -> end position of URLs
+	urlMatches := urlPattern.FindAllStringIndex(message, -1)
+	for _, match := range urlMatches {
+		urlPositions[match[0]] = match[1]
+	}
+	
+	// Helper function to check if position is within a URL
+	isInURL := func(start, end int) bool {
+		for urlStart, urlEnd := range urlPositions {
+			if start >= urlStart && end <= urlEnd {
+				return true
+			}
+		}
+		return false
+	}
+	
+	// Process IPv4 addresses
+	var offset int
+	result := message
+	ipv4Matches := ipv4Pattern.FindAllStringIndex(message, -1)
+	for _, match := range ipv4Matches {
+		if isInURL(match[0], match[1]) {
+			continue
+		}
+		ip := message[match[0]:match[1]]
+		anonymized := AnonymizeIP(ip)
+		adjustedStart := match[0] + offset
+		adjustedEnd := match[1] + offset
+		result = result[:adjustedStart] + anonymized + result[adjustedEnd:]
+		offset += len(anonymized) - (match[1] - match[0])
+	}
+	
+	// Process IPv6 addresses
+	offset = 0
+	message = result
+	ipv6Matches := ipv6Pattern.FindAllStringIndex(message, -1)
+	for _, match := range ipv6Matches {
+		if isInURL(match[0], match[1]) {
+			continue
+		}
+		ip := message[match[0]:match[1]]
+		anonymized := AnonymizeIP(ip)
+		adjustedStart := match[0] + offset
+		adjustedEnd := match[1] + offset
+		result = result[:adjustedStart] + anonymized + result[adjustedEnd:]
+		offset += len(anonymized) - (match[1] - match[0])
+	}
+	
+	return result
+}
+
 // ScrubCoordinates removes or anonymizes GPS coordinates from text messages
 // It replaces coordinate pairs with generic placeholders while preserving message structure
 func ScrubCoordinates(message string) string {
@@ -178,8 +259,21 @@ func ScrubCoordinates(message string) string {
 // It replaces tokens with generic placeholders while preserving message structure
 func ScrubAPITokens(message string) string {
 	return apiTokenPattern.ReplaceAllStringFunc(message, func(match string) string {
+		// Check if it's a bearer token
+		lowerMatch := strings.ToLower(match)
+		if strings.Contains(lowerMatch, "bearer") {
+			return "Bearer [TOKEN]"
+		}
+		// Check if it's "with token/key/etc" pattern
+		if strings.HasPrefix(lowerMatch, "with ") {
+			// Extract the keyword (token, key, etc)
+			parts := strings.Fields(match)
+			if len(parts) >= 2 {
+				return parts[0] + " " + parts[1] + " [TOKEN]"
+			}
+		}
 		// Use pre-compiled regex to find and replace just the token part within the match
-		result := tokenRegex.ReplaceAllString(match, "[API_TOKEN]")
+		result := tokenRegex.ReplaceAllString(match, "[TOKEN]")
 		// Normalize separators to colon for consistency using pre-compiled regex
 		result = separatorRegex.ReplaceAllString(result, ": ")
 		return result
@@ -195,7 +289,7 @@ func categorizeHost(host string) string {
 	}
 
 	// Check for private IP ranges using RFC-compliant detection
-	if isPrivateIP(host) {
+	if IsPrivateIP(host) {
 		return "private-ip"
 	}
 
@@ -261,8 +355,8 @@ func anonymizePath(path string) string {
 	return strings.Join(anonymizedSegments, "/")
 }
 
-// isPrivateIP checks if the host is a private IP address using net.ParseIP and enhanced classification
-func isPrivateIP(host string) bool {
+// IsPrivateIP checks if the host is a private IP address using net.ParseIP and enhanced classification
+func IsPrivateIP(host string) bool {
 	ip := net.ParseIP(host)
 	if ip == nil {
 		return false
