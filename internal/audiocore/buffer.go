@@ -110,9 +110,9 @@ func (b *bufferImpl) Release() {
 
 // bufferPoolImpl manages reusable audio buffers
 type bufferPoolImpl struct {
-	smallPool  sync.Pool  // For buffers up to smallSize
-	mediumPool sync.Pool  // For buffers up to mediumSize
-	largePool  sync.Pool  // For buffers up to largeSize
+	smallPool  sync.Pool // For buffers up to smallSize
+	mediumPool sync.Pool // For buffers up to mediumSize
+	largePool  sync.Pool // For buffers up to largeSize
 	config     BufferPoolConfig
 	stats      BufferPoolStats
 	statsMu    sync.RWMutex

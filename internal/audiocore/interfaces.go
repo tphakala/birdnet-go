@@ -10,19 +10,19 @@ import (
 
 // AudioFormat represents the format of audio data
 type AudioFormat struct {
-	SampleRate int     // Sample rate in Hz (e.g., 48000)
-	Channels   int     // Number of channels (1 for mono, 2 for stereo)
-	BitDepth   int     // Bits per sample (e.g., 16, 24, 32)
-	Encoding   string  // Encoding format (e.g., "pcm_s16le", "pcm_f32le")
+	SampleRate int    // Sample rate in Hz (e.g., 48000)
+	Channels   int    // Number of channels (1 for mono, 2 for stereo)
+	BitDepth   int    // Bits per sample (e.g., 16, 24, 32)
+	Encoding   string // Encoding format (e.g., "pcm_s16le", "pcm_f32le")
 }
 
 // AudioData represents a chunk of audio with metadata
 type AudioData struct {
-	Buffer    []byte       // Raw audio data
-	Format    AudioFormat  // Audio format information
-	Timestamp time.Time    // When this audio was captured
+	Buffer    []byte        // Raw audio data
+	Format    AudioFormat   // Audio format information
+	Timestamp time.Time     // When this audio was captured
 	Duration  time.Duration // Duration of the audio chunk
-	SourceID  string       // Identifier of the source that produced this audio
+	SourceID  string        // Identifier of the source that produced this audio
 }
 
 // AudioSource represents an audio input source
@@ -188,12 +188,12 @@ type SourceConfig struct {
 
 // ManagerConfig contains configuration for the audio manager
 type ManagerConfig struct {
-	MaxSources          int
-	DefaultBufferSize   int
-	EnableMetrics       bool
-	MetricsInterval     time.Duration
-	ProcessingTimeout   time.Duration
-	BufferPoolConfig    BufferPoolConfig
+	MaxSources        int
+	DefaultBufferSize int
+	EnableMetrics     bool
+	MetricsInterval   time.Duration
+	ProcessingTimeout time.Duration
+	BufferPoolConfig  BufferPoolConfig
 }
 
 // BufferPoolConfig contains configuration for buffer pools
