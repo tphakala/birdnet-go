@@ -19,7 +19,8 @@ func TestGainProcessorCreation(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, proc)
 
-	gainProc := proc.(*GainProcessor)
+	gainProc, ok := proc.(*GainProcessor)
+	require.True(t, ok, "Expected processor to be a *GainProcessor")
 	assert.Equal(t, "test-gain", gainProc.ID())
 	assert.Equal(t, 1.5, gainProc.GetGain())
 
@@ -50,7 +51,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("Unity Gain", func(t *testing.T) {
 		t.Parallel()
-		gainProc := proc.(*GainProcessor)
+		gainProc, ok := proc.(*GainProcessor)
+		require.True(t, ok, "Expected processor to be a *GainProcessor")
 		err := gainProc.SetGain(1.0)
 		assert.NoError(t, err)
 
@@ -73,7 +75,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM S16LE Processing", func(t *testing.T) {
 		t.Parallel()
-		gainProc := proc.(*GainProcessor)
+		gainProc, ok := proc.(*GainProcessor)
+		require.True(t, ok, "Expected processor to be a *GainProcessor")
 		err := gainProc.SetGain(2.0)
 		assert.NoError(t, err)
 
@@ -111,7 +114,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM S16LE Clipping", func(t *testing.T) {
 		t.Parallel()
-		gainProc := proc.(*GainProcessor)
+		gainProc, ok := proc.(*GainProcessor)
+		require.True(t, ok, "Expected processor to be a *GainProcessor")
 		err := gainProc.SetGain(3.0)
 		assert.NoError(t, err)
 
@@ -144,7 +148,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM F32LE Processing", func(t *testing.T) {
 		t.Parallel()
-		gainProc := proc.(*GainProcessor)
+		gainProc, ok := proc.(*GainProcessor)
+		require.True(t, ok, "Expected processor to be a *GainProcessor")
 		err := gainProc.SetGain(0.5)
 		assert.NoError(t, err)
 
@@ -180,7 +185,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM F32LE Clipping", func(t *testing.T) {
 		t.Parallel()
-		gainProc := proc.(*GainProcessor)
+		gainProc, ok := proc.(*GainProcessor)
+		require.True(t, ok, "Expected processor to be a *GainProcessor")
 		err := gainProc.SetGain(2.0)
 		assert.NoError(t, err)
 
@@ -258,7 +264,8 @@ func TestGainProcessorSetGain(t *testing.T) {
 	proc, err := NewGainProcessor("test-gain", 1.0)
 	require.NoError(t, err)
 
-	gainProc := proc.(*GainProcessor)
+	gainProc, ok := proc.(*GainProcessor)
+	require.True(t, ok, "Expected processor to be a *GainProcessor")
 
 	// Valid gain
 	err = gainProc.SetGain(1.5)

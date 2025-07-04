@@ -3,6 +3,7 @@ package audiocore
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -111,13 +112,13 @@ func TestManagerMaxSources(t *testing.T) {
 
 	// Add sources up to limit
 	for i := 0; i < 2; i++ {
-		source := newMockSource(string(rune('a'+i)), "Source")
+		source := newMockSource("source-"+strconv.Itoa(i), "Source")
 		err := manager.AddSource(source)
 		assert.NoError(t, err)
 	}
 
 	// Try to exceed limit
-	source := newMockSource("c", "Extra Source")
+	source := newMockSource("extra-source", "Extra Source")
 	err := manager.AddSource(source)
 	assert.Error(t, err)
 	if err != nil {
