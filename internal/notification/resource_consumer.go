@@ -117,7 +117,12 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 	switch event.GetSeverity() {
 	case events.SeverityRecovery:
 		notifType = TypeInfo
-		priority = PriorityLow
+		// Use higher priority for disk recovery
+		if event.GetResourceType() == events.ResourceDisk {
+			priority = PriorityMedium
+		} else {
+			priority = PriorityLow
+		}
 		title = fmt.Sprintf("%s Usage Recovered", resourceName)
 		
 	case events.SeverityWarning:
@@ -162,9 +167,19 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 
 		// Set expiry for resource alerts
 		if event.GetSeverity() != events.SeverityRecovery {
-			notification.WithExpiry(30 * time.Minute)
+			// Critical disk alerts don't expire (or have very long expiry)
+			if event.GetSeverity() == events.SeverityCritical && event.GetResourceType() == events.ResourceDisk {
+				notification.WithExpiry(24 * time.Hour) // 24 hour expiry for critical disk alerts
+			} else {
+				notification.WithExpiry(30 * time.Minute) // Standard expiry for other alerts
+			}
 		} else {
-			notification.WithExpiry(5 * time.Minute) // Recovery messages expire faster
+			// Recovery messages have different expiry based on what they're recovering from
+			if event.GetResourceType() == events.ResourceDisk {
+				notification.WithExpiry(30 * time.Minute) // Disk recovery messages stay longer
+			} else {
+				notification.WithExpiry(5 * time.Minute) // Other recovery messages expire faster
+			}
 		}
 
 		// Update in store
