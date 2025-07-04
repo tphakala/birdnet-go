@@ -85,6 +85,28 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		interval = time.Duration(config.Realtime.Monitoring.CheckInterval) * time.Second
 	}
 
+	// Auto-append critical paths if disk monitoring is enabled
+	if config.Realtime.Monitoring.Disk.Enabled {
+		// Get information about paths
+		userConfigured, autoDetected, merged := GetMonitoringPathsInfo(config)
+		
+		// Update the runtime configuration with merged paths
+		config.Realtime.Monitoring.Disk.Paths = merged
+		
+		// Log detailed information about path monitoring
+		logger.Info("Disk monitoring paths configured",
+			"user_configured", userConfigured,
+			"auto_detected", autoDetected,
+			"total_monitored", merged,
+			"note", "Auto-detected paths are added at runtime only",
+		)
+		
+		// If there are auto-detected paths, provide guidance
+		if len(autoDetected) > 0 && len(userConfigured) == 0 {
+			logger.Info("To persist auto-detected paths, add them to your config.yaml under realtime.monitoring.disk.paths")
+		}
+	}
+
 	// Use the package-level logger instead of creating a new one
 	monitor := &SystemMonitor{
 		config:         config,
@@ -103,7 +125,7 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		"cpu_enabled", config.Realtime.Monitoring.CPU.Enabled,
 		"memory_enabled", config.Realtime.Monitoring.Memory.Enabled,
 		"disk_enabled", config.Realtime.Monitoring.Disk.Enabled,
-		"disk_path", config.Realtime.Monitoring.Disk.Path,
+		"disk_paths", config.Realtime.Monitoring.Disk.Paths,
 		"disk_warning", config.Realtime.Monitoring.Disk.Warning,
 		"disk_critical", config.Realtime.Monitoring.Disk.Critical,
 	)
@@ -134,7 +156,7 @@ func (m *SystemMonitor) Start() {
 		"memory_critical", m.config.Realtime.Monitoring.Memory.Critical,
 		"disk_warning", m.config.Realtime.Monitoring.Disk.Warning,
 		"disk_critical", m.config.Realtime.Monitoring.Disk.Critical,
-		"disk_path", m.config.Realtime.Monitoring.Disk.Path,
+		"disk_paths", m.config.Realtime.Monitoring.Disk.Paths,
 	)
 
 	m.wg.Add(1)
@@ -234,14 +256,24 @@ func (m *SystemMonitor) checkMemory() {
 		m.config.Realtime.Monitoring.Memory.Critical)
 }
 
-// checkDisk monitors disk usage
+// checkDisk monitors disk usage for all configured paths
 func (m *SystemMonitor) checkDisk() {
-	// Get disk usage for the configured path (default to root)
-	path := m.config.Realtime.Monitoring.Disk.Path
-	if path == "" {
-		path = "/"
+	// Get configured paths or default to root
+	paths := m.config.Realtime.Monitoring.Disk.Paths
+	if len(paths) == 0 {
+		paths = []string{"/"}
 	}
 
+	m.logger.Debug("Starting disk usage checks", "paths", paths)
+
+	// Check each configured path
+	for _, path := range paths {
+		m.checkDiskPath(path)
+	}
+}
+
+// checkDiskPath monitors disk usage for a single path
+func (m *SystemMonitor) checkDiskPath(path string) {
 	m.logger.Debug("Starting disk usage check", "path", path)
 
 	// Check if path is already validated
@@ -580,6 +612,14 @@ func (m *SystemMonitor) TriggerCheck() {
 	}
 	m.logger.Info("Manually triggering resource check")
 	m.checkAllResources()
+}
+
+// GetMonitoredPaths returns the list of paths being monitored for disk usage
+func (m *SystemMonitor) GetMonitoredPaths() []string {
+	if m.config.Realtime.Monitoring.Disk.Enabled {
+		return m.config.Realtime.Monitoring.Disk.Paths
+	}
+	return nil
 }
 
 // CloseLogger closes the monitor log file if it was opened
