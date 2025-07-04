@@ -171,11 +171,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
 
 	// System monitoring configuration
-	viper.SetDefault("realtime.monitoring.enabled", false)
-	viper.SetDefault("realtime.monitoring.checkinterval", 30)
+	viper.SetDefault("realtime.monitoring.enabled", true)
+	viper.SetDefault("realtime.monitoring.checkinterval", 60)
 	// CPU monitoring
 	viper.SetDefault("realtime.monitoring.cpu.enabled", true)
-	viper.SetDefault("realtime.monitoring.cpu.warning", 80.0)
+	viper.SetDefault("realtime.monitoring.cpu.warning", 85.0)
 	viper.SetDefault("realtime.monitoring.cpu.critical", 95.0)
 	// Memory monitoring
 	viper.SetDefault("realtime.monitoring.memory.enabled", true)
@@ -183,8 +183,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.monitoring.memory.critical", 95.0)
 	// Disk monitoring
 	viper.SetDefault("realtime.monitoring.disk.enabled", true)
-	viper.SetDefault("realtime.monitoring.disk.warning", 80.0)
-	viper.SetDefault("realtime.monitoring.disk.critical", 90.0)
+	viper.SetDefault("realtime.monitoring.disk.warning", 85.0)
+	viper.SetDefault("realtime.monitoring.disk.critical", 95.0)
 	viper.SetDefault("realtime.monitoring.disk.path", "/")
 
 	// Webserver configuration
