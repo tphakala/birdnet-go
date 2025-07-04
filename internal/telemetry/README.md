@@ -5,6 +5,7 @@ The `telemetry` package provides comprehensive error tracking and telemetry for 
 ## Overview
 
 The telemetry system provides:
+
 - **Async error reporting**: Non-blocking Sentry integration via event bus
 - **Privacy protection**: Advanced data scrubbing and anonymization
 - **Support dumps**: Attachment upload capability for diagnostics
@@ -53,6 +54,7 @@ graph TD
 ### SystemInitManager
 
 The top-level initialization coordinator that manages the startup sequence for all async subsystems:
+
 - Coordinates telemetry, notification, and event bus initialization
 - Prevents circular dependencies through phased initialization
 - Provides system-wide health checks
@@ -61,6 +63,7 @@ The top-level initialization coordinator that manages the startup sequence for a
 ### InitManager
 
 Manages safe initialization of telemetry components:
+
 - Tracks component states (not_started, in_progress, completed, failed)
 - Uses sync.Once for thread-safe initialization
 - Provides health checks for individual components
@@ -69,6 +72,7 @@ Manages safe initialization of telemetry components:
 ### TelemetryWorker
 
 The main event consumer that:
+
 - Implements `EventConsumer` interface for event bus integration
 - Processes error events asynchronously
 - Manages rate limiting, circuit breaking, and sampling
@@ -125,6 +129,7 @@ The telemetry package leverages the centralized `internal/privacy` package for a
 ### Optimized Capture
 
 Fast-path error capture using atomic flags:
+
 - `FastCaptureError()`: Check telemetry state without config lookup
 - `FastCaptureMessage()`: Quick message capture
 - Automatic state updates on configuration changes
@@ -133,6 +138,7 @@ Fast-path error capture using atomic flags:
 ### Attachment Uploader
 
 Support for uploading diagnostic information:
+
 - Upload support dumps as Sentry attachments
 - Include system context and user messages
 - Dedicated file logging with rotation
@@ -141,6 +147,7 @@ Support for uploading diagnostic information:
 ### Rate Limiting
 
 Window-based rate limiting to protect Sentry quota:
+
 - Sliding window algorithm
 - Per-component limits (optional)
 - Configurable window and event count
@@ -149,7 +156,8 @@ Window-based rate limiting to protect Sentry quota:
 ### Circuit Breaker
 
 Protects against Sentry outages:
-- **States**: 
+
+- **States**:
   - Closed: Normal operation
   - Open: Failing, all events dropped
   - Half-Open: Testing recovery with limited events
@@ -261,30 +269,35 @@ telemetry.FastCaptureMessage("Important event occurred")
 ## Features
 
 ### 1. Privacy Protection
+
 - SHA256 URL anonymization
 - IP address categorization
 - Sensitive data scrubbing
 - Safe context transmission
 
 ### 2. Smart Sampling
+
 - Hash-based sampling for consistency
 - Component/category-based rules
 - Dynamic sampling rate adjustment
 - Configurable sample rates
 
 ### 3. Health Monitoring
+
 - Component state tracking
 - HTTP health check endpoints
 - Circuit breaker monitoring
 - Performance metrics
 
 ### 4. Graceful Degradation
+
 - Circuit breaker prevents cascade failures
 - Rate limiting protects Sentry quota
 - Event dropping with metrics
 - Fallback mechanisms
 
 ### 5. Platform Telemetry
+
 - OS and architecture detection
 - Container environment detection
 - Board model for ARM devices (Raspberry Pi)
@@ -331,6 +344,7 @@ go test -run TestIntegration ./internal/telemetry/
 ### Test Infrastructure
 
 The package includes comprehensive testing support:
+
 - `InitForTesting()`: Sets up mock Sentry transport
 - Mock transport with event capture and filtering
 - Test helpers for assertion and verification
@@ -411,7 +425,7 @@ This integration eliminates code duplication and ensures consistent privacy hand
 
 ## File Structure
 
-```
+```text
 telemetry/
 ├── README.md                    # This file
 ├── worker.go                    # Main telemetry worker
