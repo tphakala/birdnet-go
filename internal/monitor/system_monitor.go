@@ -85,6 +85,19 @@ func NewSystemMonitor(config *conf.Settings) *SystemMonitor {
 		interval = time.Duration(config.Realtime.Monitoring.CheckInterval) * time.Second
 	}
 
+	// Auto-append critical paths if disk monitoring is enabled
+	if config.Realtime.Monitoring.Disk.Enabled {
+		criticalPaths := GetCriticalPaths(config)
+		config.Realtime.Monitoring.Disk.Paths = mergePaths(
+			config.Realtime.Monitoring.Disk.Paths,
+			criticalPaths,
+		)
+		logger.Info("Auto-detected critical paths for monitoring",
+			"critical_paths", criticalPaths,
+			"merged_paths", config.Realtime.Monitoring.Disk.Paths,
+		)
+	}
+
 	// Use the package-level logger instead of creating a new one
 	monitor := &SystemMonitor{
 		config:         config,
