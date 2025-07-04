@@ -412,9 +412,8 @@ func IsSoxAvailable() (isAvailable bool, formats []string) {
 	var audioFormats []string
 	// Iterate through the lines to find the supported audio formats
 	for _, line := range lines {
-		if strings.HasPrefix(line, "AUDIO FILE FORMATS:") {
+		if formats, found := strings.CutPrefix(line, "AUDIO FILE FORMATS:"); found {
 			// Extract and process the list of audio formats
-			formats := strings.TrimPrefix(line, "AUDIO FILE FORMATS:")
 			formats = strings.TrimSpace(formats)
 			audioFormats = strings.Fields(formats)
 			break
@@ -600,7 +599,7 @@ func parseGatewayHex(gatewayHex string) net.IP {
 	}
 
 	ip := make([]byte, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		b, err := strconv.ParseUint(gatewayHex[i*2:i*2+2], 16, 8)
 		if err != nil {
 			return nil
