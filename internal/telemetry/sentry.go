@@ -4,6 +4,7 @@ package telemetry
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -71,6 +72,42 @@ func InitSentry(settings *conf.Settings) error {
 		return nil
 	}
 
+	// Enable debug logging if configured
+	if settings.Sentry.Debug {
+		enableDebugLogging()
+	}
+
+	// Initialize Sentry SDK
+	if err := initializeSentrySDK(settings); err != nil {
+		return err
+	}
+
+	// Configure global scope
+	configureSentryScope(settings)
+
+	// Initialize attachment uploader
+	attachmentUploader = NewAttachmentUploader(true)
+
+	// Process deferred messages
+	deferredCount := processDeferredMessages()
+
+	// Log initialization success
+	logInitializationSuccess(settings, deferredCount)
+
+	// Event bus integration is deferred until after core services are initialized
+	// to avoid circular dependencies and ensure proper logging
+	
+	return nil
+}
+
+// enableDebugLogging enables debug logging for telemetry
+func enableDebugLogging() {
+	serviceLevelVar.Set(slog.LevelDebug)
+	logTelemetryInfo(nil, "telemetry debug logging enabled")
+}
+
+// initializeSentrySDK initializes the Sentry SDK with privacy-compliant options
+func initializeSentrySDK(settings *conf.Settings) error {
 	// Use hardcoded DSN for BirdNET-Go project
 	const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
 
@@ -89,46 +126,175 @@ func InitSentry(settings *conf.Settings) error {
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
 
 		// BeforeSend allows us to filter sensitive data
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Remove any potentially sensitive information
-			event.User = sentry.User{} // Clear user data
-			event.ServerName = ""      // Ensure server name is not included
-
-			// Clear sensitive contexts while preserving our privacy-safe platform info
-			if event.Contexts != nil {
-				// Remove potentially sensitive default Sentry contexts
-				delete(event.Contexts, "device")  // Contains detailed device info
-				delete(event.Contexts, "os")      // Contains detailed OS info
-				delete(event.Contexts, "runtime") // Contains detailed runtime info
-				// Keep our custom "platform" and "application" contexts as they're privacy-safe
-			}
-
-			// Only keep essential error information
-			for k := range event.Extra {
-				// Remove any extra data that might contain sensitive info
-				if k != "error_type" && k != "component" {
-					delete(event.Extra, k)
-				}
-			}
-
-			// Remove hostname from tags if present
-			if event.Tags != nil {
-				delete(event.Tags, "server_name")
-				delete(event.Tags, "hostname")
-			}
-
-			return event
-		},
+		BeforeSend: createBeforeSendHook(settings),
 	})
 
 	if err != nil {
 		return fmt.Errorf("sentry initialization failed: %w", err)
 	}
 
-	// Collect platform information for telemetry
+	return nil
+}
+
+// createBeforeSendHook creates the BeforeSend hook for privacy filtering
+func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
+	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		if serviceLogger != nil && settings.Sentry.Debug {
+			return applyPrivacyFiltersWithLogging(event)
+		}
+		return applyPrivacyFilters(event)
+	}
+}
+
+// applyPrivacyFilters applies privacy filters to a Sentry event
+func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
+	// Clear user data and server name
+	event.User = sentry.User{}
+	event.ServerName = ""
+
+	// Remove sensitive contexts
+	if event.Contexts != nil {
+		delete(event.Contexts, "device")
+		delete(event.Contexts, "os")
+		delete(event.Contexts, "runtime")
+	}
+
+	// Remove extra fields except allowed ones
+	for k := range event.Extra {
+		if k != "error_type" && k != "component" {
+			delete(event.Extra, k)
+		}
+	}
+
+	// Remove sensitive tags
+	if event.Tags != nil {
+		delete(event.Tags, "server_name")
+		delete(event.Tags, "hostname")
+	}
+
+	return event
+}
+
+// applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
+func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
+	var filtersApplied []string
+
+	// Log before filtering
+	logEventBeforeFiltering(event)
+
+	// Track and apply user data removal
+	if !event.User.IsEmpty() {
+		filtersApplied = append(filtersApplied, "remove_user_data")
+	}
+	if event.ServerName != "" {
+		filtersApplied = append(filtersApplied, "remove_server_name")
+	}
+
+	// Apply basic filters
+	event.User = sentry.User{}
+	event.ServerName = ""
+
+	// Handle contexts with tracking
+	if event.Contexts != nil {
+		contextsRemoved := removePrivacyContexts(event.Contexts)
+		filtersApplied = append(filtersApplied, contextsRemoved...)
+	}
+
+	// Handle extra fields with tracking
+	if extraRemoved := removePrivacyExtraFields(event.Extra); extraRemoved > 0 {
+		filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%d_extra_fields", extraRemoved))
+	}
+
+	// Handle tags with tracking
+	if event.Tags != nil {
+		tagsRemoved := removePrivacyTags(event.Tags)
+		filtersApplied = append(filtersApplied, tagsRemoved...)
+	}
+
+	// Log after filtering
+	logEventAfterFiltering(event, filtersApplied)
+
+	return event
+}
+
+// logEventBeforeFiltering logs event details before privacy filtering
+func logEventBeforeFiltering(event *sentry.Event) {
+	logTelemetryDebug(nil, "applying privacy filters to event",
+		"event_id", event.EventID,
+		"has_user_data", !event.User.IsEmpty(),
+		"has_server_name", event.ServerName != "",
+		"contexts_count", len(event.Contexts),
+		"extra_count", len(event.Extra),
+		"tags_count", len(event.Tags),
+	)
+}
+
+// logEventAfterFiltering logs event details after privacy filtering
+func logEventAfterFiltering(event *sentry.Event, filtersApplied []string) {
+	logTelemetryDebug(nil, "privacy filters applied",
+		"event_id", event.EventID,
+		"filters_applied", filtersApplied,
+		"remaining_contexts", len(event.Contexts),
+		"remaining_extra", len(event.Extra),
+		"remaining_tags", len(event.Tags),
+	)
+}
+
+// removePrivacyContexts removes sensitive contexts and returns what was removed
+func removePrivacyContexts(contexts map[string]sentry.Context) []string {
+	var removed []string
+	sensitiveContexts := []string{"device", "os", "runtime"}
+
+	for _, key := range sensitiveContexts {
+		if _, exists := contexts[key]; exists {
+			removed = append(removed, fmt.Sprintf("remove_%s_context", key))
+			delete(contexts, key)
+		}
+	}
+
+	return removed
+}
+
+// removePrivacyExtraFields removes sensitive extra fields and returns count
+func removePrivacyExtraFields(extra map[string]any) int {
+	removed := 0
+	allowedFields := map[string]bool{
+		"error_type": true,
+		"component":  true,
+	}
+
+	for k := range extra {
+		if !allowedFields[k] {
+			removed++
+			delete(extra, k)
+		}
+	}
+
+	return removed
+}
+
+// removePrivacyTags removes sensitive tags and returns what was removed
+func removePrivacyTags(tags map[string]string) []string {
+	var removed []string
+	sensitiveTags := map[string]string{
+		"server_name": "remove_server_name_tag",
+		"hostname":    "remove_hostname_tag",
+	}
+
+	for tag, filterName := range sensitiveTags {
+		if _, exists := tags[tag]; exists {
+			removed = append(removed, filterName)
+			delete(tags, tag)
+		}
+	}
+
+	return removed
+}
+
+// configureSentryScope configures the global Sentry scope with system information
+func configureSentryScope(settings *conf.Settings) {
 	platformInfo := collectPlatformInfo()
 
-	// Configure global scope with system ID and platform information
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		// Set system ID as a tag for all events
 		scope.SetTag("system_id", settings.SystemID)
@@ -158,11 +324,10 @@ func InitSentry(settings *conf.Settings) error {
 			"go_version":   platformInfo.GoVersion,
 		})
 	})
+}
 
-	// Initialize attachment uploader
-	attachmentUploader = NewAttachmentUploader(true)
-
-	// Mark Sentry as initialized and process any deferred messages
+// processDeferredMessages processes any messages that were captured before Sentry was ready
+func processDeferredMessages() int {
 	deferredMutex.Lock()
 	sentryInitialized = true
 	messagesToProcess := make([]DeferredMessage, len(deferredMessages))
@@ -175,21 +340,28 @@ func InitSentry(settings *conf.Settings) error {
 		CaptureMessage(msg.Message, msg.Level, msg.Component)
 	}
 
-	if len(messagesToProcess) > 0 {
+	return len(messagesToProcess)
+}
+
+// logInitializationSuccess logs the successful initialization of Sentry
+func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
+	platformInfo := collectPlatformInfo()
+
+	logTelemetryInfo(nil, "Sentry telemetry initialized",
+		"system_id", settings.SystemID,
+		"version", settings.Version,
+		"debug", settings.Sentry.Debug,
+		"platform", platformInfo.OS,
+		"arch", platformInfo.Architecture,
+		"deferred_messages", deferredCount,
+	)
+
+	if deferredCount > 0 {
 		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)",
-			len(messagesToProcess), settings.SystemID)
+			deferredCount, settings.SystemID)
 	} else {
 		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
 	}
-
-	// Initialize event bus integration for async telemetry
-	if err := InitializeEventBusIntegration(); err != nil {
-		log.Printf("Failed to initialize telemetry event bus integration: %v", err)
-		// Don't fail initialization if event bus integration fails
-		// Telemetry will still work synchronously
-	}
-
-	return nil
 }
 
 // CaptureError captures an error with privacy-compliant context
@@ -205,6 +377,14 @@ func CaptureError(err error, component string) {
 	// Create a scrubbed error for privacy
 	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
 
+	// Log the error being sent (privacy-safe)
+	logTelemetryDebug(nil, "sending error event",
+		"event_type", "error",
+		"component", component,
+		"error_type", fmt.Sprintf("%T", err),
+		"scrubbed_message", scrubbedErrorMsg,
+	)
+
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetContext("error", map[string]any{
@@ -216,6 +396,11 @@ func CaptureError(err error, component string) {
 		scrubbedErr := fmt.Errorf("%s", scrubbedErrorMsg)
 		sentry.CaptureException(scrubbedErr)
 	})
+
+	// Log successful submission
+	logTelemetryDebug(nil, "error event sent successfully",
+		"component", component,
+	)
 }
 
 // CaptureMessage captures a message with privacy-compliant context
@@ -231,11 +416,25 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	// Scrub sensitive information from the message
 	scrubbedMessage := privacy.ScrubMessage(message)
 
+	// Log the message being sent (privacy-safe)
+	logTelemetryDebug(nil, "sending message event",
+		"event_type", "message",
+		"sentry_level", string(level),
+		"component", component,
+		"scrubbed_message", scrubbedMessage,
+	)
+
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetLevel(level)
 		sentry.CaptureMessage(scrubbedMessage)
 	})
+
+	// Log successful submission
+	logTelemetryDebug(nil, "message event sent successfully",
+		"component", component,
+		"sentry_level", string(level),
+	)
 }
 
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
@@ -267,6 +466,16 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 	}
 
 	deferredMessages = append(deferredMessages, deferredMessage)
+
+	// Log deferred message
+	scrubbedMessage := privacy.ScrubMessage(message)
+	logTelemetryDebug(nil, "deferring message for later processing",
+		"event_type", "deferred_message",
+		"sentry_level", string(level),
+		"component", component,
+		"scrubbed_message", scrubbedMessage,
+		"deferred_count", len(deferredMessages),
+	)
 }
 
 // Flush ensures all buffered events are sent to Sentry
@@ -282,7 +491,6 @@ func Flush(timeout time.Duration) {
 	sentry.Flush(timeout)
 }
 
-
 // GetAttachmentUploader returns the global attachment uploader instance
 func GetAttachmentUploader() *AttachmentUploader {
 	deferredMutex.Lock()
@@ -295,4 +503,3 @@ func GetAttachmentUploader() *AttachmentUploader {
 
 	return attachmentUploader
 }
-
