@@ -46,6 +46,7 @@ type process struct {
 	startOnce    sync.Once
 	stopOnce     sync.Once
 	closeOnce    sync.Once
+	startErr     error // Stores the error from the first Start() call
 }
 
 // NewProcess creates a new FFmpeg process
@@ -65,12 +66,11 @@ func (p *process) ID() string {
 
 // Start starts the FFmpeg process
 func (p *process) Start(ctx context.Context) error {
-	var startErr error
 	p.startOnce.Do(func() {
 		p.ctx, p.cancel = context.WithCancel(ctx)
-		startErr = p.start()
+		p.startErr = p.start()
 	})
-	return startErr
+	return p.startErr
 }
 
 func (p *process) start() error {

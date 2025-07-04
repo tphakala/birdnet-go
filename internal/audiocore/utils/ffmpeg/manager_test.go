@@ -54,7 +54,7 @@ func TestManagerCreateProcess(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	process, err := manager.CreateProcess(processConfig)
@@ -94,7 +94,7 @@ func TestManagerDuplicateProcess(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	// Create first process
@@ -128,7 +128,7 @@ func TestManagerMaxProcessesLimit(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	_, err := manager.CreateProcess(processConfig1)
@@ -145,7 +145,7 @@ func TestManagerMaxProcessesLimit(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	_, err = manager.CreateProcess(processConfig2)
@@ -171,7 +171,7 @@ func TestManagerRemoveProcess(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	// Create process
@@ -227,7 +227,7 @@ func TestManagerListProcesses(t *testing.T) {
 			Channels:     2,
 			BitDepth:     16,
 			BufferSize:   1024,
-			FFmpegPath:   "/usr/bin/ffmpeg",
+			FFmpegPath:   "/nonexistent/ffmpeg",
 		}
 
 		_, err := manager.CreateProcess(processConfig)
@@ -298,7 +298,7 @@ func TestManagerHealthCheck(t *testing.T) {
 		Channels:     2,
 		BitDepth:     16,
 		BufferSize:   1024,
-		FFmpegPath:   "/usr/bin/ffmpeg",
+		FFmpegPath:   "/nonexistent/ffmpeg",
 	}
 
 	_, err = manager.CreateProcess(processConfig)
