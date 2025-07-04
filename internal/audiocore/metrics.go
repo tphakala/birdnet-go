@@ -40,7 +40,7 @@ func GetMetrics() *MetricsCollector {
 }
 
 // RecordManagerMetrics records metrics for the audio manager
-func (mc *MetricsCollector) RecordManagerMetrics(managerID string, metrics *ManagerMetrics) {
+func (mc *MetricsCollector) RecordManagerMetrics(managerID string, managerMetrics *ManagerMetrics) {
 	if !mc.enabled || mc.metrics == nil {
 		return
 	}
@@ -48,7 +48,7 @@ func (mc *MetricsCollector) RecordManagerMetrics(managerID string, metrics *Mana
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	mc.metrics.UpdateActiveSources(managerID, metrics.ActiveSources)
+	mc.metrics.UpdateActiveSources(managerID, managerMetrics.ActiveSources)
 }
 
 // RecordFrameProcessed records a successfully processed frame
