@@ -158,7 +158,10 @@ realtime:
       enabled: true        # monitor disk usage
       warning: 85.0        # warning threshold percentage
       critical: 95.0       # critical threshold percentage
-      path: "/"            # filesystem path to monitor
+      paths:               # filesystem paths to monitor
+        - "/"              # root filesystem
+        # - "/home"        # add more paths as needed
+        # - "/var"
 
   # Species-specific configurations
   species:
