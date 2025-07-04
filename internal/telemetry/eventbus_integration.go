@@ -80,21 +80,22 @@ func InitializeEventBusIntegration() error {
 	// Store reference for stats/monitoring
 	telemetryWorker = worker
 
-	logger.Info("telemetry worker registered with event bus",
-		"consumer", worker.Name(),
-		"supports_batching", worker.SupportsBatching(),
-		"batching_enabled", config.BatchingEnabled,
-		"batch_size", config.BatchSize,
-		"batch_timeout", config.BatchTimeout,
-		"circuit_breaker_threshold", config.FailureThreshold,
-		"recovery_timeout", config.RecoveryTimeout,
-		"rate_limit", config.RateLimitMaxEvents,
-		"sampling_rate", config.SamplingRate,
-	)
-
-	// Also log to service logger if available
+	// Log to service logger (telemetry.log)
 	if serviceLogger != nil {
 		serviceLogger.Info("telemetry worker registered with event bus",
+			"consumer", worker.Name(),
+			"supports_batching", worker.SupportsBatching(),
+			"batching_enabled", config.BatchingEnabled,
+			"batch_size", config.BatchSize,
+			"batch_timeout", config.BatchTimeout,
+			"circuit_breaker_threshold", config.FailureThreshold,
+			"recovery_timeout", config.RecoveryTimeout,
+			"rate_limit", config.RateLimitMaxEvents,
+			"sampling_rate", config.SamplingRate,
+		)
+	} else {
+		// Fallback to integration logger if service logger not available
+		logger.Info("telemetry worker registered with event bus",
 			"consumer", worker.Name(),
 			"supports_batching", worker.SupportsBatching(),
 			"batching_enabled", config.BatchingEnabled,
@@ -138,7 +139,12 @@ func UpdateSamplingRate(rate float64) error {
 	telemetryWorker.config.SamplingRate = rate
 	telemetryWorker.configMu.Unlock()
 
-	logger.Info("updated telemetry sampling rate", "rate", rate)
+	// Log to service logger (telemetry.log)
+	if serviceLogger != nil {
+		serviceLogger.Info("updated telemetry sampling rate", "rate", rate)
+	} else {
+		logger.Info("updated telemetry sampling rate", "rate", rate)
+	}
 
 	return nil
 }
