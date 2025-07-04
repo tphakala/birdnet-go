@@ -30,6 +30,7 @@ type process struct {
 	cancel       context.CancelFunc
 	startOnce    sync.Once
 	stopOnce     sync.Once
+	closeOnce    sync.Once
 }
 
 // NewProcess creates a new FFmpeg process
@@ -162,8 +163,7 @@ func (p *process) stop() error {
 	select {
 	case err := <-done:
 		p.running.Store(false)
-		close(p.audioOutput)
-		close(p.errorOutput)
+		p.closeChannels()
 		if err != nil && err.Error() != "signal: killed" {
 			return errors.New(err).
 				Component("audiocore").
@@ -186,10 +186,17 @@ func (p *process) stop() error {
 			}
 		}
 		p.running.Store(false)
-		close(p.audioOutput)
-		close(p.errorOutput)
+		p.closeChannels()
 		return nil
 	}
+}
+
+// closeChannels safely closes the output channels only once
+func (p *process) closeChannels() {
+	p.closeOnce.Do(func() {
+		close(p.audioOutput)
+		close(p.errorOutput)
+	})
 }
 
 // Wait waits for the process to exit
@@ -320,6 +327,9 @@ func (p *process) readAudioOutput() {
 					p.mu.Unlock()
 				case <-p.ctx.Done():
 					return
+				default:
+					// Channel might be closed or full, skip this data
+					return
 				}
 			}
 		}
@@ -360,18 +370,29 @@ func (p *process) readErrorOutput() {
 				case p.errorOutput <- err:
 				case <-p.ctx.Done():
 					return
+				default:
+					// Channel might be closed or full, skip this error
+					return
 				}
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		p.errorOutput <- errors.New(err).
+		enhancedErr := errors.New(err).
 			Component("audiocore").
 			Category(errors.CategoryAudio).
 			Context("operation", "read-stderr").
 			Context("process_id", p.id).
 			Build()
+		
+		select {
+		case p.errorOutput <- enhancedErr:
+		case <-p.ctx.Done():
+			return
+		default:
+			// Channel might be closed, skip this error
+		}
 	}
 }
 
