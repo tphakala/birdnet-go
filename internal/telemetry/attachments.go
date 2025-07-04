@@ -12,6 +12,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
@@ -62,11 +63,18 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	// Extract trace ID early for use in error messages
 	traceID := extractTraceID(ctx)
 
+	// Log with privacy-safe message
+	scrubbedMessage := ""
+	if userMessage != "" {
+		scrubbedMessage = privacy.ScrubMessage(userMessage)
+	}
+
 	serviceLogger.Info("telemetry: starting support dump upload",
 		"system_id", systemID,
 		"dump_size", len(dumpData),
 		"has_message", userMessage != "",
-		"trace_id", traceID)
+		"trace_id", traceID,
+		"scrubbed_message", scrubbedMessage)
 
 	if !au.enabled {
 		serviceLogger.Warn("telemetry: upload blocked - telemetry not enabled")
@@ -142,7 +150,12 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 			ContentType: "application/zip",
 			Payload:     dumpData,
 		})
-		serviceLogger.Debug("telemetry: attachment added to scope", "filename", filename)
+		serviceLogger.Debug("telemetry: attachment added to scope",
+			"filename", filename,
+			"attachment_type", "support_dump",
+			"content_type", "application/zip",
+			"size_bytes", len(dumpData),
+			"system_id", systemID)
 
 		// Add user message as breadcrumb
 		if userMessage != "" {
