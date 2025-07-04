@@ -142,6 +142,24 @@ realtime:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on
 
+  # System resource monitoring
+  monitoring:
+    enabled: true          # true to enable system resource monitoring
+    checkinterval: 60      # interval in seconds between resource checks
+    cpu:
+      enabled: true        # monitor CPU usage
+      warning: 85.0        # warning threshold percentage
+      critical: 95.0       # critical threshold percentage
+    memory:
+      enabled: true        # monitor memory usage
+      warning: 85.0        # warning threshold percentage
+      critical: 95.0       # critical threshold percentage
+    disk:
+      enabled: true        # monitor disk usage
+      warning: 85.0        # warning threshold percentage
+      critical: 95.0       # critical threshold percentage
+      path: "/"            # filesystem path to monitor
+
   # Species-specific configurations
   species:
     include: []           # Always include these species regardless of confidence

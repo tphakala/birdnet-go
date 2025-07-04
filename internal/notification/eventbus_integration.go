@@ -11,7 +11,9 @@ import (
 var (
 	// notificationWorker is the singleton notification worker
 	notificationWorker *NotificationWorker
-	logger            *slog.Logger
+	// resourceWorker is the singleton resource event worker
+	resourceWorker *ResourceEventWorker
+	logger         *slog.Logger
 )
 
 func init() {
@@ -78,6 +80,31 @@ func InitializeEventBusIntegration() error {
 		"circuit_breaker_threshold", config.FailureThreshold,
 		"recovery_timeout", config.RecoveryTimeout,
 		"debug", config.Debug,
+	)
+	
+	// Create and register resource event worker
+	resourceConfig := DefaultResourceWorkerConfig()
+	if service.config != nil {
+		resourceConfig.Debug = service.config.Debug
+	}
+	
+	resWorker, err := NewResourceEventWorker(service, resourceConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create resource worker: %w", err)
+	}
+	
+	// Register resource worker
+	if err := eventBus.RegisterConsumer(resWorker); err != nil {
+		return fmt.Errorf("failed to register resource worker: %w", err)
+	}
+	
+	// Store reference
+	resourceWorker = resWorker
+	
+	logger.Info("resource worker registered with event bus",
+		"consumer", resWorker.Name(),
+		"alert_throttle", resourceConfig.AlertThrottle,
+		"debug", resourceConfig.Debug,
 	)
 	
 	return nil

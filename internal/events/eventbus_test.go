@@ -16,14 +16,14 @@ type mockErrorEvent struct {
 	component string
 	category  string
 	message   string
-	context   map[string]interface{}
+	context   map[string]any
 	timestamp time.Time
 	reported  atomic.Bool
 }
 
 func (m *mockErrorEvent) GetComponent() string                { return m.component }
 func (m *mockErrorEvent) GetCategory() string                 { return m.category }
-func (m *mockErrorEvent) GetContext() map[string]interface{}  { return m.context }
+func (m *mockErrorEvent) GetContext() map[string]any          { return m.context }
 func (m *mockErrorEvent) GetTimestamp() time.Time             { return m.timestamp }
 func (m *mockErrorEvent) GetError() error                     { return nil }
 func (m *mockErrorEvent) GetMessage() string                  { return m.message }
@@ -166,11 +166,13 @@ func TestEventBusPublish(t *testing.T) {
 		
 		// Create isolated event bus
 		eb := &EventBus{
-			eventChan:  make(chan ErrorEvent, 100),
-			bufferSize: 100,
-			workers:    2,
-			consumers:  make([]EventConsumer, 0),
-			logger:     logging.ForService("test"),
+			errorEventChan:    make(chan ErrorEvent, 100),
+			resourceEventChan: make(chan ResourceEvent, 100),
+			bufferSize:        100,
+			workers:           2,
+			consumers:         make([]EventConsumer, 0),
+			resourceConsumers: make([]ResourceEventConsumer, 0),
+			logger:            logging.ForService("test"),
 		}
 		eb.initialized.Store(true)
 		eb.running.Store(true)
@@ -196,10 +198,12 @@ func TestEventBusPublish(t *testing.T) {
 		defer cancel()
 		
 		eb := &EventBus{
-			eventChan:  make(chan ErrorEvent, 100),
+			errorEventChan:    make(chan ErrorEvent, 100),
+			resourceEventChan: make(chan ResourceEvent, 100),
 			bufferSize: 100,
 			workers:    2,
 			consumers:  make([]EventConsumer, 0),
+			resourceConsumers: make([]ResourceEventConsumer, 0),
 			ctx:        ctx,
 			cancel:     cancel,
 			logger:     logging.ForService("test"),
@@ -255,15 +259,18 @@ func TestEventBusOverflow(t *testing.T) {
 	defer cancel()
 	
 	eb := &EventBus{
-		eventChan:  make(chan ErrorEvent, 10), // Small buffer
+		errorEventChan:    make(chan ErrorEvent, 10), // Small buffer
+		resourceEventChan: make(chan ResourceEvent, 10),
 		bufferSize: 10,
 		workers:    1,
 		consumers:  make([]EventConsumer, 0),
+		resourceConsumers: make([]ResourceEventConsumer, 0),
 		ctx:        ctx,
 		cancel:     cancel,
 		logger:     logging.ForService("test"),
 	}
 	eb.initialized.Store(true)
+	eb.running.Store(true)
 	
 	// Register slow consumer
 	consumer := &mockConsumer{
@@ -274,12 +281,15 @@ func TestEventBusOverflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to register consumer: %v", err)
 	}
+
+	// Start the event bus workers to process events
+	eb.start()
 	
 	// Send many events quickly
 	published := 0
 	dropped := 0
 	
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		event := &mockErrorEvent{
 			component: "test",
 			category:  "overflow-test",
@@ -304,6 +314,9 @@ func TestEventBusOverflow(t *testing.T) {
 	if stats.EventsDropped != uint64(dropped) {
 		t.Errorf("expected %d dropped events, got %d", dropped, stats.EventsDropped)
 	}
+
+	// Clean up
+	_ = eb.Shutdown(1 * time.Second)
 }
 
 // TestEventBusShutdown tests graceful shutdown
@@ -317,10 +330,12 @@ func TestEventBusShutdown(t *testing.T) {
 	defer cancel()
 	
 	eb := &EventBus{
-		eventChan:  make(chan ErrorEvent, 100),
-		bufferSize: 100,
+		errorEventChan:    make(chan ErrorEvent, 100),
+		resourceEventChan: make(chan ResourceEvent, 100),
+		bufferSize:        100,
 		workers:    2,
 		consumers:  make([]EventConsumer, 0),
+		resourceConsumers: make([]ResourceEventConsumer, 0),
 		ctx:        ctx,
 		cancel:     cancel,
 		logger:     logging.ForService("test"),
@@ -335,7 +350,7 @@ func TestEventBusShutdown(t *testing.T) {
 	}
 	
 	// Publish some events
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		event := &mockErrorEvent{
 			component: "test",
 			category:  "shutdown-test",
@@ -379,10 +394,12 @@ func TestConsumerPanic(t *testing.T) {
 	defer cancel()
 	
 	eb := &EventBus{
-		eventChan:  make(chan ErrorEvent, 100),
-		bufferSize: 100,
+		errorEventChan:    make(chan ErrorEvent, 100),
+		resourceEventChan: make(chan ResourceEvent, 100),
+		bufferSize:        100,
 		workers:    1,
 		consumers:  make([]EventConsumer, 0),
+		resourceConsumers: make([]ResourceEventConsumer, 0),
 		ctx:        ctx,
 		cancel:     cancel,
 		logger:     logging.ForService("test"),

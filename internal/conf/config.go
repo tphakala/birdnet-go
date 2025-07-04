@@ -187,11 +187,13 @@ type TelemetrySettings struct {
 
 // MonitoringSettings contains settings for system resource monitoring
 type MonitoringSettings struct {
-	Enabled       bool                  // true to enable system resource monitoring
-	CheckInterval int                   // interval in seconds between resource checks
-	CPU           ThresholdSettings     // CPU usage thresholds
-	Memory        ThresholdSettings     // Memory usage thresholds
-	Disk          DiskThresholdSettings // Disk usage thresholds
+	Enabled              bool                  // true to enable system resource monitoring
+	CheckInterval        int                   // interval in seconds between resource checks
+	CriticalResendInterval int                 // interval in minutes between critical alert resends (default: 30)
+	HysteresisPercent    float64               // hysteresis percentage for state transitions (default: 5.0)
+	CPU                  ThresholdSettings     // CPU usage thresholds
+	Memory               ThresholdSettings     // Memory usage thresholds
+	Disk                 DiskThresholdSettings // Disk usage thresholds
 }
 
 // ThresholdSettings contains warning and critical thresholds
