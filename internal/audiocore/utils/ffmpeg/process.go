@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -547,5 +548,5 @@ func (p *process) readErrorOutput() {
 
 // isRTSPURL checks if the URL is an RTSP stream
 func isRTSPURL(url string) bool {
-	return len(url) > 7 && (url[:7] == "rtsp://" || url[:8] == "rtsps://")
+	return strings.HasPrefix(url, "rtsp://") || strings.HasPrefix(url, "rtsps://")
 }
