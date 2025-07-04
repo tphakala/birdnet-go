@@ -191,8 +191,51 @@ func TestSystemMonitorIntegration(t *testing.T) {
 	assert.GreaterOrEqual(t, len(paths), 3, "Should have user path plus critical paths")
 }
 
-func TestCriticalPathsInContainer(t *testing.T) {
-	// This test would need to mock conf.RunningInContainer()
-	// For now, we'll just test the logic without actually running in a container
-	t.Skip("Container detection test requires mocking")
+func TestGetMonitoringPathsInfo(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.Realtime.Monitoring.Disk.Paths = []string{"/custom", "/data"}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = "birdnet.db"
+	settings.Realtime.Audio.Export.Enabled = true
+	settings.Realtime.Audio.Export.Path = "clips/"
+
+	configured, autoDetected, merged := GetMonitoringPathsInfo(settings)
+
+	// Check configured paths
+	assert.Equal(t, []string{"/custom", "/data"}, configured)
+	
+	// Check auto-detected paths contain at least root
+	assert.Contains(t, autoDetected, "/")
+	assert.GreaterOrEqual(t, len(autoDetected), 2) // At least root + one critical path
+	
+	// Check merged paths contain both configured and auto-detected
+	assert.Contains(t, merged, "/custom")
+	assert.Contains(t, merged, "/data")
+	assert.Contains(t, merged, "/")
+	
+	// Verify no duplicates in merged
+	seen := make(map[string]bool)
+	for _, path := range merged {
+		assert.False(t, seen[path], "Found duplicate in merged paths: %s", path)
+		seen[path] = true
+	}
+}
+
+func TestGetMonitoredPaths(t *testing.T) {
+	config := &conf.Settings{}
+	config.Realtime.Monitoring.Disk.Enabled = true
+	config.Realtime.Monitoring.Disk.Paths = []string{"/", "/home"}
+	
+	monitor := &SystemMonitor{
+		config: config,
+		logger: logger,
+	}
+	
+	paths := monitor.GetMonitoredPaths()
+	assert.Equal(t, []string{"/", "/home"}, paths)
+	
+	// Test with disk monitoring disabled
+	config.Realtime.Monitoring.Disk.Enabled = false
+	paths = monitor.GetMonitoredPaths()
+	assert.Nil(t, paths)
 }
