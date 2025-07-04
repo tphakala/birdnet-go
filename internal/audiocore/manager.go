@@ -87,10 +87,7 @@ func (m *managerImpl) AddSource(source AudioSource) error {
 		m.logger.Warn("source already exists",
 			"source_id", source.ID(),
 			"source_name", source.Name())
-		return errors.New(ErrSourceAlreadyExists).
-			Component(ComponentAudioCore).
-			Context("source_id", source.ID()).
-			Build()
+		return ErrSourceAlreadyExists
 	}
 
 	m.sources[source.ID()] = source
@@ -124,10 +121,7 @@ func (m *managerImpl) RemoveSource(id string) error {
 	if !exists {
 		m.logger.Warn("source not found for removal",
 			"source_id", id)
-		return errors.New(ErrSourceNotFound).
-			Component(ComponentAudioCore).
-			Context("source_id", id).
-			Build()
+		return ErrSourceNotFound
 	}
 
 	// Stop the source
@@ -180,10 +174,7 @@ func (m *managerImpl) SetProcessorChain(sourceID string, chain ProcessorChain) e
 	defer m.mu.Unlock()
 
 	if _, exists := m.sources[sourceID]; !exists {
-		return errors.New(ErrSourceNotFound).
-			Component(ComponentAudioCore).
-			Context("source_id", sourceID).
-			Build()
+		return ErrSourceNotFound
 	}
 
 	m.processorChains[sourceID] = chain
@@ -197,10 +188,9 @@ func (m *managerImpl) Start(ctx context.Context) error {
 
 	if m.started {
 		m.logger.Warn("audio manager already started")
-		return errors.New(nil).
+		return errors.Newf("manager already started").
 			Component(ComponentAudioCore).
 			Category(errors.CategoryState).
-			Context("error", "manager already started").
 			Build()
 	}
 
@@ -278,9 +268,7 @@ func (m *managerImpl) Stop() error {
 
 	if !m.started {
 		m.logger.Warn("attempted to stop non-started manager")
-		return errors.New(ErrManagerNotStarted).
-			Component(ComponentAudioCore).
-			Build()
+		return ErrManagerNotStarted
 	}
 
 	// Cancel context to signal all goroutines to stop

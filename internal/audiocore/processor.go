@@ -33,10 +33,9 @@ func NewProcessorChain() ProcessorChain {
 // AddProcessor adds a processor to the chain
 func (pc *processorChainImpl) AddProcessor(processor AudioProcessor) error {
 	if processor == nil {
-		return errors.New(nil).
+		return errors.Newf("processor cannot be nil").
 			Component(ComponentAudioCore).
 			Category(errors.CategoryValidation).
-			Context("error", "processor cannot be nil").
 			Build()
 	}
 
@@ -48,11 +47,10 @@ func (pc *processorChainImpl) AddProcessor(processor AudioProcessor) error {
 		if p.ID() == processor.ID() {
 			pc.logger.Warn("processor already exists in chain",
 				"processor_id", processor.ID())
-			return errors.New(nil).
+			return errors.Newf("processor already exists in chain").
 				Component(ComponentAudioCore).
 				Category(errors.CategoryConflict).
 				Context("processor_id", processor.ID()).
-				Context("error", "processor already exists in chain").
 				Build()
 		}
 	}
@@ -82,10 +80,7 @@ func (pc *processorChainImpl) RemoveProcessor(id string) error {
 
 	pc.logger.Warn("processor not found for removal",
 		"processor_id", id)
-	return errors.New(ErrProcessorNotFound).
-		Component(ComponentAudioCore).
-		Context("processor_id", id).
-		Build()
+	return ErrProcessorNotFound
 }
 
 // Process runs audio through the entire chain
@@ -160,7 +155,7 @@ func (pc *processorChainImpl) GetProcessors() []AudioProcessor {
 }
 
 // ErrProcessorNotFound is returned when a processor is not found in the chain
-var ErrProcessorNotFound = errors.New(nil).
+var ErrProcessorNotFound = errors.Newf("processor not found").
 	Component(ComponentAudioCore).
 	Category(errors.CategoryNotFound).
 	Context("resource", "processor").

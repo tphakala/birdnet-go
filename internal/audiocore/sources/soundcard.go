@@ -114,10 +114,9 @@ func (s *SoundcardSource) Start(ctx context.Context) error {
 
 	if s.isActive.Load() {
 		s.logger.Warn("attempted to start already active source")
-		return errors.New(nil).
+		return errors.Newf("source already active").
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryState).
-			Context("error", "source already active").
 			Context("source_id", s.ID()).
 			Build()
 	}
