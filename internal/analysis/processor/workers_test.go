@@ -958,10 +958,12 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	}
 
 	// Wait for the action to be executed with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
 	select {
 	case <-executionChan:
 		// Action was executed successfully
-	case <-time.After(1 * time.Second):
+	case <-ctx.Done():
 		t.Fatalf("Timeout waiting for action to be executed")
 	}
 
@@ -971,7 +973,9 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	}
 
 	// Wait a bit for the job queue to update its statistics
-	time.Sleep(100 * time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer waitCancel()
+	<-waitCtx.Done()
 
 	// Verify that the job queue statistics reflect the completed job
 	stats := realQueue.GetStats()
@@ -1009,7 +1013,9 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 	}
 
 	// Wait for the job queue to process the failing job
-	time.Sleep(300 * time.Millisecond)
+	processCtx, processCancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer processCancel()
+	<-processCtx.Done()
 
 	// Verify that the failing action was executed
 	if failingAction.ExecuteCount != 1 {
@@ -1130,16 +1136,20 @@ func TestRetryLogic(t *testing.T) {
 	}
 
 	// Wait for the job to succeed with a timeout
+	successCtx, successCancel := context.WithTimeout(context.Background(), 5*time.Second) // Increased timeout for CI environments
+	defer successCancel()
 	select {
 	case <-successChan:
 		// Job succeeded after retries
 		t.Log("Success channel received signal")
-	case <-time.After(5 * time.Second): // Increased timeout for CI environments
+	case <-successCtx.Done():
 		t.Fatalf("Timeout waiting for job to succeed after retries")
 	}
 
 	// Wait a bit more to ensure all job stats are updated
-	time.Sleep(200 * time.Millisecond)
+	statsCtx, statsCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer statsCancel()
+	<-statsCtx.Done()
 
 	// Verify that the action was executed the expected number of times
 	attemptMutex.Lock()
@@ -1233,16 +1243,20 @@ func TestRetryLogic(t *testing.T) {
 	}
 
 	// Wait for all attempts to complete with an increased timeout
+	exhaustCtx, exhaustCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer exhaustCancel()
 	select {
 	case <-allAttemptsComplete:
 		// All attempts completed
 		t.Log("All exhaustion attempts completed")
-	case <-time.After(5 * time.Second):
+	case <-exhaustCtx.Done():
 		t.Fatalf("Timeout waiting for all exhaustion attempts to complete")
 	}
 
 	// Wait a bit more to ensure all processing is complete
-	time.Sleep(200 * time.Millisecond)
+	finalCtx, finalCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer finalCancel()
+	<-finalCtx.Done()
 
 	// Verify that the action was executed the expected number of times
 	attemptMutex.Lock()

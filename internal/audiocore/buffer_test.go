@@ -59,6 +59,7 @@ func TestBufferPoolGetAndPut(t *testing.T) {
 
 	// Test large buffer
 	t.Run("LargeBuffer", func(t *testing.T) {
+		t.Parallel()
 		buf := pool.Get(512 * 1024)
 		require.NotNil(t, buf)
 		assert.Equal(t, 512*1024, buf.Len())
@@ -120,7 +121,7 @@ func TestBufferOperations(t *testing.T) {
 	t.Run("Slice", func(t *testing.T) {
 		err := buf.Resize(100)
 		assert.NoError(t, err)
-		
+
 		// Valid slice
 		slice, err := buf.Slice(10, 20)
 		assert.NoError(t, err)
@@ -141,6 +142,7 @@ func TestBufferOperations(t *testing.T) {
 }
 
 func TestBufferReferenceCount(t *testing.T) {
+	t.Parallel()
 	config := BufferPoolConfig{
 		SmallBufferSize:   4 * 1024,
 		MediumBufferSize:  64 * 1024,

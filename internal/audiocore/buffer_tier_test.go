@@ -8,10 +8,11 @@ import (
 )
 
 func TestBufferPoolTierStats(t *testing.T) {
+	t.Parallel()
 	config := BufferPoolConfig{
-		SmallBufferSize:  1024,
-		MediumBufferSize: 4096,
-		LargeBufferSize:  16384,
+		SmallBufferSize:   1024,
+		MediumBufferSize:  4096,
+		LargeBufferSize:   16384,
 		MaxBuffersPerSize: 10,
 	}
 
@@ -19,9 +20,9 @@ func TestBufferPoolTierStats(t *testing.T) {
 	require.NotNil(t, pool)
 
 	// Get buffers from different tiers
-	smallBuf := pool.Get(512)   // Should use small tier
-	mediumBuf := pool.Get(2048) // Should use medium tier
-	largeBuf := pool.Get(8192)  // Should use large tier
+	smallBuf := pool.Get(512)    // Should use small tier
+	mediumBuf := pool.Get(2048)  // Should use medium tier
+	largeBuf := pool.Get(8192)   // Should use large tier
 	customBuf := pool.Get(32768) // Should use custom tier
 
 	// Check tier-specific stats
@@ -82,10 +83,11 @@ func TestBufferPoolTierStats(t *testing.T) {
 }
 
 func TestBufferPoolReportMetrics(t *testing.T) {
+	t.Parallel()
 	config := BufferPoolConfig{
-		SmallBufferSize:  1024,
-		MediumBufferSize: 4096,
-		LargeBufferSize:  16384,
+		SmallBufferSize:   1024,
+		MediumBufferSize:  4096,
+		LargeBufferSize:   16384,
 		MaxBuffersPerSize: 10,
 	}
 

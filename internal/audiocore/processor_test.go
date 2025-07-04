@@ -36,6 +36,7 @@ func (m *mockProcessor) GetOutputFormat(inputFormat AudioFormat) AudioFormat {
 }
 
 func TestProcessorChainAddRemove(t *testing.T) {
+	t.Parallel()
 	chain := NewProcessorChain()
 
 	// Add processors
@@ -75,6 +76,7 @@ func TestProcessorChainAddRemove(t *testing.T) {
 }
 
 func TestProcessorChainProcess(t *testing.T) {
+	t.Parallel()
 	chain := NewProcessorChain()
 	ctx := context.Background()
 
@@ -131,6 +133,7 @@ func TestProcessorChainProcess(t *testing.T) {
 }
 
 func TestProcessorChainProcessError(t *testing.T) {
+	t.Parallel()
 	chain := NewProcessorChain()
 	ctx := context.Background()
 
@@ -157,6 +160,7 @@ func TestProcessorChainProcessError(t *testing.T) {
 }
 
 func TestProcessorChainContextCancellation(t *testing.T) {
+	t.Parallel()
 	chain := NewProcessorChain()
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -181,6 +185,7 @@ func TestProcessorChainContextCancellation(t *testing.T) {
 }
 
 func TestProcessorChainGetProcessors(t *testing.T) {
+	t.Parallel()
 	chain := NewProcessorChain()
 
 	proc1 := &mockProcessor{id: "proc1"}

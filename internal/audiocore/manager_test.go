@@ -11,14 +11,14 @@ import (
 
 // mockSource implements a basic AudioSource for testing
 type mockSource struct {
-	id          string
-	name        string
-	active      bool
-	outputChan  chan AudioData
-	errorChan   chan error
-	startErr    error
-	stopErr     error
-	format      AudioFormat
+	id         string
+	name       string
+	active     bool
+	outputChan chan AudioData
+	errorChan  chan error
+	startErr   error
+	stopErr    error
+	format     AudioFormat
 }
 
 func newMockSource(id, name string) *mockSource {
@@ -36,17 +36,18 @@ func newMockSource(id, name string) *mockSource {
 	}
 }
 
-func (m *mockSource) ID() string                        { return m.id }
-func (m *mockSource) Name() string                      { return m.name }
-func (m *mockSource) Start(ctx context.Context) error   { m.active = true; return m.startErr }
-func (m *mockSource) Stop() error                       { m.active = false; return m.stopErr }
-func (m *mockSource) AudioOutput() <-chan AudioData     { return m.outputChan }
-func (m *mockSource) Errors() <-chan error              { return m.errorChan }
-func (m *mockSource) IsActive() bool                    { return m.active }
-func (m *mockSource) GetFormat() AudioFormat            { return m.format }
-func (m *mockSource) SetGain(gain float64) error        { return nil }
+func (m *mockSource) ID() string                      { return m.id }
+func (m *mockSource) Name() string                    { return m.name }
+func (m *mockSource) Start(ctx context.Context) error { m.active = true; return m.startErr }
+func (m *mockSource) Stop() error                     { m.active = false; return m.stopErr }
+func (m *mockSource) AudioOutput() <-chan AudioData   { return m.outputChan }
+func (m *mockSource) Errors() <-chan error            { return m.errorChan }
+func (m *mockSource) IsActive() bool                  { return m.active }
+func (m *mockSource) GetFormat() AudioFormat          { return m.format }
+func (m *mockSource) SetGain(gain float64) error      { return nil }
 
 func TestManagerCreateAndStart(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources:        10,
 		DefaultBufferSize: 4096,
@@ -78,6 +79,7 @@ func TestManagerCreateAndStart(t *testing.T) {
 }
 
 func TestManagerAddDuplicateSource(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -99,6 +101,7 @@ func TestManagerAddDuplicateSource(t *testing.T) {
 }
 
 func TestManagerMaxSources(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 2,
 	}
@@ -122,6 +125,7 @@ func TestManagerMaxSources(t *testing.T) {
 }
 
 func TestManagerRemoveSource(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -146,6 +150,7 @@ func TestManagerRemoveSource(t *testing.T) {
 }
 
 func TestManagerGetSource(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -168,6 +173,7 @@ func TestManagerGetSource(t *testing.T) {
 }
 
 func TestManagerProcessorChain(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -193,6 +199,7 @@ func TestManagerProcessorChain(t *testing.T) {
 }
 
 func TestManagerStartupErrors(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -212,6 +219,7 @@ func TestManagerStartupErrors(t *testing.T) {
 }
 
 func TestManagerAlreadyStarted(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -236,6 +244,7 @@ func TestManagerAlreadyStarted(t *testing.T) {
 }
 
 func TestManagerNotStarted(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources: 10,
 	}
@@ -251,6 +260,7 @@ func TestManagerNotStarted(t *testing.T) {
 }
 
 func TestManagerAudioOutput(t *testing.T) {
+	t.Parallel()
 	config := &ManagerConfig{
 		MaxSources:        10,
 		DefaultBufferSize: 4096,
@@ -277,6 +287,10 @@ func TestManagerAudioOutput(t *testing.T) {
 		SourceID:  source.ID(),
 	}
 
+	// Create a context with timeout for deterministic synchronization
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	// Send data to source
 	source.outputChan <- testData
 
@@ -285,7 +299,7 @@ func TestManagerAudioOutput(t *testing.T) {
 	case received := <-manager.AudioOutput():
 		assert.Equal(t, testData.SourceID, received.SourceID)
 		assert.Equal(t, testData.Buffer, received.Buffer)
-	case <-time.After(time.Second):
+	case <-ctx.Done():
 		t.Fatal("Timeout waiting for audio output")
 	}
 
