@@ -24,7 +24,7 @@ type MyAudioCompatAdapter struct {
 	wg           *sync.WaitGroup
 	outputChan   chan myaudio.UnifiedAudioData
 	quitChan     chan struct{}
-	restartChan  chan bool
+	restartChan  chan struct{}
 }
 
 // NewMyAudioCompatAdapter creates a new adapter that implements myaudio.CaptureAudio interface using audiocore
@@ -56,7 +56,7 @@ func (a *MyAudioCompatAdapter) CaptureAudio(
 	settings *conf.Settings,
 	wg *sync.WaitGroup,
 	quitChan chan struct{},
-	restartChan chan bool,
+	restartChan chan struct{},
 	unifiedAudioChan chan myaudio.UnifiedAudioData,
 ) {
 	a.settings = settings
@@ -295,7 +295,7 @@ func StartAudioCoreCapture(
 	settings *conf.Settings,
 	wg *sync.WaitGroup,
 	quitChan chan struct{},
-	restartChan chan bool,
+	restartChan chan struct{},
 	unifiedAudioChan chan myaudio.UnifiedAudioData,
 ) {
 	adapter := NewMyAudioCompatAdapter(settings)
