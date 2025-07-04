@@ -15,6 +15,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/audiocore/adapter"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -347,7 +348,17 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 	}()
 
 	// waitgroup is managed within CaptureAudio
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+	if settings.Realtime.Audio.UseAudioCore {
+		// Use new audiocore implementation
+		go func() {
+			log.Println("🎵 Using new audiocore audio capture system")
+			// Import needs to be added at the top of the file
+			adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, unifiedAudioChan)
+		}()
+	} else {
+		// Use existing myaudio implementation
+		go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+	}
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
