@@ -1,8 +1,8 @@
 package monitor
 
 import (
+	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -54,8 +54,8 @@ func GetCriticalPaths(settings *conf.Settings) []string {
 
 // resolvePath converts a relative path to absolute path
 func resolvePath(path string) string {
-	// Expand environment variables
-	path = conf.GetBasePath(path)
+	// Expand environment variables without creating directories
+	path = os.ExpandEnv(path)
 	
 	// Clean the path
 	path = filepath.Clean(path)
@@ -114,57 +114,6 @@ func mergePaths(configured, critical []string) []string {
 	return deduplicatePaths(allPaths)
 }
 
-// isSameFilesystem checks if two paths are on the same filesystem
-// This helps avoid duplicate monitoring of the same disk
-func isSameFilesystem(path1, path2 string) bool {
-	// For now, we do simple prefix matching for subdirectories
-	// A more robust implementation would use syscalls to check device IDs
-	path1 = filepath.Clean(path1)
-	path2 = filepath.Clean(path2)
-	
-	// Check if one is a subdirectory of the other
-	if strings.HasPrefix(path1, path2+string(filepath.Separator)) {
-		return true
-	}
-	if strings.HasPrefix(path2, path1+string(filepath.Separator)) {
-		return true
-	}
-	
-	return path1 == path2
-}
-
-// filterRedundantPaths removes paths that are subdirectories of already monitored paths
-func filterRedundantPaths(paths []string) []string {
-	// Sort paths by length (shorter first)
-	filtered := make([]string, 0)
-	
-	for _, path := range paths {
-		redundant := false
-		for _, existing := range filtered {
-			if isSameFilesystem(path, existing) {
-				// If the new path is a subdirectory of an existing path, skip it
-				if strings.HasPrefix(path, existing+string(filepath.Separator)) {
-					redundant = true
-					break
-				}
-			}
-		}
-		
-		if !redundant {
-			// Check if any existing paths are subdirectories of this new path
-			// If so, replace them
-			newFiltered := []string{path}
-			for _, existing := range filtered {
-				if !strings.HasPrefix(existing, path+string(filepath.Separator)) {
-					newFiltered = append(newFiltered, existing)
-				}
-			}
-			filtered = newFiltered
-		}
-	}
-	
-	return filtered
-}
 
 // GetMonitoringPathsInfo returns information about configured and auto-detected paths
 func GetMonitoringPathsInfo(settings *conf.Settings) (configured, autoDetected, merged []string) {
