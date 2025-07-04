@@ -80,32 +80,26 @@ func InitializeEventBusIntegration() error {
 	// Store reference for stats/monitoring
 	telemetryWorker = worker
 
-	// Log to service logger (telemetry.log)
+	// Log registration details
+	logMessage := "telemetry worker registered with event bus"
+	logAttrs := []any{
+		"consumer", worker.Name(),
+		"supports_batching", worker.SupportsBatching(),
+		"batching_enabled", config.BatchingEnabled,
+		"batch_size", config.BatchSize,
+		"batch_timeout", config.BatchTimeout,
+		"circuit_breaker_threshold", config.FailureThreshold,
+		"recovery_timeout", config.RecoveryTimeout,
+		"rate_limit", config.RateLimitMaxEvents,
+		"sampling_rate", config.SamplingRate,
+	}
+
+	// Always log to integration logger first for visibility
+	logger.Info(logMessage, logAttrs...)
+	
+	// Also log to service logger if available
 	if serviceLogger != nil {
-		serviceLogger.Info("telemetry worker registered with event bus",
-			"consumer", worker.Name(),
-			"supports_batching", worker.SupportsBatching(),
-			"batching_enabled", config.BatchingEnabled,
-			"batch_size", config.BatchSize,
-			"batch_timeout", config.BatchTimeout,
-			"circuit_breaker_threshold", config.FailureThreshold,
-			"recovery_timeout", config.RecoveryTimeout,
-			"rate_limit", config.RateLimitMaxEvents,
-			"sampling_rate", config.SamplingRate,
-		)
-	} else {
-		// Fallback to integration logger if service logger not available
-		logger.Info("telemetry worker registered with event bus",
-			"consumer", worker.Name(),
-			"supports_batching", worker.SupportsBatching(),
-			"batching_enabled", config.BatchingEnabled,
-			"batch_size", config.BatchSize,
-			"batch_timeout", config.BatchTimeout,
-			"circuit_breaker_threshold", config.FailureThreshold,
-			"recovery_timeout", config.RecoveryTimeout,
-			"rate_limit", config.RateLimitMaxEvents,
-			"sampling_rate", config.SamplingRate,
-		)
+		serviceLogger.Info(logMessage, logAttrs...)
 	}
 
 	return nil

@@ -94,13 +94,9 @@ func InitSentry(settings *conf.Settings) error {
 	// Log initialization success
 	logInitializationSuccess(settings, deferredCount)
 
-	// Initialize event bus integration for async telemetry
-	if err := InitializeEventBusIntegration(); err != nil {
-		log.Printf("Failed to initialize telemetry event bus integration: %v", err)
-		// Don't fail initialization if event bus integration fails
-		// Telemetry will still work synchronously
-	}
-
+	// Event bus integration is deferred until after core services are initialized
+	// to avoid circular dependencies and ensure proper logging
+	
 	return nil
 }
 
