@@ -97,31 +97,102 @@ func InitSentry(settings *conf.Settings) error {
 
 		// BeforeSend allows us to filter sensitive data
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Remove any potentially sensitive information
-			event.User = sentry.User{} // Clear user data
-			event.ServerName = ""      // Ensure server name is not included
+			// Log what privacy filters are being applied if debug is enabled
+			if serviceLogger != nil && settings.Sentry.Debug {
+				var filtersApplied []string
 
-			// Clear sensitive contexts while preserving our privacy-safe platform info
-			if event.Contexts != nil {
-				// Remove potentially sensitive default Sentry contexts
-				delete(event.Contexts, "device")  // Contains detailed device info
-				delete(event.Contexts, "os")      // Contains detailed OS info
-				delete(event.Contexts, "runtime") // Contains detailed runtime info
-				// Keep our custom "platform" and "application" contexts as they're privacy-safe
-			}
+				// Log before filtering
+				serviceLogger.Debug("applying privacy filters to event",
+					"event_id", event.EventID,
+					"has_user_data", !event.User.IsEmpty(),
+					"has_server_name", event.ServerName != "",
+					"contexts_count", len(event.Contexts),
+					"extra_count", len(event.Extra),
+					"tags_count", len(event.Tags),
+				)
 
-			// Only keep essential error information
-			for k := range event.Extra {
-				// Remove any extra data that might contain sensitive info
-				if k != "error_type" && k != "component" {
-					delete(event.Extra, k)
+				// Apply filters and track what was removed
+				if !event.User.IsEmpty() {
+					filtersApplied = append(filtersApplied, "remove_user_data")
 				}
-			}
+				if event.ServerName != "" {
+					filtersApplied = append(filtersApplied, "remove_server_name")
+				}
 
-			// Remove hostname from tags if present
-			if event.Tags != nil {
-				delete(event.Tags, "server_name")
-				delete(event.Tags, "hostname")
+				// Remove any potentially sensitive information
+				event.User = sentry.User{} // Clear user data
+				event.ServerName = ""      // Ensure server name is not included
+
+				// Clear sensitive contexts while preserving our privacy-safe platform info
+				if event.Contexts != nil {
+					// Track which contexts we're removing
+					for key := range event.Contexts {
+						if key == "device" || key == "os" || key == "runtime" {
+							filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%s_context", key))
+						}
+					}
+
+					// Remove potentially sensitive default Sentry contexts
+					delete(event.Contexts, "device")  // Contains detailed device info
+					delete(event.Contexts, "os")      // Contains detailed OS info
+					delete(event.Contexts, "runtime") // Contains detailed runtime info
+					// Keep our custom "platform" and "application" contexts as they're privacy-safe
+				}
+
+				// Track extra fields being removed
+				extraRemoved := 0
+				for k := range event.Extra {
+					// Remove any extra data that might contain sensitive info
+					if k != "error_type" && k != "component" {
+						extraRemoved++
+						delete(event.Extra, k)
+					}
+				}
+				if extraRemoved > 0 {
+					filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%d_extra_fields", extraRemoved))
+				}
+
+				// Remove hostname from tags if present
+				if event.Tags != nil {
+					if _, hasServerName := event.Tags["server_name"]; hasServerName {
+						filtersApplied = append(filtersApplied, "remove_server_name_tag")
+						delete(event.Tags, "server_name")
+					}
+					if _, hasHostname := event.Tags["hostname"]; hasHostname {
+						filtersApplied = append(filtersApplied, "remove_hostname_tag")
+						delete(event.Tags, "hostname")
+					}
+				}
+
+				// Log after filtering
+				serviceLogger.Debug("privacy filters applied",
+					"event_id", event.EventID,
+					"filters_applied", filtersApplied,
+					"remaining_contexts", len(event.Contexts),
+					"remaining_extra", len(event.Extra),
+					"remaining_tags", len(event.Tags),
+				)
+			} else {
+				// Apply filters without logging when debug is disabled
+				event.User = sentry.User{}
+				event.ServerName = ""
+
+				if event.Contexts != nil {
+					delete(event.Contexts, "device")
+					delete(event.Contexts, "os")
+					delete(event.Contexts, "runtime")
+				}
+
+				for k := range event.Extra {
+					if k != "error_type" && k != "component" {
+						delete(event.Extra, k)
+					}
+				}
+
+				if event.Tags != nil {
+					delete(event.Tags, "server_name")
+					delete(event.Tags, "hostname")
+				}
 			}
 
 			return event
