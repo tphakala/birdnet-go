@@ -72,7 +72,7 @@ func main() {
 	}
 
 	// Create source via factory
-	source, err := sources.CreateSource(sourceConfig, bufferPool)
+	source, err := sources.CreateSource(&sourceConfig, bufferPool)
 	if err != nil {
 		log.Fatalf("Failed to create source: %v", err)
 	}
@@ -128,4 +128,3 @@ func main() {
 		}
 	}
 }
-

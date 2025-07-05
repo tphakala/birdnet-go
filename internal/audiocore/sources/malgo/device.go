@@ -47,7 +47,7 @@ func EnumerateDevices() ([]AudioDeviceInfo, error) {
 			Context("backend", runtime.GOOS).
 			Build()
 	}
-	defer ctx.Uninit()
+	defer func() { _ = ctx.Uninit() }()
 
 	// Get capture devices
 	infos, err := ctx.Devices(malgo.Capture)
@@ -172,7 +172,7 @@ func TestDevice(ctx *malgo.AllocatedContext, deviceInfo *malgo.DeviceInfo) error
 	}
 
 	// Stop the device
-	device.Stop()
+	_ = device.Stop()
 	return nil
 }
 
@@ -236,7 +236,7 @@ func GetDefaultDevice() (*AudioDeviceInfo, error) {
 			Context("operation", "init_context").
 			Build()
 	}
-	defer ctx.Uninit()
+	defer func() { _ = ctx.Uninit() }()
 
 	// Get capture devices
 	infos, err := ctx.Devices(malgo.Capture)
@@ -276,4 +276,3 @@ func GetDefaultDevice() (*AudioDeviceInfo, error) {
 		Context("error", "no audio capture devices found").
 		Build()
 }
-

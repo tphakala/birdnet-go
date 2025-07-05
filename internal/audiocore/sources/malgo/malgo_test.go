@@ -299,4 +299,3 @@ func BenchmarkApplyGain(b *testing.B) {
 		source.applyGain(buffer, gain)
 	}
 }
-

@@ -135,7 +135,7 @@ func TestBufferBridgeAudioProcessing(t *testing.T) {
 	// For now, we just ensure it doesn't panic
 
 	// Stop the bridge
-	bridge.Stop()
+	_ = bridge.Stop()
 }
 
 func TestBufferBridgeErrorHandling(t *testing.T) {
@@ -156,7 +156,7 @@ func TestBufferBridgeErrorHandling(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop the bridge
-	bridge.Stop()
+	_ = bridge.Stop()
 }
 
 func TestGetSource(t *testing.T) {
@@ -188,7 +188,7 @@ func TestBufferBridgeChannelClosure(t *testing.T) {
 	// Stop should still work without hanging
 	done := make(chan bool)
 	go func() {
-		bridge.Stop()
+		_ = bridge.Stop()
 		done <- true
 	}()
 
@@ -208,7 +208,7 @@ func BenchmarkBufferBridgeProcessing(b *testing.B) {
 	if err := bridge.Start(ctx); err != nil {
 		b.Fatal(err)
 	}
-	defer bridge.Stop()
+	defer func() { _ = bridge.Stop() }()
 
 	// Create test data
 	testData := audiocore.AudioData{
@@ -229,4 +229,3 @@ func BenchmarkBufferBridgeProcessing(b *testing.B) {
 		}
 	}
 }
-

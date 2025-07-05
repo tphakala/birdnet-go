@@ -136,7 +136,7 @@ func (s *MalgoSource) Start(ctx context.Context) error {
 	// Try to find and initialize the device
 	deviceInfo, err := s.findDevice()
 	if err != nil {
-		malgoCtx.Uninit()
+		_ = malgoCtx.Uninit()
 		return err
 	}
 
@@ -161,7 +161,7 @@ func (s *MalgoSource) Start(ctx context.Context) error {
 	device, err := malgo.InitDevice(s.ctx.Context, deviceConfig, deviceCallbacks)
 	if err != nil {
 		s.cancel()
-		malgoCtx.Uninit()
+		_ = malgoCtx.Uninit()
 		return errors.New(err).
 			Component("audiocore").
 			Category(errors.CategoryAudio).
@@ -180,7 +180,7 @@ func (s *MalgoSource) Start(ctx context.Context) error {
 	if err := device.Start(); err != nil {
 		device.Uninit()
 		s.cancel()
-		malgoCtx.Uninit()
+		_ = malgoCtx.Uninit()
 		return errors.New(err).
 			Component("audiocore").
 			Category(errors.CategoryAudio).
@@ -218,14 +218,14 @@ func (s *MalgoSource) Stop() error {
 
 	// Stop and cleanup device
 	if s.device != nil {
-		s.device.Stop()
+		_ = s.device.Stop()
 		s.device.Uninit()
 		s.device = nil
 	}
 
 	// Cleanup context
 	if s.ctx != nil {
-		s.ctx.Uninit()
+		_ = s.ctx.Uninit()
 		s.ctx = nil
 	}
 
@@ -371,7 +371,7 @@ func (s *MalgoSource) onDeviceStop() {
 func (s *MalgoSource) monitor(ctx context.Context) {
 	<-ctx.Done()
 	// Context cancelled, ensure device is stopped
-	s.Stop()
+	_ = s.Stop()
 }
 
 // getBackend returns the appropriate backend for the current platform
@@ -466,4 +466,3 @@ func (s *MalgoSource) convertAudio(input []byte) ([]byte, error) {
 	// Use ConvertToS16 for other formats
 	return ConvertToS16(input, s.formatType, nil)
 }
-

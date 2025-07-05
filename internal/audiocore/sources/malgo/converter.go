@@ -32,6 +32,8 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 		bytesPerSample = 4
 	case malgo.FormatU8:
 		bytesPerSample = 1
+	case malgo.FormatUnknown:
+		return nil, fmt.Errorf("unknown source format")
 	default:
 		return nil, fmt.Errorf("unsupported source format: %v", sourceFormat)
 	}
@@ -61,7 +63,7 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 		switch sourceFormat {
 		case malgo.FormatU8:
 			// Convert 8-bit unsigned to 16-bit signed
-			val := uint8(samples[srcIdx])
+			val := samples[srcIdx]
 			// Convert from 0-255 range to -32768 to 32767
 			sample := int16((int32(val) - 128) * 256)
 			binary.LittleEndian.PutUint16(output[dstIdx:dstIdx+2], uint16(sample))
@@ -196,4 +198,3 @@ func ConvertSampleRate(input []byte, inputRate, outputRate uint32) ([]byte, erro
 
 	return output, nil
 }
-

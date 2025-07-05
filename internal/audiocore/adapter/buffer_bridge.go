@@ -72,9 +72,7 @@ func (b *BufferBridge) Stop() error {
 	}
 
 	// Stop the source
-	if err := b.source.Stop(); err != nil {
-		// Log error but continue with cleanup
-	}
+	_ = b.source.Stop() // Ignore error and continue with cleanup
 
 	// Signal stop
 	close(b.stopChan)
@@ -111,17 +109,13 @@ func (b *BufferBridge) processAudio() {
 			}
 
 			// Write to capture buffer
-			if err := myaudio.WriteToCaptureBuffer(b.sourceID, data.Buffer); err != nil {
-				// Log error but continue
-			}
+			_ = myaudio.WriteToCaptureBuffer(b.sourceID, data.Buffer) // Ignore error and continue
 
 			// Broadcast audio data for any listeners
 			myaudio.BroadcastAudioData(b.sourceID, data.Buffer)
 
 			frameCount++
-			if frameCount%10000 == 0 {
-				// Log progress occasionally
-			}
+			// Progress logging could be added here if needed
 
 		case <-b.stopChan:
 			return
@@ -161,4 +155,3 @@ func (b *BufferBridge) IsRunning() bool {
 	defer b.mu.Unlock()
 	return b.running
 }
-

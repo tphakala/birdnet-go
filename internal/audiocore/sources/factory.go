@@ -10,7 +10,7 @@ import (
 )
 
 // CreateSource creates an audio source based on the provided configuration
-func CreateSource(config audiocore.SourceConfig, bufferPool audiocore.BufferPool) (audiocore.AudioSource, error) {
+func CreateSource(config *audiocore.SourceConfig, bufferPool audiocore.BufferPool) (audiocore.AudioSource, error) {
 	switch config.Type {
 	case "malgo", "soundcard":
 		// Extract malgo-specific configuration
@@ -23,10 +23,11 @@ func CreateSource(config audiocore.SourceConfig, bufferPool audiocore.BufferPool
 		}
 
 		// Check for buffer frames in extra config
-		if frames, ok := config.ExtraConfig["buffer_frames"].(uint32); ok {
-			malgoConfig.BufferFrames = frames
-		} else if frames, ok := config.ExtraConfig["buffer_frames"].(int); ok {
-			malgoConfig.BufferFrames = uint32(frames)
+		switch v := config.ExtraConfig["buffer_frames"].(type) {
+		case uint32:
+			malgoConfig.BufferFrames = v
+		case int:
+			malgoConfig.BufferFrames = uint32(v)
 		}
 
 		return malgo.NewMalgoSource(config.ID, malgoConfig, bufferPool)
@@ -68,3 +69,4 @@ func ListAvailableDevices() ([]malgo.AudioDeviceInfo, error) {
 func GetDefaultDevice() (*malgo.AudioDeviceInfo, error) {
 	return malgo.GetDefaultDevice()
 }
+

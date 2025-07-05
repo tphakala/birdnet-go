@@ -322,4 +322,3 @@ func StartAudioCoreCapture(
 	adapter := NewMyAudioCompatAdapter(settings)
 	adapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 }
-
