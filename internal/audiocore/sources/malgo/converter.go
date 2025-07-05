@@ -110,6 +110,11 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 				val = -32768.0
 			}
 			binary.LittleEndian.PutUint16(output[dstIdx:dstIdx+2], uint16(int16(val)))
+		
+		case malgo.FormatS16, malgo.FormatUnknown:
+			// These formats should not reach here - they're handled in the outer switch
+			// S16 returns early, Unknown returns an error
+			// This case is added to satisfy the exhaustive linter
 		}
 	}
 
