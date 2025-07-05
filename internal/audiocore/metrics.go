@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -19,18 +20,14 @@ type MetricsCollector struct {
 
 // globalMetrics is a package-level metrics instance
 var (
-	globalMetrics     *MetricsCollector
+	globalMetrics     atomic.Pointer[MetricsCollector]
 	globalMetricsOnce sync.Once
-	globalMetricsMu   sync.RWMutex
 	metricsLogger     *slog.Logger
 )
 
 // InitMetrics initializes the global metrics collector
 func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 	globalMetricsOnce.Do(func() {
-		globalMetricsMu.Lock()
-		defer globalMetricsMu.Unlock()
-
 		// Initialize logger
 		metricsLogger = logging.ForService("audiocore")
 		if metricsLogger == nil {
@@ -38,10 +35,11 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 		}
 		metricsLogger = metricsLogger.With("component", "metrics")
 
-		globalMetrics = &MetricsCollector{
+		mc := &MetricsCollector{
 			metrics: metricsInstance,
 			enabled: metricsInstance != nil,
 		}
+		globalMetrics.Store(mc)
 
 		if metricsInstance != nil {
 			metricsLogger.Info("metrics collector initialized")
@@ -53,14 +51,12 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 
 // GetMetrics returns the global metrics collector
 func GetMetrics() *MetricsCollector {
-	globalMetricsMu.RLock()
-	defer globalMetricsMu.RUnlock()
-
-	if globalMetrics == nil {
+	mc := globalMetrics.Load()
+	if mc == nil {
 		// Return a no-op collector if metrics not initialized
 		return &MetricsCollector{enabled: false}
 	}
-	return globalMetrics
+	return mc
 }
 
 // RecordManagerMetrics records metrics for the audio manager
