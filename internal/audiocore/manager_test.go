@@ -292,28 +292,40 @@ func TestManagerAudioOutput(t *testing.T) {
 	// Create channels for deterministic synchronization
 	receivedChan := make(chan AudioData, 1)
 	errChan := make(chan error, 1)
+	done := make(chan struct{})
+	
+	// Create a context with cancellation for the goroutine
+	goroutineCtx, goroutineCancel := context.WithCancel(context.Background())
+	defer goroutineCancel()
 	
 	// Start a goroutine to receive from manager output
 	go func() {
+		defer close(done)
 		select {
 		case received := <-manager.AudioOutput():
 			receivedChan <- received
-		case <-time.After(5 * time.Second):
-			// This is a safety timeout, should never be reached in normal operation
-			errChan <- fmt.Errorf("timeout waiting for audio output")
+		case <-goroutineCtx.Done():
+			errChan <- fmt.Errorf("context cancelled while waiting for audio output")
 		}
 	}()
 
 	// Send data to source
 	source.outputChan <- testData
 
-	// Wait for result
+	// Wait for result with timeout
+	testCtx, testCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer testCancel()
+	
 	select {
 	case received := <-receivedChan:
 		assert.Equal(t, testData.SourceID, received.SourceID)
 		assert.Equal(t, testData.Buffer, received.Buffer)
 	case err := <-errChan:
 		t.Fatal(err)
+	case <-testCtx.Done():
+		goroutineCancel() // Cancel the goroutine
+		<-done // Wait for goroutine to finish
+		t.Fatal("timeout waiting for test to complete")
 	}
 
 	// Clean up

@@ -97,7 +97,7 @@ func (pc *processorChainImpl) Process(ctx context.Context, input *AudioData) (*A
 	// Process through each processor in sequence
 	current := input
 
-	if pc.logger.Enabled(context.TODO(), slog.LevelDebug) {
+	if pc.logger.Enabled(ctx, slog.LevelDebug) {
 		pc.logger.Debug("starting processor chain execution",
 			"processor_count", len(pc.processors),
 			"source_id", input.SourceID)
@@ -127,7 +127,7 @@ func (pc *processorChainImpl) Process(ctx context.Context, input *AudioData) (*A
 				Build()
 		}
 
-		if pc.logger.Enabled(context.TODO(), slog.LevelDebug) {
+		if pc.logger.Enabled(ctx, slog.LevelDebug) {
 			pc.logger.Debug("processor executed successfully",
 				"processor_id", processor.ID())
 		}
@@ -135,7 +135,7 @@ func (pc *processorChainImpl) Process(ctx context.Context, input *AudioData) (*A
 		current = processed
 	}
 
-	if pc.logger.Enabled(context.TODO(), slog.LevelDebug) {
+	if pc.logger.Enabled(ctx, slog.LevelDebug) {
 		pc.logger.Debug("processor chain completed successfully",
 			"processor_count", len(pc.processors))
 	}

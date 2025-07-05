@@ -23,6 +23,7 @@ func TestBufferPoolCreation(t *testing.T) {
 }
 
 func TestBufferPoolGetAndPut(t *testing.T) {
+	t.Parallel()
 	config := BufferPoolConfig{
 		SmallBufferSize:   4 * 1024,
 		MediumBufferSize:  64 * 1024,
@@ -59,7 +60,6 @@ func TestBufferPoolGetAndPut(t *testing.T) {
 
 	// Test large buffer
 	t.Run("LargeBuffer", func(t *testing.T) {
-		t.Parallel()
 		buf := pool.Get(512 * 1024)
 		require.NotNil(t, buf)
 		assert.Equal(t, 512*1024, buf.Len())

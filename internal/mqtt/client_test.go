@@ -696,12 +696,27 @@ func testDNSResolutionForTest(t *testing.T) {
 	})
 }
 
+// sanitizeClientID ensures the client ID is valid for MQTT brokers
+func sanitizeClientID(id string) string {
+	// Replace invalid characters with hyphen
+	sanitized := strings.ReplaceAll(id, "/", "-")
+	sanitized = strings.ReplaceAll(sanitized, " ", "-")
+	sanitized = strings.ReplaceAll(sanitized, ".", "-")
+	
+	// Truncate to 23 characters if needed
+	if len(sanitized) > 23 {
+		sanitized = sanitized[:23]
+	}
+	
+	return sanitized
+}
+
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
 func createTestClient(t *testing.T, broker string) (Client, *observability.Metrics) {
 	// Use test name as client ID to ensure uniqueness when running tests in parallel
 	clientID := "TestNode"
 	if t != nil {
-		clientID = t.Name()
+		clientID = sanitizeClientID(t.Name())
 	}
 	
 	testSettings := &conf.Settings{

@@ -89,7 +89,7 @@ func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, time
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	
-	ticker := time.NewTicker(1 * time.Millisecond)
+	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	
 	for {
