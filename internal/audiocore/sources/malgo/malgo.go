@@ -466,3 +466,4 @@ func (s *MalgoSource) convertAudio(input []byte) ([]byte, error) {
 	// Use ConvertToS16 for other formats
 	return ConvertToS16(input, s.formatType, nil)
 }
+

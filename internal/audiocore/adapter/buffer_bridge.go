@@ -161,3 +161,4 @@ func (b *BufferBridge) IsRunning() bool {
 	defer b.mu.Unlock()
 	return b.running
 }
+

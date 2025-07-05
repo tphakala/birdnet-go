@@ -217,3 +217,4 @@ func TestRestartHandling(t *testing.T) {
 
 	close(quitChan)
 }
+

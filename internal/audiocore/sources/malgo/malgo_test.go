@@ -31,14 +31,14 @@ type mockBuffer struct {
 	data []byte
 }
 
-func (b *mockBuffer) Data() []byte              { return b.data }
-func (b *mockBuffer) Len() int                  { return len(b.data) }
-func (b *mockBuffer) Cap() int                  { return cap(b.data) }
-func (b *mockBuffer) Reset()                    { b.data = b.data[:0] }
-func (b *mockBuffer) Resize(newSize int) error  { b.data = make([]byte, newSize); return nil }
+func (b *mockBuffer) Data() []byte                   { return b.data }
+func (b *mockBuffer) Len() int                       { return len(b.data) }
+func (b *mockBuffer) Cap() int                       { return cap(b.data) }
+func (b *mockBuffer) Reset()                         { b.data = b.data[:0] }
+func (b *mockBuffer) Resize(newSize int) error       { b.data = make([]byte, newSize); return nil }
 func (b *mockBuffer) Slice(s, e int) ([]byte, error) { return b.data[s:e], nil }
-func (b *mockBuffer) Acquire()                  {}
-func (b *mockBuffer) Release()                  {}
+func (b *mockBuffer) Acquire()                       {}
+func (b *mockBuffer) Release()                       {}
 
 func TestNewMalgoSource(t *testing.T) {
 	config := MalgoConfig{
@@ -157,9 +157,9 @@ func TestConvertToS16(t *testing.T) {
 
 func TestGetFormatInfo(t *testing.T) {
 	testCases := []struct {
-		format            malgo.FormatType
-		expectedBytes     int
-		expectedName      string
+		format        malgo.FormatType
+		expectedBytes int
+		expectedName  string
 	}{
 		{malgo.FormatU8, 1, "U8"},
 		{malgo.FormatS16, 2, "S16"},
@@ -191,7 +191,7 @@ func TestCalculateBufferSize(t *testing.T) {
 func TestMalgoSourceStartStop(t *testing.T) {
 	// Skip this test if we can't initialize malgo (e.g., in CI without audio devices)
 	ctx := context.Background()
-	
+
 	config := MalgoConfig{
 		DeviceName: "default",
 		SampleRate: 48000,
@@ -299,3 +299,4 @@ func BenchmarkApplyGain(b *testing.B) {
 		source.applyGain(buffer, gain)
 	}
 }
+

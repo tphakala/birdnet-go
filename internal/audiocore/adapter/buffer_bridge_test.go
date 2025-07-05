@@ -33,15 +33,20 @@ func newMockSource(id, name string) *mockSource {
 	}
 }
 
-func (m *mockSource) ID() string                                 { return m.id }
-func (m *mockSource) Name() string                               { return m.name }
-func (m *mockSource) Start(ctx context.Context) error           { m.active = true; return nil }
-func (m *mockSource) Stop() error                                { m.active = false; close(m.audioOutput); close(m.errorOutput); return nil }
-func (m *mockSource) AudioOutput() <-chan audiocore.AudioData   { return m.audioOutput }
-func (m *mockSource) Errors() <-chan error                       { return m.errorOutput }
-func (m *mockSource) IsActive() bool                             { return m.active }
-func (m *mockSource) GetFormat() audiocore.AudioFormat          { return m.format }
-func (m *mockSource) SetGain(gain float64) error                { return nil }
+func (m *mockSource) ID() string                      { return m.id }
+func (m *mockSource) Name() string                    { return m.name }
+func (m *mockSource) Start(ctx context.Context) error { m.active = true; return nil }
+func (m *mockSource) Stop() error {
+	m.active = false
+	close(m.audioOutput)
+	close(m.errorOutput)
+	return nil
+}
+func (m *mockSource) AudioOutput() <-chan audiocore.AudioData { return m.audioOutput }
+func (m *mockSource) Errors() <-chan error                    { return m.errorOutput }
+func (m *mockSource) IsActive() bool                          { return m.active }
+func (m *mockSource) GetFormat() audiocore.AudioFormat        { return m.format }
+func (m *mockSource) SetGain(gain float64) error              { return nil }
 
 func TestNewBufferBridge(t *testing.T) {
 	source := newMockSource("test-source", "Test Source")
@@ -224,3 +229,4 @@ func BenchmarkBufferBridgeProcessing(b *testing.B) {
 		}
 	}
 }
+

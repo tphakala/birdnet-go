@@ -276,3 +276,4 @@ func GetDefaultDevice() (*AudioDeviceInfo, error) {
 		Context("error", "no audio capture devices found").
 		Build()
 }
+

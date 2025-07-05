@@ -45,7 +45,7 @@ func main() {
 		MaxBuffersPerSize: 10,
 		EnableMetrics:     true,
 	}
-	bufferPool := audiocore.NewTieredBufferPool(poolConfig)
+	bufferPool := audiocore.NewBufferPool(poolConfig)
 
 	// Create source configuration
 	sourceConfig := audiocore.SourceConfig{
@@ -115,7 +115,7 @@ func main() {
 			return
 		case <-ticker.C:
 			// Print some stats
-			fmt.Printf("Running for %d seconds, source active: %v\n", 
+			fmt.Printf("Running for %d seconds, source active: %v\n",
 				(frameCount+1)*5, source.IsActive())
 			frameCount++
 			if frameCount >= 3 { // Stop after 15 seconds
@@ -128,3 +128,4 @@ func main() {
 		}
 	}
 }
+
