@@ -3,11 +3,13 @@ package adapter
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -19,14 +21,24 @@ type BufferBridge struct {
 	wg       sync.WaitGroup
 	mu       sync.Mutex
 	running  bool
+	logger   *slog.Logger
 }
 
 // NewBufferBridge creates a new buffer bridge
 func NewBufferBridge(source audiocore.AudioSource, sourceID string) *BufferBridge {
+	logger := logging.ForService("audiocore")
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With(
+		"component", "buffer_bridge",
+		"source_id", sourceID)
+
 	return &BufferBridge{
 		source:   source,
 		sourceID: sourceID,
 		stopChan: make(chan struct{}),
+		logger:   logger,
 	}
 }
 
@@ -72,7 +84,11 @@ func (b *BufferBridge) Stop() error {
 	}
 
 	// Stop the source
-	_ = b.source.Stop() // Ignore error and continue with cleanup
+	if err := b.source.Stop(); err != nil {
+		// Log error but continue with cleanup to ensure bridge stops properly
+		b.logger.Warn("failed to stop audio source during bridge shutdown",
+			"error", err)
+	}
 
 	// Signal stop
 	close(b.stopChan)
@@ -101,9 +117,12 @@ func (b *BufferBridge) processAudio() {
 
 			// Write to analysis buffer
 			if err := myaudio.WriteToAnalysisBuffer(b.sourceID, data.Buffer); err != nil {
-				// Log error but continue
+				// Log error but continue processing to avoid blocking
 				if time.Since(lastLogTime) > 5*time.Minute {
-					// Log less frequently to avoid spam
+					b.logger.Error("failed to write to analysis buffer",
+						"error", err,
+						"buffer_size", len(data.Buffer),
+						"frames_processed", frameCount)
 					lastLogTime = time.Now()
 				}
 			}
@@ -135,8 +154,10 @@ func (b *BufferBridge) handleErrors() {
 				return
 			}
 
-			// Log the error
-			_ = err // Error handling would go here
+			// Log the error for visibility and debugging
+			b.logger.Error("audio source reported error",
+				"error", err,
+				"source_type", b.source.Name())
 
 		case <-b.stopChan:
 			return

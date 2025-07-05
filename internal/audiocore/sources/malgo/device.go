@@ -2,7 +2,6 @@ package malgo
 
 import (
 	"encoding/hex"
-	"fmt"
 	"runtime"
 	"strings"
 
@@ -17,24 +16,31 @@ type AudioDeviceInfo struct {
 	ID    string
 }
 
-// EnumerateDevices returns a list of available audio capture devices
-func EnumerateDevices() ([]AudioDeviceInfo, error) {
-	// Determine backend
-	var backend malgo.Backend
+// getBackendForPlatform returns the appropriate malgo backend for the current platform
+func getBackendForPlatform() (malgo.Backend, error) {
 	switch runtime.GOOS {
 	case "linux":
-		backend = malgo.BackendAlsa
+		return malgo.BackendAlsa, nil
 	case "windows":
-		backend = malgo.BackendWasapi
+		return malgo.BackendWasapi, nil
 	case "darwin":
-		backend = malgo.BackendCoreaudio
+		return malgo.BackendCoreaudio, nil
 	default:
-		return nil, errors.New(nil).
+		return malgo.BackendNull, errors.New(nil).
 			Component("audiocore").
 			Category(errors.CategoryAudio).
 			Context("error", "unsupported operating system").
 			Context("os", runtime.GOOS).
 			Build()
+	}
+}
+
+// EnumerateDevices returns a list of available audio capture devices
+func EnumerateDevices() ([]AudioDeviceInfo, error) {
+	// Determine backend
+	backend, err := getBackendForPlatform()
+	if err != nil {
+		return nil, err
 	}
 
 	// Initialize context
@@ -215,16 +221,9 @@ func GetHardwareDevices() ([]AudioDeviceInfo, error) {
 // GetDefaultDevice returns the system default capture device
 func GetDefaultDevice() (*AudioDeviceInfo, error) {
 	// Determine backend
-	var backend malgo.Backend
-	switch runtime.GOOS {
-	case "linux":
-		backend = malgo.BackendAlsa
-	case "windows":
-		backend = malgo.BackendWasapi
-	case "darwin":
-		backend = malgo.BackendCoreaudio
-	default:
-		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	backend, err := getBackendForPlatform()
+	if err != nil {
+		return nil, err
 	}
 
 	// Initialize context

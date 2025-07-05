@@ -2,6 +2,8 @@ package adapter
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +18,8 @@ type mockSource struct {
 	errorOutput chan error
 	active      bool
 	format      audiocore.AudioFormat
+	closeOnce   sync.Once
+	mu          sync.Mutex
 }
 
 func newMockSource(id, name string) *mockSource {
@@ -33,20 +37,35 @@ func newMockSource(id, name string) *mockSource {
 	}
 }
 
-func (m *mockSource) ID() string                      { return m.id }
-func (m *mockSource) Name() string                    { return m.name }
-func (m *mockSource) Start(ctx context.Context) error { m.active = true; return nil }
+func (m *mockSource) ID() string   { return m.id }
+func (m *mockSource) Name() string { return m.name }
+func (m *mockSource) Start(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.active = true
+	return nil
+}
 func (m *mockSource) Stop() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.active = false
-	close(m.audioOutput)
-	close(m.errorOutput)
+
+	// Close channels only once to prevent panic
+	m.closeOnce.Do(func() {
+		close(m.audioOutput)
+		close(m.errorOutput)
+	})
 	return nil
 }
 func (m *mockSource) AudioOutput() <-chan audiocore.AudioData { return m.audioOutput }
 func (m *mockSource) Errors() <-chan error                    { return m.errorOutput }
-func (m *mockSource) IsActive() bool                          { return m.active }
-func (m *mockSource) GetFormat() audiocore.AudioFormat        { return m.format }
-func (m *mockSource) SetGain(gain float64) error              { return nil }
+func (m *mockSource) IsActive() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.active
+}
+func (m *mockSource) GetFormat() audiocore.AudioFormat { return m.format }
+func (m *mockSource) SetGain(gain float64) error       { return nil }
 
 func TestNewBufferBridge(t *testing.T) {
 	source := newMockSource("test-source", "Test Source")
@@ -125,11 +144,24 @@ func TestBufferBridgeAudioProcessing(t *testing.T) {
 		SourceID:  "test-source",
 	}
 
-	// Send data through the source
-	source.audioOutput <- testData
+	// Create a channel to signal when data is processed
+	processed := make(chan struct{})
 
-	// Give it time to process
-	time.Sleep(100 * time.Millisecond)
+	// Send data and wait for processing in separate goroutine
+	go func() {
+		// Wait a moment for bridge to start processing
+		time.Sleep(10 * time.Millisecond)
+		source.audioOutput <- testData
+		close(processed)
+	}()
+
+	// Wait for processing signal
+	select {
+	case <-processed:
+		// Data was sent
+	case <-time.After(1 * time.Second):
+		t.Error("Timeout waiting for data processing")
+	}
 
 	// In a real test, we would verify that the data was written to myaudio buffers
 	// For now, we just ensure it doesn't panic
@@ -148,12 +180,25 @@ func TestBufferBridgeErrorHandling(t *testing.T) {
 		t.Fatalf("Failed to start bridge: %v", err)
 	}
 
-	// Send test error
-	testErr := bridge.source.Errors() // Just verify channel exists
-	_ = testErr
+	// Create a channel to signal when error handler is ready
+	ready := make(chan struct{})
 
-	// Give it time to process
-	time.Sleep(100 * time.Millisecond)
+	// Send a test error to verify error handling
+	go func() {
+		// Wait a moment for bridge error handler to start
+		time.Sleep(10 * time.Millisecond)
+		testErr := errors.New("test error")
+		select {
+		case source.errorOutput <- testErr:
+			close(ready)
+		case <-time.After(100 * time.Millisecond):
+			// Error channel might be full or not ready
+			close(ready)
+		}
+	}()
+
+	// Wait for error handling
+	<-ready
 
 	// Stop the bridge
 	_ = bridge.Stop()
@@ -178,12 +223,18 @@ func TestBufferBridgeChannelClosure(t *testing.T) {
 		t.Fatalf("Failed to start bridge: %v", err)
 	}
 
-	// Close source channels to simulate source stopping
-	close(source.audioOutput)
-	close(source.errorOutput)
+	// Create done channel to signal when channels are closed
+	closed := make(chan struct{})
 
-	// Give goroutines time to exit
-	time.Sleep(100 * time.Millisecond)
+	// Close source channels to simulate source stopping
+	go func() {
+		close(source.audioOutput)
+		close(source.errorOutput)
+		close(closed)
+	}()
+
+	// Wait for channels to be closed
+	<-closed
 
 	// Stop should still work without hanging
 	done := make(chan bool)

@@ -69,4 +69,3 @@ func ListAvailableDevices() ([]malgo.AudioDeviceInfo, error) {
 func GetDefaultDevice() (*malgo.AudioDeviceInfo, error) {
 	return malgo.GetDefaultDevice()
 }
-

@@ -120,7 +120,10 @@ func (s *MalgoSource) Start(ctx context.Context) error {
 	}
 
 	// Initialize malgo context
-	backend := s.getBackend()
+	backend, err := getBackendForPlatform()
+	if err != nil {
+		return err
+	}
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, nil)
 	if err != nil {
 		return errors.New(err).
@@ -283,9 +286,9 @@ func (s *MalgoSource) SetGain(gain float64) error {
 }
 
 // onAudioData is called by malgo when audio data is available
-func (s *MalgoSource) onAudioData(pSample2, pSamples []byte, framecount uint32) {
+func (s *MalgoSource) onAudioData(pOutput, pInput []byte, framecount uint32) {
 	// Convert if needed
-	converted, err := s.convertAudio(pSamples)
+	converted, err := s.convertAudio(pInput)
 	if err != nil {
 		select {
 		case s.errorChan <- err:
@@ -372,20 +375,6 @@ func (s *MalgoSource) monitor(ctx context.Context) {
 	<-ctx.Done()
 	// Context cancelled, ensure device is stopped
 	_ = s.Stop()
-}
-
-// getBackend returns the appropriate backend for the current platform
-func (s *MalgoSource) getBackend() malgo.Backend {
-	switch runtime.GOOS {
-	case "linux":
-		return malgo.BackendAlsa
-	case "windows":
-		return malgo.BackendWasapi
-	case "darwin":
-		return malgo.BackendCoreaudio
-	default:
-		return malgo.BackendNull
-	}
 }
 
 // applyGain applies gain to 16-bit audio samples
