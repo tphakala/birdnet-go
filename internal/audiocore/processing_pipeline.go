@@ -335,13 +335,14 @@ func (p *ProcessingPipeline) GetMetrics() map[string]any {
 
 // ChunkBuffer accumulates audio data into fixed-duration chunks
 type ChunkBuffer struct {
-	chunkDuration time.Duration
-	format        AudioFormat
-	bufferPool    BufferPool
-	buffer        AudioBuffer
-	currentSize   int
-	targetSize    int
-	mu            sync.Mutex
+	chunkDuration  time.Duration
+	format         AudioFormat
+	bufferPool     BufferPool
+	buffer         AudioBuffer
+	currentSize    int
+	targetSize     int
+	overflowBuffer []byte // Buffer to hold overflow data between chunks
+	mu             sync.Mutex
 }
 
 // ChunkBufferConfig holds configuration for chunk buffer
@@ -374,6 +375,13 @@ func (c *ChunkBuffer) Add(data *AudioData) {
 	if c.buffer == nil {
 		c.buffer = c.bufferPool.Get(c.targetSize)
 		c.currentSize = 0
+		
+		// If we have overflow data from previous chunk, add it first
+		if len(c.overflowBuffer) > 0 {
+			copy(c.buffer.Data(), c.overflowBuffer)
+			c.currentSize = len(c.overflowBuffer)
+			c.overflowBuffer = nil
+		}
 	}
 
 	// Copy data to buffer
@@ -388,10 +396,13 @@ func (c *ChunkBuffer) Add(data *AudioData) {
 		c.currentSize += toCopy
 	}
 
-	// TODO: Handle overflow data that spans chunks
-	// if len(data.Buffer) > toCopy {
-	//     // Handle overflow data
-	// }
+	// Handle overflow data that spans chunks
+	if len(data.Buffer) > toCopy {
+		// Store overflow data for next chunk
+		overflow := data.Buffer[toCopy:]
+		c.overflowBuffer = make([]byte, len(overflow))
+		copy(c.overflowBuffer, overflow)
+	}
 }
 
 // HasCompleteChunk returns true if a complete chunk is ready
@@ -419,10 +430,12 @@ func (c *ChunkBuffer) GetChunk() *AudioData {
 		SourceID:  "", // Will be set by caller
 	}
 
-	// Reset buffer
+	// Reset buffer but preserve overflow
 	c.buffer.Release()
 	c.buffer = nil
 	c.currentSize = 0
+	
+	// If we have overflow data, it will be added to the next chunk
 
 	return chunk
 }
@@ -496,17 +509,21 @@ func (o *OverlapBuffer) Process(chunk *AudioData) (*AudioData, error) {
 		copy(o.overlapData.Data(), chunk.Buffer[len(chunk.Buffer)-o.overlapBytes:])
 	}
 
-	// Create processed chunk
+	// Create a copy of the processed data to avoid use-after-free
+	processedData := make([]byte, offset+len(chunk.Buffer))
+	copy(processedData, result.Data()[:offset+len(chunk.Buffer)])
+	
+	// Now we can safely release the result buffer
+	result.Release()
+	
+	// Create processed chunk with the copied data
 	processed := &AudioData{
-		Buffer:    result.Data()[:offset+len(chunk.Buffer)],
+		Buffer:    processedData,
 		Format:    chunk.Format,
 		Timestamp: chunk.Timestamp,
 		Duration:  chunk.Duration,
 		SourceID:  chunk.SourceID,
 	}
-
-	// Release the result buffer after use
-	result.Release()
 
 	return processed, nil
 }

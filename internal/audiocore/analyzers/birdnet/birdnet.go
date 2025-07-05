@@ -222,10 +222,16 @@ func (b *BirdNETAnalyzer) Close() error {
 		"total_analyzed", b.totalAnalyzed,
 		"total_detected", b.totalDetected)
 
-	// BirdNET model cleanup if needed
-	// if b.model != nil {
-	//     b.model.Close()
-	// }
+	// Close the BirdNET model to release TFLite interpreters
+	if b.model != nil {
+		if err := b.model.Close(); err != nil {
+			return errors.New(err).
+				Component(audiocore.ComponentAudioCore).
+				Category(errors.CategoryResource).
+				Context("operation", "close_model").
+				Build()
+		}
+	}
 
 	return nil
 }

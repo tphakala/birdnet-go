@@ -665,3 +665,27 @@ func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, co
 
 	return scientific, common, code
 }
+
+// Close releases all resources held by the BirdNET model
+func (bn *BirdNET) Close() error {
+	var errs []error
+	
+	// Delete the analysis interpreter
+	if bn.AnalysisInterpreter != nil {
+		bn.AnalysisInterpreter.Delete()
+		bn.AnalysisInterpreter = nil
+	}
+	
+	// Delete the range interpreter
+	if bn.RangeInterpreter != nil {
+		bn.RangeInterpreter.Delete()
+		bn.RangeInterpreter = nil
+	}
+	
+	// If there were any errors, return them
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing BirdNET model: %v", errs)
+	}
+	
+	return nil
+}
