@@ -10,6 +10,7 @@ tmp
 *.log
 *.log.*
 *.exe
+*.local.md
 model/labels_en.txt
 model/labels_fi.txt
 output/soundscape.wav.txt
