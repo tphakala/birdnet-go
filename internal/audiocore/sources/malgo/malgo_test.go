@@ -127,6 +127,31 @@ func TestConvertToS16(t *testing.T) {
 			expected: []byte{0x00, 0x00, 0x00, 0x7F},
 		},
 		{
+			name:     "S24 to S16",
+			format:   malgo.FormatS24,
+			input:    []byte{0x00, 0x00, 0x7F, 0x00, 0x00, 0x80}, // Two 24-bit samples
+			// S24: 0x7F0000 (8323072) -> S16: 0x7F00 (32512)
+			// S24: 0x800000 (-8388608) -> S16: 0x8000 (-32768)
+			expected: []byte{0x00, 0x7F, 0x00, 0x80},
+		},
+		{
+			name:     "S32 to S16",
+			format:   malgo.FormatS32,
+			input:    []byte{0x00, 0x00, 0xFF, 0x7F, 0x00, 0x00, 0x00, 0x80}, // Two 32-bit samples
+			// S32: 0x7FFF0000 (2147418112) -> S16: 0x7FFF (32767)
+			// S32: 0x80000000 (-2147483648) -> S16: 0x8000 (-32768)
+			expected: []byte{0xFF, 0x7F, 0x00, 0x80},
+		},
+		{
+			name:     "F32 to S16",
+			format:   malgo.FormatF32,
+			// F32: 0.5 = 0x3F000000, -0.5 = 0xBF000000 in IEEE 754
+			input:    []byte{0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xBF},
+			// F32: 0.5 * 32767 = 16383.5 -> S16: 16383 (0x3FFF)
+			// F32: -0.5 * 32767 = -16383.5 -> S16: -16383 (0xC001)
+			expected: []byte{0xFF, 0x3F, 0x01, 0xC0},
+		},
+		{
 			name:     "Empty input",
 			format:   malgo.FormatS16,
 			input:    []byte{},
