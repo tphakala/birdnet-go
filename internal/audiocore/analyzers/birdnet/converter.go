@@ -15,6 +15,9 @@ type FormatConverter struct {
 
 // NewFormatConverter creates a new format converter
 func NewFormatConverter(bufferPool audiocore.BufferPool) *FormatConverter {
+	if bufferPool == nil {
+		panic("FormatConverter: bufferPool cannot be nil")
+	}
 	return &FormatConverter{
 		bufferPool: bufferPool,
 	}
@@ -62,7 +65,16 @@ func (c *FormatConverter) ConvertToFloat32(input []byte, output []float32, forma
 
 // calculateSampleCount calculates the number of samples in the input
 func (c *FormatConverter) calculateSampleCount(input []byte, format audiocore.AudioFormat) int {
+	// Validate format to prevent division by zero
+	if format.BitDepth <= 0 || format.Channels <= 0 {
+		return 0
+	}
+	
 	bytesPerSample := format.BitDepth / 8
+	if bytesPerSample <= 0 {
+		return 0
+	}
+	
 	return len(input) / bytesPerSample / format.Channels
 }
 
@@ -203,12 +215,35 @@ func (c *FormatConverter) ResampleIfNeeded(input []float32, inputRate int, outpu
 }
 
 // ConvertToMono converts stereo to mono by averaging channels
-func (c *FormatConverter) ConvertToMono(input []float32, channels int) []float32 {
+func (c *FormatConverter) ConvertToMono(input []float32, channels int) ([]float32, error) {
+	if channels <= 0 {
+		return nil, errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("channels", channels).
+			Context("error", "invalid channel count").
+			Build()
+	}
+
 	if channels == 1 {
-		return input
+		return input, nil
+	}
+
+	// Validate input length is divisible by channels
+	if len(input)%channels != 0 {
+		return nil, errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("input_length", len(input)).
+			Context("channels", channels).
+			Context("error", "input length not divisible by channel count").
+			Build()
 	}
 
 	monoSamples := len(input) / channels
+	
+	// Get buffer from pool
+	outputBuf := c.bufferPool.Get(monoSamples * 4) // 4 bytes per float32
 	output := make([]float32, monoSamples)
 
 	for i := 0; i < monoSamples; i++ {
@@ -219,5 +254,8 @@ func (c *FormatConverter) ConvertToMono(input []float32, channels int) []float32
 		output[i] = sum / float32(channels)
 	}
 
-	return output
+	// Return buffer to pool
+	c.bufferPool.Put(outputBuf)
+
+	return output, nil
 }

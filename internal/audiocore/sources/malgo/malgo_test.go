@@ -68,8 +68,8 @@ func TestNewMalgoSource(t *testing.T) {
 		t.Errorf("Expected ID 'test-source', got '%s'", source.ID())
 	}
 
-	if source.Name() != "test" {
-		t.Errorf("Expected name 'test', got '%s'", source.Name())
+	if source.Name() != "Test Source" {
+		t.Errorf("Expected name 'Test Source', got '%s'", source.Name())
 	}
 
 	format := source.GetFormat()

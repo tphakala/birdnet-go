@@ -188,6 +188,7 @@ func (b *CircularBuffer) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	
-	// Release buffer back to pool if using one
+	// Clear the buffer reference
+	// Note: Buffer was allocated with make(), not from a pool
 	b.buffer = nil
 }

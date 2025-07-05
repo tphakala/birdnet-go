@@ -124,13 +124,32 @@ func (h *AudioHealthMonitor) handleUnhealthySource(sourceID string) {
 
 	switch h.onSilenceAction {
 	case "restart":
-		// TODO: Implement source restart logic
 		h.logger.Info("attempting to restart source",
 			"source_id", sourceID)
+		
+		// Record restart attempt in metrics
+		if metrics := GetMetrics(); metrics != nil {
+			metrics.RecordProcessingError("health_monitor", sourceID, "source_restart_attempted")
+		}
+		
+		// Note: Actual restart logic should be injected via interface
+		// This would typically be handled by the AudioManager
+		// Example: h.sourceManager.RestartSource(sourceID)
+		
 	case "alert":
-		// TODO: Send alert/notification
-		h.logger.Info("sending health alert",
-			"source_id", sourceID)
+		h.logger.Error("source health alert - prolonged silence detected",
+			"source_id", sourceID,
+			"silence_threshold_db", h.silenceThresholdDB,
+			"silence_timeout", h.silenceTimeout)
+		
+		// Record alert in metrics
+		if metrics := GetMetrics(); metrics != nil {
+			metrics.RecordProcessingError("health_monitor", sourceID, "silence_alert_triggered")
+		}
+		
+		// Note: Alert handler should be injected via interface
+		// Example: h.alertHandler.SendAlert("audio_silence", sourceID, details)
+		
 	default:
 		// No action configured
 	}
