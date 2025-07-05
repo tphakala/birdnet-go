@@ -513,7 +513,7 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	*bufferErrorCount = 0
 
 	// Broadcast audio data to WebSocket clients
-	broadcastAudioData(url, data)
+	BroadcastAudioData(url, data)
 
 	// Calculate audio level
 	audioLevelData := calculateAudioLevel(data, url, "")
