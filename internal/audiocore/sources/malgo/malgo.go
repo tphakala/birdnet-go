@@ -80,7 +80,7 @@ func NewMalgoSource(id string, config MalgoConfig, bufferPool audiocore.BufferPo
 		convertPool: &sync.Pool{
 			New: func() any {
 				// Pre-allocate conversion buffers based on typical frame size
-				// For 512 frames * 2 bytes/sample = 1024 bytes
+				// For 512 frames * 2 bytes/sample = 1024 bytes, one audio channel per buffer
 				buffer := make([]byte, config.BufferFrames*2)
 				return &buffer
 			},
