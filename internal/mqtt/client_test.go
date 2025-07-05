@@ -89,13 +89,15 @@ func debugLog(t *testing.T, format string, args ...interface{}) {
 
 // retryWithTimeout attempts an operation with retries until it succeeds or times out
 func retryWithTimeout(timeout time.Duration, operation func() error) error {
-	deadline := time.Now().Add(timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
 	backoff := 100 * time.Millisecond
 	maxBackoff := 2 * time.Second
 	var lastErr error
 	attempts := 0
 
-	for time.Now().Before(deadline) {
+	for {
 		attempts++
 		if err := operation(); err != nil {
 			lastErr = err
@@ -104,7 +106,16 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 			jitter := time.Duration(rand.Int63n(int64(backoff / 2))) // #nosec G404 -- weak randomness acceptable for test backoff jitter, not security-critical
 			sleepTime := backoff + jitter
 			log.Printf("[DEBUG] Sleeping for %v before next retry", sleepTime)
-			time.Sleep(sleepTime)
+			
+			timer := time.NewTimer(sleepTime)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("operation timed out after %v and %d attempts, last error: %w", timeout, attempts, lastErr)
+			case <-timer.C:
+				// Continue with next retry
+			}
+			
 			backoff *= 2
 			if backoff > maxBackoff {
 				backoff = maxBackoff
@@ -114,12 +125,12 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 		log.Printf("[DEBUG] Operation succeeded after %d attempts", attempts)
 		return nil
 	}
-	return fmt.Errorf("operation timed out after %v and %d attempts, last error: %w", timeout, attempts, lastErr)
 }
 
 // TestMQTTClient runs a suite of tests for the MQTT client implementation.
 // It covers basic functionality, error handling, reconnection scenarios, and metrics collection.
 func TestMQTTClient(t *testing.T) {
+	t.Parallel()
 	broker := getBrokerAddress()
 	if broker == "" {
 		//nolint:misspell // "mosquitto" is the correct spelling for the MQTT broker software
@@ -148,6 +159,7 @@ func TestMQTTClient(t *testing.T) {
 // testBasicFunctionality verifies the basic operations of the MQTT client:
 // connection, publishing a message, and disconnection.
 func testBasicFunctionality(t *testing.T) {
+	t.Parallel()
 	debugLog(t, "Starting Basic Functionality test")
 	broker := getBrokerAddress()
 	if broker == "" {
@@ -684,15 +696,36 @@ func testDNSResolutionForTest(t *testing.T) {
 	})
 }
 
+// sanitizeClientID ensures the client ID is valid for MQTT brokers
+func sanitizeClientID(id string) string {
+	// Replace invalid characters with hyphen
+	sanitized := strings.ReplaceAll(id, "/", "-")
+	sanitized = strings.ReplaceAll(sanitized, " ", "-")
+	sanitized = strings.ReplaceAll(sanitized, ".", "-")
+	
+	// Truncate to 23 characters if needed
+	if len(sanitized) > 23 {
+		sanitized = sanitized[:23]
+	}
+	
+	return sanitized
+}
+
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
 func createTestClient(t *testing.T, broker string) (Client, *observability.Metrics) {
+	// Use test name as client ID to ensure uniqueness when running tests in parallel
+	clientID := "TestNode"
+	if t != nil {
+		clientID = sanitizeClientID(t.Name())
+	}
+	
 	testSettings := &conf.Settings{
 		Main: struct {
 			Name      string
 			TimeAs24h bool
 			Log       conf.LogConfig
 		}{
-			Name: "TestNode",
+			Name: clientID,
 		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{

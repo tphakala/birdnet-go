@@ -73,6 +73,7 @@ type AudioSettings struct {
 	StreamTransport string             // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings     // export settings
 	SoundLevel      SoundLevelSettings // sound level monitoring settings
+	UseAudioCore    bool               // true to use new audiocore package instead of myaudio
 
 	Equalizer EqualizerSettings // equalizer settings
 }
