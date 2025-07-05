@@ -182,33 +182,6 @@ func hexToASCII(hexStr string) (string, error) {
 	return string(bytes), nil
 }
 
-// isHardwareDevice checks if the device ID indicates a hardware device
-func isHardwareDevice(decodedID string) bool {
-	// On Linux, hardware devices have IDs in the format ":X,Y"
-	if runtime.GOOS == "linux" {
-		return strings.Contains(decodedID, ":") && strings.Contains(decodedID, ",")
-	}
-	// On Windows and macOS, consider all devices as potential hardware devices
-	return true
-}
-
-// GetHardwareDevices filters devices to return only hardware devices
-func GetHardwareDevices() ([]AudioDeviceInfo, error) {
-	devices, err := EnumerateDevices()
-	if err != nil {
-		return nil, err
-	}
-
-	hardwareDevices := make([]AudioDeviceInfo, 0, len(devices))
-	for _, device := range devices {
-		if isHardwareDevice(device.ID) {
-			hardwareDevices = append(hardwareDevices, device)
-		}
-	}
-
-	return hardwareDevices, nil
-}
-
 // GetDefaultDevice returns the system default capture device
 func GetDefaultDevice() (*AudioDeviceInfo, error) {
 	// Determine backend
