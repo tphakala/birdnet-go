@@ -1,7 +1,6 @@
 package malgo
 
 import (
-	"context"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -190,8 +189,6 @@ func TestCalculateBufferSize(t *testing.T) {
 
 func TestMalgoSourceStartStop(t *testing.T) {
 	// Skip this test if we can't initialize malgo (e.g., in CI without audio devices)
-	ctx := context.Background()
-
 	config := MalgoConfig{
 		DeviceName: "default",
 		SampleRate: 48000,
@@ -210,7 +207,6 @@ func TestMalgoSourceStartStop(t *testing.T) {
 	// Test double start
 	// Note: This test may fail if no audio devices are available
 	// In production, we'd want to mock the malgo interface
-	_ = ctx // Using context to avoid unused variable error
 }
 
 func TestEnumerateDevices(t *testing.T) {

@@ -129,15 +129,6 @@ func SelectDevice(devices []malgo.DeviceInfo, deviceName string) (*malgo.DeviceI
 		}
 	}
 
-	// Windows special case: check for default device alias
-	if runtime.GOOS == "windows" && deviceName == "sysdefault" {
-		for i := range devices {
-			if devices[i].IsDefault == 1 {
-				return &devices[i], nil
-			}
-		}
-	}
-
 	return nil, errors.New(nil).
 		Component("audiocore").
 		Category(errors.CategoryValidation).
