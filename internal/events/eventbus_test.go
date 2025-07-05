@@ -86,14 +86,22 @@ func (m *mockConsumer) GetEvents() []ErrorEvent {
 // waitForProcessed waits for the consumer to process n events or times out
 func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if consumer.GetProcessedCount() >= expected {
-			return
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("timeout waiting for %d events, got %d", expected, consumer.GetProcessedCount())
+		case <-ticker.C:
+			if consumer.GetProcessedCount() >= expected {
+				return
+			}
 		}
-		time.Sleep(1 * time.Millisecond) // Small sleep to avoid busy loop
 	}
-	t.Fatalf("timeout waiting for %d events, got %d", expected, consumer.GetProcessedCount())
 }
 
 // TestEventBusInitialization tests event bus initialization

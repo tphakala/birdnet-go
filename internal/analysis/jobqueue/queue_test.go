@@ -193,6 +193,7 @@ func teardownTestQueue(t *testing.T, queue *JobQueue) {
 
 // TestBasicQueueFunctionality tests the basic functionality of the job queue
 func TestBasicQueueFunctionality(t *testing.T) {
+	t.Parallel()
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
 	defer teardownTestQueue(t, queue)
@@ -219,7 +220,9 @@ func TestBasicQueueFunctionality(t *testing.T) {
 
 	// Wait for the job to be processed
 	// The job queue processes jobs on a 1-second ticker, so we need to wait at least that long
-	time.Sleep(1200 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+	<-ctx.Done()
 
 	// Check that the action was executed
 	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
@@ -233,6 +236,7 @@ func TestBasicQueueFunctionality(t *testing.T) {
 
 // TestMultipleJobs tests enqueueing and processing multiple jobs
 func TestMultipleJobs(t *testing.T) {
+	t.Parallel()
 	// Create a context for manual control
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -292,10 +296,12 @@ func TestMultipleJobs(t *testing.T) {
 		close(done)
 	}()
 
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer timeoutCancel()
 	select {
 	case <-done:
 		// All jobs completed
-	case <-time.After(5 * time.Second):
+	case <-timeoutCtx.Done():
 		t.Fatal("Timed out waiting for jobs to complete")
 	}
 
@@ -314,6 +320,7 @@ func TestMultipleJobs(t *testing.T) {
 
 // TestRetryProcess tests the retry process for jobs that fail
 func TestRetryProcess(t *testing.T) {
+	t.Parallel()
 	// Create a context for manual control
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -368,14 +375,19 @@ func TestRetryProcess(t *testing.T) {
 	require.NotNil(t, job, "Job should not be nil")
 
 	// Force immediate processing for up to failCount+1 times
+	completed := false
 	for i := 0; i <= failCount+1; i++ {
 		// First check if we're done
 		select {
 		case <-done:
 			t.Logf("TestRetryProcess: Job completed successfully after %d attempts", attemptCount.Load())
-			goto TestComplete
+			completed = true
 		default:
 			// Not done yet, force processing
+		}
+
+		if completed {
+			break
 		}
 
 		// Force immediate processing
@@ -386,14 +398,16 @@ func TestRetryProcess(t *testing.T) {
 	}
 
 	// Wait a bit longer in case we still need more time
-	select {
-	case <-done:
-		t.Logf("TestRetryProcess: Job completed successfully after %d attempts", attemptCount.Load())
-	case <-time.After(200 * time.Millisecond):
-		t.Fatalf("Timed out waiting for job to succeed. Current attempt count: %d", attemptCount.Load())
+	if !completed {
+		retryCtx, retryCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer retryCancel()
+		select {
+		case <-done:
+			t.Logf("TestRetryProcess: Job completed successfully after %d attempts", attemptCount.Load())
+		case <-retryCtx.Done():
+			t.Fatalf("Timed out waiting for job to succeed. Current attempt count: %d", attemptCount.Load())
+		}
 	}
-
-TestComplete:
 	// Check that the action was executed the expected number of times
 	expectedExecutions := failCount + 1 // Initial attempt + retries
 	actualExecutions := action.GetExecuteCount()
@@ -410,6 +424,7 @@ TestComplete:
 
 // TestRetryExhaustion tests that jobs fail permanently after reaching the maximum number of retries
 func TestRetryExhaustion(t *testing.T) {
+	t.Parallel()
 	// Create a context for manual control
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
