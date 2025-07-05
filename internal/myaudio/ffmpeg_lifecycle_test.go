@@ -1466,7 +1466,7 @@ func mockProcessAudioDataForChannelTest(url string, data []byte, unifiedAudioCha
 	// Skip buffer writes (which would fail in test environment) and focus on channel operations
 
 	// Broadcast audio data to WebSocket clients (this is a no-op in test environment)
-	// broadcastAudioData(url, data) // Skip this as it may not be available in test
+	// BroadcastAudioData(url, data) // Skip this as it may not be available in test
 
 	// Calculate and send audio level - this is the main focus of the test
 	audioLevelData := calculateAudioLevel(data, url, "")

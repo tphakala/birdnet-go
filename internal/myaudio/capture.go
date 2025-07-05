@@ -52,8 +52,8 @@ func UnregisterBroadcastCallback(sourceID string) {
 		sourceID, len(broadcastCallbacks))
 }
 
-// broadcastAudioData sends audio data to all registered callbacks
-func broadcastAudioData(sourceID string, data []byte) {
+// BroadcastAudioData sends audio data to all registered callbacks
+func BroadcastAudioData(sourceID string, data []byte) {
 	broadcastCallbackMutex.RLock()
 	callback, exists := broadcastCallbacks[sourceID]
 
@@ -654,7 +654,7 @@ func processAudioFrame(
 	}
 
 	// Broadcast audio data (use the safe bufferToUse)
-	broadcastAudioData("malgo", bufferToUse)
+	BroadcastAudioData("malgo", bufferToUse)
 
 	// Calculate audio level (use the safe bufferToUse)
 	audioLevelData := calculateAudioLevel(bufferToUse, "malgo", source.Name)
