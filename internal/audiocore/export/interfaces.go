@@ -122,3 +122,6 @@ type ExportResult struct {
 	// Duration is how long the export took
 	Duration time.Duration
 }
+
+// Result is an alias for ExportResult for backward compatibility
+type Result = ExportResult

@@ -119,8 +119,8 @@ func IsValidBitrate(bitrate string) bool {
 	}
 
 	// Try to parse as integer
-	var rate int
-	if _, err := parseIntFromString(numStr); err != nil {
+	rate, err := parseIntFromString(numStr)
+	if err != nil {
 		return false
 	}
 
