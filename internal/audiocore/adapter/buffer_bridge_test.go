@@ -66,6 +66,13 @@ func (m *mockSource) IsActive() bool {
 }
 func (m *mockSource) GetFormat() audiocore.AudioFormat { return m.format }
 func (m *mockSource) SetGain(gain float64) error       { return nil }
+func (m *mockSource) GetConfig() audiocore.SourceConfig {
+	return audiocore.SourceConfig{
+		ID:     m.id,
+		Name:   m.name,
+		Format: m.format,
+	}
+}
 
 func TestNewBufferBridge(t *testing.T) {
 	source := newMockSource("test-source", "Test Source")

@@ -30,7 +30,7 @@ func CreateSource(config *audiocore.SourceConfig, bufferPool audiocore.BufferPoo
 			malgoConfig.BufferFrames = uint32(v)
 		}
 
-		return malgo.NewMalgoSource(config.ID, malgoConfig, bufferPool)
+		return malgo.NewMalgoSource(config, bufferPool)
 
 	case "rtsp":
 		// TODO: Implement RTSP source

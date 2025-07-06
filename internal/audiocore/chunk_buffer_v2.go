@@ -1,0 +1,104 @@
+package audiocore
+
+import (
+	"sync"
+	"time"
+)
+
+// ChunkBufferV2 accumulates audio data into fixed-duration chunks with improved overflow handling
+type ChunkBufferV2 struct {
+	chunkDuration   time.Duration
+	format          AudioFormat
+	bufferPool      BufferPool
+	targetSize      int
+	
+	// Buffer management
+	pendingData     []byte // All pending data that hasn't been chunked yet
+	completedChunks []AudioData // Ready chunks
+	mu              sync.Mutex
+}
+
+// NewChunkBufferV2 creates a new improved chunk buffer
+func NewChunkBufferV2(config ChunkBufferConfig) *ChunkBufferV2 {
+	// Calculate target buffer size
+	bytesPerSecond := config.Format.SampleRate * config.Format.Channels * (config.Format.BitDepth / 8)
+	targetSize := int(float64(bytesPerSecond) * config.ChunkDuration.Seconds())
+
+	return &ChunkBufferV2{
+		chunkDuration:   config.ChunkDuration,
+		format:          config.Format,
+		bufferPool:      config.BufferPool,
+		targetSize:      targetSize,
+		pendingData:     make([]byte, 0, targetSize*2), // Pre-allocate some capacity
+		completedChunks: make([]AudioData, 0),
+	}
+}
+
+// Add adds audio data to the buffer
+func (c *ChunkBufferV2) Add(data *AudioData) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Append new data to pending
+	c.pendingData = append(c.pendingData, data.Buffer...)
+
+	// Create chunks from pending data
+	for len(c.pendingData) >= c.targetSize {
+		// Extract a chunk
+		chunkData := make([]byte, c.targetSize)
+		copy(chunkData, c.pendingData[:c.targetSize])
+		
+		// Create chunk
+		chunk := AudioData{
+			Buffer:    chunkData,
+			Format:    c.format,
+			Timestamp: time.Now().Add(-c.chunkDuration), // Approximate start time
+			Duration:  c.chunkDuration,
+			SourceID:  data.SourceID,
+		}
+		
+		c.completedChunks = append(c.completedChunks, chunk)
+		
+		// Remove chunk from pending
+		c.pendingData = c.pendingData[c.targetSize:]
+	}
+}
+
+// HasCompleteChunk returns true if a complete chunk is ready
+func (c *ChunkBufferV2) HasCompleteChunk() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.completedChunks) > 0
+}
+
+// GetChunk returns a complete chunk
+func (c *ChunkBufferV2) GetChunk() *AudioData {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.completedChunks) == 0 {
+		return nil
+	}
+
+	// Return first chunk
+	chunk := c.completedChunks[0]
+	c.completedChunks = c.completedChunks[1:]
+	
+	return &chunk
+}
+
+// GetPendingSize returns the size of pending data that hasn't formed a complete chunk yet
+func (c *ChunkBufferV2) GetPendingSize() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.pendingData)
+}
+
+// Reset clears all buffers
+func (c *ChunkBufferV2) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	
+	c.pendingData = c.pendingData[:0]
+	c.completedChunks = c.completedChunks[:0]
+}

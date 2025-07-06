@@ -342,6 +342,7 @@ type ChunkBuffer struct {
 	currentSize    int
 	targetSize     int
 	overflowBuffer []byte // Buffer to hold overflow data between chunks
+	overflowSize   int    // Actual data size in overflow buffer
 	mu             sync.Mutex
 }
 
@@ -377,10 +378,10 @@ func (c *ChunkBuffer) Add(data *AudioData) {
 		c.currentSize = 0
 		
 		// If we have overflow data from previous chunk, add it first
-		if len(c.overflowBuffer) > 0 {
-			copy(c.buffer.Data(), c.overflowBuffer)
-			c.currentSize = len(c.overflowBuffer)
-			c.overflowBuffer = nil
+		if c.overflowSize > 0 {
+			copy(c.buffer.Data(), c.overflowBuffer[:c.overflowSize])
+			c.currentSize = c.overflowSize
+			c.overflowSize = 0
 		}
 	}
 
@@ -398,10 +399,17 @@ func (c *ChunkBuffer) Add(data *AudioData) {
 
 	// Handle overflow data that spans chunks
 	if len(data.Buffer) > toCopy {
-		// Store overflow data for next chunk
+		// Reuse overflow buffer if possible
 		overflow := data.Buffer[toCopy:]
-		c.overflowBuffer = make([]byte, len(overflow))
-		copy(c.overflowBuffer, overflow)
+		newOverflowSize := len(overflow)
+		
+		// Grow overflow buffer if needed
+		if cap(c.overflowBuffer) < newOverflowSize {
+			c.overflowBuffer = make([]byte, newOverflowSize)
+		}
+		
+		copy(c.overflowBuffer[:newOverflowSize], overflow)
+		c.overflowSize = newOverflowSize
 	}
 }
 
