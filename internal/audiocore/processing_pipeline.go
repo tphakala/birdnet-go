@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
@@ -95,10 +97,13 @@ func NewProcessingPipeline(config *ProcessingPipelineConfig) (*ProcessingPipelin
 	})
 
 	// Create chunk buffer
+	// NOTE: We intentionally don't use buffer pool for chunk buffer to avoid
+	// unnecessary PCM data copying (288KB) when sending to results queue.
+	// The processor takes ownership of the PCM data without copying.
 	chunkBuffer := NewChunkBufferV2(ChunkBufferConfig{
 		ChunkDuration: config.Config.ChunkDuration,
 		Format:        config.Source.GetFormat(),
-		BufferPool:    config.BufferPool,
+		BufferPool:    nil, // Disable pooling to avoid 288KB copies
 	})
 
 	return &ProcessingPipeline{
@@ -352,11 +357,6 @@ func (p *ProcessingPipeline) analyzeLoop(chunks <-chan AudioData) {
 			analyzeCtx, cancel := context.WithTimeout(p.ctx, p.config.ChunkDuration)
 			result, err := p.analyzer.Analyze(analyzeCtx, &chunk)
 			cancel()
-			
-			// Release pooled buffer if present
-			if chunk.BufferHandle != nil {
-				chunk.BufferHandle.Release()
-			}
 
 			if err != nil {
 				p.logger.Warn("analysis failed",
@@ -364,11 +364,20 @@ func (p *ProcessingPipeline) analyzeLoop(chunks <-chan AudioData) {
 				if p.metrics != nil {
 					p.metrics.RecordProcessingError("pipeline", p.source.ID(), "analyzer_error")
 				}
+				// Release buffer on error
+				if chunk.BufferHandle != nil {
+					chunk.BufferHandle.Release()
+				}
 				continue
 			}
 
-			// Process results
-			p.processAnalysisResult(&result)
+			// Process results with chunk data for queue conversion
+			p.processAnalysisResult(&result, &chunk)
+			
+			// Release pooled buffer after processing
+			if chunk.BufferHandle != nil {
+				chunk.BufferHandle.Release()
+			}
 
 		case <-p.ctx.Done():
 			return
@@ -376,24 +385,102 @@ func (p *ProcessingPipeline) analyzeLoop(chunks <-chan AudioData) {
 	}
 }
 
-// processAnalysisResult handles the output from the analyzer
-func (p *ProcessingPipeline) processAnalysisResult(result *AnalysisResult) {
-	// Log detections
-	if len(result.Detections) > 0 {
-		p.logger.Info("detections found",
-			"count", len(result.Detections),
-			"timestamp", result.Timestamp)
-
-		for _, detection := range result.Detections {
-			p.logger.Debug("detection",
-				"label", detection.Label,
-				"confidence", detection.Confidence,
-				"start_time", detection.StartTime,
-				"end_time", detection.EndTime)
-		}
+// processAnalysisResult converts audiocore results to birdnet.Results format and sends to queue
+//
+// OWNERSHIP MODEL:
+// This function implements a critical ownership transfer of PCM audio data:
+// 1. The input chunk contains PCM data that may be backed by a pooled buffer
+// 2. We create a copy of the PCM data to transfer ownership to the results queue
+// 3. The queue consumer (processor) takes full ownership and is responsible for the data
+// 4. After this function returns, the original chunk buffer can be safely released/reused
+//
+// This design ensures:
+// - No use-after-free bugs from pooled buffers being reused while still in the queue
+// - Clear ownership boundaries between audiocore and the processor
+// - Compatibility with the existing processor's expectations
+func (p *ProcessingPipeline) processAnalysisResult(result *AnalysisResult, chunk *AudioData) {
+	// Skip if no detections
+	if len(result.Detections) == 0 {
+		return
 	}
 
-	// TODO: Send results to detection handler/database
+	// Convert detections to datastore.Results format
+	datastoreResults := make([]datastore.Results, 0, len(result.Detections))
+	
+	for _, detection := range result.Detections {
+		// Detection.Label now contains the species string in the correct format
+		datastoreResults = append(datastoreResults, datastore.Results{
+			Species:    detection.Label,
+			Confidence: detection.Confidence,
+		})
+	}
+	
+	// Calculate elapsed time from metadata if available
+	var elapsedTime time.Duration
+	if procTime, ok := result.Metadata["processingTime"].(time.Duration); ok {
+		elapsedTime = procTime
+	} else {
+		// Estimate based on chunk duration if not available
+		elapsedTime = chunk.Duration
+	}
+	
+	// OWNERSHIP TRANSFER: Avoid copying 288KB of PCM data
+	// The existing myaudio implementation transfers ownership without copying,
+	// and the processor expects to own the data. However, we must handle the
+	// case where chunk.Buffer is backed by a pooled buffer that will be reused.
+	//
+	// Strategy: If the chunk has a buffer handle (pooled), we must copy.
+	// Otherwise, we can transfer ownership directly.
+	var pcmData []byte
+	if chunk.BufferHandle != nil {
+		// This buffer is pooled and will be released after this function.
+		// We must copy it to transfer ownership to the queue.
+		pcmData = make([]byte, len(chunk.Buffer))
+		copy(pcmData, chunk.Buffer)
+	} else {
+		// This buffer is not pooled - we can transfer ownership directly
+		// without copying the 288KB of data.
+		pcmData = chunk.Buffer
+	}
+	
+	// Create birdnet.Results struct matching the format from myaudio
+	queueResult := birdnet.Results{
+		StartTime:   result.Timestamp,
+		ElapsedTime: elapsedTime,
+		PCMdata:     pcmData,          // PCM data (ownership transfers to queue)
+		Results:     datastoreResults,
+		Source:      result.SourceID,
+		// ClipName is generated by the processor, not here
+	}
+	
+	// Check queue depth for metrics (non-blocking)
+	queueDepth := len(birdnet.ResultsQueue)
+	queueCapacity := cap(birdnet.ResultsQueue)
+	if p.metrics != nil {
+		p.metrics.UpdateQueueDepth(queueDepth, queueCapacity)
+	}
+	
+	// Send to the existing results queue
+	select {
+	case birdnet.ResultsQueue <- queueResult:
+		p.logger.Debug("sent results to queue",
+			"detections", len(datastoreResults),
+			"source", result.SourceID,
+			"timestamp", result.Timestamp)
+		
+		// Record successful queue submission
+		if p.metrics != nil {
+			p.metrics.RecordQueueSubmission(result.SourceID)
+		}
+	default:
+		// Queue is full, drop the results
+		p.logger.Warn("results queue full, dropping results",
+			"source", result.SourceID,
+			"detections", len(datastoreResults))
+		if p.metrics != nil {
+			p.metrics.RecordFrameDropped(result.SourceID, "results_queue_full")
+		}
+	}
 }
 
 // monitorHealth monitors the health of the pipeline

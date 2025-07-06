@@ -197,6 +197,10 @@ func (b *BirdNETAnalyzer) Analyze(ctx context.Context, data *audiocore.AudioData
 
 	// Convert to standard format
 	analysisResult := b.convertResults(results, data)
+	
+	// Add processing time to metadata
+	processingDuration := time.Since(startTime)
+	analysisResult.Metadata["processingTime"] = processingDuration
 
 	// Update statistics
 	b.mu.Lock()
@@ -206,12 +210,11 @@ func (b *BirdNETAnalyzer) Analyze(ctx context.Context, data *audiocore.AudioData
 
 	// Record metrics
 	if b.metrics != nil {
-		processingDuration := time.Since(startTime)
 		b.metrics.RecordFrameProcessed("birdnet", b.id, processingDuration)
 	}
 
 	b.logger.Debug("analysis completed",
-		"duration", time.Since(startTime),
+		"duration", processingDuration,
 		"detections", len(analysisResult.Detections))
 
 	return analysisResult, nil
@@ -256,19 +259,20 @@ func (b *BirdNETAnalyzer) Close() error {
 
 // convertResults converts BirdNET results to standard format
 func (b *BirdNETAnalyzer) convertResults(results []datastore.Results, data *audiocore.AudioData) audiocore.AnalysisResult {
-	detections := make([]audiocore.Detection, 0)
+	detections := make([]audiocore.Detection, 0, len(results))
 
-	// Filter by threshold
+	// Filter by threshold and convert to detections
 	for _, result := range results {
 		if result.Confidence >= b.config.Threshold {
 			detection := audiocore.Detection{
+				// Store the original species string from BirdNET as the label
+				// This is already in the format expected by the processor
 				Label:      result.Species,
 				Confidence: result.Confidence,
 				StartTime:  0.0, // BirdNET analyzes whole chunk
 				EndTime:    data.Duration.Seconds(),
-				Attributes: map[string]any{
-					// Add any additional attributes if available
-				},
+				// Attributes can be nil - we don't need the extra data anymore
+				Attributes: nil,
 			}
 			detections = append(detections, detection)
 		}

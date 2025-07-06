@@ -268,7 +268,7 @@ func (w *SafeAnalyzerWrapper) Analyze(ctx context.Context, data *AudioData) (Ana
 	case result := <-task.resultChan:
 		// Analysis completed
 		duration := time.Since(task.startTime)
-		w.recordTiming(duration)
+		w.storeTiming(duration)
 		
 		// Extract values before returning to pool
 		analysisResult := result.result
@@ -354,8 +354,8 @@ func (w *SafeAnalyzerWrapper) Close() error {
 	return closeErr
 }
 
-// recordTiming records analysis duration for percentile calculation
-func (w *SafeAnalyzerWrapper) recordTiming(duration time.Duration) {
+// storeTiming stores analysis duration for percentile calculation
+func (w *SafeAnalyzerWrapper) storeTiming(duration time.Duration) {
 	w.timingMutex.Lock()
 	defer w.timingMutex.Unlock()
 	

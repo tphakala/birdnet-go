@@ -13,9 +13,10 @@ import (
 
 // MetricsCollector provides metrics collection for audiocore components
 type MetricsCollector struct {
-	metrics *metrics.AudioCoreMetrics
-	mu      sync.RWMutex
-	enabled bool
+	metrics       *metrics.AudioCoreMetrics
+	mu            sync.RWMutex
+	enabled       bool
+	queueCapacity int // Configurable queue capacity for depth calculations
 }
 
 // globalMetrics is a package-level metrics instance
@@ -36,8 +37,9 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 		metricsLogger = metricsLogger.With("component", "metrics")
 
 		mc := &MetricsCollector{
-			metrics: metricsInstance,
-			enabled: metricsInstance != nil,
+			metrics:       metricsInstance,
+			enabled:       metricsInstance != nil,
+			queueCapacity: 100, // Default capacity, can be overridden
 		}
 		globalMetrics.Store(mc)
 
@@ -57,6 +59,13 @@ func GetMetrics() *MetricsCollector {
 		return &MetricsCollector{enabled: false}
 	}
 	return mc
+}
+
+// SetQueueCapacity sets the queue capacity for metrics calculations
+func (mc *MetricsCollector) SetQueueCapacity(capacity int) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.queueCapacity = capacity
 }
 
 // RecordManagerMetrics records metrics for the audio manager
@@ -284,5 +293,57 @@ func (mc *MetricsCollector) RecordGainProcessing(processorID string, gainLevel f
 
 	if clippingOccurred {
 		mc.metrics.RecordGainClippingEvent(processorID, sampleFormat)
+	}
+}
+
+// RecordQueueSubmission records a successful submission to the results queue
+func (mc *MetricsCollector) RecordQueueSubmission(sourceID string) {
+	if !mc.enabled || mc.metrics == nil {
+		return
+	}
+
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	// Record as a processed frame since queue submission represents successful processing
+	// Use "queue" as manager_id to distinguish from other processing metrics
+	mc.metrics.RecordProcessedFrame("queue", sourceID)
+	
+	if metricsLogger != nil && metricsLogger.Enabled(context.TODO(), slog.LevelDebug) {
+		metricsLogger.Debug("queue submission recorded",
+			"source_id", sourceID)
+	}
+}
+
+// UpdateQueueDepth updates the current queue depth metric
+func (mc *MetricsCollector) UpdateQueueDepth(depth, capacity int) {
+	if !mc.enabled || mc.metrics == nil {
+		return
+	}
+
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	// Use provided capacity or fall back to configured default
+	if capacity <= 0 {
+		capacity = mc.queueCapacity
+	}
+
+	// Calculate utilization percentage
+	utilization := float64(depth) / float64(capacity) * 100.0
+	
+	// TODO: This is a temporary workaround using RecordAudioDataBytes to track queue depth.
+	// The queue depth is a count (number of items), not bytes, which creates a semantic mismatch.
+	// A more appropriate metric recording method should be implemented in the future to accurately
+	// represent queue depth and utilization metrics specifically for queues.
+	mc.metrics.RecordAudioDataBytes("queue", "depth", depth)
+	
+	// Log warning if queue is above threshold (configurable, default 80%)
+	warningThreshold := 80.0
+	if metricsLogger != nil && utilization > warningThreshold {
+		metricsLogger.Warn("results queue depth high",
+			"depth", depth,
+			"capacity", capacity,
+			"utilization_percent", utilization)
 	}
 }
