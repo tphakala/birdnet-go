@@ -157,6 +157,9 @@ type AudioManager interface {
 	// SetProcessorChain sets the processor chain for a source
 	SetProcessorChain(sourceID string, chain ProcessorChain) error
 
+	// SetCaptureManager sets the capture manager for audio recording
+	SetCaptureManager(captureManager interface{}) error
+
 	// Start begins processing audio from all sources
 	Start(ctx context.Context) error
 

@@ -8,7 +8,7 @@ import (
 
 func TestNewProcess(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "test-process",
 		InputURL:     "test.wav",
@@ -33,7 +33,7 @@ func TestNewProcess(t *testing.T) {
 
 func TestProcessMetrics(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "metrics-test",
 		InputURL:     "test.wav",
@@ -59,7 +59,7 @@ func TestProcessMetrics(t *testing.T) {
 
 func TestProcessChannels(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "channels-test",
 		InputURL:     "test.wav",
@@ -88,7 +88,7 @@ func TestProcessChannels(t *testing.T) {
 
 func TestProcessStopBeforeStart(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "stop-test",
 		InputURL:     "test.wav",
@@ -111,7 +111,7 @@ func TestProcessStopBeforeStart(t *testing.T) {
 
 func TestBuildFFmpegArgs(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "args-test",
 		InputURL:     "rtsp://example.com/stream",
@@ -174,7 +174,7 @@ func TestBuildFFmpegArgs(t *testing.T) {
 
 func TestIsRTSPURL(t *testing.T) {
 	t.Parallel()
-	
+
 	tests := []struct {
 		url      string
 		expected bool
@@ -198,7 +198,7 @@ func TestIsRTSPURL(t *testing.T) {
 
 func TestProcessStartInvalidCommand(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "invalid-command-test",
 		InputURL:     "test.wav",
@@ -223,7 +223,7 @@ func TestProcessStartInvalidCommand(t *testing.T) {
 
 func TestProcessDoubleStart(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "double-start-test",
 		InputURL:     "test.wav",
@@ -241,20 +241,20 @@ func TestProcessDoubleStart(t *testing.T) {
 
 	// First start (may fail due to invalid input, but that's OK)
 	err1 := process.Start(ctx)
-	
+
 	// Second start should return the same error (sync.Once behavior)
 	err2 := process.Start(ctx)
-	
+
 	if (err1 == nil) != (err2 == nil) {
 		t.Error("Multiple Start() calls should return consistent error state")
 	}
-	
+
 	_ = process.Stop() // Ignore error for cleanup
 }
 
 func TestProcessDoubleStop(t *testing.T) {
 	t.Parallel()
-	
+
 	config := &ProcessConfig{
 		ID:           "double-stop-test",
 		InputURL:     "test.wav",

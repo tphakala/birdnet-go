@@ -19,12 +19,12 @@ type healthChecker struct {
 
 // audioLevelTracker tracks audio levels for silence detection
 type audioLevelTracker struct {
-	lastAudioTime   time.Time
-	lastAudioLevel  float32
-	silenceStart    time.Time
-	sampleCount     int64
-	totalSamples    int64
-	avgLevel        float32
+	lastAudioTime  time.Time
+	lastAudioLevel float32
+	silenceStart   time.Time
+	sampleCount    int64
+	totalSamples   int64
+	avgLevel       float32
 }
 
 // NewHealthChecker creates a new health checker
@@ -53,9 +53,9 @@ func (h *healthChecker) Check(process Process) error {
 
 	// Check process metrics
 	metrics := process.Metrics()
-	
+
 	// Check if process has been restarting too frequently
-	if metrics.RestartCount > 10 && 
+	if metrics.RestartCount > 10 &&
 		time.Since(metrics.LastRestart) < 5*time.Minute {
 		return errors.New(fmt.Errorf("process restarting too frequently")).
 			Component("audiocore").
@@ -66,7 +66,7 @@ func (h *healthChecker) Check(process Process) error {
 	}
 
 	// Check for recent errors
-	if metrics.LastError != nil && 
+	if metrics.LastError != nil &&
 		time.Since(metrics.LastRestart) < 30*time.Second {
 		return errors.New(fmt.Errorf("recent error detected")).
 			Component("audiocore").
@@ -83,7 +83,7 @@ func (h *healthChecker) Check(process Process) error {
 func (h *healthChecker) SetSilenceThreshold(threshold float32, duration time.Duration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	h.silenceThreshold = threshold
 	h.silenceDuration = duration
 }
@@ -101,7 +101,7 @@ func (h *healthChecker) checkSilence(process Process) error {
 			lastAudioTime: time.Now(),
 		}
 		h.audioLevels[processID] = tracker
-		
+
 		// Start monitoring audio levels for this process
 		go h.monitorAudioLevels(process, tracker)
 		return nil
@@ -151,13 +151,13 @@ func (h *healthChecker) monitorAudioLevels(process Process, tracker *audioLevelT
 
 		// Calculate audio level (RMS)
 		level := h.calculateAudioLevel(audioData)
-		
+
 		h.mu.Lock()
 		tracker.lastAudioTime = time.Now()
 		tracker.lastAudioLevel = level
 		tracker.sampleCount++
 		tracker.totalSamples += int64(len(audioData) / 2) // Assuming 16-bit samples
-		
+
 		// Update running average
 		alpha := float32(0.1) // Smoothing factor
 		if tracker.sampleCount == 1 {

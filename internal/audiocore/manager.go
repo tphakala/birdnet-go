@@ -16,6 +16,7 @@ type managerImpl struct {
 	sources         map[string]AudioSource
 	processorChains map[string]ProcessorChain
 	bufferPool      BufferPool
+	captureManager  interface{} // Capture manager for audio recording
 	audioOutput     chan AudioData
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -178,6 +179,23 @@ func (m *managerImpl) SetProcessorChain(sourceID string, chain ProcessorChain) e
 	}
 
 	m.processorChains[sourceID] = chain
+	return nil
+}
+
+// SetCaptureManager sets the capture manager for audio recording
+func (m *managerImpl) SetCaptureManager(captureManager interface{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.started {
+		return errors.Newf("cannot set capture manager after manager is started").
+			Component(ComponentAudioCore).
+			Category(errors.CategoryState).
+			Build()
+	}
+
+	m.captureManager = captureManager
+	m.logger.Info("capture manager set")
 	return nil
 }
 

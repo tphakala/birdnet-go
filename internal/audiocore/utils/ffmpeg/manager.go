@@ -39,7 +39,7 @@ func NewManager(config ManagerConfig) Manager {
 		"cleanup_timeout", config.CleanupTimeout,
 		"restart_enabled", config.RestartPolicy.Enabled,
 		"max_retries", config.RestartPolicy.MaxRetries)
-	
+
 	return &manager{
 		config:        config,
 		processes:     make(map[string]*managedProcess),
@@ -59,7 +59,7 @@ func (m *manager) CreateProcess(config *ProcessConfig) (Process, error) {
 		}(),
 		"output_format", config.OutputFormat,
 		"current_process_count", len(m.processes))
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -67,7 +67,7 @@ func (m *manager) CreateProcess(config *ProcessConfig) (Process, error) {
 	if _, exists := m.processes[config.ID]; exists {
 		logger.Error("attempted to create process that already exists",
 			"process_id", config.ID)
-		
+
 		return nil, errors.New(fmt.Errorf("process already exists")).
 			Component("audiocore").
 			Category(errors.CategoryConfiguration).
@@ -81,7 +81,7 @@ func (m *manager) CreateProcess(config *ProcessConfig) (Process, error) {
 			"process_id", config.ID,
 			"current_count", len(m.processes),
 			"limit", m.config.MaxProcesses)
-		
+
 		return nil, errors.New(fmt.Errorf("max processes limit reached")).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -91,7 +91,7 @@ func (m *manager) CreateProcess(config *ProcessConfig) (Process, error) {
 
 	// Create the process
 	process := NewProcess(config)
-	
+
 	// Wrap with managed process
 	mp := &managedProcess{
 		process:       process,
@@ -141,14 +141,14 @@ func (m *manager) ListProcesses() []Process {
 // RemoveProcess stops and removes a process
 func (m *manager) RemoveProcess(id string) error {
 	logger.Info("removing FFmpeg process", "process_id", id)
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	mp, exists := m.processes[id]
 	if !exists {
 		logger.Error("attempted to remove non-existent process", "process_id", id)
-		
+
 		return errors.New(fmt.Errorf("process not found")).
 			Component("audiocore").
 			Category(errors.CategoryGeneric).
@@ -165,11 +165,11 @@ func (m *manager) RemoveProcess(id string) error {
 	}
 
 	delete(m.processes, id)
-	
+
 	logger.Info("FFmpeg process removed successfully",
 		"process_id", id,
 		"remaining_processes", len(m.processes))
-	
+
 	return nil
 }
 
@@ -179,13 +179,13 @@ func (m *manager) Start(ctx context.Context) error {
 		"existing_processes", len(m.processes),
 		"health_check_enabled", m.config.HealthCheckPeriod > 0,
 		"health_check_period", m.config.HealthCheckPeriod)
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.ctx != nil {
 		logger.Error("attempted to start already running manager")
-		
+
 		return errors.New(fmt.Errorf("manager already started")).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -207,7 +207,7 @@ func (m *manager) Start(ctx context.Context) error {
 		m.wg.Add(1)
 		go m.healthCheckRoutine()
 	}
-	
+
 	// Start metrics logging routine (every 30 seconds) if enabled
 	if m.config.MetricsEnabled {
 		m.wg.Add(1)
@@ -225,10 +225,10 @@ func (m *manager) Start(ctx context.Context) error {
 func (m *manager) Stop() error {
 	stopTime := time.Now()
 	processCount := len(m.processes)
-	
+
 	logger.Info("stopping FFmpeg process manager",
 		"active_processes", processCount)
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -240,7 +240,7 @@ func (m *manager) Stop() error {
 	var lastErr error
 	stoppedCount := 0
 	failedCount := 0
-	
+
 	for id, mp := range m.processes {
 		if err := mp.process.Stop(); err != nil {
 			lastErr = err
@@ -268,13 +268,13 @@ func (m *manager) Stop() error {
 			"stopped_processes", stoppedCount,
 			"failed_processes", failedCount,
 			"shutdown_duration_ms", time.Since(stopTime).Milliseconds())
-		
+
 	case <-time.After(m.config.CleanupTimeout):
 		// Timeout waiting for cleanup
 		logger.Error("timeout waiting for cleanup during manager shutdown",
 			"timeout", m.config.CleanupTimeout,
 			"shutdown_duration_ms", time.Since(stopTime).Milliseconds())
-		
+
 		return errors.New(fmt.Errorf("timeout waiting for cleanup")).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -291,7 +291,7 @@ func (m *manager) Stop() error {
 			"stopped_processes", stoppedCount,
 			"failed_processes", failedCount,
 			"last_error", lastErr)
-		
+
 		return errors.New(lastErr).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -306,16 +306,16 @@ func (m *manager) Stop() error {
 func (m *manager) HealthCheck() error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	checkStart := time.Now()
 	totalProcesses := len(m.processes)
 	unhealthy := 0
 	notRunning := 0
 	failedHealthCheck := 0
-	
+
 	logger.Debug("starting health check",
 		"total_processes", totalProcesses)
-	
+
 	for processID, mp := range m.processes {
 		if !mp.process.IsRunning() {
 			unhealthy++
@@ -336,9 +336,9 @@ func (m *manager) HealthCheck() error {
 				"process_id", processID)
 		}
 	}
-	
+
 	checkDuration := time.Since(checkStart)
-	
+
 	if unhealthy > 0 {
 		logger.Warn("health check completed with unhealthy processes",
 			"total_processes", totalProcesses,
@@ -346,7 +346,7 @@ func (m *manager) HealthCheck() error {
 			"not_running", notRunning,
 			"failed_health_check", failedHealthCheck,
 			"check_duration_ms", checkDuration.Milliseconds())
-		
+
 		return errors.New(fmt.Errorf("%d unhealthy processes", unhealthy)).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -354,7 +354,7 @@ func (m *manager) HealthCheck() error {
 			Context("unhealthy", fmt.Sprintf("%d", unhealthy)).
 			Build()
 	}
-	
+
 	logger.Debug("health check completed successfully",
 		"total_processes", totalProcesses,
 		"check_duration_ms", checkDuration.Milliseconds())
@@ -365,7 +365,7 @@ func (m *manager) HealthCheck() error {
 // monitorProcess monitors a process and handles restarts
 func (m *manager) monitorProcess(mp *managedProcess) {
 	defer m.wg.Done()
-	
+
 	logger.Debug("starting process monitoring",
 		"process_id", mp.config.ID,
 		"restart_enabled", mp.restartPolicy.Enabled,
@@ -382,17 +382,17 @@ func (m *manager) monitorProcess(mp *managedProcess) {
 			if !mp.process.IsRunning() {
 				logger.Debug("detected stopped process, attempting restart",
 					"process_id", mp.config.ID)
-				
+
 				if err := m.handleProcessRestart(mp); err != nil {
 					logger.Error("process restart failed",
 						"process_id", mp.config.ID,
 						"error", err)
-					
+
 					// Check if we've exhausted retries
 					mp.mu.Lock()
 					exhausted := mp.restartPolicy.MaxRetries > 0 && mp.restartCount >= mp.restartPolicy.MaxRetries
 					mp.mu.Unlock()
-					
+
 					if exhausted {
 						logger.Error("process has exhausted all restart attempts, stopping monitoring",
 							"process_id", mp.config.ID,
@@ -432,7 +432,7 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 	// Check if restart is enabled
 	if !mp.restartPolicy.Enabled {
 		logger.Debug("restart disabled for process", "process_id", mp.config.ID)
-		
+
 		return errors.New(fmt.Errorf("restart disabled")).
 			Component("audiocore").
 			Category(errors.CategoryConfiguration).
@@ -446,7 +446,7 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 			"process_id", mp.config.ID,
 			"restart_count", mp.restartCount,
 			"max_retries", mp.restartPolicy.MaxRetries)
-		
+
 		return errors.New(fmt.Errorf("max retries exceeded")).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -463,7 +463,7 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 			"attempt", mp.restartCount+1,
 			"delay_ms", delay.Milliseconds(),
 			"backoff_multiplier", mp.restartPolicy.BackoffMultiplier)
-		
+
 		select {
 		case <-time.After(delay):
 			logger.Debug("backoff delay completed, proceeding with restart",
@@ -472,7 +472,7 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 			logger.Info("manager shutdown during restart backoff",
 				"process_id", mp.config.ID,
 				"delay_remaining_ms", delay.Milliseconds())
-			
+
 			return errors.New(fmt.Errorf("manager stopped")).
 				Component("audiocore").
 				Category(errors.CategorySystem).
@@ -484,13 +484,13 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 		if newDelay > mp.restartPolicy.MaxDelay {
 			newDelay = mp.restartPolicy.MaxDelay
 		}
-		
+
 		logger.Debug("calculated next backoff delay",
 			"process_id", mp.config.ID,
 			"current_delay_ms", mp.nextDelay.Milliseconds(),
 			"next_delay_ms", newDelay.Milliseconds(),
 			"max_delay_ms", mp.restartPolicy.MaxDelay.Milliseconds())
-		
+
 		mp.nextDelay = newDelay
 	}
 
@@ -499,17 +499,17 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 	logger.Info("attempting to restart FFmpeg process",
 		"process_id", mp.config.ID,
 		"attempt", mp.restartCount+1)
-	
+
 	if err := mp.process.Start(m.ctx); err != nil {
 		mp.restartCount++
 		mp.lastRestart = time.Now()
-		
+
 		logger.Error("FFmpeg process restart failed",
 			"process_id", mp.config.ID,
 			"attempt", mp.restartCount,
 			"error", err,
 			"restart_duration_ms", time.Since(restartTime).Milliseconds())
-		
+
 		return errors.New(err).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -528,14 +528,14 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 		"process_id", mp.config.ID,
 		"restart_duration_ms", time.Since(restartTime).Milliseconds(),
 		"backoff_reset", true)
-	
+
 	return nil
 }
 
 // healthCheckRoutine performs periodic health checks
 func (m *manager) healthCheckRoutine() {
 	defer m.wg.Done()
-	
+
 	logger.Info("starting health check routine",
 		"check_period", m.config.HealthCheckPeriod)
 
@@ -546,7 +546,7 @@ func (m *manager) healthCheckRoutine() {
 		select {
 		case <-ticker.C:
 			logger.Debug("performing periodic health check")
-			
+
 			if err := m.HealthCheck(); err != nil {
 				logger.Error("periodic health check failed",
 					"error", err,
@@ -565,7 +565,7 @@ func (m *manager) healthCheckRoutine() {
 // metricsLoggingRoutine logs process metrics periodically for operational visibility
 func (m *manager) metricsLoggingRoutine() {
 	defer m.wg.Done()
-	
+
 	logger.Debug("starting metrics logging routine",
 		"log_interval", "30s")
 
@@ -587,25 +587,25 @@ func (m *manager) metricsLoggingRoutine() {
 func (m *manager) logProcessMetrics() {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	metricsStart := time.Now()
 	totalProcesses := len(m.processes)
 	runningProcesses := 0
 	totalBytesRead := int64(0)
 	totalFramesRead := int64(0)
 	totalRestarts := 0
-	
+
 	for processID, mp := range m.processes {
 		isRunning := mp.process.IsRunning()
 		if isRunning {
 			runningProcesses++
 		}
-		
+
 		metrics := mp.process.Metrics()
 		totalBytesRead += metrics.BytesRead
 		totalFramesRead += metrics.FramesRead
 		totalRestarts += metrics.RestartCount
-		
+
 		// Log individual process metrics
 		logger.Debug("process metrics",
 			"process_id", processID,
@@ -626,7 +626,7 @@ func (m *manager) logProcessMetrics() {
 				return "never"
 			}())
 	}
-	
+
 	// Log aggregate metrics
 	logger.Info("FFmpeg manager metrics summary",
 		"total_processes", totalProcesses,

@@ -22,7 +22,7 @@ var logger *slog.Logger
 
 func init() {
 	logger = logging.ForService("audiocore-ffmpeg")
-	
+
 	// Defensive initialization for early startup
 	if logger == nil {
 		logger = slog.Default().With("service", "audiocore-ffmpeg")
@@ -31,23 +31,23 @@ func init() {
 
 // process implements the Process interface
 type process struct {
-	id           string
-	config       *ProcessConfig
-	cmd          *exec.Cmd
-	stdin        io.WriteCloser
-	stdout       io.ReadCloser
-	stderr       io.ReadCloser
-	audioOutput  chan []byte
-	errorOutput  chan error
-	metrics      ProcessMetrics
-	running      atomic.Bool
-	mu           sync.RWMutex
-	ctx          context.Context
-	cancel       context.CancelFunc
-	startOnce    sync.Once
-	stopOnce     sync.Once
-	closeOnce    sync.Once
-	startErr     error // Stores the error from the first Start() call
+	id          string
+	config      *ProcessConfig
+	cmd         *exec.Cmd
+	stdin       io.WriteCloser
+	stdout      io.ReadCloser
+	stderr      io.ReadCloser
+	audioOutput chan []byte
+	errorOutput chan error
+	metrics     ProcessMetrics
+	running     atomic.Bool
+	mu          sync.RWMutex
+	ctx         context.Context
+	cancel      context.CancelFunc
+	startOnce   sync.Once
+	stopOnce    sync.Once
+	closeOnce   sync.Once
+	startErr    error // Stores the error from the first Start() call
 }
 
 // NewProcess creates a new FFmpeg process
@@ -76,7 +76,7 @@ func (p *process) Start(ctx context.Context) error {
 
 func (p *process) start() error {
 	startTime := time.Now()
-	
+
 	logger.Debug("starting FFmpeg process",
 		"process_id", p.id,
 		"input_url", privacy.ScrubMessage(p.config.InputURL),
@@ -84,14 +84,14 @@ func (p *process) start() error {
 		"sample_rate", p.config.SampleRate,
 		"channels", p.config.Channels,
 		"buffer_size", p.config.BufferSize)
-	
+
 	// Build FFmpeg command
 	args := p.buildFFmpegArgs()
 	logger.Debug("built FFmpeg command",
 		"process_id", p.id,
 		"command", p.config.FFmpegPath,
 		"arg_count", len(args))
-	
+
 	p.cmd = exec.CommandContext(p.ctx, p.config.FFmpegPath, args...)
 
 	// Set up pipes
@@ -133,7 +133,7 @@ func (p *process) start() error {
 			"error", err,
 			"command", p.config.FFmpegPath,
 			"startup_duration_ms", time.Since(startTime).Milliseconds())
-		
+
 		return errors.New(err).
 			Component("audiocore").
 			Category(errors.CategorySystem).
@@ -221,7 +221,7 @@ func (p *process) stop() error {
 	case err := <-done:
 		p.running.Store(false)
 		p.closeChannels()
-		
+
 		shutdownDuration := time.Since(stopTime)
 		if err != nil && err.Error() != "signal: killed" {
 			logger.Error("FFmpeg process exited with error",
@@ -229,7 +229,7 @@ func (p *process) stop() error {
 				"error", err,
 				"uptime_ms", uptime.Milliseconds(),
 				"shutdown_duration_ms", shutdownDuration.Milliseconds())
-			
+
 			return errors.New(err).
 				Component("audiocore").
 				Category(errors.CategorySystem).
@@ -237,25 +237,25 @@ func (p *process) stop() error {
 				Context("process_id", p.id).
 				Build()
 		}
-		
+
 		logger.Info("FFmpeg process stopped successfully",
 			"process_id", p.id,
 			"uptime_ms", uptime.Milliseconds(),
 			"shutdown_duration_ms", shutdownDuration.Milliseconds())
 		return nil
-		
+
 	case <-time.After(5 * time.Second):
 		// Force kill if graceful shutdown fails
 		logger.Warn("FFmpeg process did not respond to graceful shutdown, forcing kill",
 			"process_id", p.id,
 			"uptime_ms", uptime.Milliseconds())
-		
+
 		if p.cmd != nil && p.cmd.Process != nil {
 			if err := p.cmd.Process.Kill(); err != nil {
 				logger.Error("failed to forcefully kill FFmpeg process",
 					"process_id", p.id,
 					"error", err)
-				
+
 				return errors.New(err).
 					Component("audiocore").
 					Category(errors.CategorySystem).
@@ -264,10 +264,10 @@ func (p *process) stop() error {
 					Build()
 			}
 		}
-		
+
 		p.running.Store(false)
 		p.closeChannels()
-		
+
 		logger.Info("FFmpeg process forcefully terminated",
 			"process_id", p.id,
 			"uptime_ms", uptime.Milliseconds(),
@@ -311,7 +311,7 @@ func (p *process) ErrorOutput() <-chan error {
 func (p *process) Metrics() ProcessMetrics {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	metrics := p.metrics
 	if p.running.Load() {
 		metrics.Uptime = time.Since(metrics.StartTime)
@@ -375,7 +375,7 @@ func (p *process) readAudioOutput() {
 			logger.Error("panic in audio reader",
 				"process_id", p.id,
 				"panic", r)
-			
+
 			p.errorOutput <- errors.New(fmt.Errorf("panic in audio reader: %v", r)).
 				Component("audiocore").
 				Category(errors.CategorySystem).
@@ -390,7 +390,7 @@ func (p *process) readAudioOutput() {
 	lastLogTime := time.Now()
 	bytesReadSinceLastLog := int64(0)
 	framesReadSinceLastLog := int64(0)
-	
+
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -402,7 +402,7 @@ func (p *process) readAudioOutput() {
 					logger.Error("failed to read audio data from FFmpeg",
 						"process_id", p.id,
 						"error", err)
-					
+
 					p.errorOutput <- errors.New(err).
 						Component("audiocore").
 						Category(errors.CategoryAudio).
@@ -410,7 +410,7 @@ func (p *process) readAudioOutput() {
 						Context("process_id", p.id).
 						Build()
 				}
-				logger.Debug("audio output reader exiting", 
+				logger.Debug("audio output reader exiting",
 					"process_id", p.id,
 					"reason", err.Error())
 				return
@@ -420,18 +420,18 @@ func (p *process) readAudioOutput() {
 				// Send copy of data to avoid race conditions
 				data := make([]byte, n)
 				copy(data, buffer[:n])
-				
+
 				select {
 				case p.audioOutput <- data:
 					p.mu.Lock()
 					p.metrics.BytesRead += int64(n)
 					p.metrics.FramesRead++
 					p.mu.Unlock()
-					
+
 					// Update local counters for periodic logging
 					bytesReadSinceLastLog += int64(n)
 					framesReadSinceLastLog++
-					
+
 					// Log audio data flow metrics every 30 seconds
 					if time.Since(lastLogTime) >= 30*time.Second {
 						logger.Debug("audio data flow metrics",
@@ -445,13 +445,13 @@ func (p *process) readAudioOutput() {
 								return 0
 							}(),
 							"data_rate_bytes_per_sec", bytesReadSinceLastLog/30)
-						
+
 						// Reset counters
 						lastLogTime = time.Now()
 						bytesReadSinceLastLog = 0
 						framesReadSinceLastLog = 0
 					}
-					
+
 				case <-p.ctx.Done():
 					return
 				default:
@@ -470,7 +470,7 @@ func (p *process) readErrorOutput() {
 			logger.Error("panic in error reader",
 				"process_id", p.id,
 				"panic", r)
-			
+
 			p.errorOutput <- errors.New(fmt.Errorf("panic in error reader: %v", r)).
 				Component("audiocore").
 				Category(errors.CategorySystem).
@@ -491,21 +491,21 @@ func (p *process) readErrorOutput() {
 			if line != "" {
 				// Scrub potentially sensitive information from FFmpeg output
 				scrubbedLine := privacy.ScrubMessage(line)
-				
+
 				logger.Debug("FFmpeg stderr output",
 					"process_id", p.id,
 					"message", scrubbedLine)
-				
+
 				err := errors.New(fmt.Errorf("ffmpeg: %s", line)).
 					Component("audiocore").
 					Category(errors.CategoryAudio).
 					Context("process_id", p.id).
 					Build()
-				
+
 				p.mu.Lock()
 				p.metrics.LastError = err
 				p.mu.Unlock()
-				
+
 				select {
 				case p.errorOutput <- err:
 				case <-p.ctx.Done():
@@ -524,14 +524,14 @@ func (p *process) readErrorOutput() {
 		logger.Error("error reading from FFmpeg stderr",
 			"process_id", p.id,
 			"error", err)
-		
+
 		enhancedErr := errors.New(err).
 			Component("audiocore").
 			Category(errors.CategoryAudio).
 			Context("operation", "read-stderr").
 			Context("process_id", p.id).
 			Build()
-		
+
 		select {
 		case p.errorOutput <- enhancedErr:
 		case <-p.ctx.Done():
@@ -542,7 +542,7 @@ func (p *process) readErrorOutput() {
 				"process_id", p.id)
 		}
 	}
-	
+
 	logger.Debug("error output reader exiting", "process_id", p.id)
 }
 

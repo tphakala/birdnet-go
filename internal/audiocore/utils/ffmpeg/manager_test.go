@@ -9,7 +9,7 @@ import (
 
 func TestNewManager(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses:      10,
 		HealthCheckPeriod: 30 * time.Second,
@@ -37,7 +37,7 @@ func TestNewManager(t *testing.T) {
 
 func TestManagerCreateProcess(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses:      2,
 		HealthCheckPeriod: 30 * time.Second,
@@ -79,7 +79,7 @@ func TestManagerCreateProcess(t *testing.T) {
 
 func TestManagerDuplicateProcess(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses: 10,
 	}
@@ -112,7 +112,7 @@ func TestManagerDuplicateProcess(t *testing.T) {
 
 func TestManagerMaxProcessesLimit(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses: 1, // Only allow 1 process
 	}
@@ -156,7 +156,7 @@ func TestManagerMaxProcessesLimit(t *testing.T) {
 
 func TestManagerRemoveProcess(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses: 10,
 	}
@@ -195,7 +195,7 @@ func TestManagerRemoveProcess(t *testing.T) {
 
 func TestManagerRemoveNonexistentProcess(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses: 10,
 	}
@@ -210,7 +210,7 @@ func TestManagerRemoveNonexistentProcess(t *testing.T) {
 
 func TestManagerListProcesses(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses: 10,
 	}
@@ -244,7 +244,7 @@ func TestManagerListProcesses(t *testing.T) {
 
 func TestManagerStartStop(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses:      10,
 		HealthCheckPeriod: 0, // Disable health checks to avoid timing dependencies
@@ -277,7 +277,7 @@ func TestManagerStartStop(t *testing.T) {
 
 func TestManagerHealthCheck(t *testing.T) {
 	t.Parallel()
-	
+
 	config := ManagerConfig{
 		MaxProcesses: 10,
 	}
@@ -316,10 +316,10 @@ func TestManagerHealthCheck(t *testing.T) {
 
 func TestRestartPolicy(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test restart policy configuration through the public API
 	config := ManagerConfig{
-		MaxProcesses:  5,
+		MaxProcesses: 5,
 		RestartPolicy: RestartPolicy{
 			Enabled:           true,
 			MaxRetries:        2,
@@ -333,7 +333,7 @@ func TestRestartPolicy(t *testing.T) {
 	}
 
 	manager := NewManager(config)
-	
+
 	// Create a process with invalid FFmpeg path to simulate restart failures
 	processConfig := &ProcessConfig{
 		ID:           "restart-test",
@@ -356,9 +356,9 @@ func TestRestartPolicy(t *testing.T) {
 	if !exists {
 		t.Error("Process should exist after creation")
 	}
-	
+
 	if retrievedProcess.ID() != process.ID() {
-		t.Errorf("Retrieved process ID should match: expected %s, got %s", 
+		t.Errorf("Retrieved process ID should match: expected %s, got %s",
 			process.ID(), retrievedProcess.ID())
 	}
 
@@ -372,7 +372,7 @@ func TestRestartPolicy(t *testing.T) {
 	// by verifying the process behavior (start should fail with the invalid path)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	err = process.Start(ctx)
 	if err == nil {
 		t.Error("Process start should fail with invalid FFmpeg path")
