@@ -20,10 +20,12 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 	testQueue := make(chan birdnet.Results, 10)
 	birdnet.ResultsQueue = testQueue
 
-	// Create mock components
+	// Create mock components with proper channels for full integration testing
 	source := &mockAudioSource{
 		id:     "test-source",
 		format: AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16},
+		output: make(chan AudioData, 10),
+		errors: make(chan error, 1),
 	}
 
 	analyzer := &mockQueueAnalyzer{
@@ -69,6 +71,12 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Start the source first
+	err = source.Start(ctx)
+	if err != nil {
+		t.Fatalf("Failed to start source: %v", err)
+	}
+
 	err = pipeline.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed to start pipeline: %v", err)
@@ -77,10 +85,16 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		if err := pipeline.Stop(); err != nil {
 			t.Errorf("Failed to stop pipeline: %v", err)
 		}
+		if err := source.Stop(); err != nil {
+			t.Errorf("Failed to stop source: %v", err)
+		}
 	}()
 
 	// Send test audio data with known pattern for verification
-	testPCMData := make([]byte, 1024)
+	// Need to send enough data to form a complete chunk
+	// 3 seconds at 48kHz, mono, 16-bit = 48000 * 1 * 2 * 3 = 288,000 bytes
+	chunkSize := 48000 * 1 * 2 * 3 // 3 seconds of audio
+	testPCMData := make([]byte, chunkSize)
 	// Fill with a recognizable pattern
 	for i := range testPCMData {
 		testPCMData[i] = byte(i % 256)
@@ -94,26 +108,12 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		SourceID:  "test-source",
 	}
 
-	// Process the test data
-	pipeline.processAnalysisResult(&AnalysisResult{
-		Timestamp: testData.Timestamp,
-		Duration:  testData.Duration,
-		Detections: []Detection{
-			{
-				Label:      "Testus_birdus_Test Bird",
-				Confidence: 0.95,
-				Attributes: nil,
-			},
-		},
-		Metadata: map[string]any{
-			"processingTime": 100 * time.Millisecond,
-		},
-		AnalyzerID: "test-analyzer",
-		SourceID:   testData.SourceID,
-	}, &testData)
+	// Send test data through the source's audio output channel for full integration testing
+	source.output <- testData
 
 	// Create a done channel for deterministic synchronization
 	done := make(chan struct{})
+	expectedChunkSize := chunkSize // Capture for use in goroutine
 	
 	// Start a goroutine to wait for the result
 	go func() {
@@ -132,8 +132,8 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		if result.Results[0].Confidence != 0.95 {
 			t.Errorf("Expected confidence 0.95, got %f", result.Results[0].Confidence)
 		}
-		if len(result.PCMdata) != 1024 {
-			t.Errorf("Expected PCM data length 1024, got %d", len(result.PCMdata))
+		if len(result.PCMdata) != expectedChunkSize {
+			t.Errorf("Expected PCM data length %d, got %d", expectedChunkSize, len(result.PCMdata))
 		}
 		// Verify PCM data content matches the pattern
 		for i := 0; i < len(result.PCMdata); i++ {

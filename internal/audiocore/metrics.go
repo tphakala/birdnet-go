@@ -330,8 +330,10 @@ func (mc *MetricsCollector) UpdateQueueDepth(depth, capacity int) {
 	// Calculate utilization percentage
 	utilization := float64(depth) / float64(capacity) * 100.0
 	
-	// Update metric - using audio data bytes as a proxy for queue depth
-	// This tracks queue depth in the existing metrics system
+	// TODO: This is a temporary workaround using RecordAudioDataBytes to track queue depth.
+	// The queue depth is a count (number of items), not bytes, which creates a semantic mismatch.
+	// A more appropriate metric recording method should be implemented in the future to accurately
+	// represent queue depth and utilization metrics specifically for queues.
 	mc.metrics.RecordAudioDataBytes("queue", "depth", depth)
 	
 	// Log warning if queue is above threshold (configurable, default 80%)
