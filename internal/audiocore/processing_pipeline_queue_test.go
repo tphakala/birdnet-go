@@ -78,7 +78,11 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start pipeline: %v", err)
 	}
-	defer pipeline.Stop()
+	defer func() {
+		if err := pipeline.Stop(); err != nil {
+			t.Errorf("Failed to stop pipeline: %v", err)
+		}
+	}()
 
 	// Send test audio data
 	testData := AudioData{
@@ -184,10 +188,19 @@ func TestSpeciesStringFallback(t *testing.T) {
 		},
 	}
 
-	pipeline, _ := NewProcessingPipeline(config)
+	pipeline, err := NewProcessingPipeline(config)
+	if err != nil {
+		t.Fatalf("Failed to create pipeline: %v", err)
+	}
 	ctx := context.Background()
-	pipeline.Start(ctx)
-	defer pipeline.Stop()
+	if err := pipeline.Start(ctx); err != nil {
+		t.Fatalf("Failed to start pipeline: %v", err)
+	}
+	defer func() {
+		if err := pipeline.Stop(); err != nil {
+			t.Errorf("Failed to stop pipeline: %v", err)
+		}
+	}()
 
 	testCases := []struct {
 		name           string
