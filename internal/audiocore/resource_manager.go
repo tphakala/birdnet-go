@@ -19,10 +19,22 @@ type ResourceTracker struct {
 	mu        sync.RWMutex
 	logger    *slog.Logger
 	
+	// Lifecycle management
+	ctx          context.Context
+	cancel       context.CancelFunc
+	cleanupQueue chan cleanupTask
+	wg           sync.WaitGroup
+	
 	// Statistics
 	totalAllocated atomic.Int64
 	totalReleased  atomic.Int64
 	activeCount    atomic.Int32
+}
+
+// cleanupTask represents a scheduled resource cleanup
+type cleanupTask struct {
+	resourceID string
+	cleanupAt  time.Time
 }
 
 // TrackedResource represents a tracked resource
@@ -43,13 +55,23 @@ func NewResourceTracker() *ResourceTracker {
 		logger = slog.Default()
 	}
 	
+	ctx, cancel := context.WithCancel(context.Background())
+	
 	tracker := &ResourceTracker{
-		resources: make(map[string]*TrackedResource),
-		logger:    logger.With("component", "resource_tracker"),
+		resources:    make(map[string]*TrackedResource),
+		logger:       logger.With("component", "resource_tracker"),
+		ctx:          ctx,
+		cancel:       cancel,
+		cleanupQueue: make(chan cleanupTask, 100),
 	}
 	
 	// Start leak detector
+	tracker.wg.Add(1)
 	go tracker.leakDetector()
+	
+	// Start cleanup worker
+	tracker.wg.Add(1)
+	go tracker.cleanupWorker()
 	
 	return tracker
 }
@@ -130,24 +152,32 @@ func (rt *ResourceTracker) Release(id string) error {
 		resource.Finalizer()
 	}
 	
-	// Remove from tracking after a delay (for debugging)
-	go func() {
-		time.Sleep(5 * time.Minute)
-		rt.mu.Lock()
-		delete(rt.resources, id)
-		rt.mu.Unlock()
-	}()
+	// Schedule cleanup after a delay (for debugging)
+	select {
+	case rt.cleanupQueue <- cleanupTask{
+		resourceID: id,
+		cleanupAt:  time.Now().Add(5 * time.Minute),
+	}:
+	case <-rt.ctx.Done():
+		// Tracker is shutting down
+	}
 	
 	return nil
 }
 
 // leakDetector periodically checks for potential leaks
 func (rt *ResourceTracker) leakDetector() {
+	defer rt.wg.Done()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	
-	for range ticker.C {
-		rt.checkForLeaks()
+	for {
+		select {
+		case <-ticker.C:
+			rt.checkForLeaks()
+		case <-rt.ctx.Done():
+			return
+		}
 	}
 }
 
@@ -168,6 +198,46 @@ func (rt *ResourceTracker) checkForLeaks() {
 				"allocated_at", resource.AllocatedAt)
 		}
 	}
+}
+
+// cleanupWorker processes scheduled resource cleanups
+func (rt *ResourceTracker) cleanupWorker() {
+	defer rt.wg.Done()
+	
+	// Use a map to track pending cleanups by time
+	pending := make(map[string]time.Time)
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case task := <-rt.cleanupQueue:
+			// Add to pending cleanups
+			pending[task.resourceID] = task.cleanupAt
+			
+		case <-ticker.C:
+			// Process due cleanups
+			now := time.Now()
+			for id, cleanupTime := range pending {
+				if now.After(cleanupTime) {
+					rt.mu.Lock()
+					delete(rt.resources, id)
+					rt.mu.Unlock()
+					delete(pending, id)
+				}
+			}
+			
+		case <-rt.ctx.Done():
+			return
+		}
+	}
+}
+
+// Close stops the resource tracker and cleans up
+func (rt *ResourceTracker) Close() error {
+	rt.cancel()
+	rt.wg.Wait()
+	return nil
 }
 
 // Stats returns resource tracking statistics
@@ -283,29 +353,37 @@ type ResourcePool[T any] struct {
 	tracker     *ResourceTracker
 	activeCount atomic.Int32
 	maxActive   int32
+	
+	// Track factory errors
+	lastFactoryError atomic.Value // stores error
 }
 
 // NewResourcePool creates a new resource pool
 func NewResourcePool[T any](factory func() (T, error), resetFunc, closeFunc func(T) error, maxActive int32, tracker *ResourceTracker) *ResourcePool[T] {
-	return &ResourcePool[T]{
-		pool: &sync.Pool{
-			New: func() any {
-				if factory == nil {
-					return nil
-				}
-				resource, err := factory()
-				if err != nil {
-					return nil
-				}
-				return resource
-			},
-		},
+	rp := &ResourcePool[T]{
 		factory:   factory,
 		resetFunc: resetFunc,
 		closeFunc: closeFunc,
 		tracker:   tracker,
 		maxActive: maxActive,
 	}
+	
+	rp.pool = &sync.Pool{
+		New: func() any {
+			if factory == nil {
+				return nil
+			}
+			resource, err := factory()
+			if err != nil {
+				// Store the error for later retrieval
+				rp.lastFactoryError.Store(err)
+				return nil
+			}
+			return resource
+		},
+	}
+	
+	return rp
 }
 
 // Get retrieves a resource from the pool
@@ -330,7 +408,20 @@ func (rp *ResourcePool[T]) Get() (T, error) {
 		}
 	}
 	
-	// Create new resource
+	// Check if pool.Get() returned nil due to factory error
+	if err := rp.lastFactoryError.Load(); err != nil {
+		// Clear the error and return it
+		rp.lastFactoryError.Store(nil)
+		if factoryErr, ok := err.(error); ok {
+			return zero, errors.New(factoryErr).
+				Component(ComponentAudioCore).
+				Category(errors.CategoryResource).
+				Context("error", "resource factory failed").
+				Build()
+		}
+	}
+	
+	// Create new resource directly
 	if rp.factory != nil {
 		resource, err := rp.factory()
 		if err != nil {

@@ -66,7 +66,12 @@ func TestChunkBufferOverflow(t *testing.T) {
 			config := ChunkBufferConfig{
 				ChunkDuration: time.Second,
 				Format: AudioFormat{
-					SampleRate: tt.chunkSize, // Hack: use chunk size as sample rate for easy calculation
+					// TEST HACK: Using chunk size as sample rate for test simplification
+					// This makes the math work out so that 1 second of audio = chunkSize bytes
+					// Formula: bytes = sampleRate * channels * (bitDepth/8) * duration
+					// With channels=1, bitDepth=8, duration=1s: bytes = sampleRate
+					// This is NOT a real sample rate - just simplifies test calculations
+					SampleRate: tt.chunkSize,
 					Channels:   1,
 					BitDepth:   8,
 				},
@@ -301,20 +306,31 @@ func TestChunkBufferReset(t *testing.T) {
 
 // mockBufferPool for testing
 type mockBufferPool struct {
-	mu      sync.Mutex
-	buffers map[int][]*mockBuffer
+	mu          sync.Mutex
+	buffers     map[int][]*mockBuffer
+	maxPoolSize int // Maximum number of buffers allowed in pool (0 = unlimited)
+	totalCount  int // Total number of buffers created
 }
 
 func (p *mockBufferPool) Get(size int) AudioBuffer {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// Check if we have buffers in the pool
 	if buffers, ok := p.buffers[size]; ok && len(buffers) > 0 {
 		buf := buffers[len(buffers)-1]
 		p.buffers[size] = buffers[:len(buffers)-1]
 		return buf
 	}
 
+	// Check if we've reached the pool limit
+	if p.maxPoolSize > 0 && p.totalCount >= p.maxPoolSize {
+		// Pool exhausted - return nil to simulate resource exhaustion
+		return nil
+	}
+
+	// Create new buffer
+	p.totalCount++
 	return &mockBuffer{
 		data: make([]byte, size),
 		size: size,

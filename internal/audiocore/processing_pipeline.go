@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -47,6 +48,10 @@ type ProcessingPipeline struct {
 	// Performance tracking
 	processedChunks int64
 	droppedChunks   int64
+	
+	// Adaptive backpressure
+	backpressureDelay atomic.Int64 // Current backpressure delay in milliseconds
+	lastDropRate      float64       // Last measured drop rate
 }
 
 // ProcessingPipelineConfig holds configuration for creating a pipeline
@@ -297,10 +302,15 @@ func (p *ProcessingPipeline) sendToAnalyzer(analyzeChan chan<- AudioData, chunk 
 			p.metrics.RecordFrameDropped(p.source.ID(), "analyzer_buffer_full")
 		}
 		
-		// Apply backpressure: skip processing for a brief period
-		// This gives the analyzer time to catch up
+		// Apply adaptive backpressure based on drop rate
+		// Start with current delay or default if zero
+		currentDelay := p.backpressureDelay.Load()
+		if currentDelay == 0 {
+			currentDelay = 10 // Default 10ms
+		}
+		
 		select {
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(time.Duration(currentDelay) * time.Millisecond):
 		case <-p.ctx.Done():
 			return
 		}
@@ -391,12 +401,40 @@ func (p *ProcessingPipeline) monitorHealth() {
 
 			if dropped > 0 {
 				dropRate := float64(dropped) / float64(processed+dropped)
-				if dropRate > 0.05 { // More than 5% drop rate
-					p.logger.Warn("high chunk drop rate detected",
-						"drop_rate", dropRate,
-						"processed", processed,
-						"dropped", dropped)
+				
+				// Adaptive backpressure adjustment
+				currentDelay := p.backpressureDelay.Load()
+				if currentDelay == 0 {
+					currentDelay = 10 // Default starting delay
 				}
+				
+				if dropRate > 0.05 { // More than 5% drop rate
+					// Increase backpressure if drop rate is increasing
+					if dropRate > p.lastDropRate {
+						newDelay := currentDelay * 2
+						if newDelay > 100 { // Cap at 100ms
+							newDelay = 100
+						}
+						p.backpressureDelay.Store(newDelay)
+						p.logger.Warn("increasing backpressure due to high drop rate",
+							"drop_rate", dropRate,
+							"new_delay_ms", newDelay,
+							"processed", processed,
+							"dropped", dropped)
+					}
+				} else if dropRate < 0.01 && currentDelay > 10 { // Less than 1% drop rate
+					// Decrease backpressure if drop rate is low
+					newDelay := currentDelay / 2
+					if newDelay < 10 { // Minimum 10ms
+						newDelay = 10
+					}
+					p.backpressureDelay.Store(newDelay)
+					p.logger.Info("reducing backpressure due to low drop rate",
+						"drop_rate", dropRate,
+						"new_delay_ms", newDelay)
+				}
+				
+				p.lastDropRate = dropRate
 			}
 
 		case <-p.ctx.Done():
