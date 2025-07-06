@@ -1,6 +1,16 @@
 // Package audiocore provides a modular and extensible audio processing system
 // for BirdNET-Go. It supports multiple simultaneous audio sources, per-source
 // configuration, and a plugin-based processing architecture.
+//
+// Architecture overview:
+//   AudioSource -> ProcessingPipeline -> Analyzer
+//   Pipeline: ChunkBuffer -> OverlapBuffer -> ProcessorChain -> Analyzer
+//
+// Key interfaces:
+//   - AudioSource: Audio input (microphone, RTSP, file)
+//   - Analyzer: ML model for detection (BirdNET, custom)
+//   - ProcessorChain: Audio transformations (resample, denoise)
+//   - BufferPool: Memory management for audio buffers
 package audiocore
 
 import (

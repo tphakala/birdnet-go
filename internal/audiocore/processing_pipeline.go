@@ -11,6 +11,8 @@ import (
 )
 
 // ProcessingPipeline manages the flow from source to analyzer
+// Flow: AudioSource -> ChunkBuffer -> OverlapBuffer -> ProcessorChain -> Analyzer
+// Supports: capture tee, health monitoring, metrics collection
 type ProcessingPipeline struct {
 	source         AudioSource
 	analyzer       Analyzer
@@ -63,6 +65,13 @@ func NewProcessingPipeline(config *ProcessingPipelineConfig) *ProcessingPipeline
 		"component", "processing_pipeline",
 		"source_id", config.Source.ID(),
 		"analyzer_id", config.Analyzer.ID())
+
+	// Validate configuration
+	if err := validatePipelineConfig(config); err != nil {
+		logger.Error("invalid pipeline configuration", "error", err)
+		// Return nil to fail fast on invalid config
+		return nil
+	}
 
 	// Create overlap buffer
 	overlapBuffer := NewOverlapBuffer(&OverlapBufferConfig{
@@ -157,9 +166,11 @@ func (p *ProcessingPipeline) Stop() error {
 }
 
 // processLoop is the main processing loop
+// Data flow: source -> capture tee -> chunk buffer -> overlap -> processor chain -> analyzer
 func (p *ProcessingPipeline) processLoop() {
 	defer p.wg.Done()
 
+	// Buffered channel for decoupling chunk processing from analysis
 	analyzeChan := make(chan AudioData, p.config.BufferAhead)
 	defer close(analyzeChan)
 
@@ -170,7 +181,7 @@ func (p *ProcessingPipeline) processLoop() {
 	for {
 		select {
 		case data := <-p.source.AudioOutput():
-			// Tee to capture buffer if enabled
+			// Tee to capture buffer if enabled (for saving clips)
 			if p.captureManager != nil {
 				if err := p.captureManager.Write(data.SourceID, &data); err != nil {
 					p.logger.Debug("failed to write to capture buffer",
@@ -179,7 +190,7 @@ func (p *ProcessingPipeline) processLoop() {
 				}
 			}
 			
-			// Add to chunk buffer
+			// Accumulate data into fixed-size chunks
 			p.chunkBuffer.Add(&data)
 
 			// Process complete chunks
@@ -335,11 +346,13 @@ func (p *ProcessingPipeline) GetMetrics() map[string]any {
 
 
 // OverlapBuffer handles chunk overlap for continuous processing
+// Creates sliding window by: saving last N bytes of each chunk, prepending to next chunk
+// Essential for: detecting events at chunk boundaries, smooth analysis continuity
 type OverlapBuffer struct {
 	sourceID      string
-	overlapData   AudioBuffer
-	overlapSize   int
-	overlapBytes  int
+	overlapData   AudioBuffer  // saved data from previous chunk
+	overlapSize   int         // overlap as percentage (0-100)
+	overlapBytes  int         // calculated bytes to overlap
 	bufferPool    BufferPool
 	format        AudioFormat
 	mu            sync.Mutex
@@ -431,4 +444,154 @@ func (o *OverlapBuffer) Reset() {
 		o.overlapData.Release()
 		o.overlapData = nil
 	}
+}
+
+// validatePipelineConfig validates pipeline configuration
+// Ensures: overlap < chunk duration, reasonable buffer sizes, valid formats
+func validatePipelineConfig(config *ProcessingPipelineConfig) error {
+	if config == nil {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "nil configuration").
+			Build()
+	}
+
+	// Validate required components
+	if config.Source == nil {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "missing audio source").
+			Build()
+	}
+	if config.Analyzer == nil {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "missing analyzer").
+			Build()
+	}
+	if config.BufferPool == nil {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "missing buffer pool").
+			Build()
+	}
+
+	// Validate chunk duration
+	if config.Config.ChunkDuration < 100*time.Millisecond {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "chunk duration too small").
+			Context("duration", config.Config.ChunkDuration).
+			Context("minimum", "100ms").
+			Build()
+	}
+	if config.Config.ChunkDuration > 30*time.Second {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "chunk duration too large").
+			Context("duration", config.Config.ChunkDuration).
+			Context("maximum", "30s").
+			Build()
+	}
+
+	// Validate overlap vs chunk duration
+	overlapDuration := time.Duration(config.Config.OverlapPercent * float64(config.Config.ChunkDuration))
+	if overlapDuration >= config.Config.ChunkDuration {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "overlap exceeds chunk duration").
+			Context("overlap_percent", config.Config.OverlapPercent).
+			Context("overlap_duration", overlapDuration).
+			Context("chunk_duration", config.Config.ChunkDuration).
+			Build()
+	}
+	if config.Config.OverlapPercent < 0 {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "negative overlap percent").
+			Context("overlap_percent", config.Config.OverlapPercent).
+			Build()
+	}
+
+	// Validate audio format
+	format := config.Source.GetFormat()
+	if format.SampleRate < 8000 || format.SampleRate > 192000 {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "invalid sample rate").
+			Context("sample_rate", format.SampleRate).
+			Context("valid_range", "8000-192000").
+			Build()
+	}
+	if format.Channels < 1 || format.Channels > 8 {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "invalid channel count").
+			Context("channels", format.Channels).
+			Context("valid_range", "1-8").
+			Build()
+	}
+	if format.BitDepth != 8 && format.BitDepth != 16 && format.BitDepth != 24 && format.BitDepth != 32 {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "unsupported bit depth").
+			Context("bit_depth", format.BitDepth).
+			Context("supported", "8,16,24,32").
+			Build()
+	}
+
+	// Validate buffer size calculations
+	bytesPerSecond := format.SampleRate * format.Channels * (format.BitDepth / 8)
+	chunkSize := int(float64(bytesPerSecond) * config.Config.ChunkDuration.Seconds())
+	if chunkSize > 100*1024*1024 { // 100MB limit
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "chunk size too large").
+			Context("chunk_size_bytes", chunkSize).
+			Context("maximum_bytes", 100*1024*1024).
+			Build()
+	}
+
+	// Validate analyzer configuration
+	analyzerConfig := config.Analyzer.GetConfiguration()
+	requiredFormat := config.Analyzer.GetRequiredFormat()
+	
+	// Check if source format is compatible with analyzer requirements
+	if requiredFormat.SampleRate != 0 && format.SampleRate != requiredFormat.SampleRate {
+		// This is OK if we have a processor chain that can resample
+		if config.ProcessorChain == nil {
+			return errors.New(nil).
+				Component(ComponentAudioCore).
+				Category(errors.CategoryValidation).
+				Context("error", "sample rate mismatch without processor chain").
+				Context("source_rate", format.SampleRate).
+				Context("analyzer_rate", requiredFormat.SampleRate).
+				Build()
+		}
+	}
+
+	// Validate analyzer-specific settings
+	if analyzerConfig.Threshold < 0 || analyzerConfig.Threshold > 1 {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "invalid detection threshold").
+			Context("threshold", analyzerConfig.Threshold).
+			Context("valid_range", "0.0-1.0").
+			Build()
+	}
+
+	return nil
 }

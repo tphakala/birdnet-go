@@ -9,6 +9,9 @@ import (
 )
 
 // analyzerManagerImpl implements AnalyzerManager
+// Usage: manager := NewAnalyzerManager(factory)
+//        analyzer, err := manager.CreateAnalyzer("birdnet", config)
+//        manager.RegisterAnalyzer(analyzer)
 type analyzerManagerImpl struct {
 	analyzers map[string]Analyzer
 	factory   AnalyzerFactory

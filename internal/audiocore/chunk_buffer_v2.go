@@ -13,11 +13,13 @@ type ChunkBufferConfig struct {
 }
 
 // ChunkBufferV2 accumulates audio data into fixed-duration chunks with improved overflow handling
+// Handles: single writes producing multiple chunks, partial data accumulation
+// Thread-safe: all methods use mutex protection
 type ChunkBufferV2 struct {
 	chunkDuration   time.Duration
 	format          AudioFormat
 	bufferPool      BufferPool
-	targetSize      int
+	targetSize      int // bytes per chunk based on format and duration
 	
 	// Buffer management
 	pendingData     []byte // All pending data that hasn't been chunked yet
@@ -42,6 +44,7 @@ func NewChunkBufferV2(config ChunkBufferConfig) *ChunkBufferV2 {
 }
 
 // Add adds audio data to the buffer
+// Creates multiple chunks if data exceeds targetSize (handles large writes correctly)
 func (c *ChunkBufferV2) Add(data *AudioData) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -49,7 +52,7 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 	// Append new data to pending
 	c.pendingData = append(c.pendingData, data.Buffer...)
 
-	// Create chunks from pending data
+	// Extract all complete chunks from pending data
 	for len(c.pendingData) >= c.targetSize {
 		// Extract a chunk
 		// Note: We can't use buffer pool here directly because AudioData doesn't 
