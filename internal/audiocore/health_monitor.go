@@ -59,6 +59,7 @@ func NewAudioHealthMonitor(config HealthMonitorConfig) *AudioHealthMonitor {
 func (h *AudioHealthMonitor) MonitorSource(source AudioSource) {
 	// Check for nil source to prevent panic
 	if source == nil {
+		h.logger.Warn("attempted to monitor nil source")
 		return
 	}
 	

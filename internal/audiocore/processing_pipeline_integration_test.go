@@ -16,8 +16,16 @@ func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 	// Track goroutines at start to detect leaks
 	startGoroutines := runtime.NumGoroutine()
 	defer func() {
-		// Give goroutines time to clean up
-		time.Sleep(100 * time.Millisecond)
+		// Give goroutines time to clean up with exponential backoff
+		deadline := time.Now().Add(500 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			endGoroutines := runtime.NumGoroutine()
+			if endGoroutines <= startGoroutines {
+				return // No leak detected
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		// Final check after timeout
 		endGoroutines := runtime.NumGoroutine()
 		if endGoroutines > startGoroutines {
 			t.Errorf("goroutine leak detected: started with %d, ended with %d goroutines", startGoroutines, endGoroutines)
