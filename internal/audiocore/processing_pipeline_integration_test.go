@@ -65,7 +65,7 @@ func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 	safeAnalyzer := NewSafeAnalyzerWrapper(&SafeAnalyzerConfig{
 		Analyzer:              mock,
 		Timeout:               100 * time.Millisecond,
-		MaxConcurrentAnalyses: 2,
+		Workers: 2,
 	})
 	defer func() { _ = safeAnalyzer.Close() }()
 
