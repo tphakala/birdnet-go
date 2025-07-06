@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/capture"
+	"github.com/tphakala/birdnet-go/internal/audiocore/export"
 	"github.com/tphakala/birdnet-go/internal/audiocore/processors"
 	"github.com/tphakala/birdnet-go/internal/audiocore/sources"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -18,14 +20,15 @@ import (
 
 // MyAudioCompatAdapter bridges audiocore with the existing myaudio interface
 type MyAudioCompatAdapter struct {
-	manager     audiocore.AudioManager
-	settings    *conf.Settings
-	ctx         context.Context
-	cancel      context.CancelFunc
-	wg          *sync.WaitGroup
-	outputChan  chan myaudio.UnifiedAudioData
-	quitChan    chan struct{}
-	restartChan chan struct{}
+	manager        audiocore.AudioManager
+	captureManager capture.Manager
+	settings       *conf.Settings
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             *sync.WaitGroup
+	outputChan     chan myaudio.UnifiedAudioData
+	quitChan       chan struct{}
+	restartChan    chan struct{}
 }
 
 // NewMyAudioCompatAdapter creates a new adapter that implements myaudio.CaptureAudio interface using audiocore
@@ -46,9 +49,26 @@ func NewMyAudioCompatAdapter(settings *conf.Settings) *MyAudioCompatAdapter {
 		},
 	}
 
+	// Create export manager with FFmpeg if available
+	ffmpegPath := settings.Realtime.Audio.FfmpegPath
+	exportManager := export.DefaultManager(ffmpegPath)
+
+	// Create audio manager
+	manager := audiocore.NewAudioManager(managerConfig)
+
+	// Create capture manager
+	bufferPool := audiocore.NewBufferPool(managerConfig.BufferPoolConfig)
+	captureManager := capture.NewManager(bufferPool, exportManager)
+
+	// Set capture manager in audio manager
+	// Use adapter to convert our enhanced interface to audiocore interface
+	audioCoreCaptureAdapter := capture.NewAudioCoreCaptureAdapter(captureManager)
+	manager.SetCaptureManager(audioCoreCaptureAdapter)
+
 	return &MyAudioCompatAdapter{
-		manager:  audiocore.NewAudioManager(managerConfig),
-		settings: settings,
+		manager:        manager,
+		captureManager: captureManager,
+		settings:       settings,
 	}
 }
 
@@ -151,6 +171,29 @@ func (a *MyAudioCompatAdapter) setupAudioSources() error {
 		}
 	}
 
+	// Configure capture for this source if export is enabled
+	if a.settings.Realtime.Audio.Export.Enabled {
+		captureConfig := capture.Config{
+			Duration:   60 * time.Second, // 60 second buffer like myaudio
+			Format:     sourceConfig.Format,
+			PreBuffer:  2 * time.Second,  // 2 seconds before detection
+			PostBuffer: 13 * time.Second, // 13 seconds after detection (total 15s)
+			ExportConfig: &export.Config{
+				Format:           export.Format(a.settings.Realtime.Audio.Export.Type),
+				OutputPath:       a.settings.Realtime.Audio.Export.Path,
+				FileNameTemplate: "{source}_{timestamp}",
+				Bitrate:          a.settings.Realtime.Audio.Export.Bitrate,
+				FFmpegPath:       a.settings.Realtime.Audio.FfmpegPath,
+				EnableDebug:      a.settings.Realtime.Audio.Export.Debug,
+				Timeout:          30 * time.Second,
+			},
+		}
+
+		if err := a.captureManager.EnableCapture(sourceConfig.ID, captureConfig); err != nil {
+			log.Printf("Failed to enable capture for source %s: %v", sourceConfig.ID, err)
+		}
+	}
+
 	return nil
 }
 
@@ -182,9 +225,16 @@ func (a *MyAudioCompatAdapter) processAudioData() {
 				log.Printf("Error writing to analysis buffer: %v", err)
 			}
 
-			// Write to capture buffer
-			if err := myaudio.WriteToCaptureBuffer(audioData.SourceID, audioData.Buffer); err != nil {
-				log.Printf("Error writing to capture buffer: %v", err)
+			// Write to audiocore capture buffer if capture is enabled
+			if a.captureManager.IsCaptureEnabled(audioData.SourceID) {
+				if err := a.captureManager.Write(audioData.SourceID, &audioData); err != nil {
+					log.Printf("Error writing to audiocore capture buffer: %v", err)
+				}
+			} else {
+				// Fall back to myaudio capture buffer for compatibility
+				if err := myaudio.WriteToCaptureBuffer(audioData.SourceID, audioData.Buffer); err != nil {
+					log.Printf("Error writing to capture buffer: %v", err)
+				}
 			}
 
 			// Calculate audio level
