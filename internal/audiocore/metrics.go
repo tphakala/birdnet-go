@@ -286,3 +286,35 @@ func (mc *MetricsCollector) RecordGainProcessing(processorID string, gainLevel f
 		mc.metrics.RecordGainClippingEvent(processorID, sampleFormat)
 	}
 }
+
+// RecordQueueSubmission records a successful submission to the results queue
+func (mc *MetricsCollector) RecordQueueSubmission(sourceID string, detectionCount int) {
+	if !mc.enabled || mc.metrics == nil {
+		return
+	}
+
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	// For now, we'll record this as a processed frame with metadata
+	// In the future, this could be a dedicated metric
+	mc.metrics.RecordProcessedFrame("queue", sourceID)
+}
+
+// UpdateQueueDepth updates the current queue depth metric
+func (mc *MetricsCollector) UpdateQueueDepth(depth int) {
+	if !mc.enabled || mc.metrics == nil {
+		return
+	}
+
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	// This would require adding a new metric type to the metrics package
+	// For now, we'll log it for monitoring
+	if metricsLogger != nil && depth > 80 { // Warn if queue is >80% full (assuming 100 capacity)
+		metricsLogger.Warn("results queue depth high",
+			"depth", depth,
+			"capacity", 100)
+	}
+}
