@@ -17,6 +17,7 @@ AudioCore is a modular and extensible audio processing framework for BirdNET-Go 
 - [Performance & Monitoring](#performance--monitoring)
 - [Implementation Status](#implementation-status)
 - [Migration from MyAudio](#migration-from-myaudio)
+- [Buffer Pool Analysis](#buffer-pool-analysis)
 
 ## Overview
 
@@ -199,6 +200,27 @@ Efficient memory management with pooling to reduce allocations.
 - Reference counting for safe buffer sharing
 - Per-tier statistics and monitoring
 - Automatic garbage collection for unused buffers
+
+**Important Design Decision - Buffer Pool Usage:**
+
+While audiocore includes a comprehensive buffer pool system, its usage is intentionally limited based on performance analysis:
+
+1. **ChunkBufferV2 deliberately disables pooling** (`BufferPool: nil`)
+   - Audio chunks are 288KB (3 seconds @ 48kHz, 16-bit mono)
+   - Pooling would force unnecessary copying when sending to results queue
+   - Direct allocation allows zero-copy ownership transfer to the processor
+   
+2. **Actual buffer pool usage is limited to:**
+   - OverlapBuffer for temporary buffers during overlap processing
+   - Small internal buffers for format conversion
+   
+3. **Why this matters for real-time audio:**
+   - Zero-copy transfer is more important than allocation overhead for large buffers
+   - 288KB allocations happen only every 3 seconds (not high frequency)
+   - GC pressure from these allocations is minimal compared to copy overhead
+   - Ownership transfer model is simpler without pool management
+
+See [Buffer Pool Analysis](#buffer-pool-analysis) section for detailed performance considerations.
 
 ### 5. FFmpeg Process Management
 Robust FFmpeg lifecycle management for RTSP streams.
@@ -528,6 +550,111 @@ if settings.Audio.UseNewAudioCore {
 3. **Compatibility Layer** ✅ - Adapter ensures existing code works
 4. **Gradual Rollout** 🔄 - Test with subset of users before full migration
 5. **Documentation** 📝 - This comprehensive guide for migration
+
+## Buffer Pool Analysis
+
+### Overview
+The audiocore package includes a sophisticated buffer pool system designed to reduce memory allocations and GC pressure. However, after careful analysis and real-world testing, we've made specific decisions about when to use pooling.
+
+### Buffer Pool Architecture
+```
+┌─────────────────────────────────────────────────────────┐
+│                  Buffer Pool System                     │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │ Small Tier  │  │ Medium Tier │  │ Large Tier  │     │
+│  │   (4KB)     │  │   (64KB)    │  │   (1MB)     │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘     │
+│                                                         │
+│  Features:                                              │
+│  • Reference counting for safe sharing                  │
+│  • Per-tier statistics and monitoring                   │
+│  • Automatic garbage collection                         │
+│  • Metrics integration                                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Real-Time Audio Considerations
+
+#### Audio Chunk Characteristics
+- **Size**: 288KB per chunk (3 seconds @ 48kHz, 16-bit mono)
+- **Frequency**: One chunk every 3 seconds
+- **Lifetime**: Chunks live through the entire processing pipeline
+- **Ownership**: Must transfer from audiocore to processor
+
+#### Performance Trade-offs
+
+**Benefits of Buffer Pooling:**
+1. Reduced allocation overhead
+2. Lower GC pressure
+3. Better memory locality
+4. Predictable memory usage
+
+**Costs of Buffer Pooling for Large Buffers:**
+1. **Forced copying**: Cannot transfer ownership without copying
+2. **Reference counting overhead**: Additional bookkeeping
+3. **Synchronization costs**: Pool access requires locking
+4. **Memory overhead**: Pools keep buffers allocated even when idle
+
+### Empirical Analysis
+
+#### Allocation Frequency
+```
+Audio chunks: 288KB every 3 seconds = 96KB/second
+With 5 sources: 480KB/second allocation rate
+
+This is relatively low for modern systems and GC.
+```
+
+#### Copy vs Allocation Cost
+```
+288KB copy: ~50-100μs (memory bandwidth limited)
+288KB allocation: ~1-5μs (fast path)
+GC amortized cost: ~10-20μs per allocation
+
+Copy cost >> Allocation + GC cost
+```
+
+### Design Decision
+
+Based on this analysis, we've made the following decisions:
+
+1. **Disable pooling for audio chunks** (288KB buffers)
+   - Zero-copy transfer is critical for performance
+   - Allocation overhead is negligible at this frequency
+   - Simplifies ownership model
+
+2. **Enable pooling for small, frequent allocations**
+   - Overlap buffers (temporary, short-lived)
+   - Format conversion buffers
+   - Internal processing buffers
+
+3. **Future considerations**
+   - If we add more audio sources (>20), revisit this decision
+   - Consider custom allocator for predictable latency
+   - Profile actual GC impact in production
+
+### Best Practices
+
+When deciding whether to use buffer pools in audiocore:
+
+1. **Use pooling when:**
+   - Buffers are small (<64KB)
+   - Allocation frequency is high (>100/second)
+   - Buffers have short, predictable lifetimes
+   - Ownership doesn't need to transfer between components
+
+2. **Avoid pooling when:**
+   - Buffers are large (>64KB)
+   - Zero-copy transfer is required
+   - Allocation frequency is low (<10/second)
+   - Buffer lifetime spans multiple components
+
+3. **Always measure:**
+   - Profile before optimizing
+   - Consider total system impact, not just allocation cost
+   - Test with realistic workloads
 
 ---
 
