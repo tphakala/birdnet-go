@@ -2,11 +2,25 @@ package audiocore
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
 )
+
+// waitForCondition polls a condition with a specified interval until it returns true or timeout
+func waitForCondition(t *testing.T, timeout, pollInterval time.Duration, condition func() bool, description string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+	
+	t.Fatalf("timeout waiting for %s after %v", description, timeout)
+}
 
 // TestProcessingPipelineBasic tests basic pipeline functionality
 func TestProcessingPipelineBasic(t *testing.T) {
@@ -72,23 +86,14 @@ func TestProcessingPipelineBasic(t *testing.T) {
 		SourceID:  source.id,
 	}
 
-	// Wait for processing with timeout
-	timeout := time.After(2 * time.Second)
-	processed := false
-	for !processed {
-		select {
-		case <-timeout:
-			t.Fatal("timeout waiting for chunk processing")
-		default:
-			metrics := pipeline.GetMetrics()
-			if count, ok := metrics["processed_chunks"].(int64); ok && count > 0 {
-				processed = true
-			} else {
-				// Brief yield to avoid busy loop
-				runtime.Gosched()
-			}
+	// Wait for processing with more efficient polling
+	waitForCondition(t, 2*time.Second, 10*time.Millisecond, func() bool {
+		metrics := pipeline.GetMetrics()
+		if count, ok := metrics["processed_chunks"].(int64); ok && count > 0 {
+			return true
 		}
-	}
+		return false
+	}, "chunk processing")
 
 	// Stop pipeline
 	err = pipeline.Stop()
@@ -238,23 +243,14 @@ func TestProcessingPipelineBackpressure(t *testing.T) {
 	}
 
 	// Wait for drops to occur due to backpressure
-	timeout := time.After(2 * time.Second)
-	hasDrops := false
-	for !hasDrops {
-		select {
-		case <-timeout:
-			t.Fatal("timeout waiting for backpressure drops")
-		default:
-			metrics := pipeline.GetMetrics()
-			if dropped, ok := metrics["dropped_chunks"].(int64); ok && dropped > 0 {
-				hasDrops = true
-				t.Logf("Detected %d dropped chunks due to backpressure", dropped)
-			} else {
-				// Brief yield to avoid busy loop
-				runtime.Gosched()
-			}
+	waitForCondition(t, 2*time.Second, 10*time.Millisecond, func() bool {
+		metrics := pipeline.GetMetrics()
+		if dropped, ok := metrics["dropped_chunks"].(int64); ok && dropped > 0 {
+			t.Logf("Detected %d dropped chunks due to backpressure", dropped)
+			return true
 		}
-	}
+		return false
+	}, "backpressure drops")
 
 	err = pipeline.Stop()
 	if err != nil {

@@ -98,8 +98,9 @@ func (rt *ResourceTracker) Track(id, resourceType string, finalizer func()) {
 	rt.totalAllocated.Add(1)
 	rt.activeCount.Add(1)
 	
-	// Use AddCleanup to detect leaks (Go 1.24+)
-	runtime.AddCleanup(resource, func(r *TrackedResource) {
+	// Use runtime.SetFinalizer for leak detection
+	// runtime.AddCleanup in Go 1.24+ has different semantics
+	runtime.SetFinalizer(resource, func(r *TrackedResource) {
 		if !r.Released.Load() {
 			rt.logger.Error("resource leaked - not properly closed",
 				"resource_id", r.ID,
@@ -112,7 +113,7 @@ func (rt *ResourceTracker) Track(id, resourceType string, finalizer func()) {
 				r.Finalizer()
 			}
 		}
-	}, resource)
+	})
 }
 
 // Release marks a resource as released
@@ -293,12 +294,12 @@ func NewManagedResource(id string, resource any, closeFunc func() error, tracker
 		})
 	}
 	
-	// Use AddCleanup as backup (Go 1.24+)
-	runtime.AddCleanup(mr, func(m *ManagedResource) {
+	// Use runtime.SetFinalizer as backup
+	runtime.SetFinalizer(mr, func(m *ManagedResource) {
 		if !m.closed.Load() {
 			_ = m.Close()
 		}
-	}, mr)
+	})
 	
 	return mr
 }

@@ -61,23 +61,47 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 	// Extract all complete chunks from pending data
 	chunkIndex := 0
 	for len(c.pendingData) >= c.targetSize {
-		// Extract a chunk
-		// Note: We can't use buffer pool here directly because AudioData doesn't 
-		// have a field to store the AudioBuffer reference for later release.
-		// The consumer of the chunk would need to handle buffer pool management.
-		chunkData := make([]byte, c.targetSize)
+		// Get buffer from pool if available
+		var chunkBuffer AudioBuffer
+		var chunkData []byte
+		
+		if c.bufferPool != nil {
+			// Use buffer pool for memory efficiency
+			chunkBuffer = c.bufferPool.Get(c.targetSize)
+			if chunkBuffer != nil {
+				chunkBuffer.Reset()
+				// Resize to exact size needed
+				if err := chunkBuffer.Resize(c.targetSize); err == nil {
+					chunkData = chunkBuffer.Data()
+				} else {
+					// If resize fails, release buffer and fall back to allocation
+					chunkBuffer.Release()
+					chunkBuffer = nil
+					chunkData = make([]byte, c.targetSize)
+				}
+			} else {
+				// Pool returned nil, fall back to allocation
+				chunkData = make([]byte, c.targetSize)
+			}
+		} else {
+			// No buffer pool available, use regular allocation
+			chunkData = make([]byte, c.targetSize)
+		}
+		
+		// Copy data to chunk buffer
 		copy(chunkData, c.pendingData[:c.targetSize])
 		
 		// Calculate timestamp for this chunk
 		chunkTimestamp := c.firstTimestamp.Add(time.Duration(chunkIndex) * c.chunkDuration)
 		
-		// Create chunk
+		// Create chunk with buffer handle for proper lifecycle management
 		chunk := AudioData{
-			Buffer:    chunkData,
-			Format:    c.format,
-			Timestamp: chunkTimestamp,
-			Duration:  c.chunkDuration,
-			SourceID:  data.SourceID,
+			Buffer:       chunkData,
+			Format:       c.format,
+			Timestamp:    chunkTimestamp,
+			Duration:     c.chunkDuration,
+			SourceID:     data.SourceID,
+			BufferHandle: chunkBuffer, // Store handle so consumer can release when done
 		}
 		
 		c.completedChunks = append(c.completedChunks, chunk)

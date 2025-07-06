@@ -409,11 +409,11 @@ func TestAnalyzerMetrics(t *testing.T) {
 
 // TestAnalyzerResourceCleanup tests proper resource cleanup
 func TestAnalyzerResourceCleanup(t *testing.T) {
-	t.Skip("Skipping due to runtime.AddCleanup issue with Go 1.24+")
 	t.Parallel()
 
 	// Create resource tracker
 	tracker := NewResourceTracker()
+	defer func() { _ = tracker.Close() }()
 
 	// Create mock analyzer
 	mock := &mockAnalyzer{
