@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -68,10 +69,11 @@ func (m *manager) CreateProcess(config *ProcessConfig) (Process, error) {
 		logger.Error("attempted to create process that already exists",
 			"process_id", config.ID)
 		
-		return nil, errors.New(fmt.Errorf("process already exists")).
-			Component("audiocore").
+		return nil, errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryConfiguration).
 			Context("process_id", config.ID).
+			Context("error", "process already exists").
 			Build()
 	}
 
@@ -82,10 +84,11 @@ func (m *manager) CreateProcess(config *ProcessConfig) (Process, error) {
 			"current_count", len(m.processes),
 			"limit", m.config.MaxProcesses)
 		
-		return nil, errors.New(fmt.Errorf("max processes limit reached")).
-			Component("audiocore").
+		return nil, errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("limit", fmt.Sprintf("%d", m.config.MaxProcesses)).
+			Context("error", "max processes limit reached").
 			Build()
 	}
 
@@ -149,10 +152,11 @@ func (m *manager) RemoveProcess(id string) error {
 	if !exists {
 		logger.Error("attempted to remove non-existent process", "process_id", id)
 		
-		return errors.New(fmt.Errorf("process not found")).
-			Component("audiocore").
-			Category(errors.CategoryGeneric).
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
+			Category(errors.CategoryNotFound).
 			Context("process_id", id).
+			Context("error", "process not found").
 			Build()
 	}
 
@@ -186,9 +190,10 @@ func (m *manager) Start(ctx context.Context) error {
 	if m.ctx != nil {
 		logger.Error("attempted to start already running manager")
 		
-		return errors.New(fmt.Errorf("manager already started")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
+			Context("error", "manager already started").
 			Build()
 	}
 
@@ -275,9 +280,11 @@ func (m *manager) Stop() error {
 			"timeout", m.config.CleanupTimeout,
 			"shutdown_duration_ms", time.Since(stopTime).Milliseconds())
 		
-		return errors.New(fmt.Errorf("timeout waiting for cleanup")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
+			Context("timeout", m.config.CleanupTimeout.String()).
+			Context("error", "timeout waiting for cleanup").
 			Build()
 	}
 
@@ -347,11 +354,12 @@ func (m *manager) HealthCheck() error {
 			"failed_health_check", failedHealthCheck,
 			"check_duration_ms", checkDuration.Milliseconds())
 		
-		return errors.New(fmt.Errorf("%d unhealthy processes", unhealthy)).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("total", fmt.Sprintf("%d", len(m.processes))).
 			Context("unhealthy", fmt.Sprintf("%d", unhealthy)).
+			Context("error", fmt.Sprintf("%d unhealthy processes", unhealthy)).
 			Build()
 	}
 	
@@ -433,10 +441,11 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 	if !mp.restartPolicy.Enabled {
 		logger.Debug("restart disabled for process", "process_id", mp.config.ID)
 		
-		return errors.New(fmt.Errorf("restart disabled")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryConfiguration).
 			Context("process_id", mp.config.ID).
+			Context("error", "restart disabled").
 			Build()
 	}
 
@@ -447,11 +456,12 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 			"restart_count", mp.restartCount,
 			"max_retries", mp.restartPolicy.MaxRetries)
 		
-		return errors.New(fmt.Errorf("max retries exceeded")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("process_id", mp.config.ID).
 			Context("retries", fmt.Sprintf("%d", mp.restartCount)).
+			Context("error", "max retries exceeded").
 			Build()
 	}
 
@@ -473,9 +483,10 @@ func (m *manager) handleProcessRestart(mp *managedProcess) error {
 				"process_id", mp.config.ID,
 				"delay_remaining_ms", delay.Milliseconds())
 			
-			return errors.New(fmt.Errorf("manager stopped")).
-				Component("audiocore").
+			return errors.New(nil).
+				Component(audiocore.ComponentAudioCore).
 				Category(errors.CategorySystem).
+				Context("error", "manager stopped").
 				Build()
 		}
 

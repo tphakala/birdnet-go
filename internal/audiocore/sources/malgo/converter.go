@@ -2,9 +2,10 @@ package malgo
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/malgo"
 )
 
@@ -33,9 +34,20 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 	case malgo.FormatU8:
 		bytesPerSample = 1
 	case malgo.FormatUnknown:
-		return nil, fmt.Errorf("unknown source format")
+		return nil, errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("format", "unknown").
+			Context("error", "unknown source format").
+			Build()
 	default:
-		return nil, fmt.Errorf("unsupported source format: %v", sourceFormat)
+		_, formatName := GetFormatInfo(sourceFormat)
+		return nil, errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("format", formatName).
+			Context("error", "unsupported source format").
+			Build()
 	}
 
 	// Ensure we have complete samples

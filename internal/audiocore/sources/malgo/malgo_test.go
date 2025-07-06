@@ -40,16 +40,26 @@ func (b *mockBuffer) Acquire()                       {}
 func (b *mockBuffer) Release()                       {}
 
 func TestNewMalgoSource(t *testing.T) {
-	config := MalgoConfig{
-		DeviceName:   "test",
-		SampleRate:   48000,
-		Channels:     1,
-		BufferFrames: 512,
-		Gain:         1.0,
+	sourceConfig := audiocore.SourceConfig{
+		ID:     "test-source",
+		Name:   "Test Source",
+		Type:   "malgo",
+		Device: "test-device",
+		Format: audiocore.AudioFormat{
+			SampleRate: 48000,
+			Channels:   1,
+			BitDepth:   16,
+			Encoding:   "pcm_s16le",
+		},
+		BufferSize: 4096,
+		Gain:       1.0,
+		ExtraConfig: map[string]any{
+			"buffer_frames": uint32(512),
+		},
 	}
 
 	pool := &mockBufferPool{}
-	source, err := NewMalgoSource("test-source", config, pool)
+	source, err := NewMalgoSource(&sourceConfig, pool)
 	if err != nil {
 		t.Fatalf("Failed to create malgo source: %v", err)
 	}
@@ -58,8 +68,8 @@ func TestNewMalgoSource(t *testing.T) {
 		t.Errorf("Expected ID 'test-source', got '%s'", source.ID())
 	}
 
-	if source.Name() != "test" {
-		t.Errorf("Expected name 'test', got '%s'", source.Name())
+	if source.Name() != "Test Source" {
+		t.Errorf("Expected name 'Test Source', got '%s'", source.Name())
 	}
 
 	format := source.GetFormat()
@@ -78,13 +88,18 @@ func TestNewMalgoSource(t *testing.T) {
 }
 
 func TestMalgoSourceGain(t *testing.T) {
-	config := MalgoConfig{
-		DeviceName: "test",
+	sourceConfig := audiocore.SourceConfig{
+		ID:         "test-source",
+		Name:       "Test Source",
+		Type:       "malgo",
+		Device:     "test-device",
+		Format:     audiocore.AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16, Encoding: "pcm_s16le"},
+		BufferSize: 4096,
 		Gain:       1.0,
 	}
 
 	pool := &mockBufferPool{}
-	source, _ := NewMalgoSource("test-source", config, pool)
+	source, _ := NewMalgoSource(&sourceConfig, pool)
 
 	// Test valid gain values
 	testCases := []struct {
@@ -214,14 +229,18 @@ func TestCalculateBufferSize(t *testing.T) {
 
 func TestMalgoSourceStartStop(t *testing.T) {
 	// Skip this test if we can't initialize malgo (e.g., in CI without audio devices)
-	config := MalgoConfig{
-		DeviceName: "default",
-		SampleRate: 48000,
-		Channels:   1,
+	sourceConfig := audiocore.SourceConfig{
+		ID:         "test-source",
+		Name:       "default",
+		Type:       "malgo",
+		Device:     "default",
+		Format:     audiocore.AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16, Encoding: "pcm_s16le"},
+		BufferSize: 4096,
+		Gain:       1.0,
 	}
 
 	pool := &mockBufferPool{}
-	source, _ := NewMalgoSource("test-source", config, pool)
+	source, _ := NewMalgoSource(&sourceConfig, pool)
 
 	// Test that Stop fails when not started
 	err := source.Stop()
@@ -252,16 +271,19 @@ func TestEnumerateDevices(t *testing.T) {
 
 func TestAudioDataPipeline(t *testing.T) {
 	// Test the audio data pipeline with mock data
-	config := MalgoConfig{
-		DeviceName:   "test",
-		SampleRate:   48000,
-		Channels:     1,
-		BufferFrames: 512,
-		Gain:         1.5,
+	sourceConfig := audiocore.SourceConfig{
+		ID:         "test-source",
+		Name:       "test",
+		Type:       "malgo",
+		Device:     "test-device",
+		Format:     audiocore.AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16, Encoding: "pcm_s16le"},
+		BufferSize: 4096,
+		Gain:       1.5,
+		ExtraConfig: map[string]any{"buffer_frames": uint32(512)},
 	}
 
 	pool := &mockBufferPool{}
-	source, _ := NewMalgoSource("test-source", config, pool)
+	source, _ := NewMalgoSource(&sourceConfig, pool)
 
 	// Test gain application
 	buffer := []byte{0x00, 0x10, 0x00, 0x20} // Two 16-bit samples
@@ -274,12 +296,18 @@ func TestAudioDataPipeline(t *testing.T) {
 }
 
 func TestIsActive(t *testing.T) {
-	config := MalgoConfig{
-		DeviceName: "test",
+	sourceConfig := audiocore.SourceConfig{
+		ID:         "test-source",
+		Name:       "test",
+		Type:       "malgo",
+		Device:     "test",
+		Format:     audiocore.AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16, Encoding: "pcm_s16le"},
+		BufferSize: 4096,
+		Gain:       1.0,
 	}
 
 	pool := &mockBufferPool{}
-	source, _ := NewMalgoSource("test-source", config, pool)
+	source, _ := NewMalgoSource(&sourceConfig, pool)
 
 	if source.IsActive() {
 		t.Error("New source should not be active")
@@ -307,9 +335,17 @@ func BenchmarkConvertToS16(b *testing.B) {
 }
 
 func BenchmarkApplyGain(b *testing.B) {
-	config := MalgoConfig{}
+	sourceConfig := audiocore.SourceConfig{
+		ID:         "bench",
+		Name:       "bench",
+		Type:       "malgo",
+		Device:     "default",
+		Format:     audiocore.AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16, Encoding: "pcm_s16le"},
+		BufferSize: 4096,
+		Gain:       1.0,
+	}
 	pool := &mockBufferPool{}
-	source, _ := NewMalgoSource("bench", config, pool)
+	source, _ := NewMalgoSource(&sourceConfig, pool)
 
 	buffer := make([]byte, 4096) // 2048 16-bit samples
 	gain := 1.5

@@ -1,6 +1,16 @@
 // Package audiocore provides a modular and extensible audio processing system
 // for BirdNET-Go. It supports multiple simultaneous audio sources, per-source
 // configuration, and a plugin-based processing architecture.
+//
+// Architecture overview:
+//   AudioSource -> ProcessingPipeline -> Analyzer
+//   Pipeline: ChunkBuffer -> OverlapBuffer -> ProcessorChain -> Analyzer
+//
+// Key interfaces:
+//   - AudioSource: Audio input (microphone, RTSP, file)
+//   - Analyzer: ML model for detection (BirdNET, custom)
+//   - ProcessorChain: Audio transformations (resample, denoise)
+//   - BufferPool: Memory management for audio buffers
 package audiocore
 
 import (
@@ -18,11 +28,12 @@ type AudioFormat struct {
 
 // AudioData represents a chunk of audio with metadata
 type AudioData struct {
-	Buffer    []byte        // Raw audio data
-	Format    AudioFormat   // Audio format information
-	Timestamp time.Time     // When this audio was captured
-	Duration  time.Duration // Duration of the audio chunk
-	SourceID  string        // Identifier of the source that produced this audio
+	Buffer       []byte        // Raw audio data
+	Format       AudioFormat   // Audio format information
+	Timestamp    time.Time     // When this audio was captured
+	Duration     time.Duration // Duration of the audio chunk
+	SourceID     string        // Identifier of the source that produced this audio
+	BufferHandle AudioBuffer   // Optional reference to buffer pool buffer for lifecycle management
 }
 
 // AudioSource represents an audio input source
@@ -53,6 +64,9 @@ type AudioSource interface {
 
 	// SetGain sets the audio gain level (0.0 to 1.0)
 	SetGain(gain float64) error
+
+	// GetConfig returns the source configuration
+	GetConfig() SourceConfig
 }
 
 // AudioProcessor processes audio data
@@ -140,6 +154,81 @@ type BufferPoolStats struct {
 	HitRate        float64
 }
 
+// Analyzer processes audio data for detection/analysis
+type Analyzer interface {
+	// ID returns unique identifier for this analyzer
+	ID() string
+
+	// Analyze processes audio data and returns results
+	Analyze(ctx context.Context, data *AudioData) (AnalysisResult, error)
+
+	// GetRequiredFormat returns the audio format this analyzer needs
+	GetRequiredFormat() AudioFormat
+
+	// GetConfiguration returns analyzer-specific configuration
+	GetConfiguration() AnalyzerConfig
+
+	// Close releases any resources
+	Close() error
+}
+
+// AnalysisResult contains the output from an analyzer
+type AnalysisResult struct {
+	Timestamp   time.Time
+	Duration    time.Duration
+	Detections  []Detection
+	Metadata    map[string]any
+	AnalyzerID  string
+	SourceID    string
+}
+
+// Detection represents a single detection event
+type Detection struct {
+	Label       string
+	Confidence  float32
+	StartTime   float64
+	EndTime     float64
+	Attributes  map[string]any
+}
+
+// AnalyzerConfig holds analyzer-specific configuration
+type AnalyzerConfig struct {
+	Type              string         // "birdnet", "custom", etc.
+	ModelPath         string         // Path to model file
+	Threshold         float32        // Detection threshold
+	ChunkDuration     time.Duration  // Analysis chunk size
+	OverlapDuration   time.Duration  // Overlap between chunks
+	ProcessingTimeout time.Duration  // Max time for analysis
+	ExtraConfig       map[string]any // Analyzer-specific settings
+}
+
+// AnalyzerManager manages a pool of analyzers
+type AnalyzerManager interface {
+	// RegisterAnalyzer adds an analyzer to the pool
+	RegisterAnalyzer(analyzer Analyzer) error
+
+	// GetAnalyzer retrieves analyzer by ID
+	GetAnalyzer(id string) (Analyzer, error)
+
+	// ListAnalyzers returns all registered analyzers
+	ListAnalyzers() []Analyzer
+
+	// CreateAnalyzer creates analyzer from config
+	CreateAnalyzer(config AnalyzerConfig) (Analyzer, error)
+
+	// RemoveAnalyzer removes and closes analyzer
+	RemoveAnalyzer(id string) error
+}
+
+// AnalyzerFactory creates analyzers from configuration
+type AnalyzerFactory interface {
+	// CreateAnalyzer creates an analyzer from configuration
+	CreateAnalyzer(id string, config AnalyzerConfig) (Analyzer, error)
+
+	// SupportedTypes returns list of supported analyzer types
+	SupportedTypes() []string
+}
+
 // AudioManager orchestrates multiple audio sources and processing
 type AudioManager interface {
 	// AddSource adds a new audio source
@@ -156,6 +245,12 @@ type AudioManager interface {
 
 	// SetProcessorChain sets the processor chain for a source
 	SetProcessorChain(sourceID string, chain ProcessorChain) error
+
+	// SetupProcessingPipeline sets up a complete processing pipeline for a source
+	SetupProcessingPipeline(sourceID, analyzerID string) error
+
+	// SetCaptureManager sets the capture manager for audio clip saving
+	SetCaptureManager(captureManager CaptureManager)
 
 	// Start begins processing audio from all sources
 	Start(ctx context.Context) error
@@ -188,8 +283,21 @@ type SourceConfig struct {
 	Format      AudioFormat
 	BufferSize  int
 	Gain        float64
-	ModelID     string // BirdNET model to use for this source
+	
+	// Analyzer configuration (per RFC decision)
+	AnalyzerID  string           // ID of analyzer to use
+	Processing  ProcessingConfig // Processing-specific config
+	
+	ModelID     string // Deprecated: Use AnalyzerID instead
 	ExtraConfig map[string]any
+}
+
+// ProcessingConfig contains processing-specific configuration
+type ProcessingConfig struct {
+	ChunkDuration   time.Duration
+	OverlapPercent  float64
+	BufferAhead     int // Number of chunks to buffer
+	Priority        int // Processing priority
 }
 
 // ManagerConfig contains configuration for the audio manager
@@ -209,4 +317,13 @@ type BufferPoolConfig struct {
 	LargeBufferSize   int // Size for large buffers (e.g., 1MB)
 	MaxBuffersPerSize int // Maximum buffers to keep per size category
 	EnableMetrics     bool
+}
+
+// CaptureManager manages audio capture buffers for saving clips
+type CaptureManager interface {
+	// Write writes audio data to capture buffer
+	Write(sourceID string, data *AudioData) error
+	
+	// SaveClip saves an audio clip from the buffer
+	SaveClip(sourceID string, timestamp time.Time, duration time.Duration) ([]byte, error)
 }

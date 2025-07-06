@@ -15,6 +15,10 @@ type managerImpl struct {
 	config          ManagerConfig
 	sources         map[string]AudioSource
 	processorChains map[string]ProcessorChain
+	pipelines       map[string]*ProcessingPipeline
+	analyzerManager AnalyzerManager
+	captureManager  CaptureManager
+	healthMonitor   *AudioHealthMonitor
 	bufferPool      BufferPool
 	audioOutput     chan AudioData
 	ctx             context.Context
@@ -60,6 +64,7 @@ func NewAudioManager(config *ManagerConfig) AudioManager {
 		config:          *config,
 		sources:         make(map[string]AudioSource),
 		processorChains: make(map[string]ProcessorChain),
+		pipelines:       make(map[string]*ProcessingPipeline),
 		bufferPool:      NewBufferPool(config.BufferPoolConfig),
 		audioOutput:     make(chan AudioData, 100),
 		startupErrors:   make(chan error, 10), // Buffered to avoid blocking
@@ -181,6 +186,66 @@ func (m *managerImpl) SetProcessorChain(sourceID string, chain ProcessorChain) e
 	return nil
 }
 
+// SetupProcessingPipeline sets up a complete processing pipeline for a source
+func (m *managerImpl) SetupProcessingPipeline(sourceID, analyzerID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	source, exists := m.sources[sourceID]
+	if !exists {
+		return ErrSourceNotFound
+	}
+
+	// Check if analyzer manager is available
+	if m.analyzerManager == nil {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryConfiguration).
+			Context("error", "analyzer manager not configured").
+			Build()
+	}
+
+	analyzer, err := m.analyzerManager.GetAnalyzer(analyzerID)
+	if err != nil {
+		return err
+	}
+
+	// Stop existing pipeline if any
+	if existingPipeline, exists := m.pipelines[sourceID]; exists {
+		_ = existingPipeline.Stop()
+		delete(m.pipelines, sourceID)
+	}
+
+	// Create processing pipeline
+	pipeline, err := NewProcessingPipeline(&ProcessingPipelineConfig{
+		Source:         source,
+		Analyzer:       analyzer,
+		ProcessorChain: m.processorChains[sourceID],
+		BufferPool:     m.bufferPool,
+		Config:         source.GetConfig().Processing,
+		Metrics:        GetMetrics(),
+		HealthMonitor:  m.healthMonitor,
+		CaptureManager: m.captureManager,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Start pipeline if manager is already started
+	if m.started {
+		if err := pipeline.Start(m.ctx); err != nil {
+			return err
+		}
+	}
+
+	m.pipelines[sourceID] = pipeline
+	m.logger.Info("processing pipeline configured",
+		"source_id", sourceID,
+		"analyzer_id", analyzerID)
+
+	return nil
+}
+
 // Start begins processing audio from all sources
 func (m *managerImpl) Start(ctx context.Context) error {
 	m.mu.Lock()
@@ -221,6 +286,18 @@ func (m *managerImpl) Start(ctx context.Context) error {
 
 	// Wait for all sources to report their startup status
 	var startupErrs []error
+
+	// Start any configured pipelines
+	for sourceID, pipeline := range m.pipelines {
+		m.logger.Debug("starting pipeline",
+			"source_id", sourceID)
+		if err := pipeline.Start(m.ctx); err != nil {
+			m.logger.Error("failed to start pipeline",
+				"source_id", sourceID,
+				"error", err)
+			startupErrs = append(startupErrs, err)
+		}
+	}
 	errorTimeout := time.NewTimer(2 * time.Second)
 	defer errorTimeout.Stop()
 
@@ -261,6 +338,13 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	return nil
 }
 
+// SetCaptureManager sets the capture manager for audio clip saving
+func (m *managerImpl) SetCaptureManager(captureManager CaptureManager) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.captureManager = captureManager
+}
+
 // Stop halts all audio processing
 func (m *managerImpl) Stop() error {
 	m.mu.Lock()
@@ -274,6 +358,17 @@ func (m *managerImpl) Stop() error {
 	// Cancel context to signal all goroutines to stop
 	m.logger.Info("stopping audio manager")
 	m.cancel()
+
+	// Stop all pipelines first
+	for sourceID, pipeline := range m.pipelines {
+		m.logger.Debug("stopping pipeline",
+			"source_id", sourceID)
+		if err := pipeline.Stop(); err != nil {
+			m.logger.Error("error stopping pipeline",
+				"source_id", sourceID,
+				"error", err)
+		}
+	}
 
 	// Stop all sources
 	var errs []error

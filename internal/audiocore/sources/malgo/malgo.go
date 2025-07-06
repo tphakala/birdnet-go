@@ -16,9 +16,10 @@ import (
 // MalgoSource implements audiocore.AudioSource using malgo for cross-platform audio capture
 type MalgoSource struct {
 	// Core fields
-	id     string
-	name   string
-	config MalgoConfig
+	id           string
+	name         string
+	config       MalgoConfig
+	sourceConfig audiocore.SourceConfig
 
 	// Malgo specific
 	ctx    *malgo.AllocatedContext
@@ -54,26 +55,42 @@ type MalgoConfig struct {
 }
 
 // NewMalgoSource creates a new malgo-based audio source
-func NewMalgoSource(id string, config MalgoConfig, bufferPool audiocore.BufferPool) (*MalgoSource, error) {
+func NewMalgoSource(sourceConfig *audiocore.SourceConfig, bufferPool audiocore.BufferPool) (*MalgoSource, error) {
+	// Extract malgo config from extra config
+	var malgoConfig MalgoConfig
+	malgoConfig.DeviceID = sourceConfig.Device
+	malgoConfig.DeviceName = sourceConfig.Name
+	malgoConfig.SampleRate = uint32(sourceConfig.Format.SampleRate)
+	malgoConfig.Channels = uint8(sourceConfig.Format.Channels)
+	malgoConfig.Gain = sourceConfig.Gain
+	
+	// Extract additional settings from ExtraConfig if available
+	if sourceConfig.ExtraConfig != nil {
+		if frames, ok := sourceConfig.ExtraConfig["buffer_frames"].(uint32); ok {
+			malgoConfig.BufferFrames = frames
+		}
+	}
+
 	// Validate configuration
-	if config.SampleRate == 0 {
-		config.SampleRate = 48000
+	if malgoConfig.SampleRate == 0 {
+		malgoConfig.SampleRate = 48000
 	}
-	if config.Channels == 0 {
-		config.Channels = 1
+	if malgoConfig.Channels == 0 {
+		malgoConfig.Channels = 1
 	}
-	if config.BufferFrames == 0 {
-		config.BufferFrames = 512
+	if malgoConfig.BufferFrames == 0 {
+		malgoConfig.BufferFrames = 512
 	}
-	if config.Gain == 0 {
-		config.Gain = 1.0
+	if malgoConfig.Gain == 0 {
+		malgoConfig.Gain = 1.0
 	}
 
 	// Create source
 	source := &MalgoSource{
-		id:         id,
-		name:       config.DeviceName,
-		config:     config,
+		id:           sourceConfig.ID,
+		name:         sourceConfig.Name,
+		config:       malgoConfig,
+		sourceConfig: *sourceConfig,
 		outputChan: make(chan audiocore.AudioData, 10),
 		errorChan:  make(chan error, 10),
 		bufferPool: bufferPool,
@@ -81,14 +98,14 @@ func NewMalgoSource(id string, config MalgoConfig, bufferPool audiocore.BufferPo
 			New: func() any {
 				// Pre-allocate conversion buffers based on typical frame size
 				// For 512 frames * 2 bytes/sample = 1024 bytes, one audio channel per buffer
-				buffer := make([]byte, config.BufferFrames*2)
+				buffer := make([]byte, malgoConfig.BufferFrames*2)
 				return &buffer
 			},
 		},
 	}
 
 	// Store initial gain
-	source.gain.Store(config.Gain)
+	source.gain.Store(malgoConfig.Gain)
 
 	return source, nil
 }
@@ -268,6 +285,13 @@ func (s *MalgoSource) GetFormat() audiocore.AudioFormat {
 		BitDepth:   16,
 		Encoding:   "pcm_s16le",
 	}
+}
+
+// GetConfig returns the source configuration
+func (s *MalgoSource) GetConfig() audiocore.SourceConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sourceConfig
 }
 
 // SetGain sets the audio gain level (0.0 to 2.0)

@@ -47,6 +47,16 @@ func (m *mockSource) Errors() <-chan error            { return m.errorChan }
 func (m *mockSource) IsActive() bool                  { return m.active }
 func (m *mockSource) GetFormat() AudioFormat          { return m.format }
 func (m *mockSource) SetGain(gain float64) error      { return nil }
+func (m *mockSource) GetConfig() SourceConfig {
+	return SourceConfig{
+		ID:         m.id,
+		Name:       m.name,
+		Type:       "mock",
+		Format:     m.format,
+		BufferSize: 4096,
+		Gain:       1.0,
+	}
+}
 
 func TestManagerCreateAndStart(t *testing.T) {
 	t.Parallel()

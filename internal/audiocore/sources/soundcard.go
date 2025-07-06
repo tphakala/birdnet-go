@@ -193,6 +193,13 @@ func (s *SoundcardSource) GetFormat() audiocore.AudioFormat {
 	return s.format
 }
 
+// GetConfig returns the source configuration
+func (s *SoundcardSource) GetConfig() audiocore.SourceConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config
+}
+
 // SetGain sets the audio gain level (0.0 to 1.0)
 func (s *SoundcardSource) SetGain(gain float64) error {
 	if gain < 0.0 || gain > 2.0 {
