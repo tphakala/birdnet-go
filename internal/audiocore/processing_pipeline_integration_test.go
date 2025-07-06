@@ -12,6 +12,17 @@ import (
 // TestProcessingPipelineWithSafeAnalyzer tests the pipeline with analyzer timeout protection
 func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 	t.Parallel()
+	
+	// Track goroutines at start to detect leaks
+	startGoroutines := runtime.NumGoroutine()
+	defer func() {
+		// Give goroutines time to clean up
+		time.Sleep(100 * time.Millisecond)
+		endGoroutines := runtime.NumGoroutine()
+		if endGoroutines > startGoroutines {
+			t.Errorf("goroutine leak detected: started with %d, ended with %d goroutines", startGoroutines, endGoroutines)
+		}
+	}()
 
 	// Create a mock source
 	source := &testAudioSource{
@@ -74,7 +85,10 @@ func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 			BufferAhead:    2,
 		},
 	}
-	pipeline := NewProcessingPipeline(pipelineConfig)
+	pipeline, err := NewProcessingPipeline(pipelineConfig)
+	if err != nil {
+		t.Fatalf("failed to create processing pipeline: %v", err)
+	}
 
 	// Start source
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -84,8 +98,7 @@ func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 	go source.simulate(ctx)
 
 	// Start pipeline
-	err := pipeline.Start(ctx)
-	if err != nil {
+	if err = pipeline.Start(ctx); err != nil {
 		t.Fatalf("failed to start pipeline: %v", err)
 	}
 	defer func() { _ = pipeline.Stop() }()

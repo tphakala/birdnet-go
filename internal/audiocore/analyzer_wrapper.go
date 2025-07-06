@@ -357,15 +357,13 @@ func (cb *CircuitBreaker) CanExecute() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	
-	now := time.Now()
-	
 	switch cb.state {
 	case "closed":
 		return true
 		
 	case "open":
 		// Check if we should transition to half-open
-		if now.Sub(cb.lastFailTime) >= cb.resetTimeout {
+		if time.Since(cb.lastFailTime) >= cb.resetTimeout {
 			cb.state = "half-open"
 			cb.halfOpenAttempts = 0
 			return true

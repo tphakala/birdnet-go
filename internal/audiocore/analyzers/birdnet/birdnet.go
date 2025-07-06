@@ -151,11 +151,28 @@ func (b *BirdNETAnalyzer) Analyze(ctx context.Context, data *audiocore.AudioData
 		// BirdNET expects [][]float32, so wrap in a slice
 		sample := [][]float32{procCtx.floatBuffer}
 		results, err := b.model.Predict(sample)
-		if err != nil {
-			errChan <- err
+		
+		// Check context before sending to avoid goroutine leak
+		select {
+		case <-predCtx.Done():
+			// Context cancelled, exit without sending
 			return
+		default:
+			// Context still active, send result
+			if err != nil {
+				select {
+				case errChan <- err:
+				case <-predCtx.Done():
+					// Context cancelled while trying to send
+				}
+				return
+			}
+			select {
+			case resultChan <- results:
+			case <-predCtx.Done():
+				// Context cancelled while trying to send
+			}
 		}
-		resultChan <- results
 	}()
 
 	// Wait for result or timeout

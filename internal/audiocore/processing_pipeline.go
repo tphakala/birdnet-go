@@ -67,16 +67,14 @@ type ProcessingPipelineConfig struct {
 }
 
 // NewProcessingPipeline creates a new processing pipeline
-func NewProcessingPipeline(config *ProcessingPipelineConfig) *ProcessingPipeline {
+func NewProcessingPipeline(config *ProcessingPipelineConfig) (*ProcessingPipeline, error) {
 	// Validate configuration first
 	if err := validatePipelineConfig(config); err != nil {
-		logger := logging.ForService("audiocore")
-		if logger == nil {
-			logger = slog.Default()
-		}
-		logger.Error("invalid pipeline configuration", "error", err)
-		// Return nil to fail fast on invalid config
-		return nil
+		return nil, errors.New(err).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "invalid pipeline configuration").
+			Build()
 	}
 
 	logger := logging.ForService("audiocore")
@@ -115,7 +113,7 @@ func NewProcessingPipeline(config *ProcessingPipelineConfig) *ProcessingPipeline
 		healthMonitor:  config.HealthMonitor,
 		metrics:        config.Metrics,
 		logger:         logger,
-	}
+	}, nil
 }
 
 // Start begins processing audio data
@@ -214,6 +212,10 @@ func (p *ProcessingPipeline) processLoop() {
 					p.logger.Debug("failed to write to capture buffer",
 						"error", err,
 						"source_id", data.SourceID)
+					// Track capture buffer write failures in metrics
+					if p.metrics != nil {
+						p.metrics.RecordProcessingError("capture_buffer", data.SourceID, "write_failed")
+					}
 				}
 			}
 			
@@ -295,7 +297,13 @@ func (p *ProcessingPipeline) sendToAnalyzer(analyzeChan chan<- AudioData, chunk 
 		if p.droppedChunks%10 == 1 {
 			p.logger.Warn("analyzer buffer full, applying backpressure",
 				"dropped_chunks", p.droppedChunks,
-				"drop_rate", float64(p.droppedChunks)/float64(p.processedChunks+p.droppedChunks))
+				"drop_rate", func() float64 {
+				total := p.processedChunks + p.droppedChunks
+				if total == 0 {
+					return 0
+				}
+				return float64(p.droppedChunks) / float64(total)
+			}())
 		}
 		
 		if p.metrics != nil {
@@ -344,6 +352,11 @@ func (p *ProcessingPipeline) analyzeLoop(chunks <-chan AudioData) {
 			analyzeCtx, cancel := context.WithTimeout(p.ctx, p.config.ChunkDuration)
 			result, err := p.analyzer.Analyze(analyzeCtx, &chunk)
 			cancel()
+			
+			// Release pooled buffer if present
+			if chunk.BufferHandle != nil {
+				chunk.BufferHandle.Release()
+			}
 
 			if err != nil {
 				p.logger.Warn("analysis failed",
@@ -400,7 +413,14 @@ func (p *ProcessingPipeline) monitorHealth() {
 			p.mu.RUnlock()
 
 			if dropped > 0 {
-				dropRate := float64(dropped) / float64(processed+dropped)
+				// Calculate drop rate with zero check
+				total := processed + dropped
+				var dropRate float64
+				if total > 0 {
+					dropRate = float64(dropped) / float64(total)
+				} else {
+					dropRate = 0
+				}
 				
 				// Adaptive backpressure adjustment
 				currentDelay := p.backpressureDelay.Load()
@@ -453,7 +473,13 @@ func (p *ProcessingPipeline) GetMetrics() map[string]any {
 		"analyzer_id":      p.analyzer.ID(),
 		"processed_chunks": p.processedChunks,
 		"dropped_chunks":   p.droppedChunks,
-		"drop_rate":        float64(p.droppedChunks) / float64(p.processedChunks+p.droppedChunks),
+		"drop_rate":        func() float64 {
+			total := p.processedChunks + p.droppedChunks
+			if total == 0 {
+				return 0
+			}
+			return float64(p.droppedChunks) / float64(total)
+		}(),
 	}
 }
 
@@ -529,20 +555,22 @@ func (o *OverlapBuffer) Process(chunk *AudioData) (*AudioData, error) {
 		copy(o.overlapData.Data(), chunk.Buffer[len(chunk.Buffer)-o.overlapBytes:])
 	}
 
-	// Create a copy of the processed data to avoid use-after-free
-	processedData := make([]byte, offset+len(chunk.Buffer))
-	copy(processedData, result.Data()[:offset+len(chunk.Buffer)])
+	// Get a buffer from pool for the processed data
+	processedSize := offset + len(chunk.Buffer)
+	processedBuffer := o.bufferPool.Get(processedSize)
+	copy(processedBuffer.Data(), result.Data()[:processedSize])
 	
-	// Now we can safely release the result buffer
+	// Now we can safely release the temporary result buffer
 	result.Release()
 	
-	// Create processed chunk with the copied data
+	// Create processed chunk with pooled buffer
 	processed := &AudioData{
-		Buffer:    processedData,
-		Format:    chunk.Format,
-		Timestamp: chunk.Timestamp,
-		Duration:  chunk.Duration,
-		SourceID:  chunk.SourceID,
+		Buffer:       processedBuffer.Data()[:processedSize],
+		Format:       chunk.Format,
+		Timestamp:    chunk.Timestamp,
+		Duration:     chunk.Duration,
+		SourceID:     chunk.SourceID,
+		BufferHandle: processedBuffer, // Track the pooled buffer for proper cleanup
 	}
 
 	return processed, nil
@@ -691,16 +719,13 @@ func validatePipelineConfig(config *ProcessingPipelineConfig) error {
 	
 	// Check if source format is compatible with analyzer requirements
 	if requiredFormat.SampleRate != 0 && format.SampleRate != requiredFormat.SampleRate {
-		// This is OK if we have a processor chain that can resample
-		if config.ProcessorChain == nil {
-			return errors.New(nil).
-				Component(ComponentAudioCore).
-				Category(errors.CategoryValidation).
-				Context("error", "sample rate mismatch without processor chain").
-				Context("source_rate", format.SampleRate).
-				Context("analyzer_rate", requiredFormat.SampleRate).
-				Build()
-		}
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "sample rate mismatch - source must match analyzer requirements").
+			Context("source_rate", format.SampleRate).
+			Context("analyzer_rate", requiredFormat.SampleRate).
+			Build()
 	}
 
 	// Validate analyzer-specific settings

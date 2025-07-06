@@ -46,17 +46,16 @@ func TestProcessingPipelineBasic(t *testing.T) {
 	}
 
 	// Create pipeline
-	pipeline := NewProcessingPipeline(config)
-	if pipeline == nil {
-		t.Fatal("failed to create pipeline")
+	pipeline, err := NewProcessingPipeline(config)
+	if err != nil {
+		t.Fatalf("failed to create pipeline: %v", err)
 	}
 
 	// Start pipeline
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := pipeline.Start(ctx)
-	if err != nil {
+	if err = pipeline.Start(ctx); err != nil {
 		t.Fatalf("failed to start pipeline: %v", err)
 	}
 
@@ -162,9 +161,12 @@ func TestProcessingPipelineValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pipeline := NewProcessingPipeline(tt.config)
-			if tt.shouldFail && pipeline != nil {
+			pipeline, err := NewProcessingPipeline(tt.config)
+			if tt.shouldFail && err == nil {
 				t.Error("expected pipeline creation to fail")
+			}
+			if !tt.shouldFail && err != nil {
+				t.Errorf("unexpected error: %v", err)
 			}
 			if !tt.shouldFail && pipeline == nil {
 				t.Error("expected pipeline creation to succeed")
@@ -210,15 +212,15 @@ func TestProcessingPipelineBackpressure(t *testing.T) {
 		},
 	}
 
-	pipeline := NewProcessingPipeline(config)
-	if pipeline == nil {
-		t.Fatal("failed to create pipeline")
+	pipeline, err := NewProcessingPipeline(config)
+	if err != nil {
+		t.Fatalf("failed to create pipeline: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := pipeline.Start(ctx)
+	err = pipeline.Start(ctx)
 	if err != nil {
 		t.Fatalf("failed to start pipeline: %v", err)
 	}

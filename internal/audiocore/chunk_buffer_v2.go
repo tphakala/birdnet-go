@@ -30,8 +30,8 @@ type ChunkBufferV2 struct {
 
 // NewChunkBufferV2 creates a new improved chunk buffer
 func NewChunkBufferV2(config ChunkBufferConfig) *ChunkBufferV2 {
-	// Calculate target buffer size
-	bytesPerSecond := config.Format.SampleRate * config.Format.Channels * (config.Format.BitDepth / 8)
+	// Calculate target buffer size using int64 to prevent overflow
+	bytesPerSecond := int64(config.Format.SampleRate) * int64(config.Format.Channels) * int64(config.Format.BitDepth/8)
 	targetSize := int(float64(bytesPerSecond) * config.ChunkDuration.Seconds())
 
 	return &ChunkBufferV2{

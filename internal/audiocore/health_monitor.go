@@ -26,7 +26,6 @@ type sourceHealth struct {
 	sourceID         string
 	lastAudioTime    time.Time
 	lastLevel        float64
-	silenceDuration  time.Duration
 	isHealthy        bool
 }
 
@@ -58,6 +57,11 @@ func NewAudioHealthMonitor(config HealthMonitorConfig) *AudioHealthMonitor {
 
 // MonitorSource starts monitoring a specific audio source
 func (h *AudioHealthMonitor) MonitorSource(source AudioSource) {
+	// Check for nil source to prevent panic
+	if source == nil {
+		return
+	}
+	
 	h.mu.Lock()
 	sourceID := source.ID()
 	if _, exists := h.sources[sourceID]; exists {
@@ -102,14 +106,13 @@ func (h *AudioHealthMonitor) UpdateAudioLevel(sourceID string, levelDB float64) 
 	// Check if audio is above silence threshold
 	if levelDB > h.silenceThresholdDB {
 		health.lastAudioTime = time.Now()
-		health.silenceDuration = 0
 		health.isHealthy = true
 	} else {
-		// Update silence duration
-		health.silenceDuration = time.Since(health.lastAudioTime)
+		// Calculate silence duration on demand
+		silenceDuration := time.Since(health.lastAudioTime)
 		
 		// Check if silence timeout exceeded
-		if health.silenceDuration > h.silenceTimeout {
+		if silenceDuration > h.silenceTimeout {
 			health.isHealthy = false
 			h.handleUnhealthySource(sourceID)
 		}
@@ -202,12 +205,12 @@ func (h *AudioHealthMonitor) checkAllSources() {
 	defer h.mu.Unlock()
 
 	for sourceID, health := range h.sources {
-		// Update silence duration
+		// Calculate silence duration on demand
 		if health.lastLevel <= h.silenceThresholdDB {
-			health.silenceDuration = time.Since(health.lastAudioTime)
+			silenceDuration := time.Since(health.lastAudioTime)
 			
 			// Check if newly unhealthy
-			if health.isHealthy && health.silenceDuration > h.silenceTimeout {
+			if health.isHealthy && silenceDuration > h.silenceTimeout {
 				health.isHealthy = false
 				h.handleUnhealthySource(sourceID)
 			}

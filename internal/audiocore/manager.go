@@ -217,7 +217,7 @@ func (m *managerImpl) SetupProcessingPipeline(sourceID, analyzerID string) error
 	}
 
 	// Create processing pipeline
-	pipeline := NewProcessingPipeline(&ProcessingPipelineConfig{
+	pipeline, err := NewProcessingPipeline(&ProcessingPipelineConfig{
 		Source:         source,
 		Analyzer:       analyzer,
 		ProcessorChain: m.processorChains[sourceID],
@@ -227,6 +227,9 @@ func (m *managerImpl) SetupProcessingPipeline(sourceID, analyzerID string) error
 		HealthMonitor:  m.healthMonitor,
 		CaptureManager: m.captureManager,
 	})
+	if err != nil {
+		return err
+	}
 
 	// Start pipeline if manager is already started
 	if m.started {

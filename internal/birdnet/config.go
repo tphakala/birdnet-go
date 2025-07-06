@@ -1,9 +1,8 @@
 package birdnet
 
 import (
-	"fmt"
-	
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Config contains minimal configuration for BirdNET initialization
@@ -43,17 +42,14 @@ type Config struct {
 func NewBirdNETFromConfig(config *Config) (*BirdNET, error) {
 	// Validate config
 	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
+		return nil, errors.New(nil).
+			Component("birdnet").
+			Category(errors.CategoryValidation).
+			Context("error", "config cannot be nil").
+			Build()
 	}
-	if config.ModelPath == "" {
-		return nil, fmt.Errorf("model path cannot be empty")
-	}
-	if config.LabelPath == "" {
-		return nil, fmt.Errorf("label path cannot be empty")
-	}
-	if config.Locale == "" {
-		return nil, fmt.Errorf("locale cannot be empty")
-	}
+	// ModelPath and LabelPath can be empty - BirdNET supports embedded resources
+	// Locale can be empty - there is a default fallback
 	
 	// Convert to Settings for backward compatibility
 	// This allows gradual migration without breaking existing code
