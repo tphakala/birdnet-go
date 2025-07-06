@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -88,19 +90,13 @@ func TestAnalyzerTimeout(t *testing.T) {
 	_, err := wrapper.Analyze(ctx, data)
 	duration := time.Since(start)
 
-	if err == nil {
-		t.Error("expected timeout error, got nil")
-	}
+	require.Error(t, err, "expected timeout error")
 
 	// Check that we timed out quickly (more flexible for CI environments)
-	if duration > 500*time.Millisecond {
-		t.Errorf("timeout took unexpectedly long: %v", duration)
-	}
+	assert.LessOrEqual(t, duration, 500*time.Millisecond, "timeout took unexpectedly long: %v", duration)
 
 	// Check timeout counter
-	if wrapper.timeoutCount.Load() != 1 {
-		t.Errorf("expected timeout count 1, got %d", wrapper.timeoutCount.Load())
-	}
+	assert.Equal(t, int64(1), wrapper.timeoutCount.Load(), "expected timeout count 1")
 }
 
 // TestAnalyzerContextCancellation tests context cancellation handling
@@ -741,5 +737,90 @@ func TestEnhancedCircuitBreaker(t *testing.T) {
 				t.Errorf("expected 3 recovery steps, got %v", recovery["total_steps"])
 			}
 		}
+	})
+}
+
+// FuzzAnalyzerWrapper tests the analyzer wrapper with fuzzing
+func FuzzAnalyzerWrapper(f *testing.F) {
+	// Add seed corpus
+	f.Add([]byte("test data"), 100, 5, 1000)
+	f.Add([]byte(""), 50, 10, 500)
+	f.Add(make([]byte, 1024), 200, 3, 2000)
+	f.Add(make([]byte, 1024*1024), 1000, 1, 5000)
+
+	f.Fuzz(func(t *testing.T, data []byte, timeoutMs int, workers int, bufferSize int) {
+		// Sanitize inputs
+		if timeoutMs < 1 {
+			timeoutMs = 1
+		}
+		if timeoutMs > 5000 {
+			timeoutMs = 5000
+		}
+		if workers < 1 {
+			workers = 1
+		}
+		if workers > 100 {
+			workers = 100
+		}
+		if bufferSize < 1 {
+			bufferSize = 1
+		}
+		if bufferSize > 10000 {
+			bufferSize = 10000
+		}
+
+		// Create mock analyzer
+		mock := &mockAnalyzer{
+			id: "fuzz-analyzer",
+			requiredFormat: AudioFormat{
+				SampleRate: 48000,
+				Channels:   1,
+				BitDepth:   16,
+				Encoding:   "pcm_s16le",
+			},
+			analyzeFunc: func(ctx context.Context, audioData *AudioData) (AnalysisResult, error) {
+				// Simulate processing
+				if len(audioData.Buffer) > 1024*1024 {
+					return AnalysisResult{}, errors.New(nil).
+						Component(ComponentAudioCore).
+						Category(errors.CategoryValidation).
+						Context("error", "buffer too large").
+						Build()
+				}
+				return AnalysisResult{
+					Detections: []Detection{{Label: "fuzz", Confidence: 0.5}},
+				}, nil
+			},
+		}
+
+		// Create wrapper with fuzzed config
+		wrapper := NewSafeAnalyzerWrapper(&SafeAnalyzerConfig{
+			Analyzer:         mock,
+			Timeout:          time.Duration(timeoutMs) * time.Millisecond,
+			Workers:          workers,
+			TimingBufferSize: bufferSize,
+		})
+		defer func() { _ = wrapper.Close() }()
+
+		// Test with fuzzed data
+		audioData := &AudioData{
+			Buffer:    data,
+			Format:    mock.requiredFormat,
+			Timestamp: time.Now(),
+			Duration:  100 * time.Millisecond,
+			SourceID:  "fuzz-source",
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// Should not panic
+		_, _ = wrapper.Analyze(ctx, audioData)
+
+		// Check metrics are valid
+		metrics := wrapper.GetMetrics()
+		assert.NotNil(t, metrics)
+		assert.Contains(t, metrics, "total_analyses")
+		assert.Contains(t, metrics, "worker_pool")
 	})
 }
