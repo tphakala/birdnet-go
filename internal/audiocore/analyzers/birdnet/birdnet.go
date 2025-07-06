@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -94,8 +95,8 @@ func NewBirdNETAnalyzer(id string, config audiocore.AnalyzerConfig, bufferPool a
 	}
 
 	// Calculate buffer size for processing context
-	// 3 seconds at 48kHz = 144000 samples
-	samplesPerChunk := int(config.ChunkDuration.Seconds() * 48000)
+	// Use the same sample rate as defined in conf/consts.go
+	samplesPerChunk := int(config.ChunkDuration.Seconds() * float64(conf.SampleRate))
 
 	return &BirdNETAnalyzer{
 		id:         id,
@@ -202,9 +203,9 @@ func (b *BirdNETAnalyzer) Analyze(ctx context.Context, data *audiocore.AudioData
 // GetRequiredFormat returns the audio format this analyzer needs
 func (b *BirdNETAnalyzer) GetRequiredFormat() audiocore.AudioFormat {
 	return audiocore.AudioFormat{
-		SampleRate: 48000,
-		Channels:   1,
-		BitDepth:   32,
+		SampleRate: conf.SampleRate,    // Use constant from conf package
+		Channels:   conf.NumChannels,   // Use constant from conf package
+		BitDepth:   32,                 // BirdNET expects float32 (32-bit float)
 		Encoding:   "pcm_f32le",
 	}
 }
