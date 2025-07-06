@@ -210,7 +210,8 @@ func TestProcessingPipelineBackpressure(t *testing.T) {
 	}
 
 	// Send multiple chunks quickly
-	chunkSize := 4800 // 100ms at 48kHz
+	// 100ms at 48kHz, mono, 16-bit = 48000 * 1 * 2 * 0.1 = 9600 bytes
+	chunkSize := 9600 // 100ms at 48kHz, mono, 16-bit
 	for i := 0; i < 10; i++ {
 		source.output <- AudioData{
 			Buffer:    make([]byte, chunkSize),

@@ -201,11 +201,10 @@ func (h *AudioHealthMonitor) checkAllSources() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	now := time.Now()
 	for sourceID, health := range h.sources {
 		// Update silence duration
 		if health.lastLevel <= h.silenceThresholdDB {
-			health.silenceDuration = now.Sub(health.lastAudioTime)
+			health.silenceDuration = time.Since(health.lastAudioTime)
 			
 			// Check if newly unhealthy
 			if health.isHealthy && health.silenceDuration > h.silenceTimeout {

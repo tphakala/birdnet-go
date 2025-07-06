@@ -307,13 +307,24 @@ func (w *SafeAnalyzerWrapper) updateMetrics(duration time.Duration, success bool
 
 // GetMetrics returns current metrics
 func (w *SafeAnalyzerWrapper) GetMetrics() map[string]any {
+	totalAnalyses := w.totalAnalyses.Load()
+	timeoutCount := w.timeoutCount.Load()
+	errorCount := w.errorCount.Load()
+	
+	// Calculate rates, avoiding division by zero
+	var timeoutRate, errorRate float64
+	if totalAnalyses > 0 {
+		timeoutRate = float64(timeoutCount) / float64(totalAnalyses)
+		errorRate = float64(errorCount) / float64(totalAnalyses)
+	}
+	
 	return map[string]any{
-		"total_analyses":       w.totalAnalyses.Load(),
-		"timeout_count":        w.timeoutCount.Load(),
-		"error_count":          w.errorCount.Load(),
+		"total_analyses":       totalAnalyses,
+		"timeout_count":        timeoutCount,
+		"error_count":          errorCount,
 		"avg_analysis_time_us": w.avgAnalysisTime.Load(),
-		"timeout_rate":         float64(w.timeoutCount.Load()) / float64(w.totalAnalyses.Load()),
-		"error_rate":           float64(w.errorCount.Load()) / float64(w.totalAnalyses.Load()),
+		"timeout_rate":         timeoutRate,
+		"error_rate":           errorRate,
 		"circuit_breaker":      w.circuitBreaker.GetState(),
 	}
 }

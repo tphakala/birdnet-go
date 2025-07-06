@@ -176,8 +176,9 @@ func (s *testAudioSource) simulate(ctx context.Context) {
 			}
 			
 			// Generate test data
+			// 100ms at 48kHz, mono, 16-bit = 48000 * 1 * 2 * 0.1 = 9600 bytes
 			data := AudioData{
-				Buffer:    make([]byte, 4800), // 100ms at 48kHz
+				Buffer:    make([]byte, 9600), // 100ms at 48kHz, mono, 16-bit
 				Format:    s.format,
 				Timestamp: time.Now(),
 				Duration:  100 * time.Millisecond,

@@ -28,11 +28,12 @@ type AudioFormat struct {
 
 // AudioData represents a chunk of audio with metadata
 type AudioData struct {
-	Buffer    []byte        // Raw audio data
-	Format    AudioFormat   // Audio format information
-	Timestamp time.Time     // When this audio was captured
-	Duration  time.Duration // Duration of the audio chunk
-	SourceID  string        // Identifier of the source that produced this audio
+	Buffer       []byte        // Raw audio data
+	Format       AudioFormat   // Audio format information
+	Timestamp    time.Time     // When this audio was captured
+	Duration     time.Duration // Duration of the audio chunk
+	SourceID     string        // Identifier of the source that produced this audio
+	BufferHandle AudioBuffer   // Optional reference to buffer pool buffer for lifecycle management
 }
 
 // AudioSource represents an audio input source

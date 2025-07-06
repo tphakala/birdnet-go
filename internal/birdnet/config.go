@@ -1,6 +1,10 @@
 package birdnet
 
-import "github.com/tphakala/birdnet-go/internal/conf"
+import (
+	"fmt"
+	
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
 
 // Config contains minimal configuration for BirdNET initialization
 // This is a simplified version that avoids requiring the full conf.Settings struct
@@ -37,6 +41,20 @@ type Config struct {
 
 // NewBirdNETFromConfig initializes a new BirdNET instance with minimal configuration
 func NewBirdNETFromConfig(config *Config) (*BirdNET, error) {
+	// Validate config
+	if config == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+	if config.ModelPath == "" {
+		return nil, fmt.Errorf("model path cannot be empty")
+	}
+	if config.LabelPath == "" {
+		return nil, fmt.Errorf("label path cannot be empty")
+	}
+	if config.Locale == "" {
+		return nil, fmt.Errorf("locale cannot be empty")
+	}
+	
 	// Convert to Settings for backward compatibility
 	// This allows gradual migration without breaking existing code
 	settings := &conf.Settings{
@@ -61,7 +79,7 @@ func NewBirdNETFromConfig(config *Config) (*BirdNET, error) {
 // This is useful for transitioning existing code
 func ConfigFromSettings(settings *conf.Settings) *Config {
 	if settings == nil {
-		return &Config{}
+		return nil
 	}
 
 	return &Config{

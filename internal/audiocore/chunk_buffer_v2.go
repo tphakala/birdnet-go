@@ -22,8 +22,9 @@ type ChunkBufferV2 struct {
 	targetSize      int // bytes per chunk based on format and duration
 	
 	// Buffer management
-	pendingData     []byte // All pending data that hasn't been chunked yet
+	pendingData     []byte      // All pending data that hasn't been chunked yet
 	completedChunks []AudioData // Ready chunks
+	firstTimestamp  time.Time   // Timestamp of first data in pending buffer
 	mu              sync.Mutex
 }
 
@@ -49,10 +50,16 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Track timestamp of first data if buffer was empty
+	if len(c.pendingData) == 0 && len(data.Buffer) > 0 {
+		c.firstTimestamp = data.Timestamp
+	}
+
 	// Append new data to pending
 	c.pendingData = append(c.pendingData, data.Buffer...)
 
 	// Extract all complete chunks from pending data
+	chunkIndex := 0
 	for len(c.pendingData) >= c.targetSize {
 		// Extract a chunk
 		// Note: We can't use buffer pool here directly because AudioData doesn't 
@@ -61,16 +68,20 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 		chunkData := make([]byte, c.targetSize)
 		copy(chunkData, c.pendingData[:c.targetSize])
 		
+		// Calculate timestamp for this chunk
+		chunkTimestamp := c.firstTimestamp.Add(time.Duration(chunkIndex) * c.chunkDuration)
+		
 		// Create chunk
 		chunk := AudioData{
 			Buffer:    chunkData,
 			Format:    c.format,
-			Timestamp: time.Now().Add(-c.chunkDuration), // Approximate start time
+			Timestamp: chunkTimestamp,
 			Duration:  c.chunkDuration,
 			SourceID:  data.SourceID,
 		}
 		
 		c.completedChunks = append(c.completedChunks, chunk)
+		chunkIndex++
 		
 		// Remove chunk from pending - use copy to avoid potential slice aliasing issues
 		remaining := len(c.pendingData) - c.targetSize
@@ -78,6 +89,12 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 			copy(c.pendingData[:remaining], c.pendingData[c.targetSize:])
 		}
 		c.pendingData = c.pendingData[:remaining]
+	}
+	
+	// Update first timestamp if all chunks were extracted
+	if len(c.pendingData) > 0 {
+		// Adjust timestamp for remaining data
+		c.firstTimestamp = c.firstTimestamp.Add(time.Duration(chunkIndex) * c.chunkDuration)
 	}
 }
 
@@ -124,4 +141,5 @@ func (c *ChunkBufferV2) Reset() {
 	
 	c.pendingData = c.pendingData[:0]
 	c.completedChunks = c.completedChunks[:0]
+	c.firstTimestamp = time.Time{}
 }
