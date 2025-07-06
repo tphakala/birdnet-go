@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -173,44 +174,23 @@ func (c *FormatConverter) convertU8ToFloat32(input []byte, output []float32) err
 	return nil
 }
 
-// ResampleIfNeeded resamples audio to 48kHz if needed
+// ResampleIfNeeded validates that input audio is at the required sample rate
+// BirdNET-Go expects all audio sources to provide audio at the sample rate defined
+// in conf.SampleRate and does not perform sample rate conversion. This ensures
+// consistent processing and avoids quality loss from resampling.
 func (c *FormatConverter) ResampleIfNeeded(input []float32, inputRate int, output []float32) error {
-	if inputRate == 48000 {
-		// No resampling needed
-		copy(output, input)
-		return nil
-	}
-
-	// Simple linear interpolation resampling
-	// Note: For production, consider using a proper resampling library
-	ratio := float64(48000) / float64(inputRate)
-	outputSamples := int(float64(len(input)) * ratio)
-	
-	if outputSamples > len(output) {
+	if inputRate != conf.SampleRate {
 		return errors.New(nil).
 			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryValidation).
-			Context("output_samples_needed", outputSamples).
-			Context("output_buffer_size", len(output)).
-			Context("error", "output buffer too small for resampling").
+			Context("input_rate", inputRate).
+			Context("expected_rate", conf.SampleRate).
+			Context("error", "input audio must match configured sample rate - sample rate conversion is not supported").
 			Build()
 	}
-
-	for i := 0; i < outputSamples; i++ {
-		// Calculate source position
-		srcPos := float64(i) / ratio
-		srcIdx := int(srcPos)
-		frac := srcPos - float64(srcIdx)
-
-		if srcIdx+1 < len(input) {
-			// Linear interpolation
-			output[i] = input[srcIdx]*(1-float32(frac)) + input[srcIdx+1]*float32(frac)
-		} else if srcIdx < len(input) {
-			// Last sample
-			output[i] = input[srcIdx]
-		}
-	}
-
+	
+	// Input is at correct sample rate, just copy
+	copy(output, input)
 	return nil
 }
 
