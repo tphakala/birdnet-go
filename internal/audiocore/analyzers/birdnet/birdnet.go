@@ -197,6 +197,10 @@ func (b *BirdNETAnalyzer) Analyze(ctx context.Context, data *audiocore.AudioData
 
 	// Convert to standard format
 	analysisResult := b.convertResults(results, data)
+	
+	// Add processing time to metadata
+	processingDuration := time.Since(startTime)
+	analysisResult.Metadata["processingTime"] = processingDuration
 
 	// Update statistics
 	b.mu.Lock()
@@ -206,12 +210,11 @@ func (b *BirdNETAnalyzer) Analyze(ctx context.Context, data *audiocore.AudioData
 
 	// Record metrics
 	if b.metrics != nil {
-		processingDuration := time.Since(startTime)
 		b.metrics.RecordFrameProcessed("birdnet", b.id, processingDuration)
 	}
 
 	b.logger.Debug("analysis completed",
-		"duration", time.Since(startTime),
+		"duration", processingDuration,
 		"detections", len(analysisResult.Detections))
 
 	return analysisResult, nil
@@ -261,13 +264,20 @@ func (b *BirdNETAnalyzer) convertResults(results []datastore.Results, data *audi
 	// Filter by threshold
 	for _, result := range results {
 		if result.Confidence >= b.config.Threshold {
+			// Parse species information using BirdNET's taxonomy enrichment
+			scientificName, commonName, speciesCode := b.model.EnrichResultWithTaxonomy(result.Species)
+			
 			detection := audiocore.Detection{
-				Label:      result.Species,
+				Label:      commonName, // Use common name as primary label
 				Confidence: result.Confidence,
 				StartTime:  0.0, // BirdNET analyzes whole chunk
 				EndTime:    data.Duration.Seconds(),
 				Attributes: map[string]any{
-					// Add any additional attributes if available
+					// Store full species information for queue conversion
+					"species_string":   result.Species,    // Original format from BirdNET
+					"scientific_name":  scientificName,
+					"common_name":      commonName,
+					"species_code":     speciesCode,
 				},
 			}
 			detections = append(detections, detection)
