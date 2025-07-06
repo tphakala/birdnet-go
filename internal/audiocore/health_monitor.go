@@ -9,6 +9,22 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// RestartHandler defines the interface for handling source restarts
+type RestartHandler interface {
+	// RestartSource attempts to restart the given audio source
+	// Returns error if restart fails
+	RestartSource(sourceID string) error
+}
+
+// AlertHandler defines the interface for handling health alerts
+type AlertHandler interface {
+	// SendAlert sends an alert for the given condition
+	// alertType: Type of alert (e.g., "audio_silence", "source_failure")
+	// sourceID: ID of the affected source
+	// details: Additional details about the alert condition
+	SendAlert(alertType, sourceID string, details map[string]interface{}) error
+}
+
 // AudioHealthMonitor monitors the health of audio sources and pipelines
 type AudioHealthMonitor struct {
 	silenceThresholdDB float64
@@ -19,6 +35,10 @@ type AudioHealthMonitor struct {
 	sources map[string]*sourceHealth
 	mu      sync.RWMutex
 	logger  *slog.Logger
+	
+	// Handlers for actions
+	restartHandler RestartHandler
+	alertHandler   AlertHandler
 }
 
 // sourceHealth tracks health metrics for a single source
@@ -35,6 +55,8 @@ type HealthMonitorConfig struct {
 	SilenceTimeout     time.Duration
 	CheckInterval      time.Duration
 	OnSilenceAction    string
+	RestartHandler     RestartHandler
+	AlertHandler       AlertHandler
 }
 
 // NewAudioHealthMonitor creates a new health monitor
@@ -52,6 +74,8 @@ func NewAudioHealthMonitor(config HealthMonitorConfig) *AudioHealthMonitor {
 		onSilenceAction:    config.OnSilenceAction,
 		sources:            make(map[string]*sourceHealth),
 		logger:             logger,
+		restartHandler:     config.RestartHandler,
+		alertHandler:       config.AlertHandler,
 	}
 }
 
@@ -136,9 +160,20 @@ func (h *AudioHealthMonitor) handleUnhealthySource(sourceID string) {
 			metrics.RecordProcessingError("health_monitor", sourceID, "source_restart_attempted")
 		}
 		
-		// Note: Actual restart logic should be injected via interface
-		// This would typically be handled by the AudioManager
-		// Example: h.sourceManager.RestartSource(sourceID)
+		// Call restart handler if available
+		if h.restartHandler != nil {
+			if err := h.restartHandler.RestartSource(sourceID); err != nil {
+				h.logger.Error("failed to restart source",
+					"source_id", sourceID,
+					"error", err)
+			} else {
+				h.logger.Info("source restart initiated successfully",
+					"source_id", sourceID)
+			}
+		} else {
+			h.logger.Warn("restart handler not configured",
+				"source_id", sourceID)
+		}
 		
 	case "alert":
 		h.logger.Error("source health alert - prolonged silence detected",
@@ -151,8 +186,26 @@ func (h *AudioHealthMonitor) handleUnhealthySource(sourceID string) {
 			metrics.RecordProcessingError("health_monitor", sourceID, "silence_alert_triggered")
 		}
 		
-		// Note: Alert handler should be injected via interface
-		// Example: h.alertHandler.SendAlert("audio_silence", sourceID, details)
+		// Call alert handler if available
+		if h.alertHandler != nil {
+			details := map[string]interface{}{
+				"silence_threshold_db": h.silenceThresholdDB,
+				"silence_timeout":      h.silenceTimeout.String(),
+				"timestamp":            time.Now().Format(time.RFC3339),
+			}
+			
+			if err := h.alertHandler.SendAlert("audio_silence", sourceID, details); err != nil {
+				h.logger.Error("failed to send alert",
+					"source_id", sourceID,
+					"error", err)
+			} else {
+				h.logger.Info("alert sent successfully",
+					"source_id", sourceID)
+			}
+		} else {
+			h.logger.Warn("alert handler not configured",
+				"source_id", sourceID)
+		}
 		
 	default:
 		// No action configured
