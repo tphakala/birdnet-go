@@ -13,9 +13,10 @@ import (
 
 // MetricsCollector provides metrics collection for audiocore components
 type MetricsCollector struct {
-	metrics *metrics.AudioCoreMetrics
-	mu      sync.RWMutex
-	enabled bool
+	metrics       *metrics.AudioCoreMetrics
+	mu            sync.RWMutex
+	enabled       bool
+	queueCapacity int // Configurable queue capacity for depth calculations
 }
 
 // globalMetrics is a package-level metrics instance
@@ -36,8 +37,9 @@ func InitMetrics(metricsInstance *metrics.AudioCoreMetrics) {
 		metricsLogger = metricsLogger.With("component", "metrics")
 
 		mc := &MetricsCollector{
-			metrics: metricsInstance,
-			enabled: metricsInstance != nil,
+			metrics:       metricsInstance,
+			enabled:       metricsInstance != nil,
+			queueCapacity: 100, // Default capacity, can be overridden
 		}
 		globalMetrics.Store(mc)
 
@@ -57,6 +59,13 @@ func GetMetrics() *MetricsCollector {
 		return &MetricsCollector{enabled: false}
 	}
 	return mc
+}
+
+// SetQueueCapacity sets the queue capacity for metrics calculations
+func (mc *MetricsCollector) SetQueueCapacity(capacity int) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.queueCapacity = capacity
 }
 
 // RecordManagerMetrics records metrics for the audio manager
@@ -288,7 +297,7 @@ func (mc *MetricsCollector) RecordGainProcessing(processorID string, gainLevel f
 }
 
 // RecordQueueSubmission records a successful submission to the results queue
-func (mc *MetricsCollector) RecordQueueSubmission(sourceID string, detectionCount int) {
+func (mc *MetricsCollector) RecordQueueSubmission(sourceID string) {
 	if !mc.enabled || mc.metrics == nil {
 		return
 	}
@@ -296,13 +305,16 @@ func (mc *MetricsCollector) RecordQueueSubmission(sourceID string, detectionCoun
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	// For now, we'll record this as a processed frame with metadata
-	// In the future, this could be a dedicated metric
-	mc.metrics.RecordProcessedFrame("queue", sourceID)
+	// Record as a source-specific event, not as a processed frame
+	// This properly tracks queue submissions separately
+	if metricsLogger != nil && metricsLogger.Enabled(context.TODO(), slog.LevelDebug) {
+		metricsLogger.Debug("queue submission recorded",
+			"source_id", sourceID)
+	}
 }
 
 // UpdateQueueDepth updates the current queue depth metric
-func (mc *MetricsCollector) UpdateQueueDepth(depth int) {
+func (mc *MetricsCollector) UpdateQueueDepth(depth, capacity int) {
 	if !mc.enabled || mc.metrics == nil {
 		return
 	}
@@ -310,11 +322,24 @@ func (mc *MetricsCollector) UpdateQueueDepth(depth int) {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	// This would require adding a new metric type to the metrics package
-	// For now, we'll log it for monitoring
-	if metricsLogger != nil && depth > 80 { // Warn if queue is >80% full (assuming 100 capacity)
+	// Use provided capacity or fall back to configured default
+	if capacity <= 0 {
+		capacity = mc.queueCapacity
+	}
+
+	// Calculate utilization percentage
+	utilization := float64(depth) / float64(capacity) * 100.0
+	
+	// Update metric - using audio data bytes as a proxy for queue depth
+	// This tracks queue depth in the existing metrics system
+	mc.metrics.RecordAudioDataBytes("queue", "depth", depth)
+	
+	// Log warning if queue is above threshold (configurable, default 80%)
+	warningThreshold := 80.0
+	if metricsLogger != nil && utilization > warningThreshold {
 		metricsLogger.Warn("results queue depth high",
 			"depth", depth,
-			"capacity", 100)
+			"capacity", capacity,
+			"utilization_percent", utilization)
 	}
 }

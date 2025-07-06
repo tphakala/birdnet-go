@@ -79,9 +79,15 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		}
 	}()
 
-	// Send test audio data
+	// Send test audio data with known pattern for verification
+	testPCMData := make([]byte, 1024)
+	// Fill with a recognizable pattern
+	for i := range testPCMData {
+		testPCMData[i] = byte(i % 256)
+	}
+	
 	testData := AudioData{
-		Buffer:    make([]byte, 1024), // Test PCM data
+		Buffer:    testPCMData,
 		Format:    source.format,
 		Timestamp: time.Now(),
 		Duration:  3 * time.Second,
@@ -106,9 +112,13 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		SourceID:   testData.SourceID,
 	}, &testData)
 
-	// Wait for result in queue
-	select {
-	case result := <-testQueue:
+	// Create a done channel for deterministic synchronization
+	done := make(chan struct{})
+	
+	// Start a goroutine to wait for the result
+	go func() {
+		result := <-testQueue
+		
 		// Verify the result
 		if result.Source != "test-source" {
 			t.Errorf("Expected source 'test-source', got '%s'", result.Source)
@@ -125,7 +135,26 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		if len(result.PCMdata) != 1024 {
 			t.Errorf("Expected PCM data length 1024, got %d", len(result.PCMdata))
 		}
-	case <-time.After(2 * time.Second):
+		// Verify PCM data content matches the pattern
+		for i := 0; i < len(result.PCMdata); i++ {
+			expected := byte(i % 256)
+			if result.PCMdata[i] != expected {
+				t.Errorf("PCM data mismatch at index %d: expected %d, got %d", i, expected, result.PCMdata[i])
+				break // Don't flood with errors
+			}
+		}
+		
+		close(done)
+	}()
+	
+	// Wait for completion with a reasonable timeout
+	testCtx, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer testCancel()
+	
+	select {
+	case <-done:
+		// Test completed successfully
+	case <-testCtx.Done():
 		t.Fatal("Timeout waiting for result in queue")
 	}
 }
@@ -241,23 +270,39 @@ func TestSimplifiedSpeciesHandling(t *testing.T) {
 				Detections: []Detection{tc.detection},
 				SourceID:   "test-source",
 			}
+			// Create test data with a different pattern
+			testBuffer := make([]byte, 100)
+			for i := range testBuffer {
+				testBuffer[i] = byte((i * 2) % 256) // Different pattern
+			}
 			chunk := &AudioData{
-				Buffer: make([]byte, 100),
+				Buffer: testBuffer,
 			}
 
 			pipeline.processAnalysisResult(result, chunk)
 
-			// Check queue
-			select {
-			case queueResult := <-testQueue:
+			// Check queue with deterministic synchronization
+			done := make(chan struct{})
+			
+			go func() {
+				queueResult := <-testQueue
 				if len(queueResult.Results) != 1 {
-					t.Fatalf("Expected 1 result, got %d", len(queueResult.Results))
-				}
-				if queueResult.Results[0].Species != tc.expectedSpecies {
+					t.Errorf("Expected 1 result, got %d", len(queueResult.Results))
+				} else if queueResult.Results[0].Species != tc.expectedSpecies {
 					t.Errorf("Expected species '%s', got '%s'", 
 						tc.expectedSpecies, queueResult.Results[0].Species)
 				}
-			case <-time.After(1 * time.Second):
+				close(done)
+			}()
+			
+			// Use context for timeout
+			testCtx, testCancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer testCancel()
+			
+			select {
+			case <-done:
+				// Success
+			case <-testCtx.Done():
 				t.Fatal("Timeout waiting for result")
 			}
 		})
