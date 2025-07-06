@@ -45,6 +45,9 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 	// Create chunks from pending data
 	for len(c.pendingData) >= c.targetSize {
 		// Extract a chunk
+		// Note: We can't use buffer pool here directly because AudioData doesn't 
+		// have a field to store the AudioBuffer reference for later release.
+		// The consumer of the chunk would need to handle buffer pool management.
 		chunkData := make([]byte, c.targetSize)
 		copy(chunkData, c.pendingData[:c.targetSize])
 		
@@ -59,8 +62,12 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 		
 		c.completedChunks = append(c.completedChunks, chunk)
 		
-		// Remove chunk from pending
-		c.pendingData = c.pendingData[c.targetSize:]
+		// Remove chunk from pending - use copy to avoid potential slice aliasing issues
+		remaining := len(c.pendingData) - c.targetSize
+		if remaining > 0 {
+			copy(c.pendingData[:remaining], c.pendingData[c.targetSize:])
+		}
+		c.pendingData = c.pendingData[:remaining]
 	}
 }
 
@@ -80,9 +87,15 @@ func (c *ChunkBufferV2) GetChunk() *AudioData {
 		return nil
 	}
 
-	// Return first chunk
+	// Return first chunk - make a copy to avoid race conditions
 	chunk := c.completedChunks[0]
-	c.completedChunks = c.completedChunks[1:]
+	
+	// Remove first chunk safely
+	remaining := len(c.completedChunks) - 1
+	if remaining > 0 {
+		copy(c.completedChunks[:remaining], c.completedChunks[1:])
+	}
+	c.completedChunks = c.completedChunks[:remaining]
 	
 	return &chunk
 }

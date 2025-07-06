@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -39,10 +40,11 @@ func NewHealthChecker() HealthChecker {
 // Check performs a health check on the process
 func (h *healthChecker) Check(process Process) error {
 	if !process.IsRunning() {
-		return errors.New(fmt.Errorf("process not running")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("process_id", process.ID()).
+			Context("error", "process not running").
 			Build()
 	}
 
@@ -57,22 +59,24 @@ func (h *healthChecker) Check(process Process) error {
 	// Check if process has been restarting too frequently
 	if metrics.RestartCount > 10 && 
 		time.Since(metrics.LastRestart) < 5*time.Minute {
-		return errors.New(fmt.Errorf("process restarting too frequently")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("process_id", process.ID()).
 			Context("restart_count", fmt.Sprintf("%d", metrics.RestartCount)).
+			Context("error", "process restarting too frequently").
 			Build()
 	}
 
 	// Check for recent errors
 	if metrics.LastError != nil && 
 		time.Since(metrics.LastRestart) < 30*time.Second {
-		return errors.New(fmt.Errorf("recent error detected")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("process_id", process.ID()).
-			Context("error", metrics.LastError.Error()).
+			Context("last_error", metrics.LastError.Error()).
+			Context("error", "recent error detected").
 			Build()
 	}
 
@@ -111,23 +115,25 @@ func (h *healthChecker) checkSilence(process Process) error {
 	if !tracker.silenceStart.IsZero() {
 		silenceDuration := time.Since(tracker.silenceStart)
 		if silenceDuration > h.silenceDuration {
-			return errors.New(fmt.Errorf("silence detected for %v", silenceDuration)).
-				Component("audiocore").
+			return errors.New(nil).
+				Component(audiocore.ComponentAudioCore).
 				Category(errors.CategoryAudio).
 				Context("process_id", processID).
 				Context("silence_duration", silenceDuration.String()).
 				Context("threshold_db", fmt.Sprintf("%.1f", h.silenceThreshold)).
+				Context("error", fmt.Sprintf("silence detected for %v", silenceDuration)).
 				Build()
 		}
 	}
 
 	// Check if we haven't received any audio data recently
 	if time.Since(tracker.lastAudioTime) > 30*time.Second {
-		return errors.New(fmt.Errorf("no audio data received")).
-			Component("audiocore").
+		return errors.New(nil).
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryAudio).
 			Context("process_id", processID).
 			Context("last_audio", tracker.lastAudioTime.Format(time.RFC3339)).
+			Context("error", "no audio data received").
 			Build()
 	}
 

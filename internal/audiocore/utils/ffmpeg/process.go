@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -99,7 +100,7 @@ func (p *process) start() error {
 	p.stdin, err = p.cmd.StdinPipe()
 	if err != nil {
 		return errors.New(err).
-			Component("audiocore").
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "create-stdin-pipe").
 			Context("process_id", p.id).
@@ -109,7 +110,7 @@ func (p *process) start() error {
 	p.stdout, err = p.cmd.StdoutPipe()
 	if err != nil {
 		return errors.New(err).
-			Component("audiocore").
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "create-stdout-pipe").
 			Context("process_id", p.id).
@@ -119,7 +120,7 @@ func (p *process) start() error {
 	p.stderr, err = p.cmd.StderrPipe()
 	if err != nil {
 		return errors.New(err).
-			Component("audiocore").
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "create-stderr-pipe").
 			Context("process_id", p.id).
@@ -135,7 +136,7 @@ func (p *process) start() error {
 			"startup_duration_ms", time.Since(startTime).Milliseconds())
 		
 		return errors.New(err).
-			Component("audiocore").
+			Component(audiocore.ComponentAudioCore).
 			Category(errors.CategorySystem).
 			Context("operation", "start-ffmpeg").
 			Context("process_id", p.id).
@@ -231,7 +232,7 @@ func (p *process) stop() error {
 				"shutdown_duration_ms", shutdownDuration.Milliseconds())
 			
 			return errors.New(err).
-				Component("audiocore").
+				Component(audiocore.ComponentAudioCore).
 				Category(errors.CategorySystem).
 				Context("operation", "stop-ffmpeg").
 				Context("process_id", p.id).
@@ -257,7 +258,7 @@ func (p *process) stop() error {
 					"error", err)
 				
 				return errors.New(err).
-					Component("audiocore").
+					Component(audiocore.ComponentAudioCore).
 					Category(errors.CategorySystem).
 					Context("operation", "kill-ffmpeg").
 					Context("process_id", p.id).
@@ -376,10 +377,12 @@ func (p *process) readAudioOutput() {
 				"process_id", p.id,
 				"panic", r)
 			
-			p.errorOutput <- errors.New(fmt.Errorf("panic in audio reader: %v", r)).
-				Component("audiocore").
+			p.errorOutput <- errors.New(nil).
+				Component(audiocore.ComponentAudioCore).
 				Category(errors.CategorySystem).
 				Context("process_id", p.id).
+				Context("panic", fmt.Sprintf("%v", r)).
+				Context("error", fmt.Sprintf("panic in audio reader: %v", r)).
 				Build()
 		}
 	}()
@@ -404,7 +407,7 @@ func (p *process) readAudioOutput() {
 						"error", err)
 					
 					p.errorOutput <- errors.New(err).
-						Component("audiocore").
+						Component(audiocore.ComponentAudioCore).
 						Category(errors.CategoryAudio).
 						Context("operation", "read-audio").
 						Context("process_id", p.id).

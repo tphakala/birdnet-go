@@ -8,7 +8,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -72,18 +71,19 @@ func NewBirdNETAnalyzer(id string, config audiocore.AnalyzerConfig, bufferPool a
 		"labels_path", labelsPath,
 		"threads", threads)
 
-	// Create settings for BirdNET
-	// TODO: This needs to be refactored to use a simpler configuration
-	// For now, create minimal settings
-	settings := &conf.Settings{
-		BirdNET: conf.BirdNETConfig{
-			ModelPath: config.ModelPath,
-			LabelPath: labelsPath,
-			Threads:   threads,
-		},
+	// Create simplified BirdNET configuration
+	birdnetConfig := &birdnet.Config{
+		ModelPath: config.ModelPath,
+		LabelPath: labelsPath,
+		Threads:   threads,
+		// Additional configuration from ExtraConfig
+		Locale:           getStringFromExtraConfig(config.ExtraConfig, "locale", "en"),
+		UseXNNPACK:       getBoolFromExtraConfig(config.ExtraConfig, "use_xnnpack", true),
+		Debug:            getBoolFromExtraConfig(config.ExtraConfig, "debug", false),
+		RangeFilterModel: getStringFromExtraConfig(config.ExtraConfig, "range_filter_model", "v2"),
 	}
 
-	model, err := birdnet.NewBirdNET(settings)
+	model, err := birdnet.NewBirdNETFromConfig(birdnetConfig)
 	if err != nil {
 		return nil, errors.New(err).
 			Component(audiocore.ComponentAudioCore).
@@ -323,3 +323,18 @@ var (
 	_ audiocore.Analyzer        = (*BirdNETAnalyzer)(nil)
 	_ audiocore.AnalyzerFactory = (*BirdNETAnalyzerFactory)(nil)
 )
+
+// Helper functions for extracting values from ExtraConfig
+func getStringFromExtraConfig(config map[string]any, key, defaultValue string) string {
+	if v, ok := config[key].(string); ok {
+		return v
+	}
+	return defaultValue
+}
+
+func getBoolFromExtraConfig(config map[string]any, key string, defaultValue bool) bool {
+	if v, ok := config[key].(bool); ok {
+		return v
+	}
+	return defaultValue
+}

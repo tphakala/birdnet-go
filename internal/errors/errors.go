@@ -65,7 +65,14 @@ type EnhancedError struct {
 
 // Error implements the error interface
 func (ee *EnhancedError) Error() string {
-	return ee.Err.Error()
+	if ee.Err != nil {
+		return ee.Err.Error()
+	}
+	// If there's an error message in context, use that
+	if msg, ok := ee.Context["error"].(string); ok {
+		return msg
+	}
+	return "unknown error"
 }
 
 // Unwrap implements the error unwrapping interface

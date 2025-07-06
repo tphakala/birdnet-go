@@ -12,6 +12,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// analyzeResult is used to pass results from the analysis goroutine
+type analyzeResult struct {
+	result AnalysisResult
+	err    error
+}
+
+// analyzeResultPool reduces allocations for analyzeResult structs
+var analyzeResultPool = sync.Pool{
+	New: func() any {
+		return &analyzeResult{}
+	},
+}
+
 // SafeAnalyzerWrapper wraps an analyzer with timeout and deadlock prevention
 type SafeAnalyzerWrapper struct {
 	analyzer         Analyzer
@@ -157,33 +170,35 @@ func (w *SafeAnalyzerWrapper) Analyze(ctx context.Context, data *AudioData) (Ana
 	analyzeCtx, cancel := context.WithTimeout(ctx, w.timeout)
 	defer cancel()
 	
-	// Create channels for result and error
-	type analyzeResult struct {
-		result AnalysisResult
-		err    error
-	}
-	resultChan := make(chan analyzeResult, 1)
+	// Create channel for result - using pointer to enable pooling
+	resultChan := make(chan *analyzeResult, 1)
 	
 	// Track analysis time
 	startTime := time.Now()
 	
 	// Run analysis in goroutine
 	go func() {
+		// Get result struct from pool
+		res := analyzeResultPool.Get().(*analyzeResult)
+		// Note: We don't defer Put here because the receiver needs to do it
+		
 		defer func() {
 			if r := recover(); r != nil {
-				err := errors.New(fmt.Errorf("analyzer panic: %v", r)).
+				res.err = errors.New(nil).
 					Component(ComponentAudioCore).
 					Category(errors.CategoryProcessing).
 					Context("analyzer_id", w.ID()).
 					Context("panic", fmt.Sprintf("%v", r)).
+					Context("error", fmt.Sprintf("analyzer panic: %v", r)).
 					Build()
+				res.result = AnalysisResult{}
 				
-				resultChan <- analyzeResult{err: err}
+				resultChan <- res
 			}
 		}()
 		
-		result, err := w.analyzer.Analyze(analyzeCtx, data)
-		resultChan <- analyzeResult{result: result, err: err}
+		res.result, res.err = w.analyzer.Analyze(analyzeCtx, data)
+		resultChan <- res
 	}()
 	
 	// Wait for result or timeout
@@ -193,14 +208,23 @@ func (w *SafeAnalyzerWrapper) Analyze(ctx context.Context, data *AudioData) (Ana
 		duration := time.Since(startTime)
 		w.updateMetrics(duration, result.err == nil)
 		
-		if result.err != nil {
+		// Extract values before returning to pool
+		analysisResult := result.result
+		analysisErr := result.err
+		
+		// Clear and return to pool
+		result.result = AnalysisResult{}
+		result.err = nil
+		analyzeResultPool.Put(result)
+		
+		if analysisErr != nil {
 			w.circuitBreaker.RecordFailure()
 			w.errorCount.Add(1)
-			return AnalysisResult{}, result.err
+			return AnalysisResult{}, analysisErr
 		}
 		
 		w.circuitBreaker.RecordSuccess()
-		return result.result, nil
+		return analysisResult, nil
 		
 	case <-analyzeCtx.Done():
 		// Timeout or cancellation

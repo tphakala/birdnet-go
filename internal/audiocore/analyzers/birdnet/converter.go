@@ -242,8 +242,8 @@ func (c *FormatConverter) ConvertToMono(input []float32, channels int) ([]float3
 
 	monoSamples := len(input) / channels
 	
-	// Get buffer from pool
-	outputBuf := c.bufferPool.Get(monoSamples * 4) // 4 bytes per float32
+	// Allocate output directly - no need for buffer pool here
+	// since we're returning the slice and can't control when it's released
 	output := make([]float32, monoSamples)
 
 	for i := 0; i < monoSamples; i++ {
@@ -253,9 +253,6 @@ func (c *FormatConverter) ConvertToMono(input []float32, channels int) ([]float3
 		}
 		output[i] = sum / float32(channels)
 	}
-
-	// Return buffer to pool
-	c.bufferPool.Put(outputBuf)
 
 	return output, nil
 }

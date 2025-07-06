@@ -21,6 +21,7 @@ type CircularBufferConfig struct {
 type CircularBuffer struct {
 	config       CircularBufferConfig
 	buffer       []byte
+	audioBuffer  audiocore.AudioBuffer // Keep reference to return to pool
 	capacity     int
 	writePos     int64
 	mu           sync.RWMutex
@@ -46,9 +47,20 @@ func NewCircularBuffer(config CircularBufferConfig) *CircularBuffer {
 	// Add 10% extra capacity for safety
 	capacity = int(float64(capacity) * 1.1)
 	
+	// Get buffer from pool for large allocations
+	var buffer []byte
+	var audioBuffer audiocore.AudioBuffer
+	if config.BufferPool != nil {
+		audioBuffer = config.BufferPool.Get(capacity)
+		buffer = audioBuffer.Data()[:capacity]
+	} else {
+		buffer = make([]byte, capacity)
+	}
+	
 	return &CircularBuffer{
 		config:       config,
-		buffer:       make([]byte, capacity),
+		buffer:       buffer,
+		audioBuffer:  audioBuffer,
 		capacity:     capacity,
 		bufferPool:   config.BufferPool,
 		startTime:    time.Now(),
@@ -188,7 +200,12 @@ func (b *CircularBuffer) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	
+	// Return buffer to pool if it was allocated from pool
+	if b.audioBuffer != nil && b.bufferPool != nil {
+		b.bufferPool.Put(b.audioBuffer)
+		b.audioBuffer = nil
+	}
+	
 	// Clear the buffer reference
-	// Note: Buffer was allocated with make(), not from a pool
 	b.buffer = nil
 }
