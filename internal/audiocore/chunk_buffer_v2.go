@@ -61,49 +61,8 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 	// Extract all complete chunks from pending data
 	chunkIndex := 0
 	for len(c.pendingData) >= c.targetSize {
-		// Get buffer from pool if available
-		var chunkBuffer AudioBuffer
-		var chunkData []byte
-		
-		if c.bufferPool != nil {
-			// Use buffer pool for memory efficiency
-			chunkBuffer = c.bufferPool.Get(c.targetSize)
-			if chunkBuffer != nil {
-				chunkBuffer.Reset()
-				// Resize to exact size needed
-				if err := chunkBuffer.Resize(c.targetSize); err == nil {
-					chunkData = chunkBuffer.Data()
-				} else {
-					// If resize fails, release buffer and fall back to allocation
-					chunkBuffer.Release()
-					chunkBuffer = nil
-					chunkData = make([]byte, c.targetSize)
-				}
-			} else {
-				// Pool returned nil, fall back to allocation
-				chunkData = make([]byte, c.targetSize)
-			}
-		} else {
-			// No buffer pool available, use regular allocation
-			chunkData = make([]byte, c.targetSize)
-		}
-		
-		// Copy data to chunk buffer
-		copy(chunkData, c.pendingData[:c.targetSize])
-		
-		// Calculate timestamp for this chunk
-		chunkTimestamp := c.firstTimestamp.Add(time.Duration(chunkIndex) * c.chunkDuration)
-		
-		// Create chunk with buffer handle for proper lifecycle management
-		chunk := AudioData{
-			Buffer:       chunkData,
-			Format:       c.format,
-			Timestamp:    chunkTimestamp,
-			Duration:     c.chunkDuration,
-			SourceID:     data.SourceID,
-			BufferHandle: chunkBuffer, // Store handle so consumer can release when done
-		}
-		
+		// Extract single chunk in a separate function to handle defer properly
+		chunk := c.extractSingleChunk(data, chunkIndex)
 		c.completedChunks = append(c.completedChunks, chunk)
 		chunkIndex++
 		
@@ -119,6 +78,61 @@ func (c *ChunkBufferV2) Add(data *AudioData) {
 	if len(c.pendingData) > 0 {
 		// Adjust timestamp for remaining data
 		c.firstTimestamp = c.firstTimestamp.Add(time.Duration(chunkIndex) * c.chunkDuration)
+	}
+}
+
+// extractSingleChunk extracts a single chunk from pending data
+// This is a separate method to properly handle defer in loops
+func (c *ChunkBufferV2) extractSingleChunk(data *AudioData, chunkIndex int) AudioData {
+	// Get buffer from pool if available
+	var chunkBuffer AudioBuffer
+	var chunkData []byte
+	
+	if c.bufferPool != nil {
+		// Use buffer pool for memory efficiency
+		chunkBuffer = c.bufferPool.Get(c.targetSize)
+		if chunkBuffer != nil {
+			// Ensure buffer is released on error
+			success := false
+			defer func() {
+				if !success && chunkBuffer != nil {
+					chunkBuffer.Release()
+				}
+			}()
+			
+			chunkBuffer.Reset()
+			// Resize to exact size needed
+			if err := chunkBuffer.Resize(c.targetSize); err == nil {
+				chunkData = chunkBuffer.Data()
+				success = true
+			} else {
+				// If resize fails, fall back to allocation
+				chunkBuffer = nil
+				chunkData = make([]byte, c.targetSize)
+			}
+		} else {
+			// Pool returned nil, fall back to allocation
+			chunkData = make([]byte, c.targetSize)
+		}
+	} else {
+		// No buffer pool available, use regular allocation
+		chunkData = make([]byte, c.targetSize)
+	}
+		
+	// Copy data to chunk buffer
+	copy(chunkData, c.pendingData[:c.targetSize])
+	
+	// Calculate timestamp for this chunk
+	chunkTimestamp := c.firstTimestamp.Add(time.Duration(chunkIndex) * c.chunkDuration)
+	
+	// Create chunk with buffer handle for proper lifecycle management
+	return AudioData{
+		Buffer:       chunkData,
+		Format:       c.format,
+		Timestamp:    chunkTimestamp,
+		Duration:     c.chunkDuration,
+		SourceID:     data.SourceID,
+		BufferHandle: chunkBuffer, // Store handle so consumer can release when done
 	}
 }
 

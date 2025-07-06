@@ -96,28 +96,28 @@ func NewSafeAnalyzerWrapper(config *SafeAnalyzerConfig) *SafeAnalyzerWrapper {
 	
 	// Defaults
 	if config.Timeout == 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = DefaultAnalyzerTimeout * time.Second
 	}
 	if config.Workers == 0 {
-		config.Workers = 5
+		config.Workers = DefaultWorkerCount
 	}
 	if config.TimingBufferSize == 0 {
-		config.TimingBufferSize = 1000
+		config.TimingBufferSize = DefaultTimingBufferSize
 	}
 	
 	// Default circuit breaker config
 	cbConfig := config.CircuitBreakerConfig
 	if cbConfig == nil {
 		cbConfig = &CircuitBreakerConfig{
-			MaxFailures:      5,
-			ResetTimeout:     30 * time.Second,
-			HalfOpenRequests: 2,
+			MaxFailures:      DefaultCircuitBreakerMaxFailures,
+			ResetTimeout:     DefaultCircuitBreakerResetTimeout * time.Second,
+			HalfOpenRequests: DefaultCircuitBreakerHalfOpenRequests,
 			FailureThresholds: map[string]int{
-				"timeout": 3,
-				"error":   5,
-				"panic":   1,
+				CircuitBreakerFailureTypeTimeout: 3,
+				CircuitBreakerFailureTypeError:   5,
+				CircuitBreakerFailureTypePanic:   1,
 			},
-			RecoverySteps: 3,
+			RecoverySteps: DefaultCircuitBreakerRecoverySteps,
 		}
 	}
 	
@@ -193,7 +193,7 @@ func (w *SafeAnalyzerWrapper) processTask(task *analyzeTask) {
 				Context("error", fmt.Sprintf("analyzer panic: %v", r)).
 				Build()
 			res.result = AnalysisResult{}
-			w.circuitBreaker.RecordFailure("panic")
+			w.circuitBreaker.RecordFailure(CircuitBreakerFailureTypePanic)
 		}
 		
 		// Always try to send result
@@ -283,7 +283,7 @@ func (w *SafeAnalyzerWrapper) Analyze(ctx context.Context, data *AudioData) (Ana
 		w.totalAnalyses.Add(1)
 		if analysisErr != nil {
 			w.errorCount.Add(1)
-			w.circuitBreaker.RecordFailure("error")
+			w.circuitBreaker.RecordFailure(CircuitBreakerFailureTypeError)
 			return AnalysisResult{}, analysisErr
 		}
 		
@@ -295,7 +295,7 @@ func (w *SafeAnalyzerWrapper) Analyze(ctx context.Context, data *AudioData) (Ana
 		// Timeout
 		w.timeoutCount.Add(1)
 		w.totalAnalyses.Add(1)
-		w.circuitBreaker.RecordFailure("timeout")
+		w.circuitBreaker.RecordFailure(CircuitBreakerFailureTypeTimeout)
 		
 		w.logger.Error("analysis timeout",
 			"analyzer_id", w.ID(),
@@ -448,7 +448,7 @@ type CircuitBreaker struct {
 	failureThresholds map[string]int // Per-type failure thresholds
 	
 	mu               sync.RWMutex
-	state            string // "closed", "open", "half-open"
+	state            CircuitBreakerState
 	failures         map[string]int // Failures by type
 	totalFailures    int
 	lastFailTime     time.Time
@@ -485,7 +485,7 @@ func NewCircuitBreaker(config *CircuitBreakerConfig) *CircuitBreaker {
 		halfOpenRequests:  config.HalfOpenRequests,
 		failureThresholds: failureThresholds,
 		recoverySteps:     recoverySteps,
-		state:             "closed",
+		state:             CircuitBreakerStateClosed,
 		failures:          make(map[string]int),
 		lastStateChange:   time.Now(),
 	}
@@ -497,10 +497,10 @@ func (cb *CircuitBreaker) CanExecute() bool {
 	defer cb.mu.Unlock()
 	
 	switch cb.state {
-	case "closed":
+	case CircuitBreakerStateClosed:
 		return true
 		
-	case "open":
+	case CircuitBreakerStateOpen:
 		// Check if we should transition to half-open
 		if time.Since(cb.lastFailTime) >= cb.resetTimeout {
 			cb.transitionToHalfOpen()
@@ -509,7 +509,7 @@ func (cb *CircuitBreaker) CanExecute() bool {
 		cb.rejectedCount.Add(1)
 		return false
 		
-	case "half-open":
+	case CircuitBreakerStateHalfOpen:
 		// Gradual recovery - allow requests per step
 		currentStepRequests := cb.halfOpenRequests / cb.recoverySteps
 		if cb.halfOpenAttempts < currentStepRequests {
@@ -531,7 +531,7 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	
 	cb.successCount.Add(1)
 	
-	if cb.state == "half-open" {
+	if cb.state == CircuitBreakerStateHalfOpen {
 		// Check if we've completed enough requests for current step
 		currentStepRequests := cb.halfOpenRequests / cb.recoverySteps
 		if cb.halfOpenAttempts >= currentStepRequests {
@@ -559,7 +559,7 @@ func (cb *CircuitBreaker) RecordFailure(failureType string) {
 	cb.lastFailTime = time.Now()
 	
 	switch cb.state {
-	case "closed":
+	case CircuitBreakerStateClosed:
 		// Check if we should open based on type-specific thresholds
 		shouldOpen := false
 		
@@ -579,9 +579,12 @@ func (cb *CircuitBreaker) RecordFailure(failureType string) {
 			cb.transitionToOpen()
 		}
 		
-	case "half-open":
+	case CircuitBreakerStateHalfOpen:
 		// Failure in half-open state, reopen the circuit
 		cb.transitionToOpen()
+		
+	case CircuitBreakerStateOpen:
+		// Already open, nothing to do
 	}
 }
 
@@ -589,19 +592,19 @@ func (cb *CircuitBreaker) RecordFailure(failureType string) {
 func (cb *CircuitBreaker) GetState() string {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
-	return cb.state
+	return cb.state.String()
 }
 
 // transitionToOpen transitions to open state
 func (cb *CircuitBreaker) transitionToOpen() {
-	cb.state = "open"
+	cb.state = CircuitBreakerStateOpen
 	cb.stateTransitions.Add(1)
 	cb.lastStateChange = time.Now()
 }
 
 // transitionToHalfOpen transitions to half-open state
 func (cb *CircuitBreaker) transitionToHalfOpen() {
-	cb.state = "half-open"
+	cb.state = CircuitBreakerStateHalfOpen
 	cb.halfOpenAttempts = 0
 	cb.currentStep = 0
 	cb.stateTransitions.Add(1)
@@ -610,7 +613,7 @@ func (cb *CircuitBreaker) transitionToHalfOpen() {
 
 // transitionToClosed transitions to closed state
 func (cb *CircuitBreaker) transitionToClosed() {
-	cb.state = "closed"
+	cb.state = CircuitBreakerStateClosed
 	cb.failures = make(map[string]int)
 	cb.totalFailures = 0
 	cb.currentStep = 0
@@ -624,7 +627,7 @@ func (cb *CircuitBreaker) GetMetrics() map[string]any {
 	defer cb.mu.RUnlock()
 	
 	metrics := map[string]any{
-		"state":              cb.state,
+		"state":              cb.state.String(),
 		"state_transitions":  cb.stateTransitions.Load(),
 		"success_count":      cb.successCount.Load(),
 		"failure_count":      cb.failureCount.Load(),
@@ -635,7 +638,7 @@ func (cb *CircuitBreaker) GetMetrics() map[string]any {
 		"time_in_state":      time.Since(cb.lastStateChange).String(),
 	}
 	
-	if cb.state == "half-open" {
+	if cb.state == CircuitBreakerStateHalfOpen {
 		metrics["recovery_progress"] = map[string]any{
 			"current_step":      cb.currentStep,
 			"total_steps":       cb.recoverySteps,
@@ -652,7 +655,7 @@ func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	
-	cb.state = "closed"
+	cb.state = CircuitBreakerStateClosed
 	cb.failures = make(map[string]int)
 	cb.totalFailures = 0
 	cb.halfOpenAttempts = 0

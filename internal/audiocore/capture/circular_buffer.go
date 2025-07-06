@@ -44,8 +44,8 @@ func NewCircularBuffer(config CircularBufferConfig) *CircularBuffer {
 	totalSamples := int(config.Duration.Seconds() * float64(samplesPerSecond))
 	capacity := totalSamples * bytesPerSample
 	
-	// Add 10% extra capacity for safety
-	capacity = int(float64(capacity) * 1.1)
+	// Add extra capacity for safety
+	capacity = int(float64(capacity) * audiocore.CircularBufferExtraCapacity)
 	
 	// Get buffer from pool for large allocations
 	var buffer []byte
