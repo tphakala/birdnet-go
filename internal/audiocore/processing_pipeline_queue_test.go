@@ -35,14 +35,9 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 				Duration:  data.Duration,
 				Detections: []Detection{
 					{
-						Label:      "Test Bird",
+						Label:      "Testus_birdus_Test Bird", // Species string in BirdNET format
 						Confidence: 0.95,
-						Attributes: map[string]any{
-							"species_string":  "Testus_birdus_Test Bird",
-							"scientific_name": "Testus birdus",
-							"common_name":     "Test Bird",
-							"species_code":    "TESBIR",
-						},
+						Attributes: nil, // No longer needed
 					},
 				},
 				Metadata: map[string]any{
@@ -99,14 +94,9 @@ func TestProcessingPipelineQueueIntegration(t *testing.T) {
 		Duration:  testData.Duration,
 		Detections: []Detection{
 			{
-				Label:      "Test Bird",
+				Label:      "Testus_birdus_Test Bird",
 				Confidence: 0.95,
-				Attributes: map[string]any{
-					"species_string":  "Testus_birdus_Test Bird",
-					"scientific_name": "Testus birdus",
-					"common_name":     "Test Bird",
-					"species_code":    "TESBIR",
-				},
+				Attributes: nil,
 			},
 		},
 		Metadata: map[string]any{
@@ -161,8 +151,8 @@ func (m *mockQueueAnalyzer) GetConfiguration() AnalyzerConfig {
 }
 func (m *mockQueueAnalyzer) Close() error { return nil }
 
-// Test that species string fallback works correctly
-func TestSpeciesStringFallback(t *testing.T) {
+// Test that simplified species string handling works correctly
+func TestSimplifiedSpeciesHandling(t *testing.T) {
 	// Save original queue and restore after test
 	originalQueue := birdnet.ResultsQueue
 	defer func() {
@@ -208,36 +198,31 @@ func TestSpeciesStringFallback(t *testing.T) {
 		expectedSpecies string
 	}{
 		{
-			name: "with species_string attribute",
+			name: "standard BirdNET format",
 			detection: Detection{
-				Label:      "Common Bird",
+				Label:      "Turdus_migratorius_American Robin",
 				Confidence: 0.9,
-				Attributes: map[string]any{
-					"species_string": "Birdus_commonus_Common Bird",
-				},
+				Attributes: nil,
 			},
-			expectedSpecies: "Birdus_commonus_Common Bird",
+			expectedSpecies: "Turdus_migratorius_American Robin",
 		},
 		{
-			name: "fallback to scientific_common reconstruction",
+			name: "species with spaces",
 			detection: Detection{
-				Label:      "Another Bird",
+				Label:      "Passer_domesticus_House Sparrow",
 				Confidence: 0.85,
-				Attributes: map[string]any{
-					"scientific_name": "Birdus anothericus",
-					"common_name":     "Another Bird",
-				},
+				Attributes: nil,
 			},
-			expectedSpecies: "Birdus anothericus_Another Bird",
+			expectedSpecies: "Passer_domesticus_House Sparrow",
 		},
 		{
-			name: "fallback to label only",
+			name: "direct label passthrough",
 			detection: Detection{
-				Label:      "Mystery Bird",
+				Label:      "Custom_Species_Format",
 				Confidence: 0.8,
-				Attributes: map[string]any{},
+				Attributes: nil,
 			},
-			expectedSpecies: "Mystery Bird",
+			expectedSpecies: "Custom_Species_Format",
 		},
 	}
 

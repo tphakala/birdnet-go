@@ -382,50 +382,20 @@ func (p *ProcessingPipeline) analyzeLoop(chunks <-chan AudioData) {
 	}
 }
 
-// processAnalysisResult handles the output from the analyzer
+// processAnalysisResult converts audiocore results to birdnet.Results format and sends to queue
 func (p *ProcessingPipeline) processAnalysisResult(result *AnalysisResult, chunk *AudioData) {
-	// Log detections
-	if len(result.Detections) > 0 {
-		p.logger.Info("detections found",
-			"count", len(result.Detections),
-			"timestamp", result.Timestamp)
-
-		for _, detection := range result.Detections {
-			p.logger.Debug("detection",
-				"label", detection.Label,
-				"confidence", detection.Confidence,
-				"start_time", detection.StartTime,
-				"end_time", detection.EndTime)
-		}
+	// Skip if no detections
+	if len(result.Detections) == 0 {
+		return
 	}
 
-	// Convert and send to birdnet.ResultsQueue for existing processor compatibility
-	if len(result.Detections) > 0 {
-		p.sendToResultsQueue(result, chunk)
-	}
-}
-
-// sendToResultsQueue converts audiocore results to birdnet.Results format and sends to queue
-func (p *ProcessingPipeline) sendToResultsQueue(result *AnalysisResult, chunk *AudioData) {
 	// Convert detections to datastore.Results format
 	datastoreResults := make([]datastore.Results, 0, len(result.Detections))
 	
 	for _, detection := range result.Detections {
-		// Get the original species string from attributes
-		speciesString, ok := detection.Attributes["species_string"].(string)
-		if !ok {
-			// Fallback: try to reconstruct from scientific and common names
-			scientific, _ := detection.Attributes["scientific_name"].(string)
-			common, _ := detection.Attributes["common_name"].(string)
-			if scientific != "" && common != "" {
-				speciesString = scientific + "_" + common
-			} else {
-				speciesString = detection.Label // Last resort, use the label
-			}
-		}
-		
+		// Detection.Label now contains the species string in the correct format
 		datastoreResults = append(datastoreResults, datastore.Results{
-			Species:    speciesString,
+			Species:    detection.Label,
 			Confidence: detection.Confidence,
 		})
 	}

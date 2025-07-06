@@ -135,9 +135,9 @@ Each audio source has its own dedicated processing pipeline:
 │                              │                   │                             │
 │                              │                   ▼                             │
 │                              │          ┌─────────────┐                        │
-│                              │          │ Detections │                         │
-│                              │          │   Handler   │                        │
-│                              │          │            │                        │
+│                              │          │   Results   │                        │
+│                              │          │    Queue    │────────────────▶ birdnet.ResultsQueue
+│                              │          │ Integration │                        │
 │                              │          └─────────────┘                        │
 │                              │                                                 │
 │                              ▼                                                 │
@@ -235,7 +235,11 @@ type AudioData struct {
 5. **Analysis** - Send to BirdNET or other ML models
 
 ### 3. Result Handling
+
+AudioCore integrates seamlessly with the existing BirdNET-Go results processing pipeline by publishing detection results to the same `birdnet.ResultsQueue` used by the legacy myaudio system.
+
 ```go
+// Analysis results from analyzers
 type AnalysisResult struct {
     Timestamp   time.Time
     Duration    time.Duration
@@ -244,7 +248,22 @@ type AnalysisResult struct {
     AnalyzerID  string          // Which analyzer produced this
     SourceID    string          // Which source this came from
 }
+
+// Simplified detection format (after recent refactoring)
+type Detection struct {
+    Label      string   // Species string (e.g., "Turdus_migratorius_American Robin")
+    Confidence float32  // Detection confidence (0.0-1.0)
+    StartTime  float64  // Start time within chunk
+    EndTime    float64  // End time within chunk
+    Attributes map[string]any // Additional attributes (now unused, set to nil)
+}
 ```
+
+**Integration with Results Queue:**
+- ProcessingPipeline converts audiocore detections to `datastore.Results` format
+- Results are published to `birdnet.ResultsQueue` for downstream processing
+- Full compatibility maintained with existing database saving and notification systems
+- PCM audio data ownership transfers to the results queue for clip generation
 
 ## Key Features
 
@@ -445,16 +464,39 @@ Based on testing and benchmarks:
 - **Health Monitoring** - Adaptive backpressure and error recovery
 - **Metrics System** - Comprehensive observability
 - **Compatibility Layer** - Adapter for existing myaudio interface
+- **Results Integration** - Direct publishing to birdnet.ResultsQueue
+- **Simplified Data Flow** - Streamlined species string handling
 
 ### 🔄 In Progress
 - **RTSP Source Integration** - Connecting FFmpeg manager to source factory
-- **Testing & Validation** - Comprehensive test coverage
+- **Testing & Validation** - Comprehensive test coverage (integration tests for queue functionality completed)
 
 ### ❌ Not Yet Implemented
 - **File Sources** - Audio file input support
 - **Advanced Processors** - EQ, noise reduction, filters
 - **Audio Export** - WAV/MP3/FLAC export functionality
 - **Plugin System** - Dynamic loading of custom processors/analyzers
+
+## Recent Architectural Improvements
+
+### Simplified Results Processing (2025-01)
+Based on integration requirements, the audiocore package underwent significant simplification:
+
+1. **Direct Species String Handling**
+   - BirdNETAnalyzer now stores species strings directly in `Detection.Label`
+   - Removed complex parsing and reconstruction logic
+   - Eliminated unnecessary use of `Detection.Attributes` map
+
+2. **Streamlined Queue Integration**
+   - ProcessingPipeline publishes directly to `birdnet.ResultsQueue`
+   - Merged `processAnalysisResult` and `sendToResultsQueue` methods
+   - Maintains full compatibility with existing processor expectations
+
+3. **Benefits of Simplification**
+   - Reduced code complexity and maintenance burden
+   - Better performance with fewer allocations
+   - Cleaner data flow from analyzer to database
+   - No changes required to downstream systems
 
 ## Migration from MyAudio
 

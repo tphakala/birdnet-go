@@ -259,26 +259,20 @@ func (b *BirdNETAnalyzer) Close() error {
 
 // convertResults converts BirdNET results to standard format
 func (b *BirdNETAnalyzer) convertResults(results []datastore.Results, data *audiocore.AudioData) audiocore.AnalysisResult {
-	detections := make([]audiocore.Detection, 0)
+	detections := make([]audiocore.Detection, 0, len(results))
 
-	// Filter by threshold
+	// Filter by threshold and convert to detections
 	for _, result := range results {
 		if result.Confidence >= b.config.Threshold {
-			// Parse species information using BirdNET's taxonomy enrichment
-			scientificName, commonName, speciesCode := b.model.EnrichResultWithTaxonomy(result.Species)
-			
 			detection := audiocore.Detection{
-				Label:      commonName, // Use common name as primary label
+				// Store the original species string from BirdNET as the label
+				// This is already in the format expected by the processor
+				Label:      result.Species,
 				Confidence: result.Confidence,
 				StartTime:  0.0, // BirdNET analyzes whole chunk
 				EndTime:    data.Duration.Seconds(),
-				Attributes: map[string]any{
-					// Store full species information for queue conversion
-					"species_string":   result.Species,    // Original format from BirdNET
-					"scientific_name":  scientificName,
-					"common_name":      commonName,
-					"species_code":     speciesCode,
-				},
+				// Attributes can be nil - we don't need the extra data anymore
+				Attributes: nil,
 			}
 			detections = append(detections, detection)
 		}
