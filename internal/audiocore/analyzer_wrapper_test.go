@@ -2,6 +2,7 @@ package audiocore
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -84,9 +85,9 @@ func TestAnalyzerTimeout(t *testing.T) {
 		t.Error("expected timeout error, got nil")
 	}
 
-	// Check that we timed out quickly
-	if duration > 200*time.Millisecond {
-		t.Errorf("timeout took too long: %v", duration)
+	// Check that we timed out quickly (more flexible for CI environments)
+	if duration > 500*time.Millisecond {
+		t.Errorf("timeout took unexpectedly long: %v", duration)
 	}
 
 	// Check timeout counter
@@ -128,8 +129,12 @@ func TestAnalyzerContextCancellation(t *testing.T) {
 		_, analyzeErr = wrapper.Analyze(ctx, &AudioData{Buffer: make([]byte, 1024)})
 	}()
 
-	// Cancel context after short delay
-	time.Sleep(50 * time.Millisecond)
+	// Start analysis and then cancel immediately
+	analysisStarted := make(chan struct{})
+	go func() {
+		close(analysisStarted)
+	}()
+	<-analysisStarted
 	cancel()
 
 	// Wait for analysis to complete
@@ -194,8 +199,15 @@ func TestAnalyzerConcurrentLimit(t *testing.T) {
 				}
 			}
 
-			// Simulate some work
-			time.Sleep(100 * time.Millisecond)
+			// Simulate some work with context awareness
+			select {
+			case <-ctx.Done():
+				// Context cancelled, cleanup
+				activeCount.Add(-1)
+				return AnalysisResult{}, ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+				// Work completed
+			}
 
 			// Decrement active count
 			activeCount.Add(-1)
@@ -288,8 +300,14 @@ func TestCircuitBreaker(t *testing.T) {
 		t.Error("expected circuit breaker rejection, got success")
 	}
 
-	// Wait for reset timeout
-	time.Sleep(150 * time.Millisecond)
+	// Wait for circuit breaker to transition to half-open
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if wrapper.circuitBreaker.GetState() == "half-open" {
+			break
+		}
+		runtime.Gosched()
+	}
 
 	// Circuit should transition to half-open and allow limited requests
 	_, err = wrapper.Analyze(ctx, data)

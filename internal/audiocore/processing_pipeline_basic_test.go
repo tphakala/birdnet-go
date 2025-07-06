@@ -2,6 +2,7 @@ package audiocore
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -72,19 +73,28 @@ func TestProcessingPipelineBasic(t *testing.T) {
 		SourceID:  source.id,
 	}
 
-	// Give pipeline time to process
-	time.Sleep(100 * time.Millisecond)
+	// Wait for processing with timeout
+	timeout := time.After(2 * time.Second)
+	processed := false
+	for !processed {
+		select {
+		case <-timeout:
+			t.Fatal("timeout waiting for chunk processing")
+		default:
+			metrics := pipeline.GetMetrics()
+			if count, ok := metrics["processed_chunks"].(int64); ok && count > 0 {
+				processed = true
+			} else {
+				// Brief yield to avoid busy loop
+				runtime.Gosched()
+			}
+		}
+	}
 
 	// Stop pipeline
 	err = pipeline.Stop()
 	if err != nil {
 		t.Errorf("failed to stop pipeline: %v", err)
-	}
-
-	// Check metrics
-	metrics := pipeline.GetMetrics()
-	if processed, ok := metrics["processed_chunks"].(int64); !ok || processed == 0 {
-		t.Error("expected at least one processed chunk")
 	}
 }
 
@@ -173,8 +183,12 @@ func TestProcessingPipelineBackpressure(t *testing.T) {
 		requiredFormat: AudioFormat{SampleRate: 48000, Channels: 1, BitDepth: 16},
 		analyzeFunc: func(ctx context.Context, data *AudioData) (AnalysisResult, error) {
 			// Simulate slow processing
-			time.Sleep(200 * time.Millisecond)
-			return AnalysisResult{}, nil
+			select {
+			case <-ctx.Done():
+				return AnalysisResult{}, ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+				return AnalysisResult{}, nil
+			}
 		},
 	}
 
@@ -221,18 +235,28 @@ func TestProcessingPipelineBackpressure(t *testing.T) {
 		}
 	}
 
-	// Let it process
-	time.Sleep(500 * time.Millisecond)
+	// Wait for drops to occur due to backpressure
+	timeout := time.After(2 * time.Second)
+	hasDrops := false
+	for !hasDrops {
+		select {
+		case <-timeout:
+			t.Fatal("timeout waiting for backpressure drops")
+		default:
+			metrics := pipeline.GetMetrics()
+			if dropped, ok := metrics["dropped_chunks"].(int64); ok && dropped > 0 {
+				hasDrops = true
+				t.Logf("Detected %d dropped chunks due to backpressure", dropped)
+			} else {
+				// Brief yield to avoid busy loop
+				runtime.Gosched()
+			}
+		}
+	}
 
 	err = pipeline.Stop()
 	if err != nil {
 		t.Errorf("failed to stop pipeline: %v", err)
-	}
-
-	// Check that some chunks were dropped due to backpressure
-	metrics := pipeline.GetMetrics()
-	if dropped, ok := metrics["dropped_chunks"].(int64); !ok || dropped == 0 {
-		t.Error("expected some dropped chunks due to backpressure")
 	}
 }
 

@@ -1,6 +1,7 @@
 package audiocore
 
 import (
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -104,6 +105,9 @@ func TestChunkBufferV2ConcurrentAccess(t *testing.T) {
 	chunks := make([][]byte, 0)
 	var chunksMu sync.Mutex
 
+	// Channel to signal writer completion
+	writerDone := make(chan struct{})
+	
 	// Writer goroutine
 	wg.Add(1)
 	go func() {
@@ -115,22 +119,43 @@ func TestChunkBufferV2ConcurrentAccess(t *testing.T) {
 			}
 			cb.Add(data)
 		}
+		close(writerDone)
 	}()
 
 	// Reader goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ { // Expect ~50 chunks from 500 bytes
-			if cb.HasCompleteChunk() {
-				chunk := cb.GetChunk()
-				if chunk != nil {
-					chunksMu.Lock()
-					chunks = append(chunks, chunk.Buffer)
-					chunksMu.Unlock()
+		timeout := time.After(2 * time.Second)
+		for {
+			select {
+			case <-writerDone:
+				// Writer finished, collect remaining chunks
+				for cb.HasCompleteChunk() {
+					chunk := cb.GetChunk()
+					if chunk != nil {
+						chunksMu.Lock()
+						chunks = append(chunks, chunk.Buffer)
+						chunksMu.Unlock()
+					}
+				}
+				return
+			case <-timeout:
+				t.Log("Reader timeout")
+				return
+			default:
+				if cb.HasCompleteChunk() {
+					chunk := cb.GetChunk()
+					if chunk != nil {
+						chunksMu.Lock()
+						chunks = append(chunks, chunk.Buffer)
+						chunksMu.Unlock()
+					}
+				} else {
+					// No chunk ready, yield CPU
+					runtime.Gosched()
 				}
 			}
-			time.Sleep(time.Millisecond)
 		}
 	}()
 

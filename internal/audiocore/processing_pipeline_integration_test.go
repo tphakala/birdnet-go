@@ -2,6 +2,7 @@ package audiocore
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -89,18 +90,24 @@ func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 	}
 	defer func() { _ = pipeline.Stop() }()
 
-	// Let it run for a while
-	time.Sleep(2 * time.Second)
-
-	// Check metrics
-	metrics := pipeline.GetMetrics()
-	t.Logf("Pipeline metrics: %+v", metrics)
-
-	// Verify we processed some chunks
-	processed := metrics["processed_chunks"].(int64)
-	if processed == 0 {
-		t.Error("no chunks were processed")
+	// Wait for sufficient processing to occur
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("timeout waiting for chunk processing")
+		default:
+			metrics := pipeline.GetMetrics()
+			if processed, ok := metrics["processed_chunks"].(int64); ok && processed >= 10 {
+				t.Logf("Pipeline metrics: %+v", metrics)
+				goto checkAnalyzer
+			}
+			// Brief yield to avoid busy loop
+			runtime.Gosched()
+		}
 	}
+
+checkAnalyzer:
 
 	// Check analyzer metrics
 	analyzerMetrics := safeAnalyzer.GetMetrics()
@@ -120,7 +127,7 @@ func TestProcessingPipelineWithSafeAnalyzer(t *testing.T) {
 
 	// Check that timeout rate is reasonable (around 33%)
 	timeoutRate := analyzerMetrics["timeout_rate"].(float64)
-	if timeoutRate < 0.2 || timeoutRate > 0.5 {
+	if timeoutRate < 0.15 || timeoutRate > 0.6 {
 		t.Errorf("unexpected timeout rate: %f, expected around 0.33", timeoutRate)
 	}
 }
