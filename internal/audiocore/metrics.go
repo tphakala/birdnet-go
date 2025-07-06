@@ -305,8 +305,10 @@ func (mc *MetricsCollector) RecordQueueSubmission(sourceID string) {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	// Record as a source-specific event, not as a processed frame
-	// This properly tracks queue submissions separately
+	// Record as a processed frame since queue submission represents successful processing
+	// Use "queue" as manager_id to distinguish from other processing metrics
+	mc.metrics.RecordProcessedFrame("queue", sourceID)
+	
 	if metricsLogger != nil && metricsLogger.Enabled(context.TODO(), slog.LevelDebug) {
 		metricsLogger.Debug("queue submission recorded",
 			"source_id", sourceID)
