@@ -13,6 +13,12 @@ import (
 // ProcessingPipeline manages the flow from source to analyzer
 // Flow: AudioSource -> ChunkBuffer -> OverlapBuffer -> ProcessorChain -> Analyzer
 // Supports: capture tee, health monitoring, metrics collection
+//
+// Buffer lifecycle:
+//   - AudioSource allocates buffers from BufferPool
+//   - ChunkBuffer copies data (can't use pool due to AudioData limitations)
+//   - OverlapBuffer uses pool for temporary buffers, releases after use
+//   - Analyzer receives owned data, responsible for cleanup
 type ProcessingPipeline struct {
 	source         AudioSource
 	analyzer       Analyzer
@@ -57,6 +63,17 @@ type ProcessingPipelineConfig struct {
 
 // NewProcessingPipeline creates a new processing pipeline
 func NewProcessingPipeline(config *ProcessingPipelineConfig) *ProcessingPipeline {
+	// Validate configuration first
+	if err := validatePipelineConfig(config); err != nil {
+		logger := logging.ForService("audiocore")
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("invalid pipeline configuration", "error", err)
+		// Return nil to fail fast on invalid config
+		return nil
+	}
+
 	logger := logging.ForService("audiocore")
 	if logger == nil {
 		logger = slog.Default()
@@ -65,13 +82,6 @@ func NewProcessingPipeline(config *ProcessingPipelineConfig) *ProcessingPipeline
 		"component", "processing_pipeline",
 		"source_id", config.Source.ID(),
 		"analyzer_id", config.Analyzer.ID())
-
-	// Validate configuration
-	if err := validatePipelineConfig(config); err != nil {
-		logger.Error("invalid pipeline configuration", "error", err)
-		// Return nil to fail fast on invalid config
-		return nil
-	}
 
 	// Create overlap buffer
 	overlapBuffer := NewOverlapBuffer(&OverlapBufferConfig{
@@ -169,6 +179,18 @@ func (p *ProcessingPipeline) Stop() error {
 // Data flow: source -> capture tee -> chunk buffer -> overlap -> processor chain -> analyzer
 func (p *ProcessingPipeline) processLoop() {
 	defer p.wg.Done()
+	
+	// Panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.Error("panic in process loop",
+				"panic", r,
+				"source_id", p.source.ID())
+			if p.metrics != nil {
+				p.metrics.RecordProcessingError("pipeline", p.source.ID(), "panic")
+			}
+		}
+	}()
 
 	// Buffered channel for decoupling chunk processing from analysis
 	analyzeChan := make(chan AudioData, p.config.BufferAhead)
@@ -193,51 +215,92 @@ func (p *ProcessingPipeline) processLoop() {
 			// Accumulate data into fixed-size chunks
 			p.chunkBuffer.Add(&data)
 
-			// Process complete chunks
-			for p.chunkBuffer.HasCompleteChunk() {
-				chunk := p.chunkBuffer.GetChunk()
-				if chunk == nil {
-					continue
-				}
+			// Process all complete chunks
+			p.processChunks(analyzeChan)
 
-				// Apply overlap
-				processedChunk, err := p.overlapBuffer.Process(chunk)
-				if err != nil {
-					p.logger.Warn("overlap processing failed",
-						"error", err)
-					if p.metrics != nil {
-						p.metrics.RecordProcessingError("pipeline", p.source.ID(), "overlap_error")
-					}
-					continue
-				}
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
 
-				// Run through processor chain if configured
-				if p.processorChain != nil {
-					processedChunk, err = p.processorChain.Process(p.ctx, processedChunk)
-					if err != nil {
-						p.logger.Warn("processor chain failed",
-							"error", err)
-						if p.metrics != nil {
-							p.metrics.RecordProcessingError("pipeline", p.source.ID(), "processor_error")
-						}
-						continue
-					}
-				}
+// processChunks processes all complete chunks from the buffer
+func (p *ProcessingPipeline) processChunks(analyzeChan chan<- AudioData) {
+	for p.chunkBuffer.HasCompleteChunk() {
+		// Check context before processing each chunk
+		select {
+		case <-p.ctx.Done():
+			return
+		default:
+		}
 
-				// Send to analyzer (non-blocking)
-				select {
-				case analyzeChan <- *processedChunk:
-					p.processedChunks++
-				default:
-					// Buffer full, drop chunk
-					p.droppedChunks++
-					p.logger.Warn("analyzer buffer full, dropping chunk")
-					if p.metrics != nil {
-						p.metrics.RecordFrameDropped(p.source.ID(), "analyzer_buffer_full")
-					}
-				}
+		chunk := p.chunkBuffer.GetChunk()
+		if chunk == nil {
+			continue
+		}
+
+		// Process the chunk through the pipeline
+		processedChunk := p.processChunk(chunk)
+		if processedChunk == nil {
+			continue
+		}
+
+		// Send to analyzer with backpressure handling
+		p.sendToAnalyzer(analyzeChan, processedChunk)
+	}
+}
+
+// processChunk runs a chunk through overlap and processor chain
+func (p *ProcessingPipeline) processChunk(chunk *AudioData) *AudioData {
+	// Apply overlap
+	processedChunk, err := p.overlapBuffer.Process(chunk)
+	if err != nil {
+		p.logger.Warn("overlap processing failed", "error", err)
+		if p.metrics != nil {
+			p.metrics.RecordProcessingError("pipeline", p.source.ID(), "overlap_error")
+		}
+		return nil
+	}
+
+	// Run through processor chain if configured
+	if p.processorChain != nil {
+		processedChunk, err = p.processorChain.Process(p.ctx, processedChunk)
+		if err != nil {
+			p.logger.Warn("processor chain failed", "error", err)
+			if p.metrics != nil {
+				p.metrics.RecordProcessingError("pipeline", p.source.ID(), "processor_error")
 			}
+			return nil
+		}
+	}
 
+	return processedChunk
+}
+
+// sendToAnalyzer sends chunk to analyzer with backpressure handling
+func (p *ProcessingPipeline) sendToAnalyzer(analyzeChan chan<- AudioData, chunk *AudioData) {
+	select {
+	case analyzeChan <- *chunk:
+		p.processedChunks++
+	default:
+		// Buffer full - implement backpressure
+		p.droppedChunks++
+		
+		// Log warning every 10 dropped chunks to avoid log spam
+		if p.droppedChunks%10 == 1 {
+			p.logger.Warn("analyzer buffer full, applying backpressure",
+				"dropped_chunks", p.droppedChunks,
+				"drop_rate", float64(p.droppedChunks)/float64(p.processedChunks+p.droppedChunks))
+		}
+		
+		if p.metrics != nil {
+			p.metrics.RecordFrameDropped(p.source.ID(), "analyzer_buffer_full")
+		}
+		
+		// Apply backpressure: skip processing for a brief period
+		// This gives the analyzer time to catch up
+		select {
+		case <-time.After(10 * time.Millisecond):
 		case <-p.ctx.Done():
 			return
 		}
@@ -247,6 +310,18 @@ func (p *ProcessingPipeline) processLoop() {
 // analyzeLoop processes chunks through the analyzer
 func (p *ProcessingPipeline) analyzeLoop(chunks <-chan AudioData) {
 	defer p.wg.Done()
+	
+	// Panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.Error("panic in analyze loop",
+				"panic", r,
+				"analyzer_id", p.analyzer.ID())
+			if p.metrics != nil {
+				p.metrics.RecordProcessingError("pipeline", p.source.ID(), "analyzer_panic")
+			}
+		}
+	}()
 
 	for {
 		select {
@@ -481,6 +556,14 @@ func validatePipelineConfig(config *ProcessingPipelineConfig) error {
 	}
 
 	// Validate chunk duration
+	if config.Config.ChunkDuration <= 0 {
+		return errors.New(nil).
+			Component(ComponentAudioCore).
+			Category(errors.CategoryValidation).
+			Context("error", "chunk duration must be positive").
+			Context("duration", config.Config.ChunkDuration).
+			Build()
+	}
 	if config.Config.ChunkDuration < 100*time.Millisecond {
 		return errors.New(nil).
 			Component(ComponentAudioCore).
