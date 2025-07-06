@@ -20,7 +20,7 @@ type ProcessingPipeline struct {
 	config         ProcessingConfig
 
 	// Chunk management
-	chunkBuffer *ChunkBuffer
+	chunkBuffer *ChunkBufferV2
 
 	// Capture support
 	captureManager CaptureManager
@@ -73,7 +73,7 @@ func NewProcessingPipeline(config *ProcessingPipelineConfig) *ProcessingPipeline
 	})
 
 	// Create chunk buffer
-	chunkBuffer := NewChunkBuffer(ChunkBufferConfig{
+	chunkBuffer := NewChunkBufferV2(ChunkBufferConfig{
 		ChunkDuration: config.Config.ChunkDuration,
 		Format:        config.Source.GetFormat(),
 		BufferPool:    config.BufferPool,
@@ -333,120 +333,6 @@ func (p *ProcessingPipeline) GetMetrics() map[string]any {
 	}
 }
 
-// ChunkBuffer accumulates audio data into fixed-duration chunks
-type ChunkBuffer struct {
-	chunkDuration  time.Duration
-	format         AudioFormat
-	bufferPool     BufferPool
-	buffer         AudioBuffer
-	currentSize    int
-	targetSize     int
-	overflowBuffer []byte // Buffer to hold overflow data between chunks
-	overflowSize   int    // Actual data size in overflow buffer
-	mu             sync.Mutex
-}
-
-// ChunkBufferConfig holds configuration for chunk buffer
-type ChunkBufferConfig struct {
-	ChunkDuration time.Duration
-	Format        AudioFormat
-	BufferPool    BufferPool
-}
-
-// NewChunkBuffer creates a new chunk buffer
-func NewChunkBuffer(config ChunkBufferConfig) *ChunkBuffer {
-	// Calculate target buffer size
-	bytesPerSecond := config.Format.SampleRate * config.Format.Channels * (config.Format.BitDepth / 8)
-	targetSize := int(float64(bytesPerSecond) * config.ChunkDuration.Seconds())
-
-	return &ChunkBuffer{
-		chunkDuration: config.ChunkDuration,
-		format:        config.Format,
-		bufferPool:    config.BufferPool,
-		targetSize:    targetSize,
-	}
-}
-
-// Add adds audio data to the buffer
-func (c *ChunkBuffer) Add(data *AudioData) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Initialize buffer if needed
-	if c.buffer == nil {
-		c.buffer = c.bufferPool.Get(c.targetSize)
-		c.currentSize = 0
-		
-		// If we have overflow data from previous chunk, add it first
-		if c.overflowSize > 0 {
-			copy(c.buffer.Data(), c.overflowBuffer[:c.overflowSize])
-			c.currentSize = c.overflowSize
-			c.overflowSize = 0
-		}
-	}
-
-	// Copy data to buffer
-	remaining := c.targetSize - c.currentSize
-	toCopy := len(data.Buffer)
-	if toCopy > remaining {
-		toCopy = remaining
-	}
-
-	if toCopy > 0 {
-		copy(c.buffer.Data()[c.currentSize:], data.Buffer[:toCopy])
-		c.currentSize += toCopy
-	}
-
-	// Handle overflow data that spans chunks
-	if len(data.Buffer) > toCopy {
-		// Reuse overflow buffer if possible
-		overflow := data.Buffer[toCopy:]
-		newOverflowSize := len(overflow)
-		
-		// Grow overflow buffer if needed
-		if cap(c.overflowBuffer) < newOverflowSize {
-			c.overflowBuffer = make([]byte, newOverflowSize)
-		}
-		
-		copy(c.overflowBuffer[:newOverflowSize], overflow)
-		c.overflowSize = newOverflowSize
-	}
-}
-
-// HasCompleteChunk returns true if a complete chunk is ready
-func (c *ChunkBuffer) HasCompleteChunk() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.currentSize >= c.targetSize
-}
-
-// GetChunk returns a complete chunk and resets the buffer
-func (c *ChunkBuffer) GetChunk() *AudioData {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.currentSize < c.targetSize {
-		return nil
-	}
-
-	// Create chunk data
-	chunk := &AudioData{
-		Buffer:    c.buffer.Data()[:c.targetSize],
-		Format:    c.format,
-		Timestamp: time.Now().Add(-c.chunkDuration), // Approximate start time
-		Duration:  c.chunkDuration,
-		SourceID:  "", // Will be set by caller
-	}
-
-	// Reset buffer but preserve overflow
-	c.buffer.Release()
-	c.buffer = nil
-	c.currentSize = 0
-	
-	// If we have overflow data, it will be added to the next chunk
-
-	return chunk
-}
 
 // OverlapBuffer handles chunk overlap for continuous processing
 type OverlapBuffer struct {

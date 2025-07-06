@@ -72,7 +72,7 @@ func TestChunkBufferOverflow(t *testing.T) {
 				},
 				BufferPool: pool,
 			}
-			cb := NewChunkBuffer(config)
+			cb := NewChunkBufferV2(config)
 
 			// Track chunks produced
 			var chunks [][]byte
@@ -121,12 +121,11 @@ func TestChunkBufferOverflow(t *testing.T) {
 			}
 
 			// Verify overflow buffer size
-			cb.mu.Lock()
-			overflowSize := cb.overflowSize
-			cb.mu.Unlock()
+			// ChunkBufferV2 uses GetPendingSize() to check remaining data
+			pendingSize := cb.GetPendingSize()
 
-			if overflowSize != tt.expectedOverflow {
-				t.Errorf("expected overflow size %d, got %d", tt.expectedOverflow, overflowSize)
+			if pendingSize != tt.expectedOverflow {
+				t.Errorf("expected overflow size %d, got %d", tt.expectedOverflow, pendingSize)
 			}
 
 			// Verify data integrity by checking patterns
@@ -148,7 +147,7 @@ func TestChunkBufferOverflow(t *testing.T) {
 			}
 
 			// Add overflow data to collected count
-			collectedData += overflowSize
+			collectedData += pendingSize
 
 			// Verify no data loss
 			if collectedData != totalData {
@@ -175,7 +174,7 @@ func TestChunkBufferConcurrency(t *testing.T) {
 		},
 		BufferPool: pool,
 	}
-	cb := NewChunkBuffer(config)
+	cb := NewChunkBufferV2(config)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -255,7 +254,7 @@ func TestChunkBufferReset(t *testing.T) {
 		},
 		BufferPool: pool,
 	}
-	cb := NewChunkBuffer(config)
+	cb := NewChunkBufferV2(config)
 
 	// First chunk with overflow
 	data1 := &AudioData{
@@ -271,11 +270,10 @@ func TestChunkBufferReset(t *testing.T) {
 	}
 
 	// Verify overflow is preserved
-	cb.mu.Lock()
-	if cb.overflowSize != 50 {
-		t.Errorf("expected 50 bytes overflow, got %d", cb.overflowSize)
+	pendingSize := cb.GetPendingSize()
+	if pendingSize != 50 {
+		t.Errorf("expected 50 bytes overflow, got %d", pendingSize)
 	}
-	cb.mu.Unlock()
 
 	// Add more data
 	data2 := &AudioData{
@@ -295,11 +293,10 @@ func TestChunkBufferReset(t *testing.T) {
 	}
 
 	// Verify second overflow
-	cb.mu.Lock()
-	if cb.overflowSize != 10 {
-		t.Errorf("expected 10 bytes overflow, got %d", cb.overflowSize)
+	pendingSize2 := cb.GetPendingSize()
+	if pendingSize2 != 10 {
+		t.Errorf("expected 10 bytes overflow, got %d", pendingSize2)
 	}
-	cb.mu.Unlock()
 }
 
 // mockBufferPool for testing

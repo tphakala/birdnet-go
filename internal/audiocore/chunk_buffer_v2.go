@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// ChunkBufferConfig holds configuration for chunk buffer
+type ChunkBufferConfig struct {
+	ChunkDuration time.Duration
+	Format        AudioFormat
+	BufferPool    BufferPool
+}
+
 // ChunkBufferV2 accumulates audio data into fixed-duration chunks with improved overflow handling
 type ChunkBufferV2 struct {
 	chunkDuration   time.Duration
