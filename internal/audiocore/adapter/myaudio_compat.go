@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +31,42 @@ type MyAudioCompatAdapter struct {
 	outputChan     chan myaudio.UnifiedAudioData
 	quitChan       chan struct{}
 	restartChan    chan struct{}
+}
+
+// generateSourceID creates a unique, human-readable identifier for an audio source
+// Format: {type}_{sanitized_device_name}_{index}
+// Examples: soundcard_usb_audio_device_0, soundcard_microphone_array_1
+func generateSourceID(sourceType, deviceName string, index int) string {
+	// Sanitize the device name to make it safe for use as an identifier
+	sanitized := sanitizeDeviceName(deviceName)
+	
+	// Generate the ID with type, sanitized name, and index
+	return fmt.Sprintf("%s_%s_%d", sourceType, sanitized, index)
+}
+
+// sanitizeDeviceName converts a device name to a safe identifier
+func sanitizeDeviceName(deviceName string) string {
+	// Convert to lowercase
+	sanitized := strings.ToLower(deviceName)
+	
+	// Replace spaces and special characters with underscores
+	reg := regexp.MustCompile(`[^a-z0-9]+`)
+	sanitized = reg.ReplaceAllString(sanitized, "_")
+	
+	// Remove leading/trailing underscores
+	sanitized = strings.Trim(sanitized, "_")
+	
+	// Handle empty or very short names
+	if sanitized == "" || len(sanitized) < 3 {
+		sanitized = "device"
+	}
+	
+	// Truncate if too long
+	if len(sanitized) > 30 {
+		sanitized = sanitized[:30]
+	}
+	
+	return sanitized
 }
 
 // NewMyAudioCompatAdapter creates a new adapter that implements myaudio.CaptureAudio interface using audiocore
@@ -128,12 +166,21 @@ func (a *MyAudioCompatAdapter) setupAudioSources() error {
 		return nil
 	}
 
+	// Generate unique source ID based on device name
+	deviceName := a.settings.Realtime.Audio.Source
+	if deviceName == "" {
+		deviceName = "default"
+	}
+	
+	// Generate human-readable unique ID
+	sourceID := generateSourceID("soundcard", deviceName, 0)
+	
 	// Set up soundcard source
 	sourceConfig := &audiocore.SourceConfig{
-		ID:     "soundcard",
+		ID:     sourceID,
 		Name:   "System Audio",
 		Type:   "soundcard",
-		Device: a.settings.Realtime.Audio.Source,
+		Device: deviceName,
 		Format: audiocore.AudioFormat{
 			SampleRate: 48000,
 			Channels:   1,
@@ -153,6 +200,16 @@ func (a *MyAudioCompatAdapter) setupAudioSources() error {
 	// Add source to manager
 	if err := a.manager.AddSource(source); err != nil {
 		return err
+	}
+
+	// Allocate analysis buffer for this source (myaudio compatibility)
+	// Use 3 seconds of audio data as buffer capacity (same as myaudio default)
+	bufferCapacity := sourceConfig.Format.SampleRate * (sourceConfig.Format.BitDepth / 8) * sourceConfig.Format.Channels * 3
+	if err := myaudio.AllocateAnalysisBuffer(bufferCapacity, sourceID); err != nil {
+		log.Printf("Failed to allocate analysis buffer for source %s: %v", sourceID, err)
+		// Continue even if buffer allocation fails - this is not fatal
+	} else {
+		log.Printf("Analysis buffer allocated for source: %s", sourceID)
 	}
 
 	// Set up processor chain if needed
@@ -194,8 +251,8 @@ func (a *MyAudioCompatAdapter) setupAudioSources() error {
 			},
 		}
 
-		if err := a.captureManager.EnableCapture(sourceConfig.ID, captureConfig); err != nil {
-			log.Printf("Failed to enable capture for source %s: %v", sourceConfig.ID, err)
+		if err := a.captureManager.EnableCapture(sourceID, captureConfig); err != nil {
+			log.Printf("Failed to enable capture for source %s: %v", sourceID, err)
 		}
 	}
 
@@ -227,7 +284,8 @@ func (a *MyAudioCompatAdapter) processAudioData() {
 
 			// Write to analysis buffer (myaudio compatibility)
 			if err := myaudio.WriteToAnalysisBuffer(audioData.SourceID, audioData.Buffer); err != nil {
-				log.Printf("Error writing to analysis buffer: %v", err)
+				log.Printf("Error writing to analysis buffer for source %s: %v", audioData.SourceID, err)
+				// Continue processing even if analysis buffer write fails
 			}
 
 			// Write to audiocore capture buffer if capture is enabled
