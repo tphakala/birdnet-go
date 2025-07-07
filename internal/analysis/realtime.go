@@ -46,6 +46,9 @@ var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 // soundLevelChan is a channel to send sound level updates
 var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
 
+// Pre-compiled regex for device name sanitization
+var deviceNameRegex = regexp.MustCompile(`[^a-z0-9]+`)
+
 // AudioDemuxManager manages the lifecycle of audio demultiplexing goroutines
 type AudioDemuxManager struct {
 	doneChan chan struct{}
@@ -1056,9 +1059,9 @@ func startAudioCoreAnalysis(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 		Type:              "birdnet",
 		ModelPath:         settings.BirdNET.ModelPath, // Empty means use embedded model
 		Threshold:         float32(settings.BirdNET.Threshold),
-		ChunkDuration:     3 * time.Second,
+		ChunkDuration:     conf.DefaultChunkDuration * time.Second,
 		OverlapDuration:   time.Duration(settings.BirdNET.Overlap * float64(time.Second)),
-		ProcessingTimeout: 10 * time.Second,
+		ProcessingTimeout: conf.DefaultProcessingTimeout * time.Second,
 		ExtraConfig: map[string]any{
 			"sensitivity":   settings.BirdNET.Sensitivity,
 			"longitude":     settings.BirdNET.Longitude,
@@ -1163,7 +1166,7 @@ func setupAudioCoreSources(manager audiocore.AudioManager, captureManager captur
 		BufferSize: 4096,
 		Gain:       1.0,
 		Processing: audiocore.ProcessingConfig{
-			ChunkDuration:   3 * time.Second,
+			ChunkDuration:   conf.DefaultChunkDuration * time.Second,
 			OverlapPercent:  settings.BirdNET.Overlap,
 			BufferAhead:     2,
 			Priority:        1,
@@ -1230,8 +1233,7 @@ func sanitizeAudioCoreDeviceName(deviceName string) string {
 	sanitized := strings.ToLower(deviceName)
 	
 	// Replace spaces and special characters with underscores
-	reg := regexp.MustCompile(`[^a-z0-9]+`)
-	sanitized = reg.ReplaceAllString(sanitized, "_")
+	sanitized = deviceNameRegex.ReplaceAllString(sanitized, "_")
 	
 	// Remove leading/trailing underscores
 	sanitized = strings.Trim(sanitized, "_")

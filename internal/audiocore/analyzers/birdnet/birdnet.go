@@ -2,6 +2,7 @@ package birdnet
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -51,6 +52,18 @@ func NewBirdNETAnalyzer(id string, config audiocore.AnalyzerConfig, bufferPool a
 		"analyzer_id", id)
 
 	// Note: Empty ModelPath is allowed - it means use embedded model
+	
+	// Validate threshold range
+	if config.Threshold < 0.0 || config.Threshold > 1.0 {
+		return nil, errors.New(fmt.Errorf("invalid threshold value: %f", config.Threshold)).
+			Component(audiocore.ComponentAudioCore).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_threshold").
+			Context("threshold", config.Threshold).
+			Context("analyzer_id", id).
+			Context("valid_range", "0.0-1.0").
+			Build()
+	}
 
 	// Extract additional configuration
 	labelsPath, _ := config.ExtraConfig["labelPath"].(string)
@@ -88,6 +101,8 @@ func NewBirdNETAnalyzer(id string, config audiocore.AnalyzerConfig, bufferPool a
 			Category(errors.CategoryConfiguration).
 			Context("operation", "load_model").
 			Context("model_path", config.ModelPath).
+			Context("analyzer_id", id).
+			Context("analyzer_type", config.Type).
 			Build()
 	}
 
@@ -358,9 +373,3 @@ func getBoolFromExtraConfig(config map[string]any, key string, defaultValue bool
 	return defaultValue
 }
 
-func getFloat64FromExtraConfig(config map[string]any, key string, defaultValue float64) float64 {
-	if v, ok := config[key].(float64); ok {
-		return v
-	}
-	return defaultValue
-}

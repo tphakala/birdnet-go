@@ -12,4 +12,8 @@ const (
 
 	// BufferSize is the size of the audio buffer in bytes, rounded up to the nearest 2048
 	BufferSize = ((SampleRate*NumChannels*CaptureLength*BitDepth/8 + 2047) / 2048) * 2048
+
+	// AudioCore processing constants
+	DefaultChunkDuration     = 3  // Default chunk duration in seconds
+	DefaultProcessingTimeout = 10 // Default processing timeout in seconds
 )
