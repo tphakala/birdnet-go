@@ -206,10 +206,25 @@ func (b *bufferAdapter) Close() error {
 
 // ToAudioFormat converts CircularBufferConfig to AudioFormat
 func (c CircularBufferConfig) ToAudioFormat() audiocore.AudioFormat {
+	// Dynamically determine encoding based on bit depth
+	var encoding string
+	switch c.BitDepth {
+	case 8:
+		encoding = "pcm_u8"
+	case 16:
+		encoding = "pcm_s16le"
+	case 24:
+		encoding = "pcm_s24le"
+	case 32:
+		encoding = "pcm_s32le"
+	default:
+		encoding = "pcm_s16le" // Fallback to 16-bit if unknown
+	}
+
 	return audiocore.AudioFormat{
 		SampleRate: c.SampleRate,
 		Channels:   c.Channels,
 		BitDepth:   c.BitDepth,
-		Encoding:   "pcm_s16le", // Default encoding
+		Encoding:   encoding,
 	}
 }

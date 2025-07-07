@@ -126,12 +126,7 @@ func TestExportManager_WriteAndSaveClip(t *testing.T) {
 }
 
 func TestExportManager_ExportClip(t *testing.T) {
-	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "export_manager_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	tempDir := t.TempDir()
 
 	// Setup
 	bufferPool := audiocore.NewBufferPool(audiocore.BufferPoolConfig{
@@ -165,7 +160,7 @@ func TestExportManager_ExportClip(t *testing.T) {
 	}
 
 	sourceID := "test_source"
-	err = manager.EnableCapture(sourceID, config)
+	err := manager.EnableCapture(sourceID, config)
 	if err != nil {
 		t.Fatalf("EnableCapture failed: %v", err)
 	}

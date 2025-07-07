@@ -3,6 +3,7 @@ package detection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -266,7 +267,7 @@ func TestHandlerChain_ConcurrentAccess(t *testing.T) {
 
 	// Add some handlers
 	for i := 0; i < 5; i++ {
-		id := string(rune('a' + i))
+		id := fmt.Sprintf("handler_%d", i)
 		handler := &mockHandler{id: id, name: id}
 		_ = chain.AddHandler(handler)
 	}
@@ -299,7 +300,7 @@ func BenchmarkHandlerChain_HandleAnalysisResult(b *testing.B) {
 
 	// Add multiple handlers
 	for i := 0; i < 5; i++ {
-		id := string(rune('a' + i))
+		id := fmt.Sprintf("handler_%d", i)
 		handler := &mockHandler{id: id, name: id}
 		_ = chain.AddHandler(handler)
 	}
