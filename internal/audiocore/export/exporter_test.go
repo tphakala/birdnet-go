@@ -10,12 +10,7 @@ import (
 )
 
 func TestManager_Export(t *testing.T) {
-	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "export_manager_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	tempDir := t.TempDir()
 
 	// Create manager with WAV exporter
 	manager := NewManager()
@@ -180,12 +175,7 @@ func TestDefaultManager(t *testing.T) {
 }
 
 func TestManager_ExportClip(t *testing.T) {
-	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "export_clip_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	tempDir := t.TempDir()
 
 	manager := NewManager()
 	manager.RegisterExporter(FormatWAV, NewWAVExporter())
@@ -234,11 +224,7 @@ func TestManager_ExportClip(t *testing.T) {
 
 func BenchmarkManager_Export_WAV(b *testing.B) {
 	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "export_benchmark")
-	if err != nil {
-		b.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	tempDir := b.TempDir()
 
 	manager := DefaultManager("")
 
