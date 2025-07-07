@@ -351,10 +351,12 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 	if settings.Realtime.Audio.UseAudioCore {
 		// Use new audiocore implementation
 		log.Println("🎵 Using new audiocore audio capture system")
-		// Start audiocore in a goroutine but capture the adapter first
-		audioCoreAdapter := adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, unifiedAudioChan)
+		// Create adapter and get capture manager before starting goroutine
+		audioCoreAdapter := adapter.NewMyAudioCompatAdapter(settings)
 		// Pass the capture manager to the processor
 		proc.SetCaptureManager(audioCoreAdapter.GetCaptureManager())
+		// Start audio capture in goroutine
+		go audioCoreAdapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
 	} else {
 		// Use existing myaudio implementation
 		go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)

@@ -364,6 +364,8 @@ func (s *SoundLevelAnalyzer) Process(audioData []byte) *myaudio.SoundLevelData {
 }
 
 // StartAudioCoreCapture is the entry point that replaces myaudio.CaptureAudio when UseAudioCore is enabled
+// StartAudioCoreCapture is deprecated. Use NewMyAudioCompatAdapter directly.
+// Kept for backward compatibility.
 func StartAudioCoreCapture(
 	settings *conf.Settings,
 	wg *sync.WaitGroup,

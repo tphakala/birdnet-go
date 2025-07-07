@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/audiocore/export"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -21,6 +22,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
+
+// CaptureManager defines the interface for audio capture and export operations
+type CaptureManager interface {
+	ExportClip(ctx context.Context, sourceID string, triggerTime time.Time, duration time.Duration) (*export.ExportResult, error)
+	IsCaptureEnabled(sourceID string) bool
+}
 
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
@@ -57,7 +64,7 @@ type Processor struct {
 	backupMutex     sync.RWMutex
 
 	// AudioCore capture manager for audio export
-	captureManager      interface{} // Use interface{} to avoid import cycle
+	captureManager      CaptureManager
 	captureManagerMutex sync.RWMutex
 }
 
@@ -756,14 +763,14 @@ func (p *Processor) GetBackupScheduler() interface{} {
 }
 
 // SetCaptureManager safely sets the audiocore capture manager
-func (p *Processor) SetCaptureManager(captureManager interface{}) {
+func (p *Processor) SetCaptureManager(captureManager CaptureManager) {
 	p.captureManagerMutex.Lock()
 	defer p.captureManagerMutex.Unlock()
 	p.captureManager = captureManager
 }
 
 // GetCaptureManager safely returns the audiocore capture manager
-func (p *Processor) GetCaptureManager() interface{} {
+func (p *Processor) GetCaptureManager() CaptureManager {
 	p.captureManagerMutex.RLock()
 	defer p.captureManagerMutex.RUnlock()
 	return p.captureManager

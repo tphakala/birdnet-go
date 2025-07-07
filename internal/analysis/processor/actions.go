@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
-	"github.com/tphakala/birdnet-go/internal/audiocore/capture"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -204,19 +203,16 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 			// Use audiocore export functionality
 			captureManager := a.Processor.GetCaptureManager()
 			if captureManager == nil {
-				log.Printf("❌ AudioCore capture manager not available for export")
+				log.Printf("❌ AudioCore capture manager not available for export (audiocore may not be initialized)")
 				return fmt.Errorf("audiocore capture manager not initialized")
 			}
 			
-			cm, ok := captureManager.(capture.Manager)
-			if !ok {
-				log.Printf("❌ AudioCore capture manager type assertion failed")
-				return fmt.Errorf("invalid capture manager type")
-			}
+			// Create context with timeout for export operation
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 			
-			ctx := context.Background()
 			// Export clip with 15 second duration
-			exportResult, err := cm.ExportClip(ctx, a.Note.Source, a.Note.BeginTime, 15*time.Second)
+			exportResult, err := captureManager.ExportClip(ctx, a.Note.Source, a.Note.BeginTime, 15*time.Second)
 			if err != nil {
 				log.Printf("❌ Failed to export audio clip via audiocore: %v", err)
 				return err
