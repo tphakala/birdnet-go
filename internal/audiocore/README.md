@@ -143,9 +143,9 @@ Each audio source has its own dedicated processing pipeline:
 │                              │                                                 │
 │                              ▼                                                 │
 │                     ┌─────────────┐                                            │
-│                     │ Capture     │                                            │
-│                     │ Manager     │                                            │
-│                     │ (Clip Save) │                                            │
+│                     │ Capture     │◄────── Processor calls                     │
+│                     │ Manager     │        ExportClip() when                   │
+│                     │ (Export)    │        detection saved                     │
 │                     │            │                                            │
 │                     └─────────────┘                                            │
 │                                                                                 │
@@ -256,7 +256,7 @@ type AudioData struct {
 4. **Processor Chain** - Apply gain, EQ, filters, etc.
 5. **Analysis** - Send to BirdNET or other ML models
 
-### 3. Result Handling
+### 3. Result Handling & Export Integration
 
 AudioCore integrates seamlessly with the existing BirdNET-Go results processing pipeline by publishing detection results to the same `birdnet.ResultsQueue` used by the legacy myaudio system.
 
@@ -286,6 +286,12 @@ type Detection struct {
 - Results are published to `birdnet.ResultsQueue` for downstream processing
 - Full compatibility maintained with existing database saving and notification systems
 - PCM audio data ownership transfers to the results queue for clip generation
+
+**Audio Export Integration (New):**
+- The processor directly calls `captureManager.ExportClip()` when saving detections
+- No longer uses internal detection handlers for exports
+- Clean separation: processor decides when to export, audiocore handles how
+- Zero-copy audio chunk transfer from audiocore to processor
 
 ## Key Features
 
@@ -480,7 +486,7 @@ Based on testing and benchmarks:
 - **Soundcard Sources** - USB microphone capture via PortAudio
 - **Processing Pipeline** - Chunking, overlap, processor chains
 - **BirdNET Integration** - Full analyzer implementation with thread safety
-- **Buffer Management** - Multi-tier pooling with reference counting
+- **Buffer Management** - Multi-tier pooling with reference counting (strategically not used for audio chunks)
 - **FFmpeg Management** - Robust process lifecycle for RTSP streams
 - **Gain Control** - Per-source audio level adjustment
 - **Health Monitoring** - Adaptive backpressure and error recovery
@@ -488,15 +494,16 @@ Based on testing and benchmarks:
 - **Compatibility Layer** - Adapter for existing myaudio interface
 - **Results Integration** - Direct publishing to birdnet.ResultsQueue
 - **Simplified Data Flow** - Streamlined species string handling
+- **Audio Export** - Full WAV/MP3/FLAC export via capture manager
+- **Processor Integration** - Direct export access from processor actions
 
 ### 🔄 In Progress
 - **RTSP Source Integration** - Connecting FFmpeg manager to source factory
-- **Testing & Validation** - Comprehensive test coverage (integration tests for queue functionality completed)
+- **Testing & Validation** - Expanding test coverage
 
 ### ❌ Not Yet Implemented
 - **File Sources** - Audio file input support
-- **Advanced Processors** - EQ, noise reduction, filters
-- **Audio Export** - WAV/MP3/FLAC export functionality
+- **Advanced Processors** - EQ, noise reduction, filters beyond gain
 - **Plugin System** - Dynamic loading of custom processors/analyzers
 
 ## Recent Architectural Improvements
@@ -514,10 +521,17 @@ Based on integration requirements, the audiocore package underwent significant s
    - Merged `processAnalysisResult` and `sendToResultsQueue` methods
    - Maintains full compatibility with existing processor expectations
 
-3. **Benefits of Simplification**
-   - Reduced code complexity and maintenance burden
-   - Better performance with fewer allocations
+3. **Processor-Driven Export Architecture**
+   - Removed internal `CaptureHandler` for detection exports
+   - Processor directly calls `captureManager.ExportClip()` when needed
+   - Eliminated duplicate export logic and dual buffer writing
+   - Clean separation of concerns: processor controls when, audiocore controls how
+
+4. **Benefits of Simplification**
+   - Reduced code complexity and maintenance burden (-630 lines)
+   - Better performance with fewer allocations and no duplicate buffering
    - Cleaner data flow from analyzer to database
+   - Single export path improves reliability and debugging
    - No changes required to downstream systems
 
 ## Migration from MyAudio
@@ -527,11 +541,13 @@ The package includes a compatibility adapter (`adapter/myaudio_compat.go`) that 
 
 ```go
 // Enable audiocore in configuration
-settings.Audio.UseNewAudioCore = true
+settings.Audio.UseAudioCore = true
 
 // Use compatibility adapter
-if settings.Audio.UseNewAudioCore {
-    adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, audioChan)
+if settings.Audio.UseAudioCore {
+    audioCoreAdapter := adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, audioChan)
+    // Pass capture manager to processor for export functionality
+    processor.SetCaptureManager(audioCoreAdapter.GetCaptureManager())
 } else {
     myaudio.CaptureAudio(settings, wg, quitChan, restartChan, audioChan)
 }
@@ -546,10 +562,11 @@ if settings.Audio.UseNewAudioCore {
 
 ### Migration Strategy
 1. **Parallel Development** ✅ - New package developed alongside existing one
-2. **Feature Flag** ✅ - `UseNewAudioCore` config option for switching
+2. **Feature Flag** ✅ - `UseAudioCore` config option for switching
 3. **Compatibility Layer** ✅ - Adapter ensures existing code works
-4. **Gradual Rollout** 🔄 - Test with subset of users before full migration
-5. **Documentation** 📝 - This comprehensive guide for migration
+4. **Processor Integration** ✅ - Export functionality integrated with processor
+5. **Gradual Rollout** 🔄 - Test with subset of users before full migration
+6. **Documentation** ✅ - This comprehensive guide for migration
 
 ## Buffer Pool Analysis
 

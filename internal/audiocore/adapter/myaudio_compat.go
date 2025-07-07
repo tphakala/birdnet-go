@@ -72,6 +72,11 @@ func NewMyAudioCompatAdapter(settings *conf.Settings) *MyAudioCompatAdapter {
 	}
 }
 
+// GetCaptureManager returns the capture manager instance
+func (a *MyAudioCompatAdapter) GetCaptureManager() capture.Manager {
+	return a.captureManager
+}
+
 // CaptureAudio starts audio capture using audiocore, compatible with myaudio.CaptureAudio
 func (a *MyAudioCompatAdapter) CaptureAudio(
 	settings *conf.Settings,
@@ -230,12 +235,9 @@ func (a *MyAudioCompatAdapter) processAudioData() {
 				if err := a.captureManager.Write(audioData.SourceID, &audioData); err != nil {
 					log.Printf("Error writing to audiocore capture buffer: %v", err)
 				}
-			} else {
-				// Fall back to myaudio capture buffer for compatibility
-				if err := myaudio.WriteToCaptureBuffer(audioData.SourceID, audioData.Buffer); err != nil {
-					log.Printf("Error writing to capture buffer: %v", err)
-				}
 			}
+			// Note: When audiocore is enabled, we only use audiocore's capture buffers
+			// This eliminates duplicate buffering and reduces memory usage
 
 			// Calculate audio level
 			audioLevel := a.calculateAudioLevel(audioData.Buffer)
@@ -362,13 +364,16 @@ func (s *SoundLevelAnalyzer) Process(audioData []byte) *myaudio.SoundLevelData {
 }
 
 // StartAudioCoreCapture is the entry point that replaces myaudio.CaptureAudio when UseAudioCore is enabled
+// StartAudioCoreCapture is deprecated. Use NewMyAudioCompatAdapter directly.
+// Kept for backward compatibility.
 func StartAudioCoreCapture(
 	settings *conf.Settings,
 	wg *sync.WaitGroup,
 	quitChan chan struct{},
 	restartChan chan struct{},
 	unifiedAudioChan chan myaudio.UnifiedAudioData,
-) {
+) *MyAudioCompatAdapter {
 	adapter := NewMyAudioCompatAdapter(settings)
 	adapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+	return adapter
 }

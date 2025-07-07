@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/audiocore/export"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -21,6 +22,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
+
+// CaptureManager defines the interface for audio capture and export operations
+type CaptureManager interface {
+	ExportClip(ctx context.Context, sourceID string, triggerTime time.Time, duration time.Duration) (*export.ExportResult, error)
+	IsCaptureEnabled(sourceID string) bool
+}
 
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
@@ -55,6 +62,10 @@ type Processor struct {
 	backupManager   interface{} // Use interface{} to avoid import cycle
 	backupScheduler interface{} // Use interface{} to avoid import cycle
 	backupMutex     sync.RWMutex
+
+	// AudioCore capture manager for audio export
+	captureManager      CaptureManager
+	captureManagerMutex sync.RWMutex
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -566,7 +577,8 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			EventTracker: p.GetEventTracker(),
 			Note:         detection.Note,
 			Results:      detection.Results,
-			Ds:           p.Ds})
+			Ds:           p.Ds,
+			Processor:    p})
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -748,6 +760,20 @@ func (p *Processor) GetBackupScheduler() interface{} {
 	p.backupMutex.RLock()
 	defer p.backupMutex.RUnlock()
 	return p.backupScheduler
+}
+
+// SetCaptureManager safely sets the audiocore capture manager
+func (p *Processor) SetCaptureManager(captureManager CaptureManager) {
+	p.captureManagerMutex.Lock()
+	defer p.captureManagerMutex.Unlock()
+	p.captureManager = captureManager
+}
+
+// GetCaptureManager safely returns the audiocore capture manager
+func (p *Processor) GetCaptureManager() CaptureManager {
+	p.captureManagerMutex.RLock()
+	defer p.captureManagerMutex.RUnlock()
+	return p.captureManager
 }
 
 // Shutdown gracefully stops all processor components

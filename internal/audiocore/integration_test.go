@@ -9,7 +9,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/capture"
-	"github.com/tphakala/birdnet-go/internal/audiocore/detection"
 	"github.com/tphakala/birdnet-go/internal/audiocore/export"
 )
 
@@ -97,40 +96,33 @@ func TestIntegration_CaptureAndExport(t *testing.T) {
 		}
 	}
 
-	// Create detection handler chain
-	handlerChain := detection.NewHandlerChain()
-
-	// Add capture handler to the chain
-	captureHandler := detection.NewCaptureHandler("capture-handler", captureManager, 0.7)
-	_ = handlerChain.AddHandler(captureHandler)
-
-	// Simulate detection results
+	// Test export functionality directly (without CaptureHandler)
+	// This simulates what the processor would do
 	detectionTime := baseTime.Add(2500 * time.Millisecond) // Middle of our audio data
-	analysisResult := &detection.AnalysisResult{
-		SourceID:  sourceID,
-		Timestamp: detectionTime,
-		Duration:  1 * time.Second,
-		AnalyzerID: "test-analyzer",
-		Detections: []detection.Detection{
-			{
-				SourceID:   sourceID,
-				Timestamp:  detectionTime,
-				Species:    "Test Bird",
-				Confidence: 0.95,
-				StartTime:  0.0,
-				EndTime:    1.0,
-			},
-		},
-	}
-
-	// Process detection through handler chain
+	
+	// Export clip directly using capture manager
 	ctx := context.Background()
-	err = handlerChain.HandleAnalysisResult(ctx, analysisResult)
+	exportResult, err := captureManager.ExportClip(ctx, sourceID, detectionTime, 3*time.Second)
 	if err != nil {
-		t.Fatalf("Failed to process detection: %v", err)
+		t.Fatalf("Failed to export clip: %v", err)
 	}
 
 	// Verify that a clip was exported
+	if exportResult.FilePath == "" {
+		t.Fatal("Export result has empty file path")
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(exportResult.FilePath); os.IsNotExist(err) {
+		t.Fatalf("Exported file does not exist: %s", exportResult.FilePath)
+	}
+
+	// Verify export result metadata
+	if exportResult.Metadata.SourceID != sourceID {
+		t.Errorf("Expected source ID %s, got %s", sourceID, exportResult.Metadata.SourceID)
+	}
+
+	// List all exported files
 	files, err := filepath.Glob(filepath.Join(tempDir, "*.wav"))
 	if err != nil {
 		t.Fatalf("Failed to list exported files: %v", err)
@@ -229,48 +221,40 @@ func TestIntegration_MultipleSources(t *testing.T) {
 		}
 	}
 
-	// Create handler chain
-	handlerChain := detection.NewHandlerChain()
-	captureHandler := detection.NewCaptureHandler("capture-handler", captureManager, 0.6)
-	_ = handlerChain.AddHandler(captureHandler)
-
-	// Process detections for multiple sources
+	// Test direct export for multiple sources (without CaptureHandler)
 	ctx := context.Background()
+	exportedFiles := make(map[string]string)
+	
 	for i, sourceID := range sources {
-		analysisResult := &detection.AnalysisResult{
-			SourceID:  sourceID,
-			Timestamp: baseTime.Add(time.Duration(i*100) * time.Millisecond),
-			Duration:  500 * time.Millisecond,
-			AnalyzerID: "test-analyzer",
-			Detections: []detection.Detection{
-				{
-					SourceID:   sourceID,
-					Timestamp:  baseTime.Add(time.Duration(i*100) * time.Millisecond),
-					Species:    "Test Bird " + sourceID,
-					Confidence: float32(0.8 + float64(i)*0.05),
-					StartTime:  0.0,
-					EndTime:    0.5,
-				},
-			},
-		}
-
-		err = handlerChain.HandleAnalysisResult(ctx, analysisResult)
+		detectionTime := baseTime.Add(time.Duration(i*100) * time.Millisecond)
+		
+		// Export clip directly
+		exportResult, err := captureManager.ExportClip(ctx, sourceID, detectionTime, 2*time.Second)
 		if err != nil {
-			t.Fatalf("Failed to process detections: %v", err)
+			t.Fatalf("Failed to export clip for %s: %v", sourceID, err)
+		}
+		
+		// Store the exported file path
+		exportedFiles[sourceID] = exportResult.FilePath
+		
+		// Verify file exists
+		if _, err := os.Stat(exportResult.FilePath); os.IsNotExist(err) {
+			t.Errorf("Exported file does not exist for %s: %s", sourceID, exportResult.FilePath)
 		}
 	}
 
-	// Verify clips were exported for each source
-	for _, sourceID := range sources {
-		pattern := filepath.Join(tempDir, sourceID+"_detection_*.wav")
-		files, err := filepath.Glob(pattern)
-		if err != nil {
-			t.Errorf("Failed to glob files for %s: %v", sourceID, err)
+	// Verify we have exports for each source
+	if len(exportedFiles) != len(sources) {
+		t.Errorf("Expected %d exported files, got %d", len(sources), len(exportedFiles))
+	}
+	
+	// Verify each source has a unique file
+	uniquePaths := make(map[string]bool)
+	for sourceID, path := range exportedFiles {
+		if uniquePaths[path] {
+			t.Errorf("Duplicate export path for source %s: %s", sourceID, path)
 		}
-
-		if len(files) != 1 {
-			t.Errorf("Expected 1 file for %s, found %d", sourceID, len(files))
-		}
+		uniquePaths[path] = true
 	}
 
 	// Clean up
@@ -335,48 +319,29 @@ func TestIntegration_ConcurrentDetections(t *testing.T) {
 		t.Fatalf("Failed to write audio: %v", err)
 	}
 
-	// Create handler
-	handlerChain := detection.NewHandlerChain()
-	captureHandler := detection.NewCaptureHandler("capture-handler", captureManager, 0.5)
-	_ = handlerChain.AddHandler(captureHandler)
-
-	// Process multiple detections concurrently
+	// Test concurrent exports directly (without CaptureHandler)
 	done := make(chan bool)
 	detectionCount := 5
+	ctx := context.Background()
 
+	// Process multiple exports concurrently
 	for i := 0; i < detectionCount; i++ {
 		go func(id int) {
 			timestamp := time.Now().Add(time.Duration(id) * time.Second)
-			analysisResult := &detection.AnalysisResult{
-				SourceID:  sourceID,
-				Timestamp: timestamp,
-				Duration:  500 * time.Millisecond,
-				AnalyzerID: "test-analyzer",
-				Detections: []detection.Detection{
-					{
-						SourceID:   sourceID,
-						Timestamp:  timestamp,
-						Species:    "Concurrent Bird",
-						Confidence: 0.9,
-						StartTime:  float64(id),
-						EndTime:    float64(id) + 0.5,
-					},
-				},
+			
+			// Export clip directly
+			_, err := captureManager.ExportClip(ctx, sourceID, timestamp, 1*time.Second)
+			if err != nil {
+				t.Errorf("Failed to export clip %d: %v", id, err)
 			}
-
-			ctx := context.Background()
-			_ = handlerChain.HandleAnalysisResult(ctx, analysisResult)
 			done <- true
 		}(i)
 	}
 
-	// Wait for all detections to be processed
+	// Wait for all exports to complete
 	for i := 0; i < detectionCount; i++ {
 		<-done
 	}
-
-	// Give some time for exports to complete
-	time.Sleep(100 * time.Millisecond)
 
 	// Verify exports
 	files, err := filepath.Glob(filepath.Join(tempDir, "*.wav"))
