@@ -252,6 +252,9 @@ type AudioManager interface {
 	// SetCaptureManager sets the capture manager for audio clip saving
 	SetCaptureManager(captureManager CaptureManager)
 
+	// SetAnalyzerManager sets the analyzer manager for the audio manager
+	SetAnalyzerManager(analyzerManager AnalyzerManager)
+
 	// Start begins processing audio from all sources
 	Start(ctx context.Context) error
 

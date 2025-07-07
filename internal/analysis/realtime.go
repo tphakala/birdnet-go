@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -15,7 +17,11 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
-	"github.com/tphakala/birdnet-go/internal/audiocore/adapter"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	audiocoreanalyzer "github.com/tphakala/birdnet-go/internal/audiocore/analyzers/birdnet"
+	"github.com/tphakala/birdnet-go/internal/audiocore/capture"
+	"github.com/tphakala/birdnet-go/internal/audiocore/export"
+	"github.com/tphakala/birdnet-go/internal/audiocore/sources"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -125,11 +131,14 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
-	// Initialize audio sources
-	sources, err := initializeAudioSources(settings)
-	if err != nil {
-		// Non-fatal error, continue with available sources
-		log.Printf("⚠️  Audio source initialization warning: %v", err)
+	// Initialize audio sources (only needed for myaudio, not audiocore)
+	if !settings.Realtime.Audio.UseAudioCore {
+		audioSources, err := initializeAudioSources(settings)
+		if err != nil {
+			// Non-fatal error, continue with available sources
+			log.Printf("⚠️  Audio source initialization warning: %v", err)
+		}
+		_ = audioSources // Silence unused variable warning
 	}
 
 	// Queue is now initialized at package level in birdnet package
@@ -185,11 +194,16 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize the buffer manager
 	bufferManager := NewBufferManager(bn, quitChan, &wg)
 
-	// Start buffer monitors for each audio source only if we have active sources
-	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
-		bufferManager.UpdateMonitors(sources)
-	} else {
-		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+	// Start buffer monitors for each audio source only if we have active sources (myaudio only)
+	if !settings.Realtime.Audio.UseAudioCore {
+		if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
+			audioSources, err := initializeAudioSources(settings)
+			if err == nil {
+				bufferManager.UpdateMonitors(audioSources)
+			}
+		} else {
+			log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+		}
 	}
 
 	// start audio capture
@@ -349,14 +363,9 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 
 	// waitgroup is managed within CaptureAudio
 	if settings.Realtime.Audio.UseAudioCore {
-		// Use new audiocore implementation
+		// Use new audiocore implementation directly
 		log.Println("🎵 Using new audiocore audio capture system")
-		// Create adapter and get capture manager before starting goroutine
-		audioCoreAdapter := adapter.NewMyAudioCompatAdapter(settings)
-		// Pass the capture manager to the processor
-		proc.SetCaptureManager(audioCoreAdapter.GetCaptureManager())
-		// Start audio capture in goroutine
-		go audioCoreAdapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+		go startAudioCoreAnalysis(settings, wg, quitChan, restartChan, proc)
 	} else {
 		// Use existing myaudio implementation
 		go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
@@ -788,16 +797,16 @@ func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, 
 }
 
 // initializeBuffers handles initialization of all audio-related buffers
-func initializeBuffers(sources []string) error {
+func initializeBuffers(audioSources []string) error {
 	var initErrors []string
 
 	// Initialize analysis buffers
-	if err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources); err != nil { // 3x buffer size to avoid underruns
+	if err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, audioSources); err != nil { // 3x buffer size to avoid underruns
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize analysis buffers: %v", err))
 	}
 
 	// Initialize capture buffers
-	if err := myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
+	if err := myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, audioSources); err != nil {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
 	}
 
@@ -954,19 +963,19 @@ func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datasto
 
 // initializeAudioSources prepares and validates audio sources
 func initializeAudioSources(settings *conf.Settings) ([]string, error) {
-	var sources []string
+	var audioSources []string
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if len(settings.Realtime.RTSP.URLs) > 0 {
-			sources = settings.Realtime.RTSP.URLs
+			audioSources = settings.Realtime.RTSP.URLs
 		}
 		if settings.Realtime.Audio.Source != "" {
 			// We'll add malgo to sources only if device initialization succeeds
 			// This will be handled in CaptureAudio
-			sources = append(sources, "malgo")
+			audioSources = append(audioSources, "malgo")
 		}
 
 		// Initialize buffers for all audio sources
-		if err := initializeBuffers(sources); err != nil {
+		if err := initializeBuffers(audioSources); err != nil {
 			// If buffer initialization fails, log the error but continue
 			// Some sources might still work
 			log.Printf("⚠️  Error initializing buffers: %v", err)
@@ -975,7 +984,7 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	} else {
 		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
 	}
-	return sources, nil
+	return audioSources, nil
 }
 
 // printSystemDetails prints system information and analyzer configuration
@@ -1005,4 +1014,220 @@ func printSystemDetails(settings *conf.Settings) {
 		settings.BirdNET.Overlap,
 		settings.BirdNET.Sensitivity,
 		settings.Realtime.Interval)
+}
+
+// startAudioCoreAnalysis starts the audiocore analysis system directly
+func startAudioCoreAnalysis(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, proc *processor.Processor) {
+	wg.Add(1)
+	defer wg.Done()
+
+	// Create context for audiocore
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create manager configuration
+	managerConfig := &audiocore.ManagerConfig{
+		MaxSources:        10,
+		DefaultBufferSize: 4096,
+		EnableMetrics:     settings.Sentry.Enabled,
+		MetricsInterval:   10 * time.Second,
+		ProcessingTimeout: 5 * time.Second,
+		BufferPoolConfig: audiocore.BufferPoolConfig{
+			SmallBufferSize:   4 * 1024,
+			MediumBufferSize:  64 * 1024,
+			LargeBufferSize:   1024 * 1024,
+			MaxBuffersPerSize: 100,
+			EnableMetrics:     settings.Sentry.Enabled,
+		},
+	}
+
+	// Create buffer pool
+	bufferPool := audiocore.NewBufferPool(managerConfig.BufferPoolConfig)
+
+	// Create audio manager
+	manager := audiocore.NewAudioManager(managerConfig)
+
+	// Create analyzer manager and BirdNET analyzer
+	analyzerFactory := audiocoreanalyzer.NewBirdNETAnalyzerFactory(bufferPool)
+	analyzerManager := audiocore.NewAnalyzerManager(analyzerFactory)
+	
+	// Create BirdNET analyzer configuration
+	analyzerConfig := audiocore.AnalyzerConfig{
+		Type:              "birdnet",
+		ChunkDuration:     3 * time.Second,
+		OverlapDuration:   time.Duration(settings.BirdNET.Overlap * float64(time.Second)),
+		ProcessingTimeout: 10 * time.Second,
+		ExtraConfig:       make(map[string]any),
+	}
+	
+	// Create and register the BirdNET analyzer
+	analyzer, err := analyzerFactory.CreateAnalyzer("birdnet-standard", analyzerConfig)
+	if err != nil {
+		log.Printf("Failed to create BirdNET analyzer: %v", err)
+		return
+	}
+	
+	if err := analyzerManager.RegisterAnalyzer(analyzer); err != nil {
+		log.Printf("Failed to register BirdNET analyzer: %v", err)
+		return
+	}
+	
+	// Set analyzer manager in audio manager
+	manager.SetAnalyzerManager(analyzerManager)
+
+	// Create export manager if needed
+	var captureManager capture.Manager
+	if settings.Realtime.Audio.Export.Enabled {
+		ffmpegPath := settings.Realtime.Audio.FfmpegPath
+		exportManager := export.DefaultManager(ffmpegPath)
+		captureManager = capture.NewManager(bufferPool, exportManager)
+		
+		// Set capture manager in audio manager
+		audioCoreCaptureAdapter := capture.NewAudioCoreCaptureAdapter(captureManager)
+		manager.SetCaptureManager(audioCoreCaptureAdapter)
+		
+		// Pass capture manager to processor for export functionality
+		proc.SetCaptureManager(captureManager)
+	}
+
+	// Set up audio sources
+	if err := setupAudioCoreSources(manager, captureManager, settings); err != nil {
+		log.Printf("Failed to setup audio sources: %v", err)
+		return
+	}
+
+	// Start the audio manager
+	if err := manager.Start(ctx); err != nil {
+		log.Printf("Failed to start audio manager: %v", err)
+		return
+	}
+	defer func() {
+		if err := manager.Stop(); err != nil {
+			log.Printf("Error stopping audio manager: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signals
+	for {
+		select {
+		case <-quitChan:
+			log.Println("AudioCore analysis stopping...")
+			return
+		case <-restartChan:
+			log.Println("AudioCore analysis restart requested")
+			return
+		}
+	}
+}
+
+// setupAudioCoreSources configures audio sources for audiocore
+func setupAudioCoreSources(manager audiocore.AudioManager, captureManager capture.Manager, settings *conf.Settings) error {
+	// Generate unique source ID based on device name
+	deviceName := settings.Realtime.Audio.Source
+	if deviceName == "" {
+		deviceName = "default"
+	}
+	
+	// Generate human-readable unique ID
+	sourceID := generateAudioCoreSourceID("soundcard", deviceName, 0)
+	
+	// Set up soundcard source
+	sourceConfig := &audiocore.SourceConfig{
+		ID:     sourceID,
+		Name:   "System Audio",
+		Type:   "soundcard",
+		Device: deviceName,
+		Format: audiocore.AudioFormat{
+			SampleRate: 48000,
+			Channels:   1,
+			BitDepth:   16,
+			Encoding:   "pcm_s16le",
+		},
+		BufferSize: 4096,
+		Gain:       1.0,
+		Processing: audiocore.ProcessingConfig{
+			ChunkDuration:   3 * time.Second,
+			OverlapPercent:  settings.BirdNET.Overlap,
+			BufferAhead:     2,
+			Priority:        1,
+		},
+	}
+
+	// Create soundcard source
+	source, err := sources.NewSoundcardSource(sourceConfig)
+	if err != nil {
+		return err
+	}
+
+	// Add source to manager
+	if err := manager.AddSource(source); err != nil {
+		return err
+	}
+
+	// Set up processing pipeline for BirdNET analysis
+	if err := manager.SetupProcessingPipeline(sourceID, "birdnet-standard"); err != nil {
+		log.Printf("Failed to setup processing pipeline: %v", err)
+		return err
+	}
+
+	// Configure capture for this source if export is enabled
+	if settings.Realtime.Audio.Export.Enabled && captureManager != nil {
+		captureConfig := capture.Config{
+			Duration:   60 * time.Second, // 60 second buffer
+			Format:     sourceConfig.Format,
+			PreBuffer:  2 * time.Second,  // 2 seconds before detection
+			PostBuffer: 13 * time.Second, // 13 seconds after detection (total 15s)
+			ExportConfig: &export.Config{
+				Format:           export.Format(settings.Realtime.Audio.Export.Type),
+				OutputPath:       settings.Realtime.Audio.Export.Path,
+				FileNameTemplate: "{source}_{timestamp}",
+				Bitrate:          settings.Realtime.Audio.Export.Bitrate,
+				FFmpegPath:       settings.Realtime.Audio.FfmpegPath,
+				EnableDebug:      settings.Realtime.Audio.Export.Debug,
+				Timeout:          30 * time.Second,
+			},
+		}
+
+		if err := captureManager.EnableCapture(sourceID, captureConfig); err != nil {
+			log.Printf("Failed to enable capture for source %s: %v", sourceID, err)
+		}
+	}
+
+	log.Printf("AudioCore source configured: %s", sourceID)
+	return nil
+}
+
+// generateAudioCoreSourceID creates a unique, human-readable identifier for an audio source
+// Format: {type}_{sanitized_device_name}_{index}
+func generateAudioCoreSourceID(sourceType, deviceName string, index int) string {
+	// Sanitize the device name to make it safe for use as an identifier
+	sanitized := sanitizeAudioCoreDeviceName(deviceName)
+	
+	// Generate the ID with type, sanitized name, and index
+	return fmt.Sprintf("%s_%s_%d", sourceType, sanitized, index)
+}
+
+// sanitizeAudioCoreDeviceName converts a device name to a safe identifier
+func sanitizeAudioCoreDeviceName(deviceName string) string {
+	// Convert to lowercase
+	sanitized := strings.ToLower(deviceName)
+	
+	// Replace spaces and special characters with underscores
+	reg := regexp.MustCompile(`[^a-z0-9]+`)
+	sanitized = reg.ReplaceAllString(sanitized, "_")
+	
+	// Remove leading/trailing underscores
+	sanitized = strings.Trim(sanitized, "_")
+	
+	// Handle empty or very short names
+	if sanitized == "" || len(sanitized) < 3 {
+		sanitized = "device"
+	}
+	
+	// Truncate if too long
+	if len(sanitized) > 30 {
+		sanitized = sanitized[:30]
+	}
+	
+	return sanitized
 }
