@@ -19,6 +19,8 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - Check open/merged PRs before starting work to avoid conflicts
 - **Run `golangci-lint run -v` before EVERY commit**
 - Rebase regularly against your base branch
+- Do not reuse old merged branches
+- Do not open PRs against old already merged branches, always check for this
 
 ### Code Quality
 
