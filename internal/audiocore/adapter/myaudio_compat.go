@@ -235,12 +235,9 @@ func (a *MyAudioCompatAdapter) processAudioData() {
 				if err := a.captureManager.Write(audioData.SourceID, &audioData); err != nil {
 					log.Printf("Error writing to audiocore capture buffer: %v", err)
 				}
-			} else {
-				// Fall back to myaudio capture buffer for compatibility
-				if err := myaudio.WriteToCaptureBuffer(audioData.SourceID, audioData.Buffer); err != nil {
-					log.Printf("Error writing to capture buffer: %v", err)
-				}
 			}
+			// Note: When audiocore is enabled, we only use audiocore's capture buffers
+			// This eliminates duplicate buffering and reduces memory usage
 
 			// Calculate audio level
 			audioLevel := a.calculateAudioLevel(audioData.Buffer)

@@ -200,38 +200,36 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
-		// Check if audiocore is enabled and capture manager is available
-		useAudioCore := false
 		if a.Settings.Realtime.Audio.UseAudioCore && a.Processor != nil {
+			// Use audiocore export functionality
 			captureManager := a.Processor.GetCaptureManager()
-			if captureManager != nil {
-				// Use audiocore export functionality
-				if cm, ok := captureManager.(capture.Manager); ok {
-					ctx := context.Background()
-					// Export clip with 15 second duration
-					exportResult, err := cm.ExportClip(ctx, a.Note.Source, a.Note.BeginTime, 15*time.Second)
-					if err != nil {
-						log.Printf("❌ Failed to export audio clip via audiocore: %v", err)
-						return err
-					}
-					
-					if a.Settings.Debug {
-						log.Printf("✅ Saved audio clip via audiocore to %s (export took %v)\n", 
-							exportResult.FilePath, exportResult.Duration)
-						log.Printf("detection time %v, begin time %v, end time %v\n", 
-							a.Note.Time, a.Note.BeginTime, time.Now())
-					}
-					useAudioCore = true
-				} else {
-					log.Printf("⚠️ AudioCore capture manager type assertion failed, falling back to myaudio")
-				}
-			} else {
-				log.Printf("⚠️ AudioCore capture manager not available, falling back to myaudio")
+			if captureManager == nil {
+				log.Printf("❌ AudioCore capture manager not available for export")
+				return fmt.Errorf("audiocore capture manager not initialized")
 			}
-		}
-		
-		// Fall back to legacy myaudio export if audiocore wasn't used
-		if !useAudioCore {
+			
+			cm, ok := captureManager.(capture.Manager)
+			if !ok {
+				log.Printf("❌ AudioCore capture manager type assertion failed")
+				return fmt.Errorf("invalid capture manager type")
+			}
+			
+			ctx := context.Background()
+			// Export clip with 15 second duration
+			exportResult, err := cm.ExportClip(ctx, a.Note.Source, a.Note.BeginTime, 15*time.Second)
+			if err != nil {
+				log.Printf("❌ Failed to export audio clip via audiocore: %v", err)
+				return err
+			}
+			
+			if a.Settings.Debug {
+				log.Printf("✅ Saved audio clip via audiocore to %s (export took %v)\n", 
+					exportResult.FilePath, exportResult.Duration)
+				log.Printf("detection time %v, begin time %v, end time %v\n", 
+					a.Note.Time, a.Note.BeginTime, time.Now())
+			}
+		} else {
+			// Use legacy myaudio export
 			pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
 			if err != nil {
 				log.Printf("❌ Failed to read audio segment from buffer: %v", err)
