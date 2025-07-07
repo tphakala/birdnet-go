@@ -55,6 +55,10 @@ type Processor struct {
 	backupManager   interface{} // Use interface{} to avoid import cycle
 	backupScheduler interface{} // Use interface{} to avoid import cycle
 	backupMutex     sync.RWMutex
+
+	// AudioCore capture manager for audio export
+	captureManager      interface{} // Use interface{} to avoid import cycle
+	captureManagerMutex sync.RWMutex
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -566,7 +570,8 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			EventTracker: p.GetEventTracker(),
 			Note:         detection.Note,
 			Results:      detection.Results,
-			Ds:           p.Ds})
+			Ds:           p.Ds,
+			Processor:    p})
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -748,6 +753,20 @@ func (p *Processor) GetBackupScheduler() interface{} {
 	p.backupMutex.RLock()
 	defer p.backupMutex.RUnlock()
 	return p.backupScheduler
+}
+
+// SetCaptureManager safely sets the audiocore capture manager
+func (p *Processor) SetCaptureManager(captureManager interface{}) {
+	p.captureManagerMutex.Lock()
+	defer p.captureManagerMutex.Unlock()
+	p.captureManager = captureManager
+}
+
+// GetCaptureManager safely returns the audiocore capture manager
+func (p *Processor) GetCaptureManager() interface{} {
+	p.captureManagerMutex.RLock()
+	defer p.captureManagerMutex.RUnlock()
+	return p.captureManager
 }
 
 // Shutdown gracefully stops all processor components

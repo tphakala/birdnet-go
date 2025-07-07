@@ -193,7 +193,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// start audio capture
-	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan, proc)
 
 	// start sound level publishers only if sound level monitoring is enabled
 	if settings.Realtime.Audio.SoundLevel.Enabled {
@@ -287,13 +287,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		case <-restartChan:
 			// Handle the restart signal.
 			fmt.Println("🔄 Restarting audio capture")
-			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan, proc)
 		}
 	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) {
+func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, proc *processor.Processor) {
 	// Stop previous demultiplexing goroutine if it exists
 	audioDemuxManager.Stop()
 
@@ -350,11 +350,11 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 	// waitgroup is managed within CaptureAudio
 	if settings.Realtime.Audio.UseAudioCore {
 		// Use new audiocore implementation
-		go func() {
-			log.Println("🎵 Using new audiocore audio capture system")
-			// Import needs to be added at the top of the file
-			adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, unifiedAudioChan)
-		}()
+		log.Println("🎵 Using new audiocore audio capture system")
+		// Start audiocore in a goroutine but capture the adapter first
+		audioCoreAdapter := adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, unifiedAudioChan)
+		// Pass the capture manager to the processor
+		proc.SetCaptureManager(audioCoreAdapter.GetCaptureManager())
 	} else {
 		// Use existing myaudio implementation
 		go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)

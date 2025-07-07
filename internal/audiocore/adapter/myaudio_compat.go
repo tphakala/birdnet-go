@@ -72,6 +72,11 @@ func NewMyAudioCompatAdapter(settings *conf.Settings) *MyAudioCompatAdapter {
 	}
 }
 
+// GetCaptureManager returns the capture manager instance
+func (a *MyAudioCompatAdapter) GetCaptureManager() capture.Manager {
+	return a.captureManager
+}
+
 // CaptureAudio starts audio capture using audiocore, compatible with myaudio.CaptureAudio
 func (a *MyAudioCompatAdapter) CaptureAudio(
 	settings *conf.Settings,
@@ -368,7 +373,8 @@ func StartAudioCoreCapture(
 	quitChan chan struct{},
 	restartChan chan struct{},
 	unifiedAudioChan chan myaudio.UnifiedAudioData,
-) {
+) *MyAudioCompatAdapter {
 	adapter := NewMyAudioCompatAdapter(settings)
 	adapter.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
+	return adapter
 }
