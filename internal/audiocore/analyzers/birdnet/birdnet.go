@@ -50,39 +50,36 @@ func NewBirdNETAnalyzer(id string, config audiocore.AnalyzerConfig, bufferPool a
 		"component", "birdnet_analyzer",
 		"analyzer_id", id)
 
-	// Validate configuration
-	if config.ModelPath == "" {
-		return nil, errors.New(nil).
-			Component(audiocore.ComponentAudioCore).
-			Category(errors.CategoryConfiguration).
-			Context("error", "model path not specified").
-			Build()
-	}
+	// Note: Empty ModelPath is allowed - it means use embedded model
 
 	// Extract additional configuration
-	labelsPath, _ := config.ExtraConfig["labels_path"].(string)
+	labelsPath, _ := config.ExtraConfig["labelPath"].(string)
 	threads, _ := config.ExtraConfig["threads"].(int)
 	if threads == 0 {
 		threads = 1
 	}
 
 	// Load model
+	modelDescription := config.ModelPath
+	if modelDescription == "" {
+		modelDescription = "embedded"
+	}
 	logger.Info("loading BirdNET model",
-		"model_path", config.ModelPath,
+		"model_path", modelDescription,
 		"labels_path", labelsPath,
 		"threads", threads)
 
 	// Create simplified BirdNET configuration
 	birdnetConfig := &birdnet.Config{
-		ModelPath: config.ModelPath,
-		LabelPath: labelsPath,
-		Threads:   threads,
-		// Additional configuration from ExtraConfig
-		Locale:           getStringFromExtraConfig(config.ExtraConfig, "locale", "en"),
-		UseXNNPACK:       getBoolFromExtraConfig(config.ExtraConfig, "use_xnnpack", true),
-		Debug:            getBoolFromExtraConfig(config.ExtraConfig, "debug", false),
-		RangeFilterModel: getStringFromExtraConfig(config.ExtraConfig, "range_filter_model", "v2"),
+		ModelPath:  config.ModelPath,
+		LabelPath:  labelsPath,
+		Threads:    threads,
+		Locale:     getStringFromExtraConfig(config.ExtraConfig, "locale", "en"),
+		UseXNNPACK: getBoolFromExtraConfig(config.ExtraConfig, "useXNNPACK", true),
 	}
+	
+	// Store additional configuration for later use in analysis
+	// These will be accessed during prediction
 
 	model, err := birdnet.NewBirdNETFromConfig(birdnetConfig)
 	if err != nil {
@@ -356,6 +353,13 @@ func getStringFromExtraConfig(config map[string]any, key, defaultValue string) s
 
 func getBoolFromExtraConfig(config map[string]any, key string, defaultValue bool) bool {
 	if v, ok := config[key].(bool); ok {
+		return v
+	}
+	return defaultValue
+}
+
+func getFloat64FromExtraConfig(config map[string]any, key string, defaultValue float64) float64 {
+	if v, ok := config[key].(float64); ok {
 		return v
 	}
 	return defaultValue

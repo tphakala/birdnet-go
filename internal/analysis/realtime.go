@@ -1051,14 +1051,31 @@ func startAudioCoreAnalysis(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 	analyzerFactory := audiocoreanalyzer.NewBirdNETAnalyzerFactory(bufferPool)
 	analyzerManager := audiocore.NewAnalyzerManager(analyzerFactory)
 	
-	// Create BirdNET analyzer configuration
+	// Create BirdNET analyzer configuration from existing config
 	analyzerConfig := audiocore.AnalyzerConfig{
 		Type:              "birdnet",
+		ModelPath:         settings.BirdNET.ModelPath, // Empty means use embedded model
+		Threshold:         float32(settings.BirdNET.Threshold),
 		ChunkDuration:     3 * time.Second,
 		OverlapDuration:   time.Duration(settings.BirdNET.Overlap * float64(time.Second)),
 		ProcessingTimeout: 10 * time.Second,
-		ExtraConfig:       make(map[string]any),
+		ExtraConfig: map[string]any{
+			"sensitivity":   settings.BirdNET.Sensitivity,
+			"longitude":     settings.BirdNET.Longitude,
+			"latitude":      settings.BirdNET.Latitude,
+			"threads":       settings.BirdNET.Threads,
+			"locale":        settings.BirdNET.Locale,
+			"labelPath":     settings.BirdNET.LabelPath,
+			"useXNNPACK":    settings.BirdNET.UseXNNPACK,
+			"debug":         settings.BirdNET.Debug,
+			"rangeFilter":   settings.BirdNET.RangeFilter,
+		},
 	}
+	
+	// Log configuration for debugging
+	log.Printf("AudioCore BirdNET config: ModelPath=%q, Threshold=%.3f, Overlap=%.3fs, Sensitivity=%.3f", 
+		analyzerConfig.ModelPath, analyzerConfig.Threshold, 
+		analyzerConfig.OverlapDuration.Seconds(), settings.BirdNET.Sensitivity)
 	
 	// Create and register the BirdNET analyzer
 	analyzer, err := analyzerFactory.CreateAnalyzer("birdnet-standard", analyzerConfig)
