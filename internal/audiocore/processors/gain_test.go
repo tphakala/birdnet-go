@@ -37,13 +37,13 @@ func TestGainProcessorCreation(t *testing.T) {
 
 func TestGainProcessorProcess(t *testing.T) {
 	t.Parallel()
-	proc, err := NewGainProcessor("test-gain", 2.0)
-	require.NoError(t, err)
-
 	ctx := context.Background()
 
 	t.Run("NilInput", func(t *testing.T) {
 		t.Parallel()
+		proc, err := NewGainProcessor("test-gain", 2.0)
+		require.NoError(t, err)
+		
 		output, err := proc.Process(ctx, nil)
 		assert.Error(t, err)
 		assert.Nil(t, output)
@@ -51,10 +51,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("Unity Gain", func(t *testing.T) {
 		t.Parallel()
-		gainProc, ok := proc.(*GainProcessor)
-		require.True(t, ok, "Expected processor to be a *GainProcessor")
-		err := gainProc.SetGain(1.0)
-		assert.NoError(t, err)
+		proc, err := NewGainProcessor("test-gain", 1.0)
+		require.NoError(t, err)
 
 		input := &audiocore.AudioData{
 			Buffer: []byte{0, 0, 0, 0},
@@ -75,10 +73,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM S16LE Processing", func(t *testing.T) {
 		t.Parallel()
-		gainProc, ok := proc.(*GainProcessor)
-		require.True(t, ok, "Expected processor to be a *GainProcessor")
-		err := gainProc.SetGain(2.0)
-		assert.NoError(t, err)
+		proc, err := NewGainProcessor("test-gain", 2.0)
+		require.NoError(t, err)
 
 		// Create test buffer with known values
 		buffer := make([]byte, 8)
@@ -114,10 +110,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM S16LE Clipping", func(t *testing.T) {
 		t.Parallel()
-		gainProc, ok := proc.(*GainProcessor)
-		require.True(t, ok, "Expected processor to be a *GainProcessor")
-		err := gainProc.SetGain(3.0)
-		assert.NoError(t, err)
+		proc, err := NewGainProcessor("test-gain", 3.0)
+		require.NoError(t, err)
 
 		// Create test buffer with values that will clip
 		buffer := make([]byte, 4)
@@ -148,10 +142,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM F32LE Processing", func(t *testing.T) {
 		t.Parallel()
-		gainProc, ok := proc.(*GainProcessor)
-		require.True(t, ok, "Expected processor to be a *GainProcessor")
-		err := gainProc.SetGain(0.5)
-		assert.NoError(t, err)
+		proc, err := NewGainProcessor("test-gain", 0.5)
+		require.NoError(t, err)
 
 		// Create test buffer with known float values
 		buffer := make([]byte, 16)
@@ -185,10 +177,8 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("PCM F32LE Clipping", func(t *testing.T) {
 		t.Parallel()
-		gainProc, ok := proc.(*GainProcessor)
-		require.True(t, ok, "Expected processor to be a *GainProcessor")
-		err := gainProc.SetGain(2.0)
-		assert.NoError(t, err)
+		proc, err := NewGainProcessor("test-gain", 2.0)
+		require.NoError(t, err)
 
 		// Create test buffer with values that will clip
 		buffer := make([]byte, 8)
@@ -218,6 +208,9 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("Unsupported Encoding", func(t *testing.T) {
 		t.Parallel()
+		proc, err := NewGainProcessor("test-gain", 1.5)
+		require.NoError(t, err)
+		
 		input := &audiocore.AudioData{
 			Buffer: []byte{0, 0, 0, 0},
 			Format: audiocore.AudioFormat{
@@ -237,6 +230,9 @@ func TestGainProcessorProcess(t *testing.T) {
 
 	t.Run("Context Cancellation", func(t *testing.T) {
 		t.Parallel()
+		proc, err := NewGainProcessor("test-gain", 1.0)
+		require.NoError(t, err)
+		
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
