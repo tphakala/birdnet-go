@@ -745,7 +745,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 	// Log the FFmpeg command for debugging purposes
 	log.Printf("⬆️ Starting FFmpeg with command: %s", cmd.String())
 	logger.Debug("starting FFmpeg",
-		"command", cmd.String(),
+		"command", privacy.ScrubMessage(cmd.String()),
 		"url", privacy.SanitizeRTSPUrl(config.URL),
 		"transport", config.Transport)
 
