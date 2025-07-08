@@ -247,12 +247,20 @@ func TestFFmpegStream_HandleAudioData(t *testing.T) {
 	if err := AllocateAnalysisBuffer(conf.BufferSize*3, "test"); err != nil {
 		t.Skip("Cannot allocate analysis buffer for test")
 	}
-	defer RemoveAnalysisBuffer("test")
+	defer func() {
+		if err := RemoveAnalysisBuffer("test"); err != nil {
+			t.Logf("Failed to remove analysis buffer: %v", err)
+		}
+	}()
 	
 	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, "test"); err != nil {
 		t.Skip("Cannot allocate capture buffer for test") 
 	}
-	defer RemoveCaptureBuffer("test")
+	defer func() {
+		if err := RemoveCaptureBuffer("test"); err != nil {
+			t.Logf("Failed to remove capture buffer: %v", err)
+		}
+	}()
 
 	audioChan := make(chan UnifiedAudioData, 10)
 	stream := NewFFmpegStream("test", "tcp", audioChan)
