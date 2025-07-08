@@ -1268,8 +1268,9 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 	}
 }
 
-// CaptureAudioRTSP is the main function for capturing audio from an RTSP stream
-func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
+// captureAudioRTSPLegacy is the old implementation for capturing audio from an RTSP stream
+// DEPRECATED: This function is kept for reference but should not be used
+func captureAudioRTSPLegacy(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// Register the channels for this stream
 	RegisterStreamChannels(url, restartChan, unifiedAudioChan)
 	defer UnregisterStreamChannels(url)
