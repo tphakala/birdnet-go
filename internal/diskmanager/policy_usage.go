@@ -290,6 +290,9 @@ func checkInitialUsage(baseDir string, usageThreshold int, debug bool) (initialU
 	if diskInfo.TotalBytes > 0 {
 		initialUsagePercent = int((diskInfo.UsedBytes * 100) / diskInfo.TotalBytes) // #nosec G115 -- percentage calculation, result bounded by 100
 	}
+	
+	// Update disk usage metrics
+	updateDiskUsageMetrics(diskInfo)
 
 	if initialUsagePercent < usageThreshold {
 		if debug {
@@ -397,6 +400,8 @@ func refreshUsageDataIfNeeded(deletedCount, refreshInterval int, baseDir string,
 			if debug {
 				log.Printf("Refreshed disk usage. Total: %d, Used: %d", refreshedDiskInfo.TotalBytes, refreshedDiskInfo.UsedBytes)
 			}
+			// Update disk usage metrics
+			updateDiskUsageMetrics(refreshedDiskInfo)
 			// Return updated info and reset estimate to actual
 			return refreshedDiskInfo, refreshedDiskInfo.UsedBytes
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc" // Import suncalc
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -31,6 +32,7 @@ type Interface interface {
 	Get(id string) (Note, error)
 	Close() error
 	SetMetrics(metrics *Metrics) // Set metrics instance for observability
+	SetSunCalcMetrics(suncalcMetrics any) // Set metrics for SunCalc service
 	Optimize(ctx context.Context) error // Perform database optimization (VACUUM, ANALYZE, etc.)
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
@@ -119,8 +121,18 @@ func New(settings *conf.Settings) Interface {
 }
 
 // SetMetrics sets the metrics instance for the datastore
-func (ds *DataStore) SetMetrics(metrics *Metrics) {
-	ds.metrics = metrics
+func (ds *DataStore) SetMetrics(m *Metrics) {
+	ds.metrics = m
+}
+
+// SetSunCalcMetrics sets the metrics instance for the SunCalc service
+func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
+	if ds.SunCalc != nil && suncalcMetrics != nil {
+		// Type assert to the actual metrics type
+		if m, ok := suncalcMetrics.(*metrics.SunCalcMetrics); ok {
+			ds.SunCalc.SetMetrics(m)
+		}
+	}
 }
 
 // Save stores a note and its associated results as a single transaction in the database.

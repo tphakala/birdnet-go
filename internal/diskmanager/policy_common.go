@@ -55,6 +55,13 @@ func SetMetrics(m *metrics.DiskManagerMetrics) {
 	diskMetrics = m
 }
 
+// updateDiskUsageMetrics updates disk usage metrics if metrics are available
+func updateDiskUsageMetrics(info DiskSpaceInfo) {
+	if diskMetrics != nil {
+		diskMetrics.UpdateDiskUsage(info.UsedBytes, info.TotalBytes)
+	}
+}
+
 // buildSpeciesSubDirCountMap creates a map to track the number of files per species per subdirectory.
 func buildSpeciesSubDirCountMap(files []FileInfo) map[string]map[string]int {
 	serviceLogger.Debug("Building species subdirectory count map",
