@@ -62,7 +62,7 @@ func FuzzConvert16BitToFloat32(f *testing.F) {
 		}
 		
 		// If using pool, return the buffer
-		if len(result) == conf.BufferSize/2 { // Standard size
+		if len(result) == Float32BufferSize { // Standard size
 			ReturnFloat32Buffer(result)
 		}
 	})
@@ -169,8 +169,8 @@ func FuzzFloat32PoolOperations(f *testing.F) {
 				switch {
 				case buf == nil:
 					t.Error("Got nil buffer from pool")
-				case len(buf) != conf.BufferSize/2:
-					t.Errorf("Got wrong size buffer: %d, expected %d", len(buf), conf.BufferSize/2)
+				case len(buf) != Float32BufferSize:
+					t.Errorf("Got wrong size buffer: %d, expected %d", len(buf), Float32BufferSize)
 				default:
 					buffers = append(buffers, buf)
 				}

@@ -17,6 +17,12 @@ var (
 	float32Pool    *Float32Pool            // Global pool for float32 conversion buffers
 )
 
+const (
+	// Float32BufferSize is the number of float32 samples in a standard buffer
+	// For 16-bit audio: conf.BufferSize / 2 (bytes per sample) = 144384 samples
+	Float32BufferSize = conf.BufferSize / 2
+)
+
 // SetProcessMetrics sets the metrics instance for audio processing operations
 func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	processMetrics = myAudioMetrics
@@ -25,12 +31,8 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 // InitFloat32Pool initializes the global float32 pool for audio conversion.
 // This should be called during application startup.
 func InitFloat32Pool() error {
-	// Calculate the size based on buffer configuration
-	// For 16-bit audio: BufferSize / 2 (bytes per sample)
-	size := conf.BufferSize / 2
-	
 	var err error
-	float32Pool, err = NewFloat32Pool(size)
+	float32Pool, err = NewFloat32Pool(Float32BufferSize)
 	if err != nil {
 		return fmt.Errorf("failed to initialize float32 pool: %w", err)
 	}
@@ -41,7 +43,7 @@ func InitFloat32Pool() error {
 // ReturnFloat32Buffer returns a float32 buffer to the pool if possible.
 // This should be called after the buffer is no longer needed.
 func ReturnFloat32Buffer(buffer []float32) {
-	if float32Pool != nil && len(buffer) == conf.BufferSize/2 {
+	if float32Pool != nil && len(buffer) == Float32BufferSize {
 		float32Pool.Put(buffer)
 	}
 }
@@ -63,7 +65,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	
 	// Return float32 buffer to pool after prediction
 	// This is safe because Predict copies the data to the input tensor
-	if conf.BitDepth == 16 && len(sampleData) > 0 && len(sampleData[0]) == conf.BufferSize/2 {
+	if conf.BitDepth == 16 && len(sampleData) > 0 && len(sampleData[0]) == Float32BufferSize {
 		ReturnFloat32Buffer(sampleData[0])
 	}
 	
@@ -157,7 +159,7 @@ func convert16BitToFloat32(sample []byte) []float32 {
 	
 	// Try to get buffer from pool if available
 	var float32Data []float32
-	if float32Pool != nil && length == conf.BufferSize/2 {
+	if float32Pool != nil && length == Float32BufferSize {
 		float32Data = float32Pool.Get()
 	} else {
 		// Fallback to allocation for non-standard sizes or if pool not initialized
