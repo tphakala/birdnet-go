@@ -4,6 +4,7 @@
 package myaudio
 
 import (
+	"math"
 	"testing"
 	
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -56,8 +57,8 @@ func FuzzConvert16BitToFloat32(f *testing.F) {
 			if val != val { // NaN check
 				t.Errorf("Sample %d is NaN", i)
 			}
-			if val > 1e30 || val < -1e30 { // Rough infinity check
-				t.Errorf("Sample %d appears to be infinite: %f", i, val)
+			if math.IsInf(float64(val), 0) {
+				t.Errorf("Sample %d is infinite: %f", i, val)
 			}
 		}
 		
@@ -128,9 +129,9 @@ func FuzzConvertToFloat32_AllBitDepths(f *testing.F) {
 			t.Errorf("Expected %d samples, got %d", expectedLen, len(result[0]))
 		}
 		
-		// Verify all values are within valid range
+		// Verify all values are within valid range [-1.0, 1.0)
 		for i, val := range result[0] {
-			if val < -1.0 || val > 1.0 {
+			if val < -1.0 || val >= 1.0 {
 				t.Errorf("Sample %d out of range: %f", i, val)
 			}
 		}
@@ -152,12 +153,13 @@ func FuzzFloat32PoolOperations(f *testing.F) {
 	f.Add([]byte{0, 0, 1, 0}) // Get then put
 	f.Add([]byte{0, 0, 0, 0, 1, 0, 1, 0}) // Multiple gets and puts
 	
-	var buffers [][]float32
-	
 	f.Fuzz(func(t *testing.T, ops []byte) {
 		if len(ops) < 2 {
 			t.Skip("Need at least one operation")
 		}
+		
+		// Declare buffers slice inside fuzz function to prevent state leakage
+		var buffers [][]float32
 		
 		// Process operations in pairs
 		for i := 0; i < len(ops)-1; i += 2 {
@@ -189,6 +191,5 @@ func FuzzFloat32PoolOperations(f *testing.F) {
 		for _, buf := range buffers {
 			float32Pool.Put(buf)
 		}
-		buffers = nil
 	})
 }
