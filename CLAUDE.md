@@ -5,10 +5,6 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 
 ## Critical Rules
 
-### API Development
-- **NEVER expand API v1** - All new endpoints go in `internal/api/v2/`
-- API v1 is deprecated - no new functionality
-
 ### Git Workflow
 - **Always start from an updated base branch**:
   ```bash
@@ -19,6 +15,10 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - Check open/merged PRs before starting work to avoid conflicts
 - **Run `golangci-lint run -v` before EVERY commit**
 - Rebase regularly against your base branch
+
+### API Development
+- **NEVER expand API v1** - All new endpoints go in `internal/api/v2/`
+- API v1 is deprecated - no new functionality
 
 ### Code Quality
 
@@ -112,3 +112,6 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - Test without time dependencies
 - Use `t.TempDir()` not manual cleanup
 - Document all exports
+
+## Development Workflow Reminders
+- When running linter, run for full project "golangci-lint run -v"
