@@ -277,3 +277,181 @@ func generateSpeciesName(index int) string {
 	// Generate names like "Species_000001", "Species_000002", etc.
 	return fmt.Sprintf("Species_%06d", index+1)
 }
+
+// BenchmarkApplySigmoidOptimized compares original vs optimized sigmoid function
+func BenchmarkApplySigmoidOptimized(b *testing.B) {
+	predictions := make([]float32, 6522)
+	for i := range predictions {
+		predictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
+	}
+	
+	sensitivity := 1.0
+	buffer := make([]float32, 6522) // Pre-allocated buffer
+
+	b.Run("Original", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			confidence := applySigmoidToPredictions(predictions, sensitivity)
+			if len(confidence) != 6522 {
+				b.Errorf("Expected 6522 confidence values, got %d", len(confidence))
+			}
+		}
+	})
+
+	b.Run("Optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			confidence := applySigmoidToPredictionsReuse(predictions, sensitivity, buffer)
+			if len(confidence) != 6522 {
+				b.Errorf("Expected 6522 confidence values, got %d", len(confidence))
+			}
+		}
+	})
+}
+
+// BenchmarkTopKResultsOptimized compares full sort vs top-k algorithm
+func BenchmarkTopKResultsOptimized(b *testing.B) {
+	// Create test results with realistic data
+	results := make([]datastore.Results, 6522)
+	for i := range results {
+		results[i] = datastore.Results{
+			Species:    generateSpeciesName(i),
+			Confidence: float32(i%100) / 100.0,
+		}
+	}
+
+	b.Run("FullSortAndTrim", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			// Make a copy to sort since sorting modifies the slice
+			testResults := make([]datastore.Results, len(results))
+			copy(testResults, results)
+			
+			sortResults(testResults)
+			trimmed := trimResultsToMax(testResults, 10)
+			
+			if len(trimmed) != 10 {
+				b.Errorf("Expected 10 results, got %d", len(trimmed))
+			}
+		}
+	})
+
+	b.Run("OptimizedTopK", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			// Make a copy since getTopKResults modifies the slice
+			testResults := make([]datastore.Results, len(results))
+			copy(testResults, results)
+			
+			topResults := getTopKResults(testResults, 10)
+			
+			if len(topResults) != 10 {
+				b.Errorf("Expected 10 results, got %d", len(topResults))
+			}
+		}
+	})
+}
+
+// BenchmarkFullPipelineOptimized compares the complete optimized pipeline
+func BenchmarkFullPipelineOptimized(b *testing.B) {
+	speciesCount := 6522
+	labels := make([]string, speciesCount)
+	rawPredictions := make([]float32, speciesCount)
+	buffer := make([]float32, speciesCount)           // Pre-allocated confidence buffer
+	resultsBuffer := make([]datastore.Results, speciesCount) // Pre-allocated results buffer
+	
+	// Generate realistic test data
+	for i := range speciesCount {
+		labels[i] = generateSpeciesName(i)
+		rawPredictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
+	}
+	
+	sensitivity := 1.0
+
+	b.Run("Original", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			// Step 1: Apply sigmoid to predictions
+			confidence := applySigmoidToPredictions(rawPredictions, sensitivity)
+			
+			// Step 2: Pair labels with confidence values
+			results, err := pairLabelsAndConfidence(labels, confidence)
+			if err != nil {
+				b.Errorf("pairLabelsAndConfidence failed: %v", err)
+			}
+			
+			// Step 3: Sort results by confidence
+			sortResults(results)
+			
+			// Step 4: Trim to top 10 results
+			finalResults := trimResultsToMax(results, 10)
+			
+			// Prevent compiler optimization
+			if len(finalResults) != 10 {
+				b.Errorf("Expected 10 final results, got %d", len(finalResults))
+			}
+		}
+	})
+
+	b.Run("Optimized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			// Step 1: Apply sigmoid with buffer reuse
+			confidence := applySigmoidToPredictionsReuse(rawPredictions, sensitivity, buffer)
+			
+			// Step 2: Pair labels with confidence values using buffer reuse
+			results, err := pairLabelsAndConfidenceReuse(labels, confidence, resultsBuffer)
+			if err != nil {
+				b.Errorf("pairLabelsAndConfidenceReuse failed: %v", err)
+			}
+			
+			// Step 3: Get top 10 using optimized algorithm
+			finalResults := getTopKResults(results, 10)
+			
+			// Prevent compiler optimization
+			if len(finalResults) != 10 {
+				b.Errorf("Expected 10 final results, got %d", len(finalResults))
+			}
+		}
+	})
+}
+
+// BenchmarkMemoryUsageComparison measures memory allocation differences
+func BenchmarkMemoryUsageComparison(b *testing.B) {
+	speciesCount := 6522
+	labels := make([]string, speciesCount)
+	predictions := make([]float32, speciesCount)
+	
+	// Generate test data once
+	for i := range speciesCount {
+		labels[i] = generateSpeciesName(i)
+		predictions[i] = float32(i%100) / 100.0
+	}
+	
+	sensitivity := 1.0
+
+	b.Run("OriginalPipeline", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			// This simulates the memory-intensive original pipeline
+			confidence := applySigmoidToPredictions(predictions, sensitivity)
+			results, _ := pairLabelsAndConfidence(labels, confidence)
+			sortResults(results)
+			trimResultsToMax(results, 10)
+		}
+	})
+
+	b.Run("OptimizedPipeline", func(b *testing.B) {
+		// Pre-allocate buffers (would be done once in BirdNET struct)
+		confidenceBuffer := make([]float32, speciesCount)
+		resultsBuffer := make([]datastore.Results, speciesCount)
+		
+		b.ReportAllocs()
+		for b.Loop() {
+			// This simulates the optimized pipeline with buffer reuse
+			confidence := applySigmoidToPredictionsReuse(predictions, sensitivity, confidenceBuffer)
+			results, _ := pairLabelsAndConfidenceReuse(labels, confidence, resultsBuffer)
+			getTopKResults(results, 10)
+		}
+	})
+}
