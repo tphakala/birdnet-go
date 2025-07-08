@@ -14,11 +14,36 @@ import (
 
 var (
 	processMetrics *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
+	float32Pool    *Float32Pool            // Global pool for float32 conversion buffers
 )
 
 // SetProcessMetrics sets the metrics instance for audio processing operations
 func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	processMetrics = myAudioMetrics
+}
+
+// InitFloat32Pool initializes the global float32 pool for audio conversion.
+// This should be called during application startup.
+func InitFloat32Pool() error {
+	// Calculate the size based on buffer configuration
+	// For 16-bit audio: BufferSize / 2 (bytes per sample)
+	size := conf.BufferSize / 2
+	
+	var err error
+	float32Pool, err = NewFloat32Pool(size)
+	if err != nil {
+		return fmt.Errorf("failed to initialize float32 pool: %w", err)
+	}
+	
+	return nil
+}
+
+// ReturnFloat32Buffer returns a float32 buffer to the pool if possible.
+// This should be called after the buffer is no longer needed.
+func ReturnFloat32Buffer(buffer []float32) {
+	if float32Pool != nil && len(buffer) == conf.BufferSize/2 {
+		float32Pool.Put(buffer)
+	}
 }
 
 // processData processes the given audio data to detect bird species, logs the detected species
@@ -35,6 +60,13 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 
 	// run BirdNET inference
 	results, err := bn.Predict(sampleData)
+	
+	// Return float32 buffer to pool after prediction
+	// This is safe because Predict copies the data to the input tensor
+	if conf.BitDepth == 16 && len(sampleData) > 0 && len(sampleData[0]) == conf.BufferSize/2 {
+		ReturnFloat32Buffer(sampleData[0])
+	}
+	
 	if err != nil {
 		return fmt.Errorf("error predicting species: %w", err)
 	}
@@ -122,7 +154,16 @@ func ConvertToFloat32(sample []byte, bitDepth int) ([][]float32, error) {
 // convert16BitToFloat32 converts 16-bit sample to float32 values.
 func convert16BitToFloat32(sample []byte) []float32 {
 	length := len(sample) / 2
-	float32Data := make([]float32, length)
+	
+	// Try to get buffer from pool if available
+	var float32Data []float32
+	if float32Pool != nil && length == conf.BufferSize/2 {
+		float32Data = float32Pool.Get()
+	} else {
+		// Fallback to allocation for non-standard sizes or if pool not initialized
+		float32Data = make([]float32, length)
+	}
+	
 	divisor := float32(32768.0)
 
 	for i := 0; i < length; i++ {
