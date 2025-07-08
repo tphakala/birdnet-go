@@ -33,7 +33,6 @@ func init() {
 		// Using the global logger for this critical setup error
 		logging.Error("Failed to initialize weather file logger", "error", err)
 		// Fallback to a disabled logger (writes to io.Discard) but respects the level var
-		logging.Warn("Weather service falling back to a disabled logger due to initialization error.")
 		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: weatherLevelVar})
 		weatherLogger = slog.New(fbHandler).With("service", "weather")
 		logging.Warn("Weather service falling back to default logger due to file logger initialization error.")
@@ -185,12 +184,8 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		if s.metrics != nil {
 			s.metrics.RecordWeatherDbError("save_hourly_weather", "database_error")
 		}
-		return errors.New(err).
-			Component("weather").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_hourly_weather").
-			Context("time", hourlyWeather.Time.Format("2006-01-02 15:04:05")).
-			Build()
+		// Return the error directly as SaveHourlyWeather already wraps it properly
+		return err
 	}
 	if s.metrics != nil {
 		s.metrics.RecordWeatherDbOperation("save_hourly_weather", "success")
