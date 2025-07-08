@@ -131,6 +131,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	if err != nil {
 		return err
 	}
+	
+	// Update BirdNET model loaded metric now that metrics are available
+	UpdateBirdNETModelLoadedMetric(metrics.BirdNET)
 
 	// Connect metrics to datastore before opening
 	dataStore.SetMetrics(metrics.Datastore)
