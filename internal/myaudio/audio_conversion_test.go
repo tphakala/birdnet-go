@@ -166,7 +166,7 @@ func TestFloat32PoolIntegration(t *testing.T) {
 	const iterations = 10
 	for i := range iterations {
 		result := convert16BitToFloat32(testData)
-		assert.Len(t, result, conf.BufferSize/2)
+		assert.Len(t, result, Float32BufferSize)
 		
 		// Verify some values
 		assert.InDelta(t, 0.5, result[0], 0.01)
