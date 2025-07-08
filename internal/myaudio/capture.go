@@ -243,9 +243,10 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 			continue
 		}
 
+		var abExists bool
 		// Check if analysis buffer exists
 		abMutex.RLock()
-		_, abExists := analysisBuffers[url]
+		_, abExists = analysisBuffers[url]
 		abMutex.RUnlock()
 
 		// Initialize analysis buffer if it doesn't exist

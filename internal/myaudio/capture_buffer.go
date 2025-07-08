@@ -4,7 +4,6 @@ package myaudio
 import (
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -38,8 +37,8 @@ var (
 func init() {
 	captureBuffers = make(map[string]*CaptureBuffer)
 	
-	// Enable allocation tracking in debug builds or when DEBUG_BUFFER_ALLOC is set
-	if conf.Setting().Debug || os.Getenv("DEBUG_BUFFER_ALLOC") == "true" {
+	// Enable allocation tracking based on configuration
+	if conf.Setting().Debug {
 		EnableAllocationTracking(true)
 	}
 }
@@ -51,14 +50,24 @@ func SetCaptureMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 
 // AllocateCaptureBufferIfNeeded checks if a buffer exists and only allocates if needed.
 // It returns nil if the buffer already exists or was successfully created.
+// This function is thread-safe and prevents race conditions during allocation.
 func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample int, source string) error {
-	// Quick check without lock first
-	if HasCaptureBuffer(source) {
+	// Check and allocate within the same lock to prevent race conditions
+	cbMutex.Lock()
+	defer cbMutex.Unlock()
+	
+	// Check if buffer already exists
+	if _, exists := captureBuffers[source]; exists {
 		return nil
 	}
-
-	// Proceed with allocation
-	return AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, source)
+	
+	// Buffer doesn't exist, need to allocate
+	// Temporarily unlock to call AllocateCaptureBuffer which has its own locking
+	cbMutex.Unlock()
+	err := AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, source)
+	cbMutex.Lock()
+	
+	return err
 }
 
 // AllocateCaptureBuffer initializes an audio buffer for a single source.

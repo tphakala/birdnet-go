@@ -163,11 +163,18 @@ func BenchmarkMemoryImpact(b *testing.B) {
 	// Expected buffer size: 60s * 48000Hz * 2 bytes = 5,760,000 bytes (~5.5MB)
 	const expectedBufferSize = 5760000
 	
+	// Verify our calculation is correct
+	actualSize := 60 * 48000 * 2
+	if actualSize != expectedBufferSize {
+		b.Errorf("Buffer size calculation mismatch: expected %d, got %d", expectedBufferSize, actualSize)
+	}
+	
 	b.Run("single_allocation_memory", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			source := fmt.Sprintf("mem_single_%d", i)
 			
 			// Single allocation
@@ -178,6 +185,7 @@ func BenchmarkMemoryImpact(b *testing.B) {
 			
 			// Clean up
 			_ = RemoveCaptureBuffer(source)
+			i++
 		}
 	})
 	
@@ -185,7 +193,8 @@ func BenchmarkMemoryImpact(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			source := fmt.Sprintf("mem_prevented_%d", i)
 			
 			// First allocation succeeds
@@ -202,6 +211,7 @@ func BenchmarkMemoryImpact(b *testing.B) {
 			
 			// Clean up
 			_ = RemoveCaptureBuffer(source)
+			i++
 		}
 	})
 }

@@ -42,7 +42,8 @@ func BenchmarkCaptureBufferLifecycle(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		source := fmt.Sprintf("bench_%d", i)
 		
 		// Allocate
@@ -63,6 +64,7 @@ func BenchmarkCaptureBufferLifecycle(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Removal failed: %v", err)
 		}
+		i++
 	}
 }
 
