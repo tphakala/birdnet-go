@@ -70,43 +70,49 @@ func BenchmarkCaptureBufferAllocationComparison(b *testing.B) {
 	
 	b.Run("old_pattern_race_prone", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ResetTimer()
 		
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			// Clean up from previous iteration
 			for j := 0; j < numSources; j++ {
-				source := fmt.Sprintf("old_source_%d", j)
+				source := fmt.Sprintf("old_source_%d_%d", i, j)
 				_ = RemoveCaptureBuffer(source)
 			}
 			
 			// Create sources
 			sources := make([]string, numSources)
 			for j := 0; j < numSources; j++ {
-				sources[j] = fmt.Sprintf("old_source_%d", j)
+				sources[j] = fmt.Sprintf("old_source_%d_%d", i, j)
 			}
 			
 			// Simulate old behavior
 			_ = simulateOldBehavior(sources)
+			i++
 		}
 	})
 	
 	b.Run("new_pattern_safe", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ResetTimer()
 		
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			// Clean up from previous iteration
 			for j := 0; j < numSources; j++ {
-				source := fmt.Sprintf("new_source_%d", j)
+				source := fmt.Sprintf("new_source_%d_%d", i, j)
 				_ = RemoveCaptureBuffer(source)
 			}
 			
 			// Create sources
 			sources := make([]string, numSources)
 			for j := 0; j < numSources; j++ {
-				sources[j] = fmt.Sprintf("new_source_%d", j)
+				sources[j] = fmt.Sprintf("new_source_%d_%d", i, j)
 			}
 			
 			// Simulate new behavior
 			_ = simulateNewBehavior(sources)
+			i++
 		}
 	})
 }
@@ -115,8 +121,10 @@ func BenchmarkCaptureBufferAllocationComparison(b *testing.B) {
 func BenchmarkConcurrentAllocationPatterns(b *testing.B) {
 	b.Run("old_pattern_concurrent", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ResetTimer()
 		
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			source := fmt.Sprintf("concurrent_old_%d", i)
 			var wg sync.WaitGroup
 			
@@ -133,13 +141,16 @@ func BenchmarkConcurrentAllocationPatterns(b *testing.B) {
 			
 			wg.Wait()
 			_ = RemoveCaptureBuffer(source)
+			i++
 		}
 	})
 	
 	b.Run("new_pattern_concurrent", func(b *testing.B) {
 		b.ReportAllocs()
+		b.ResetTimer()
 		
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			source := fmt.Sprintf("concurrent_new_%d", i)
 			var wg sync.WaitGroup
 			
@@ -154,21 +165,13 @@ func BenchmarkConcurrentAllocationPatterns(b *testing.B) {
 			
 			wg.Wait()
 			_ = RemoveCaptureBuffer(source)
+			i++
 		}
 	})
 }
 
 // BenchmarkMemoryImpact measures the memory impact of repeated allocations
 func BenchmarkMemoryImpact(b *testing.B) {
-	// Expected buffer size: 60s * 48000Hz * 2 bytes = 5,760,000 bytes (~5.5MB)
-	const expectedBufferSize = 5760000
-	
-	// Verify our calculation is correct
-	actualSize := 60 * 48000 * 2
-	if actualSize != expectedBufferSize {
-		b.Errorf("Buffer size calculation mismatch: expected %d, got %d", expectedBufferSize, actualSize)
-	}
-	
 	b.Run("single_allocation_memory", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
