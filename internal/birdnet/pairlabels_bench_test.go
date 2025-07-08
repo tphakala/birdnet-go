@@ -13,7 +13,7 @@ func BenchmarkPairLabelsAndConfidenceAlloc(b *testing.B) {
 	labels := make([]string, speciesCount)
 	confidence := make([]float32, speciesCount)
 	
-	for i := 0; i < speciesCount; i++ {
+	for i := range labels {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0
 	}
@@ -76,7 +76,7 @@ func BenchmarkPairLabelsVariations(b *testing.B) {
 	labels := make([]string, speciesCount)
 	confidence := make([]float32, speciesCount)
 	
-	for i := 0; i < speciesCount; i++ {
+	for i := range labels {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0
 	}
