@@ -5,6 +5,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 var bn *birdnet.BirdNET // BirdNET interpreter
@@ -22,6 +23,11 @@ func initializeBirdNET(settings *conf.Settings) error {
 		// Initialize included species list
 		if err := birdnet.BuildRangeFilter(bn); err != nil {
 			return fmt.Errorf("failed to initialize BirdNET: %w", err)
+		}
+		
+		// Initialize float32 pool for audio conversion
+		if err := myaudio.InitFloat32Pool(); err != nil {
+			return fmt.Errorf("failed to initialize float32 pool: %w", err)
 		}
 	}
 	return nil
