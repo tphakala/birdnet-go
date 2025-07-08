@@ -53,10 +53,6 @@ func getGlobalManager() *FFmpegManager {
 // CaptureAudioRTSP provides backward compatibility with the old API
 // This function now delegates to the new simplified FFmpeg manager
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	// Register channels for backward compatibility
-	RegisterStreamChannels(url, restartChan, unifiedAudioChan)
-	defer UnregisterStreamChannels(url)
-
 	// Initialize sound level processor if enabled
 	settings := conf.Setting()
 	displayName := privacy.SanitizeRTSPUrl(url)
