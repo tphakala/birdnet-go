@@ -20,7 +20,7 @@ func BenchmarkPairLabelsAndConfidenceAlloc(b *testing.B) {
 	
 	b.Run("Current", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			results, _ := pairLabelsAndConfidence(labels, confidence)
 			_ = results
 		}
@@ -28,7 +28,7 @@ func BenchmarkPairLabelsAndConfidenceAlloc(b *testing.B) {
 	
 	b.Run("PreAllocExact", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			results := make([]datastore.Results, len(labels))
 			for j, label := range labels {
 				results[j] = datastore.Results{Species: label, Confidence: confidence[j]}
@@ -40,7 +40,7 @@ func BenchmarkPairLabelsAndConfidenceAlloc(b *testing.B) {
 	b.Run("ReuseSlice", func(b *testing.B) {
 		b.ReportAllocs()
 		results := make([]datastore.Results, len(labels))
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for j, label := range labels {
 				results[j] = datastore.Results{Species: label, Confidence: confidence[j]}
 			}
@@ -64,7 +64,7 @@ func BenchmarkResultsStructSize(b *testing.B) {
 	// Measure actual allocation
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		results := make([]datastore.Results, count)
 		_ = results
 	}
@@ -83,7 +83,7 @@ func BenchmarkPairLabelsVariations(b *testing.B) {
 	
 	b.Run("WithPointers", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			results := make([]*datastore.Results, 0, len(labels))
 			for j, label := range labels {
 				results = append(results, &datastore.Results{
@@ -97,7 +97,7 @@ func BenchmarkPairLabelsVariations(b *testing.B) {
 	
 	b.Run("IndexAssignment", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			results := make([]datastore.Results, len(labels))
 			for j := range labels {
 				results[j].Species = labels[j]
