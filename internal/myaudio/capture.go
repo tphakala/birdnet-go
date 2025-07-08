@@ -177,86 +177,48 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
 func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	// Get current active streams
-	currentStreams := make(map[string]bool)
+	// Use the new FFmpeg manager's sync function to handle configuration changes
+	if err := SyncRTSPStreamsWithConfig(unifiedAudioChan); err != nil {
+		log.Printf("❌ Error syncing RTSP streams with configuration: %v", err)
+	}
+	
+	// Clean up buffers for removed streams
+	// Get current configured URLs from settings
+	configuredMap := make(map[string]bool)
+	for _, url := range settings.Realtime.RTSP.URLs {
+		configuredMap[url] = true
+	}
+	
+	// Check activeStreams sync.Map for streams that need cleanup
+	var toCleanup []string
 	activeStreams.Range(func(key, value interface{}) bool {
-		currentStreams[key.(string)] = true
+		url := key.(string)
+		if !configuredMap[url] {
+			toCleanup = append(toCleanup, url)
+		}
 		return true
 	})
-
-	// Stop streams that are no longer in settings
-	for url := range currentStreams {
-		found := false
-		for _, newURL := range settings.Realtime.RTSP.URLs {
-			if url == newURL {
-				found = true
-				break
-			}
+	
+	// Clean up buffers for removed streams
+	for _, url := range toCleanup {
+		activeStreams.Delete(url)
+		log.Printf("⬇️ Stream %s removed", url)
+		
+		// Wait a short time for any in-flight writes to complete
+		time.Sleep(100 * time.Millisecond)
+		
+		// Remove the buffers
+		if err := RemoveAnalysisBuffer(url); err != nil {
+			log.Printf("❌ Warning: failed to remove analysis buffer for %s: %v", url, err)
 		}
-		if !found {
-			// Stream is no longer in settings, stop it
-			if process, exists := ffmpegProcesses.Load(url); exists {
-				if p, ok := process.(*FFmpegProcess); ok {
-					// Stop the FFmpeg process first
-					p.Cleanup(url)
-					// Wait a short time for the process to fully stop
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-
-			// Mark stream as inactive before removing buffers
-			activeStreams.Delete(url)
-			log.Printf("⬇️ Stream %s removed", url)
-			// Wait a short time for any in-flight writes to complete
-			time.Sleep(100 * time.Millisecond)
-
-			// Now it's safe to remove the buffers
-			if err := RemoveAnalysisBuffer(url); err != nil {
-				log.Printf("❌ Warning: failed to remove analysis buffer for %s: %v", url, err)
-			}
-			if err := RemoveCaptureBuffer(url); err != nil {
-				log.Printf("❌ Warning: failed to remove capture buffer for %s: %v", url, err)
-			}
+		if err := RemoveCaptureBuffer(url); err != nil {
+			log.Printf("❌ Warning: failed to remove capture buffer for %s: %v", url, err)
 		}
 	}
-
-	// Start new streams
+	
+	// Update activeStreams map with configured streams
 	for _, url := range settings.Realtime.RTSP.URLs {
-		// Check if stream is already active
-		if _, exists := activeStreams.Load(url); exists {
-			continue
-		}
-
-		var abExists bool
-		// Check if analysis buffer exists
-		abMutex.RLock()
-		_, abExists = analysisBuffers[url]
-		abMutex.RUnlock()
-
-		// Initialize analysis buffer if it doesn't exist
-		if !abExists {
-			if err := AllocateAnalysisBuffer(conf.BufferSize*3, url); err != nil {
-				log.Printf("❌ Failed to initialize analysis buffer for %s: %v", url, err)
-				continue
-			}
-		}
-
-		// Initialize capture buffer if needed
-		if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, url); err != nil {
-			// Clean up the ring buffer if audio buffer init fails and we just created it
-			if !abExists {
-				err := RemoveAnalysisBuffer(url)
-				if err != nil {
-					log.Printf("❌ Failed to remove analysis buffer for %s: %v", url, err)
-				}
-			}
-			log.Printf("❌ Failed to initialize capture buffer for %s: %v", url, err)
-			continue
-		}
-
-		// New stream, start it
 		activeStreams.Store(url, true)
-		go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 	}
 }
 
