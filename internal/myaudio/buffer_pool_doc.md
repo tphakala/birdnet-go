@@ -29,12 +29,13 @@ Implemented a thread-safe buffer pool using `sync.Pool` that reuses byte slices 
 
 ### Benchmark Results
 
-```
+```text
 BenchmarkBufferAllocation_NoPool-16     10000    33611 ns/op    245777 B/op    1 allocs/op
 BenchmarkBufferAllocation_WithPool-16   10000       38.93 ns/op      49 B/op    1 allocs/op
 ```
 
 **Improvements:**
+
 - Memory allocation: Reduced by 99.98% (245KB → 49 bytes)
 - Performance: 863x faster (33.6μs → 38.9ns)
 - Hit rate: 100% in steady state

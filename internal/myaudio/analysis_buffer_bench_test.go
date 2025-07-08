@@ -76,8 +76,11 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 			}
 			// Write more data if needed
 			abMutex.Lock()
-			ab.Write(testData)
+			_, err = ab.Write(testData)
 			abMutex.Unlock()
+			if err != nil {
+				b.Fatalf("Failed to write test data: %v", err)
+			}
 		}
 		
 		if data == nil {
@@ -134,7 +137,10 @@ func BenchmarkReadFromAnalysisBuffer_Concurrent(b *testing.B) {
 			testData[i] = byte(i % 256)
 		}
 		for j := 0; j < 3; j++ {
-			ab.Write(testData)
+			_, err := ab.Write(testData)
+			if err != nil {
+				b.Fatalf("Failed to write test data for stream %s: %v", stream, err)
+			}
 		}
 	}
 	abMutex.Unlock()
@@ -202,8 +208,11 @@ func BenchmarkReadFromAnalysisBuffer_MemoryPressure(b *testing.B) {
 	}
 	for i := 0; i < 5; i++ {
 		abMutex.Lock()
-		ab.Write(testData)
+		_, err := ab.Write(testData)
 		abMutex.Unlock()
+		if err != nil {
+			b.Fatalf("Failed to write test data: %v", err)
+		}
 	}
 
 	// Create memory pressure with allocations

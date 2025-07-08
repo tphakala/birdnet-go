@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewBufferPool(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		size    int
@@ -82,6 +83,7 @@ func TestBufferPoolGetPut(t *testing.T) {
 }
 
 func TestBufferPoolSizeValidation(t *testing.T) {
+	t.Parallel()
 	const bufferSize = 1024
 	pool, err := NewBufferPool(bufferSize)
 	require.NoError(t, err)
@@ -175,6 +177,7 @@ func TestBufferPoolMemoryReuse(t *testing.T) {
 }
 
 func TestBufferPoolClear(t *testing.T) {
+	t.Parallel()
 	const bufferSize = 1024
 	pool, err := NewBufferPool(bufferSize)
 	require.NoError(t, err)
@@ -246,8 +249,11 @@ func TestBufferPoolStress(t *testing.T) {
 	}
 
 	// Run for specified duration
-	time.Sleep(time.Duration(duration) * time.Second)
-	close(stopChan)
+	// Use a separate goroutine to control test duration
+	go func() {
+		time.Sleep(time.Duration(duration) * time.Second)
+		close(stopChan)
+	}()
 	wg.Wait()
 
 	// Verify results
