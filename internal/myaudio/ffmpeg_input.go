@@ -27,8 +27,8 @@ import (
 // var ffmpegProcesses = &sync.Map{}
 
 var (
-	logger *slog.Logger
-	levelVar = new(slog.LevelVar)
+	logger      *slog.Logger
+	levelVar    = new(slog.LevelVar)
 	closeLogger func() error
 )
 
@@ -119,6 +119,87 @@ func categorizeStreamURL(url string) string {
 		return "http-stream"
 	}
 	return "other-stream"
+}
+
+// parseFFmpegExitReason extracts meaningful exit reasons from FFmpeg stderr output
+func parseFFmpegExitReason(stderr string) string {
+	if stderr == "" {
+		return "no_stderr_output"
+	}
+
+	stderrLower := strings.ToLower(stderr)
+
+	// Connection and network issues
+	if strings.Contains(stderrLower, "connection reset") || 
+	   strings.Contains(stderrLower, "connection refused") ||
+	   strings.Contains(stderrLower, "connection timed out") ||
+	   strings.Contains(stderrLower, "connection closed") {
+		return "connection_lost"
+	}
+
+	if strings.Contains(stderrLower, "network is unreachable") ||
+	   strings.Contains(stderrLower, "no route to host") {
+		return "network_unreachable"
+	}
+
+	if strings.Contains(stderrLower, "operation timed out") ||
+	   strings.Contains(stderrLower, "read timeout") ||
+	   strings.Contains(stderrLower, "timeout") {
+		return "timeout"
+	}
+
+	// RTSP specific errors
+	if strings.Contains(stderrLower, "rtsp") && strings.Contains(stderrLower, "401") {
+		return "rtsp_unauthorized"
+	}
+
+	if strings.Contains(stderrLower, "rtsp") && strings.Contains(stderrLower, "404") {
+		return "rtsp_not_found"
+	}
+
+	if strings.Contains(stderrLower, "rtsp") && strings.Contains(stderrLower, "403") {
+		return "rtsp_forbidden"
+	}
+
+	// Stream format issues
+	if strings.Contains(stderrLower, "invalid data found") ||
+	   strings.Contains(stderrLower, "no streams found") ||
+	   strings.Contains(stderrLower, "stream not found") {
+		return "invalid_stream_format"
+	}
+
+	// EOF and disconnection patterns
+	if strings.Contains(stderrLower, "end of file") ||
+	   strings.Contains(stderrLower, "eof") {
+		return "stream_ended"
+	}
+
+	// Server/camera specific issues
+	if strings.Contains(stderrLower, "server returned") && 
+	   (strings.Contains(stderrLower, "5") || strings.Contains(stderrLower, "50")) {
+		return "server_error"
+	}
+
+	// Memory or resource issues
+	if strings.Contains(stderrLower, "out of memory") ||
+	   strings.Contains(stderrLower, "resource temporarily unavailable") {
+		return "resource_exhausted"
+	}
+
+	// Interrupted/killed by user or system
+	if strings.Contains(stderrLower, "interrupted") ||
+	   strings.Contains(stderrLower, "sigint") ||
+	   strings.Contains(stderrLower, "sigterm") {
+		return "interrupted"
+	}
+
+	// Generic error patterns
+	if strings.Contains(stderrLower, "error") {
+		return "ffmpeg_error"
+	}
+
+	// If we can't categorize it, return a generic classification
+	return "unknown_exit_reason"
 }
 
 // backoffStrategy implements an exponential backoff for retries
@@ -645,18 +726,22 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 					if p.stderrBuf != nil {
 						stderrOutput = p.stderrBuf.String()
 					}
+					
+					exitReason := parseFFmpegExitReason(stderrOutput)
 
 					if stderrOutput != "" {
 						log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
 						logger.Warn("FFmpeg exited quickly with stderr",
 							"runtime_seconds", runtime.Seconds(),
 							"stderr", stderrOutput,
+							"exit_reason", exitReason,
 							"url", privacy.SanitizeRTSPUrl(url),
 							"url_type", categorizeStreamURL(url))
 						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v): %s", runtime, stderrOutput)).
 							Category(errors.CategoryRTSP).
 							Component("ffmpeg-quick-exit").
 							Context("url_type", categorizeStreamURL(url)).
+							Context("exit_reason", exitReason).
 							Context("runtime_seconds", runtime.Seconds()).
 							Build()
 					} else {
@@ -664,11 +749,13 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 							"runtime_seconds", runtime.Seconds(),
 							"url", privacy.SanitizeRTSPUrl(url),
 							"url_type", categorizeStreamURL(url),
+							"exit_reason", exitReason,
 							"reason", "likely_connection_failure")
 						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - likely connection failure", runtime)).
 							Category(errors.CategoryRTSP).
 							Component("ffmpeg-quick-exit").
 							Context("url_type", categorizeStreamURL(url)).
+							Context("exit_reason", exitReason).
 							Context("runtime_seconds", runtime.Seconds()).
 							Build()
 					}
@@ -803,12 +890,15 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		if runtime < 5*time.Second {
 			// FFmpeg exited too quickly, log stderr regardless of error status
 			stderrOutput := stderrBuf.String()
+			exitReason := parseFFmpegExitReason(stderrOutput)
+			
 			if stderrOutput != "" {
 				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with stderr:\n%s", runtime, config.URL, stderrOutput)
 				logger.Warn("FFmpeg exited quickly with stderr",
 					"runtime_seconds", runtime.Seconds(),
 					"url", privacy.SanitizeRTSPUrl(config.URL),
 					"stderr", stderrOutput,
+					"exit_reason", exitReason,
 					"url_type", categorizeStreamURL(config.URL))
 				if err == nil {
 					// Create an error if FFmpeg exited with status 0 but too quickly
@@ -822,6 +912,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 					"runtime_seconds", runtime.Seconds(),
 					"url", privacy.SanitizeRTSPUrl(config.URL),
 					"url_type", categorizeStreamURL(config.URL),
+					"exit_reason", exitReason,
 					"reason", "possible_connection_failure")
 				if err == nil {
 					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - possible connection failure", runtime)
@@ -830,25 +921,34 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		} else if err != nil {
 			// Normal error logging for longer-running processes
 			if !strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
+				stderrOutput := stderrBuf.String()
+				exitReason := parseFFmpegExitReason(stderrOutput)
+				
 				log.Printf("⚠️ FFmpeg process for RTSP source %s exited with error: %v", config.URL, err)
 				logger.Error("FFmpeg process exited with error",
 					"url", privacy.SanitizeRTSPUrl(config.URL),
 					"error", err,
 					"runtime_seconds", runtime.Seconds(),
+					"exit_reason", exitReason,
 					"url_type", categorizeStreamURL(config.URL))
 				// Include stderr in the error if available
-				if stderrBuf.String() != "" {
-					log.Printf("⚠️ FFmpeg process stderr:\n%v", stderrBuf.String())
+				if stderrOutput != "" {
+					log.Printf("⚠️ FFmpeg process stderr:\n%v", stderrOutput)
 					logger.Debug("FFmpeg process stderr",
-						"stderr", stderrBuf.String())
-					err = fmt.Errorf("%w\nStderr: %s", err, stderrBuf.String())
+						"stderr", stderrOutput,
+						"exit_reason", exitReason)
+					err = fmt.Errorf("%w\nStderr: %s", err, stderrOutput)
 				}
 			}
 		} else {
 			// Log normal exit for longer-running processes
+			stderrOutput := stderrBuf.String()
+			exitReason := parseFFmpegExitReason(stderrOutput)
+			
 			logger.Info("FFmpeg process ended normally",
 				"url", privacy.SanitizeRTSPUrl(config.URL),
 				"runtime_seconds", runtime.Seconds(),
+				"exit_reason", exitReason,
 				"url_type", categorizeStreamURL(config.URL))
 		}
 		done <- err
@@ -927,6 +1027,7 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 					"pid", p.cmd.Process.Pid)
 				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
 			}
+			time.Sleep(1000 * time.Millisecond) // Avoid busy-looping
 			// Note: We skip placeholder checks here because this function is called by the same
 			// goroutine that created the placeholder, and needs to proceed to replace it with the actual process
 		}
