@@ -10,6 +10,8 @@ import (
 
 // TestPairLabelsAndConfidence tests the pairLabelsAndConfidence function
 func TestPairLabelsAndConfidence(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		labels      []string
@@ -123,6 +125,8 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			results, err := pairLabelsAndConfidence(tt.labels, tt.confidence)
 			
 			if tt.wantErr {
@@ -145,6 +149,8 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 
 // TestPairLabelsAndConfidenceReuseBuffer tests the buffer reuse function
 func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		labels      []string
@@ -255,6 +261,8 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			// Create buffer
 			buffer := make([]datastore.Results, tt.bufferSize)
 			
@@ -281,6 +289,8 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 
 // TestPairLabelsAndConfidenceReuse tests that the function works correctly with pre-allocated slices
 func TestPairLabelsAndConfidenceReuse(t *testing.T) {
+	t.Parallel()
+
 	labels := []string{"Robin", "Sparrow", "Eagle"}
 	confidence1 := []float32{0.9, 0.7, 0.5}
 	confidence2 := []float32{0.3, 0.6, 0.8}
@@ -321,6 +331,8 @@ func TestPairLabelsAndConfidenceReuse(t *testing.T) {
 
 // TestSortResults tests the sortResults function
 func TestSortResults(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    []datastore.Results
@@ -400,6 +412,8 @@ func TestSortResults(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			// Make a copy to avoid modifying test data
 			results := make([]datastore.Results, len(tt.input))
 			copy(results, tt.input)
@@ -423,6 +437,8 @@ func TestSortResults(t *testing.T) {
 
 // TestTrimResultsToMax tests the trimResultsToMax function
 func TestTrimResultsToMax(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     []datastore.Results
@@ -479,6 +495,8 @@ func TestTrimResultsToMax(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := trimResultsToMax(tt.input, tt.maxCount)
 			
 			if len(result) != tt.wantCount {
@@ -498,6 +516,8 @@ func TestTrimResultsToMax(t *testing.T) {
 
 // TestApplySigmoidToPredictions tests the sigmoid application
 func TestApplySigmoidToPredictions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		predictions []float32
@@ -563,6 +583,8 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			results := applySigmoidToPredictions(tt.predictions, tt.sensitivity)
 			
 			if len(results) != len(tt.predictions) {

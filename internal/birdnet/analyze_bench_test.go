@@ -16,16 +16,17 @@ func BenchmarkPairLabelsAndConfidence(b *testing.B) {
 	confidence := make([]float32, speciesCount)
 	
 	// Generate realistic species names and confidence values
-	for i := 0; i < speciesCount; i++ {
+	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0 // 0.00 to 0.99
 	}
 	
 	// Reset timer to exclude setup time
 	b.ResetTimer()
+	b.ReportAllocs()
 	
 	// Run benchmark
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		results, err := pairLabelsAndConfidence(labels, confidence)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidence failed: %v", err)
@@ -46,7 +47,7 @@ func BenchmarkPairLabelsAndConfidenceMemory(b *testing.B) {
 	confidence := make([]float32, speciesCount)
 	
 	// Generate test data
-	for i := 0; i < speciesCount; i++ {
+	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0
 	}
@@ -56,7 +57,7 @@ func BenchmarkPairLabelsAndConfidenceMemory(b *testing.B) {
 	b.ReportAllocs()
 	
 	// Benchmark with memory tracking
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		results, err := pairLabelsAndConfidence(labels, confidence)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidence failed: %v", err)
@@ -105,7 +106,7 @@ func BenchmarkApplySigmoidToPredictions(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		confidence := applySigmoidToPredictions(predictions, sensitivity)
 		
 		// Prevent compiler optimization
@@ -129,7 +130,7 @@ func BenchmarkSortResults(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Make a copy to sort since sorting modifies the slice
 		testResults := make([]datastore.Results, len(results))
 		copy(testResults, results)
@@ -157,7 +158,7 @@ func BenchmarkTrimResultsToMax(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		trimmed := trimResultsToMax(results, 10)
 		
 		// Verify trimming worked
@@ -175,7 +176,7 @@ func BenchmarkFullPredictionPipeline(b *testing.B) {
 	rawPredictions := make([]float32, speciesCount)
 	
 	// Generate realistic test data
-	for i := 0; i < speciesCount; i++ {
+	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		rawPredictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
 	}
@@ -185,7 +186,7 @@ func BenchmarkFullPredictionPipeline(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Step 1: Apply sigmoid to predictions
 		confidence := applySigmoidToPredictions(rawPredictions, sensitivity)
 		
@@ -224,7 +225,7 @@ func BenchmarkPairLabelsAndConfidenceOptimized(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		results, err := pairLabelsAndConfidenceReuse(labels, confidence, buffer)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidenceReuse failed: %v", err)
@@ -243,19 +244,21 @@ func BenchmarkMemoryGrowthPattern(b *testing.B) {
 	labels := make([]string, speciesCount)
 	
 	// Generate labels once
-	for i := 0; i < speciesCount; i++ {
+	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 	}
 	
 	b.ResetTimer()
 	b.ReportAllocs()
 	
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		// Simulate varying confidence values each iteration
 		confidence := make([]float32, speciesCount)
 		for j := range confidence {
 			confidence[j] = float32((i+j)%100) / 100.0
 		}
+		i++
 		
 		// Run the memory-intensive pipeline
 		results, err := pairLabelsAndConfidence(labels, confidence)
