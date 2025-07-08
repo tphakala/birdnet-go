@@ -54,6 +54,13 @@ func GetAvailableSpace(baseDir string) (uint64, error) {
 // GetDetailedDiskUsage returns the total and used disk space in bytes for the filesystem containing the given path.
 func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	startTime := time.Now()
+	defer func() {
+		// Always record disk check duration, even on error
+		if diskMetrics != nil {
+			diskMetrics.RecordDiskCheckDuration(time.Since(startTime).Seconds())
+		}
+	}()
+	
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
@@ -82,11 +89,6 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	totalBytes := stat.Blocks * bsize
 	freeBytes := stat.Bavail * bsize // Available to non-root user
 	usedBytes := totalBytes - freeBytes
-
-	// Record disk check duration if metrics are available
-	if diskMetrics != nil {
-		diskMetrics.RecordDiskCheckDuration(time.Since(startTime).Seconds())
-	}
 
 	return DiskSpaceInfo{
 		TotalBytes: totalBytes,

@@ -123,8 +123,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// Queue is now initialized at package level in birdnet package
-	// Optionally resize the queue if needed
-	birdnet.ResizeQueue(5)
+	// Resize the queue based on processing needs
+	// TODO: Make this configurable via settings
+	const defaultQueueSize = 5
+	birdnet.ResizeQueue(defaultQueueSize)
 
 	// Initialize Prometheus metrics manager
 	metrics, err := initializeMetrics()
