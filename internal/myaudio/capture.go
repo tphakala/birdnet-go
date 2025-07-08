@@ -123,8 +123,7 @@ type UnifiedAudioData struct {
 // activeStreams keeps track of currently active RTSP streams
 var activeStreams sync.Map
 
-// ffmpegMonitor is the global FFmpeg process monitor
-var ffmpegMonitor *FFmpegMonitor
+// FFmpeg monitoring is now handled by the new FFmpegManager in the integration layer
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
@@ -178,21 +177,6 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
 func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	// If there are no RTSP URLs configured and FFmpeg monitor is running, stop it
-	if len(settings.Realtime.RTSP.URLs) == 0 {
-		if ffmpegMonitor != nil {
-			ffmpegMonitor.Stop()
-			ffmpegMonitor = nil
-		}
-		return
-	}
-
-	// Initialize FFmpeg monitor if not already running
-	if ffmpegMonitor == nil {
-		ffmpegMonitor = NewDefaultFFmpegMonitor()
-		ffmpegMonitor.Start()
-	}
-
 	// Get current active streams
 	currentStreams := make(map[string]bool)
 	activeStreams.Range(func(key, value interface{}) bool {
