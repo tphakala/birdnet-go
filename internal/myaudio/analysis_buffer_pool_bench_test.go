@@ -81,8 +81,11 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 			}
 			// Write more data if needed
 			abMutex.Lock()
-			ab.Write(testData)
+			_, err = ab.Write(testData)
 			abMutex.Unlock()
+			if err != nil {
+				b.Fatalf("Failed to write test data: %v", err)
+			}
 		}
 		
 		if data == nil {
