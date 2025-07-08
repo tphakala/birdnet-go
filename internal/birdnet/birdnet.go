@@ -54,6 +54,7 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	mu                  sync.Mutex
 	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
+	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -548,6 +549,11 @@ func (bn *BirdNET) validateModelAndLabels() error {
 	// Pre-allocate results buffer with the model's output size
 	if bn.resultsBuffer == nil || len(bn.resultsBuffer) != modelOutputSize {
 		bn.resultsBuffer = make([]datastore.Results, modelOutputSize)
+	}
+
+	// Pre-allocate confidence buffer with the model's output size
+	if bn.confidenceBuffer == nil || len(bn.confidenceBuffer) != modelOutputSize {
+		bn.confidenceBuffer = make([]float32, modelOutputSize)
 	}
 
 	bn.Debug("\033[32m✅ Model validation successful: %d labels match model output size\033[0m", modelOutputSize)
