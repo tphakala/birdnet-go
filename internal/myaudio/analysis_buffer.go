@@ -31,6 +31,7 @@ var (
 	abMutex         sync.RWMutex                      // Mutex to protect access to the analysisBuffers and prevData maps
 	warningCounter  map[string]int
 	analysisMetrics *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
+	readBufferPool  *BufferPool            // Global buffer pool for read operations
 )
 
 // init initializes the warningCounter map
@@ -89,6 +90,22 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 	if overlapSize == 0 {
 		overlapSize = SecondsToBytes(settings.BirdNET.Overlap)
 		readSize = conf.BufferSize - overlapSize
+		
+		// Initialize the read buffer pool if not already done
+		if readBufferPool == nil {
+			var err error
+			readBufferPool, err = NewBufferPool(readSize)
+			if err != nil {
+				enhancedErr := errors.New(err).
+					Component("myaudio").
+					Category(errors.CategorySystem).
+					Context("operation", "allocate_analysis_buffer").
+					Context("source", source).
+					Context("buffer_pool_size", readSize).
+					Build()
+				return enhancedErr
+			}
+		}
 	}
 
 	// Initialize the analysis ring buffer
@@ -392,8 +409,15 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 		return nil, nil
 	}
 
-	// Create a slice to hold the data we're going to read
-	data := make([]byte, readSize)
+	// Get a buffer from the pool instead of allocating new
+	var data []byte
+	if readBufferPool != nil {
+		data = readBufferPool.Get()
+	} else {
+		// Fallback if pool not initialized
+		data = make([]byte, readSize)
+	}
+	
 	// Read data from the ring buffer
 	bytesRead, err := ab.Read(data)
 	if err != nil {
@@ -412,6 +436,11 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			analysisMetrics.RecordBufferRead("analysis", stream, "error")
 			analysisMetrics.RecordBufferReadError("analysis", stream, "read_failed")
 		}
+		
+		// Return buffer to pool on error
+		if readBufferPool != nil {
+			readBufferPool.Put(data)
+		}
 		return nil, enhancedErr
 	}
 
@@ -419,6 +448,11 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 	var fullData []byte
 	prevData[stream] = append(prevData[stream], data...)
 	fullData = prevData[stream]
+	
+	// Return buffer to pool after copying data
+	if readBufferPool != nil {
+		readBufferPool.Put(data)
+	}
 	if len(fullData) >= conf.BufferSize {
 		// Update prevData for the next iteration
 		prevData[stream] = fullData[readSize:]
