@@ -107,7 +107,8 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
 	predictions := extractPredictions(outputTensor)
 
-	confidence := applySigmoidToPredictions(predictions, bn.Settings.BirdNET.Sensitivity)
+	// Use optimized sigmoid function with buffer reuse
+	confidence := applySigmoidToPredictionsReuse(predictions, bn.Settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 
 	// Use the pre-allocated buffer to reduce memory allocations
 	results, err := pairLabelsAndConfidenceReuse(bn.Settings.BirdNET.Labels, confidence, bn.resultsBuffer)
@@ -130,22 +131,22 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		return nil, err
 	}
 
-	// Sorting results by confidence in descending order.
-	sortResults(results)
+	// Use optimized top-k algorithm instead of full sort + trim
+	topResults := getTopKResults(results, 10)
 
 	// Log prediction timing for performance monitoring
 	duration := time.Since(start)
-	bn.Debug("Prediction completed in %v with %d results", duration, len(results))
+	bn.Debug("Prediction completed in %v with %d results", duration, len(topResults))
 
 	// Record metrics
 	span.SetData("total_duration_ms", duration.Milliseconds())
-	span.SetData("result_count", len(results))
+	span.SetData("result_count", len(topResults))
 	span.SetTag("error", "false")
 
 	// The span.Finish() will automatically record the prediction metrics
 
 	// Return the top 10 results
-	return trimResultsToMax(results, 10), nil
+	return topResults, nil
 }
 
 // AnalyzeAudio processes audio data in chunks and predicts species using the BirdNET model.
@@ -302,10 +303,93 @@ func applySigmoidToPredictions(predictions []float32, sensitivity float64) []flo
 	return confidence
 }
 
+// applySigmoidToPredictionsReuse applies the sigmoid function to predictions using a pre-allocated buffer.
+func applySigmoidToPredictionsReuse(predictions []float32, sensitivity float64, buffer []float32) []float32 {
+	if len(buffer) != len(predictions) {
+		// Fallback to allocation if buffer size doesn't match
+		return applySigmoidToPredictions(predictions, sensitivity)
+	}
+	
+	for i, pred := range predictions {
+		buffer[i] = float32(customSigmoid(float64(pred), sensitivity))
+	}
+	return buffer
+}
+
 // trimResultsToMax trims the results to a maximum specified count.
 func trimResultsToMax(results []datastore.Results, maxResults int) []datastore.Results {
 	if len(results) > maxResults {
 		return results[:maxResults]
 	}
 	return results
+}
+
+// getTopKResults returns the top k results without fully sorting the array.
+// Uses a partial sort algorithm that's more efficient than sorting all results.
+func getTopKResults(results []datastore.Results, k int) []datastore.Results {
+	if len(results) == 0 || k <= 0 {
+		return []datastore.Results{}
+	}
+	
+	if k >= len(results) {
+		// If k is greater than or equal to the number of results, sort everything
+		sortResults(results)
+		return results
+	}
+	
+	// Use partial sort to find top k elements
+	partialSort(results, k)
+	
+	// Sort the top k elements in descending order
+	sortResults(results[:k])
+	
+	return results[:k]
+}
+
+// partialSort performs a partial sort to move the top k elements to the front.
+// This is more efficient than full sorting when k << len(results).
+func partialSort(results []datastore.Results, k int) {
+	n := len(results)
+	if k >= n {
+		return
+	}
+	
+	// Use quickselect-like algorithm to partition the top k elements
+	left, right := 0, n-1
+	
+partitionLoop:
+	for left < right {
+		pivotIndex := partition(results, left, right)
+		
+		switch {
+		case pivotIndex == k-1:
+			// Perfect partition - we have exactly k elements
+			break partitionLoop
+		case pivotIndex < k-1:
+			// Need more elements, search right partition
+			left = pivotIndex + 1
+		default:
+			// Too many elements, search left partition
+			right = pivotIndex - 1
+		}
+	}
+}
+
+// partition partitions the array around a pivot for quickselect algorithm.
+// Returns the final position of the pivot.
+func partition(results []datastore.Results, left, right int) int {
+	// Use the rightmost element as pivot
+	pivot := results[right]
+	i := left - 1
+	
+	for j := left; j < right; j++ {
+		// Sort in descending order (higher confidence first)
+		if results[j].Confidence > pivot.Confidence {
+			i++
+			results[i], results[j] = results[j], results[i]
+		}
+	}
+	
+	results[i+1], results[right] = results[right], results[i+1]
+	return i + 1
 }

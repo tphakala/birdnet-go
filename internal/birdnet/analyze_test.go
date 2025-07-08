@@ -614,3 +614,262 @@ func generateTestConfidence(count int) []float32 {
 	}
 	return confidence
 }
+
+// TestApplySigmoidToPredictionsReuse tests the optimized sigmoid function with buffer reuse
+func TestApplySigmoidToPredictionsReuse(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		predictions []float32
+		sensitivity float64
+		bufferSize  int
+		validate    func(t *testing.T, original []float32, reuse []float32, buffer []float32)
+	}{
+		{
+			name:        "Buffer size matches",
+			predictions: []float32{-2, -1, 0, 1, 2},
+			sensitivity: 1.0,
+			bufferSize:  5,
+			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				if len(original) != len(reuse) {
+					t.Errorf("Length mismatch: %d vs %d", len(original), len(reuse))
+				}
+				// Results should be identical
+				for i := range original {
+					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
+						t.Errorf("Index %d: original=%f, reuse=%f", i, original[i], reuse[i])
+					}
+				}
+				// Reuse should return the same buffer
+				if &reuse[0] != &buffer[0] {
+					t.Error("Buffer reuse should return the same buffer")
+				}
+			},
+		},
+		{
+			name:        "Buffer size mismatch fallback",
+			predictions: []float32{-1, 0, 1},
+			sensitivity: 1.0,
+			bufferSize:  2, // Smaller than predictions
+			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				if len(original) != len(reuse) {
+					t.Errorf("Length mismatch: %d vs %d", len(original), len(reuse))
+				}
+				// Results should be identical even with fallback
+				for i := range original {
+					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
+						t.Errorf("Index %d: original=%f, reuse=%f", i, original[i], reuse[i])
+					}
+				}
+				// Should not use the buffer due to size mismatch
+				if len(reuse) == len(buffer) && &reuse[0] == &buffer[0] {
+					t.Error("Should have fallen back to allocation, not used buffer")
+				}
+			},
+		},
+		{
+			name:        "Empty inputs",
+			predictions: []float32{},
+			sensitivity: 1.0,
+			bufferSize:  0,
+			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				if len(original) != 0 || len(reuse) != 0 {
+					t.Error("Empty inputs should produce empty outputs")
+				}
+			},
+		},
+		{
+			name:        "Large buffer",
+			predictions: []float32{1.0, 2.0, 3.0},
+			sensitivity: 2.0,
+			bufferSize:  5, // Larger than predictions
+			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				// Should fallback due to size mismatch
+				for i := range original {
+					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
+						t.Errorf("Index %d: original=%f, reuse=%f", i, original[i], reuse[i])
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Get original results
+			original := applySigmoidToPredictions(tt.predictions, tt.sensitivity)
+			
+			// Create buffer and test reuse function
+			buffer := make([]float32, tt.bufferSize)
+			reuse := applySigmoidToPredictionsReuse(tt.predictions, tt.sensitivity, buffer)
+
+			if tt.validate != nil {
+				tt.validate(t, original, reuse, buffer)
+			}
+		})
+	}
+}
+
+// TestGetTopKResults tests the optimized top-k results function
+func TestGetTopKResults(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    []datastore.Results
+		k        int
+		validate func(t *testing.T, results []datastore.Results, k int)
+	}{
+		{
+			name: "Normal case - top 3 from 5",
+			input: []datastore.Results{
+				{Species: "A", Confidence: 0.9},
+				{Species: "B", Confidence: 0.7},
+				{Species: "C", Confidence: 0.8},
+				{Species: "D", Confidence: 0.6},
+				{Species: "E", Confidence: 0.5},
+			},
+			k: 3,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != k {
+					t.Errorf("Expected %d results, got %d", k, len(results))
+				}
+				// Should be sorted in descending order
+				for i := 1; i < len(results); i++ {
+					if results[i].Confidence > results[i-1].Confidence {
+						t.Errorf("Results not sorted: %f > %f at index %d", 
+							results[i].Confidence, results[i-1].Confidence, i)
+					}
+				}
+				// Check that we got the highest confidence values
+				expectedOrder := []string{"A", "C", "B"} // 0.9, 0.8, 0.7
+				for i, expected := range expectedOrder {
+					if results[i].Species != expected {
+						t.Errorf("Index %d: expected %s, got %s", i, expected, results[i].Species)
+					}
+				}
+			},
+		},
+		{
+			name: "k equals length",
+			input: []datastore.Results{
+				{Species: "A", Confidence: 0.5},
+				{Species: "B", Confidence: 0.9},
+				{Species: "C", Confidence: 0.7},
+			},
+			k: 3,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != 3 {
+					t.Errorf("Expected 3 results, got %d", len(results))
+				}
+				// Should be sorted
+				if results[0].Confidence != 0.9 || results[1].Confidence != 0.7 || results[2].Confidence != 0.5 {
+					t.Error("Full array not sorted correctly")
+				}
+			},
+		},
+		{
+			name: "k greater than length",
+			input: []datastore.Results{
+				{Species: "A", Confidence: 0.8},
+				{Species: "B", Confidence: 0.9},
+			},
+			k: 5,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != 2 {
+					t.Errorf("Expected 2 results (input length), got %d", len(results))
+				}
+				// Should be sorted
+				if results[0].Confidence != 0.9 || results[1].Confidence != 0.8 {
+					t.Error("Results not sorted correctly")
+				}
+			},
+		},
+		{
+			name:  "Empty input",
+			input: []datastore.Results{},
+			k:     5,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != 0 {
+					t.Errorf("Expected 0 results for empty input, got %d", len(results))
+				}
+			},
+		},
+		{
+			name: "k is zero",
+			input: []datastore.Results{
+				{Species: "A", Confidence: 0.9},
+			},
+			k: 0,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != 0 {
+					t.Errorf("Expected 0 results for k=0, got %d", len(results))
+				}
+			},
+		},
+		{
+			name: "k is negative",
+			input: []datastore.Results{
+				{Species: "A", Confidence: 0.9},
+			},
+			k: -1,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != 0 {
+					t.Errorf("Expected 0 results for negative k, got %d", len(results))
+				}
+			},
+		},
+		{
+			name: "Large dataset (realistic BirdNET size)",
+			input: generateLargeTestResults(6522),
+			k: 10,
+			validate: func(t *testing.T, results []datastore.Results, k int) {
+				if len(results) != 10 {
+					t.Errorf("Expected 10 results, got %d", len(results))
+				}
+				// Verify sorted order
+				for i := 1; i < len(results); i++ {
+					if results[i].Confidence > results[i-1].Confidence {
+						t.Errorf("Large dataset not sorted correctly at index %d", i)
+					}
+				}
+				// First result should have the highest confidence
+				// In our generated data, confidence decreases from 0.99 down
+				if results[0].Confidence < 0.99 {
+					t.Errorf("Expected highest confidence ~0.99, got %f", results[0].Confidence)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Make a copy to avoid modifying test data
+			input := make([]datastore.Results, len(tt.input))
+			copy(input, tt.input)
+
+			results := getTopKResults(input, tt.k)
+
+			if tt.validate != nil {
+				tt.validate(t, results, tt.k)
+			}
+		})
+	}
+}
+
+// generateLargeTestResults creates a large dataset for testing
+func generateLargeTestResults(count int) []datastore.Results {
+	results := make([]datastore.Results, count)
+	for i := 0; i < count; i++ {
+		results[i] = datastore.Results{
+			Species:    fmt.Sprintf("Species_%06d", i+1),
+			Confidence: float32(100-i%100) / 100.0, // Decreasing confidence pattern
+		}
+	}
+	return results
+}
