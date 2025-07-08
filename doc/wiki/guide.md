@@ -690,21 +690,21 @@ graph TD
 ```yaml
 realtime:
   dynamicthreshold:
-    enabled: false      # Enable dynamic threshold adjustment
+    enabled: true       # Enable dynamic threshold adjustment (default: true)
     debug: false        # Enable debug logging for threshold changes
-    trigger: 0.5        # Confidence level that triggers threshold reduction
-    min: 0.3           # Minimum allowed threshold (safety floor)
+    trigger: 0.90       # Confidence level that triggers threshold reduction
+    min: 0.20          # Minimum allowed threshold (safety floor)
     validhours: 24     # Hours before threshold resets to base value
 ```
 
 #### Key Parameters Explained
 
-1. **`trigger`** (default: 0.5)
+1. **`trigger`** (default: 0.90)
    - The confidence level that activates dynamic threshold adjustment
    - When a detection exceeds this value, the system starts lowering the threshold for that species
-   - Example: With trigger=0.9, only very high-confidence detections (90%+) will activate the dynamic adjustment
+   - Example: With trigger=0.90, only very high-confidence detections (90%+) will activate the dynamic adjustment
 
-2. **`min`** (default: 0.3)
+2. **`min`** (default: 0.20)
    - The absolute minimum threshold value
    - Prevents the threshold from dropping too low, maintaining detection quality
    - Acts as a safety floor to prevent excessive false positives
@@ -723,7 +723,7 @@ The system uses a progressive adjustment based on the number of high-confidence 
 | 0               | 0     | 1.0× (base)         | 0.80             |
 | 1               | 1     | 0.75×               | 0.60             |
 | 2               | 2     | 0.50×               | 0.40             |
-| 3+              | 3     | 0.25×               | 0.30 (min limit) |
+| 3+              | 3     | 0.25×               | 0.20 (min limit) |
 
 #### Practical Example
 
@@ -735,32 +735,36 @@ realtime:
   dynamicthreshold:
     enabled: true
     trigger: 0.9        # High trigger for quality
-    min: 0.3           # Safety floor
+    min: 0.2           # Safety floor
     validhours: 24     # 24-hour window
 ```
 
-**Scenario: American Robin Detection**
+**Scenario: Great Horned Owl Detection**
 
-1. **Initial State**: American Robin has no dynamic threshold, uses base 0.8
+1. **Initial State**: Great Horned Owl has no dynamic threshold, uses base 0.8
 2. **First Detection**: 
-   - 08:00 - American Robin detected with 0.92 confidence (exceeds 0.9 trigger)
+   - 19:30 (dusk) - Great Horned Owl detected with 0.93 confidence (exceeds 0.9 trigger)
    - High confidence count: 1
    - New threshold: 0.8 × 0.75 = 0.6
-   - Timer set to expire at 08:00 tomorrow
-3. **Subsequent Detections**:
-   - 08:15 - American Robin detected with 0.65 confidence (now passes lowered threshold)
-   - 09:30 - Another detection with 0.95 confidence
+   - Timer set to expire at 19:30 tomorrow
+3. **Night Activity**:
+   - 21:45 - Great Horned Owl detected with 0.65 confidence (now passes lowered threshold)
+   - 23:15 - Another detection with 0.94 confidence
    - High confidence count: 2
    - New threshold: 0.8 × 0.5 = 0.4
-   - Timer reset to 09:30 tomorrow
-4. **Maximum Adjustment**:
-   - 10:00 - Detection with 0.91 confidence
+   - Timer reset to 23:15 tomorrow
+4. **Pre-dawn Activity**:
+   - 04:30 - Detection with 0.91 confidence
    - High confidence count: 3
    - Calculated threshold: 0.8 × 0.25 = 0.2
-   - Applied threshold: 0.3 (min limit enforced)
-5. **Reset**:
-   - If no high-confidence detections occur for 24 hours after 10:00
+   - Applied threshold: 0.2 (exactly at min limit)
+5. **Daytime Silence**:
+   - Owls typically inactive during day
+   - No detections from 05:00 to 19:00
+6. **Reset Scenario**:
+   - If no high-confidence detections occur for 24 hours after 04:30
    - Threshold returns to base 0.8
+   - Next evening's first call would need 0.8+ confidence again
 
 #### Benefits and Use Cases
 
@@ -773,7 +777,7 @@ realtime:
 #### Best Practices
 
 1. **Conservative Trigger**: Set trigger high (0.8-0.95) to ensure only clear detections adjust thresholds
-2. **Reasonable Minimum**: Keep min above 0.3 to maintain detection quality
+2. **Reasonable Minimum**: Keep min at or above 0.2 to maintain detection quality
 3. **Monitor with Debug**: Enable debug mode initially to understand how thresholds change:
    ```yaml
    dynamicthreshold:
