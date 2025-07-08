@@ -306,7 +306,8 @@ func applySigmoidToPredictions(predictions []float32, sensitivity float64) []flo
 // applySigmoidToPredictionsReuse applies the sigmoid function to predictions using a pre-allocated buffer.
 func applySigmoidToPredictionsReuse(predictions []float32, sensitivity float64, buffer []float32) []float32 {
 	if len(buffer) != len(predictions) {
-		// Fallback to allocation if buffer size doesn't match
+		// Fallback to allocation when buffer size doesn't match predictions length.
+		// This ensures correctness when model output size differs from expected buffer size.
 		return applySigmoidToPredictions(predictions, sensitivity)
 	}
 	
