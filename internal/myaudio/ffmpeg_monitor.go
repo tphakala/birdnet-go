@@ -47,9 +47,7 @@ func MonitorFFmpegProcesses(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			// Sync with configuration to handle removed streams
-			if err := SyncRTSPStreamsWithConfig(nil); err != nil {
-				// Silently ignore errors as this is just maintenance
-			}
+			_ = SyncRTSPStreamsWithConfig(nil) // Intentionally ignore errors in monitoring loop
 		}
 	}
 }

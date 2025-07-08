@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -286,18 +287,30 @@ func (s *FFmpegStream) cleanupProcess() {
 	
 	// Close stdout
 	if s.stdout != nil {
-		s.stdout.Close()
+		if err := s.stdout.Close(); err != nil {
+			// Log but don't fail - process cleanup is more important
+			log.Printf("⚠️ Error closing stdout for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
+		}
 	}
 	
 	// Kill process
 	if err := killProcessGroup(s.cmd); err != nil {
-		s.cmd.Process.Kill()
+		if killErr := s.cmd.Process.Kill(); killErr != nil {
+			// Only log if kill also fails
+			log.Printf("⚠️ Error killing process for %s: %v", privacy.SanitizeRTSPUrl(s.url), killErr)
+		}
 	}
 	
 	// Wait for process to exit
 	done := make(chan struct{})
 	go func() {
-		s.cmd.Wait()
+		if err := s.cmd.Wait(); err != nil {
+			// This is expected when we kill the process
+			// Only log if it's not an expected exit status
+			if !strings.Contains(err.Error(), "signal: killed") {
+				log.Printf("⚠️ Process wait error for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
+			}
+		}
 		close(done)
 	}()
 	

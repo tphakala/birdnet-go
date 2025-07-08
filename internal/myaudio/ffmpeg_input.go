@@ -887,7 +887,8 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 
 		// Check if FFmpeg exited quickly (potential connection issue)
 		runtime := time.Since(startTime)
-		if runtime < 5*time.Second {
+		switch {
+		case runtime < 5*time.Second:
 			// FFmpeg exited too quickly, log stderr regardless of error status
 			stderrOutput := stderrBuf.String()
 			exitReason := parseFFmpegExitReason(stderrOutput)
@@ -918,7 +919,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - possible connection failure", runtime)
 				}
 			}
-		} else if err != nil {
+		case err != nil:
 			// Normal error logging for longer-running processes
 			if !strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
 				stderrOutput := stderrBuf.String()
@@ -940,7 +941,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 					err = fmt.Errorf("%w\nStderr: %s", err, stderrOutput)
 				}
 			}
-		} else {
+		default:
 			// Log normal exit for longer-running processes
 			stderrOutput := stderrBuf.String()
 			exitReason := parseFFmpegExitReason(stderrOutput)
@@ -1269,7 +1270,7 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 }
 
 // captureAudioRTSPLegacy is the old implementation for capturing audio from an RTSP stream
-// DEPRECATED: This function is kept for reference but should not be used
+// Deprecated: This function is kept for reference but should not be used
 func captureAudioRTSPLegacy(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// Register the channels for this stream
 	RegisterStreamChannels(url, restartChan, unifiedAudioChan)
