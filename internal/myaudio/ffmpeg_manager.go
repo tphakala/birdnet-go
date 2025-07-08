@@ -4,13 +4,39 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
+
+var (
+	managerLogger *slog.Logger
+	managerLevelVar = new(slog.LevelVar)
+	closeManagerLogger func() error
+)
+
+func init() {
+	var err error
+	// Define log file path relative to working directory
+	logFilePath := filepath.Join("logs", "ffmpeg-manager.log")
+	initialLevel := slog.LevelInfo // Set desired initial level
+	managerLevelVar.Set(initialLevel)
+
+	// Initialize the service-specific file logger
+	managerLogger, closeManagerLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-manager", managerLevelVar)
+	if err != nil {
+		// Fallback: Log error to standard log and use default logger
+		log.Printf("Failed to initialize ffmpeg-manager file logger at %s: %v. Using default logger.", logFilePath, err)
+		managerLogger = slog.Default().With("service", "ffmpeg-manager")
+		closeManagerLogger = func() error { return nil } // No-op closer
+	}
+}
 
 // FFmpegManager manages all FFmpeg streams
 type FFmpegManager struct {
@@ -55,6 +81,11 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 		stream.Run(m.ctx)
 	}()
 
+	managerLogger.Info("started FFmpeg stream",
+		"url", privacy.SanitizeRTSPUrl(url),
+		"transport", transport,
+		"operation", "start_stream")
+	
 	log.Printf("✅ Started FFmpeg stream for %s", privacy.SanitizeRTSPUrl(url))
 	return nil
 }
@@ -75,6 +106,10 @@ func (m *FFmpegManager) StopStream(url string) error {
 	stream.Stop()
 	delete(m.streams, url)
 	
+	managerLogger.Info("stopped FFmpeg stream",
+		"url", privacy.SanitizeRTSPUrl(url),
+		"operation", "stop_stream")
+	
 	log.Printf("🛑 Stopped FFmpeg stream for %s", privacy.SanitizeRTSPUrl(url))
 	return nil
 }
@@ -93,6 +128,11 @@ func (m *FFmpegManager) RestartStream(url string) error {
 	}
 
 	stream.Restart()
+	
+	managerLogger.Info("restarted FFmpeg stream",
+		"url", privacy.SanitizeRTSPUrl(url),
+		"operation", "restart_stream")
+	
 	log.Printf("🔄 Restarted FFmpeg stream for %s", privacy.SanitizeRTSPUrl(url))
 	return nil
 }
@@ -143,6 +183,10 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 
 	for _, url := range toStop {
 		if err := m.StopStream(url); err != nil {
+			managerLogger.Warn("failed to stop unconfigured stream",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err,
+				"operation", "sync_with_config")
 			log.Printf("⚠️ Error stopping unconfigured stream %s: %v", url, err)
 		}
 	}
@@ -155,6 +199,11 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 
 		if !running {
 			if err := m.StartStream(url, transport, audioChan); err != nil {
+				managerLogger.Warn("failed to start configured stream",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"error", err,
+					"transport", transport,
+					"operation", "sync_with_config")
 				log.Printf("⚠️ Error starting configured stream %s: %v", url, err)
 			}
 		}
@@ -188,11 +237,21 @@ func (m *FFmpegManager) checkStreamHealth() {
 	
 	for url, h := range health {
 		if !h.IsHealthy {
+			managerLogger.Warn("unhealthy stream detected",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+				"restart_count", h.RestartCount,
+				"operation", "health_check")
+			
 			log.Printf("⚠️ Unhealthy stream detected: %s (last data: %v ago)", 
 				privacy.SanitizeRTSPUrl(url), time.Since(h.LastDataReceived))
 			
 			// Restart unhealthy streams
 			if err := m.RestartStream(url); err != nil {
+				managerLogger.Error("failed to restart unhealthy stream",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"error", err,
+					"operation", "health_check_restart")
 				log.Printf("❌ Failed to restart unhealthy stream %s: %v", url, err)
 			}
 		}
@@ -201,6 +260,13 @@ func (m *FFmpegManager) checkStreamHealth() {
 
 // Shutdown gracefully shuts down all streams
 func (m *FFmpegManager) Shutdown() {
+	start := time.Now()
+	activeStreams := len(m.streams)
+	
+	managerLogger.Info("shutting down FFmpeg manager",
+		"active_streams", activeStreams,
+		"operation", "shutdown")
+	
 	log.Printf("🛑 Shutting down FFmpeg manager...")
 	
 	// Cancel context to signal shutdown
@@ -226,8 +292,16 @@ func (m *FFmpegManager) Shutdown() {
 	// Wait with timeout
 	select {
 	case <-done:
+		managerLogger.Info("FFmpeg manager shutdown complete",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"stopped_streams", activeStreams,
+			"operation", "shutdown")
 		log.Printf("✅ FFmpeg manager shutdown complete")
 	case <-time.After(30 * time.Second):
+		managerLogger.Warn("FFmpeg manager shutdown timeout",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"active_streams", activeStreams,
+			"operation", "shutdown")
 		log.Printf("⚠️ FFmpeg manager shutdown timeout")
 	}
 }

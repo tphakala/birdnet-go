@@ -2,10 +2,13 @@ package myaudio
 
 import (
 	"log"
+	"log/slog"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -14,7 +17,28 @@ var (
 	globalManager *FFmpegManager
 	managerOnce   sync.Once
 	managerMutex  sync.RWMutex
+	
+	integrationLogger *slog.Logger
+	integrationLevelVar = new(slog.LevelVar)
+	closeIntegrationLogger func() error
 )
+
+func init() {
+	var err error
+	// Define log file path relative to working directory - use ffmpeg-input.log as requested
+	logFilePath := filepath.Join("logs", "ffmpeg-input.log")
+	initialLevel := slog.LevelInfo // Set desired initial level
+	integrationLevelVar.Set(initialLevel)
+
+	// Initialize the service-specific file logger
+	integrationLogger, closeIntegrationLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-input", integrationLevelVar)
+	if err != nil {
+		// Fallback: Log error to standard log and use default logger
+		log.Printf("Failed to initialize ffmpeg-input file logger at %s: %v. Using default logger.", logFilePath, err)
+		integrationLogger = slog.Default().With("service", "ffmpeg-input")
+		closeIntegrationLogger = func() error { return nil } // No-op closer
+	}
+}
 
 // getGlobalManager returns the global FFmpeg manager instance
 func getGlobalManager() *FFmpegManager {
@@ -45,6 +69,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 
 	// Check FFmpeg availability
 	if conf.GetFfmpegBinaryName() == "" {
+		integrationLogger.Error("FFmpeg not available",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"operation", "capture_audio_rtsp")
 		log.Printf("❌ FFmpeg is not available, cannot capture audio from %s", url)
 		return
 	}
@@ -54,6 +81,11 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 
 	// Start the stream
 	if err := manager.StartStream(url, transport, unifiedAudioChan); err != nil {
+		integrationLogger.Error("failed to start stream",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"transport", transport,
+			"operation", "capture_audio_rtsp")
 		log.Printf("❌ Failed to start stream for %s: %v", url, err)
 		return
 	}
@@ -67,12 +99,20 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 			case <-quitChan:
 				// Stop the stream
 				if err := manager.StopStream(url); err != nil {
+					integrationLogger.Warn("failed to stop stream",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"error", err,
+						"operation", "quit_signal")
 					log.Printf("⚠️ Error stopping stream %s: %v", url, err)
 				}
 				return
 			case <-restartChan:
 				// Restart the stream
 				if err := manager.RestartStream(url); err != nil {
+					integrationLogger.Warn("failed to restart stream",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"error", err,
+						"operation", "restart_signal")
 					log.Printf("⚠️ Error restarting stream %s: %v", url, err)
 				}
 			}
