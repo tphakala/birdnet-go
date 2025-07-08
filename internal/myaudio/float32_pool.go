@@ -73,6 +73,8 @@ func (fp *Float32Pool) Put(buf []float32) {
 		fp.discarded.Add(1)
 		return
 	}
+	//nolint:staticcheck // SA6002: sync.Pool is designed to work with slices and 
+	// the overhead is negligible compared to the allocation savings we achieve
 	fp.pool.Put(buf)
 }
 

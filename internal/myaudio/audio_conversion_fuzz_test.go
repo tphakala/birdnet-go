@@ -166,11 +166,12 @@ func FuzzFloat32PoolOperations(f *testing.F) {
 			switch op {
 			case 0: // Get
 				buf := float32Pool.Get()
-				if buf == nil {
+				switch {
+				case buf == nil:
 					t.Error("Got nil buffer from pool")
-				} else if len(buf) != conf.BufferSize/2 {
+				case len(buf) != conf.BufferSize/2:
 					t.Errorf("Got wrong size buffer: %d, expected %d", len(buf), conf.BufferSize/2)
-				} else {
+				default:
 					buffers = append(buffers, buf)
 				}
 				
