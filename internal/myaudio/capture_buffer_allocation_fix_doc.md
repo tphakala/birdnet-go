@@ -90,16 +90,26 @@ Replaced direct `AllocateCaptureBuffer` calls with `AllocateCaptureBufferIfNeede
 ## Performance Impact
 
 The fix has minimal performance impact:
-- `AllocateCaptureBufferIfNeeded` adds only a map lookup when buffer exists
-- No additional allocations in the common path
+- `AllocateCaptureBufferIfNeeded` adds only a map lookup when buffer exists (14.36 ns/op)
+- Zero additional memory allocations (0 B/op, 0 allocs/op)  
 - Thread-safe without introducing contention
+
+### Benchmark Results
+
+```
+BenchmarkAllocateCaptureBufferIfNeeded-16    77802882    14.36 ns/op    0 B/op    0 allocs/op
+```
+
+When a buffer already exists, the overhead is just 14 nanoseconds for the safety check.
 
 ## Memory Savings
 
-Expected results:
-- **Before**: 5.50MB repeated allocations in heap profile
-- **After**: Single allocation per source (typically 5.76MB for 60s @ 48kHz stereo)
-- **Savings**: Up to 5.50MB reduction in heap usage
+Based on the fix implementation:
+- **Before**: 5.50MB repeated allocations shown in heap profile (could allocate same buffer multiple times)
+- **After**: Single allocation per source (5.76MB for 60s @ 48kHz stereo)
+- **Savings**: Prevents the 5.50MB of repeated allocations entirely
+
+Each prevented double allocation saves ~5.76MB of memory. In a system with 10 RTSP cameras where each might have attempted 2-3 allocations due to race conditions, this could save 50-100MB of heap memory.
 
 ## Debugging
 
