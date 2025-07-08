@@ -17,6 +17,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	tflite "github.com/tphakala/go-tflite"
@@ -52,6 +53,7 @@ type BirdNET struct {
 	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	mu                  sync.Mutex
+	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -131,6 +133,15 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 		bn.Debug("Warning: Locale '%s' is not officially supported by model '%s'. Using default locale '%s'.",
 			normalizedLocale, bn.ModelInfo.ID, bn.ModelInfo.DefaultLocale)
 		settings.BirdNET.Locale = bn.ModelInfo.DefaultLocale
+	}
+
+	// Validate model and labels, which will also allocate the results buffer
+	if err := bn.validateModelAndLabels(); err != nil {
+		return nil, errors.New(fmt.Errorf("BirdNET: model validation failed: %w", err)).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Build()
 	}
 
 	return bn, nil
@@ -532,6 +543,11 @@ func (bn *BirdNET) validateModelAndLabels() error {
 				return "external"
 			}()).
 			Build()
+	}
+
+	// Pre-allocate results buffer with the model's output size
+	if bn.resultsBuffer == nil || len(bn.resultsBuffer) != modelOutputSize {
+		bn.resultsBuffer = make([]datastore.Results, modelOutputSize)
 	}
 
 	bn.Debug("\033[32m✅ Model validation successful: %d labels match model output size\033[0m", modelOutputSize)
