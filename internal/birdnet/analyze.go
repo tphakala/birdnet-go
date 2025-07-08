@@ -109,7 +109,8 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 
 	confidence := applySigmoidToPredictions(predictions, bn.Settings.BirdNET.Sensitivity)
 
-	results, err := pairLabelsAndConfidence(bn.Settings.BirdNET.Labels, confidence)
+	// Use the pre-allocated buffer to reduce memory allocations
+	results, err := pairLabelsAndConfidenceReuse(bn.Settings.BirdNET.Labels, confidence, bn.resultsBuffer)
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryValidation).
@@ -234,6 +235,24 @@ func pairLabelsAndConfidence(labels []string, preds []float32) ([]datastore.Resu
 		results = append(results, datastore.Results{Species: label, Confidence: preds[i]})
 	}
 	return results, nil
+}
+
+// pairLabelsAndConfidenceReuse pairs labels with confidence values, reusing a pre-allocated buffer.
+// The buffer must have the same length as labels and preds.
+func pairLabelsAndConfidenceReuse(labels []string, preds []float32, buffer []datastore.Results) ([]datastore.Results, error) {
+	if len(labels) != len(preds) {
+		return nil, fmt.Errorf("mismatched labels and predictions lengths: %d vs %d", len(labels), len(preds))
+	}
+	if len(buffer) != len(labels) {
+		return nil, fmt.Errorf("buffer size mismatch: %d vs %d", len(buffer), len(labels))
+	}
+
+	// Reuse the buffer by updating values in place
+	for i, label := range labels {
+		buffer[i].Species = label
+		buffer[i].Confidence = preds[i]
+	}
+	return buffer, nil
 }
 
 // FormatDuration formats duration in a human-readable way based on the total time
