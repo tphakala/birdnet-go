@@ -6,6 +6,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 var bn *birdnet.BirdNET // BirdNET interpreter
@@ -31,4 +32,13 @@ func initializeBirdNET(settings *conf.Settings) error {
 		}
 	}
 	return nil
+}
+
+// UpdateBirdNETModelLoadedMetric updates the model loaded metric status
+// This should be called after metrics are initialized to report model status
+func UpdateBirdNETModelLoadedMetric(birdnetMetrics *metrics.BirdNETMetrics) {
+	if birdnetMetrics != nil && bn != nil {
+		// Model is loaded successfully
+		birdnetMetrics.RecordModelLoad("birdnet", nil)
+	}
 }
