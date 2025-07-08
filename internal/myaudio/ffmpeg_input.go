@@ -624,6 +624,9 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 		select {
 		case <-ctx.Done():
 			log.Printf("Stopping audio processing for RTSP source: %s", url)
+			logger.Info("stopping audio processing",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"url_type", categorizeStreamURL(url))
 			<-watchdogDone // Wait for watchdog to finish
 			return nil     // Return nil on normal shutdown
 		case <-watchdogDone:
@@ -645,6 +648,11 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 
 					if stderrOutput != "" {
 						log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
+						logger.Warn("FFmpeg exited quickly with stderr",
+							"runtime_seconds", runtime.Seconds(),
+							"stderr", stderrOutput,
+							"url", privacy.SanitizeRTSPUrl(url),
+							"url_type", categorizeStreamURL(url))
 						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v): %s", runtime, stderrOutput)).
 							Category(errors.CategoryRTSP).
 							Component("ffmpeg-quick-exit").
@@ -652,6 +660,11 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 							Context("runtime_seconds", runtime.Seconds()).
 							Build()
 					} else {
+						logger.Warn("FFmpeg exited quickly without stderr",
+							"runtime_seconds", runtime.Seconds(),
+							"url", privacy.SanitizeRTSPUrl(url),
+							"url_type", categorizeStreamURL(url),
+							"reason", "likely_connection_failure")
 						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - likely connection failure", runtime)).
 							Category(errors.CategoryRTSP).
 							Component("ffmpeg-quick-exit").
@@ -663,8 +676,17 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 
 				// Check if this is a normal shutdown
 				if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "file already closed") {
+					logger.Info("FFmpeg process ended normally",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"runtime_seconds", time.Since(p.startTime).Seconds())
 					return nil
 				}
+				// Log unexpected read failures that indicate connection loss
+				logger.Error("FFmpeg connection lost - error reading from process",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"error", err,
+					"runtime_seconds", time.Since(p.startTime).Seconds(),
+					"url_type", categorizeStreamURL(url))
 				// Only return error for unexpected failures
 				return errors.New(fmt.Errorf("error reading from ffmpeg: %w", err)).
 					Category(errors.CategoryRTSP).
@@ -783,6 +805,11 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 			stderrOutput := stderrBuf.String()
 			if stderrOutput != "" {
 				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with stderr:\n%s", runtime, config.URL, stderrOutput)
+				logger.Warn("FFmpeg exited quickly with stderr",
+					"runtime_seconds", runtime.Seconds(),
+					"url", privacy.SanitizeRTSPUrl(config.URL),
+					"stderr", stderrOutput,
+					"url_type", categorizeStreamURL(config.URL))
 				if err == nil {
 					// Create an error if FFmpeg exited with status 0 but too quickly
 					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
@@ -791,6 +818,11 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 				}
 			} else {
 				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with no stderr output", runtime, config.URL)
+				logger.Warn("FFmpeg exited quickly without stderr",
+					"runtime_seconds", runtime.Seconds(),
+					"url", privacy.SanitizeRTSPUrl(config.URL),
+					"url_type", categorizeStreamURL(config.URL),
+					"reason", "possible_connection_failure")
 				if err == nil {
 					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - possible connection failure", runtime)
 				}
@@ -802,6 +834,7 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 				logger.Error("FFmpeg process exited with error",
 					"url", privacy.SanitizeRTSPUrl(config.URL),
 					"error", err,
+					"runtime_seconds", runtime.Seconds(),
 					"url_type", categorizeStreamURL(config.URL))
 				// Include stderr in the error if available
 				if stderrBuf.String() != "" {
@@ -811,6 +844,12 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 					err = fmt.Errorf("%w\nStderr: %s", err, stderrBuf.String())
 				}
 			}
+		} else {
+			// Log normal exit for longer-running processes
+			logger.Info("FFmpeg process ended normally",
+				"url", privacy.SanitizeRTSPUrl(config.URL),
+				"runtime_seconds", runtime.Seconds(),
+				"url_type", categorizeStreamURL(config.URL))
 		}
 		done <- err
 	}()
@@ -883,6 +922,9 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 			// Check if it's an actual running process
 			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 				log.Printf("⚠️ FFmpeg process already exists during retry for URL %s (PID: %d)", lm.config.URL, p.cmd.Process.Pid)
+				logger.Warn("FFmpeg process already exists during retry",
+					"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+					"pid", p.cmd.Process.Pid)
 				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
 			}
 			// Note: We skip placeholder checks here because this function is called by the same
@@ -900,11 +942,20 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 			if !retry {
 				// This should never happen with unlimited retries (-1), but keep as safeguard
 				log.Printf("⚠️ Backoff strategy unexpectedly returned no retry for RTSP source %s: %v", lm.config.URL, err)
+				logger.Error("backoff strategy unexpectedly returned no retry",
+					"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+					"error", err,
+					"url_type", categorizeStreamURL(lm.config.URL))
 				telemetry.CaptureError(fmt.Errorf("FFmpeg backoff exhausted for %s: %w", lm.config.URL, err), "ffmpeg-backoff-exhausted")
 				return nil, fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
 			}
 
 			log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", lm.config.URL, err, delay)
+			logger.Warn("failed to start FFmpeg, retrying",
+				"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+				"error", err,
+				"retry_delay", delay,
+				"url_type", categorizeStreamURL(lm.config.URL))
 			// Track retry attempts with telemetry
 			telemetry.CaptureMessage(fmt.Sprintf("FFmpeg retry attempt for %s: delay=%v",
 				lm.config.URL, delay), sentry.LevelWarning, "ffmpeg-retry-attempt")
@@ -919,6 +970,9 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 		// Success - reset backoff and return process
 		lm.backoff.reset()
 		// Log successful connection after retries
+		logger.Info("FFmpeg connection established after retries",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+			"url_type", categorizeStreamURL(lm.config.URL))
 		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg connection established for %s after retries", lm.config.URL),
 			sentry.LevelInfo, "ffmpeg-connection-success")
 		return process, nil
@@ -934,6 +988,9 @@ func (lm *lifecycleManager) waitWithInterrupts(ctx context.Context, duration tim
 		return nil // Normal completion
 	case <-lm.restartChan:
 		log.Printf("🔄 Restart signal received during wait, restarting FFmpeg for RTSP source %s immediately.", lm.config.URL)
+		logger.Info("restart signal received during wait",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+			"action", "restarting_immediately")
 		lm.backoff.reset()
 		return nil // Continue with immediate restart
 	}
@@ -967,6 +1024,10 @@ func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmp
 
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("⚠️ FFmpeg process for RTSP source %s ended unexpectedly: %v", lm.config.URL, err)
+			logger.Warn("FFmpeg process ended unexpectedly",
+				"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+				"error", err,
+				"url_type", categorizeStreamURL(lm.config.URL))
 			// Return the error so the lifecycle manager can handle it with proper backoff
 			return true, false, err
 		}
@@ -974,6 +1035,9 @@ func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmp
 
 	case <-lm.restartChan:
 		log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", lm.config.URL)
+		logger.Info("restart signal received",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+			"url_type", categorizeStreamURL(lm.config.URL))
 		// Update restart info BEFORE cleanup to ensure valid process state
 		process.updateRestartInfo()
 		process.Cleanup(lm.config.URL)
@@ -987,6 +1051,8 @@ func (lm *lifecycleManager) handleRestartDelay(ctx context.Context, process *FFm
 	// Check if stream is still configured before restart delay
 	if !lm.isStreamConfigured() {
 		log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", lm.config.URL)
+		logger.Info("stream no longer configured, stopping lifecycle manager",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL))
 		lm.cleanupProcessFromMap()
 		return fmt.Errorf("stream %s no longer configured", lm.config.URL)
 	}
@@ -1015,12 +1081,17 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		// Check if it's a placeholder
 		if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
 			log.Printf("⚠️ FFmpeg process is already being started for URL %s", config.URL)
+			logger.Debug("FFmpeg process is already being started",
+				"url", privacy.SanitizeRTSPUrl(config.URL))
 			mutex.Unlock()
 			return fmt.Errorf("FFmpeg process already being started for URL: %s", config.URL)
 		}
 		// Check if it's an actual process
 		if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 			log.Printf("⚠️ FFmpeg process already exists for URL %s (PID: %d), not starting duplicate", config.URL, p.cmd.Process.Pid)
+			logger.Warn("FFmpeg process already exists, not starting duplicate",
+				"url", privacy.SanitizeRTSPUrl(config.URL),
+				"pid", p.cmd.Process.Pid)
 			mutex.Unlock()
 			return fmt.Errorf("FFmpeg process already running for URL: %s", config.URL)
 		}
@@ -1108,6 +1179,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
 			log.Printf("❌ Error initializing sound level processor for RTSP source %s: %v", url, err)
+			logger.Error("error initializing sound level processor",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err)
 		}
 		defer UnregisterSoundLevelProcessor(url)
 	}
