@@ -638,6 +638,163 @@ After the range filter allows a species, individual detections must meet confide
      threshold: 0.8  # Default confidence requirement
    ```
 
+### Dynamic Threshold System
+
+The Dynamic Threshold feature intelligently adapts detection sensitivity for individual species based on recent high-confidence detections. This system helps improve detection rates for species that are actively present in your area while maintaining accuracy.
+
+#### How Dynamic Thresholds Work
+
+```mermaid
+graph TD
+    A[Bird Detection] --> B{Dynamic Threshold<br/>Enabled?}
+    B -->|No| C[Use Base Threshold]
+    B -->|Yes| D{Species Has<br/>Dynamic Threshold?}
+    
+    D -->|No| E[Initialize Dynamic<br/>Threshold for Species]
+    D -->|Yes| F{Confidence ><br/>Trigger Value?}
+    
+    E --> F
+    
+    F -->|Yes| G[High Confidence<br/>Detection!]
+    F -->|No| H{Timer Expired?}
+    
+    G --> I[Increment<br/>High Conf Count]
+    I --> J[Reset Timer<br/>+ValidHours]
+    J --> K{Check High<br/>Conf Count}
+    
+    K -->|Count = 1| L[Level 1:<br/>Threshold × 0.75]
+    K -->|Count = 2| M[Level 2:<br/>Threshold × 0.5]
+    K -->|Count ≥ 3| N[Level 3:<br/>Threshold × 0.25]
+    
+    H -->|Yes| O[Reset to<br/>Base Threshold]
+    H -->|No| P[Keep Current<br/>Threshold]
+    
+    L --> Q{Below Min<br/>Threshold?}
+    M --> Q
+    N --> Q
+    O --> R[Apply Threshold]
+    P --> R
+    
+    Q -->|Yes| S[Use Min<br/>Threshold]
+    Q -->|No| T[Use Calculated<br/>Threshold]
+    
+    S --> R
+    T --> R
+    C --> R
+    
+    R --> U[Detection Processed<br/>with Final Threshold]
+```
+
+#### Configuration
+
+```yaml
+realtime:
+  dynamicthreshold:
+    enabled: false      # Enable dynamic threshold adjustment
+    debug: false        # Enable debug logging for threshold changes
+    trigger: 0.5        # Confidence level that triggers threshold reduction
+    min: 0.3           # Minimum allowed threshold (safety floor)
+    validhours: 24     # Hours before threshold resets to base value
+```
+
+#### Key Parameters Explained
+
+1. **`trigger`** (default: 0.5)
+   - The confidence level that activates dynamic threshold adjustment
+   - When a detection exceeds this value, the system starts lowering the threshold for that species
+   - Example: With trigger=0.9, only very high-confidence detections (90%+) will activate the dynamic adjustment
+
+2. **`min`** (default: 0.3)
+   - The absolute minimum threshold value
+   - Prevents the threshold from dropping too low, maintaining detection quality
+   - Acts as a safety floor to prevent excessive false positives
+
+3. **`validhours`** (default: 24)
+   - Duration (in hours) that the lowered threshold remains active
+   - Timer resets with each new high-confidence detection
+   - After this period without high-confidence detections, the threshold returns to base value
+
+#### Threshold Adjustment Levels
+
+The system uses a progressive adjustment based on the number of high-confidence detections:
+
+| High Conf Count | Level | Threshold Multiplier | Example (Base: 0.8) |
+|-----------------|-------|---------------------|-------------------|
+| 0               | 0     | 1.0× (base)         | 0.80             |
+| 1               | 1     | 0.75×               | 0.60             |
+| 2               | 2     | 0.50×               | 0.40             |
+| 3+              | 3     | 0.25×               | 0.30 (min limit) |
+
+#### Practical Example
+
+Let's walk through a scenario with these settings:
+```yaml
+birdnet:
+  threshold: 0.8        # Base threshold
+realtime:
+  dynamicthreshold:
+    enabled: true
+    trigger: 0.9        # High trigger for quality
+    min: 0.3           # Safety floor
+    validhours: 24     # 24-hour window
+```
+
+**Scenario: American Robin Detection**
+
+1. **Initial State**: American Robin has no dynamic threshold, uses base 0.8
+2. **First Detection**: 
+   - 08:00 - American Robin detected with 0.92 confidence (exceeds 0.9 trigger)
+   - High confidence count: 1
+   - New threshold: 0.8 × 0.75 = 0.6
+   - Timer set to expire at 08:00 tomorrow
+3. **Subsequent Detections**:
+   - 08:15 - American Robin detected with 0.65 confidence (now passes lowered threshold)
+   - 09:30 - Another detection with 0.95 confidence
+   - High confidence count: 2
+   - New threshold: 0.8 × 0.5 = 0.4
+   - Timer reset to 09:30 tomorrow
+4. **Maximum Adjustment**:
+   - 10:00 - Detection with 0.91 confidence
+   - High confidence count: 3
+   - Calculated threshold: 0.8 × 0.25 = 0.2
+   - Applied threshold: 0.3 (min limit enforced)
+5. **Reset**:
+   - If no high-confidence detections occur for 24 hours after 10:00
+   - Threshold returns to base 0.8
+
+#### Benefits and Use Cases
+
+1. **Adaptive Sensitivity**: Automatically becomes more sensitive to species that are actively vocalizing in your area
+2. **Quality Maintenance**: High trigger values ensure only quality detections influence the system
+3. **Temporal Awareness**: Accounts for daily activity patterns with the time-based reset
+4. **Species-Specific**: Each species maintains its own dynamic threshold independently
+5. **Safety Limits**: Minimum threshold prevents excessive false positives
+
+#### Best Practices
+
+1. **Conservative Trigger**: Set trigger high (0.8-0.95) to ensure only clear detections adjust thresholds
+2. **Reasonable Minimum**: Keep min above 0.3 to maintain detection quality
+3. **Monitor with Debug**: Enable debug mode initially to understand how thresholds change:
+   ```yaml
+   dynamicthreshold:
+     debug: true  # Logs threshold changes
+   ```
+4. **Combine with Deep Detection**: For best results, use with deep detection to filter false positives:
+   ```yaml
+   birdnet:
+     overlap: 2.7      # Deep detection
+   realtime:
+     dynamicthreshold:
+       enabled: true   # Adaptive thresholds
+   ```
+
+#### Important Notes
+
+- Dynamic thresholds work **after** the range filter - species must pass location filtering first
+- Each species threshold is independent - one species' activity doesn't affect others
+- The system automatically cleans up stale thresholds to prevent memory bloat
+- Custom species thresholds (if configured) take precedence over dynamic adjustments
+
 ### Stage 3: Deep Detection Filter
 
 [Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple detections of the same species within a 15-second window before accepting it, significantly reducing false positives.
