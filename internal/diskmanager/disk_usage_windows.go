@@ -90,6 +90,11 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 
 	usedBytes := uint64(totalNumberOfBytes - totalNumberOfFreeBytes)
 
+	// Record disk check duration if metrics are available
+	if diskMetrics != nil {
+		diskMetrics.RecordDiskCheckDuration(time.Since(startTime).Seconds())
+	}
+
 	return DiskSpaceInfo{
 		TotalBytes: uint64(totalNumberOfBytes),
 		UsedBytes:  usedBytes,
