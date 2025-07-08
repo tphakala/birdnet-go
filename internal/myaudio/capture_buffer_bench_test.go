@@ -2,7 +2,7 @@ package myaudio
 
 import (
 	"fmt"
-	"sync"
+	"runtime"
 	"testing"
 )
 
@@ -73,7 +73,8 @@ func BenchmarkAllocateCaptureBuffer(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		source := fmt.Sprintf("bench_alloc_%d", i)
 		
 		err := AllocateCaptureBuffer(60, 48000, 2, source)
@@ -86,6 +87,7 @@ func BenchmarkAllocateCaptureBuffer(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Removal failed: %v", err)
 		}
+		i++
 	}
 }
 
@@ -276,36 +278,53 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 	for _, cfg := range configurations {
 		b.Run(cfg.name, func(b *testing.B) {
-			var m1, m2 sync.Mutex
-			sources := make([]string, 0, cfg.numSources)
-
-			// Measure memory before allocation
-			m1.Lock()
-			var memBefore uint64
 			b.ReportAllocs()
-			m1.Unlock()
+			b.ResetTimer()
 
-			// Allocate buffers
-			for i := 0; i < cfg.numSources; i++ {
-				source := fmt.Sprintf("mem_test_%d", i)
-				sources = append(sources, source)
-				err := AllocateCaptureBuffer(cfg.duration, cfg.sampleRate, cfg.bytesPerSample, source)
-				if err != nil {
-					b.Fatalf("Allocation failed: %v", err)
+			for i := 0; i < b.N; i++ {
+				sources := make([]string, 0, cfg.numSources)
+
+				// Force GC to get clean baseline
+				runtime.GC()
+				runtime.GC() // Run twice to ensure finalizers run
+
+				// Measure memory before allocation
+				var memStatsBefore runtime.MemStats
+				runtime.ReadMemStats(&memStatsBefore)
+
+				// Allocate buffers
+				for j := 0; j < cfg.numSources; j++ {
+					source := fmt.Sprintf("mem_test_%d_%d", i, j)
+					sources = append(sources, source)
+					err := AllocateCaptureBuffer(cfg.duration, cfg.sampleRate, cfg.bytesPerSample, source)
+					if err != nil {
+						b.Fatalf("Allocation failed: %v", err)
+					}
 				}
-			}
 
-			// Measure memory after allocation
-			m2.Lock()
-			var memAfter uint64
-			expectedSize := uint64(cfg.numSources * cfg.duration * cfg.sampleRate * cfg.bytesPerSample)
-			b.Logf("Expected total buffer size: %.2f MB", float64(expectedSize)/1024/1024)
-			b.Logf("Estimated memory increase: %.2f MB", float64(memAfter-memBefore)/1024/1024)
-			m2.Unlock()
+				// Force GC to account for all allocations
+				runtime.GC()
 
-			// Clean up
-			for _, source := range sources {
-				_ = RemoveCaptureBuffer(source)
+				// Measure memory after allocation
+				var memStatsAfter runtime.MemStats
+				runtime.ReadMemStats(&memStatsAfter)
+
+				// Calculate memory usage
+				memUsed := memStatsAfter.Alloc - memStatsBefore.Alloc
+				expectedSize := uint64(cfg.numSources * cfg.duration * cfg.sampleRate * cfg.bytesPerSample)
+				
+				// Only log on first iteration to avoid spam
+				if i == 0 {
+					b.Logf("Configuration: %s", cfg.name)
+					b.Logf("Expected total buffer size: %.2f MB", float64(expectedSize)/1024/1024)
+					b.Logf("Actual memory allocated: %.2f MB", float64(memUsed)/1024/1024)
+					b.Logf("Memory overhead: %.2f%%", float64(memUsed-expectedSize)/float64(expectedSize)*100)
+				}
+
+				// Clean up
+				for _, source := range sources {
+					_ = RemoveCaptureBuffer(source)
+				}
 			}
 		})
 	}

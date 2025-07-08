@@ -82,10 +82,12 @@ func TrackAllocation(source string, size int) string {
 	allocTracker.mu.Lock()
 	defer allocTracker.mu.Unlock()
 
+	now := time.Now()
 	info, exists := allocTracker.allocations[source]
 	if !exists {
 		info = &AllocationInfo{
-			FirstAlloc:    time.Now(),
+			FirstAlloc:    now,
+			LastAlloc:     now,
 			StackTraces:   make([]string, 0, 10),
 			Sources:       make([]string, 0, 10),
 			AllocSizes:    make([]int, 0, 10),
@@ -94,8 +96,14 @@ func TrackAllocation(source string, size int) string {
 		allocTracker.allocations[source] = info
 	}
 
+	// Calculate time since last allocation before updating
+	var timeSinceLastAlloc time.Duration
+	if info.Count > 0 {
+		timeSinceLastAlloc = now.Sub(info.LastAlloc)
+	}
+
 	info.Count++
-	info.LastAlloc = time.Now()
+	info.LastAlloc = now
 	
 	// Keep last 10 stack traces
 	if len(info.StackTraces) >= 10 {
@@ -114,7 +122,7 @@ func TrackAllocation(source string, size int) string {
 	if info.Count > 1 {
 		log.Printf("⚠️ Repeated allocation detected for source %s: count=%d, size=%d bytes, id=%s",
 			source, info.Count, size, allocID)
-		log.Printf("   Time since last allocation: %v", time.Since(info.LastAlloc))
+		log.Printf("   Time since last allocation: %v", timeSinceLastAlloc)
 		log.Printf("   Stack trace:\n%s", stackTrace)
 	}
 
