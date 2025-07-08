@@ -350,7 +350,7 @@ func (m *FFmpegMonitor) monitorLoop() {
 		default:
 			// Safe ticker access
 			if m.monitorTicker == nil {
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				continue
 			}
 
