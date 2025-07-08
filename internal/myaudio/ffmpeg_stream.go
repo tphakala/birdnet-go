@@ -8,38 +8,21 @@ import (
 	"log"
 	"log/slog"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-var (
-	streamLogger *slog.Logger
-	streamLevelVar = new(slog.LevelVar)
-	closeStreamLogger func() error
-)
+// Use shared logger from integration file
+var streamLogger *slog.Logger
 
 func init() {
-	var err error
-	// Define log file path relative to working directory
-	logFilePath := filepath.Join("logs", "ffmpeg-stream.log")
-	initialLevel := slog.LevelInfo // Set desired initial level
-	streamLevelVar.Set(initialLevel)
-
-	// Initialize the service-specific file logger
-	streamLogger, closeStreamLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-stream", streamLevelVar)
-	if err != nil {
-		// Fallback: Log error to standard log and use default logger
-		log.Printf("Failed to initialize ffmpeg-stream file logger at %s: %v. Using default logger.", logFilePath, err)
-		streamLogger = slog.Default().With("service", "ffmpeg-stream")
-		closeStreamLogger = func() error { return nil } // No-op closer
-	}
+	// Use the shared integration logger for consistency
+	streamLogger = integrationLogger
 }
 
 // StreamHealth represents the health status of a stream
@@ -75,6 +58,9 @@ type FFmpegStream struct {
 	lastDataMu       sync.RWMutex
 	restartCount     int
 	restartCountMu   sync.Mutex
+	
+	// Process timing
+	processStartTime time.Time
 	
 	// Backoff for restarts
 	backoffDuration  time.Duration
@@ -112,6 +98,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				streamLogger.Error("failed to start FFmpeg process",
 					"url", privacy.SanitizeRTSPUrl(s.url),
 					"error", err,
+					"component", "ffmpeg-stream",
 					"operation", "start_process")
 				log.Printf("❌ Failed to start FFmpeg for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
 				s.handleRestartBackoff()
@@ -131,12 +118,27 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			}
 			
 			// Handle process exit
+			runtime := time.Since(s.processStartTime)
 			if err != nil && !errors.Is(err, context.Canceled) {
+				// Log process exit with sanitized error message
+				errorMsg := err.Error()
+				sanitizedError := privacy.SanitizeRTSPUrl(errorMsg)
+				
 				streamLogger.Warn("FFmpeg process ended",
 					"url", privacy.SanitizeRTSPUrl(s.url),
-					"error", err,
+					"error", sanitizedError,
+					"runtime_seconds", runtime.Seconds(),
+					"component", "ffmpeg-stream",
 					"operation", "process_ended")
-				log.Printf("⚠️ FFmpeg process ended for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
+				log.Printf("⚠️ FFmpeg process ended for %s after %v: %v", privacy.SanitizeRTSPUrl(s.url), runtime, sanitizedError)
+			} else {
+				// Log normal exit
+				streamLogger.Info("FFmpeg process ended normally",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"runtime_seconds", runtime.Seconds(),
+					"component", "ffmpeg-stream",
+					"operation", "process_ended")
+				log.Printf("✅ FFmpeg process ended normally for %s after %v", privacy.SanitizeRTSPUrl(s.url), runtime)
 			}
 			
 			// Apply backoff before restart
@@ -200,10 +202,14 @@ func (s *FFmpegStream) startProcess() error {
 			Build()
 	}
 	
+	// Record start time for runtime calculation
+	s.processStartTime = time.Now()
+	
 	streamLogger.Info("FFmpeg process started",
 		"url", privacy.SanitizeRTSPUrl(s.url),
 		"pid", s.cmd.Process.Pid,
 		"transport", s.transport,
+		"component", "ffmpeg-stream",
 		"operation", "start_process")
 	
 	log.Printf("✅ FFmpeg started for %s (PID: %d)", privacy.SanitizeRTSPUrl(s.url), s.cmd.Process.Pid)
@@ -222,7 +228,9 @@ func (s *FFmpegStream) processAudio() error {
 			// Check if process exited too quickly
 			if time.Since(startTime) < 5*time.Second {
 				stderrOutput := s.stderr.String()
-				return errors.New(fmt.Errorf("FFmpeg exited too quickly: %s", stderrOutput)).
+				// Sanitize stderr output to remove sensitive data
+				sanitizedOutput := privacy.SanitizeRTSPUrl(stderrOutput)
+				return errors.New(fmt.Errorf("FFmpeg exited too quickly: %s", sanitizedOutput)).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
 					Build()
@@ -359,6 +367,11 @@ func (s *FFmpegStream) cleanupProcess() {
 			// This is expected when we kill the process
 			// Only log if it's not an expected exit status
 			if !strings.Contains(err.Error(), "signal: killed") {
+				streamLogger.Warn("FFmpeg process wait error",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"error", err,
+					"component", "ffmpeg-stream",
+					"operation", "process_wait")
 				log.Printf("⚠️ Process wait error for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
 			}
 		}
@@ -369,11 +382,13 @@ func (s *FFmpegStream) cleanupProcess() {
 	case <-done:
 		streamLogger.Info("FFmpeg process stopped",
 			"url", privacy.SanitizeRTSPUrl(s.url),
+			"component", "ffmpeg-stream",
 			"operation", "cleanup_process")
 		log.Printf("🛑 FFmpeg process stopped for %s", privacy.SanitizeRTSPUrl(s.url))
 	case <-time.After(5 * time.Second):
 		streamLogger.Warn("FFmpeg process cleanup timeout",
 			"url", privacy.SanitizeRTSPUrl(s.url),
+			"component", "ffmpeg-stream",
 			"operation", "cleanup_process")
 		log.Printf("⚠️ FFmpeg process cleanup timeout for %s", privacy.SanitizeRTSPUrl(s.url))
 	}

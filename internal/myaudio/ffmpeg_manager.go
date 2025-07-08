@@ -5,37 +5,20 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-var (
-	managerLogger *slog.Logger
-	managerLevelVar = new(slog.LevelVar)
-	closeManagerLogger func() error
-)
+// Use shared logger from integration file
+var managerLogger *slog.Logger
 
 func init() {
-	var err error
-	// Define log file path relative to working directory
-	logFilePath := filepath.Join("logs", "ffmpeg-manager.log")
-	initialLevel := slog.LevelInfo // Set desired initial level
-	managerLevelVar.Set(initialLevel)
-
-	// Initialize the service-specific file logger
-	managerLogger, closeManagerLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-manager", managerLevelVar)
-	if err != nil {
-		// Fallback: Log error to standard log and use default logger
-		log.Printf("Failed to initialize ffmpeg-manager file logger at %s: %v. Using default logger.", logFilePath, err)
-		managerLogger = slog.Default().With("service", "ffmpeg-manager")
-		closeManagerLogger = func() error { return nil } // No-op closer
-	}
+	// Use the shared integration logger for consistency
+	managerLogger = integrationLogger
 }
 
 // FFmpegManager manages all FFmpeg streams
@@ -84,6 +67,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 	managerLogger.Info("started FFmpeg stream",
 		"url", privacy.SanitizeRTSPUrl(url),
 		"transport", transport,
+		"component", "ffmpeg-manager",
 		"operation", "start_stream")
 	
 	log.Printf("✅ Started FFmpeg stream for %s", privacy.SanitizeRTSPUrl(url))
