@@ -83,6 +83,11 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	freeBytes := stat.Bavail * bsize // Available to non-root user
 	usedBytes := totalBytes - freeBytes
 
+	// Record disk check duration if metrics are available
+	if diskMetrics != nil {
+		diskMetrics.RecordDiskCheckDuration(time.Since(startTime).Seconds())
+	}
+
 	return DiskSpaceInfo{
 		TotalBytes: totalBytes,
 		UsedBytes:  usedBytes,
