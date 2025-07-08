@@ -191,7 +191,8 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 	})
 
 	// Validate that we can create a weather service (but we'll use the provider directly for testing)
-	_, err := weather.NewService(settings, h.DS)
+	// Pass nil for metrics in testing context
+	_, err := weather.NewService(settings, h.DS, nil)
 	if err != nil {
 		sendResult(WeatherTestResult{
 			Success: false,

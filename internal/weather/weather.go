@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // Package-level logger for weather service
@@ -49,6 +50,7 @@ type Service struct {
 	provider Provider
 	db       datastore.Interface
 	settings *conf.Settings
+	metrics  *metrics.WeatherMetrics
 }
 
 // WeatherData represents the common structure for weather data across providers
@@ -92,7 +94,7 @@ type Precipitation struct {
 }
 
 // NewService creates a new weather service with the specified provider
-func NewService(settings *conf.Settings, db datastore.Interface) (*Service, error) {
+func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics *metrics.WeatherMetrics) (*Service, error) {
 	var provider Provider
 
 	// Select weather provider based on configuration
@@ -113,11 +115,20 @@ func NewService(settings *conf.Settings, db datastore.Interface) (*Service, erro
 		provider: provider,
 		db:       db,
 		settings: settings,
+		metrics:  weatherMetrics,
 	}, nil
 }
 
 // SaveWeatherData saves the weather data to the database
 func (s *Service) SaveWeatherData(data *WeatherData) error {
+	// Track operation duration
+	start := time.Now()
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.RecordWeatherDbDuration("save_weather_data", time.Since(start).Seconds())
+		}
+	}()
+
 	// Create daily events data
 	dailyEvents := &datastore.DailyEvents{
 		Date:     data.Time.Format("2006-01-02"),
@@ -129,12 +140,18 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	if err := s.db.SaveDailyEvents(dailyEvents); err != nil {
 		// Log the error before returning
 		weatherLogger.Error("Failed to save daily events to database", "error", err, "date", dailyEvents.Date, "city", dailyEvents.CityName)
+		if s.metrics != nil {
+			s.metrics.RecordWeatherDbError("save_daily_events", "database_error")
+		}
 		return errors.New(err).
 			Component("weather").
 			Category(errors.CategoryDatabase).
 			Context("operation", "save_daily_events").
 			Context("date", dailyEvents.Date).
 			Build()
+	}
+	if s.metrics != nil {
+		s.metrics.RecordWeatherDbOperation("save_daily_events", "success")
 	}
 
 	// Create hourly weather data
@@ -165,12 +182,26 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	if err := s.db.SaveHourlyWeather(hourlyWeather); err != nil {
 		// Log the error before returning
 		weatherLogger.Error("Failed to save hourly weather to database", "error", err, "time", hourlyWeather.Time)
+		if s.metrics != nil {
+			s.metrics.RecordWeatherDbError("save_hourly_weather", "database_error")
+		}
 		return errors.New(err).
 			Component("weather").
 			Category(errors.CategoryDatabase).
 			Context("operation", "save_hourly_weather").
 			Context("time", hourlyWeather.Time.Format("2006-01-02 15:04:05")).
 			Build()
+	}
+	if s.metrics != nil {
+		s.metrics.RecordWeatherDbOperation("save_hourly_weather", "success")
+		// Update current weather gauges
+		s.metrics.UpdateWeatherGauges(
+			data.Temperature.Current,
+			float64(data.Humidity),
+			float64(data.Pressure),
+			data.Wind.Speed,
+			float64(data.Visibility),
+		)
 	}
 
 	weatherLogger.Debug("Successfully saved weather data to database", "time", data.Time, "city", data.Location.City)
@@ -232,8 +263,23 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 
 // fetchAndSave fetches weather data and saves it to the database
 func (s *Service) fetchAndSave() error {
+	// Track fetch duration
+	fetchStart := time.Now()
+	
 	// FetchWeather should now internally log its start/end/errors
 	data, err := s.provider.FetchWeather(s.settings)
+	
+	// Record fetch metrics
+	if s.metrics != nil {
+		s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
+		if err != nil {
+			s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "error")
+			s.metrics.RecordWeatherFetchError(s.settings.Realtime.Weather.Provider, "fetch_error")
+		} else {
+			s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "success")
+		}
+	}
+	
 	if err != nil {
 		// Provider should log the specific error, we log the failure context here
 		weatherLogger.Error("Failed to fetch weather data from provider",

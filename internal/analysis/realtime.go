@@ -106,16 +106,6 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize database access.
 	dataStore := datastore.New(settings)
 
-	// Open a connection to the database and handle possible errors.
-	if err := dataStore.Open(); err != nil {
-		//logger.Error("main", "Failed to open database: %v", err)
-		return err // Return error to stop execution if database connection fails.
-	} else {
-		//logger.Info("main", "Successfully opened database")
-		// Ensure the database connection is closed when the function returns.
-		defer closeDataStore(dataStore)
-	}
-
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
 	// Initialize the restart channel for capture restart control.
@@ -141,6 +131,19 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	if err != nil {
 		return err
 	}
+
+	// Connect metrics to datastore before opening
+	dataStore.SetMetrics(metrics.Datastore)
+	dataStore.SetSunCalcMetrics(metrics.SunCalc)
+	
+	// Open a connection to the database and handle possible errors.
+	if err := dataStore.Open(); err != nil {
+		return err // Return error to stop execution if database connection fails.
+	}
+	// Ensure the database connection is closed when the function returns.
+	defer closeDataStore(dataStore)
+	
+	// Note: datastore monitoring is automatically started when the database is opened
 
 	// Initialize bird image cache if needed
 	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
@@ -228,7 +231,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// start weather polling
 	if settings.Realtime.Weather.Provider != "none" {
-		startWeatherPolling(&wg, settings, dataStore, quitChan)
+		startWeatherPolling(&wg, settings, dataStore, metrics, quitChan)
 	}
 
 	// start telemetry endpoint
@@ -371,9 +374,9 @@ func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataSto
 }
 
 // startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
-func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, quitChan chan struct{}) {
+func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics, quitChan chan struct{}) {
 	// Create new weather service
-	weatherService, err := weather.NewService(settings, dataStore)
+	weatherService, err := weather.NewService(settings, dataStore, metrics.Weather)
 	if err != nil {
 		log.Printf("⛈️ Failed to initialize weather service: %v", err)
 		return
