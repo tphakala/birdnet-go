@@ -243,16 +243,11 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 			continue
 		}
 
-		abExists, cbExists := false, false //nolint:wastedassign // Need to initialize variables
+		var abExists bool
 		// Check if analysis buffer exists
 		abMutex.RLock()
 		_, abExists = analysisBuffers[url]
 		abMutex.RUnlock()
-
-		// Check if capture buffer exists
-		cbMutex.RLock()
-		_, cbExists = captureBuffers[url]
-		cbMutex.RUnlock()
 
 		// Initialize analysis buffer if it doesn't exist
 		if !abExists {
@@ -262,19 +257,17 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 			}
 		}
 
-		// Initialize capture buffer if it doesn't exist
-		if !cbExists {
-			if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, url); err != nil {
-				// Clean up the ring buffer if audio buffer init fails and we just created it
-				if !abExists {
-					err := RemoveCaptureBuffer(url)
-					if err != nil {
-						log.Printf("❌ Failed to remove capture buffer for %s: %v", url, err)
-					}
+		// Initialize capture buffer if needed
+		if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, url); err != nil {
+			// Clean up the ring buffer if audio buffer init fails and we just created it
+			if !abExists {
+				err := RemoveAnalysisBuffer(url)
+				if err != nil {
+					log.Printf("❌ Failed to remove analysis buffer for %s: %v", url, err)
 				}
-				log.Printf("❌ Failed to initialize capture buffer for %s: %v", url, err)
-				continue
 			}
+			log.Printf("❌ Failed to initialize capture buffer for %s: %v", url, err)
+			continue
 		}
 
 		// New stream, start it
@@ -285,17 +278,12 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 
 // initializeBuffersForSource handles the initialization of analysis and capture buffers for a given source
 func initializeBuffersForSource(sourceID string) error {
-	var abExists, cbExists bool
+	var abExists bool
 
 	// Check if analysis buffer exists
 	abMutex.RLock()
 	_, abExists = analysisBuffers[sourceID]
 	abMutex.RUnlock()
-
-	// Check if capture buffer exists
-	cbMutex.RLock()
-	_, cbExists = captureBuffers[sourceID]
-	cbMutex.RUnlock()
 
 	// Initialize analysis buffer if it doesn't exist
 	if !abExists {
@@ -304,17 +292,15 @@ func initializeBuffersForSource(sourceID string) error {
 		}
 	}
 
-	// Initialize capture buffer if it doesn't exist
-	if !cbExists {
-		if err := AllocateCaptureBuffer(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
-			// Clean up the analysis buffer if we just created it and capture buffer init fails
-			if !abExists {
-				if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
-					log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
-				}
+	// Initialize capture buffer if needed
+	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
+		// Clean up the analysis buffer if we just created it and capture buffer init fails
+		if !abExists {
+			if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
+				log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
 			}
-			return fmt.Errorf("failed to initialize capture buffer: %w", err)
 		}
+		return fmt.Errorf("failed to initialize capture buffer: %w", err)
 	}
 
 	return nil
