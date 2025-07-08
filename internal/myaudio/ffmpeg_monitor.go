@@ -3,7 +3,9 @@ package myaudio
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,11 +15,36 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // Global variables - make ffmpegProcesses a pointer to sync.Map
 var ffmpegProcesses = &sync.Map{}
+
+var (
+	monitorLogger *slog.Logger
+	monitorLevelVar = new(slog.LevelVar)
+	closeMonitorLogger func() error
+)
+
+func init() {
+	var err error
+	// Define log file path relative to working directory
+	logFilePath := filepath.Join("logs", "ffmpeg-monitor.log")
+	initialLevel := slog.LevelDebug // Set desired initial level
+	monitorLevelVar.Set(initialLevel)
+
+	// Initialize the service-specific file logger
+	monitorLogger, closeMonitorLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-monitor", monitorLevelVar)
+	if err != nil {
+		// Fallback: Log error to standard log and use default logger
+		log.Printf("Failed to initialize ffmpeg-monitor file logger at %s: %v. Using default logger.", logFilePath, err)
+		monitorLogger = slog.Default().With("service", "ffmpeg-monitor")
+		closeMonitorLogger = func() error { return nil } // No-op closer
+	}
+}
 
 // ProcessInfo contains information about a system process
 type ProcessInfo struct {
@@ -318,6 +345,8 @@ func (m *FFmpegMonitor) Start() {
 
 	go m.monitorLoop()
 	log.Printf("🔍 FFmpeg process monitor started with interval %s", interval)
+	monitorLogger.Info("FFmpeg process monitor started",
+		"interval", interval)
 }
 
 // Stop stops the FFmpeg process monitor
@@ -334,6 +363,7 @@ func (m *FFmpegMonitor) Stop() {
 	close(m.done)
 	m.running.Store(false)
 	log.Printf("🛑 FFmpeg process monitor stopped")
+	monitorLogger.Info("FFmpeg process monitor stopped")
 }
 
 // IsRunning returns whether the monitor is currently running
@@ -358,6 +388,8 @@ func (m *FFmpegMonitor) monitorLoop() {
 			case <-m.monitorTicker.C():
 				if err := m.checkProcesses(); err != nil {
 					log.Printf("⚠️ Error during process check: %v", err)
+					monitorLogger.Error("error during process check",
+						"error", err)
 				}
 			case <-m.done:
 				return
@@ -383,12 +415,16 @@ func (m *FFmpegMonitor) checkProcesses() error {
 			// If URL is not in configuration, clean up the process
 			if !configuredURLs[url] {
 				log.Printf("🧹 Found orphaned FFmpeg process for URL %s, cleaning up", url)
+				monitorLogger.Info("found orphaned FFmpeg process, cleaning up",
+					"url", privacy.SanitizeRTSPUrl(url))
 				telemetry.CaptureMessage(fmt.Sprintf("Cleaning up orphaned FFmpeg process for %s", url),
 					sentry.LevelInfo, "ffmpeg-orphaned-cleanup")
 				process.Cleanup(url)
 			}
 		} else {
 			log.Printf("⚠️ Process for URL %s doesn't implement ProcessCleaner interface", url)
+			monitorLogger.Warn("process doesn't implement ProcessCleaner interface",
+				"url", privacy.SanitizeRTSPUrl(url))
 			telemetry.CaptureMessage(fmt.Sprintf("Process for %s doesn't implement ProcessCleaner interface", url),
 				sentry.LevelWarning, "ffmpeg-interface-error")
 		}
@@ -460,6 +496,9 @@ func (m *FFmpegMonitor) cleanupOrphanedProcesses() error {
 		if systemPIDs[pid] && !m.processManager.IsProcessRunning(pid) {
 			// Process exists in the system but is not running (zombie or killed)
 			log.Printf("🧹 Found externally killed FFmpeg process for URL %s, cleaning up", url)
+			monitorLogger.Info("found externally killed FFmpeg process, cleaning up",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"pid", pid)
 
 			// Important: Use the stored process reference directly
 			if process, ok := pidToProcess[pid]; ok {
@@ -474,8 +513,13 @@ func (m *FFmpegMonitor) cleanupOrphanedProcesses() error {
 	for _, proc := range processes {
 		if !knownPIDs[proc.PID] {
 			log.Printf("🧹 Found orphaned FFmpeg process with PID %d, terminating", proc.PID)
+			monitorLogger.Info("found orphaned FFmpeg process, terminating",
+				"pid", proc.PID)
 			if err := m.processManager.TerminateProcess(proc.PID); err != nil {
 				log.Printf("⚠️ Error terminating FFmpeg process %d: %v", proc.PID, err)
+				monitorLogger.Error("error terminating FFmpeg process",
+					"pid", proc.PID,
+					"error", err)
 			}
 		}
 	}
