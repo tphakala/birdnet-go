@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +16,8 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -21,6 +25,29 @@ import (
 // This is used to ensure that only one FFmpeg process is running per RTSP source
 // Moved to ffmpeg_monitor.go to avoid duplicate declaration
 // var ffmpegProcesses = &sync.Map{}
+
+var (
+	logger      *slog.Logger
+	levelVar    = new(slog.LevelVar)
+	closeLogger func() error
+)
+
+func init() {
+	var err error
+	// Define log file path relative to working directory
+	logFilePath := filepath.Join("logs", "ffmpeg-input.log")
+	initialLevel := slog.LevelDebug // Set desired initial level
+	levelVar.Set(initialLevel)
+
+	// Initialize the service-specific file logger
+	logger, closeLogger, err = logging.NewFileLogger(logFilePath, "ffmpeg-input", levelVar)
+	if err != nil {
+		// Fallback: Log error to standard log and use default logger
+		log.Printf("Failed to initialize ffmpeg-input file logger at %s: %v. Using default logger.", logFilePath, err)
+		logger = slog.Default().With("service", "ffmpeg-input")
+		closeLogger = func() error { return nil } // No-op closer
+	}
+}
 
 // FFmpegConfig holds the configuration for the FFmpeg command
 type FFmpegConfig struct {
@@ -92,6 +119,87 @@ func categorizeStreamURL(url string) string {
 		return "http-stream"
 	}
 	return "other-stream"
+}
+
+// parseFFmpegExitReason extracts meaningful exit reasons from FFmpeg stderr output
+func parseFFmpegExitReason(stderr string) string {
+	if stderr == "" {
+		return "no_stderr_output"
+	}
+
+	stderrLower := strings.ToLower(stderr)
+
+	// Connection and network issues
+	if strings.Contains(stderrLower, "connection reset") || 
+	   strings.Contains(stderrLower, "connection refused") ||
+	   strings.Contains(stderrLower, "connection timed out") ||
+	   strings.Contains(stderrLower, "connection closed") {
+		return "connection_lost"
+	}
+
+	if strings.Contains(stderrLower, "network is unreachable") ||
+	   strings.Contains(stderrLower, "no route to host") {
+		return "network_unreachable"
+	}
+
+	if strings.Contains(stderrLower, "operation timed out") ||
+	   strings.Contains(stderrLower, "read timeout") ||
+	   strings.Contains(stderrLower, "timeout") {
+		return "timeout"
+	}
+
+	// RTSP specific errors
+	if strings.Contains(stderrLower, "rtsp") && strings.Contains(stderrLower, "401") {
+		return "rtsp_unauthorized"
+	}
+
+	if strings.Contains(stderrLower, "rtsp") && strings.Contains(stderrLower, "404") {
+		return "rtsp_not_found"
+	}
+
+	if strings.Contains(stderrLower, "rtsp") && strings.Contains(stderrLower, "403") {
+		return "rtsp_forbidden"
+	}
+
+	// Stream format issues
+	if strings.Contains(stderrLower, "invalid data found") ||
+	   strings.Contains(stderrLower, "no streams found") ||
+	   strings.Contains(stderrLower, "stream not found") {
+		return "invalid_stream_format"
+	}
+
+	// EOF and disconnection patterns
+	if strings.Contains(stderrLower, "end of file") ||
+	   strings.Contains(stderrLower, "eof") {
+		return "stream_ended"
+	}
+
+	// Server/camera specific issues
+	if strings.Contains(stderrLower, "server returned") && 
+	   (strings.Contains(stderrLower, "5") || strings.Contains(stderrLower, "50")) {
+		return "server_error"
+	}
+
+	// Memory or resource issues
+	if strings.Contains(stderrLower, "out of memory") ||
+	   strings.Contains(stderrLower, "resource temporarily unavailable") {
+		return "resource_exhausted"
+	}
+
+	// Interrupted/killed by user or system
+	if strings.Contains(stderrLower, "interrupted") ||
+	   strings.Contains(stderrLower, "sigint") ||
+	   strings.Contains(stderrLower, "sigterm") {
+		return "interrupted"
+	}
+
+	// Generic error patterns
+	if strings.Contains(stderrLower, "error") {
+		return "ffmpeg_error"
+	}
+
+	// If we can't categorize it, return a generic classification
+	return "unknown_exit_reason"
 }
 
 // backoffStrategy implements an exponential backoff for retries
@@ -190,6 +298,7 @@ func getRestartTracker(cmd *exec.Cmd) *FFmpegRestartTracker {
 func (p *FFmpegProcess) updateRestartInfo() {
 	if p == nil || p.restartTracker == nil || p.cmd == nil {
 		log.Printf("⚠️ Attempted to update restart info on nil process or command")
+		logger.Warn("attempted to update restart info on nil process or command")
 		return
 	}
 
@@ -245,6 +354,7 @@ func (p *FFmpegProcess) getRestartDelay() time.Duration {
 	// Check for restart storm
 	if p.isRestartStorm() {
 		log.Printf("⚠️ Restart storm detected, applying extended backoff")
+		logger.Warn("restart storm detected, applying extended backoff")
 		return 5 * time.Minute // Extended delay during restart storm
 	}
 
@@ -270,6 +380,9 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 	}
 
 	// Log cleanup attempt with telemetry
+	logger.Info("starting FFmpeg cleanup",
+		"url", privacy.SanitizeRTSPUrl(url),
+		"url_type", categorizeStreamURL(url))
 	telemetry.CaptureMessage(fmt.Sprintf("Starting FFmpeg cleanup for %s", url),
 		sentry.LevelInfo, "ffmpeg-cleanup-start")
 
@@ -297,6 +410,8 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 	if p.stdout != nil {
 		if err := p.stdout.Close(); err != nil {
 			log.Printf("Failed to close FFmpeg stdout: %v", err)
+			logger.Debug("failed to close FFmpeg stdout",
+				"error", err)
 		}
 	}
 
@@ -315,6 +430,9 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 	select {
 	case <-done:
 		log.Printf("🛑 FFmpeg process for RTSP source %s stopped normally", url)
+		logger.Info("FFmpeg process stopped normally",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"url_type", categorizeStreamURL(url))
 		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process for %s stopped normally", url),
 			sentry.LevelInfo, "ffmpeg-cleanup-normal")
 		// Process finished normally
@@ -328,6 +446,9 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 				// Only log if both kill attempts fail and process still exists
 				if !strings.Contains(err.Error(), "process already finished") {
 					log.Printf("⚠️ Failed to kill FFmpeg process for %s: %v", url, err)
+					logger.Warn("failed to kill FFmpeg process",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"error", err)
 					telemetry.CaptureError(fmt.Errorf("failed to kill FFmpeg process for %s: %w", url, err), "ffmpeg-kill-failure")
 				}
 			}
@@ -339,8 +460,13 @@ func (p *FFmpegProcess) CleanupWithDelete(url string, shouldDelete bool) {
 		case <-done:
 			verifyTimer.Stop()
 			log.Printf("✅ FFmpeg process for %s confirmed terminated after force kill", url)
+			logger.Debug("FFmpeg process confirmed terminated after force kill",
+				"url", privacy.SanitizeRTSPUrl(url))
 		case <-verifyTimer.C:
 			log.Printf("❌ FFmpeg process for %s may still be running after force kill attempt", url)
+			logger.Error("FFmpeg process may still be running after force kill attempt",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"url_type", categorizeStreamURL(url))
 			telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process for %s possibly stuck after kill attempts", url),
 				sentry.LevelError, "ffmpeg-zombie-process")
 		}
@@ -384,6 +510,9 @@ func (p *FFmpegProcess) startWatchdog(ctx context.Context, url string, watchdog 
 				// Only check watchdog timeout if the stream is still configured
 				if streamConfigured && watchdog.timeSinceLastData() > 60*time.Second {
 					log.Printf("⚠️ No data received from RTSP source %s for 60 seconds, triggering restart", url)
+					logger.Warn("no data received from RTSP source for 60 seconds, triggering restart",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"timeout_seconds", 60)
 					return
 				} else if !streamConfigured {
 					return
@@ -472,6 +601,9 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	// Write the audio data to the analysis buffer
 	if err := WriteToAnalysisBuffer(url, data); err != nil {
 		log.Printf("❌ Error writing to analysis buffer for RTSP source %s: %v", url, err)
+		logger.Error("error writing to analysis buffer",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err)
 		telemetry.CaptureError(fmt.Errorf("analysis buffer write error for %s: %w", url, err), "rtsp-analysis-buffer-error")
 		hasBufferError = true
 	} else {
@@ -482,6 +614,9 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 	// Write the audio data to the capture buffer
 	if err := WriteToCaptureBuffer(url, data); err != nil {
 		log.Printf("❌ Error writing to capture buffer for RTSP source %s: %v", url, err)
+		logger.Error("error writing to capture buffer",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err)
 		telemetry.CaptureError(fmt.Errorf("capture buffer write error for %s: %w", url, err), "rtsp-capture-buffer-error")
 		hasBufferError = true
 	}
@@ -493,6 +628,11 @@ func (p *FFmpegProcess) processAudioData(url string, data []byte, bufferErrorCou
 
 		if *bufferErrorCount >= maxBufferErrors {
 			log.Printf("⚠️ Too many buffer write errors (%d) for RTSP source %s since %v, triggering restart", *bufferErrorCount, url, lastBufferErrorTime.Format("15:04:05"))
+			logger.Warn("too many buffer write errors, triggering restart",
+				"error_count", *bufferErrorCount,
+				"url", privacy.SanitizeRTSPUrl(url),
+				"since", lastBufferErrorTime.Format("15:04:05"),
+				"url_type", categorizeStreamURL(url))
 			// Capture buffer error threshold exceeded
 			telemetry.CaptureMessage(fmt.Sprintf("Buffer error threshold exceeded for %s: %d errors", url, *bufferErrorCount),
 				sentry.LevelError, "rtsp-buffer-error-threshold")
@@ -565,6 +705,9 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 		select {
 		case <-ctx.Done():
 			log.Printf("Stopping audio processing for RTSP source: %s", url)
+			logger.Info("stopping audio processing",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"url_type", categorizeStreamURL(url))
 			<-watchdogDone // Wait for watchdog to finish
 			return nil     // Return nil on normal shutdown
 		case <-watchdogDone:
@@ -583,20 +726,36 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 					if p.stderrBuf != nil {
 						stderrOutput = p.stderrBuf.String()
 					}
+					
+					exitReason := parseFFmpegExitReason(stderrOutput)
 
 					if stderrOutput != "" {
 						log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
+						logger.Warn("FFmpeg exited quickly with stderr",
+							"runtime_seconds", runtime.Seconds(),
+							"stderr", stderrOutput,
+							"exit_reason", exitReason,
+							"url", privacy.SanitizeRTSPUrl(url),
+							"url_type", categorizeStreamURL(url))
 						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v): %s", runtime, stderrOutput)).
 							Category(errors.CategoryRTSP).
 							Component("ffmpeg-quick-exit").
 							Context("url_type", categorizeStreamURL(url)).
+							Context("exit_reason", exitReason).
 							Context("runtime_seconds", runtime.Seconds()).
 							Build()
 					} else {
+						logger.Warn("FFmpeg exited quickly without stderr",
+							"runtime_seconds", runtime.Seconds(),
+							"url", privacy.SanitizeRTSPUrl(url),
+							"url_type", categorizeStreamURL(url),
+							"exit_reason", exitReason,
+							"reason", "likely_connection_failure")
 						return errors.New(fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - likely connection failure", runtime)).
 							Category(errors.CategoryRTSP).
 							Component("ffmpeg-quick-exit").
 							Context("url_type", categorizeStreamURL(url)).
+							Context("exit_reason", exitReason).
 							Context("runtime_seconds", runtime.Seconds()).
 							Build()
 					}
@@ -604,8 +763,17 @@ func (p *FFmpegProcess) processAudio(ctx context.Context, url string, restartCha
 
 				// Check if this is a normal shutdown
 				if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "file already closed") {
+					logger.Info("FFmpeg process ended normally",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"runtime_seconds", time.Since(p.startTime).Seconds())
 					return nil
 				}
+				// Log unexpected read failures that indicate connection loss
+				logger.Error("FFmpeg connection lost - error reading from process",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"error", err,
+					"runtime_seconds", time.Since(p.startTime).Seconds(),
+					"url_type", categorizeStreamURL(url))
 				// Only return error for unexpected failures
 				return errors.New(fmt.Errorf("error reading from ffmpeg: %w", err)).
 					Category(errors.CategoryRTSP).
@@ -685,6 +853,10 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 
 	// Log the FFmpeg command for debugging purposes
 	log.Printf("⬆️ Starting FFmpeg with command: %s", cmd.String())
+	logger.Debug("starting FFmpeg",
+		"command", privacy.ScrubMessage(cmd.String()),
+		"url", privacy.SanitizeRTSPUrl(config.URL),
+		"transport", config.Transport)
 
 	// Start the FFmpeg process
 	if err := cmd.Start(); err != nil {
@@ -701,6 +873,10 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg process started successfully for %s (PID: %d)", config.URL, cmd.Process.Pid),
 			sentry.LevelInfo, "ffmpeg-process-started")
 		log.Printf("✅ FFmpeg started successfully for RTSP source %s", config.URL)
+		logger.Info("FFmpeg started successfully",
+			"url", privacy.SanitizeRTSPUrl(config.URL),
+			"pid", cmd.Process.Pid,
+			"url_type", categorizeStreamURL(config.URL))
 	}
 
 	// Create a channel to receive the exit status of the FFmpeg process
@@ -714,8 +890,16 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		if runtime < 5*time.Second {
 			// FFmpeg exited too quickly, log stderr regardless of error status
 			stderrOutput := stderrBuf.String()
+			exitReason := parseFFmpegExitReason(stderrOutput)
+			
 			if stderrOutput != "" {
 				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with stderr:\n%s", runtime, config.URL, stderrOutput)
+				logger.Warn("FFmpeg exited quickly with stderr",
+					"runtime_seconds", runtime.Seconds(),
+					"url", privacy.SanitizeRTSPUrl(config.URL),
+					"stderr", stderrOutput,
+					"exit_reason", exitReason,
+					"url_type", categorizeStreamURL(config.URL))
 				if err == nil {
 					// Create an error if FFmpeg exited with status 0 but too quickly
 					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) with stderr: %s", runtime, stderrOutput)
@@ -724,6 +908,12 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 				}
 			} else {
 				log.Printf("⚠️ FFmpeg exited quickly (runtime: %v) for RTSP source %s with no stderr output", runtime, config.URL)
+				logger.Warn("FFmpeg exited quickly without stderr",
+					"runtime_seconds", runtime.Seconds(),
+					"url", privacy.SanitizeRTSPUrl(config.URL),
+					"url_type", categorizeStreamURL(config.URL),
+					"exit_reason", exitReason,
+					"reason", "possible_connection_failure")
 				if err == nil {
 					err = fmt.Errorf("FFmpeg exited too quickly (runtime: %v) - possible connection failure", runtime)
 				}
@@ -731,13 +921,35 @@ func startFFmpeg(ctx context.Context, config FFmpegConfig) (*FFmpegProcess, erro
 		} else if err != nil {
 			// Normal error logging for longer-running processes
 			if !strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
+				stderrOutput := stderrBuf.String()
+				exitReason := parseFFmpegExitReason(stderrOutput)
+				
 				log.Printf("⚠️ FFmpeg process for RTSP source %s exited with error: %v", config.URL, err)
+				logger.Error("FFmpeg process exited with error",
+					"url", privacy.SanitizeRTSPUrl(config.URL),
+					"error", err,
+					"runtime_seconds", runtime.Seconds(),
+					"exit_reason", exitReason,
+					"url_type", categorizeStreamURL(config.URL))
 				// Include stderr in the error if available
-				if stderrBuf.String() != "" {
-					log.Printf("⚠️ FFmpeg process stderr:\n%v", stderrBuf.String())
-					err = fmt.Errorf("%w\nStderr: %s", err, stderrBuf.String())
+				if stderrOutput != "" {
+					log.Printf("⚠️ FFmpeg process stderr:\n%v", stderrOutput)
+					logger.Debug("FFmpeg process stderr",
+						"stderr", stderrOutput,
+						"exit_reason", exitReason)
+					err = fmt.Errorf("%w\nStderr: %s", err, stderrOutput)
 				}
 			}
+		} else {
+			// Log normal exit for longer-running processes
+			stderrOutput := stderrBuf.String()
+			exitReason := parseFFmpegExitReason(stderrOutput)
+			
+			logger.Info("FFmpeg process ended normally",
+				"url", privacy.SanitizeRTSPUrl(config.URL),
+				"runtime_seconds", runtime.Seconds(),
+				"exit_reason", exitReason,
+				"url_type", categorizeStreamURL(config.URL))
 		}
 		done <- err
 	}()
@@ -810,8 +1022,12 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 			// Check if it's an actual running process
 			if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 				log.Printf("⚠️ FFmpeg process already exists during retry for URL %s (PID: %d)", lm.config.URL, p.cmd.Process.Pid)
+				logger.Warn("FFmpeg process already exists during retry",
+					"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+					"pid", p.cmd.Process.Pid)
 				return nil, fmt.Errorf("FFmpeg process already running for URL: %s", lm.config.URL)
 			}
+			time.Sleep(1000 * time.Millisecond) // Avoid busy-looping
 			// Note: We skip placeholder checks here because this function is called by the same
 			// goroutine that created the placeholder, and needs to proceed to replace it with the actual process
 		}
@@ -827,11 +1043,20 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 			if !retry {
 				// This should never happen with unlimited retries (-1), but keep as safeguard
 				log.Printf("⚠️ Backoff strategy unexpectedly returned no retry for RTSP source %s: %v", lm.config.URL, err)
+				logger.Error("backoff strategy unexpectedly returned no retry",
+					"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+					"error", err,
+					"url_type", categorizeStreamURL(lm.config.URL))
 				telemetry.CaptureError(fmt.Errorf("FFmpeg backoff exhausted for %s: %w", lm.config.URL, err), "ffmpeg-backoff-exhausted")
 				return nil, fmt.Errorf("failed to start FFmpeg after maximum attempts: %w", err)
 			}
 
 			log.Printf("⚠️ Failed to start FFmpeg for RTSP source %s: %v. Retrying in %v...", lm.config.URL, err, delay)
+			logger.Warn("failed to start FFmpeg, retrying",
+				"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+				"error", err,
+				"retry_delay", delay,
+				"url_type", categorizeStreamURL(lm.config.URL))
 			// Track retry attempts with telemetry
 			telemetry.CaptureMessage(fmt.Sprintf("FFmpeg retry attempt for %s: delay=%v",
 				lm.config.URL, delay), sentry.LevelWarning, "ffmpeg-retry-attempt")
@@ -846,6 +1071,9 @@ func (lm *lifecycleManager) startProcessWithRetry(ctx context.Context) (*FFmpegP
 		// Success - reset backoff and return process
 		lm.backoff.reset()
 		// Log successful connection after retries
+		logger.Info("FFmpeg connection established after retries",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+			"url_type", categorizeStreamURL(lm.config.URL))
 		telemetry.CaptureMessage(fmt.Sprintf("FFmpeg connection established for %s after retries", lm.config.URL),
 			sentry.LevelInfo, "ffmpeg-connection-success")
 		return process, nil
@@ -861,6 +1089,9 @@ func (lm *lifecycleManager) waitWithInterrupts(ctx context.Context, duration tim
 		return nil // Normal completion
 	case <-lm.restartChan:
 		log.Printf("🔄 Restart signal received during wait, restarting FFmpeg for RTSP source %s immediately.", lm.config.URL)
+		logger.Info("restart signal received during wait",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+			"action", "restarting_immediately")
 		lm.backoff.reset()
 		return nil // Continue with immediate restart
 	}
@@ -894,6 +1125,10 @@ func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmp
 
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("⚠️ FFmpeg process for RTSP source %s ended unexpectedly: %v", lm.config.URL, err)
+			logger.Warn("FFmpeg process ended unexpectedly",
+				"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+				"error", err,
+				"url_type", categorizeStreamURL(lm.config.URL))
 			// Return the error so the lifecycle manager can handle it with proper backoff
 			return true, false, err
 		}
@@ -901,6 +1136,9 @@ func (lm *lifecycleManager) runProcessAndWait(ctx context.Context, process *FFmp
 
 	case <-lm.restartChan:
 		log.Printf("🔄 Restart signal received, restarting FFmpeg for RTSP source %s.", lm.config.URL)
+		logger.Info("restart signal received",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL),
+			"url_type", categorizeStreamURL(lm.config.URL))
 		// Update restart info BEFORE cleanup to ensure valid process state
 		process.updateRestartInfo()
 		process.Cleanup(lm.config.URL)
@@ -914,6 +1152,8 @@ func (lm *lifecycleManager) handleRestartDelay(ctx context.Context, process *FFm
 	// Check if stream is still configured before restart delay
 	if !lm.isStreamConfigured() {
 		log.Printf("🛑 Stream %s is no longer configured, stopping lifecycle manager", lm.config.URL)
+		logger.Info("stream no longer configured, stopping lifecycle manager",
+			"url", privacy.SanitizeRTSPUrl(lm.config.URL))
 		lm.cleanupProcessFromMap()
 		return fmt.Errorf("stream %s no longer configured", lm.config.URL)
 	}
@@ -942,12 +1182,17 @@ func manageFfmpegLifecycle(ctx context.Context, config FFmpegConfig, restartChan
 		// Check if it's a placeholder
 		if _, isPlaceholder := existing.(*ffmpegPlaceholder); isPlaceholder {
 			log.Printf("⚠️ FFmpeg process is already being started for URL %s", config.URL)
+			logger.Debug("FFmpeg process is already being started",
+				"url", privacy.SanitizeRTSPUrl(config.URL))
 			mutex.Unlock()
 			return fmt.Errorf("FFmpeg process already being started for URL: %s", config.URL)
 		}
 		// Check if it's an actual process
 		if p, ok := existing.(*FFmpegProcess); ok && p.cmd != nil && p.cmd.Process != nil {
 			log.Printf("⚠️ FFmpeg process already exists for URL %s (PID: %d), not starting duplicate", config.URL, p.cmd.Process.Pid)
+			logger.Warn("FFmpeg process already exists, not starting duplicate",
+				"url", privacy.SanitizeRTSPUrl(config.URL),
+				"pid", p.cmd.Process.Pid)
 			mutex.Unlock()
 			return fmt.Errorf("FFmpeg process already running for URL: %s", config.URL)
 		}
@@ -1035,6 +1280,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
 			log.Printf("❌ Error initializing sound level processor for RTSP source %s: %v", url, err)
+			logger.Error("error initializing sound level processor",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err)
 		}
 		defer UnregisterSoundLevelProcessor(url)
 	}
@@ -1044,6 +1292,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 		err := fmt.Errorf("FFmpeg not available for RTSP source %s", url)
 		log.Printf("❌ FFmpeg is not available, cannot capture audio from RTSP source %s.", url)
 		log.Printf("⚠️ Please make sure FFmpeg is installed and included in system PATH.")
+		logger.Error("FFmpeg is not available, cannot capture audio",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"help", "Please make sure FFmpeg is installed and included in system PATH")
 		telemetry.CaptureError(err, "rtsp-ffmpeg-unavailable")
 		return
 	}
@@ -1069,6 +1320,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 		<-quitChan
 		// Log that a quit signal was received
 		log.Printf("🔴 Quit signal received, stopping FFmpeg for RTSP source %s.", url)
+		logger.Info("quit signal received, stopping FFmpeg",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"url_type", categorizeStreamURL(url))
 		// Cancel the context to stop all operations
 		cancel()
 	}()
@@ -1078,6 +1332,10 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// If an error occurred and it's not due to context cancellation, log it and report to user
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Printf("⚠️ FFmpeg lifecycle manager for RTSP source %s exited with error: %v", url, err)
+		logger.Error("FFmpeg lifecycle manager exited with error",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"url_type", categorizeStreamURL(url))
 		telemetry.CaptureError(fmt.Errorf("RTSP lifecycle error for %s: %w", url, err), "rtsp-lifecycle-error")
 	}
 }
