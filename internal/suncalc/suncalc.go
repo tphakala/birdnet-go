@@ -13,6 +13,7 @@ import (
 	"github.com/sj14/astral/pkg/astral"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // SunEventTimes holds the calculated sun event times in local time
@@ -31,9 +32,10 @@ type cacheEntry struct {
 
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
-	cache    map[string]cacheEntry // Cache of sun event times for dates
-	lock     sync.RWMutex          // Lock for cache access
-	observer astral.Observer       // Observer for sun event calculations
+	cache    map[string]cacheEntry      // Cache of sun event times for dates
+	lock     sync.RWMutex                // Lock for cache access
+	observer astral.Observer             // Observer for sun event calculations
+	metrics  *metrics.SunCalcMetrics     // Metrics for observability
 }
 
 // NewSunCalc creates a new SunCalc instance
@@ -44,24 +46,53 @@ func NewSunCalc(latitude, longitude float64) *SunCalc {
 	}
 }
 
+// SetMetrics sets the metrics instance for observability
+func (sc *SunCalc) SetMetrics(m *metrics.SunCalcMetrics) {
+	sc.lock.Lock()
+	defer sc.lock.Unlock()
+	sc.metrics = m
+}
+
 // GetSunEventTimes returns the sun event times for a given date, using cache if available
 func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
+	start := time.Now()
+	
 	// Format the date as a string key for the cache
 	dateKey := date.Format("2006-01-02")
 
 	// Acquire a read lock and check if the date is in the cache
 	sc.lock.RLock()
 	entry, exists := sc.cache[dateKey]
+	cacheSize := len(sc.cache)
 	sc.lock.RUnlock()
+
+	// Update cache size metric
+	if sc.metrics != nil {
+		sc.metrics.UpdateCacheSize(float64(cacheSize))
+	}
 
 	// If the date exists in the cache and matches the requested date, return the cached times
 	if exists && entry.date.Equal(date) {
+		if sc.metrics != nil {
+			sc.metrics.RecordSunCalcCacheHit("get_sun_events")
+			sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
+			sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+		}
 		return entry.times, nil
+	}
+
+	// Record cache miss
+	if sc.metrics != nil {
+		sc.metrics.RecordSunCalcCacheMiss("get_sun_events")
 	}
 
 	// If not in cache, calculate the sun event times
 	times, err := sc.calculateSunEventTimes(date)
 	if err != nil {
+		if sc.metrics != nil {
+			sc.metrics.RecordSunCalcOperation("get_sun_events", "error")
+			sc.metrics.RecordSunCalcError("get_sun_events", "calculation_error")
+		}
 		return SunEventTimes{}, err
 	}
 
@@ -69,6 +100,22 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	sc.lock.Lock()
 	sc.cache[dateKey] = cacheEntry{times: times, date: date}
 	sc.lock.Unlock()
+
+	// Record successful operation and update sun time gauges
+	if sc.metrics != nil {
+		sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
+		sc.metrics.RecordSunCalcDuration("get_sun_events", time.Since(start).Seconds())
+		
+		// Update sun time gauges for current day
+		if date.Format("2006-01-02") == time.Now().Format("2006-01-02") {
+			sc.metrics.UpdateSunTimes(
+				float64(times.Sunrise.Unix()),
+				float64(times.Sunset.Unix()),
+				float64(times.CivilDawn.Unix()),
+				float64(times.CivilDusk.Unix()),
+			)
+		}
+	}
 
 	// Return the calculated times
 	return times, nil

@@ -70,6 +70,10 @@ func (m *MockDataStore) SetMetrics(metrics *datastore.Metrics) {
 	// Mock implementation - no-op
 }
 
+func (m *MockDataStore) SetSunCalcMetrics(suncalcMetrics any) {
+	// Mock implementation - no-op
+}
+
 func (m *MockDataStore) Optimize(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
@@ -401,6 +405,10 @@ func (m *MockDataStoreV2) Get(id string) (datastore.Note, error) {
 }
 func (m *MockDataStoreV2) Close() error { args := m.Called(); return args.Error(0) }
 func (m *MockDataStoreV2) SetMetrics(metrics *datastore.Metrics) {
+	// Mock implementation - no-op
+}
+
+func (m *MockDataStoreV2) SetSunCalcMetrics(suncalcMetrics any) {
 	// Mock implementation - no-op
 }
 
