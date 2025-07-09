@@ -101,6 +101,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **Continue processing on errors** - don't fail entire chains
 - **Provide fallback mechanisms** (e.g., default loggers)
 - **Chain contexts properly** - preserve parent cancellation
+- **Never access shared mutable state after releasing its protecting lock. Always capture needed values into local variables while holding the lock.**
 
 ## Quick Reference
 - Always validate inputs
