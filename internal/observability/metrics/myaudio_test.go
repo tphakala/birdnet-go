@@ -104,3 +104,70 @@ func BenchmarkRecordAudioConversionError_FmtSprintf(b *testing.B) {
 		m.RecordAudioConversionError("wav", 16, "error")
 	}
 }
+
+func TestRecordBufferAllocationAttempt(t *testing.T) {
+	// Create a new registry for testing
+	registry := prometheus.NewRegistry()
+	m, err := NewMyAudioMetrics(registry)
+	assert.NoError(t, err)
+
+	// Test allocation attempt tracking scenarios
+	testCases := []struct {
+		name       string
+		bufferType string
+		source     string
+		result     string
+		expected   float64
+	}{
+		{"first allocation", "capture", "rtsp://camera1", "first_allocation", 1},
+		{"repeated blocked", "capture", "rtsp://camera1", "repeated_blocked", 1},
+		{"error case", "capture", "rtsp://camera2", "error", 1},
+		{"attempted tracking", "capture", "rtsp://camera3", "attempted", 1},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Record the allocation attempt
+			m.RecordBufferAllocationAttempt(tc.bufferType, tc.source, tc.result)
+
+			// Verify the metric was recorded
+			count := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
+				tc.bufferType,
+				tc.source,
+				tc.result,
+			))
+			assert.Equal(t, tc.expected, count)
+		})
+	}
+	
+	// Test repeated allocation scenario
+	t.Run("repeated allocation scenario", func(t *testing.T) {
+		source := "rtsp://test_camera"
+		
+		// Simulate multiple allocation attempts
+		m.RecordBufferAllocationAttempt("capture", source, "attempted")
+		m.RecordBufferAllocationAttempt("capture", source, "first_allocation")
+		
+		// Simulate repeated attempts
+		for i := 0; i < 3; i++ {
+			m.RecordBufferAllocationAttempt("capture", source, "attempted")
+			m.RecordBufferAllocationAttempt("capture", source, "repeated_blocked")
+		}
+		
+		// Verify counts
+		attemptedCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
+			"capture", source, "attempted",
+		))
+		assert.Equal(t, float64(4), attemptedCount, "Should have 4 attempted allocations")
+		
+		firstAllocCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
+			"capture", source, "first_allocation",
+		))
+		assert.Equal(t, float64(1), firstAllocCount, "Should have 1 successful first allocation")
+		
+		blockedCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
+			"capture", source, "repeated_blocked",
+		))
+		assert.Equal(t, float64(3), blockedCount, "Should have 3 blocked repeated allocations")
+	})
+}

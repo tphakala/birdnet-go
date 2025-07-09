@@ -67,8 +67,20 @@ func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample i
 
 // AllocateCaptureBuffer initializes an audio buffer for a single source.
 // It returns an error if initialization fails or if the input is invalid.
+// 
+// Metrics tracking:
+// - myaudio_buffer_allocation_attempts_total{result="first_allocation"} - successful first allocations
+// - myaudio_buffer_allocation_attempts_total{result="repeated_blocked"} - blocked repeated allocations
+// - myaudio_buffer_allocation_attempts_total{result="error"} - failed allocations due to validation errors
+//
+// To detect repeated allocation issues, monitor the "repeated_blocked" counter per source.
 func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, source string) error {
 	start := time.Now()
+	
+	// Track allocation attempt
+	if captureMetrics != nil {
+		captureMetrics.RecordBufferAllocationAttempt("capture", source, "attempted")
+	}
 
 	// Validate inputs
 	if durationSeconds <= 0 {
@@ -83,6 +95,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", source, "error")
 			captureMetrics.RecordBufferAllocationError("capture", source, "invalid_duration")
+			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -98,6 +111,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", source, "error")
 			captureMetrics.RecordBufferAllocationError("capture", source, "invalid_sample_rate")
+			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -113,6 +127,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", source, "error")
 			captureMetrics.RecordBufferAllocationError("capture", source, "invalid_bytes_per_sample")
+			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -126,6 +141,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", "unknown", "error")
 			captureMetrics.RecordBufferAllocationError("capture", "unknown", "empty_source")
+			captureMetrics.RecordBufferAllocationAttempt("capture", "unknown", "error")
 		}
 		return enhancedErr
 	}
@@ -148,6 +164,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", source, "error")
 			captureMetrics.RecordBufferAllocationError("capture", source, "size_too_large")
+			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -167,6 +184,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", source, "error")
 			captureMetrics.RecordBufferAllocationError("capture", source, "creation_failed")
+			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -190,6 +208,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		if captureMetrics != nil {
 			captureMetrics.RecordBufferAllocation("capture", source, "error")
 			captureMetrics.RecordBufferAllocationError("capture", source, "already_exists")
+			captureMetrics.RecordBufferAllocationAttempt("capture", source, "repeated_blocked")
 		}
 		return enhancedErr
 	}
@@ -201,6 +220,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		duration := time.Since(start).Seconds()
 		captureMetrics.RecordBufferAllocation("capture", source, "success")
 		captureMetrics.RecordBufferAllocationDuration("capture", source, duration)
+		captureMetrics.RecordBufferAllocationAttempt("capture", source, "first_allocation")
 		captureMetrics.UpdateBufferCapacity("capture", source, alignedBufferSize)
 		captureMetrics.UpdateBufferSize("capture", source, 0) // Empty at start
 		captureMetrics.UpdateBufferUtilization("capture", source, 0.0)
