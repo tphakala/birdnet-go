@@ -71,8 +71,13 @@ func getGlobalManager() *FFmpegManager {
 		defer managerMutex.Unlock()
 		
 		globalManager = NewFFmpegManager()
-		// Start monitoring with 30-second interval
-		globalManager.StartMonitoring(30 * time.Second)
+		// Start monitoring with configurable interval
+		settings := conf.Setting()
+		monitoringInterval := time.Duration(settings.Realtime.RTSP.Health.MonitoringInterval) * time.Second
+		if monitoringInterval == 0 {
+			monitoringInterval = 30 * time.Second // default fallback
+		}
+		globalManager.StartMonitoring(monitoringInterval)
 	})
 	
 	managerMutex.RLock()
