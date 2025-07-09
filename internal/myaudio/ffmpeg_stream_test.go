@@ -54,8 +54,8 @@ func TestFFmpegStream_Restart(t *testing.T) {
 	audioChan := make(chan UnifiedAudioData, 10)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
-	// Test restart
-	stream.Restart()
+	// Test restart (manual restart)
+	stream.Restart(true)
 
 	// Verify restart signal was sent
 	select {

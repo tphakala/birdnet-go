@@ -130,7 +130,7 @@ func (m *FFmpegManager) RestartStream(url string) error {
 			Build()
 	}
 
-	stream.Restart()
+	stream.Restart(false) // false = automatic restart (health-triggered)
 	
 	managerLogger.Info("restarted FFmpeg stream",
 		"url", privacy.SanitizeRTSPUrl(url),
