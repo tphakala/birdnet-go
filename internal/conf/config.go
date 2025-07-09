@@ -160,9 +160,10 @@ type RTSPHealthSettings struct {
 
 // RTSPSettings contains settings for RTSP streaming.
 type RTSPSettings struct {
-	Transport string              // RTSP Transport Protocol
-	URLs      []string            // RTSP stream URL
-	Health    RTSPHealthSettings  // health monitoring settings
+	Transport        string              // RTSP Transport Protocol
+	URLs             []string            // RTSP stream URL
+	Health           RTSPHealthSettings  // health monitoring settings
+	FFmpegParameters []string            // optional custom FFmpeg parameters
 }
 
 // MQTTSettings contains settings for MQTT integration.
