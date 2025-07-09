@@ -56,6 +56,9 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			Build()
 	}
 
+	// Initialize sound level processor if enabled
+	registerSoundLevelProcessorIfEnabled(url, managerLogger)
+
 	// Create new stream
 	stream := NewFFmpegStream(url, transport, audioChan)
 	m.streams[url] = stream
@@ -95,6 +98,12 @@ func (m *FFmpegManager) StopStream(url string) error {
 
 	stream.Stop()
 	delete(m.streams, url)
+	
+	// Unregister sound level processor
+	UnregisterSoundLevelProcessor(url)
+	managerLogger.Debug("unregistered sound level processor",
+		"url", privacy.SanitizeRTSPUrl(url),
+		"operation", "stop_stream")
 	
 	managerLogger.Info("stopped FFmpeg stream",
 		"url", privacy.SanitizeRTSPUrl(url),
@@ -285,13 +294,21 @@ func (m *FFmpegManager) Shutdown() {
 	
 	// Stop all streams
 	m.streamsMu.Lock()
+	urls := make([]string, 0, len(m.streams))
 	for url := range m.streams {
-		if stream := m.streams[url]; stream != nil {
-			stream.Stop()
+		urls = append(urls, url)
+	}
+	m.streamsMu.Unlock()
+	
+	// Stop each stream using StopStream which handles unregistration
+	for _, url := range urls {
+		if err := m.StopStream(url); err != nil {
+			managerLogger.Warn("failed to stop stream during shutdown",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err,
+				"operation", "shutdown")
 		}
 	}
-	m.streams = make(map[string]*FFmpegStream)
-	m.streamsMu.Unlock()
 	
 	// Wait for all goroutines to finish
 	done := make(chan struct{})

@@ -561,6 +561,15 @@ func RegisterSoundLevelProcessor(source, name string) error {
 	}
 
 	soundLevelProcessors[source] = processor
+	
+	// Log registration if debug is enabled
+	if logger := getSoundLevelLogger(); logger != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
+		logger.Debug("registered sound level processor",
+			"source", source,
+			"name", name,
+			"total_processors", len(soundLevelProcessors))
+	}
+	
 	return nil
 }
 
@@ -569,6 +578,15 @@ func UnregisterSoundLevelProcessor(source string) {
 	soundLevelProcessorMutex.Lock()
 	defer soundLevelProcessorMutex.Unlock()
 
+	// Log unregistration if debug is enabled and processor exists
+	if _, exists := soundLevelProcessors[source]; exists {
+		if logger := getSoundLevelLogger(); logger != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
+			logger.Debug("unregistering sound level processor",
+				"source", source,
+				"remaining_processors", len(soundLevelProcessors)-1)
+		}
+	}
+	
 	delete(soundLevelProcessors, source)
 }
 
@@ -579,10 +597,7 @@ func ProcessSoundLevelData(source string, audioData []byte) (*SoundLevelData, er
 	soundLevelProcessorMutex.RUnlock()
 
 	if !exists {
-		return nil, errors.Newf("no sound level processor registered for source: %s", source).
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "process_sound_level_data").
+		return nil, errors.New(ErrSoundLevelProcessorNotRegistered).
 			Context("source", source).
 			Build()
 	}
