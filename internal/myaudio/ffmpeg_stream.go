@@ -361,9 +361,19 @@ func (s *FFmpegStream) startProcess() error {
 	// Get FFmpeg format settings
 	sampleRate, numChannels, format := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
 
-	// Create FFmpeg command
-	s.cmd = exec.CommandContext(s.ctx, settings.FfmpegPath,
+	// Build FFmpeg command arguments
+	args := []string{
 		"-rtsp_transport", s.transport,
+	}
+	
+	// Add custom FFmpeg parameters from configuration (before input)
+	rtspSettings := conf.Setting().Realtime.RTSP
+	if len(rtspSettings.FFmpegParameters) > 0 {
+		args = append(args, rtspSettings.FFmpegParameters...)
+	}
+	
+	// Add input and output parameters
+	args = append(args,
 		"-i", s.url,
 		"-loglevel", "error",
 		"-vn",
@@ -373,6 +383,9 @@ func (s *FFmpegStream) startProcess() error {
 		"-hide_banner",
 		"pipe:1",
 	)
+
+	// Create FFmpeg command
+	s.cmd = exec.CommandContext(s.ctx, settings.FfmpegPath, args...)
 
 	// Setup process group
 	setupProcessGroup(s.cmd)
