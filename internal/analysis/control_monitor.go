@@ -367,9 +367,14 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		cm.soundLevelPublishersDone = nil
 	}
 
+	// Always unregister existing sound level processors first
+	// This ensures that when the interval changes, processors are recreated with the new interval
+	unregisterAllSoundLevelProcessors(settings)
+
 	// If sound level monitoring is enabled, start new publishers
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		// Register sound level processors for active audio sources
+		// This will create new processors with the updated interval setting
 		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
 			log.Printf("⚠️ Warning: Failed to register some sound level processors: %v", err)
 			// Continue anyway, some sources might work
@@ -381,12 +386,9 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		// Start sound level publishers
 		startSoundLevelPublishers(cm.soundLevelPublishersWg, cm.soundLevelPublishersDone, cm.proc, cm.soundLevelChan, cm.httpServer)
 
-		log.Printf("✅ Sound level monitoring enabled")
-		cm.notifySuccess("Sound level monitoring enabled")
+		log.Printf("✅ Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval)
+		cm.notifySuccess(fmt.Sprintf("Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval))
 	} else {
-		// Unregister all sound level processors
-		unregisterAllSoundLevelProcessors(settings)
-
 		log.Printf("✅ Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
 	}
