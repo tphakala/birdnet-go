@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -43,10 +44,18 @@ func init() {
 // getGlobalManager returns the global FFmpeg manager instance
 func getGlobalManager() *FFmpegManager {
 	managerOnce.Do(func() {
+		managerMutex.Lock()
+		defer managerMutex.Unlock()
+		
 		globalManager = NewFFmpegManager()
 		// Start monitoring with 30-second interval
 		globalManager.StartMonitoring(30 * time.Second)
 	})
+	
+	managerMutex.RLock()
+	defer managerMutex.RUnlock()
+	
+	// Return nil if manager was shut down
 	return globalManager
 }
 
@@ -74,6 +83,13 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 
 	// Get the global manager
 	manager := getGlobalManager()
+	if manager == nil {
+		integrationLogger.Error("FFmpeg manager is not available",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"operation", "capture_audio_rtsp")
+		log.Printf("❌ FFmpeg manager is not available for %s", url)
+		return
+	}
 
 	// Start the stream
 	if err := manager.StartStream(url, transport, unifiedAudioChan); err != nil {
@@ -120,12 +136,21 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 // This is called when configuration changes to start/stop streams as needed
 func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	manager := getGlobalManager()
+	if manager == nil {
+		return errors.Newf("FFmpeg manager is not available").
+			Category(errors.CategorySystem).
+			Component("ffmpeg-integration").
+			Build()
+	}
 	return manager.SyncWithConfig(audioChan)
 }
 
 // GetRTSPStreamHealth returns health information for all RTSP streams
 func GetRTSPStreamHealth() map[string]StreamHealth {
 	manager := getGlobalManager()
+	if manager == nil {
+		return make(map[string]StreamHealth)
+	}
 	return manager.HealthCheck()
 }
 
@@ -137,7 +162,8 @@ func ShutdownFFmpegManager() {
 	if globalManager != nil {
 		globalManager.Shutdown()
 		globalManager = nil
-		managerOnce = sync.Once{} // Reset the once to allow re-initialization
+		// Don't reset managerOnce to avoid race conditions
+		// The manager can only be initialized once per process
 	}
 }
 
