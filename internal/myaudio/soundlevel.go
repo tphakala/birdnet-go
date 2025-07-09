@@ -85,10 +85,21 @@ type intervalAggregator struct {
 
 // newSoundLevelProcessor creates a new sound level processor for the given source
 func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
-	// Get configured interval, with minimum of 5 seconds
-	interval := conf.Setting().Realtime.Audio.SoundLevel.Interval
-	if interval < 5 {
-		interval = 5
+	// Get configured interval, with minimum to prevent excessive CPU usage
+	configuredInterval := conf.Setting().Realtime.Audio.SoundLevel.Interval
+	interval := configuredInterval
+	if interval < conf.MinSoundLevelInterval {
+		interval = conf.MinSoundLevelInterval
+		
+		// Log when interval is clamped to minimum
+		if logger := getSoundLevelLogger(); logger != nil {
+			logger.Info("sound level interval clamped to minimum",
+				"source", source,
+				"configured_interval", configuredInterval,
+				"actual_interval", interval,
+				"minimum_interval", conf.MinSoundLevelInterval,
+				"reason", "prevent excessive CPU usage")
+		}
 	}
 
 	processor := &soundLevelProcessor{
