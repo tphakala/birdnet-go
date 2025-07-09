@@ -108,6 +108,7 @@ func (m *FFmpegManager) StopStream(url string) error {
 func (m *FFmpegManager) RestartStream(url string) error {
 	m.streamsMu.RLock()
 	stream, exists := m.streams[url]
+	activeStreamCount := len(m.streams)
 	m.streamsMu.RUnlock()
 
 	if !exists {
@@ -116,7 +117,7 @@ func (m *FFmpegManager) RestartStream(url string) error {
 			Component("ffmpeg-manager").
 			Context("operation", "restart_stream").
 			Context("url", privacy.SanitizeRTSPUrl(url)).
-			Context("active_streams", len(m.streams)).
+			Context("active_streams", activeStreamCount).
 			Build()
 	}
 
