@@ -836,7 +836,10 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	// Get configurable thresholds
 	settings := conf.Setting()
 	healthyDataThreshold := time.Duration(settings.Realtime.RTSP.Health.HealthyDataThreshold) * time.Second
-	if healthyDataThreshold == 0 {
+	
+	// Validate threshold: must be positive and within reasonable limits (max 30 minutes)
+	const maxHealthyDataThreshold = 30 * time.Minute
+	if healthyDataThreshold <= 0 || healthyDataThreshold > maxHealthyDataThreshold {
 		healthyDataThreshold = defaultHealthyDataThreshold
 	}
 	

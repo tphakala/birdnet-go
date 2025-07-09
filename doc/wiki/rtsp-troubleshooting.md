@@ -25,7 +25,7 @@ This guide covers common RTSP streaming issues and their solutions in BirdNET-Go
 Some cameras don't properly close TCP connections during reboots, leaving "half-open" TCP sessions. FFmpeg continues waiting on these dead connections instead of detecting the failure immediately.
 
 **Solution:**
-Use custom FFmpeg parameters to add connection timeouts and reconnection logic.
+Use custom FFmpeg parameters to add connection timeouts and failure detection strategies.
 
 ### High Restart Count with Circuit Breaker
 
