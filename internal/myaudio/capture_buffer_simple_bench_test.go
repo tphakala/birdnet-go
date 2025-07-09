@@ -7,16 +7,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Disable allocation tracking for benchmarks to reduce noise
-	EnableAllocationTracking(false)
 	os.Exit(m.Run())
 }
 
 // BenchmarkRepeatedAllocationPrevention shows the benefit of preventing repeated allocations
 func BenchmarkRepeatedAllocationPrevention(b *testing.B) {
-	// Temporarily disable tracking for cleaner output
-	EnableAllocationTracking(false)
-	defer EnableAllocationTracking(false)
 	
 	b.Run("without_fix_allows_double_alloc", func(b *testing.B) {
 		b.ReportAllocs()

@@ -15,6 +15,8 @@ type MyAudioMetrics struct {
 	bufferAllocationsTotal   *prometheus.CounterVec
 	bufferAllocationDuration *prometheus.HistogramVec
 	bufferAllocationErrors   *prometheus.CounterVec
+	bufferAllocationAttempts *prometheus.CounterVec  // Track all allocation attempts including blocked ones
+	bufferAllocationSizes    *prometheus.HistogramVec // Track allocation sizes for memory usage patterns
 
 	// Buffer capacity and utilization metrics
 	bufferCapacityGauge    *prometheus.GaugeVec
@@ -113,6 +115,23 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help: "Total number of buffer allocation errors",
 		},
 		[]string{"buffer_type", "source", "error_type"},
+	)
+
+	m.bufferAllocationAttempts = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_buffer_allocation_attempts_total",
+			Help: "Total number of buffer allocation attempts including successful and blocked",
+		},
+		[]string{"buffer_type", "source", "result"}, // result: first_allocation, repeated_blocked, error
+	)
+
+	m.bufferAllocationSizes = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_buffer_allocation_size_bytes",
+			Help:    "Size of buffer allocations in bytes",
+			Buckets: prometheus.ExponentialBuckets(1024, 2, 20), // 1KB to ~1GB
+		},
+		[]string{"buffer_type", "source"},
 	)
 
 	// Buffer capacity metrics
@@ -460,6 +479,8 @@ func (m *MyAudioMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.bufferAllocationsTotal.Describe(ch)
 	m.bufferAllocationDuration.Describe(ch)
 	m.bufferAllocationErrors.Describe(ch)
+	m.bufferAllocationAttempts.Describe(ch)
+	m.bufferAllocationSizes.Describe(ch)
 	m.bufferCapacityGauge.Describe(ch)
 	m.bufferUtilizationGauge.Describe(ch)
 	m.bufferSizeGauge.Describe(ch)
@@ -507,6 +528,8 @@ func (m *MyAudioMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.bufferAllocationsTotal.Collect(ch)
 	m.bufferAllocationDuration.Collect(ch)
 	m.bufferAllocationErrors.Collect(ch)
+	m.bufferAllocationAttempts.Collect(ch)
+	m.bufferAllocationSizes.Collect(ch)
 	m.bufferCapacityGauge.Collect(ch)
 	m.bufferUtilizationGauge.Collect(ch)
 	m.bufferSizeGauge.Collect(ch)
@@ -564,6 +587,24 @@ func (m *MyAudioMetrics) RecordBufferAllocationDuration(bufferType, source strin
 // RecordBufferAllocationError records a buffer allocation error
 func (m *MyAudioMetrics) RecordBufferAllocationError(bufferType, source, errorType string) {
 	m.bufferAllocationErrors.WithLabelValues(bufferType, source, errorType).Inc()
+}
+
+// RecordBufferAllocationAttempt records any buffer allocation attempt
+// result values:
+// - "attempted" - initial attempt (always recorded first)
+// - "first_allocation" - successful first allocation
+// - "repeated_blocked" - allocation blocked due to existing buffer
+// - "error" - allocation failed due to validation or system errors
+//
+// Example Prometheus query to find sources with repeated allocation attempts:
+// sum by (source) (rate(myaudio_buffer_allocation_attempts_total{result="repeated_blocked"}[5m])) > 0
+func (m *MyAudioMetrics) RecordBufferAllocationAttempt(bufferType, source, result string) {
+	m.bufferAllocationAttempts.WithLabelValues(bufferType, source, result).Inc()
+}
+
+// RecordBufferAllocationSize records the size of a buffer allocation
+func (m *MyAudioMetrics) RecordBufferAllocationSize(bufferType, source string, sizeBytes int) {
+	m.bufferAllocationSizes.WithLabelValues(bufferType, source).Observe(float64(sizeBytes))
 }
 
 // Buffer capacity recording methods
