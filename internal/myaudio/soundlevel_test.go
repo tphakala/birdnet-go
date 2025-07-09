@@ -29,14 +29,14 @@ func TestNewSoundLevelProcessor_IntervalClamping(t *testing.T) {
 		{
 			name:             "interval_below_minimum",
 			configInterval:   3,
-			expectedInterval: 5,
-			description:      "intervals less than 5 should be clamped to 5",
+			expectedInterval: conf.MinSoundLevelInterval,
+			description:      "intervals less than minimum should be clamped",
 		},
 		{
 			name:             "interval_at_minimum",
-			configInterval:   5,
-			expectedInterval: 5,
-			description:      "interval of exactly 5 should remain 5",
+			configInterval:   conf.MinSoundLevelInterval,
+			expectedInterval: conf.MinSoundLevelInterval,
+			description:      "interval at minimum should remain unchanged",
 		},
 		{
 			name:             "interval_above_minimum",
@@ -47,14 +47,14 @@ func TestNewSoundLevelProcessor_IntervalClamping(t *testing.T) {
 		{
 			name:             "zero_interval",
 			configInterval:   0,
-			expectedInterval: 5,
-			description:      "zero interval should be clamped to 5",
+			expectedInterval: conf.MinSoundLevelInterval,
+			description:      "zero interval should be clamped to minimum",
 		},
 		{
 			name:             "negative_interval",
 			configInterval:   -1,
-			expectedInterval: 5,
-			description:      "negative interval should be clamped to 5",
+			expectedInterval: conf.MinSoundLevelInterval,
+			description:      "negative interval should be clamped to minimum",
 		},
 		{
 			name:             "large_interval",
