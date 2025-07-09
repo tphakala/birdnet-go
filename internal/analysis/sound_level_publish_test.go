@@ -1132,17 +1132,20 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 	}
 }
 
+// mqttIntervalTest defines test parameters for interval validation
+type mqttIntervalTest struct {
+	name             string
+	interval         int           // configured interval in seconds
+	testDuration     time.Duration // total test duration
+	dataRate         time.Duration // rate at which data is sent to soundLevelChan
+	expectedPublishes int          // expected number of MQTT publishes
+}
+
 // TestMQTTPublishIntervalValidation validates that MQTT publishes happen exactly at configured intervals
 func TestMQTTPublishIntervalValidation(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name             string
-		interval         int           // configured interval in seconds
-		testDuration     time.Duration // total test duration
-		dataRate         time.Duration // rate at which data is sent to soundLevelChan
-		expectedPublishes int          // expected number of MQTT publishes
-	}{
+	tests := []mqttIntervalTest{
 		{
 			name:             "5 second interval with immediate data",
 			interval:         5,
@@ -1169,159 +1172,218 @@ func TestMQTTPublishIntervalValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			// Create channels
-			testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
-			publishEvents := make(chan publishEvent, 20)
-			stopChan := make(chan struct{})
-
-			// Create mock processor that tracks publish timing and payload
-			mockProc := createMockProcessor(func(ctx context.Context, topic, payload string) error {
-				publishEvents <- publishEvent{
-					timestamp: time.Now(),
-					payload:   payload,
-					topic:     topic,
-				}
-				return nil
-			})
-
-			// Start MQTT publisher
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for {
-					select {
-					case <-stopChan:
-						return
-					case soundData := <-testSoundLevelChan:
-						ctx := context.Background()
-						topic := "test/soundlevel"
-						compactData := CompactSoundLevelData{
-							TS:    soundData.Timestamp.Format(time.RFC3339),
-							Src:   soundData.Source,
-							Name:  soundData.Name,
-							Dur:   soundData.Duration,
-							Bands: make(map[string]CompactBandData),
-						}
-						for band, bandData := range soundData.OctaveBands {
-							compactData.Bands[band] = CompactBandData{
-								Freq: bandData.CenterFreq,
-								Min:  bandData.Min,
-								Max:  bandData.Max,
-								Mean: bandData.Mean,
-							}
-						}
-						jsonData, err := json.Marshal(compactData)
-						if err != nil {
-							t.Errorf("Failed to marshal compact data: %v", err)
-							return
-						}
-						if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
-							t.Logf("Mock publish returned error (expected in some tests): %v", err)
-						}
-					}
-				}
-			}()
-
-			testStartTime := time.Now()
-			
-			// In the real system, sound level processors send data at interval boundaries
-			// Simulate this by sending data at the configured interval
-			go func() {
-				intervalTicker := time.NewTicker(time.Duration(tt.interval) * time.Second)
-				defer intervalTicker.Stop()
-				
-				for {
-					select {
-					case <-intervalTicker.C:
-						// Send aggregated data when interval completes
-						soundData := myaudio.SoundLevelData{
-							Timestamp: time.Now(),
-							Source:    "test-device",
-							Name:      fmt.Sprintf("device-%ds", tt.interval),
-							Duration:  tt.interval,
-							OctaveBands: map[string]myaudio.OctaveBandData{
-								"1.0_kHz": {
-									CenterFreq: 1000,
-									Min:        -65.0,
-									Max:        -45.0,
-									Mean:       -55.0,
-								},
-								"2.0_kHz": {
-									CenterFreq: 2000,
-									Min:        -70.0,
-									Max:        -50.0,
-									Mean:       -60.0,
-								},
-							},
-						}
-						select {
-						case testSoundLevelChan <- soundData:
-							t.Logf("Sent sound data at %v", time.Since(testStartTime))
-						case <-stopChan:
-							return
-						}
-					case <-stopChan:
-						return
-					}
-				}
-			}()
-
-			// Collect publish events
-			var events []publishEvent
-			testTimer := time.NewTimer(tt.testDuration)
-			defer testTimer.Stop()
-
-			done := make(chan struct{})
-			go func() {
-				for {
-					select {
-					case event := <-publishEvents:
-						events = append(events, event)
-						t.Logf("MQTT publish at %v (elapsed: %v)", 
-							event.timestamp.Format("15:04:05.000"),
-							event.timestamp.Sub(testStartTime))
-					case <-testTimer.C:
-						close(done)
-						return
-					}
-				}
-			}()
-
-			<-done
-			close(stopChan)
-			wg.Wait()
-
-			// Verify publish count
-			assert.Equal(t, tt.expectedPublishes, len(events),
-				"Expected %d MQTT publishes but got %d", tt.expectedPublishes, len(events))
-
-			// Verify publish timing - publishes should happen shortly after interval boundaries
-			for i, event := range events {
-				expectedTime := testStartTime.Add(time.Duration((i+1)*tt.interval) * time.Second)
-				actualDelay := event.timestamp.Sub(expectedTime)
-				
-				// Allow up to 500ms delay for processing
-				assert.LessOrEqual(t, actualDelay.Milliseconds(), int64(500),
-					"Publish %d was too late (delay: %v)", i+1, actualDelay)
-				assert.GreaterOrEqual(t, actualDelay.Milliseconds(), int64(-100),
-					"Publish %d was too early (delay: %v)", i+1, actualDelay)
-
-				// Verify payload structure
-				var compactData CompactSoundLevelData
-				err := json.Unmarshal([]byte(event.payload), &compactData)
-				require.NoError(t, err, "Failed to unmarshal payload %d", i+1)
-				
-				assert.Equal(t, "test-device", compactData.Src)
-				assert.Equal(t, tt.interval, compactData.Dur)
-				assert.Equal(t, 2, len(compactData.Bands))
-				
-				// Verify topic
-				assert.Contains(t, event.topic, "soundlevel")
-			}
+			runMQTTIntervalTest(t, tt)
 		})
 	}
+}
+
+// runMQTTIntervalTest executes a single MQTT interval test
+func runMQTTIntervalTest(t *testing.T, tt mqttIntervalTest) {
+	// Create test infrastructure
+	testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	publishEvents := make(chan publishEvent, 20)
+	stopChan := make(chan struct{})
+	var wg sync.WaitGroup
+
+	// Create mock processor
+	mockProc := createMockProcessorWithEvents(publishEvents)
+
+	// Start MQTT publisher
+	startMQTTPublisher(t, &wg, stopChan, testSoundLevelChan, mockProc)
+
+	// Start data generator
+	testStartTime := time.Now()
+	startSoundLevelDataGenerator(t, tt.interval, stopChan, testSoundLevelChan, testStartTime)
+
+	// Collect and verify results
+	events := collectPublishEvents(t, publishEvents, tt.testDuration, testStartTime)
+	
+	// Cleanup
+	close(stopChan)
+	wg.Wait()
+
+	// Verify results
+	verifyPublishResults(t, events, tt, testStartTime)
+}
+
+// createMockProcessorWithEvents creates a mock processor that sends events to a channel
+func createMockProcessorWithEvents(publishEvents chan publishEvent) *processor.Processor {
+	return createMockProcessor(func(ctx context.Context, topic, payload string) error {
+		publishEvents <- publishEvent{
+			timestamp: time.Now(),
+			payload:   payload,
+			topic:     topic,
+		}
+		return nil
+	})
+}
+
+// startMQTTPublisher starts the MQTT publisher goroutine
+func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{}, 
+	testSoundLevelChan chan myaudio.SoundLevelData, mockProc *processor.Processor) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stopChan:
+				return
+			case soundData := <-testSoundLevelChan:
+				publishSoundLevelData(t, soundData, mockProc)
+			}
+		}
+	}()
+}
+
+// publishSoundLevelData publishes sound level data via mock MQTT
+func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockProc *processor.Processor) {
+	ctx := context.Background()
+	topic := "test/soundlevel"
+	
+	compactData := convertToCompactFormat(soundData)
+	jsonData, err := json.Marshal(compactData)
+	if err != nil {
+		t.Errorf("Failed to marshal compact data: %v", err)
+		return
+	}
+	
+	if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+		t.Logf("Mock publish returned error (expected in some tests): %v", err)
+	}
+}
+
+// convertToCompactFormat converts sound level data to compact format
+func convertToCompactFormat(soundData myaudio.SoundLevelData) CompactSoundLevelData {
+	compactData := CompactSoundLevelData{
+		TS:    soundData.Timestamp.Format(time.RFC3339),
+		Src:   soundData.Source,
+		Name:  soundData.Name,
+		Dur:   soundData.Duration,
+		Bands: make(map[string]CompactBandData),
+	}
+	
+	for band, bandData := range soundData.OctaveBands {
+		compactData.Bands[band] = CompactBandData{
+			Freq: bandData.CenterFreq,
+			Min:  bandData.Min,
+			Max:  bandData.Max,
+			Mean: bandData.Mean,
+		}
+	}
+	
+	return compactData
+}
+
+// startSoundLevelDataGenerator starts generating sound level data at intervals
+func startSoundLevelDataGenerator(t *testing.T, interval int, stopChan chan struct{}, 
+	testSoundLevelChan chan myaudio.SoundLevelData, testStartTime time.Time) {
+	go func() {
+		intervalTicker := time.NewTicker(time.Duration(interval) * time.Second)
+		defer intervalTicker.Stop()
+		
+		for {
+			select {
+			case <-intervalTicker.C:
+				soundData := createTestSoundLevelData(interval)
+				select {
+				case testSoundLevelChan <- soundData:
+					t.Logf("Sent sound data at %v", time.Since(testStartTime))
+				case <-stopChan:
+					return
+				}
+			case <-stopChan:
+				return
+			}
+		}
+	}()
+}
+
+// createTestSoundLevelData creates test sound level data
+func createTestSoundLevelData(interval int) myaudio.SoundLevelData {
+	return myaudio.SoundLevelData{
+		Timestamp: time.Now(),
+		Source:    "test-device",
+		Name:      fmt.Sprintf("device-%ds", interval),
+		Duration:  interval,
+		OctaveBands: map[string]myaudio.OctaveBandData{
+			"1.0_kHz": {
+				CenterFreq: 1000,
+				Min:        -65.0,
+				Max:        -45.0,
+				Mean:       -55.0,
+			},
+			"2.0_kHz": {
+				CenterFreq: 2000,
+				Min:        -70.0,
+				Max:        -50.0,
+				Mean:       -60.0,
+			},
+		},
+	}
+}
+
+// collectPublishEvents collects publish events for the test duration
+func collectPublishEvents(t *testing.T, publishEvents chan publishEvent, 
+	testDuration time.Duration, testStartTime time.Time) []publishEvent {
+	var events []publishEvent
+	testTimer := time.NewTimer(testDuration)
+	defer testTimer.Stop()
+
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case event := <-publishEvents:
+				events = append(events, event)
+				t.Logf("MQTT publish at %v (elapsed: %v)", 
+					event.timestamp.Format("15:04:05.000"),
+					event.timestamp.Sub(testStartTime))
+			case <-testTimer.C:
+				close(done)
+				return
+			}
+		}
+	}()
+
+	<-done
+	return events
+}
+
+// verifyPublishResults verifies the publish events meet expectations
+func verifyPublishResults(t *testing.T, events []publishEvent, tt mqttIntervalTest, testStartTime time.Time) {
+	// Verify publish count
+	assert.Equal(t, tt.expectedPublishes, len(events),
+		"Expected %d MQTT publishes but got %d", tt.expectedPublishes, len(events))
+
+	// Verify each publish
+	for i, event := range events {
+		verifyPublishTiming(t, event, i, tt.interval, testStartTime)
+		verifyPublishPayload(t, event, i, tt.interval)
+	}
+}
+
+// verifyPublishTiming verifies a publish happened at the expected time
+func verifyPublishTiming(t *testing.T, event publishEvent, index, interval int, testStartTime time.Time) {
+	expectedTime := testStartTime.Add(time.Duration((index+1)*interval) * time.Second)
+	actualDelay := event.timestamp.Sub(expectedTime)
+	
+	// Allow up to 500ms delay for processing
+	assert.LessOrEqual(t, actualDelay.Milliseconds(), int64(500),
+		"Publish %d was too late (delay: %v)", index+1, actualDelay)
+	assert.GreaterOrEqual(t, actualDelay.Milliseconds(), int64(-100),
+		"Publish %d was too early (delay: %v)", index+1, actualDelay)
+}
+
+// verifyPublishPayload verifies the payload structure and content
+func verifyPublishPayload(t *testing.T, event publishEvent, index, interval int) {
+	var compactData CompactSoundLevelData
+	err := json.Unmarshal([]byte(event.payload), &compactData)
+	require.NoError(t, err, "Failed to unmarshal payload %d", index+1)
+	
+	assert.Equal(t, "test-device", compactData.Src)
+	assert.Equal(t, interval, compactData.Dur)
+	assert.Equal(t, 2, len(compactData.Bands))
+	assert.Contains(t, event.topic, "soundlevel")
 }
 
 // TestMQTTPublishIntervalWithNoData tests behavior when no data is received
@@ -1465,16 +1527,16 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 	
 	// Collector goroutine
 	go func() {
+		defer close(attemptsDone)
 		for i := 0; i < expectedAttempts; i++ {
 			select {
 			case attempt := <-publishAttempts:
 				attempts = append(attempts, attempt)
 			case <-time.After(1 * time.Second):
-				// Timeout for individual attempt
-				break
+				// Timeout for individual attempt - exit the loop
+				return
 			}
 		}
-		close(attemptsDone)
 	}()
 	
 	// Send test data
