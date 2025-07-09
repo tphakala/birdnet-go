@@ -60,8 +60,9 @@ type soundLevelProcessor struct {
 	// 1-second aggregation buffers
 	secondBuffers map[string]*octaveBandBuffer
 
-	// 10-second aggregation
-	tenSecondBuffer *tenSecondAggregator
+	// Configurable interval aggregation
+	intervalBuffer *intervalAggregator
+	interval       int // interval in seconds
 
 	mutex sync.RWMutex
 }
@@ -73,9 +74,9 @@ type octaveBandBuffer struct {
 	targetSampleCount int // Number of samples in 1 second based on sample rate
 }
 
-// tenSecondAggregator collects 1-second measurements to produce 10-second statistics
-type tenSecondAggregator struct {
-	secondMeasurements []map[string]float64 // Array of 10 second measurements
+// intervalAggregator collects 1-second measurements to produce interval statistics
+type intervalAggregator struct {
+	secondMeasurements []map[string]float64 // Array of second measurements
 	startTime          time.Time
 	currentIndex       int
 	measurementCount   int // Track number of completed 1-second measurements
@@ -84,14 +85,21 @@ type tenSecondAggregator struct {
 
 // newSoundLevelProcessor creates a new sound level processor for the given source
 func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
+	// Get configured interval, with minimum of 5 seconds
+	interval := conf.Setting().Realtime.Audio.SoundLevel.Interval
+	if interval < 5 {
+		interval = 5
+	}
+
 	processor := &soundLevelProcessor{
 		source:        source,
 		name:          name,
 		sampleRate:    conf.SampleRate,
 		filters:       make([]*octaveBandFilter, 0, len(octaveBandCenterFreqs)),
 		secondBuffers: make(map[string]*octaveBandBuffer),
-		tenSecondBuffer: &tenSecondAggregator{
-			secondMeasurements: make([]map[string]float64, 10),
+		interval:      interval,
+		intervalBuffer: &intervalAggregator{
+			secondMeasurements: make([]map[string]float64, interval),
 			startTime:          time.Now(),
 		},
 	}
@@ -132,9 +140,9 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 		}
 	}
 
-	// Initialize 10-second aggregator arrays
-	for i := range processor.tenSecondBuffer.secondMeasurements {
-		processor.tenSecondBuffer.secondMeasurements[i] = make(map[string]float64)
+	// Initialize interval aggregator arrays
+	for i := range processor.intervalBuffer.secondMeasurements {
+		processor.intervalBuffer.secondMeasurements[i] = make(map[string]float64)
 	}
 
 	return processor, nil
@@ -348,9 +356,9 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 				}
 			}
 
-			// Store 1-second measurement in 10-second aggregator
-			currentIdx := p.tenSecondBuffer.currentIndex
-			p.tenSecondBuffer.secondMeasurements[currentIdx][bandKey] = levelDB
+			// Store 1-second measurement in interval aggregator
+			currentIdx := p.intervalBuffer.currentIndex
+			p.intervalBuffer.secondMeasurements[currentIdx][bandKey] = levelDB
 			measurementCompleted = true
 
 			// Handle any overflow samples by keeping them for the next window
@@ -371,36 +379,36 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	// If a 1-second measurement was completed, update aggregator state
 	if measurementCompleted {
 		// Move to next index after all bands have stored their measurements
-		p.tenSecondBuffer.currentIndex = (p.tenSecondBuffer.currentIndex + 1) % 10
-		p.tenSecondBuffer.measurementCount++
+		p.intervalBuffer.currentIndex = (p.intervalBuffer.currentIndex + 1) % p.interval
+		p.intervalBuffer.measurementCount++
 
-		// Mark as full once we've collected 10 measurements
-		if p.tenSecondBuffer.measurementCount >= 10 && !p.tenSecondBuffer.full {
-			p.tenSecondBuffer.full = true
+		// Mark as full once we've collected enough measurements
+		if p.intervalBuffer.measurementCount >= p.interval && !p.intervalBuffer.full {
+			p.intervalBuffer.full = true
 		}
 	}
 
-	// Check if 10-second window is complete based on measurement count
-	if p.tenSecondBuffer.measurementCount >= 10 {
+	// Check if interval window is complete based on measurement count
+	if p.intervalBuffer.measurementCount >= p.interval {
 		soundLevelData := p.generateSoundLevelData()
 
-		// Log 10-second measurement completion if debug is enabled
-		// This should always log when debug is enabled since it matches the configured interval
+		// Log interval measurement completion if debug is enabled
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 			if logger := getSoundLevelLogger(); logger != nil {
-				logger.Debug("completed 10-second sound level measurement",
+				logger.Debug("completed sound level interval measurement",
 					"source", p.source,
 					"name", p.name,
+					"interval", p.interval,
 					"timestamp", soundLevelData.Timestamp,
 					"octave_bands", len(soundLevelData.OctaveBands))
 			}
 		}
 
-		p.resetTenSecondBuffer()
+		p.resetIntervalBuffer()
 		return soundLevelData, nil
 	}
 
-	return nil, nil // 10-second window not yet complete
+	return nil, nil // interval window not yet complete
 }
 
 // calculateRMS calculates Root Mean Square of audio samples
@@ -417,16 +425,16 @@ func calculateRMS(samples []float64) float64 {
 	return math.Sqrt(sum / float64(len(samples)))
 }
 
-// generateSoundLevelData creates SoundLevelData from 10-second aggregated measurements
+// generateSoundLevelData creates SoundLevelData from interval aggregated measurements
 func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 	octaveBands := make(map[string]OctaveBandData)
 
-	// For each octave band, calculate min/max/mean from the 10 one-second measurements
+	// For each octave band, calculate min/max/mean from the interval one-second measurements
 	for _, filter := range p.filters {
 		bandKey := formatBandKey(filter.centerFreq)
 
 		var values []float64
-		for _, secondMeasurement := range p.tenSecondBuffer.secondMeasurements {
+		for _, secondMeasurement := range p.intervalBuffer.secondMeasurements {
 			if val, exists := secondMeasurement[bandKey]; exists {
 				values = append(values, val)
 			}
@@ -478,22 +486,22 @@ func (p *soundLevelProcessor) generateSoundLevelData() *SoundLevelData {
 		Timestamp:   time.Now(),
 		Source:      p.source,
 		Name:        p.name,
-		Duration:    10, // Always 10 seconds
+		Duration:    p.interval, // Use configured interval
 		OctaveBands: octaveBands,
 	}
 }
 
-// resetTenSecondBuffer resets the 10-second aggregation buffer
-func (p *soundLevelProcessor) resetTenSecondBuffer() {
-	p.tenSecondBuffer.startTime = time.Now()
-	p.tenSecondBuffer.currentIndex = 0
-	p.tenSecondBuffer.measurementCount = 0
-	p.tenSecondBuffer.full = false
+// resetIntervalBuffer resets the interval aggregation buffer
+func (p *soundLevelProcessor) resetIntervalBuffer() {
+	p.intervalBuffer.startTime = time.Now()
+	p.intervalBuffer.currentIndex = 0
+	p.intervalBuffer.measurementCount = 0
+	p.intervalBuffer.full = false
 
 	// Clear all measurements
-	for i := range p.tenSecondBuffer.secondMeasurements {
-		for k := range p.tenSecondBuffer.secondMeasurements[i] {
-			delete(p.tenSecondBuffer.secondMeasurements[i], k)
+	for i := range p.intervalBuffer.secondMeasurements {
+		for k := range p.intervalBuffer.secondMeasurements[i] {
+			delete(p.intervalBuffer.secondMeasurements[i], k)
 		}
 	}
 }
