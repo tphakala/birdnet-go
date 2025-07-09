@@ -621,9 +621,12 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 // registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources
 func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error {
 	var errs []error
+	successCount := 0
+	totalSources := 0
 
 	// Register for malgo source if active
 	if settings.Realtime.Audio.Source != "" {
+		totalSources++
 		if err := myaudio.RegisterSoundLevelProcessor("malgo", settings.Realtime.Audio.Source); err != nil {
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
@@ -632,13 +635,16 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("source_type", "malgo").
 				Context("source_name", settings.Realtime.Audio.Source).
 				Build())
+			log.Printf("❌ Failed to register sound level processor for audio device %s: %v", settings.Realtime.Audio.Source, err)
 		} else {
+			successCount++
 			log.Printf("🔊 Registered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
 		}
 	}
 
 	// Register for each RTSP source
 	for _, url := range settings.Realtime.RTSP.URLs {
+		totalSources++
 		displayName := conf.SanitizeRTSPUrl(url)
 		if err := myaudio.RegisterSoundLevelProcessor(url, displayName); err != nil {
 			errs = append(errs, errors.New(err).
@@ -648,9 +654,16 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("source_type", "rtsp").
 				Context("source_url", url).
 				Build())
+			log.Printf("❌ Failed to register sound level processor for RTSP source %s: %v", displayName, err)
 		} else {
+			successCount++
 			log.Printf("🔊 Registered sound level processor for RTSP source: %s", displayName)
 		}
+	}
+
+	// Log summary if there were partial failures
+	if len(errs) > 0 && successCount > 0 {
+		log.Printf("⚠️ Registered %d of %d sound level processors successfully", successCount, totalSources)
 	}
 
 	if len(errs) > 0 {

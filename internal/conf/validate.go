@@ -14,6 +14,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// MinSoundLevelInterval is the minimum sound level interval in seconds to prevent excessive CPU usage
+const MinSoundLevelInterval = 5
+
 // ValidationError represents a collection of validation errors
 type ValidationError struct {
 	Errors []string
@@ -332,12 +335,13 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 func validateSoundLevelSettings(settings *SoundLevelSettings) error {
 	// Sound level settings are optional, only validate if enabled
 	if settings.Enabled {
-		// Check if interval is positive
-		if settings.Interval <= 0 {
-			return errors.New(fmt.Errorf("sound level interval must be greater than zero")).
+		// Check if interval is at least the minimum to avoid excessive CPU usage
+		if settings.Interval < MinSoundLevelInterval {
+			return errors.New(fmt.Errorf("sound level interval must be at least %d seconds to avoid excessive CPU usage, got %d", MinSoundLevelInterval, settings.Interval)).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "sound-level-interval").
 				Context("interval", settings.Interval).
+				Context("minimum_interval", MinSoundLevelInterval).
 				Build()
 		}
 	}
