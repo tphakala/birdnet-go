@@ -332,12 +332,13 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 func validateSoundLevelSettings(settings *SoundLevelSettings) error {
 	// Sound level settings are optional, only validate if enabled
 	if settings.Enabled {
-		// Check if interval is positive
-		if settings.Interval <= 0 {
-			return errors.New(fmt.Errorf("sound level interval must be greater than zero")).
+		// Check if interval is at least 5 seconds to avoid excessive CPU usage
+		if settings.Interval < 5 {
+			return errors.New(fmt.Errorf("sound level interval must be at least 5 seconds to avoid excessive CPU usage, got %d", settings.Interval)).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "sound-level-interval").
 				Context("interval", settings.Interval).
+				Context("minimum_interval", 5).
 				Build()
 		}
 	}
