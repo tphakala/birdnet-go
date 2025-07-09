@@ -11,12 +11,7 @@ import (
 
 // TestCaptureBufferSingleAllocation verifies that each source gets only one buffer allocation
 func TestCaptureBufferSingleAllocation(t *testing.T) {
-	// Note: Cannot run in parallel due to global allocation tracking
-
-	// Enable allocation tracking for this test
-	EnableAllocationTracking(true)
-	defer EnableAllocationTracking(false)
-	ResetAllocationTracking()
+	t.Parallel()
 
 	testCases := []struct {
 		name           string
@@ -45,10 +40,6 @@ func TestCaptureBufferSingleAllocation(t *testing.T) {
 			err = AllocateCaptureBufferIfNeeded(tc.duration, tc.sampleRate, tc.bytesPerSample, tc.source)
 			assert.NoError(t, err, "AllocateCaptureBufferIfNeeded should not error on existing buffer")
 
-			// Verify allocation count
-			count := GetAllocationCount(tc.source)
-			assert.Equal(t, 2, count, "Should have tracked 2 allocation attempts (1 successful, 1 failed)")
-
 			// Clean up
 			err = RemoveCaptureBuffer(tc.source)
 			require.NoError(t, err, "Buffer removal should succeed")
@@ -58,11 +49,7 @@ func TestCaptureBufferSingleAllocation(t *testing.T) {
 
 // TestCaptureBufferReconnection simulates RTSP reconnection scenario
 func TestCaptureBufferReconnection(t *testing.T) {
-	// Note: Cannot run in parallel due to global allocation tracking
-
-	EnableAllocationTracking(true)
-	defer EnableAllocationTracking(false)
-	ResetAllocationTracking()
+	t.Parallel()
 
 	source := "rtsp://test.stream/camera1"
 	duration := 60
@@ -80,10 +67,6 @@ func TestCaptureBufferReconnection(t *testing.T) {
 	// Simulate reconnection - should allocate again
 	err = AllocateCaptureBufferIfNeeded(duration, sampleRate, bytesPerSample, source)
 	require.NoError(t, err, "Reallocation after removal should succeed")
-
-	// Verify this is considered as 2 separate allocations, not repeated
-	count := GetAllocationCount(source)
-	assert.Equal(t, 2, count, "Should have 2 allocations tracked")
 
 	// Clean up
 	err = RemoveCaptureBuffer(source)
@@ -123,50 +106,9 @@ func TestCaptureBufferCleanup(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestAllocationTracking verifies the allocation tracking system works correctly
-func TestAllocationTracking(t *testing.T) {
-	t.Parallel()
-
-	// Test with tracking disabled
-	EnableAllocationTracking(false)
-	ResetAllocationTracking()
-
-	source := "test_no_tracking"
-	allocID := TrackAllocation(source, 1024)
-	assert.Empty(t, allocID, "Allocation ID should be empty when tracking is disabled")
-	assert.Equal(t, 0, GetAllocationCount(source), "No allocations should be tracked when disabled")
-
-	// Test with tracking enabled
-	EnableAllocationTracking(true)
-	defer EnableAllocationTracking(false)
-
-	source = "test_with_tracking"
-	allocID = TrackAllocation(source, 1024)
-	assert.NotEmpty(t, allocID, "Allocation ID should be generated when tracking is enabled")
-	assert.Equal(t, 1, GetAllocationCount(source), "Allocation should be tracked")
-
-	// Track another allocation
-	allocID2 := TrackAllocation(source, 2048)
-	assert.NotEmpty(t, allocID2, "Second allocation ID should be generated")
-	assert.NotEqual(t, allocID, allocID2, "Allocation IDs should be unique")
-	assert.Equal(t, 2, GetAllocationCount(source), "Second allocation should be tracked")
-
-	// Verify report generation
-	report := GetAllocationReport()
-	assert.Contains(t, report, source)
-	assert.Contains(t, report, "REPEATED ALLOCATIONS DETECTED")
-}
-
 // TestConcurrentBufferAllocation tests thread safety of buffer allocation
 func TestConcurrentBufferAllocation(t *testing.T) {
-	// skip this test for now
-	t.Skip()
-
 	t.Parallel()
-
-	EnableAllocationTracking(true)
-	defer EnableAllocationTracking(false)
-	ResetAllocationTracking()
 
 	const numGoroutines = 10
 	source := "concurrent_test_source"
@@ -194,10 +136,6 @@ func TestConcurrentBufferAllocation(t *testing.T) {
 
 	// Only one allocation should succeed
 	assert.Equal(t, 1, successCount, "Only one allocation should succeed in concurrent scenario")
-
-	// All attempts should be tracked
-	allocCount := GetAllocationCount(source)
-	assert.GreaterOrEqual(t, allocCount, numGoroutines, "All allocation attempts should be tracked")
 
 	// Clean up
 	err := RemoveCaptureBuffer(source)
@@ -246,10 +184,6 @@ func TestBufferLifecycleWithErrors(t *testing.T) {
 func TestInitCaptureBuffers(t *testing.T) {
 	t.Parallel()
 
-	EnableAllocationTracking(true)
-	defer EnableAllocationTracking(false)
-	ResetAllocationTracking()
-
 	sources := []string{"rtsp://cam1", "rtsp://cam2", "rtsp://cam3", "rtsp://cam4"}
 
 	// First initialization should succeed
@@ -259,64 +193,19 @@ func TestInitCaptureBuffers(t *testing.T) {
 	// Verify all buffers were created
 	for _, source := range sources {
 		assert.True(t, HasCaptureBuffer(source), "Buffer for %s should exist", source)
-		assert.Equal(t, 1, GetAllocationCount(source), "Should have 1 allocation for %s", source)
 	}
 
 	// Second initialization should also succeed (using AllocateCaptureBufferIfNeeded internally)
 	err = InitCaptureBuffers(60, 48000, 2, sources)
 	assert.NoError(t, err, "Repeated initialization should not error")
 
-	// Verify no successful repeated allocations
+	// Verify buffers still exist
 	for _, source := range sources {
-		// Will have 2 tracked attempts, but only 1 successful
 		assert.True(t, HasCaptureBuffer(source), "Buffer for %s should still exist", source)
 	}
 
 	// Clean up
 	for _, source := range sources {
-		err = RemoveCaptureBuffer(source)
-		require.NoError(t, err)
-	}
-}
-
-// TestAllocationReportGeneration tests the allocation report functionality
-func TestAllocationReportGeneration(t *testing.T) {
-	t.Parallel()
-
-	EnableAllocationTracking(true)
-	defer EnableAllocationTracking(false)
-	ResetAllocationTracking()
-
-	// Create some allocations
-	sources := []string{"source_a", "source_b", "source_c"}
-
-	// source_a: single allocation
-	err := AllocateCaptureBuffer(60, 48000, 2, sources[0])
-	require.NoError(t, err)
-
-	// source_b: repeated allocation attempts
-	err = AllocateCaptureBuffer(60, 48000, 2, sources[1])
-	require.NoError(t, err)
-	err = AllocateCaptureBuffer(60, 48000, 2, sources[1]) // This should fail
-	assert.Error(t, err)
-
-	// source_c: no allocation
-
-	// Generate report
-	report := GetAllocationReport()
-
-	// Verify report contents
-	assert.Contains(t, report, "Capture Buffer Allocation Report")
-	assert.Contains(t, report, sources[0])
-	assert.Contains(t, report, sources[1])
-	assert.NotContains(t, report, sources[2])                   // No allocation for source_c
-	assert.Contains(t, report, "REPEATED ALLOCATIONS DETECTED") // For source_b
-
-	// Print summary
-	PrintAllocationSummary()
-
-	// Clean up
-	for _, source := range sources[:2] {
 		err = RemoveCaptureBuffer(source)
 		require.NoError(t, err)
 	}

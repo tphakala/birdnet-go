@@ -36,11 +36,6 @@ var (
 // init initializes the audioBuffers map
 func init() {
 	captureBuffers = make(map[string]*CaptureBuffer)
-	
-	// Enable allocation tracking based on configuration
-	if conf.Setting().Debug {
-		EnableAllocationTracking(true)
-	}
 }
 
 // SetCaptureMetrics sets the metrics instance for capture buffer operations
@@ -157,8 +152,6 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		return enhancedErr
 	}
 
-	// Track this allocation attempt
-	allocID := TrackAllocation(source, alignedBufferSize)
 
 	// Create new buffer
 	cb := NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample)
@@ -169,7 +162,6 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("operation", "allocate_capture_buffer").
 			Context("source", source).
 			Context("buffer_size", alignedBufferSize).
-			Context("allocation_id", allocID).
 			Build()
 
 		if captureMetrics != nil {
@@ -185,17 +177,14 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 
 	// Check if buffer already exists
 	if _, exists := captureBuffers[source]; exists {
-		// Log repeated allocation attempt with tracking info
-		log.Printf("⚠️ Buffer allocation blocked: buffer already exists for source %s (allocation ID: %s)",
-			source, allocID)
+		// Log repeated allocation attempt
+		log.Printf("⚠️ Buffer allocation blocked: buffer already exists for source %s", source)
 		
 		enhancedErr := errors.Newf("capture buffer already exists for source: %s", source).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "allocate_capture_buffer").
 			Context("source", source).
-			Context("allocation_id", allocID).
-			Context("existing_allocation_count", GetAllocationCount(source)).
 			Build()
 
 		if captureMetrics != nil {
