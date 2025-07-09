@@ -30,7 +30,7 @@ func BenchmarkNewCaptureBuffer(b *testing.B) {
 			b.ResetTimer()
 
 			for b.Loop() {
-				cb := NewCaptureBuffer(tc.duration, tc.sampleRate, tc.bytesPerSample)
+				cb := NewCaptureBuffer(tc.duration, tc.sampleRate, tc.bytesPerSample, "bench_source")
 				benchResultCB = cb
 			}
 		})
@@ -232,33 +232,6 @@ func BenchmarkHasCaptureBuffer(b *testing.B) {
 	}
 }
 
-// BenchmarkAllocationTracking benchmarks the overhead of allocation tracking
-func BenchmarkAllocationTracking(b *testing.B) {
-	b.Run("tracking_disabled", func(b *testing.B) {
-		EnableAllocationTracking(false)
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for b.Loop() {
-			allocID := TrackAllocation("bench_source", 1024)
-			benchResultCB = allocID
-		}
-	})
-
-	b.Run("tracking_enabled", func(b *testing.B) {
-		EnableAllocationTracking(true)
-		defer EnableAllocationTracking(false)
-		ResetAllocationTracking()
-		
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for b.Loop() {
-			allocID := TrackAllocation("bench_source", 1024)
-			benchResultCB = allocID
-		}
-	})
-}
 
 // BenchmarkMemoryUsage estimates memory usage for different buffer configurations
 func BenchmarkMemoryUsage(b *testing.B) {
