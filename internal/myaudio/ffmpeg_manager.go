@@ -56,6 +56,23 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			Build()
 	}
 
+	// Initialize sound level processor if enabled
+	settings := conf.Setting()
+	displayName := privacy.SanitizeRTSPUrl(url)
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
+			managerLogger.Warn("failed to register sound level processor",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err,
+				"operation", "start_stream")
+			log.Printf("⚠️ Error registering sound level processor for %s: %v", displayName, err)
+		} else {
+			managerLogger.Debug("registered sound level processor",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"operation", "start_stream")
+		}
+	}
+
 	// Create new stream
 	stream := NewFFmpegStream(url, transport, audioChan)
 	m.streams[url] = stream
@@ -95,6 +112,12 @@ func (m *FFmpegManager) StopStream(url string) error {
 
 	stream.Stop()
 	delete(m.streams, url)
+	
+	// Unregister sound level processor
+	UnregisterSoundLevelProcessor(url)
+	managerLogger.Debug("unregistered sound level processor",
+		"url", privacy.SanitizeRTSPUrl(url),
+		"operation", "stop_stream")
 	
 	managerLogger.Info("stopped FFmpeg stream",
 		"url", privacy.SanitizeRTSPUrl(url),
@@ -288,6 +311,8 @@ func (m *FFmpegManager) Shutdown() {
 	for url := range m.streams {
 		if stream := m.streams[url]; stream != nil {
 			stream.Stop()
+			// Unregister sound level processor
+			UnregisterSoundLevelProcessor(url)
 		}
 	}
 	m.streams = make(map[string]*FFmpegStream)
