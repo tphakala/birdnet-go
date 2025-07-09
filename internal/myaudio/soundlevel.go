@@ -597,10 +597,7 @@ func ProcessSoundLevelData(source string, audioData []byte) (*SoundLevelData, er
 	soundLevelProcessorMutex.RUnlock()
 
 	if !exists {
-		return nil, errors.Newf("no sound level processor registered for source: %s", source).
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "process_sound_level_data").
+		return nil, errors.New(ErrSoundLevelProcessorNotRegistered).
 			Context("source", source).
 			Build()
 	}

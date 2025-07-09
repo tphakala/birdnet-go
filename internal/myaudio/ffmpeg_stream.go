@@ -593,7 +593,7 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
 		if soundLevel, err := ProcessSoundLevelData(s.url, data); err != nil {
 			// Log as warning if it's a registration issue, debug otherwise
-			if strings.Contains(err.Error(), "no sound level processor registered") {
+			if errors.Is(err, ErrSoundLevelProcessorNotRegistered) {
 				streamLogger.Warn("sound level processor not registered",
 					"url", privacy.SanitizeRTSPUrl(s.url),
 					"error", err,

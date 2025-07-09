@@ -41,6 +41,29 @@ func init() {
 	}
 }
 
+// registerSoundLevelProcessorIfEnabled registers a sound level processor for the given source
+// if sound level processing is enabled in the configuration. This helper function ensures
+// consistent registration behavior across different stream initialization paths.
+func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) {
+	settings := conf.Setting()
+	if !settings.Realtime.Audio.SoundLevel.Enabled {
+		return
+	}
+	
+	displayName := privacy.SanitizeRTSPUrl(source)
+	if err := RegisterSoundLevelProcessor(source, displayName); err != nil {
+		logger.Warn("failed to register sound level processor",
+			"url", displayName,
+			"error", err,
+			"operation", "register_sound_level")
+		log.Printf("⚠️ Error registering sound level processor for %s: %v", displayName, err)
+	} else {
+		logger.Debug("registered sound level processor",
+			"url", displayName,
+			"operation", "register_sound_level")
+	}
+}
+
 // getGlobalManager returns the global FFmpeg manager instance
 func getGlobalManager() *FFmpegManager {
 	managerOnce.Do(func() {
@@ -63,14 +86,8 @@ func getGlobalManager() *FFmpegManager {
 // This function now delegates to the new simplified FFmpeg manager
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// Initialize sound level processor if enabled
-	settings := conf.Setting()
-	displayName := privacy.SanitizeRTSPUrl(url)
-	if settings.Realtime.Audio.SoundLevel.Enabled {
-		if err := RegisterSoundLevelProcessor(url, displayName); err != nil {
-			log.Printf("❌ Error initializing sound level processor for %s: %v", url, err)
-		}
-		defer UnregisterSoundLevelProcessor(url)
-	}
+	registerSoundLevelProcessorIfEnabled(url, integrationLogger)
+	defer UnregisterSoundLevelProcessor(url)
 
 	// Check FFmpeg availability
 	if conf.GetFfmpegBinaryName() == "" {
