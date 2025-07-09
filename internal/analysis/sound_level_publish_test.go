@@ -820,8 +820,16 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 					Bands: make(map[string]CompactBandData),
 				}
 				
-				jsonData, _ := json.Marshal(compactData)
-				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				jsonData, err := json.Marshal(compactData)
+				if err != nil {
+					t.Errorf("Failed to marshal compact data: %v", err)
+					return
+				}
+				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+					// In test context, we expect the mock to handle the publish
+					// Log error but don't fail since mock behavior is controlled by test
+					t.Logf("Mock publish returned error (expected in some tests): %v", err)
+				}
 			}
 		}
 	}()
@@ -913,8 +921,14 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 					Name: soundData.Name,
 					Dur:  soundData.Duration,
 				}
-				jsonData, _ := json.Marshal(compactData)
-				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				jsonData, err := json.Marshal(compactData)
+				if err != nil {
+					t.Errorf("Failed to marshal compact data: %v", err)
+					return
+				}
+				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+					t.Logf("Mock publish returned error (expected in some tests): %v", err)
+				}
 			}
 		}
 	}()
@@ -1019,8 +1033,14 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 						Mean: bandData.Mean,
 					}
 				}
-				jsonData, _ := json.Marshal(compactData)
-				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				jsonData, err := json.Marshal(compactData)
+				if err != nil {
+					t.Errorf("Failed to marshal compact data: %v", err)
+					return
+				}
+				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+					t.Logf("Mock publish returned error (expected in some tests): %v", err)
+				}
 			}
 		}
 	}()
@@ -1192,8 +1212,14 @@ func TestMQTTPublishIntervalValidation(t *testing.T) {
 								Mean: bandData.Mean,
 							}
 						}
-						jsonData, _ := json.Marshal(compactData)
-						_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
+						jsonData, err := json.Marshal(compactData)
+						if err != nil {
+							t.Errorf("Failed to marshal compact data: %v", err)
+							return
+						}
+						if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+							t.Logf("Mock publish returned error (expected in some tests): %v", err)
+						}
 					}
 				}
 			}()
@@ -1337,21 +1363,29 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 					Dur:   soundData.Duration,
 					Bands: make(map[string]CompactBandData),
 				}
-				jsonData, _ := json.Marshal(compactData)
-				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				jsonData, err := json.Marshal(compactData)
+				if err != nil {
+					t.Errorf("Failed to marshal compact data: %v", err)
+					return
+				}
+				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+					t.Logf("Mock publish returned error (expected in some tests): %v", err)
+				}
 			}
 		}
 	}()
 
-	// Don't send any data - just wait
-	time.Sleep(3 * time.Second)
+	// Don't send any data - wait with timer to ensure no publishes occur
+	timer := time.NewTimer(3 * time.Second)
+	defer timer.Stop()
 	
-	// Verify no publishes occurred
+	// Wait for either a publish event (which would be an error) or timeout
 	select {
 	case event := <-publishEvents:
 		t.Fatalf("Unexpected MQTT publish without data: %v", event)
-	default:
-		// Good - no publish without data
+	case <-timer.C:
+		// Good - no publish occurred within the timeout period
+		t.Log("No publish occurred as expected when no data was sent")
 	}
 
 	close(stopChan)
@@ -1410,15 +1444,41 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 						Mean: bandData.Mean,
 					}
 				}
-				jsonData, _ := json.Marshal(compactData)
+				jsonData, err := json.Marshal(compactData)
+				if err != nil {
+					t.Errorf("Failed to marshal compact data: %v", err)
+					return
+				}
 				// Errors are handled by the real publisher, but here we just attempt
-				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+					// This test expects some publishes to fail
+					t.Logf("Mock publish error (expected): %v", err)
+				}
 			}
 		}
 	}()
 
-	// Send sound data
-	for i := 0; i < 4; i++ {
+	// Send sound data and collect publish attempts
+	expectedAttempts := 4
+	attempts := make([]publishEvent, 0, expectedAttempts)
+	attemptsDone := make(chan struct{})
+	
+	// Collector goroutine
+	go func() {
+		for i := 0; i < expectedAttempts; i++ {
+			select {
+			case attempt := <-publishAttempts:
+				attempts = append(attempts, attempt)
+			case <-time.After(1 * time.Second):
+				// Timeout for individual attempt
+				break
+			}
+		}
+		close(attemptsDone)
+	}()
+	
+	// Send test data
+	for i := 0; i < expectedAttempts; i++ {
 		soundData := myaudio.SoundLevelData{
 			Timestamp: time.Now(),
 			Source:    "error-test",
@@ -1434,22 +1494,14 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 			},
 		}
 		testSoundLevelChan <- soundData
-		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Wait for processing
-	time.Sleep(500 * time.Millisecond)
-
-	// Collect all attempts
-	var attempts []publishEvent
-	done := false
-	for !done {
-		select {
-		case attempt := <-publishAttempts:
-			attempts = append(attempts, attempt)
-		default:
-			done = true
-		}
+	// Wait for all attempts to be collected
+	select {
+	case <-attemptsDone:
+		// All attempts processed
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for all publish attempts")
 	}
 
 	// Verify all data was attempted to be published despite errors
