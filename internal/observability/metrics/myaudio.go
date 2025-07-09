@@ -16,6 +16,7 @@ type MyAudioMetrics struct {
 	bufferAllocationDuration *prometheus.HistogramVec
 	bufferAllocationErrors   *prometheus.CounterVec
 	bufferAllocationAttempts *prometheus.CounterVec  // Track all allocation attempts including blocked ones
+	bufferAllocationSizes    *prometheus.HistogramVec // Track allocation sizes for memory usage patterns
 
 	// Buffer capacity and utilization metrics
 	bufferCapacityGauge    *prometheus.GaugeVec
@@ -122,6 +123,15 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help: "Total number of buffer allocation attempts including successful and blocked",
 		},
 		[]string{"buffer_type", "source", "result"}, // result: first_allocation, repeated_blocked, error
+	)
+
+	m.bufferAllocationSizes = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_buffer_allocation_size_bytes",
+			Help:    "Size of buffer allocations in bytes",
+			Buckets: prometheus.ExponentialBuckets(1024, 2, 20), // 1KB to ~1GB
+		},
+		[]string{"buffer_type", "source"},
 	)
 
 	// Buffer capacity metrics
@@ -470,6 +480,7 @@ func (m *MyAudioMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.bufferAllocationDuration.Describe(ch)
 	m.bufferAllocationErrors.Describe(ch)
 	m.bufferAllocationAttempts.Describe(ch)
+	m.bufferAllocationSizes.Describe(ch)
 	m.bufferCapacityGauge.Describe(ch)
 	m.bufferUtilizationGauge.Describe(ch)
 	m.bufferSizeGauge.Describe(ch)
@@ -518,6 +529,7 @@ func (m *MyAudioMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.bufferAllocationDuration.Collect(ch)
 	m.bufferAllocationErrors.Collect(ch)
 	m.bufferAllocationAttempts.Collect(ch)
+	m.bufferAllocationSizes.Collect(ch)
 	m.bufferCapacityGauge.Collect(ch)
 	m.bufferUtilizationGauge.Collect(ch)
 	m.bufferSizeGauge.Collect(ch)
@@ -588,6 +600,11 @@ func (m *MyAudioMetrics) RecordBufferAllocationError(bufferType, source, errorTy
 // sum by (source) (rate(myaudio_buffer_allocation_attempts_total{result="repeated_blocked"}[5m])) > 0
 func (m *MyAudioMetrics) RecordBufferAllocationAttempt(bufferType, source, result string) {
 	m.bufferAllocationAttempts.WithLabelValues(bufferType, source, result).Inc()
+}
+
+// RecordBufferAllocationSize records the size of a buffer allocation
+func (m *MyAudioMetrics) RecordBufferAllocationSize(bufferType, source string, sizeBytes int) {
+	m.bufferAllocationSizes.WithLabelValues(bufferType, source).Observe(float64(sizeBytes))
 }
 
 // Buffer capacity recording methods
