@@ -125,6 +125,7 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		return 0, errors.Newf("no data samples available for rate calculation").
 			Component("ffmpeg-stream").
 			Category(errors.CategorySystem).
+			Context("operation", "calculate_data_rate").
 			Build()
 	}
 
@@ -132,6 +133,8 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		return 0, errors.Newf("insufficient data samples for rate calculation: %d samples", len(d.samples)).
 			Component("ffmpeg-stream").
 			Category(errors.CategorySystem).
+			Context("operation", "calculate_data_rate").
+			Context("sample_count", len(d.samples)).
 			Build()
 	}
 
@@ -145,6 +148,8 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		return 0, errors.Newf("invalid duration for rate calculation: %f seconds", duration).
 			Component("ffmpeg-stream").
 			Category(errors.CategorySystem).
+			Context("operation", "calculate_data_rate").
+			Context("duration_seconds", duration).
 			Build()
 	}
 
@@ -344,6 +349,8 @@ func (s *FFmpegStream) startProcess() error {
 		return errors.New(fmt.Errorf("FFmpeg validation failed: %w", err)).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-stream").
+			Context("operation", "start_process").
+			Context("ffmpeg_path", settings.FfmpegPath).
 			Build()
 	}
 
@@ -377,6 +384,8 @@ func (s *FFmpegStream) startProcess() error {
 		return errors.New(fmt.Errorf("failed to create stdout pipe: %w", err)).
 			Category(errors.CategorySystem).
 			Component("ffmpeg-stream").
+			Context("operation", "start_process").
+			Context("url", privacy.SanitizeRTSPUrl(s.url)).
 			Build()
 	}
 
@@ -385,6 +394,9 @@ func (s *FFmpegStream) startProcess() error {
 		return errors.New(fmt.Errorf("failed to start FFmpeg: %w", err)).
 			Category(errors.CategorySystem).
 			Component("ffmpeg-stream").
+			Context("operation", "start_process").
+			Context("url", privacy.SanitizeRTSPUrl(s.url)).
+			Context("transport", s.transport).
 			Build()
 	}
 
@@ -443,9 +455,14 @@ func (s *FFmpegStream) processAudio() error {
 				// Sanitize stderr output to remove sensitive data
 				// Use pre-compiled regex to find and replace RTSP URLs with credentials
 				sanitizedOutput := rtspCredentialPattern.ReplaceAllStringFunc(stderrOutput, privacy.SanitizeRTSPUrl)
-				return errors.New(fmt.Errorf("FFmpeg exited too quickly: %s", sanitizedOutput)).
+				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
+					Context("operation", "process_audio").
+					Context("url", privacy.SanitizeRTSPUrl(s.url)).
+					Context("transport", s.transport).
+					Context("exit_time_seconds", time.Since(startTime).Seconds()).
+					Context("error_detail", sanitizedOutput).
 					Build()
 			}
 
@@ -456,6 +473,9 @@ func (s *FFmpegStream) processAudio() error {
 			return errors.New(fmt.Errorf("error reading from FFmpeg: %w", err)).
 				Category(errors.CategoryRTSP).
 				Component("ffmpeg-stream").
+				Context("operation", "process_audio").
+				Context("url", privacy.SanitizeRTSPUrl(s.url)).
+				Context("runtime_seconds", time.Since(startTime).Seconds()).
 				Build()
 		}
 
@@ -511,9 +531,13 @@ func (s *FFmpegStream) processAudio() error {
 					"operation", "silence_detected")
 				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.url), time.Since(lastData))
 				s.cleanupProcess()
-				return errors.New(fmt.Errorf("silence timeout: no data for %v", silenceTimeout)).
+				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
+					Context("operation", "silence_timeout").
+					Context("url", privacy.SanitizeRTSPUrl(s.url)).
+					Context("timeout_seconds", silenceTimeout.Seconds()).
+					Context("last_data_seconds_ago", time.Since(lastData).Seconds()).
 					Build()
 			}
 		default:
@@ -529,6 +553,9 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		return errors.New(fmt.Errorf("failed to write to analysis buffer: %w", err)).
 			Category(errors.CategoryAudio).
 			Component("ffmpeg-stream").
+			Context("operation", "handle_audio_data").
+			Context("url", privacy.SanitizeRTSPUrl(s.url)).
+			Context("data_size", len(data)).
 			Build()
 	}
 
@@ -537,6 +564,9 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		return errors.New(fmt.Errorf("failed to write to capture buffer: %w", err)).
 			Category(errors.CategoryAudio).
 			Component("ffmpeg-stream").
+			Context("operation", "handle_audio_data").
+			Context("url", privacy.SanitizeRTSPUrl(s.url)).
+			Context("data_size", len(data)).
 			Build()
 	}
 
@@ -592,6 +622,18 @@ func (s *FFmpegStream) logDroppedData() {
 			"operation", "audio_data_drop")
 		
 		log.Printf("⚠️ Audio data dropped for %s - channel full", privacy.SanitizeRTSPUrl(s.url))
+		
+		// Report to Sentry with enhanced context
+		errorWithContext := errors.Newf("audio processing channel full, data being dropped").
+			Component("ffmpeg-stream").
+			Category(errors.CategoryAudio).
+			Context("operation", "audio_data_drop").
+			Context("url", privacy.SanitizeRTSPUrl(s.url)).
+			Context("channel_capacity", cap(s.audioChan)).
+			Context("drop_log_interval_seconds", dropLogInterval.Seconds()).
+			Build()
+		// This will be reported via event bus if telemetry is enabled
+		_ = errorWithContext
 	}
 }
 
@@ -859,6 +901,19 @@ func (s *FFmpegStream) recordFailure() {
 			"component", "ffmpeg-stream")
 		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures",
 			privacy.SanitizeRTSPUrl(s.url), s.consecutiveFailures)
+		
+		// Report to Sentry with enhanced context
+		errorWithContext := errors.Newf("RTSP stream circuit breaker opened after %d consecutive failures", s.consecutiveFailures).
+			Component("ffmpeg-stream").
+			Category(errors.CategoryRTSP).
+			Context("operation", "circuit_breaker_open").
+			Context("url", privacy.SanitizeRTSPUrl(s.url)).
+			Context("transport", s.transport).
+			Context("consecutive_failures", s.consecutiveFailures).
+			Context("cooldown_seconds", circuitBreakerCooldown.Seconds()).
+			Build()
+		// This will be reported via event bus if telemetry is enabled
+		_ = errorWithContext
 	}
 }
 
