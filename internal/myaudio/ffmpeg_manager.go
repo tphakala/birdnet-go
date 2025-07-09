@@ -50,6 +50,9 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 		return errors.New(fmt.Errorf("stream already exists for URL: %s", url)).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
+			Context("operation", "start_stream").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Context("transport", transport).
 			Build()
 	}
 
@@ -84,6 +87,9 @@ func (m *FFmpegManager) StopStream(url string) error {
 		return errors.New(fmt.Errorf("no stream found for URL: %s", url)).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
+			Context("operation", "stop_stream").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Context("active_streams", len(m.streams)).
 			Build()
 	}
 
@@ -108,6 +114,9 @@ func (m *FFmpegManager) RestartStream(url string) error {
 		return errors.New(fmt.Errorf("no stream found for URL: %s", url)).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
+			Context("operation", "restart_stream").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Context("active_streams", len(m.streams)).
 			Build()
 	}
 
@@ -237,6 +246,19 @@ func (m *FFmpegManager) checkStreamHealth() {
 					"error", err,
 					"operation", "health_check_restart")
 				log.Printf("❌ Failed to restart unhealthy stream %s: %v", url, err)
+				
+				// Report to Sentry with enhanced context
+				errorWithContext := errors.New(err).
+					Component("ffmpeg-manager").
+					Category(errors.CategoryRTSP).
+					Context("operation", "health_check_restart").
+					Context("url", privacy.SanitizeRTSPUrl(url)).
+					Context("last_data_seconds_ago", time.Since(h.LastDataReceived).Seconds()).
+					Context("restart_count", h.RestartCount).
+					Context("health_status", "unhealthy").
+					Build()
+				// This will be reported via event bus if telemetry is enabled
+				_ = errorWithContext
 			}
 		}
 	}

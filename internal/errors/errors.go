@@ -334,6 +334,8 @@ func RegisterComponent(packagePattern, componentName string) {
 func init() {
 	RegisterComponent("birdnet", "birdnet")
 	RegisterComponent("myaudio", "myaudio")
+	RegisterComponent("ffmpeg-manager", "ffmpeg-manager")
+	RegisterComponent("ffmpeg-stream", "ffmpeg-stream")
 	RegisterComponent("httpcontroller", "http-controller")
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
