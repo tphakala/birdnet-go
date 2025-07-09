@@ -289,7 +289,11 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			}
 
 			// Handle process exit
-			runtime := time.Since(s.processStartTime)
+			// Get process start time safely
+			s.cmdMu.Lock()
+			processStartTime := s.processStartTime
+			s.cmdMu.Unlock()
+			runtime := time.Since(processStartTime)
 			if err != nil && !errors.Is(err, context.Canceled) {
 				// Record failure for circuit breaker
 				s.recordFailure()
@@ -451,7 +455,10 @@ func (s *FFmpegStream) processAudio() error {
 		if err != nil {
 			// Check if process exited too quickly
 			if time.Since(startTime) < processQuickExitTime {
+				// Get stderr output safely (process has exited at this point)
+				s.cmdMu.Lock()
 				stderrOutput := s.stderr.String()
+				s.cmdMu.Unlock()
 				// Sanitize stderr output to remove sensitive data
 				// Use pre-compiled regex to find and replace RTSP URLs with credentials
 				sanitizedOutput := rtspCredentialPattern.ReplaceAllStringFunc(stderrOutput, privacy.SanitizeRTSPUrl)
@@ -706,6 +713,7 @@ func (s *FFmpegStream) cleanupProcess() {
 func (s *FFmpegStream) handleRestartBackoff() {
 	s.restartCountMu.Lock()
 	s.restartCount++
+	currentRestartCount := s.restartCount
 	
 	// Cap the exponent to prevent integer overflow
 	exponent := s.restartCount - 1
@@ -722,10 +730,10 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	streamLogger.Debug("applying restart backoff",
 		"url", privacy.SanitizeRTSPUrl(s.url),
 		"backoff_ms", backoff.Milliseconds(),
-		"restart_count", s.restartCount,
+		"restart_count", currentRestartCount,
 		"operation", "restart_backoff")
 
-	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", backoff, s.restartCount, privacy.SanitizeRTSPUrl(s.url))
+	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", backoff, currentRestartCount, privacy.SanitizeRTSPUrl(s.url))
 
 	select {
 	case <-time.After(backoff):

@@ -268,7 +268,11 @@ func (m *FFmpegManager) checkStreamHealth() {
 // Shutdown gracefully shuts down all streams
 func (m *FFmpegManager) Shutdown() {
 	start := time.Now()
+	
+	// Get active stream count safely
+	m.streamsMu.RLock()
 	activeStreams := len(m.streams)
+	m.streamsMu.RUnlock()
 	
 	managerLogger.Info("shutting down FFmpeg manager",
 		"active_streams", activeStreams,
