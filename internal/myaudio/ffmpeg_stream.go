@@ -40,9 +40,9 @@ const (
 	defaultBackoffDuration = 5 * time.Second
 	maxBackoffDuration     = 2 * time.Minute
 
-	// Health check thresholds
-	healthyDataThreshold   = 60 * time.Second
-	receivingDataThreshold = 5 * time.Second
+	// Health check thresholds (defaults, can be overridden by config)
+	defaultHealthyDataThreshold   = 60 * time.Second
+	defaultReceivingDataThreshold = 5 * time.Second
 
 	// Circuit breaker settings
 	circuitBreakerThreshold = 10              // Number of consecutive failures before opening circuit
@@ -361,9 +361,19 @@ func (s *FFmpegStream) startProcess() error {
 	// Get FFmpeg format settings
 	sampleRate, numChannels, format := getFFmpegFormat(conf.SampleRate, conf.NumChannels, conf.BitDepth)
 
-	// Create FFmpeg command
-	s.cmd = exec.CommandContext(s.ctx, settings.FfmpegPath,
+	// Build FFmpeg command arguments
+	args := []string{
 		"-rtsp_transport", s.transport,
+	}
+	
+	// Add custom FFmpeg parameters from configuration (before input)
+	rtspSettings := conf.Setting().Realtime.RTSP
+	if len(rtspSettings.FFmpegParameters) > 0 {
+		args = append(args, rtspSettings.FFmpegParameters...)
+	}
+	
+	// Add input and output parameters
+	args = append(args,
 		"-i", s.url,
 		"-loglevel", "error",
 		"-vn",
@@ -373,6 +383,9 @@ func (s *FFmpegStream) startProcess() error {
 		"-hide_banner",
 		"pipe:1",
 	)
+
+	// Create FFmpeg command
+	s.cmd = exec.CommandContext(s.ctx, settings.FfmpegPath, args...)
 
 	// Setup process group
 	setupProcessGroup(s.cmd)
@@ -774,13 +787,16 @@ func (s *FFmpegStream) Stop() {
 }
 
 // Restart requests a stream restart.
-// This resets the restart count and sends a non-blocking restart signal.
+// If manual is true, resets the restart count (user-initiated restart).
+// If manual is false, keeps the restart count intact (automatic health-triggered restart).
 // If a restart is already pending, this call is ignored.
-func (s *FFmpegStream) Restart() {
-	// Reset restart count on manual restart
-	s.restartCountMu.Lock()
-	s.restartCount = 0
-	s.restartCountMu.Unlock()
+func (s *FFmpegStream) Restart(manual bool) {
+	// Reset restart count only on manual restart
+	if manual {
+		s.restartCountMu.Lock()
+		s.restartCount = 0
+		s.restartCountMu.Unlock()
+	}
 
 	// Send restart signal (non-blocking)
 	select {
@@ -817,10 +833,20 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 		dataRate = 0
 	}
 
+	// Get configurable thresholds
+	settings := conf.Setting()
+	healthyDataThreshold := time.Duration(settings.Realtime.RTSP.Health.HealthyDataThreshold) * time.Second
+	
+	// Validate threshold: must be positive and within reasonable limits (max 30 minutes)
+	const maxHealthyDataThreshold = 30 * time.Minute
+	if healthyDataThreshold <= 0 || healthyDataThreshold > maxHealthyDataThreshold {
+		healthyDataThreshold = defaultHealthyDataThreshold
+	}
+	
 	// Consider unhealthy if no data for configured threshold
 	isHealthy := time.Since(lastData) < healthyDataThreshold
 	// Stream is receiving data if we got data within the threshold
-	isReceivingData := time.Since(lastData) < receivingDataThreshold
+	isReceivingData := time.Since(lastData) < defaultReceivingDataThreshold
 
 	return StreamHealth{
 		IsHealthy:          isHealthy,
