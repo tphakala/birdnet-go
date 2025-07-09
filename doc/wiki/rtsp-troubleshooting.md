@@ -81,6 +81,20 @@ realtime:
 
 The `ffmpegparameters` setting allows you to add custom FFmpeg command-line arguments for problematic cameras.
 
+### FFmpeg Version Compatibility
+
+**Important:** FFmpeg parameter names and defaults have changed across versions:
+
+- **FFmpeg 5.0+**: Uses `-timeout` for socket timeouts (current)
+- **FFmpeg 4.x and earlier**: Used `-stimeout` for socket timeouts (deprecated)
+
+**Check your FFmpeg version:**
+```bash
+ffmpeg -version
+```
+
+If using an older version, you may need to use `-stimeout` instead of `-timeout`.
+
 ### Basic Syntax
 
 ```yaml
@@ -100,11 +114,43 @@ realtime:
 realtime:
   rtsp:
     ffmpegparameters:
-      - "-stimeout"
-      - "5000000"      # 5 second socket timeout (in microseconds)
       - "-timeout"
-      - "10000000"     # 10 second I/O timeout (in microseconds)
+      - "5000000"      # 5 second socket timeout (in microseconds)
+      - "-rw_timeout"
+      - "10000000"     # 10 second read/write timeout (in microseconds)
 ```
+
+**Important Notes:**
+- **FFmpeg 5.0+ uses `-timeout`** instead of the older `-stimeout` option
+- **Default timeout values:**
+  - `-timeout`: 0 (no timeout, infinite wait)
+  - `-rw_timeout`: 0 (no timeout, infinite wait)
+  - `-listen_timeout`: -1 (infinite timeout)
+- **Units are microseconds** (1 second = 1,000,000 microseconds)
+
+### FFmpeg Parameter Defaults Reference
+
+| Parameter | Default Value | Description | Units |
+|-----------|---------------|-------------|-------|
+| `-timeout` | 0 (infinite) | Socket I/O timeout for RTSP | microseconds |
+| `-rw_timeout` | 0 (infinite) | Read/write timeout | microseconds |
+| `-listen_timeout` | -1 (infinite) | Connection timeout | seconds |
+| `-reconnect` | false | Enable automatic reconnection | boolean |
+| `-reconnect_at_eof` | false | Reconnect at end of file | boolean |
+| `-reconnect_streamed` | false | Reconnect streamed inputs | boolean |
+| `-reconnect_delay_max` | 120 | Max reconnect delay | seconds |
+| `-tcp_nodelay` | 0 (disabled) | Disable Nagle's algorithm | boolean |
+| `-buffer_size` | -1 (system default) | Socket buffer size | bytes |
+| `-probesize` | 5000000 | Probe size for stream detection | bytes |
+| `-analyzeduration` | 5000000 | Analysis duration | microseconds |
+| `-reorder_queue_size` | -1 (auto) | Packet reorder buffer size | packets |
+| `-rtsp_transport` | 0 (auto) | RTSP transport protocol | flags |
+| `-rtsp_flags` | 0 (none) | RTSP flags | flags |
+
+**Common timeout values:**
+- 1 second = 1,000,000 microseconds
+- 5 seconds = 5,000,000 microseconds
+- 10 seconds = 10,000,000 microseconds
 
 #### Reconnection Settings
 ```yaml
@@ -112,11 +158,13 @@ realtime:
   rtsp:
     ffmpegparameters:
       - "-reconnect"
-      - "1"            # Enable automatic reconnection
+      - "1"            # Enable automatic reconnection (default: false)
       - "-reconnect_at_eof"
-      - "1"            # Reconnect at end of file
+      - "1"            # Reconnect at end of file (default: false)
       - "-reconnect_streamed"
-      - "1"            # Reconnect for streamed inputs
+      - "1"            # Reconnect for streamed inputs (default: false)
+      - "-reconnect_delay_max"
+      - "120"          # Max reconnect delay in seconds (default: 120)
 ```
 
 #### TCP Socket Optimization
@@ -125,9 +173,9 @@ realtime:
   rtsp:
     ffmpegparameters:
       - "-tcp_nodelay"
-      - "1"            # Disable Nagle's algorithm for lower latency
-      - "-rw_timeout"
-      - "10000000"     # Read/write timeout (in microseconds)
+      - "1"            # Disable Nagle's algorithm for lower latency (default: 0)
+      - "-buffer_size"
+      - "32768"        # Set buffer size in bytes (default: -1, system default)
 ```
 
 #### Buffer and Probe Settings
@@ -135,12 +183,12 @@ realtime:
 realtime:
   rtsp:
     ffmpegparameters:
-      - "-buffer_size"
-      - "32768"        # Set buffer size
       - "-probesize"
-      - "32"           # Reduce probe size for faster detection
+      - "5000000"      # Probe size in bytes (default: 5000000)
       - "-analyzeduration"
-      - "1000000"      # Reduce analysis duration (in microseconds)
+      - "1000000"      # Analysis duration in microseconds (default: 5000000)
+      - "-reorder_queue_size"
+      - "1000"         # Packet reorder buffer size (default: -1, auto)
 ```
 
 ## Camera-Specific Issues
@@ -163,8 +211,8 @@ realtime:
     ffmpegparameters:
       - "-rtsp_flags"
       - "prefer_tcp"
-      - "-stimeout"
-      - "5000000"
+      - "-timeout"
+      - "5000000"      # 5 second timeout
 ```
 
 ### Dahua Cameras
@@ -185,10 +233,10 @@ For cameras that don't properly close connections:
 realtime:
   rtsp:
     ffmpegparameters:
-      - "-stimeout"
-      - "5000000"      # 5 second socket timeout
       - "-timeout"
-      - "10000000"     # 10 second I/O timeout
+      - "5000000"      # 5 second socket timeout
+      - "-rw_timeout"
+      - "10000000"     # 10 second read/write timeout
       - "-reconnect"
       - "1"
       - "-tcp_nodelay"
@@ -246,18 +294,18 @@ realtime:
       healthydatathreshold: 90   # Allow 90 seconds without data
       monitoringinterval: 30     # Check every 30 seconds
     ffmpegparameters:
-      - "-stimeout"
-      - "5000000"               # 5 second socket timeout
       - "-timeout"
-      - "10000000"              # 10 second I/O timeout
+      - "5000000"               # 5 second socket timeout
+      - "-rw_timeout"
+      - "8000000"               # 8 second read/write timeout
       - "-reconnect"
       - "1"                     # Enable reconnection
       - "-reconnect_at_eof"
       - "1"                     # Reconnect at EOF
       - "-tcp_nodelay"
       - "1"                     # Disable Nagle's algorithm
-      - "-rw_timeout"
-      - "8000000"               # 8 second read/write timeout
+      - "-buffer_size"
+      - "65536"                 # 64KB buffer size
 ```
 
 ### Minimal Configuration for Stable Cameras
@@ -285,11 +333,13 @@ realtime:
       monitoringinterval: 15     # Frequent health checks
     ffmpegparameters:
       - "-probesize"
-      - "32"                    # Fast stream detection
+      - "1000000"               # Fast stream detection (1MB)
       - "-analyzeduration"
-      - "1000000"               # Quick analysis
+      - "1000000"               # Quick analysis (1 second)
       - "-tcp_nodelay"
       - "1"                     # Low latency
+      - "-timeout"
+      - "3000000"               # 3 second timeout for quick failure detection
 ```
 
 ## When to Use Custom Parameters
