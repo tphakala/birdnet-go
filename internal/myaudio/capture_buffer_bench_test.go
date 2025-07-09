@@ -30,7 +30,7 @@ func BenchmarkNewCaptureBuffer(b *testing.B) {
 			b.ResetTimer()
 
 			for b.Loop() {
-				cb := NewCaptureBuffer(tc.duration, tc.sampleRate, tc.bytesPerSample)
+				cb := NewCaptureBuffer(tc.duration, tc.sampleRate, tc.bytesPerSample, "bench_source")
 				benchResultCB = cb
 			}
 		})

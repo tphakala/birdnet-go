@@ -17,6 +17,14 @@ This counter tracks all buffer allocation attempts with the following labels:
   - `"repeated_blocked"`: Allocation blocked due to existing buffer
   - `"error"`: Allocation failed due to validation or system errors
 
+### `myaudio_buffer_allocation_size_bytes`
+
+This histogram tracks the size of buffer allocations with the following labels:
+- `buffer_type`: Type of buffer (e.g., "capture", "analysis")
+- `source`: Source identifier (e.g., "rtsp://camera1")
+
+Use this metric to understand memory usage patterns and identify sources with unusually large buffer requirements.
+
 ## Monitoring Repeated Allocations
 
 ### Prometheus Queries
@@ -53,6 +61,21 @@ groups:
       description: "Source {{ $labels.source }} is experiencing {{ $value }} repeated allocation attempts per second"
 ```
 
+5. **Analyze buffer allocation sizes by source:**
+```promql
+histogram_quantile(0.95, sum by (source, le) (rate(myaudio_buffer_allocation_size_bytes_bucket[5m])))
+```
+
+6. **Find sources with large buffer allocations:**
+```promql
+histogram_quantile(0.99, myaudio_buffer_allocation_size_bytes_bucket) > 10485760  # > 10MB
+```
+
+7. **Total memory allocated across all buffers:**
+```promql
+sum by (buffer_type) (myaudio_buffer_capacity_bytes)
+```
+
 ## Grafana Dashboard Example
 
 ```json
@@ -71,6 +94,22 @@ groups:
       "targets": [
         {
           "expr": "topk(10, sum by (source) (myaudio_buffer_allocation_attempts_total{result=\"repeated_blocked\"}))"
+        }
+      ]
+    },
+    {
+      "title": "Buffer Allocation Sizes (95th percentile)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (source, le) (myaudio_buffer_allocation_size_bytes_bucket))"
+        }
+      ]
+    },
+    {
+      "title": "Total Buffer Memory by Source",
+      "targets": [
+        {
+          "expr": "sum by (source) (myaudio_buffer_capacity_bytes)"
         }
       ]
     }
