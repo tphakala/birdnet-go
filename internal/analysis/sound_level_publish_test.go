@@ -799,8 +799,8 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 	var wg sync.WaitGroup
 	// Note: We're testing the behavior, not the internal implementation
 	// The actual publisher function is internal to the package
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for {
 			select {
@@ -821,7 +821,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 				}
 				
 				jsonData, _ := json.Marshal(compactData)
-				mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
 			}
 		}
 	}()
@@ -897,8 +897,8 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 	initialInterval := 5
 	var wg sync.WaitGroup
 	// Mock publisher that simulates the behavior
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for {
 			select {
@@ -914,7 +914,7 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 					Dur:  soundData.Duration,
 				}
 				jsonData, _ := json.Marshal(compactData)
-				mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
 			}
 		}
 	}()
@@ -994,8 +994,8 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 	// Start publisher
 	var wg sync.WaitGroup
 	// Mock the MQTT publisher behavior
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for {
 			select {
@@ -1020,7 +1020,7 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 					}
 				}
 				jsonData, _ := json.Marshal(compactData)
-				mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
 			}
 		}
 	}()
@@ -1167,8 +1167,8 @@ func TestMQTTPublishIntervalValidation(t *testing.T) {
 
 			// Start MQTT publisher
 			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
-				wg.Add(1)
 				defer wg.Done()
 				for {
 					select {
@@ -1193,7 +1193,7 @@ func TestMQTTPublishIntervalValidation(t *testing.T) {
 							}
 						}
 						jsonData, _ := json.Marshal(compactData)
-						mockProc.PublishMQTT(ctx, topic, string(jsonData))
+						_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
 					}
 				}
 			}()
@@ -1319,8 +1319,8 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 
 	// Start MQTT publisher
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for {
 			select {
@@ -1338,7 +1338,7 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 					Bands: make(map[string]CompactBandData),
 				}
 				jsonData, _ := json.Marshal(compactData)
-				mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
 			}
 		}
 	}()
@@ -1384,8 +1384,8 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 
 	// Start MQTT publisher
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for {
 			select {
@@ -1412,7 +1412,7 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 				}
 				jsonData, _ := json.Marshal(compactData)
 				// Errors are handled by the real publisher, but here we just attempt
-				mockProc.PublishMQTT(ctx, topic, string(jsonData))
+				_ = mockProc.PublishMQTT(ctx, topic, string(jsonData))
 			}
 		}
 	}()
