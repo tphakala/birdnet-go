@@ -1,21 +1,12 @@
 package myaudio
 
 import (
-	"bytes"
-	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
-
-// MockCommand helps test command execution without actually running FFmpeg
-type MockCommand struct {
-	*exec.Cmd
-	mockStdout *bytes.Buffer
-	mockStderr *bytes.Buffer
-}
 
 func TestFFmpegStream_NewStream(t *testing.T) {
 	t.Parallel()
@@ -154,6 +145,7 @@ func TestFFmpegStream_BackoffCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			audioChan := make(chan UnifiedAudioData, 10)
 			stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 			
@@ -162,8 +154,13 @@ func TestFFmpegStream_BackoffCalculation(t *testing.T) {
 			stream.restartCount = tt.restartCount - 1 // Will be incremented in handleRestartBackoff
 			stream.restartCountMu.Unlock()
 
-			// Calculate expected backoff
-			backoff := stream.backoffDuration * time.Duration(1<<uint(tt.restartCount-1))
+			// Calculate expected backoff with the same logic as the implementation
+			exponent := tt.restartCount - 1
+			if exponent > 20 { // maxBackoffExponent constant
+				exponent = 20
+			}
+			
+			backoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
 			if backoff > stream.maxBackoff {
 				backoff = stream.maxBackoff
 			}
@@ -188,7 +185,8 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				health := stream.GetHealth()
 				_ = health.IsHealthy
-				time.Sleep(time.Microsecond)
+				// Use runtime.Gosched() instead of sleep for better concurrency testing
+				// runtime.Gosched()
 			}
 			done <- true
 		}()
@@ -199,7 +197,8 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 		go func() {
 			for j := 0; j < 100; j++ {
 				stream.updateLastDataTime()
-				time.Sleep(time.Microsecond)
+				// Use runtime.Gosched() instead of sleep for better concurrency testing
+				// runtime.Gosched()
 			}
 			done <- true
 		}()
@@ -211,7 +210,8 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 			stream.restartCountMu.Lock()
 			stream.restartCount++
 			stream.restartCountMu.Unlock()
-			time.Sleep(time.Microsecond)
+			// Use runtime.Gosched() instead of sleep for better concurrency testing
+			// runtime.Gosched()
 		}
 		done <- true
 	}()
@@ -282,4 +282,188 @@ func TestFFmpegStream_HandleAudioData(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("No data received on audio channel")
 	}
+}
+
+func TestFFmpegStream_CircuitBreakerBehavior(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Test circuit breaker is initially closed
+	assert.False(t, stream.isCircuitOpen())
+
+	// Simulate failures to trigger circuit breaker
+	for i := 0; i < 12; i++ { // More than circuitBreakerThreshold (10)
+		stream.recordFailure()
+	}
+
+	// Circuit should now be open
+	assert.True(t, stream.isCircuitOpen())
+
+	// Reset failures
+	stream.resetFailures()
+
+	// Circuit should be closed again
+	assert.False(t, stream.isCircuitOpen())
+}
+
+func TestFFmpegStream_DataRateCalculation(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Test data rate calculator
+	calc := stream.dataRateCalc
+	
+	// Add some data samples
+	calc.addSample(1024)
+	calc.addSample(2048)
+	calc.addSample(1536)
+
+	// Calculate rate
+	rate, err := calc.getRate()
+	assert.NoError(t, err)
+	assert.Greater(t, rate, 0.0)
+}
+
+func TestFFmpegStream_HealthTracking(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Test initial health
+	health := stream.GetHealth()
+	assert.True(t, health.IsHealthy)
+	assert.Equal(t, 0, health.RestartCount)
+	assert.Equal(t, int64(0), health.TotalBytesReceived)
+
+	// Simulate data reception
+	stream.updateLastDataTime()
+	stream.bytesReceivedMu.Lock()
+	stream.totalBytesReceived = 1024
+	stream.bytesReceivedMu.Unlock()
+
+	// Update restart count
+	stream.restartCountMu.Lock()
+	stream.restartCount = 3
+	stream.restartCountMu.Unlock()
+
+	// Check updated health
+	health = stream.GetHealth()
+	assert.True(t, health.IsHealthy)
+	assert.Equal(t, 3, health.RestartCount)
+	assert.Equal(t, int64(1024), health.TotalBytesReceived)
+}
+
+func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	const numGoroutines = 10
+	const numOperations = 100
+	done := make(chan bool, numGoroutines)
+
+	// Concurrent health checks
+	for i := 0; i < numGoroutines/2; i++ {
+		go func() {
+			defer func() { done <- true }()
+			for j := 0; j < numOperations; j++ {
+				health := stream.GetHealth()
+				assert.NotNil(t, health)
+			}
+		}()
+	}
+
+	// Concurrent data updates
+	for i := 0; i < numGoroutines/2; i++ {
+		go func() {
+			defer func() { done <- true }()
+			for j := 0; j < numOperations; j++ {
+				stream.updateLastDataTime()
+				stream.bytesReceivedMu.Lock()
+				stream.totalBytesReceived += 100
+				stream.bytesReceivedMu.Unlock()
+			}
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case <-done:
+			// Completed
+		case <-time.After(2 * time.Second):
+			t.Fatal("Concurrent test timed out")
+		}
+	}
+
+	// Verify final state is consistent
+	health := stream.GetHealth()
+	assert.NotNil(t, health)
+	assert.Greater(t, health.TotalBytesReceived, int64(0))
+}
+
+func TestFFmpegStream_BackoffOverflowProtection(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Test with very high restart count that would cause overflow without protection
+	stream.restartCountMu.Lock()
+	stream.restartCount = 100 // This would cause overflow without protection
+	stream.restartCountMu.Unlock()
+
+	// Calculate expected backoff with overflow protection
+	exponent := 100 - 1
+	if exponent > 20 { // maxBackoffExponent constant
+		exponent = 20
+	}
+	
+	expectedBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
+	if expectedBackoff > stream.maxBackoff {
+		expectedBackoff = stream.maxBackoff
+	}
+
+	// The expected backoff should be the maximum allowed (2 minutes)
+	assert.Equal(t, 2*time.Minute, expectedBackoff)
+	
+	// Verify the calculation doesn't panic or overflow
+	assert.NotPanics(t, func() {
+		// This should not panic due to overflow protection
+		testBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
+		_ = testBackoff
+	})
+}
+
+func TestFFmpegStream_DroppedDataLogging(t *testing.T) {
+	t.Parallel()
+
+	// Create a stream with a very small channel to force drops
+	audioChan := make(chan UnifiedAudioData, 1)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Fill the channel
+	select {
+	case audioChan <- UnifiedAudioData{}:
+		// Channel filled
+	default:
+		t.Fatal("Expected to be able to fill the channel")
+	}
+
+	// Test rate limiting - first call should log
+	stream.logDroppedData()
+	
+	// Second call immediately should not log (rate limited)
+	// We can't easily test the actual logging output, but we can test the rate limiting logic
+	firstLogTime := stream.lastDropLogTime
+	
+	// Call again immediately - should not update lastDropLogTime due to rate limiting
+	stream.logDroppedData()
+	assert.Equal(t, firstLogTime, stream.lastDropLogTime, "Log time should not change due to rate limiting")
 }

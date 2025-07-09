@@ -47,6 +47,12 @@ const (
 	// Circuit breaker settings
 	circuitBreakerThreshold = 10              // Number of consecutive failures before opening circuit
 	circuitBreakerCooldown  = 5 * time.Minute // Cooldown period when circuit is open
+
+	// Drop logging settings
+	dropLogInterval = 30 * time.Second // Minimum interval between drop log messages
+
+	// Maximum safe exponent for bit shift to prevent overflow
+	maxBackoffExponent = 20 // This allows up to 2^20 = ~1 million multiplier
 )
 
 // Use shared logger from integration file
@@ -201,6 +207,10 @@ type FFmpegStream struct {
 	consecutiveFailures int
 	circuitOpenTime     time.Time
 	circuitMu           sync.Mutex
+
+	// Dropped data tracking
+	lastDropLogTime time.Time
+	dropLogMu       sync.Mutex
 }
 
 // NewFFmpegStream creates a new FFmpeg stream handler.
@@ -217,6 +227,7 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		maxBackoff:      maxBackoffDuration,
 		lastDataTime:    time.Now(),
 		dataRateCalc:    newDataRateCalculator(dataRateWindowSize),
+		lastDropLogTime: time.Now(),
 	}
 }
 
@@ -560,9 +571,28 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		// Data sent successfully
 	default:
 		// Channel full, drop data to avoid blocking
+		s.logDroppedData()
 	}
 
 	return nil
+}
+
+// logDroppedData logs dropped audio data with rate limiting
+func (s *FFmpegStream) logDroppedData() {
+	s.dropLogMu.Lock()
+	defer s.dropLogMu.Unlock()
+	
+	now := time.Now()
+	if now.Sub(s.lastDropLogTime) >= dropLogInterval {
+		s.lastDropLogTime = now
+		
+		streamLogger.Warn("audio data dropped due to full channel",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"component", "ffmpeg-stream",
+			"operation", "audio_data_drop")
+		
+		log.Printf("⚠️ Audio data dropped for %s - channel full", privacy.SanitizeRTSPUrl(s.url))
+	}
 }
 
 // cleanupProcess cleans up the FFmpeg process
@@ -634,7 +664,14 @@ func (s *FFmpegStream) cleanupProcess() {
 func (s *FFmpegStream) handleRestartBackoff() {
 	s.restartCountMu.Lock()
 	s.restartCount++
-	backoff := s.backoffDuration * time.Duration(1<<uint(s.restartCount-1))
+	
+	// Cap the exponent to prevent integer overflow
+	exponent := s.restartCount - 1
+	if exponent > maxBackoffExponent {
+		exponent = maxBackoffExponent
+	}
+	
+	backoff := s.backoffDuration * time.Duration(1<<uint(exponent))
 	if backoff > s.maxBackoff {
 		backoff = s.maxBackoff
 	}
