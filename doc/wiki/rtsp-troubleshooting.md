@@ -248,8 +248,8 @@ realtime:
     ffmpegparameters:
       - "-timeout"
       - "15000000"     # 15 second timeout
-      - "-reconnect"
-      - "1"
+      - "-buffer_size"
+      - "131072"       # 128KB buffer size for better handling
 ```
 
 ### Generic IP Cameras with Poor TCP Handling
