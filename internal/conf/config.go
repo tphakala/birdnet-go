@@ -152,10 +152,18 @@ type DogBarkFilterSettings struct {
 	Species    []string // species list for filtering
 }
 
+// RTSPHealthSettings contains settings for RTSP stream health monitoring.
+type RTSPHealthSettings struct {
+	HealthyDataThreshold int // seconds before stream considered unhealthy (default: 60)
+	MonitoringInterval   int // health check interval in seconds (default: 30)
+}
+
 // RTSPSettings contains settings for RTSP streaming.
 type RTSPSettings struct {
-	Transport string   // RTSP Transport Protocol
-	URLs      []string // RTSP stream URL
+	Transport        string              // RTSP Transport Protocol
+	URLs             []string            // RTSP stream URL
+	Health           RTSPHealthSettings  // health monitoring settings
+	FFmpegParameters []string            // optional custom FFmpeg parameters
 }
 
 // MQTTSettings contains settings for MQTT integration.

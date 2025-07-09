@@ -45,6 +45,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Troubleshooting & Support
 
+* [RTSP Troubleshooting](rtsp-troubleshooting.md) - Comprehensive guide for RTSP camera issues and configuration
 * [Docker Troubleshooting](BirdNET‐Go-Guide#docker-installation-troubleshooting) - Resolving common Docker issues
 * [Support Script](BirdNET‐Go-Guide#support-script) - Generating diagnostic information
 * [Reporting Issues](BirdNET‐Go-Guide#reporting-issues) - How to effectively report bugs
