@@ -166,31 +166,30 @@ jobs:
         run: |
           # Check if changes were pushed
           if git ls-remote --heads origin ${{ steps.create-branch.outputs.branch_name }} | grep -q .; then
-            PR_BODY=$(cat <<'EOF'
-## Summary
-This PR contains automated fixes for failing unit tests detected in the CI pipeline.
-
-## Changes
-- Fixed failing unit tests based on test output analysis
-- Ensured all tests follow project coding standards
-- Verified fixes pass golangci-lint
-
-## Test Results
-See the test output and fixes applied by the automated test engineer.
-
-## Review Notes
-Please review the automated fixes to ensure they:
-1. Correctly address the root cause of test failures
-2. Follow project coding standards
-3. Don't introduce new issues
-
-🤖 Generated with Claude Code
-EOF
-            )
+            cat > /tmp/pr-body.md << 'EOF'
+          ## Summary
+          This PR contains automated fixes for failing unit tests detected in the CI pipeline.
+          
+          ## Changes
+          - Fixed failing unit tests based on test output analysis
+          - Ensured all tests follow project coding standards
+          - Verified fixes pass golangci-lint
+          
+          ## Test Results
+          See the test output and fixes applied by the automated test engineer.
+          
+          ## Review Notes
+          Please review the automated fixes to ensure they:
+          - Correctly address the root cause of test failures
+          - Follow project coding standards
+          - Don't introduce new issues
+          
+          🤖 Generated with Claude Code
+          EOF
             
             gh pr create \
               --title "fix: automated fixes for failing unit tests" \
-              --body "$PR_BODY" \
+              --body-file /tmp/pr-body.md \
               --base main \
               --head ${{ steps.create-branch.outputs.branch_name }}
           else
