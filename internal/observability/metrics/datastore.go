@@ -690,3 +690,85 @@ func (m *DatastoreMetrics) RecordBackupDuration(operation string, duration float
 func (m *DatastoreMetrics) RecordMaintenanceOperation(operation, status string) {
 	m.maintenanceOperationsTotal.WithLabelValues(operation, status).Inc()
 }
+
+// RecordOperation implements the Recorder interface.
+// It records various datastore operations with their status.
+func (m *DatastoreMetrics) RecordOperation(operation, status string) {
+	// Map generic operations to specific datastore operations
+	switch operation {
+	case "db_query", "db_insert", "db_update", "db_delete":
+		m.dbOperationsTotal.WithLabelValues(operation, status).Inc()
+	case "transaction":
+		m.dbTransactionsTotal.WithLabelValues(status).Inc()
+	case "note_create", "note_update", "note_delete", "note_get":
+		m.noteOperationsTotal.WithLabelValues(operation, status).Inc()
+	case "search":
+		m.searchOperationsTotal.WithLabelValues("search", status).Inc()
+	case "analytics":
+		m.analyticsOperationsTotal.WithLabelValues("query", status).Inc()
+	case "cache_get", "cache_set", "cache_delete":
+		m.cacheOperationsTotal.WithLabelValues("suntimes", operation, status).Inc()
+	case "weather_data":
+		m.weatherDataOperationsTotal.WithLabelValues("fetch", status).Inc()
+	case "image_cache":
+		m.imageCacheOperationsTotal.WithLabelValues("get", status).Inc()
+	case "backup":
+		m.backupOperationsTotal.WithLabelValues("create", status).Inc()
+	case "maintenance":
+		m.maintenanceOperationsTotal.WithLabelValues("vacuum", status).Inc()
+	}
+}
+
+// RecordDuration implements the Recorder interface.
+// It records the duration of various datastore operations.
+func (m *DatastoreMetrics) RecordDuration(operation string, seconds float64) {
+	switch operation {
+	case "db_query", "db_insert", "db_update", "db_delete":
+		m.dbOperationDuration.WithLabelValues(operation).Observe(seconds)
+	case "transaction":
+		m.dbTransactionDuration.WithLabelValues("commit").Observe(seconds)
+	case "note_lock":
+		m.noteLockDuration.WithLabelValues("exclusive").Observe(seconds)
+	case "note_operation":
+		m.noteOperationDuration.WithLabelValues("update").Observe(seconds)
+	case "search":
+		m.searchOperationDuration.WithLabelValues("query").Observe(seconds)
+	case "analytics":
+		m.analyticsOperationDuration.WithLabelValues("query").Observe(seconds)
+	case "weather_data":
+		m.weatherDataDuration.WithLabelValues("fetch").Observe(seconds)
+	case "image_cache":
+		m.imageCacheDuration.WithLabelValues("get").Observe(seconds)
+	case "backup":
+		m.backupDuration.WithLabelValues("create").Observe(seconds)
+	case "lock_wait":
+		m.lockWaitTimeHistogram.WithLabelValues("note").Observe(seconds)
+	}
+}
+
+// RecordError implements the Recorder interface.
+// It records errors for various datastore operations.
+func (m *DatastoreMetrics) RecordError(operation, errorType string) {
+	switch operation {
+	case "db_query", "db_insert", "db_update", "db_delete":
+		m.dbOperationErrorsTotal.WithLabelValues(operation, errorType).Inc()
+	case "transaction":
+		m.dbTransactionErrorsTotal.WithLabelValues("commit", errorType).Inc()
+	case "note_lock":
+		m.noteLockOperationsTotal.WithLabelValues("exclusive", "error").Inc()
+	case "search":
+		m.searchOperationsTotal.WithLabelValues("search", "error").Inc()
+	case "analytics":
+		m.analyticsOperationsTotal.WithLabelValues("query", "error").Inc()
+	case "cache":
+		m.cacheOperationsTotal.WithLabelValues("suntimes", "get", "error").Inc()
+	case "weather_data":
+		m.weatherDataOperationsTotal.WithLabelValues("fetch", "error").Inc()
+	case "image_cache":
+		m.imageCacheOperationsTotal.WithLabelValues("get", "error").Inc()
+	case "backup":
+		m.backupOperationsTotal.WithLabelValues("create", "error").Inc()
+	case "maintenance":
+		m.maintenanceOperationsTotal.WithLabelValues("vacuum", "error").Inc()
+	}
+}
