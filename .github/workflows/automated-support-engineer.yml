@@ -1,0 +1,145 @@
+name: Automated Support Engineer
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  schedule:
+    # Check for unanswered issues every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  provide-support:
+    # Skip if issue is created by tphakala or if it's a bot comment
+    if: |
+      (github.event_name == 'issues' && github.event.issue.user.login != 'tphakala' && !contains(github.event.issue.user.type, 'Bot')) ||
+      (github.event_name == 'issue_comment' && github.event.comment.user.login != 'tphakala' && !contains(github.event.comment.user.type, 'Bot') && !contains(github.event.comment.body, '🤖 Automated Support')) ||
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check if already responded
+        id: check-response
+        if: github.event_name == 'issues' || github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUMBER=${{ github.event.issue.number }}
+          
+          # Check if we've already responded to this issue
+          if gh api repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
+            --jq '.[] | select(.body | contains("🤖 Automated Support"))' | grep -q .; then
+            echo "already_responded=true" >> $GITHUB_OUTPUT
+            echo "Already responded to issue #${ISSUE_NUMBER}"
+          else
+            echo "already_responded=false" >> $GITHUB_OUTPUT
+            echo "No automated response found for issue #${ISSUE_NUMBER}"
+          fi
+
+      - name: Check for unanswered issues
+        id: find-unanswered
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find open issues without automated support responses
+          echo "## Unanswered Issues" > /tmp/unanswered-issues.md
+          
+          gh api repos/${{ github.repository }}/issues \
+            --jq '.[] | select(.state == "open" and .user.login != "tphakala" and (.user.type | contains("Bot") | not))' \
+            | jq -r '.number' | while read -r issue_num; do
+              
+              # Check if issue has automated support response
+              if ! gh api repos/${{ github.repository }}/issues/${issue_num}/comments \
+                --jq '.[] | select(.body | contains("🤖 Automated Support"))' | grep -q .; then
+                echo "- Issue #${issue_num}" >> /tmp/unanswered-issues.md
+              fi
+          done
+          
+          # Check if we found any unanswered issues
+          if grep -q "Issue #" /tmp/unanswered-issues.md; then
+            echo "has_unanswered=true" >> $GITHUB_OUTPUT
+            # Get the first unanswered issue
+            FIRST_ISSUE=$(grep -oP 'Issue #\K\d+' /tmp/unanswered-issues.md | head -1)
+            echo "first_issue=${FIRST_ISSUE}" >> $GITHUB_OUTPUT
+          else
+            echo "has_unanswered=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Provide automated support
+        if: |
+          (github.event_name == 'issues' && steps.check-response.outputs.already_responded != 'true') ||
+          (github.event_name == 'issue_comment' && steps.check-response.outputs.already_responded != 'true' && !contains(github.event.comment.body, '🤖 Automated Support')) ||
+          (steps.find-unanswered.outputs.has_unanswered == 'true')
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Use a more cost-effective model for support
+          model: "claude-sonnet-4-20250514"
+          allowed_tools: |
+            Read(README.md)
+            Read(docs/*.md)
+            Read(CLAUDE.md)
+            Glob(docs/**/*.md)
+            Grep(*.go)
+            WebFetch(https://*)
+          custom_instructions: |
+            You are a friendly and helpful first-level support engineer for the BirdNET-Go project.
+            Your role is to provide initial assistance to users who open issues.
+            
+            IMPORTANT GUIDELINES:
+            1. Be kind, patient, and understanding
+            2. Start your response with "🤖 Automated Support" to identify yourself
+            3. Thank the user for reporting the issue
+            4. Ask clarifying questions if the issue is unclear
+            5. Provide relevant documentation links if available
+            6. Suggest common troubleshooting steps if applicable
+            7. Let them know a maintainer will review their issue
+            8. DO NOT close issues or add labels
+            9. Keep responses concise but helpful
+            10. If the issue seems like a bug, ask for:
+                - Version information
+                - Steps to reproduce
+                - Error logs or screenshots
+                - System information (OS, hardware)
+            11. If it's a feature request, acknowledge it positively
+            12. Check the README and documentation for relevant information
+            13. Be encouraging and supportive
+            
+            Response template structure:
+            - Greeting and thanks
+            - Acknowledge their issue/request
+            - Provide relevant help or ask clarifying questions
+            - Mention that a maintainer will review
+            - Sign off warmly
+          prompt: |
+            @claude Please provide first-level support for this GitHub issue.
+            
+            ${{ github.event_name == 'issues' && format('New issue opened: #{0}\nTitle: {1}\nBody: {2}', github.event.issue.number, github.event.issue.title, github.event.issue.body) || '' }}
+            ${{ github.event_name == 'issue_comment' && format('New comment on issue #{0}\nComment: {1}', github.event.issue.number, github.event.comment.body) || '' }}
+            ${{ steps.find-unanswered.outputs.has_unanswered == 'true' && format('Provide support for unanswered issue #{0}', steps.find-unanswered.outputs.first_issue) || '' }}
+            
+            Remember to:
+            1. Start with "🤖 Automated Support"
+            2. Be friendly and helpful
+            3. Don't make any code changes
+            4. Focus on gathering information and providing initial guidance
+            5. Check documentation for relevant information to share
+
+      - name: Add 'needs-triage' label
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/labels \
+            --method POST \
+            --field labels='["needs-triage"]' || true
