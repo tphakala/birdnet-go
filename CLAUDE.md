@@ -48,6 +48,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **Structure tests clearly**: setup → execution → assertion
 - **Use fuzzing** for complex input validation functions
 - **Keep benchmarks minimal** - remove unnecessary setup/teardown
+- **When testing, also test for race conditions with `go test -race`**
 
 #### Modern Go Patterns
 - Use `any` instead of `interface{}`
