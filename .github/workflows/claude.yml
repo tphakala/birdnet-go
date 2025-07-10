@@ -110,7 +110,8 @@ jobs:
             fi
             
             # Add a comment to indicate Claude has been assigned
-            gh issue comment $ISSUE_NUMBER --body "🤖 **Claude Assigned**
+            cat > /tmp/assignment-comment.md << 'EOF'
+🤖 **Claude Assigned**
 
 This issue has been automatically assigned to Claude for resolution. Claude will:
 - Analyze the problem
@@ -118,7 +119,9 @@ This issue has been automatically assigned to Claude for resolution. Claude will
 - Run tests to verify the solution
 - Create a pull request with the changes
 
-Status: **Working** 🔄" || echo "Could not add comment"
+Status: **Working** 🔄
+EOF
+            gh issue comment $ISSUE_NUMBER --body-file /tmp/assignment-comment.md || echo "Could not add comment"
           else
             echo "Issue #$ISSUE_NUMBER is already assigned to $CURRENT_ASSIGNEE"
           fi
@@ -215,11 +218,14 @@ Status: **Working** 🔄" || echo "Could not add comment"
             gh issue edit $ISSUE_NUMBER --add-label "claude-completed" || echo "Could not update labels"
             
             # Add completion comment
-            gh issue comment $ISSUE_NUMBER --body "✅ **Claude Work Completed**
+            cat > /tmp/completion-comment.md << 'EOF'
+✅ **Claude Work Completed**
 
 Claude has finished analyzing and working on this issue. Please review any pull requests or changes that were made.
 
-Status: **Completed** ✅" || echo "Could not add completion comment"
+Status: **Completed** ✅
+EOF
+            gh issue comment $ISSUE_NUMBER --body-file /tmp/completion-comment.md || echo "Could not add completion comment"
           else
             echo "Claude encountered an issue, updating status"
             
@@ -229,9 +235,12 @@ Status: **Completed** ✅" || echo "Could not add completion comment"
             gh issue edit $ISSUE_NUMBER --add-label "claude-error" || echo "Could not update labels"
             
             # Add error comment
-            gh issue comment $ISSUE_NUMBER --body "⚠️ **Claude Encountered an Issue**
+            cat > /tmp/error-comment.md << 'EOF'
+⚠️ **Claude Encountered an Issue**
 
 Claude was unable to complete work on this issue automatically. Please check the workflow logs for details and consider manual intervention.
 
-Status: **Needs Review** ⚠️" || echo "Could not add error comment"
+Status: **Needs Review** ⚠️
+EOF
+            gh issue comment $ISSUE_NUMBER --body-file /tmp/error-comment.md || echo "Could not add error comment"
           fi
