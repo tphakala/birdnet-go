@@ -177,14 +177,16 @@ type FFmpegStream struct {
 	audioChan chan UnifiedAudioData
 
 	// Process management
-	cmd    *exec.Cmd
-	cmdMu  sync.Mutex
-	stdout io.ReadCloser
-	stderr bytes.Buffer
+	cmd      *exec.Cmd
+	cmdMu    sync.Mutex
+	stdout   io.ReadCloser
+	stderr   bytes.Buffer
+	stderrMu sync.RWMutex // Protect stderr buffer access
 
 	// State management
 	ctx         context.Context
 	cancel      context.CancelFunc
+	cancelMu    sync.RWMutex // Protect cancel function access
 	restartChan chan struct{}
 	stopChan    chan struct{}
 	stopped     bool
@@ -218,6 +220,19 @@ type FFmpegStream struct {
 	dropLogMu       sync.Mutex
 }
 
+// threadSafeWriter wraps a bytes.Buffer with mutex protection for concurrent access
+type threadSafeWriter struct {
+	buf *bytes.Buffer
+	mu  *sync.RWMutex
+}
+
+// Write implements io.Writer interface with thread-safe access
+func (w *threadSafeWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
 // NewFFmpegStream creates a new FFmpeg stream handler.
 // The url parameter specifies the RTSP stream URL, transport specifies the RTSP transport protocol,
 // and audioChan is the channel where processed audio data will be sent.
@@ -240,8 +255,18 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 // It runs in a loop, automatically restarting the process on failures with exponential backoff.
 // The function returns when the context is cancelled or Stop() is called.
 func (s *FFmpegStream) Run(parentCtx context.Context) {
+	// Set context and cancel function with proper locking
+	s.cancelMu.Lock()
 	s.ctx, s.cancel = context.WithCancel(parentCtx)
-	defer s.cancel()
+	s.cancelMu.Unlock()
+	
+	defer func() {
+		s.cancelMu.Lock()
+		if s.cancel != nil {
+			s.cancel()
+		}
+		s.cancelMu.Unlock()
+	}()
 
 	for {
 		select {
@@ -415,9 +440,11 @@ func (s *FFmpegStream) startProcess() error {
 	// Setup process group
 	setupProcessGroup(s.cmd)
 
-	// Capture stderr
+	// Capture stderr with thread-safe writer
+	s.stderrMu.Lock()
 	s.stderr.Reset()
-	s.cmd.Stderr = &s.stderr
+	s.stderrMu.Unlock()
+	s.cmd.Stderr = &threadSafeWriter{buf: &s.stderr, mu: &s.stderrMu}
 
 	// Get stdout pipe
 	var err error
@@ -493,10 +520,10 @@ func (s *FFmpegStream) processAudio() error {
 		if err != nil {
 			// Check if process exited too quickly
 			if time.Since(startTime) < processQuickExitTime {
-				// Get stderr output safely (process has exited at this point)
-				s.cmdMu.Lock()
+				// Get stderr output safely
+				s.stderrMu.RLock()
 				stderrOutput := s.stderr.String()
-				s.cmdMu.Unlock()
+				s.stderrMu.RUnlock()
 				// Sanitize stderr output to remove sensitive data
 				sanitizedOutput := privacy.SanitizeRTSPUrls(stderrOutput)
 				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
@@ -801,9 +828,13 @@ func (s *FFmpegStream) Stop() {
 	// Signal stop
 	close(s.stopChan)
 
-	// Cancel context
-	if s.cancel != nil {
-		s.cancel()
+	// Cancel context with proper locking
+	s.cancelMu.RLock()
+	cancel := s.cancel
+	s.cancelMu.RUnlock()
+	
+	if cancel != nil {
+		cancel()
 	}
 
 	// Cleanup process

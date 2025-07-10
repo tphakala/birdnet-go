@@ -11,12 +11,13 @@ import (
 )
 
 func TestFFmpegManager_StartStop(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	url := "rtsp://test.example.com/stream"
 	transport := "tcp"
 
@@ -48,12 +49,13 @@ func TestFFmpegManager_StartStop(t *testing.T) {
 }
 
 func TestFFmpegManager_MultipleStreams(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	urls := []string{
 		"rtsp://test1.example.com/stream",
 		"rtsp://test2.example.com/stream",
@@ -86,12 +88,13 @@ func TestFFmpegManager_MultipleStreams(t *testing.T) {
 }
 
 func TestFFmpegManager_RestartStream(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	url := "rtsp://test.example.com/stream"
 
 	// Start a stream
@@ -113,12 +116,13 @@ func TestFFmpegManager_RestartStream(t *testing.T) {
 }
 
 func TestFFmpegManager_HealthCheck(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	url := "rtsp://test.example.com/stream"
 
 	// Start a stream
@@ -158,10 +162,11 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 }
 
 func TestFFmpegManager_Shutdown(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 
 	// Start multiple streams
 	urls := []string{
@@ -191,12 +196,13 @@ func TestFFmpegManager_Shutdown(t *testing.T) {
 }
 
 func TestFFmpegManager_ConcurrentOperations(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 100)
+	defer close(audioChan)
 	var wg sync.WaitGroup
 
 	// Concurrently start streams
@@ -241,7 +247,7 @@ func TestFFmpegManager_ConcurrentOperations(t *testing.T) {
 }
 
 func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
@@ -250,6 +256,7 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 	manager.StartMonitoring(50 * time.Millisecond)
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	url := "rtsp://test.example.com/stream"
 
 	// Start a stream
@@ -286,12 +293,13 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 }
 
 func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 1000)
+	defer close(audioChan)
 	const numStreams = 5  // Reduced from 20 to avoid FFmpeg connection issues
 	const numOperations = 20  // Reduced from 50
 
@@ -367,12 +375,13 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 }
 
 func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 100)
+	defer close(audioChan)
 	const testDuration = 200 * time.Millisecond
 	
 	// Start a few streams - use localhost to avoid DNS issues
