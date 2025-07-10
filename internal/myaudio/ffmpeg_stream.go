@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -361,9 +362,42 @@ func (s *FFmpegStream) startProcess() error {
 		"-rtsp_transport", s.transport,
 	}
 	
-	// Add custom FFmpeg parameters from configuration (before input)
+	// Get RTSP settings
 	rtspSettings := conf.Setting().Realtime.RTSP
+	
+	// Check if user has already provided a timeout parameter
+	hasUserTimeout := false
+	userTimeoutValue := ""
 	if len(rtspSettings.FFmpegParameters) > 0 {
+		for i, param := range rtspSettings.FFmpegParameters {
+			if param == "-timeout" && i+1 < len(rtspSettings.FFmpegParameters) {
+				hasUserTimeout = true
+				userTimeoutValue = rtspSettings.FFmpegParameters[i+1]
+				break
+			}
+		}
+	}
+	
+	// Add default 30-second timeout if user hasn't provided one
+	if !hasUserTimeout {
+		args = append(args, "-timeout", "30000000") // 30 seconds in microseconds
+	}
+	
+	// Add custom FFmpeg parameters from configuration (before input)
+	if len(rtspSettings.FFmpegParameters) > 0 {
+		// Validate user timeout if provided
+		if hasUserTimeout {
+			if err := s.validateUserTimeout(userTimeoutValue); err != nil {
+				streamLogger.Warn("invalid user timeout, using default",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"user_timeout", userTimeoutValue,
+					"error", err,
+					"component", "ffmpeg-stream",
+					"operation", "validate_timeout")
+				// Add default timeout before user parameters
+				args = append(args, "-timeout", "30000000")
+			}
+		}
 		args = append(args, rtspSettings.FFmpegParameters...)
 	}
 	
@@ -966,4 +1000,32 @@ func (s *FFmpegStream) resetFailures() {
 			"component", "ffmpeg-stream")
 		s.consecutiveFailures = 0
 	}
+}
+
+// validateUserTimeout validates a user-provided timeout value
+// The timeout should be in microseconds and at least 1 second (1000000 microseconds)
+func (s *FFmpegStream) validateUserTimeout(timeoutStr string) error {
+	timeout, err := strconv.ParseInt(timeoutStr, 10, 64)
+	if err != nil {
+		return errors.Newf("invalid timeout format: %s (must be a number in microseconds)", timeoutStr).
+			Component("ffmpeg-stream").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_user_timeout").
+			Context("timeout_value", timeoutStr).
+			Build()
+	}
+
+	// Minimum 1 second (1,000,000 microseconds)
+	const minTimeoutMicroseconds = 1000000
+	if timeout < minTimeoutMicroseconds {
+		return errors.Newf("timeout too short: %d microseconds (minimum: %d microseconds = 1 second)", timeout, minTimeoutMicroseconds).
+			Component("ffmpeg-stream").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_user_timeout").
+			Context("timeout_microseconds", timeout).
+			Context("minimum_microseconds", minTimeoutMicroseconds).
+			Build()
+	}
+
+	return nil
 }
