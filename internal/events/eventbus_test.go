@@ -262,14 +262,14 @@ func TestEventBusOverflow(t *testing.T) {
 	
 	logging.Init()
 	
-	// Create event bus with small buffer
+	// Create event bus with very small buffer for predictable overflow
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	
 	eb := &EventBus{
-		errorEventChan:    make(chan ErrorEvent, 10), // Small buffer
-		resourceEventChan: make(chan ResourceEvent, 10),
-		bufferSize: 10,
+		errorEventChan:    make(chan ErrorEvent, 2), // Very small buffer
+		resourceEventChan: make(chan ResourceEvent, 2),
+		bufferSize: 2,
 		workers:    1,
 		consumers:  make([]EventConsumer, 0),
 		resourceConsumers: make([]ResourceEventConsumer, 0),
@@ -280,24 +280,28 @@ func TestEventBusOverflow(t *testing.T) {
 	eb.initialized.Store(true)
 	eb.running.Store(true)
 	
-	// Register slow consumer
-	consumer := &mockConsumer{
-		name:         "slow-consumer",
-		processDelay: 100 * time.Millisecond, // Slow processing
+	// Create blocking consumer 
+	blockChan := make(chan struct{}, 1) // Buffered to prevent blocking
+	releaseChan := make(chan struct{})
+	consumer := &blockingConsumer{
+		name:        "blocking-consumer",
+		blockChan:   blockChan,
+		releaseChan: releaseChan,
 	}
 	err := eb.RegisterConsumer(consumer)
 	if err != nil {
 		t.Fatalf("failed to register consumer: %v", err)
 	}
 
-	// Start the event bus workers to process events
-	eb.start()
+	// Don't start workers yet - test without processing
 	
-	// Send many events quickly
+	// Fill the buffer and test overflow
 	published := 0
 	dropped := 0
 	
-	for i := range 20 {
+	// Send buffer size + extra events (2 + 3 = 5 total)
+	// First 2 should succeed, rest should fail
+	for i := range 5 {
 		event := &mockErrorEvent{
 			component: "test",
 			category:  "overflow-test",
@@ -312,18 +316,28 @@ func TestEventBusOverflow(t *testing.T) {
 		}
 	}
 	
-	// Some events should be dropped
-	if dropped == 0 {
-		t.Error("expected some events to be dropped due to overflow")
+	// We expect exactly 3 events to be dropped since:
+	// - Buffer capacity: 2
+	// - No workers started (no processing)
+	// - 5 events sent
+	// - First 2 should succeed, next 3 should fail
+	expectedDropped := 3
+	if dropped != expectedDropped {
+		t.Errorf("expected %d dropped events, got %d (published: %d)", expectedDropped, dropped, published)
 	}
 	
 	// Verify stats
 	stats := eb.GetStats()
 	if stats.EventsDropped != uint64(dropped) {
-		t.Errorf("expected %d dropped events, got %d", dropped, stats.EventsDropped)
+		t.Errorf("stats mismatch: expected %d dropped events, got %d", dropped, stats.EventsDropped)
+	}
+	
+	if stats.EventsReceived != uint64(published) {
+		t.Errorf("stats mismatch: expected %d received events, got %d", published, stats.EventsReceived)
 	}
 
 	// Clean up
+	close(releaseChan) // Release any blocked consumers
 	_ = eb.Shutdown(1 * time.Second)
 }
 
@@ -471,3 +485,35 @@ func (p *panickyConsumer) ProcessBatch(events []ErrorEvent) error {
 }
 
 func (p *panickyConsumer) SupportsBatching() bool { return false }
+
+// blockingConsumer is a consumer that blocks on the first event until signaled
+type blockingConsumer struct {
+	name        string
+	blockChan   chan struct{} // Signals when first event is received
+	releaseChan chan struct{} // Wait for this to be closed before processing
+	firstEvent  atomic.Bool   // Track if we've seen the first event
+}
+
+func (b *blockingConsumer) Name() string { return b.name }
+
+func (b *blockingConsumer) ProcessEvent(event ErrorEvent) error {
+	// Signal that we received an event, but only for the first one
+	if b.firstEvent.CompareAndSwap(false, true) {
+		// Signal that we've received the first event
+		b.blockChan <- struct{}{}
+		// Wait for release signal (this will block until close(releaseChan))
+		<-b.releaseChan
+	}
+	return nil
+}
+
+func (b *blockingConsumer) ProcessBatch(events []ErrorEvent) error {
+	for _, event := range events {
+		if err := b.ProcessEvent(event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *blockingConsumer) SupportsBatching() bool { return false }
