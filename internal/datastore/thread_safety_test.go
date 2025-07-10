@@ -95,13 +95,13 @@ func TestDataStoreMetricsAccessThreadSafety(t *testing.T) {
 			for j := 0; j < numOperations; j++ {
 				// Simulate the pattern used in monitoring.go
 				ds.metricsMu.RLock()
-				metrics := ds.metrics
+				metricsInstance := ds.metrics
 				ds.metricsMu.RUnlock()
 				
 				// Use the metrics reference safely
-				if metrics != nil {
+				if metricsInstance != nil {
 					// Simulate metrics call (no-op for test)
-					_ = metrics
+					_ = metricsInstance
 				}
 				time.Sleep(time.Microsecond)
 			}
