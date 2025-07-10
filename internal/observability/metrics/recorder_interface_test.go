@@ -230,35 +230,83 @@ func TestRecorderWithRealMetrics(t *testing.T) {
 
 // BenchmarkTestRecorder benchmarks the TestRecorder implementation.
 func BenchmarkTestRecorder(b *testing.B) {
-	recorder := NewTestRecorder()
-
 	b.Run("RecordOperation", func(b *testing.B) {
+		// Setup: create a fresh recorder for each benchmark
+		recorder := NewTestRecorder()
+		
+		// Reset timer after setup
 		b.ResetTimer()
+		
+		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			recorder.RecordOperation("bench", "success")
 		}
+		
+		// Cleanup would go here if needed
+		b.StopTimer()
 	})
 
 	b.Run("RecordDuration", func(b *testing.B) {
+		// Setup: create a fresh recorder
+		recorder := NewTestRecorder()
+		
+		// Reset timer after setup
 		b.ResetTimer()
+		
+		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			recorder.RecordDuration("bench", 0.123)
 		}
+		
+		b.StopTimer()
 	})
 
 	b.Run("RecordError", func(b *testing.B) {
+		// Setup: create a fresh recorder
+		recorder := NewTestRecorder()
+		
+		// Reset timer after setup
 		b.ResetTimer()
+		
+		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			recorder.RecordError("bench", "error")
 		}
+		
+		b.StopTimer()
 	})
 
 	b.Run("GetOperationCount", func(b *testing.B) {
+		// Setup: create and populate recorder
+		recorder := NewTestRecorder()
 		recorder.RecordOperation("bench", "success")
+		
+		// Reset timer after setup
 		b.ResetTimer()
+		
+		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			_ = recorder.GetOperationCount("bench", "success")
 		}
+		
+		b.StopTimer()
+	})
+	
+	b.Run("ConcurrentOperations", func(b *testing.B) {
+		// Setup: create a fresh recorder
+		recorder := NewTestRecorder()
+		
+		// Reset timer after setup
+		b.ResetTimer()
+		
+		// Run concurrent operations
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				recorder.RecordOperation("bench", "success")
+			}
+		})
+		
+		b.StopTimer()
 	})
 }
 
@@ -285,14 +333,14 @@ func TestRecorderUsageExample(t *testing.T) {
 		metrics Recorder
 	}
 
-	doWork := func(c *Component) error {
-		start := time.Now()
+	doWork := func(c *Component, simulatedDuration time.Duration) error {
+		// Record the simulated duration instead of actual elapsed time
 		defer func() {
-			c.metrics.RecordDuration("work", time.Since(start).Seconds())
+			c.metrics.RecordDuration("work", simulatedDuration.Seconds())
 		}()
 
-		// Simulate some work
-		time.Sleep(10 * time.Millisecond)
+		// In real code, work would happen here
+		// For testing, we just use the simulated duration
 
 		// Record success
 		c.metrics.RecordOperation("work", "success")
@@ -303,7 +351,10 @@ func TestRecorderUsageExample(t *testing.T) {
 	testRecorder := NewTestRecorder()
 	component := &Component{metrics: testRecorder}
 
-	if err := doWork(component); err != nil {
+	// Use a fixed duration for deterministic testing
+	simulatedDuration := 15 * time.Millisecond
+	
+	if err := doWork(component, simulatedDuration); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -316,7 +367,7 @@ func TestRecorderUsageExample(t *testing.T) {
 	if len(durations) != 1 {
 		t.Fatalf("expected 1 duration, got %d", len(durations))
 	}
-	if durations[0] < 0.01 {
-		t.Errorf("expected duration >= 0.01s, got %f", durations[0])
+	if durations[0] != simulatedDuration.Seconds() {
+		t.Errorf("expected duration %f, got %f", simulatedDuration.Seconds(), durations[0])
 	}
 }
