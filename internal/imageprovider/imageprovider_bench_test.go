@@ -330,6 +330,83 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 	}
 }
 
+// BenchmarkProviderAccess measures the performance of provider access patterns
+func BenchmarkProviderAccess(b *testing.B) {
+	mockProvider := &mockImageProvider{}
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		b.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		b.Fatalf("Failed to create cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	// Pre-populate cache to focus on provider access
+	species := []string{"Turdus merula", "Parus major", "Carduelis carduelis"}
+	for _, s := range species {
+		if _, err := cache.Get(s); err != nil {
+			b.Fatalf("Failed to pre-populate: %v", err)
+		}
+	}
+
+	b.Run("Sequential", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		
+		i := 0
+		for b.Loop() {
+			// This will hit cache but still needs provider access check
+			_, err := cache.Get(species[i%len(species)])
+			if err != nil {
+				b.Fatalf("Unexpected error: %v", err)
+			}
+			i++
+		}
+	})
+
+	b.Run("Concurrent", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				_, err := cache.Get(species[i%len(species)])
+				if err != nil {
+					b.Fatalf("Unexpected error: %v", err)
+				}
+				i++
+			}
+		})
+	})
+
+	b.Run("MixedReadWrite", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				if i%100 == 0 {
+					// Occasionally change provider (write operation)
+					cache.SetImageProvider(mockProvider)
+				} else {
+					// Mostly read operations
+					_, err := cache.Get(species[i%len(species)])
+					if err != nil {
+						b.Fatalf("Unexpected error: %v", err)
+					}
+				}
+				i++
+			}
+		})
+	})
+}
+
 // BenchmarkConcurrentInitialization measures performance when multiple goroutines
 // try to initialize the same cache entry simultaneously
 func BenchmarkConcurrentInitialization(b *testing.B) {
