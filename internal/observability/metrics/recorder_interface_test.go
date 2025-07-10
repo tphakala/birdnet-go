@@ -3,6 +3,9 @@ package metrics
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRecordOperation verifies RecordOperation functionality of TestRecorder.
@@ -15,18 +18,10 @@ func TestRecordOperation(t *testing.T) {
 	recorder.RecordOperation("prediction", "error")
 	recorder.RecordOperation("model_load", "success")
 
-	if count := recorder.GetOperationCount("prediction", "success"); count != 2 {
-		t.Errorf("expected 2 successful predictions, got %d", count)
-	}
-	if count := recorder.GetOperationCount("prediction", "error"); count != 1 {
-		t.Errorf("expected 1 error prediction, got %d", count)
-	}
-	if count := recorder.GetOperationCount("model_load", "success"); count != 1 {
-		t.Errorf("expected 1 successful model load, got %d", count)
-	}
-	if count := recorder.GetOperationCount("model_load", "error"); count != 0 {
-		t.Errorf("expected 0 error model loads, got %d", count)
-	}
+	assert.Equal(t, 2, recorder.GetOperationCount("prediction", "success"), "should have 2 successful predictions")
+	assert.Equal(t, 1, recorder.GetOperationCount("prediction", "error"), "should have 1 error prediction")
+	assert.Equal(t, 1, recorder.GetOperationCount("model_load", "success"), "should have 1 successful model load")
+	assert.Equal(t, 0, recorder.GetOperationCount("model_load", "error"), "should have 0 error model loads")
 }
 
 // TestRecordDuration verifies RecordDuration functionality of TestRecorder.
@@ -39,25 +34,17 @@ func TestRecordDuration(t *testing.T) {
 	recorder.RecordDuration("chunk_process", 0.789)
 
 	predDurations := recorder.GetDurations("prediction")
-	if len(predDurations) != 2 {
-		t.Fatalf("expected 2 prediction durations, got %d", len(predDurations))
-	}
-	if predDurations[0] != 0.123 || predDurations[1] != 0.456 {
-		t.Errorf("unexpected prediction durations: %v", predDurations)
-	}
+	require.Len(t, predDurations, 2, "should have 2 prediction durations")
+	assert.Equal(t, 0.123, predDurations[0], "first prediction duration should be 0.123")
+	assert.Equal(t, 0.456, predDurations[1], "second prediction duration should be 0.456")
 
 	chunkDurations := recorder.GetDurations("chunk_process")
-	if len(chunkDurations) != 1 {
-		t.Fatalf("expected 1 chunk process duration, got %d", len(chunkDurations))
-	}
-	if chunkDurations[0] != 0.789 {
-		t.Errorf("expected chunk duration 0.789, got %f", chunkDurations[0])
-	}
+	require.Len(t, chunkDurations, 1, "should have 1 chunk process duration")
+	assert.Equal(t, 0.789, chunkDurations[0], "chunk duration should be 0.789")
 
 	// Test non-existent operation
-	if durations := recorder.GetDurations("non_existent"); durations != nil {
-		t.Errorf("expected nil for non-existent operation, got %v", durations)
-	}
+	durations := recorder.GetDurations("non_existent")
+	assert.Nil(t, durations, "should return nil for non-existent operation")
 }
 
 // TestRecordError verifies RecordError functionality of TestRecorder.
@@ -70,18 +57,10 @@ func TestRecordError(t *testing.T) {
 	recorder.RecordError("prediction", "model_error")
 	recorder.RecordError("db_query", "connection")
 
-	if count := recorder.GetErrorCount("prediction", "validation"); count != 2 {
-		t.Errorf("expected 2 validation errors, got %d", count)
-	}
-	if count := recorder.GetErrorCount("prediction", "model_error"); count != 1 {
-		t.Errorf("expected 1 model error, got %d", count)
-	}
-	if count := recorder.GetErrorCount("db_query", "connection"); count != 1 {
-		t.Errorf("expected 1 connection error, got %d", count)
-	}
-	if count := recorder.GetErrorCount("db_query", "timeout"); count != 0 {
-		t.Errorf("expected 0 timeout errors, got %d", count)
-	}
+	assert.Equal(t, 2, recorder.GetErrorCount("prediction", "validation"), "should have 2 validation errors")
+	assert.Equal(t, 1, recorder.GetErrorCount("prediction", "model_error"), "should have 1 model error")
+	assert.Equal(t, 1, recorder.GetErrorCount("db_query", "connection"), "should have 1 connection error")
+	assert.Equal(t, 0, recorder.GetErrorCount("db_query", "timeout"), "should have 0 timeout errors")
 }
 
 // TestRecorderThreadSafety verifies thread safety of TestRecorder.
@@ -109,15 +88,14 @@ func TestRecorderThreadSafety(t *testing.T) {
 	}
 
 	expectedCount := numGoroutines * opsPerGoroutine
-	if count := recorder.GetOperationCount("concurrent", "success"); count != expectedCount {
-		t.Errorf("expected %d operations after concurrent access, got %d", expectedCount, count)
-	}
-	if durations := recorder.GetDurations("concurrent"); len(durations) != expectedCount {
-		t.Errorf("expected %d durations after concurrent access, got %d", expectedCount, len(durations))
-	}
-	if count := recorder.GetErrorCount("concurrent", "test"); count != expectedCount {
-		t.Errorf("expected %d errors after concurrent access, got %d", expectedCount, count)
-	}
+	assert.Equal(t, expectedCount, recorder.GetOperationCount("concurrent", "success"), 
+		"should have correct operation count after concurrent access")
+	
+	durations := recorder.GetDurations("concurrent")
+	assert.Len(t, durations, expectedCount, "should have correct duration count after concurrent access")
+	
+	assert.Equal(t, expectedCount, recorder.GetErrorCount("concurrent", "test"), 
+		"should have correct error count after concurrent access")
 }
 
 // TestGetAllOperations verifies GetAllOperations functionality of TestRecorder.
@@ -130,15 +108,11 @@ func TestGetAllOperations(t *testing.T) {
 	recorder.RecordOperation("op2", "success")
 
 	all := recorder.GetAllOperations()
-	if len(all) != 2 {
-		t.Errorf("expected 2 operations, got %d", len(all))
-	}
-	if all["op1"]["success"] != 1 || all["op1"]["error"] != 1 {
-		t.Errorf("unexpected op1 counts: %v", all["op1"])
-	}
-	if all["op2"]["success"] != 1 {
-		t.Errorf("unexpected op2 counts: %v", all["op2"])
-	}
+	assert.Len(t, all, 2, "should have 2 different operations")
+	
+	assert.Equal(t, 1, all["op1"]["success"], "op1 should have 1 success")
+	assert.Equal(t, 1, all["op1"]["error"], "op1 should have 1 error")
+	assert.Equal(t, 1, all["op2"]["success"], "op2 should have 1 success")
 }
 
 // TestGetAllErrors verifies GetAllErrors functionality of TestRecorder.
@@ -151,15 +125,11 @@ func TestGetAllErrors(t *testing.T) {
 	recorder.RecordError("op2", "type1")
 
 	all := recorder.GetAllErrors()
-	if len(all) != 2 {
-		t.Errorf("expected 2 operations with errors, got %d", len(all))
-	}
-	if all["op1"]["type1"] != 1 || all["op1"]["type2"] != 1 {
-		t.Errorf("unexpected op1 error counts: %v", all["op1"])
-	}
-	if all["op2"]["type1"] != 1 {
-		t.Errorf("unexpected op2 error counts: %v", all["op2"])
-	}
+	assert.Len(t, all, 2, "should have 2 operations with errors")
+	
+	assert.Equal(t, 1, all["op1"]["type1"], "op1 should have 1 type1 error")
+	assert.Equal(t, 1, all["op1"]["type2"], "op1 should have 1 type2 error")
+	assert.Equal(t, 1, all["op2"]["type1"], "op2 should have 1 type1 error")
 }
 
 // TestHasRecordedMetrics verifies HasRecordedMetrics functionality of TestRecorder.
@@ -169,34 +139,24 @@ func TestHasRecordedMetrics(t *testing.T) {
 	recorder := NewTestRecorder()
 	
 	// Initially should have no metrics
-	if recorder.HasRecordedMetrics() {
-		t.Error("expected no metrics recorded initially")
-	}
+	assert.False(t, recorder.HasRecordedMetrics(), "should have no metrics initially")
 	
 	// Record an operation
 	recorder.RecordOperation("test", "success")
-	if !recorder.HasRecordedMetrics() {
-		t.Error("expected metrics to be recorded after operation")
-	}
+	assert.True(t, recorder.HasRecordedMetrics(), "should have metrics after recording operation")
 	
 	// Reset and check again
 	recorder.Reset()
-	if recorder.HasRecordedMetrics() {
-		t.Error("expected no metrics after reset")
-	}
+	assert.False(t, recorder.HasRecordedMetrics(), "should have no metrics after reset")
 	
 	// Record a duration
 	recorder.RecordDuration("test", 0.1)
-	if !recorder.HasRecordedMetrics() {
-		t.Error("expected metrics to be recorded after duration")
-	}
+	assert.True(t, recorder.HasRecordedMetrics(), "should have metrics after recording duration")
 	
 	// Reset and record an error
 	recorder.Reset()
 	recorder.RecordError("test", "error")
-	if !recorder.HasRecordedMetrics() {
-		t.Error("expected metrics to be recorded after error")
-	}
+	assert.True(t, recorder.HasRecordedMetrics(), "should have metrics after recording error")
 }
 
 // TestNoOpRecorder verifies that the NoOpRecorder correctly implements the Recorder interface.
@@ -354,20 +314,15 @@ func TestRecorderUsageExample(t *testing.T) {
 	// Use a fixed duration for deterministic testing
 	simulatedDuration := 15 * time.Millisecond
 	
-	if err := doWork(component, simulatedDuration); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := doWork(component, simulatedDuration)
+	require.NoError(t, err, "doWork should not return an error")
 
 	// Verify metrics were recorded
-	if count := testRecorder.GetOperationCount("work", "success"); count != 1 {
-		t.Errorf("expected 1 successful operation, got %d", count)
-	}
+	assert.Equal(t, 1, testRecorder.GetOperationCount("work", "success"), 
+		"should have 1 successful operation")
 
 	durations := testRecorder.GetDurations("work")
-	if len(durations) != 1 {
-		t.Fatalf("expected 1 duration, got %d", len(durations))
-	}
-	if durations[0] != simulatedDuration.Seconds() {
-		t.Errorf("expected duration %f, got %f", simulatedDuration.Seconds(), durations[0])
-	}
+	require.Len(t, durations, 1, "should have 1 duration recorded")
+	assert.Equal(t, simulatedDuration.Seconds(), durations[0], 
+		"recorded duration should match simulated duration")
 }
