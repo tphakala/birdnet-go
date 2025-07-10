@@ -105,7 +105,7 @@ func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, time
 }
 
 // createTestEventBus creates a properly initialized EventBus for testing
-func createTestEventBus(t *testing.T, bufferSize int, workers int) *EventBus {
+func createTestEventBus(t *testing.T, bufferSize, workers int) *EventBus {
 	t.Helper()
 	
 	ctx, cancel := context.WithCancel(context.Background())
@@ -142,6 +142,13 @@ func ensureEventBusStarted(t *testing.T, eb *EventBus) {
 	if !eb.running.Load() {
 		t.Fatal("event bus failed to start")
 	}
+}
+
+// resetGlobalStateForTesting resets global state for test isolation
+// This is a test-only function to help manage global state between tests
+func resetGlobalStateForTesting() {
+	hasActiveConsumers.Store(false)
+	// Reset other global state if needed in the future
 }
 
 // TestEventBusInitialization tests event bus initialization
@@ -204,6 +211,9 @@ func TestEventBusInitialization(t *testing.T) {
 }
 
 // TestEventBusPublish tests event publishing
+// Note: This test cannot run in parallel because RegisterConsumer modifies the global
+// hasActiveConsumers flag. Future refactoring should consider making this state
+// injectable to improve test isolation.
 func TestEventBusPublish(t *testing.T) {
 	// Don't run main test in parallel, but subtests can be parallel
 	
@@ -212,18 +222,9 @@ func TestEventBusPublish(t *testing.T) {
 	t.Run("publish without consumers", func(t *testing.T) {
 		t.Parallel()
 		
-		// Create isolated event bus
-		eb := &EventBus{
-			errorEventChan:    make(chan ErrorEvent, 100),
-			resourceEventChan: make(chan ResourceEvent, 100),
-			bufferSize:        100,
-			workers:           2,
-			consumers:         make([]EventConsumer, 0),
-			resourceConsumers: make([]ResourceEventConsumer, 0),
-			logger:            logging.ForService("test"),
-		}
-		eb.initialized.Store(true)
-		eb.running.Store(true)
+		// Create isolated event bus using helper
+		eb := createTestEventBus(t, 100, 2)
+		eb.running.Store(true) // Manually set running since no consumers to trigger start
 		
 		event := &mockErrorEvent{
 			component: "test",
@@ -293,14 +294,16 @@ func TestEventBusPublish(t *testing.T) {
 }
 
 // TestEventBusOverflow tests buffer overflow handling
+// Note: This test cannot run in parallel because it modifies the global
+// hasActiveConsumers flag. Future refactoring should consider making this state
+// injectable to improve test isolation.
 func TestEventBusOverflow(t *testing.T) {
 	// Don't run in parallel - modifies global state
 	
 	logging.Init()
 	
-	// Save and restore global state
-	origHasActiveConsumers := hasActiveConsumers.Load()
-	defer hasActiveConsumers.Store(origHasActiveConsumers)
+	// Reset global state after test
+	defer resetGlobalStateForTesting()
 	
 	// Create event bus with very small buffer for predictable overflow
 	eb := createTestEventBus(t, 2, 1)
@@ -432,14 +435,16 @@ func TestEventBusShutdown(t *testing.T) {
 }
 
 // TestConsumerPanic tests handling of consumer panics
+// Note: This test cannot run in parallel because it modifies the global
+// hasActiveConsumers flag. Future refactoring should consider making this state
+// injectable to improve test isolation.
 func TestConsumerPanic(t *testing.T) {
 	// Don't run in parallel - modifies global state
 	
 	logging.Init()
 	
-	// Save and restore global state
-	origHasActiveConsumers := hasActiveConsumers.Load()
-	defer hasActiveConsumers.Store(origHasActiveConsumers)
+	// Reset global state after test
+	defer resetGlobalStateForTesting()
 	
 	// Create event bus using helper
 	eb := createTestEventBus(t, 100, 1)
