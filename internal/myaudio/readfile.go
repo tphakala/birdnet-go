@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -13,7 +14,9 @@ import (
 )
 
 var (
-	fileMetrics *metrics.MyAudioMetrics // Global metrics instance for file operations
+	fileMetrics      *metrics.MyAudioMetrics // Global metrics instance for file operations
+	fileMetricsMutex sync.RWMutex            // Mutex for thread-safe access to fileMetrics
+	fileMetricsOnce  sync.Once               // Ensures metrics are only set once
 )
 
 // AudioChunkCallback is a function type that processes audio chunks
@@ -52,9 +55,9 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 			Context("operation", "get_audio_info").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("get_audio_info", "unknown", "error")
-			fileMetrics.RecordFileOperationError("get_audio_info", "unknown", "empty_path")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("get_audio_info", "unknown", "error")
+			m.RecordFileOperationError("get_audio_info", "unknown", "empty_path")
 		}
 		return AudioInfo{}, enhancedErr
 	}
@@ -69,9 +72,9 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 			Context("file_extension", "none").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("get_audio_info", ext, "error")
-			fileMetrics.RecordFileOperationError("get_audio_info", ext, "no_extension")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("get_audio_info", ext, "error")
+			m.RecordFileOperationError("get_audio_info", ext, "no_extension")
 		}
 		return AudioInfo{}, enhancedErr
 	}
@@ -87,9 +90,9 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 			Context("file_operation", "open").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("get_audio_info", ext, "error")
-			fileMetrics.RecordFileOperationError("get_audio_info", ext, "open_failed")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("get_audio_info", ext, "error")
+			m.RecordFileOperationError("get_audio_info", ext, "open_failed")
 		}
 		return AudioInfo{}, enhancedErr
 	}
@@ -115,9 +118,9 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 			Context("supported_formats", "wav,flac").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("get_audio_info", ext, "error")
-			fileMetrics.RecordFileOperationError("get_audio_info", ext, "unsupported_format")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("get_audio_info", ext, "error")
+			m.RecordFileOperationError("get_audio_info", ext, "unsupported_format")
 		}
 		return AudioInfo{}, enhancedErr
 	}
@@ -131,19 +134,19 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 			Context("file_operation", "read_header").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("get_audio_info", ext, "error")
-			fileMetrics.RecordFileOperationError("get_audio_info", ext, "header_read_failed")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("get_audio_info", ext, "error")
+			m.RecordFileOperationError("get_audio_info", ext, "header_read_failed")
 		}
 		return AudioInfo{}, enhancedErr
 	}
 
 	// Record successful operation
-	if fileMetrics != nil {
+	if m := getFileMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		fileMetrics.RecordFileOperation("get_audio_info", ext, "success")
-		fileMetrics.RecordFileOperationDuration("get_audio_info", ext, duration)
-		fileMetrics.RecordAudioFileInfo(ext, info.SampleRate, info.NumChannels, info.BitDepth, info.TotalSamples)
+		m.RecordFileOperation("get_audio_info", ext, "success")
+		m.RecordFileOperationDuration("get_audio_info", ext, duration)
+		m.RecordAudioFileInfo(ext, info.SampleRate, info.NumChannels, info.BitDepth, info.TotalSamples)
 	}
 
 	return info, nil
@@ -161,9 +164,9 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 			Context("operation", "read_audio_file_buffered").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("read_buffered", "unknown", "error")
-			fileMetrics.RecordFileOperationError("read_buffered", "unknown", "nil_settings")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("read_buffered", "unknown", "error")
+			m.RecordFileOperationError("read_buffered", "unknown", "nil_settings")
 		}
 		return enhancedErr
 	}
@@ -175,9 +178,9 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 			Context("operation", "read_audio_file_buffered").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("read_buffered", "unknown", "error")
-			fileMetrics.RecordFileOperationError("read_buffered", "unknown", "empty_path")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("read_buffered", "unknown", "error")
+			m.RecordFileOperationError("read_buffered", "unknown", "empty_path")
 		}
 		return enhancedErr
 	}
@@ -189,9 +192,9 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 			Context("operation", "read_audio_file_buffered").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("read_buffered", "unknown", "error")
-			fileMetrics.RecordFileOperationError("read_buffered", "unknown", "nil_callback")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("read_buffered", "unknown", "error")
+			m.RecordFileOperationError("read_buffered", "unknown", "nil_callback")
 		}
 		return enhancedErr
 	}
@@ -210,9 +213,9 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 			Context("file_operation", "open").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("read_buffered", ext, "error")
-			fileMetrics.RecordFileOperationError("read_buffered", ext, "open_failed")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("read_buffered", ext, "error")
+			m.RecordFileOperationError("read_buffered", ext, "open_failed")
 		}
 		return enhancedErr
 	}
@@ -237,9 +240,9 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 			Context("supported_formats", "wav,flac").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("read_buffered", ext, "error")
-			fileMetrics.RecordFileOperationError("read_buffered", ext, "unsupported_format")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("read_buffered", ext, "error")
+			m.RecordFileOperationError("read_buffered", ext, "unsupported_format")
 		}
 		return enhancedErr
 	}
@@ -253,26 +256,39 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 			Context("file_operation", "read_buffered").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordFileOperation("read_buffered", ext, "error")
-			fileMetrics.RecordFileOperationError("read_buffered", ext, "read_failed")
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("read_buffered", ext, "error")
+			m.RecordFileOperationError("read_buffered", ext, "read_failed")
 		}
 		return enhancedErr
 	}
 
 	// Record successful operation
-	if fileMetrics != nil {
+	if m := getFileMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		fileMetrics.RecordFileOperation("read_buffered", ext, "success")
-		fileMetrics.RecordFileOperationDuration("read_buffered", ext, duration)
+		m.RecordFileOperation("read_buffered", ext, "success")
+		m.RecordFileOperationDuration("read_buffered", ext, duration)
 	}
 
 	return nil
 }
 
-// SetFileMetrics sets the metrics instance for file operations
+// SetFileMetrics sets the metrics instance for file operations.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
 func SetFileMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	fileMetrics = myAudioMetrics
+	fileMetricsOnce.Do(func() {
+		fileMetricsMutex.Lock()
+		defer fileMetricsMutex.Unlock()
+		fileMetrics = myAudioMetrics
+	})
+}
+
+// getFileMetrics returns the current metrics instance in a thread-safe manner
+func getFileMetrics() *metrics.MyAudioMetrics {
+	fileMetricsMutex.RLock()
+	defer fileMetricsMutex.RUnlock()
+	return fileMetrics
 }
 
 // getAudioDivisor returns the appropriate divisor for converting samples based on bit depth
@@ -293,8 +309,8 @@ func getAudioDivisor(bitDepth int) (float32, error) {
 			Context("supported_bit_depths", "16,24,32").
 			Build()
 
-		if fileMetrics != nil {
-			fileMetrics.RecordAudioDataValidationError("file_processing", "unsupported_bit_depth")
+		if m := getFileMetrics(); m != nil {
+			m.RecordAudioDataValidationError("file_processing", "unsupported_bit_depth")
 		}
 		return 0, enhancedErr
 	}

@@ -13,14 +13,29 @@ import (
 
 // Global variables for filter chain and mutex
 var (
-	filterChain   *equalizer.FilterChain
-	filterMutex   sync.RWMutex
-	filterMetrics *metrics.MyAudioMetrics // Global metrics instance for filter operations
+	filterChain         *equalizer.FilterChain
+	filterMutex         sync.RWMutex
+	filterMetrics       *metrics.MyAudioMetrics // Global metrics instance for filter operations
+	filterMetricsMutex  sync.RWMutex            // Mutex for thread-safe access to filterMetrics
+	filterMetricsOnce   sync.Once               // Ensures metrics are only set once
 )
 
-// SetFilterMetrics sets the metrics instance for filter operations
+// SetFilterMetrics sets the metrics instance for filter operations.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
 func SetFilterMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	filterMetrics = myAudioMetrics
+	filterMetricsOnce.Do(func() {
+		filterMetricsMutex.Lock()
+		defer filterMetricsMutex.Unlock()
+		filterMetrics = myAudioMetrics
+	})
+}
+
+// getFilterMetrics returns the current metrics instance in a thread-safe manner
+func getFilterMetrics() *metrics.MyAudioMetrics {
+	filterMetricsMutex.RLock()
+	defer filterMetricsMutex.RUnlock()
+	return filterMetrics
 }
 
 // InitializeFilterChain sets up the initial filter chain based on settings
@@ -35,9 +50,9 @@ func InitializeFilterChain(settings *conf.Settings) error {
 			Context("operation", "initialize_filter_chain").
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("initialize_filters", "system", "error")
-			filterMetrics.RecordAudioProcessingError("initialize_filters", "system", "nil_settings")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("initialize_filters", "system", "error")
+			m.RecordAudioProcessingError("initialize_filters", "system", "nil_settings")
 		}
 		return enhancedErr
 	}
@@ -54,9 +69,9 @@ func InitializeFilterChain(settings *conf.Settings) error {
 			Context("operation", "initialize_filter_chain").
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("initialize_filters", "system", "error")
-			filterMetrics.RecordAudioProcessingError("initialize_filters", "system", "chain_creation_failed")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("initialize_filters", "system", "error")
+			m.RecordAudioProcessingError("initialize_filters", "system", "chain_creation_failed")
 		}
 		return enhancedErr
 	}
@@ -77,9 +92,9 @@ func InitializeFilterChain(settings *conf.Settings) error {
 					Context("filter_frequency", filterConfig.Frequency).
 					Build()
 
-				if filterMetrics != nil {
-					filterMetrics.RecordAudioProcessing("initialize_filters", "system", "error")
-					filterMetrics.RecordAudioProcessingError("initialize_filters", "system", "filter_creation_failed")
+				if m := getFilterMetrics(); m != nil {
+					m.RecordAudioProcessing("initialize_filters", "system", "error")
+					m.RecordAudioProcessingError("initialize_filters", "system", "filter_creation_failed")
 				}
 				return enhancedErr
 			}
@@ -93,9 +108,9 @@ func InitializeFilterChain(settings *conf.Settings) error {
 						Context("filter_type", filterConfig.Type).
 						Build()
 
-					if filterMetrics != nil {
-						filterMetrics.RecordAudioProcessing("initialize_filters", "system", "error")
-						filterMetrics.RecordAudioProcessingError("initialize_filters", "system", "filter_add_failed")
+					if m := getFilterMetrics(); m != nil {
+						m.RecordAudioProcessing("initialize_filters", "system", "error")
+						m.RecordAudioProcessingError("initialize_filters", "system", "filter_add_failed")
 					}
 					return enhancedErr
 				}
@@ -105,10 +120,10 @@ func InitializeFilterChain(settings *conf.Settings) error {
 	}
 
 	// Record successful initialization
-	if filterMetrics != nil {
+	if m := getFilterMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		filterMetrics.RecordAudioProcessing("initialize_filters", "system", "success")
-		filterMetrics.RecordAudioProcessingDuration("initialize_filters", "system", duration)
+		m.RecordAudioProcessing("initialize_filters", "system", "success")
+		m.RecordAudioProcessingDuration("initialize_filters", "system", duration)
 	}
 
 	return nil
@@ -126,9 +141,9 @@ func UpdateFilterChain(settings *conf.Settings) error {
 			Context("operation", "update_filter_chain").
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("update_filters", "system", "error")
-			filterMetrics.RecordAudioProcessingError("update_filters", "system", "nil_settings")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("update_filters", "system", "error")
+			m.RecordAudioProcessingError("update_filters", "system", "nil_settings")
 		}
 		return enhancedErr
 	}
@@ -146,9 +161,9 @@ func UpdateFilterChain(settings *conf.Settings) error {
 			Context("operation", "update_filter_chain").
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("update_filters", "system", "error")
-			filterMetrics.RecordAudioProcessingError("update_filters", "system", "chain_creation_failed")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("update_filters", "system", "error")
+			m.RecordAudioProcessingError("update_filters", "system", "chain_creation_failed")
 		}
 		return enhancedErr
 	}
@@ -169,9 +184,9 @@ func UpdateFilterChain(settings *conf.Settings) error {
 					Context("filter_type", filterConfig.Type).
 					Build()
 
-				if filterMetrics != nil {
-					filterMetrics.RecordAudioProcessing("update_filters", "system", "error")
-					filterMetrics.RecordAudioProcessingError("update_filters", "system", "filter_creation_failed")
+				if m := getFilterMetrics(); m != nil {
+					m.RecordAudioProcessing("update_filters", "system", "error")
+					m.RecordAudioProcessingError("update_filters", "system", "filter_creation_failed")
 				}
 				return enhancedErr
 			}
@@ -186,9 +201,9 @@ func UpdateFilterChain(settings *conf.Settings) error {
 						Context("filter_type", filterConfig.Type).
 						Build()
 
-					if filterMetrics != nil {
-						filterMetrics.RecordAudioProcessing("update_filters", "system", "error")
-						filterMetrics.RecordAudioProcessingError("update_filters", "system", "filter_add_failed")
+					if m := getFilterMetrics(); m != nil {
+						m.RecordAudioProcessing("update_filters", "system", "error")
+						m.RecordAudioProcessingError("update_filters", "system", "filter_add_failed")
 					}
 					return enhancedErr
 				}
@@ -201,10 +216,10 @@ func UpdateFilterChain(settings *conf.Settings) error {
 	filterChain = newChain
 
 	// Record successful update
-	if filterMetrics != nil {
+	if m := getFilterMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		filterMetrics.RecordAudioProcessing("update_filters", "system", "success")
-		filterMetrics.RecordAudioProcessingDuration("update_filters", "system", duration)
+		m.RecordAudioProcessing("update_filters", "system", "success")
+		m.RecordAudioProcessingDuration("update_filters", "system", duration)
 	}
 
 	return nil
@@ -259,9 +274,9 @@ func ApplyFilters(samples []byte) error {
 			Context("sample_size", 0).
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("apply_filters", "unknown", "error")
-			filterMetrics.RecordAudioProcessingError("apply_filters", "unknown", "empty_samples")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("apply_filters", "unknown", "error")
+			m.RecordAudioProcessingError("apply_filters", "unknown", "empty_samples")
 		}
 		return enhancedErr
 	}
@@ -274,10 +289,10 @@ func ApplyFilters(samples []byte) error {
 			Context("sample_size", len(samples)).
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("apply_filters", "filter", "error")
-			filterMetrics.RecordAudioProcessingError("apply_filters", "filter", "invalid_sample_length")
-			filterMetrics.RecordAudioDataValidationError("filter", "alignment")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("apply_filters", "filter", "error")
+			m.RecordAudioProcessingError("apply_filters", "filter", "invalid_sample_length")
+			m.RecordAudioDataValidationError("filter", "alignment")
 		}
 		return enhancedErr
 	}
@@ -293,19 +308,19 @@ func ApplyFilters(samples []byte) error {
 			Context("operation", "apply_filters").
 			Build()
 
-		if filterMetrics != nil {
-			filterMetrics.RecordAudioProcessing("apply_filters", "filter", "error")
-			filterMetrics.RecordAudioProcessingError("apply_filters", "filter", "uninitialized_chain")
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("apply_filters", "filter", "error")
+			m.RecordAudioProcessingError("apply_filters", "filter", "uninitialized_chain")
 		}
 		return enhancedErr
 	}
 
 	if filterChain.Length() == 0 {
 		// No filters to apply - record success but no processing
-		if filterMetrics != nil {
+		if m := getFilterMetrics(); m != nil {
 			duration := time.Since(start).Seconds()
-			filterMetrics.RecordAudioProcessing("apply_filters", "filter", "success")
-			filterMetrics.RecordAudioProcessingDuration("apply_filters", "filter", duration)
+			m.RecordAudioProcessing("apply_filters", "filter", "success")
+			m.RecordAudioProcessingDuration("apply_filters", "filter", duration)
 		}
 		return nil
 	}
@@ -333,11 +348,11 @@ func ApplyFilters(samples []byte) error {
 	}
 
 	// Record successful filter application
-	if filterMetrics != nil {
+	if m := getFilterMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		filterMetrics.RecordAudioProcessing("apply_filters", "filter", "success")
-		filterMetrics.RecordAudioProcessingDuration("apply_filters", "filter", duration)
-		filterMetrics.RecordAudioSampleCount("filter", sampleCount)
+		m.RecordAudioProcessing("apply_filters", "filter", "success")
+		m.RecordAudioProcessingDuration("apply_filters", "filter", duration)
+		m.RecordAudioSampleCount("filter", sampleCount)
 	}
 
 	return nil

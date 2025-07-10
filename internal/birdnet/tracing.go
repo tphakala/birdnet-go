@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,12 +27,31 @@ type TracingSpan struct {
 }
 
 // Global metrics instance (set by observability package)
-var globalMetrics *metrics.BirdNETMetrics
-var activeOperations int64
+var (
+	globalMetrics    *metrics.BirdNETMetrics
+	metricsMutex     sync.RWMutex
+	metricsOnce      sync.Once
+	activeOperations int64
+)
 
-// SetMetrics sets the global metrics instance for tracing
+// SetMetrics sets the global metrics instance for tracing.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls to this function will be ignored (idempotent behavior).
+// This design prevents race conditions during initialization while ensuring
+// metrics configuration remains consistent throughout the application lifecycle.
 func SetMetrics(m *metrics.BirdNETMetrics) {
-	globalMetrics = m
+	metricsOnce.Do(func() {
+		metricsMutex.Lock()
+		defer metricsMutex.Unlock()
+		globalMetrics = m
+	})
+}
+
+// getMetrics returns the current metrics instance in a thread-safe manner
+func getMetrics() *metrics.BirdNETMetrics {
+	metricsMutex.RLock()
+	defer metricsMutex.RUnlock()
+	return globalMetrics
 }
 
 // StartSpan starts a new tracing span with minimal overhead
@@ -40,7 +60,7 @@ func StartSpan(ctx context.Context, operation, description string) (*TracingSpan
 		operation:      operation,
 		description:    description,
 		startTime:      time.Now(),
-		metricsEnabled: globalMetrics != nil,
+		metricsEnabled: getMetrics() != nil,
 	}
 
 	// Only create Sentry span if telemetry is enabled
@@ -55,7 +75,9 @@ func StartSpan(ctx context.Context, operation, description string) (*TracingSpan
 	// Track active operations for metrics
 	if span.metricsEnabled {
 		count := atomic.AddInt64(&activeOperations, 1)
-		globalMetrics.SetActiveProcessing(float64(count))
+		if m := getMetrics(); m != nil {
+			m.SetActiveProcessing(float64(count))
+		}
 	}
 
 	return span, ctx
@@ -114,21 +136,23 @@ func (s *TracingSpan) Finish() {
 			model = "unknown"
 		}
 
-		// Record appropriate metric based on operation
-		switch s.operation {
-		case "birdnet.predict":
-			globalMetrics.RecordPrediction(model, durationSeconds, nil)
-		case "birdnet.process_chunk":
-			globalMetrics.RecordChunkProcess(model, durationSeconds)
-		case "birdnet.model_invoke":
-			globalMetrics.RecordModelInvoke(model, durationSeconds)
-		case "birdnet.range_filter":
-			globalMetrics.RecordRangeFilter(model, durationSeconds)
-		}
+		if m := getMetrics(); m != nil {
+			// Record appropriate metric based on operation
+			switch s.operation {
+			case "birdnet.predict":
+				m.RecordPrediction(model, durationSeconds, nil)
+			case "birdnet.process_chunk":
+				m.RecordChunkProcess(model, durationSeconds)
+			case "birdnet.model_invoke":
+				m.RecordModelInvoke(model, durationSeconds)
+			case "birdnet.range_filter":
+				m.RecordRangeFilter(model, durationSeconds)
+			}
 
-		// Update active operations count
-		count := atomic.AddInt64(&activeOperations, -1)
-		globalMetrics.SetActiveProcessing(float64(count))
+			// Update active operations count
+			count := atomic.AddInt64(&activeOperations, -1)
+			m.SetActiveProcessing(float64(count))
+		}
 	}
 
 	// Record in Sentry if enabled
