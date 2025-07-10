@@ -238,8 +238,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		startWeatherPolling(&wg, settings, dataStore, metrics, quitChan)
 	}
 
-	// Telemetry endpoint initialization is now handled by control monitor for hot reload support
-	// startTelemetryEndpoint(&wg, settings, metrics, quitChan)
+	// Telemetry endpoint initialization is now handled by control monitor for hot reload support.
+	// Unlike other services that start directly here, telemetry is managed by the control monitor
+	// to allow users to dynamically enable/disable metrics and change the listen address without
+	// restarting the application. The control monitor will start the endpoint if enabled.
+	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
 
 	// start control monitor for hot reloads
 	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
@@ -785,9 +788,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 
 // startControlMonitor handles various control signals for realtime analysis mode
 func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics) {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan)
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics)
 	ctrlMonitor.httpServer = httpServer
-	ctrlMonitor.metrics = metrics
 	ctrlMonitor.Start()
 }
 
