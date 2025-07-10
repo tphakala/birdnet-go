@@ -27,7 +27,8 @@ const (
 )
 
 // SetProcessMetrics sets the metrics instance for audio processing operations.
-// This function is thread-safe and ensures metrics are only set once.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
 func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	processMetricsOnce.Do(func() {
 		processMetricsMutex.Lock()

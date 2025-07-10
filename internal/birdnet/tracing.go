@@ -35,7 +35,10 @@ var (
 )
 
 // SetMetrics sets the global metrics instance for tracing.
-// This function is thread-safe and ensures metrics are only set once.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls to this function will be ignored (idempotent behavior).
+// This design prevents race conditions during initialization while ensuring
+// metrics configuration remains consistent throughout the application lifecycle.
 func SetMetrics(m *metrics.BirdNETMetrics) {
 	metricsOnce.Do(func() {
 		metricsMutex.Lock()

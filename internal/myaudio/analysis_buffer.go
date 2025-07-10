@@ -42,7 +42,8 @@ func init() {
 }
 
 // SetAnalysisMetrics sets the metrics instance for analysis buffer operations.
-// This function is thread-safe and ensures metrics are only set once.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
 func SetAnalysisMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	analysisMetricsOnce.Do(func() {
 		analysisMetricsMutex.Lock()
