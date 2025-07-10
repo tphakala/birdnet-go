@@ -294,7 +294,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				s.recordFailure()
 				// Log process exit with sanitized error message
 				errorMsg := err.Error()
-				sanitizedError := privacy.SanitizeRTSPUrl(errorMsg)
+				sanitizedError := privacy.SanitizeRTSPUrls(errorMsg)
 
 				// Check if this was a silence timeout
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
