@@ -1,191 +1,77 @@
-name: Automated Test Engineer
+name: Test Failure Monitor
 
 on:
   workflow_run:
     workflows: ["golangci-test"]
     types:
       - completed
-  workflow_dispatch:
 
 jobs:
-  analyze-failures:
-    if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') ||
-      github.event_name == 'workflow_dispatch'
+  create-issue-on-failure:
+    if: github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
       issues: write
       actions: read
-      checks: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Install dependencies
-        run: |
-          make check-tensorflow
-          make download-tflite-linux-amd64
-
-      - name: Set CGO environment
-        run: |
-          echo "CGO_ENABLED=1" >> $GITHUB_ENV
-          echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
-
-      - name: Download test artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: test-log
-          path: /tmp/
-          run-id: ${{ github.event.workflow_run.id }}
-        continue-on-error: true
-
-      - name: Run tests and capture failures
-        id: test-run
-        env:
-          CI: true
-          MQTT_TEST_BROKER: tcp://localhost:1883
-        run: |
-          # Start mosquitto in background for tests that need it
-          docker run -d -p 1883:1883 eclipse-mosquitto:1.6
-          sleep 5
-          
-          # Run tests and capture output
-          go test -json -v -timeout 60s ./... 2>&1 | tee /tmp/test-output.log || true
-          
-          # Extract failing test information
-          echo "## Test Failures" > /tmp/test-failures.md
-          grep -E '"Action":"fail"' /tmp/test-output.log | jq -r '.Package + " " + .Test' | sort -u >> /tmp/test-failures.md || true
-          
-          # Check if there are failures
-          if grep -q '"Action":"fail"' /tmp/test-output.log; then
-            echo "has_failures=true" >> $GITHUB_OUTPUT
-            echo "Found test failures"
-          else
-            echo "has_failures=false" >> $GITHUB_OUTPUT
-            echo "No test failures found"
-          fi
-
-      - name: Create branch for fixes
-        id: create-branch
-        if: steps.test-run.outputs.has_failures == 'true'
-        run: |
-          # Configure git
-          git config user.name "Automated Test Engineer"
-          git config user.email "automated-test-engineer@birdnet-go.com"
-          
-          BRANCH_NAME="fix/automated-test-fixes-$(date +%Y%m%d-%H%M%S)"
-          git checkout -b $BRANCH_NAME
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-
-      - name: Analyze and fix test failures with Claude
-        if: steps.test-run.outputs.has_failures == 'true'
-        uses: anthropics/claude-code-action@beta
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          model: "claude-opus-4-20250514"
-          allowed_tools: |
-            Bash(go test *)
-            Bash(golangci-lint run -v)
-            Read(*_test.go)
-            Edit(*_test.go)
-            MultiEdit(*_test.go)
-            Write(*_test.go)
-            Grep(*.go)
-            Glob(**/*_test.go)
-          custom_instructions: |
-            You are an automated test engineer. Your task is to:
-            1. Analyze the failing unit tests from the test output
-            2. Read the failing test files and understand why they're failing
-            3. Debug the root cause of the failures
-            4. Implement fixes for the failing tests
-            5. Ensure all fixes follow the project's coding standards
-            6. Run the fixed tests to verify they pass
-            
-            Important guidelines:
-            - Focus ONLY on fixing the failing tests, don't modify working tests
-            - Follow the project's CLAUDE.md guidelines strictly
-            - Use structured logging and proper error handling
-            - Ensure tests are deterministic and don't use time.Sleep()
-            - Use t.TempDir() for temporary directories
-            - Run golangci-lint before finalizing changes
-            
-            The test output is available in /tmp/test-output.log
-            The list of failing tests is in /tmp/test-failures.md
-          direct_prompt: |
-            @claude Please analyze the failing unit tests and implement fixes for them.
-            
-            First, read the test output from /tmp/test-output.log and /tmp/test-failures.md to understand which tests are failing.
-            Then, debug each failing test and implement appropriate fixes.
-            Finally, verify that all tests pass after your fixes.
-            
-            Remember to follow all guidelines in CLAUDE.md, especially:
-            - Use internal/errors package for error handling
-            - Run golangci-lint before completing
-            - Ensure tests are properly structured and use modern Go patterns
-
-      - name: Commit and push changes
-        if: steps.test-run.outputs.has_failures == 'true'
-        run: |
-          # Check if there are changes
-          if [[ -n $(git status -s) ]]; then
-            git add -A
-            git commit -m "fix: automated fixes for failing unit tests
-
-            This commit contains automated fixes for unit test failures detected in the CI pipeline.
-            
-            🤖 Generated with Claude Code
-            
-            Co-Authored-By: Claude <noreply@anthropic.com>"
-            
-            git push origin ${{ steps.create-branch.outputs.branch_name }}
-          else
-            echo "No changes to commit"
-          fi
-
-      - name: Create Pull Request
-        if: steps.test-run.outputs.has_failures == 'true'
+      - name: Check if issue already exists
+        id: check-issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if changes were pushed
-          if git ls-remote --heads origin ${{ steps.create-branch.outputs.branch_name }} | grep -q .; then
-            cat > /tmp/pr-body.md << 'EOF'
-          ## Summary
-          This PR contains automated fixes for failing unit tests detected in the CI pipeline.
-          
-          ## Changes
-          - Fixed failing unit tests based on test output analysis
-          - Ensured all tests follow project coding standards
-          - Verified fixes pass golangci-lint
-          
-          ## Test Results
-          See the test output and fixes applied by the automated test engineer.
-          
-          ## Review Notes
-          Please review the automated fixes to ensure they:
-          - Correctly address the root cause of test failures
-          - Follow project coding standards
-          - Don't introduce new issues
-          
-          🤖 Generated with Claude Code
-          EOF
-            
-            gh pr create \
-              --title "fix: automated fixes for failing unit tests" \
-              --body-file /tmp/pr-body.md \
-              --base main \
-              --head ${{ steps.create-branch.outputs.branch_name }}
+          # Check for existing open test failure issues
+          EXISTING_ISSUE=$(gh issue list --repo ${{ github.repository }} --state open --label "test-failure" --limit 1 --json number --jq '.[0].number // empty')
+          if [[ -n "$EXISTING_ISSUE" ]]; then
+            echo "existing_issue=$EXISTING_ISSUE" >> $GITHUB_OUTPUT
+            echo "Found existing test failure issue: #$EXISTING_ISSUE"
           else
-            echo "No changes were pushed, skipping PR creation"
+            echo "existing_issue=" >> $GITHUB_OUTPUT
+            echo "No existing test failure issue found"
           fi
+
+      - name: Create test failure issue
+        if: steps.check-issue.outputs.existing_issue == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "🔴 Unit Tests Failing - Automated Fix Needed" \
+            --label "test-failure,automated" \
+            --body "@claude Please analyze and fix the failing unit tests.
+
+          ## Test Failure Details
+          - **Workflow Run**: ${{ github.event.workflow_run.html_url }}
+          - **Commit**: ${{ github.event.workflow_run.head_sha }}
+          - **Branch**: ${{ github.event.workflow_run.head_branch }}
+          - **Triggered by**: ${{ github.event.workflow_run.triggering_actor.login }}
+          
+          ## Instructions for Claude
+          Please:
+          1. Download and analyze the test logs from the failed workflow
+          2. Identify the root cause of test failures
+          3. Implement fixes following project guidelines in CLAUDE.md
+          4. Create a PR with the fixes
+          5. Verify all tests pass after your changes
+          
+          ## Guidelines
+          - Use internal/errors package for error handling
+          - Follow modern Go patterns (no time.Sleep in tests)
+          - Use t.TempDir() for temporary directories  
+          - Run golangci-lint before finalizing
+          - Only fix failing tests, don't modify working ones"
+
+      - name: Comment on existing issue
+        if: steps.check-issue.outputs.existing_issue != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ steps.check-issue.outputs.existing_issue }} \
+            --repo ${{ github.repository }} \
+            --body "🔄 **New Test Failure Detected**
+
+          - **Workflow Run**: ${{ github.event.workflow_run.html_url }}
+          - **Commit**: ${{ github.event.workflow_run.head_sha }}
+          - **Branch**: ${{ github.event.workflow_run.head_branch }}
+          
+          @claude Please analyze this latest test failure and provide fixes."
