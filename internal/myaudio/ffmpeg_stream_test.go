@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ func TestFFmpegStream_NewStream(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	assert.NotNil(t, stream)
@@ -28,6 +30,7 @@ func TestFFmpegStream_Stop(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Test stopping the stream
@@ -52,6 +55,7 @@ func TestFFmpegStream_Restart(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Test restart (manual restart)
@@ -76,6 +80,7 @@ func TestFFmpegStream_GetHealth(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Get initial health
@@ -106,6 +111,7 @@ func TestFFmpegStream_UpdateLastDataTime(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Set old time
@@ -147,6 +153,7 @@ func TestFFmpegStream_BackoffCalculation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			audioChan := make(chan UnifiedAudioData, 10)
+			defer close(audioChan)
 			stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 			
 			// Set restart count
@@ -174,6 +181,7 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Run concurrent operations
@@ -243,27 +251,33 @@ func TestFFmpegStream_ProcessLifecycle(t *testing.T) {
 }
 
 func TestFFmpegStream_HandleAudioData(t *testing.T) {
+	// Do not use t.Parallel() - this test accesses global analysisBuffers and captureBuffers maps
+	
+	// Use unique source ID to avoid conflicts
+	sourceID := fmt.Sprintf("test-%d", time.Now().UnixNano())
+	
 	// Skip test if we can't initialize buffers (requires proper setup)
-	if err := AllocateAnalysisBuffer(conf.BufferSize*3, "test"); err != nil {
+	if err := AllocateAnalysisBuffer(conf.BufferSize*3, sourceID); err != nil {
 		t.Skip("Cannot allocate analysis buffer for test")
 	}
 	defer func() {
-		if err := RemoveAnalysisBuffer("test"); err != nil {
+		if err := RemoveAnalysisBuffer(sourceID); err != nil {
 			t.Logf("Failed to remove analysis buffer: %v", err)
 		}
 	}()
 	
-	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, "test"); err != nil {
+	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
 		t.Skip("Cannot allocate capture buffer for test") 
 	}
 	defer func() {
-		if err := RemoveCaptureBuffer("test"); err != nil {
+		if err := RemoveCaptureBuffer(sourceID); err != nil {
 			t.Logf("Failed to remove capture buffer: %v", err)
 		}
 	}()
 
 	audioChan := make(chan UnifiedAudioData, 10)
-	stream := NewFFmpegStream("test", "tcp", audioChan)
+	defer close(audioChan)
+	stream := NewFFmpegStream(sourceID, "tcp", audioChan)
 	
 	// Test audio data handling
 	testData := make([]byte, 1024)
@@ -288,6 +302,7 @@ func TestFFmpegStream_CircuitBreakerBehavior(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Test circuit breaker is initially closed
@@ -312,6 +327,7 @@ func TestFFmpegStream_DataRateCalculation(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Test data rate calculator
@@ -332,6 +348,7 @@ func TestFFmpegStream_HealthTracking(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Test initial health
@@ -362,6 +379,7 @@ func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	const numGoroutines = 10
@@ -412,6 +430,7 @@ func TestFFmpegStream_BackoffOverflowProtection(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Test with very high restart count that would cause overflow without protection
@@ -446,6 +465,7 @@ func TestFFmpegStream_DroppedDataLogging(t *testing.T) {
 
 	// Create a stream with a very small channel to force drops
 	audioChan := make(chan UnifiedAudioData, 1)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	// Fill the channel
@@ -473,6 +493,7 @@ func TestFFmpegStream_ValidateUserTimeout(t *testing.T) {
 	t.Parallel()
 
 	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	tests := []struct {

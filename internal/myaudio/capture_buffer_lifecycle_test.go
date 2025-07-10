@@ -11,7 +11,7 @@ import (
 
 // TestCaptureBufferSingleAllocation verifies that each source gets only one buffer allocation
 func TestCaptureBufferSingleAllocation(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	testCases := []struct {
 		name           string
@@ -49,7 +49,7 @@ func TestCaptureBufferSingleAllocation(t *testing.T) {
 
 // TestCaptureBufferReconnection simulates RTSP reconnection scenario
 func TestCaptureBufferReconnection(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	source := "rtsp://test.stream/camera1"
 	duration := 60
@@ -75,7 +75,7 @@ func TestCaptureBufferReconnection(t *testing.T) {
 
 // TestCaptureBufferCleanup verifies proper cleanup prevents orphaned buffers
 func TestCaptureBufferCleanup(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	sources := []string{"source1", "source2", "source3"}
 
@@ -108,7 +108,7 @@ func TestCaptureBufferCleanup(t *testing.T) {
 
 // TestConcurrentBufferAllocation tests thread safety of buffer allocation
 func TestConcurrentBufferAllocation(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	const numGoroutines = 10
 	source := "concurrent_test_source"
@@ -144,7 +144,7 @@ func TestConcurrentBufferAllocation(t *testing.T) {
 
 // TestBufferLifecycleWithErrors tests buffer lifecycle with various error conditions
 func TestBufferLifecycleWithErrors(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	testCases := []struct {
 		name           string
@@ -182,7 +182,7 @@ func TestBufferLifecycleWithErrors(t *testing.T) {
 
 // TestInitCaptureBuffers tests batch buffer initialization
 func TestInitCaptureBuffers(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	sources := []string{"rtsp://cam1", "rtsp://cam2", "rtsp://cam3", "rtsp://cam4"}
 
@@ -213,7 +213,7 @@ func TestInitCaptureBuffers(t *testing.T) {
 
 // TestMemoryLeakPrevention verifies that buffers are properly cleaned up
 func TestMemoryLeakPrevention(t *testing.T) {
-	t.Parallel()
+	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	const iterations = 100
 	source := "leak_test_source"
