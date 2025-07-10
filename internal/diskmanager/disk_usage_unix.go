@@ -56,8 +56,8 @@ func GetDetailedDiskUsage(path string) (DiskSpaceInfo, error) {
 	startTime := time.Now()
 	defer func() {
 		// Always record disk check duration, even on error
-		if diskMetrics != nil {
-			diskMetrics.RecordDiskCheckDuration(time.Since(startTime).Seconds())
+		if m := getMetrics(); m != nil {
+			m.RecordDiskCheckDuration(time.Since(startTime).Seconds())
 		}
 	}()
 	
