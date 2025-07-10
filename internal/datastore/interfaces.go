@@ -87,6 +87,7 @@ type DataStore struct {
 	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
 	metrics       *Metrics // Metrics instance for tracking operations
+	metricsMu     sync.RWMutex     // Mutex to protect metrics field access
 	
 	// Monitoring lifecycle management
 	monitoringCtx    context.Context    // Context for monitoring goroutines
@@ -122,15 +123,21 @@ func New(settings *conf.Settings) Interface {
 
 // SetMetrics sets the metrics instance for the datastore
 func (ds *DataStore) SetMetrics(m *Metrics) {
+	ds.metricsMu.Lock()
+	defer ds.metricsMu.Unlock()
 	ds.metrics = m
 }
 
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
 func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
-	if ds.SunCalc != nil && suncalcMetrics != nil {
+	ds.metricsMu.RLock()
+	sunCalc := ds.SunCalc
+	ds.metricsMu.RUnlock()
+	
+	if sunCalc != nil && suncalcMetrics != nil {
 		// Type assert to the actual metrics type
 		if m, ok := suncalcMetrics.(*metrics.SunCalcMetrics); ok {
-			ds.SunCalc.SetMetrics(m)
+			sunCalc.SetMetrics(m)
 		}
 	}
 }
@@ -1315,9 +1322,12 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				"error", enhancedErr)
 			
 			// Record error metric
-			if ds.metrics != nil {
-				ds.metrics.RecordImageCacheOperation("save", "error")
-				ds.metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
+			ds.metricsMu.RLock()
+			metrics := ds.metrics
+			ds.metricsMu.RUnlock()
+			if metrics != nil {
+				metrics.RecordImageCacheOperation("save", "error")
+				metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
 			}
 			
 			return enhancedErr
@@ -1325,9 +1335,12 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 	}
 	
 	// Record success metric
-	if ds.metrics != nil {
-		ds.metrics.RecordImageCacheOperation("save", "success")
-		ds.metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
+	ds.metricsMu.RLock()
+	metrics := ds.metrics
+	ds.metricsMu.RUnlock()
+	if metrics != nil {
+		metrics.RecordImageCacheOperation("save", "success")
+		metrics.RecordImageCacheDuration("save", time.Since(start).Seconds())
 	}
 	
 	return nil
@@ -1987,17 +2000,23 @@ func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string,
 			"scientific_name", note.ScientificName)
 		
 		// Record error metric
-		if ds.metrics != nil {
-			ds.metrics.RecordNoteOperation("save", "error")
-			ds.metrics.RecordDbOperationError("create", "notes", categorizeError(err))
+		ds.metricsMu.RLock()
+		metrics := ds.metrics
+		ds.metricsMu.RUnlock()
+		if metrics != nil {
+			metrics.RecordNoteOperation("save", "error")
+			metrics.RecordDbOperationError("create", "notes", categorizeError(err))
 		}
 		
 		return enhancedErr
 	}
 	
 	// Record success metric for note
-	if ds.metrics != nil {
-		ds.metrics.RecordNoteOperation("save", "success")
+	ds.metricsMu.RLock()
+	metrics := ds.metrics
+	ds.metricsMu.RUnlock()
+	if metrics != nil {
+		metrics.RecordNoteOperation("save", "success")
 	}
 	
 	return nil
@@ -2023,8 +2042,11 @@ func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, no
 				"note_id", noteID,
 				"result_index", i)
 			
-			if ds.metrics != nil {
-				ds.metrics.RecordDbOperationError("create", "results", categorizeError(err))
+			ds.metricsMu.RLock()
+			metrics := ds.metrics
+			ds.metricsMu.RUnlock()
+			if metrics != nil {
+				metrics.RecordDbOperationError("create", "results", categorizeError(err))
 			}
 			
 			return enhancedErr
@@ -2047,17 +2069,23 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 		txLogger.Error("Failed to commit transaction",
 			"error", enhancedErr)
 		
-		if ds.metrics != nil {
-			ds.metrics.RecordTransaction("rollback")
-			ds.metrics.RecordTransactionError("save_note", categorizeError(err))
+		ds.metricsMu.RLock()
+		metrics := ds.metrics
+		ds.metricsMu.RUnlock()
+		if metrics != nil {
+			metrics.RecordTransaction("rollback")
+			metrics.RecordTransactionError("save_note", categorizeError(err))
 		}
 		
 		return enhancedErr
 	}
 	
 	// Record commit success
-	if ds.metrics != nil {
-		ds.metrics.RecordTransaction("committed")
+	ds.metricsMu.RLock()
+	metrics := ds.metrics
+	ds.metricsMu.RUnlock()
+	if metrics != nil {
+		metrics.RecordTransaction("committed")
 	}
 	
 	return nil
@@ -2072,8 +2100,11 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 		"backoff_ms", delay.Milliseconds())
 	
 	// Record retry metric
-	if ds.metrics != nil {
-		ds.metrics.RecordTransactionRetry("save_note", "database_locked")
+	ds.metricsMu.RLock()
+	metrics := ds.metrics
+	ds.metricsMu.RUnlock()
+	if metrics != nil {
+		metrics.RecordTransactionRetry("save_note", "database_locked")
 	}
 	
 	time.Sleep(delay)
@@ -2152,10 +2183,13 @@ func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resul
 		"rows_affected", 1+resultsCount)
 	
 	// Record success metrics
-	if ds.metrics != nil {
-		ds.metrics.RecordTransactionDuration("save_note", duration.Seconds())
+	ds.metricsMu.RLock()
+	metrics := ds.metrics
+	ds.metricsMu.RUnlock()
+	if metrics != nil {
+		metrics.RecordTransactionDuration("save_note", duration.Seconds())
 		if attempts > 1 {
-			ds.metrics.RecordLockContention("database", "retry_succeeded")
+			metrics.RecordLockContention("database", "retry_succeeded")
 		}
 	}
 }
@@ -2175,10 +2209,13 @@ func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txSta
 		"total_duration", time.Since(txStart))
 	
 	// Record failure metrics
-	if ds.metrics != nil {
-		ds.metrics.RecordTransaction("timeout")
-		ds.metrics.RecordTransactionError("save_note", "max_retries_exhausted")
-		ds.metrics.RecordLockContention("database", "max_retries_exhausted")
+	ds.metricsMu.RLock()
+	metrics := ds.metrics
+	ds.metricsMu.RUnlock()
+	if metrics != nil {
+		metrics.RecordTransaction("timeout")
+		metrics.RecordTransactionError("save_note", "max_retries_exhausted")
+		metrics.RecordLockContention("database", "max_retries_exhausted")
 	}
 	
 	return enhancedErr
