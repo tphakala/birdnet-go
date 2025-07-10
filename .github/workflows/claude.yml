@@ -41,24 +41,24 @@ jobs:
           elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
             ISSUE_NUMBER=${{ github.event.issue.number }}
           fi
-          
+
           # Check if issue is already assigned to anyone
           CURRENT_ASSIGNEE=$(gh issue view $ISSUE_NUMBER --json assignees --jq '.assignees[0].login // empty')
-          
+
           if [[ -z "$CURRENT_ASSIGNEE" ]]; then
             echo "Assigning issue #$ISSUE_NUMBER to indicate Claude is working on it"
             # Assign to the repository owner or a service account
             gh issue edit $ISSUE_NUMBER --add-assignee tphakala || echo "Could not assign issue"
-            
+
             # Add a label to indicate Claude is working on this
             gh label create "claude-working" --description "Claude is currently working on this issue" --color "1d76db" 2>/dev/null || true
             gh issue edit $ISSUE_NUMBER --add-label "claude-working" || echo "Could not add label"
-            
+
             # Auto-assign package labels based on issue content
             ISSUE_BODY=$(gh issue view $ISSUE_NUMBER --json body --jq '.body')
             ISSUE_TITLE=$(gh issue view $ISSUE_NUMBER --json title --jq '.title')
             COMBINED_TEXT="$ISSUE_TITLE $ISSUE_BODY"
-            
+
             # Detect packages mentioned in the issue and add appropriate labels
             if echo "$COMBINED_TEXT" | grep -i "analysis\|processor" >/dev/null; then
               gh issue edit $ISSUE_NUMBER --add-label "pkg:analysis" 2>/dev/null || true
@@ -108,17 +108,19 @@ jobs:
             if echo "$COMBINED_TEXT" | grep -i "test.*fail\|unit.*test" >/dev/null; then
               gh issue edit $ISSUE_NUMBER --add-label "pkg:testing" 2>/dev/null || true
             fi
-            
+
             # Add a comment to indicate Claude has been assigned
-            echo "🤖 **Claude Assigned**
-
-This issue has been automatically assigned to Claude for resolution. Claude will:
-- Analyze the problem
-- Implement fixes following project guidelines  
-- Run tests to verify the solution
-- Create a pull request with the changes
-
-Status: **Working** 🔄" > /tmp/assignment-comment.md
+            {
+              echo "🤖 **Claude Assigned**"
+              echo ""
+              echo "This issue has been automatically assigned to Claude for resolution. Claude will:"
+              echo "- Analyze the problem"
+              echo "- Implement fixes following project guidelines"
+              echo "- Run tests to verify the solution"
+              echo "- Create a pull request with the changes"
+              echo ""
+              echo "Status: **Working** 🔄"
+            } > /tmp/assignment-comment.md
             gh issue comment $ISSUE_NUMBER --body-file /tmp/assignment-comment.md || echo "Could not add comment"
           else
             echo "Issue #$ISSUE_NUMBER is already assigned to $CURRENT_ASSIGNEE"
@@ -133,16 +135,16 @@ Status: **Working** 🔄" > /tmp/assignment-comment.md
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
-          
+
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           # model: "claude-opus-4-20250514"
-          
+
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
-          
+
           # Optional: Trigger when specific user is assigned to an issue
           # assignee_trigger: "claude-bot"
-          
+
           # Allow Claude to run Go testing and development commands
           allowed_tools: |
             Bash(go test *)
@@ -158,35 +160,35 @@ Status: **Working** 🔄" > /tmp/assignment-comment.md
             Grep(*.go)
             Glob(**/*_test.go)
             Glob(**/*.go)
-          
+
           # Add Go and BirdNET-Go specific instructions
           custom_instructions: |
             You are working on BirdNET-Go, a Go implementation of BirdNET for real-time bird sound identification.
-            
+
             ## Critical Rules
             - **ALWAYS use `internal/errors` package** (never standard `errors`)
             - **Run `golangci-lint run -v` before EVERY commit**
             - **Follow all guidelines in CLAUDE.md exactly**
-            
+
             ## Testing Guidelines
             - Use `t.TempDir()` for temporary directories (automatic cleanup)
             - Use `t.Parallel()` only when tests are truly independent
             - Avoid `time.Sleep()` - use channels/synchronization instead
             - Structure tests: setup → execution → assertion
             - Use table-driven tests with `t.Run()` for comprehensive coverage
-            
+
             ## Error Handling
             - Always use `internal/errors` package
             - Wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
             - Specify `.Component()` and `.Category()` for telemetry
-            
+
             ## Code Quality
             - Use modern Go patterns (any instead of interface{})
             - Use standard library first before external dependencies
             - Follow security best practices
             - Validate all user input
             - Use `for i := range n` for Go 1.22+ patterns
-            
+
             ## When fixing tests
             - Focus ONLY on failing tests
             - Read the test failure details carefully
@@ -205,36 +207,40 @@ Status: **Working** 🔄" > /tmp/assignment-comment.md
           elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
             ISSUE_NUMBER=${{ github.event.issue.number }}
           fi
-          
+
           # Check if Claude step was successful
           if [[ "${{ steps.claude.outcome }}" == "success" ]]; then
             echo "Claude completed successfully, updating issue status"
-            
+
             # Remove working label and add completed label
             gh label create "claude-completed" --description "Claude has completed work on this issue" --color "28a745" 2>/dev/null || true
             gh issue edit $ISSUE_NUMBER --remove-label "claude-working" 2>/dev/null || true
             gh issue edit $ISSUE_NUMBER --add-label "claude-completed" || echo "Could not update labels"
-            
+
             # Add completion comment
-            echo "✅ **Claude Work Completed**
-
-Claude has finished analyzing and working on this issue. Please review any pull requests or changes that were made.
-
-Status: **Completed** ✅" > /tmp/completion-comment.md
+            {
+              echo "✅ **Claude Work Completed**"
+              echo ""
+              echo "Claude has finished analyzing and working on this issue. Please review any pull requests or changes that were made."
+              echo ""
+              echo "Status: **Completed** ✅"
+            } > /tmp/completion-comment.md
             gh issue comment $ISSUE_NUMBER --body-file /tmp/completion-comment.md || echo "Could not add completion comment"
           else
             echo "Claude encountered an issue, updating status"
-            
+
             # Add error label
             gh label create "claude-error" --description "Claude encountered an error while working on this issue" --color "dc3545" 2>/dev/null || true
             gh issue edit $ISSUE_NUMBER --remove-label "claude-working" 2>/dev/null || true
             gh issue edit $ISSUE_NUMBER --add-label "claude-error" || echo "Could not update labels"
-            
+
             # Add error comment
-            echo "⚠️ **Claude Encountered an Issue**
-
-Claude was unable to complete work on this issue automatically. Please check the workflow logs for details and consider manual intervention.
-
-Status: **Needs Review** ⚠️" > /tmp/error-comment.md
+            {
+              echo "⚠️ **Claude Encountered an Issue**"
+              echo ""
+              echo "Claude was unable to complete work on this issue automatically. Please check the workflow logs for details and consider manual intervention."
+              echo ""
+              echo "Status: **Needs Review** ⚠️"
+            } > /tmp/error-comment.md
             gh issue comment $ISSUE_NUMBER --body-file /tmp/error-comment.md || echo "Could not add error comment"
           fi
