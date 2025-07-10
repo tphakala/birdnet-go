@@ -2,6 +2,8 @@
 package metrics
 
 import (
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -689,4 +691,133 @@ func (m *DatastoreMetrics) RecordBackupDuration(operation string, duration float
 // RecordMaintenanceOperation records a maintenance operation
 func (m *DatastoreMetrics) RecordMaintenanceOperation(operation, status string) {
 	m.maintenanceOperationsTotal.WithLabelValues(operation, status).Inc()
+}
+
+// parseTableFromOperation extracts table name from operations like "db_query:notes"
+// Returns the operation and table separately, or "unknown" if no table specified
+func parseTableFromOperation(operation string) (op, table string) {
+	parts := strings.SplitN(operation, ":", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	// Default table names for specific operations
+	switch operation {
+	case "note_create", "note_update", "note_delete", "note_get":
+		return operation, "notes"
+	default:
+		return operation, "unknown"
+	}
+}
+
+// RecordOperation implements the Recorder interface.
+// It records various datastore operations with their status.
+// For database operations, use format "operation:table" (e.g., "db_query:notes")
+// Supported operations: "db_query", "db_insert", "db_update", "db_delete", "transaction",
+// "note_create", "note_update", "note_delete", "note_get", "search", "analytics",
+// "cache_get", "cache_set", "cache_delete", "weather_data", "image_cache", "backup", "maintenance"
+// Status values: "success", "error"
+func (m *DatastoreMetrics) RecordOperation(operation, status string) {
+	// Parse table from operation for database operations
+	op, table := parseTableFromOperation(operation)
+	
+	// Map generic operations to specific datastore operations
+	switch op {
+	case "db_query", "db_insert", "db_update", "db_delete":
+		m.dbOperationsTotal.WithLabelValues(op, table, status).Inc()
+	case "transaction":
+		m.dbTransactionsTotal.WithLabelValues(status).Inc()
+	case "note_create", "note_update", "note_delete", "note_get":
+		m.noteOperationsTotal.WithLabelValues(op, status).Inc()
+	case "search":
+		m.searchOperationsTotal.WithLabelValues("search", status).Inc()
+	case "analytics":
+		m.analyticsOperationsTotal.WithLabelValues("query", status).Inc()
+	case "cache_get", "cache_set", "cache_delete":
+		m.cacheOperationsTotal.WithLabelValues("suntimes", op, status).Inc()
+	case "weather_data":
+		m.weatherDataOperationsTotal.WithLabelValues("fetch", status).Inc()
+	case "image_cache":
+		m.imageCacheOperationsTotal.WithLabelValues("get", status).Inc()
+	case "backup":
+		m.backupOperationsTotal.WithLabelValues("create", status).Inc()
+	case "maintenance":
+		m.maintenanceOperationsTotal.WithLabelValues("vacuum", status).Inc()
+	}
+}
+
+// RecordDuration implements the Recorder interface.
+// It records the duration of various datastore operations.
+// For database operations, use format "operation:table" (e.g., "db_query:notes")
+func (m *DatastoreMetrics) RecordDuration(operation string, seconds float64) {
+	// Parse table from operation for database operations
+	op, table := parseTableFromOperation(operation)
+	
+	switch op {
+	case "db_query", "db_insert", "db_update", "db_delete":
+		m.dbOperationDuration.WithLabelValues(op, table).Observe(seconds)
+	case "transaction":
+		m.dbTransactionDuration.WithLabelValues("commit").Observe(seconds)
+	case "note_lock":
+		m.noteLockDuration.WithLabelValues("exclusive").Observe(seconds)
+	case "note_operation":
+		m.noteOperationDuration.WithLabelValues("update").Observe(seconds)
+	case "search":
+		m.searchOperationDuration.WithLabelValues("query").Observe(seconds)
+	case "analytics":
+		m.analyticsOperationDuration.WithLabelValues("query").Observe(seconds)
+	case "weather_data":
+		m.weatherDataDuration.WithLabelValues("fetch").Observe(seconds)
+	case "image_cache":
+		m.imageCacheDuration.WithLabelValues("get").Observe(seconds)
+	case "backup":
+		m.backupDuration.WithLabelValues("create").Observe(seconds)
+	case "lock_wait":
+		m.lockWaitTimeHistogram.WithLabelValues("note").Observe(seconds)
+	}
+}
+
+// RecordError implements the Recorder interface.
+// It records errors for various datastore operations.
+// For database operations, use format "operation:table" (e.g., "db_query:notes")
+func (m *DatastoreMetrics) RecordError(operation, errorType string) {
+	// Parse table from operation for database operations
+	op, table := parseTableFromOperation(operation)
+	
+	switch op {
+	case "db_query", "db_insert", "db_update", "db_delete":
+		m.dbOperationErrorsTotal.WithLabelValues(op, table, errorType).Inc()
+		// Also increment operation counter with error status
+		m.dbOperationsTotal.WithLabelValues(op, table, "error").Inc()
+	case "transaction":
+		m.dbTransactionErrorsTotal.WithLabelValues("commit", errorType).Inc()
+		// Also increment transaction counter with error status
+		m.dbTransactionsTotal.WithLabelValues("error").Inc()
+	case "note_lock":
+		// Record as error in note operations
+		m.noteLockOperationsTotal.WithLabelValues("exclusive", "error").Inc()
+	case "note_create", "note_update", "note_delete", "note_get":
+		// Record as error in note operations
+		m.noteOperationsTotal.WithLabelValues(op, "error").Inc()
+	case "search":
+		// Record as error in search operations
+		m.searchOperationsTotal.WithLabelValues("search", "error").Inc()
+	case "analytics":
+		// Record as error in analytics operations
+		m.analyticsOperationsTotal.WithLabelValues("query", "error").Inc()
+	case "cache", "cache_get", "cache_set", "cache_delete":
+		// Record as error in cache operations
+		m.cacheOperationsTotal.WithLabelValues("suntimes", op, "error").Inc()
+	case "weather_data":
+		// Record as error in weather data operations
+		m.weatherDataOperationsTotal.WithLabelValues("fetch", "error").Inc()
+	case "image_cache":
+		// Record as error in image cache operations
+		m.imageCacheOperationsTotal.WithLabelValues("get", "error").Inc()
+	case "backup":
+		// Record as error in backup operations
+		m.backupOperationsTotal.WithLabelValues("create", "error").Inc()
+	case "maintenance":
+		// Record as error in maintenance operations
+		m.maintenanceOperationsTotal.WithLabelValues("vacuum", "error").Inc()
+	}
 }

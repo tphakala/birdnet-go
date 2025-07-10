@@ -290,3 +290,59 @@ func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 	ch <- m.ActiveProcessingGauge
 	ch <- m.ModelLoadedGauge
 }
+
+// RecordOperation implements the Recorder interface.
+// It records operations related to BirdNET processing.
+// Supported operations: "prediction", "model_load", "detection"
+// Status values: "success", "error", or species name for "detection"
+func (m *BirdNETMetrics) RecordOperation(operation, status string) {
+	switch operation {
+	case "prediction":
+		m.PredictionTotal.WithLabelValues("birdnet", status).Inc()
+	case "model_load":
+		m.ModelLoadTotal.WithLabelValues("birdnet", status).Inc()
+		if status == "success" {
+			m.ModelLoadedGauge.Set(1)
+		} else {
+			m.ModelLoadedGauge.Set(0)
+		}
+	case "detection":
+		// IMPORTANT: For the "detection" operation, the status parameter represents 
+		// the detected species name (e.g., "Turdus migratorius" for American Robin),
+		// not a success/error status. This is a special case where we reuse the 
+		// status parameter for semantic convenience in the Recorder interface.
+		m.DetectionCounter.WithLabelValues(status).Inc()
+	}
+}
+
+// RecordDuration implements the Recorder interface.
+// It records duration metrics for various BirdNET operations.
+// Supported operations: "prediction", "chunk_process", "model_invoke", "range_filter", "process_time_ms"
+func (m *BirdNETMetrics) RecordDuration(operation string, seconds float64) {
+	switch operation {
+	case "prediction":
+		m.PredictionDuration.WithLabelValues("birdnet").Observe(seconds)
+	case "chunk_process":
+		m.ChunkProcessDuration.WithLabelValues("birdnet").Observe(seconds)
+	case "model_invoke":
+		m.ModelInvokeDuration.WithLabelValues("birdnet").Observe(seconds)
+	case "range_filter":
+		m.RangeFilterDuration.WithLabelValues("birdnet").Observe(seconds)
+	case "process_time_ms":
+		// Convert to milliseconds for backward compatibility
+		m.ProcessTimeGauge.Set(seconds * 1000)
+	}
+}
+
+// RecordError implements the Recorder interface.
+// It records error metrics for BirdNET operations.
+// Supported operations: "prediction", "model_load"
+// Error types: "validation", "model_error", "tensor_error", "invoke_error", etc.
+func (m *BirdNETMetrics) RecordError(operation, errorType string) {
+	switch operation {
+	case "prediction":
+		m.PredictionErrors.WithLabelValues("birdnet", errorType).Inc()
+	case "model_load":
+		m.ModelLoadErrors.WithLabelValues("birdnet", errorType).Inc()
+	}
+}
