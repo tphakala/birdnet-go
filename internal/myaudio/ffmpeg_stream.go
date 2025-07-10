@@ -55,7 +55,7 @@ const (
 	maxBackoffExponent = 20 // This allows up to 2^20 = ~1 million multiplier
 
 	// Timeout settings for FFmpeg RTSP streams
-	defaultTimeoutMicroseconds = 30000000 // 30 seconds in microseconds
+	defaultTimeoutMicroseconds = 10000000 // 10 seconds in microseconds
 	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
 )
 
@@ -365,18 +365,18 @@ func (s *FFmpegStream) startProcess() error {
 	args := []string{
 		"-rtsp_transport", s.transport,
 	}
-	
+
 	// Get RTSP settings
 	rtspSettings := conf.Setting().Realtime.RTSP
-	
+
 	// Check if user has already provided a timeout parameter
 	hasUserTimeout, userTimeoutValue := detectUserTimeout(rtspSettings.FFmpegParameters)
-	
+
 	// Add default timeout if user hasn't provided one
 	if !hasUserTimeout {
 		args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
 	}
-	
+
 	// Add custom FFmpeg parameters from configuration (before input)
 	if len(rtspSettings.FFmpegParameters) > 0 {
 		// Validate user timeout if provided
@@ -396,7 +396,7 @@ func (s *FFmpegStream) startProcess() error {
 		}
 		args = append(args, rtspSettings.FFmpegParameters...)
 	}
-	
+
 	// Add input and output parameters
 	args = append(args,
 		"-i", s.url,
@@ -664,18 +664,18 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 func (s *FFmpegStream) logDroppedData() {
 	s.dropLogMu.Lock()
 	defer s.dropLogMu.Unlock()
-	
+
 	now := time.Now()
 	if now.Sub(s.lastDropLogTime) >= dropLogInterval {
 		s.lastDropLogTime = now
-		
+
 		streamLogger.Warn("audio data dropped due to full channel",
 			"url", privacy.SanitizeRTSPUrl(s.url),
 			"component", "ffmpeg-stream",
 			"operation", "audio_data_drop")
-		
+
 		log.Printf("⚠️ Audio data dropped for %s - channel full", privacy.SanitizeRTSPUrl(s.url))
-		
+
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("audio processing channel full, data being dropped").
 			Component("ffmpeg-stream").
@@ -760,13 +760,13 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	s.restartCountMu.Lock()
 	s.restartCount++
 	currentRestartCount := s.restartCount
-	
+
 	// Cap the exponent to prevent integer overflow
 	exponent := s.restartCount - 1
 	if exponent > maxBackoffExponent {
 		exponent = maxBackoffExponent
 	}
-	
+
 	backoff := s.backoffDuration * time.Duration(1<<uint(exponent))
 	if backoff > s.maxBackoff {
 		backoff = s.maxBackoff
@@ -860,13 +860,13 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	// Get configurable thresholds
 	settings := conf.Setting()
 	healthyDataThreshold := time.Duration(settings.Realtime.RTSP.Health.HealthyDataThreshold) * time.Second
-	
+
 	// Validate threshold: must be positive and within reasonable limits (max 30 minutes)
 	const maxHealthyDataThreshold = 30 * time.Minute
 	if healthyDataThreshold <= 0 || healthyDataThreshold > maxHealthyDataThreshold {
 		healthyDataThreshold = defaultHealthyDataThreshold
 	}
-	
+
 	// Consider unhealthy if no data for configured threshold
 	isHealthy := time.Since(lastData) < healthyDataThreshold
 	// Stream is receiving data if we got data within the threshold
@@ -968,7 +968,7 @@ func (s *FFmpegStream) recordFailure() {
 			"component", "ffmpeg-stream")
 		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures",
 			privacy.SanitizeRTSPUrl(s.url), s.consecutiveFailures)
-		
+
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("RTSP stream circuit breaker opened after %d consecutive failures", s.consecutiveFailures).
 			Component("ffmpeg-stream").
