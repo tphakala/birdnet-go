@@ -191,73 +191,77 @@ func TestRecorderWithRealMetrics(t *testing.T) {
 // BenchmarkTestRecorder benchmarks the TestRecorder implementation.
 func BenchmarkTestRecorder(b *testing.B) {
 	b.Run("RecordOperation", func(b *testing.B) {
-		// Setup: create a fresh recorder for each benchmark
+		b.StopTimer() // Stop timer before setup
+		
+		// Setup: create a fresh recorder for each run
 		recorder := NewTestRecorder()
 		
-		// Reset timer after setup
-		b.ResetTimer()
+		b.StartTimer() // Start timer after setup is complete
 		
 		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			recorder.RecordOperation("bench", "success")
 		}
 		
-		// Cleanup would go here if needed
-		b.StopTimer()
+		b.StopTimer() // Stop timer before any cleanup
 	})
 
 	b.Run("RecordDuration", func(b *testing.B) {
+		b.StopTimer() // Stop timer before setup
+		
 		// Setup: create a fresh recorder
 		recorder := NewTestRecorder()
 		
-		// Reset timer after setup
-		b.ResetTimer()
+		b.StartTimer() // Start timer after setup
 		
 		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			recorder.RecordDuration("bench", 0.123)
 		}
 		
-		b.StopTimer()
+		b.StopTimer() // Stop timer after benchmark
 	})
 
 	b.Run("RecordError", func(b *testing.B) {
+		b.StopTimer() // Stop timer before setup
+		
 		// Setup: create a fresh recorder
 		recorder := NewTestRecorder()
 		
-		// Reset timer after setup
-		b.ResetTimer()
+		b.StartTimer() // Start timer after setup
 		
 		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			recorder.RecordError("bench", "error")
 		}
 		
-		b.StopTimer()
+		b.StopTimer() // Stop timer after benchmark
 	})
 
 	b.Run("GetOperationCount", func(b *testing.B) {
+		b.StopTimer() // Stop timer before setup
+		
 		// Setup: create and populate recorder
 		recorder := NewTestRecorder()
 		recorder.RecordOperation("bench", "success")
 		
-		// Reset timer after setup
-		b.ResetTimer()
+		b.StartTimer() // Start timer after all setup is complete
 		
 		// Run the benchmark
 		for i := 0; i < b.N; i++ {
 			_ = recorder.GetOperationCount("bench", "success")
 		}
 		
-		b.StopTimer()
+		b.StopTimer() // Stop timer after benchmark
 	})
 	
 	b.Run("ConcurrentOperations", func(b *testing.B) {
+		b.StopTimer() // Stop timer before setup
+		
 		// Setup: create a fresh recorder
 		recorder := NewTestRecorder()
 		
-		// Reset timer after setup
-		b.ResetTimer()
+		b.StartTimer() // Start timer after setup
 		
 		// Run concurrent operations
 		b.RunParallel(func(pb *testing.PB) {
@@ -266,7 +270,26 @@ func BenchmarkTestRecorder(b *testing.B) {
 			}
 		})
 		
-		b.StopTimer()
+		b.StopTimer() // Stop timer after benchmark
+	})
+	
+	// Benchmark with recorder reset between iterations
+	b.Run("RecordOperationWithReset", func(b *testing.B) {
+		b.StopTimer() // Stop timer before setup
+		
+		// Create recorder once
+		recorder := NewTestRecorder()
+		
+		// Run the benchmark with reset
+		for i := 0; i < b.N; i++ {
+			b.StopTimer() // Stop timer before reset
+			recorder.Reset() // Reset state between iterations
+			b.StartTimer() // Restart timer after reset
+			
+			recorder.RecordOperation("bench", "success")
+		}
+		
+		b.StopTimer() // Final stop
 	})
 }
 
