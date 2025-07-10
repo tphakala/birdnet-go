@@ -29,9 +29,11 @@ type CaptureBuffer struct {
 
 // map to store audio buffers for each audio source
 var (
-	captureBuffers map[string]*CaptureBuffer
-	cbMutex        sync.RWMutex            // Mutex to protect access to the captureBuffers map
-	captureMetrics *metrics.MyAudioMetrics // Global metrics instance for capture buffer operations
+	captureBuffers      map[string]*CaptureBuffer
+	cbMutex             sync.RWMutex            // Mutex to protect access to the captureBuffers map
+	captureMetrics      *metrics.MyAudioMetrics // Global metrics instance for capture buffer operations
+	captureMetricsMutex sync.RWMutex            // Mutex for thread-safe access to captureMetrics
+	captureMetricsOnce  sync.Once               // Ensures metrics are only set once
 )
 
 // init initializes the audioBuffers map
@@ -39,9 +41,22 @@ func init() {
 	captureBuffers = make(map[string]*CaptureBuffer)
 }
 
-// SetCaptureMetrics sets the metrics instance for capture buffer operations
+// SetCaptureMetrics sets the metrics instance for capture buffer operations.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
 func SetCaptureMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	captureMetrics = myAudioMetrics
+	captureMetricsOnce.Do(func() {
+		captureMetricsMutex.Lock()
+		defer captureMetricsMutex.Unlock()
+		captureMetrics = myAudioMetrics
+	})
+}
+
+// getCaptureMetrics returns the current metrics instance in a thread-safe manner
+func getCaptureMetrics() *metrics.MyAudioMetrics {
+	captureMetricsMutex.RLock()
+	defer captureMetricsMutex.RUnlock()
+	return captureMetrics
 }
 
 // AllocateCaptureBufferIfNeeded checks if a buffer exists and only allocates if needed.
@@ -79,8 +94,8 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 	start := time.Now()
 	
 	// Track allocation attempt
-	if captureMetrics != nil {
-		captureMetrics.RecordBufferAllocationAttempt("capture", source, "attempted")
+	if m := getCaptureMetrics(); m != nil {
+		m.RecordBufferAllocationAttempt("capture", source, "attempted")
 	}
 
 	// Validate inputs
@@ -93,10 +108,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("duration_seconds", durationSeconds).
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", source, "error")
-			captureMetrics.RecordBufferAllocationError("capture", source, "invalid_duration")
-			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", source, "error")
+			m.RecordBufferAllocationError("capture", source, "invalid_duration")
+			m.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -109,10 +124,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("sample_rate", sampleRate).
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", source, "error")
-			captureMetrics.RecordBufferAllocationError("capture", source, "invalid_sample_rate")
-			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", source, "error")
+			m.RecordBufferAllocationError("capture", source, "invalid_sample_rate")
+			m.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -125,10 +140,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("bytes_per_sample", bytesPerSample).
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", source, "error")
-			captureMetrics.RecordBufferAllocationError("capture", source, "invalid_bytes_per_sample")
-			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", source, "error")
+			m.RecordBufferAllocationError("capture", source, "invalid_bytes_per_sample")
+			m.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -139,10 +154,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("operation", "allocate_capture_buffer").
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", "unknown", "error")
-			captureMetrics.RecordBufferAllocationError("capture", "unknown", "empty_source")
-			captureMetrics.RecordBufferAllocationAttempt("capture", "unknown", "error")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", "unknown", "error")
+			m.RecordBufferAllocationError("capture", "unknown", "empty_source")
+			m.RecordBufferAllocationAttempt("capture", "unknown", "error")
 		}
 		return enhancedErr
 	}
@@ -162,10 +177,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("max_allowed_size", 1<<30).
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", source, "error")
-			captureMetrics.RecordBufferAllocationError("capture", source, "size_too_large")
-			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", source, "error")
+			m.RecordBufferAllocationError("capture", source, "size_too_large")
+			m.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -182,10 +197,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("buffer_size", alignedBufferSize).
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", source, "error")
-			captureMetrics.RecordBufferAllocationError("capture", source, "creation_failed")
-			captureMetrics.RecordBufferAllocationAttempt("capture", source, "error")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", source, "error")
+			m.RecordBufferAllocationError("capture", source, "creation_failed")
+			m.RecordBufferAllocationAttempt("capture", source, "error")
 		}
 		return enhancedErr
 	}
@@ -206,10 +221,10 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 			Context("source", source).
 			Build()
 
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferAllocation("capture", source, "error")
-			captureMetrics.RecordBufferAllocationError("capture", source, "already_exists")
-			captureMetrics.RecordBufferAllocationAttempt("capture", source, "repeated_blocked")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferAllocation("capture", source, "error")
+			m.RecordBufferAllocationError("capture", source, "already_exists")
+			m.RecordBufferAllocationAttempt("capture", source, "repeated_blocked")
 		}
 		return enhancedErr
 	}
@@ -217,15 +232,15 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 	captureBuffers[source] = cb
 
 	// Record successful allocation metrics
-	if captureMetrics != nil {
+	if m := getCaptureMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		captureMetrics.RecordBufferAllocation("capture", source, "success")
-		captureMetrics.RecordBufferAllocationDuration("capture", source, duration)
-		captureMetrics.RecordBufferAllocationAttempt("capture", source, "first_allocation")
-		captureMetrics.RecordBufferAllocationSize("capture", source, alignedBufferSize)
-		captureMetrics.UpdateBufferCapacity("capture", source, alignedBufferSize)
-		captureMetrics.UpdateBufferSize("capture", source, 0) // Empty at start
-		captureMetrics.UpdateBufferUtilization("capture", source, 0.0)
+		m.RecordBufferAllocation("capture", source, "success")
+		m.RecordBufferAllocationDuration("capture", source, duration)
+		m.RecordBufferAllocationAttempt("capture", source, "first_allocation")
+		m.RecordBufferAllocationSize("capture", source, alignedBufferSize)
+		m.UpdateBufferCapacity("capture", source, alignedBufferSize)
+		m.UpdateBufferSize("capture", source, 0) // Empty at start
+		m.UpdateBufferUtilization("capture", source, 0.0)
 	}
 
 	return nil
@@ -342,8 +357,8 @@ func (cb *CaptureBuffer) Write(data []byte) {
 		}
 
 		// Record audio data validation error
-		if captureMetrics != nil {
-			captureMetrics.RecordAudioDataValidationError(cb.source, "alignment")
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordAudioDataValidationError(cb.source, "alignment")
 		}
 	}
 
@@ -363,16 +378,16 @@ func (cb *CaptureBuffer) Write(data []byte) {
 	cb.writeIndex = (cb.writeIndex + bytesWritten) % cb.bufferSize
 
 	// Record metrics for buffer write
-	if captureMetrics != nil {
+	if m := getCaptureMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		captureMetrics.RecordBufferWrite("capture", cb.source, "success")
-		captureMetrics.RecordBufferWriteDuration("capture", cb.source, duration)
-		captureMetrics.RecordBufferWriteBytes("capture", cb.source, bytesWritten)
+		m.RecordBufferWrite("capture", cb.source, "success")
+		m.RecordBufferWriteDuration("capture", cb.source, duration)
+		m.RecordBufferWriteBytes("capture", cb.source, bytesWritten)
 
 		// Update buffer utilization
 		utilization := float64(cb.writeIndex) / float64(cb.bufferSize)
-		captureMetrics.UpdateBufferUtilization("capture", cb.source, utilization)
-		captureMetrics.UpdateBufferSize("capture", cb.source, cb.writeIndex)
+		m.UpdateBufferUtilization("capture", cb.source, utilization)
+		m.UpdateBufferSize("capture", cb.source, cb.writeIndex)
 	}
 
 	// Determine if the write operation has overwritten old data.
@@ -384,8 +399,8 @@ func (cb *CaptureBuffer) Write(data []byte) {
 		}
 
 		// Record buffer wraparound
-		if captureMetrics != nil {
-			captureMetrics.RecordBufferWraparound("capture", cb.source)
+		if m := getCaptureMetrics(); m != nil {
+			m.RecordBufferWraparound("capture", cb.source)
 		}
 	}
 }
@@ -422,9 +437,9 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 					Context("buffer_duration_seconds", cb.bufferDuration.Seconds()).
 					Build()
 
-				if captureMetrics != nil {
-					captureMetrics.RecordCaptureBufferSegmentRead(cb.source, "error")
-					captureMetrics.RecordCaptureBufferTimestampError(cb.source, "outside_timeframe")
+				if m := getCaptureMetrics(); m != nil {
+					m.RecordCaptureBufferSegmentRead(cb.source, "error")
+					m.RecordCaptureBufferTimestampError(cb.source, "outside_timeframe")
 				}
 				return nil, enhancedErr
 			}
@@ -445,9 +460,9 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 				Context("end_offset_seconds", endOffset.Seconds()).
 				Build()
 
-			if captureMetrics != nil {
-				captureMetrics.RecordCaptureBufferSegmentRead(cb.source, "error")
-				captureMetrics.RecordCaptureBufferTimestampError(cb.source, "invalid_duration")
+			if m := getCaptureMetrics(); m != nil {
+				m.RecordCaptureBufferSegmentRead(cb.source, "error")
+				m.RecordCaptureBufferTimestampError(cb.source, "invalid_duration")
 			}
 			return nil, enhancedErr
 		}
@@ -476,11 +491,11 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 			cb.lock.Unlock()
 
 			// Record successful read metrics
-			if captureMetrics != nil {
+			if m := getCaptureMetrics(); m != nil {
 				totalDuration := time.Since(operationStart).Seconds()
-				captureMetrics.RecordCaptureBufferSegmentRead(cb.source, "success")
-				captureMetrics.RecordCaptureBufferSegmentReadDuration(cb.source, totalDuration)
-				captureMetrics.RecordBufferReadBytes("capture", cb.source, len(segment))
+				m.RecordCaptureBufferSegmentRead(cb.source, "success")
+				m.RecordCaptureBufferSegmentReadDuration(cb.source, totalDuration)
+				m.RecordBufferReadBytes("capture", cb.source, len(segment))
 			}
 
 			return segment, nil
