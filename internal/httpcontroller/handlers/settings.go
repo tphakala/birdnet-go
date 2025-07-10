@@ -148,6 +148,15 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	// Check the authentication settings and update if needed
 	h.updateAuthenticationSettings(settings)
 
+	// Check if telemetry settings have changed
+	if telemetrySettingsChanged(&oldSettings, settings) {
+		h.SSE.SendNotification(Notification{
+			Message: "Reconfiguring telemetry endpoint...",
+			Type:    "info",
+		})
+		h.controlChan <- "reconfigure_telemetry"
+	}
+
 	// Check if audio equalizer settings have changed
 	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, settings.Realtime.Audio.Equalizer) {
 		if err := myaudio.UpdateFilterChain(settings); err != nil {
@@ -849,6 +858,22 @@ func soundLevelSettingsChanged(oldSettings, currentSettings *conf.Settings) bool
 	// Check for changes in interval (only if enabled)
 	if currentSettings.Realtime.Audio.SoundLevel.Enabled &&
 		oldSettings.Realtime.Audio.SoundLevel.Interval != currentSettings.Realtime.Audio.SoundLevel.Interval {
+		return true
+	}
+
+	return false
+}
+
+// telemetrySettingsChanged checks if telemetry/observability settings have changed
+func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in enabled state
+	if oldSettings.Realtime.Telemetry.Enabled != currentSettings.Realtime.Telemetry.Enabled {
+		return true
+	}
+
+	// Check for changes in listen address (only if enabled)
+	if currentSettings.Realtime.Telemetry.Enabled &&
+		oldSettings.Realtime.Telemetry.Listen != currentSettings.Realtime.Telemetry.Listen {
 		return true
 	}
 
