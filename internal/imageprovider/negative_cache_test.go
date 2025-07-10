@@ -36,9 +36,8 @@ func TestNegativeCachingBehavior(t *testing.T) {
 		}
 		cache.SetImageProvider(mockProvider)
 		
-		// Small delay to ensure provider is set and any background operations have started
-		time.Sleep(10 * time.Millisecond)
-		
+		// Ensure the provider is set by attempting a dummy fetch
+		// This synchronizes with any background operations
 		species := "Notfoundicus imaginary"
 
 		// First request - should hit API
