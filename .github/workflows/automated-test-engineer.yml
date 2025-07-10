@@ -28,21 +28,21 @@ jobs:
         run: |
           if [[ -f "/tmp/gotest.log" ]]; then
             echo "Test log found, parsing failures..."
-            
+
             # Extract failing tests
             echo "## Failed Tests" > /tmp/failed-tests.md
             echo "" >> /tmp/failed-tests.md
-            
+
             # Extract package information for labeling
             echo "" > /tmp/affected-packages.txt
-            
+
             # Parse JSON test output for failures
             if command -v jq >/dev/null 2>&1; then
               grep '"Action":"fail"' /tmp/gotest.log | jq -r '
-                select(.Test != null) | 
+                select(.Test != null) |
                 "- **\(.Package)/\(.Test)**: \(.Output // "Test failed")"
               ' | head -20 >> /tmp/failed-tests.md || true
-              
+
               # Extract package names for labeling
               grep '"Action":"fail"' /tmp/gotest.log | jq -r '
                 select(.Test != null) | .Package
@@ -50,7 +50,7 @@ jobs:
             else
               grep -E '"Action":"fail"' /tmp/gotest.log | head -10 >> /tmp/failed-tests.md || true
             fi
-            
+
             # Extract error messages
             echo "" >> /tmp/failed-tests.md
             echo "## Error Details" >> /tmp/failed-tests.md
@@ -58,7 +58,7 @@ jobs:
             echo '```' >> /tmp/failed-tests.md
             grep -A 5 -B 5 "FAIL\|Error\|panic:" /tmp/gotest.log | head -50 >> /tmp/failed-tests.md || true
             echo '```' >> /tmp/failed-tests.md
-            
+
             echo "has_failures=true" >> $GITHUB_OUTPUT
             echo "Found test failures in log"
           else
@@ -93,7 +93,7 @@ jobs:
           if [[ -f "/tmp/failed-tests.md" ]]; then
             FAILURE_DETAILS=$(cat /tmp/failed-tests.md)
           fi
-          
+
           # Create issue with structured failure data
           cat > /tmp/issue-body.md << 'EOF'
           @claude Please analyze and fix the failing unit tests.
@@ -103,16 +103,16 @@ jobs:
           - **Commit**: ${{ github.event.workflow_run.head_sha }}
           - **Branch**: ${{ github.event.workflow_run.head_branch }}
           - **Triggered by**: ${{ github.event.workflow_run.triggering_actor.login }}
-          
+
           EOF
-          
+
           # Add parsed failure details
           if [[ -n "$FAILURE_DETAILS" ]]; then
             echo "$FAILURE_DETAILS" >> /tmp/issue-body.md
           fi
-          
+
           cat >> /tmp/issue-body.md << 'EOF'
-          
+
           ## Instructions for Claude
           Please:
           1. Analyze the failing tests above
@@ -122,16 +122,16 @@ jobs:
           5. Run the tests to verify fixes work
           6. Run golangci-lint to ensure code quality
           7. Create a PR with the fixes
-          
+
           ## Guidelines
           - Use `internal/errors` package for error handling (never standard `errors`)
           - Follow modern Go patterns (no time.Sleep in tests)
-          - Use `t.TempDir()` for temporary directories  
+          - Use `t.TempDir()` for temporary directories
           - Use `t.Parallel()` only when tests are truly independent
           - Structure tests clearly: setup → execution → assertion
           - Only fix failing tests, don't modify working ones
           - Ensure all tests follow the patterns in CLAUDE.md
-          
+
           ## Available Tools
           You have access to:
           - Reading and editing Go test files
@@ -140,11 +140,11 @@ jobs:
           - Searching the codebase with Grep/Glob
           - Creating commits and PRs
           EOF
-          
+
           # Create labels if they don't exist
           gh label create "test-failure" --description "Issues related to failing unit tests" --color "d73a4a" 2>/dev/null || true
           gh label create "automated" --description "Issues created by automated systems" --color "0052cc" 2>/dev/null || true
-          
+
           # Determine package labels from affected packages
           PACKAGE_LABELS="test-failure,automated"
           if [[ -f "/tmp/affected-packages.txt" ]]; then
@@ -179,12 +179,12 @@ jobs:
               fi
             done < /tmp/affected-packages.txt
           fi
-          
+
           # Remove duplicate labels
           PACKAGE_LABELS=$(echo "$PACKAGE_LABELS" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
-          
+
           echo "Applying labels: $PACKAGE_LABELS"
-          
+
           gh issue create \
             --repo ${{ github.repository }} \
             --title "🔴 Unit Tests Failing - Automated Fix Needed" \
@@ -201,7 +201,7 @@ jobs:
           if [[ -f "/tmp/failed-tests.md" ]]; then
             FAILURE_DETAILS=$(cat /tmp/failed-tests.md)
           fi
-          
+
           # Create comment with failure details
           cat > /tmp/comment-body.md << 'EOF'
           🔄 **New Test Failure Detected**
@@ -209,17 +209,17 @@ jobs:
           - **Workflow Run**: ${{ github.event.workflow_run.html_url }}
           - **Commit**: ${{ github.event.workflow_run.head_sha }}
           - **Branch**: ${{ github.event.workflow_run.head_branch }}
-          
+
           EOF
-          
+
           # Add parsed failure details
           if [[ -n "$FAILURE_DETAILS" ]]; then
             echo "$FAILURE_DETAILS" >> /tmp/comment-body.md
           fi
-          
+
           echo "" >> /tmp/comment-body.md
           echo "@claude Please analyze these latest test failures and provide fixes." >> /tmp/comment-body.md
-          
+
           gh issue comment ${{ steps.check-issue.outputs.existing_issue }} \
             --repo ${{ github.repository }} \
             --body-file /tmp/comment-body.md
