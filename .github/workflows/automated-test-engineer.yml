@@ -165,9 +165,7 @@ jobs:
         run: |
           # Check if changes were pushed
           if git ls-remote --heads origin ${{ steps.create-branch.outputs.branch_name }} | grep -q .; then
-            gh pr create \
-              --title "fix: automated fixes for failing unit tests" \
-              --body "$(cat <<'EOF'
+            PR_BODY=$(cat <<'EOF'
 ## Summary
 This PR contains automated fixes for failing unit tests detected in the CI pipeline.
 
@@ -187,7 +185,11 @@ Please review the automated fixes to ensure they:
 
 🤖 Generated with Claude Code
 EOF
-              )" \
+            )
+            
+            gh pr create \
+              --title "fix: automated fixes for failing unit tests" \
+              --body "$PR_BODY" \
               --base main \
               --head ${{ steps.create-branch.outputs.branch_name }}
           else
