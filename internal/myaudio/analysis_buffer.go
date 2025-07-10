@@ -24,14 +24,16 @@ const (
 )
 
 var (
-	overlapSize     int                               // overlapSize is the number of bytes to overlap between chunks
-	readSize        int                               // readSize is the number of bytes to read from the ring buffer
-	analysisBuffers map[string]*ringbuffer.RingBuffer // analysisBuffers is a map to store ring buffers for each audio source
-	prevData        map[string][]byte                 // prevData is a map to store the previous data for each audio source
-	abMutex         sync.RWMutex                      // Mutex to protect access to the analysisBuffers and prevData maps
-	warningCounter  map[string]int
-	analysisMetrics *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
-	readBufferPool  *BufferPool            // Global buffer pool for read operations
+	overlapSize         int                               // overlapSize is the number of bytes to overlap between chunks
+	readSize            int                               // readSize is the number of bytes to read from the ring buffer
+	analysisBuffers     map[string]*ringbuffer.RingBuffer // analysisBuffers is a map to store ring buffers for each audio source
+	prevData            map[string][]byte                 // prevData is a map to store the previous data for each audio source
+	abMutex             sync.RWMutex                      // Mutex to protect access to the analysisBuffers and prevData maps
+	warningCounter      map[string]int
+	analysisMetrics     *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
+	analysisMetricsMutex sync.RWMutex            // Mutex for thread-safe access to analysisMetrics
+	analysisMetricsOnce  sync.Once               // Ensures metrics are only set once
+	readBufferPool      *BufferPool             // Global buffer pool for read operations
 )
 
 // init initializes the warningCounter map
@@ -39,9 +41,21 @@ func init() {
 	warningCounter = make(map[string]int)
 }
 
-// SetAnalysisMetrics sets the metrics instance for analysis buffer operations
+// SetAnalysisMetrics sets the metrics instance for analysis buffer operations.
+// This function is thread-safe and ensures metrics are only set once.
 func SetAnalysisMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	analysisMetrics = myAudioMetrics
+	analysisMetricsOnce.Do(func() {
+		analysisMetricsMutex.Lock()
+		defer analysisMetricsMutex.Unlock()
+		analysisMetrics = myAudioMetrics
+	})
+}
+
+// getAnalysisMetrics returns the current metrics instance in a thread-safe manner
+func getAnalysisMetrics() *metrics.MyAudioMetrics {
+	analysisMetricsMutex.RLock()
+	defer analysisMetricsMutex.RUnlock()
+	return analysisMetrics
 }
 
 // SecondsToBytes converts overlap in seconds to bytes
@@ -64,9 +78,9 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 			Context("requested_capacity", capacity).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferAllocation("analysis", source, "error")
-			analysisMetrics.RecordBufferAllocationError("analysis", source, "invalid_capacity")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferAllocation("analysis", source, "error")
+			m.RecordBufferAllocationError("analysis", source, "invalid_capacity")
 		}
 		return enhancedErr
 	}
@@ -77,9 +91,9 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 			Context("operation", "allocate_analysis_buffer").
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferAllocation("analysis", "unknown", "error")
-			analysisMetrics.RecordBufferAllocationError("analysis", "unknown", "empty_source")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferAllocation("analysis", "unknown", "error")
+			m.RecordBufferAllocationError("analysis", "unknown", "empty_source")
 		}
 		return enhancedErr
 	}
@@ -119,9 +133,9 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 			Context("requested_capacity", capacity).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferAllocation("analysis", source, "error")
-			analysisMetrics.RecordBufferAllocationError("analysis", source, "memory_allocation_failed")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferAllocation("analysis", source, "error")
+			m.RecordBufferAllocationError("analysis", source, "memory_allocation_failed")
 		}
 		return enhancedErr
 	}
@@ -140,9 +154,9 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 			Context("source", source).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferAllocation("analysis", source, "error")
-			analysisMetrics.RecordBufferAllocationError("analysis", source, "already_exists")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferAllocation("analysis", source, "error")
+			m.RecordBufferAllocationError("analysis", source, "already_exists")
 		}
 		return enhancedErr
 	}
@@ -163,13 +177,13 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 	warningCounter[source] = 0
 
 	// Record successful allocation metrics
-	if analysisMetrics != nil {
+	if m := getAnalysisMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		analysisMetrics.RecordBufferAllocation("analysis", source, "success")
-		analysisMetrics.RecordBufferAllocationDuration("analysis", source, duration)
-		analysisMetrics.UpdateBufferCapacity("analysis", source, capacity)
-		analysisMetrics.UpdateBufferSize("analysis", source, 0) // Empty at start
-		analysisMetrics.UpdateBufferUtilization("analysis", source, 0.0)
+		m.RecordBufferAllocation("analysis", source, "success")
+		m.RecordBufferAllocationDuration("analysis", source, duration)
+		m.UpdateBufferCapacity("analysis", source, capacity)
+		m.UpdateBufferSize("analysis", source, 0) // Empty at start
+		m.UpdateBufferUtilization("analysis", source, 0.0)
 	}
 
 	// Log the buffer creation for debugging
@@ -243,9 +257,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 			Context("data_size", len(data)).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferWrite("analysis", stream, "error")
-			analysisMetrics.RecordBufferWriteError("analysis", stream, "buffer_not_found")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferWrite("analysis", stream, "error")
+			m.RecordBufferWriteError("analysis", stream, "buffer_not_found")
 		}
 		return enhancedErr
 	}
@@ -261,9 +275,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 			Context("data_size", len(data)).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferWrite("analysis", stream, "error")
-			analysisMetrics.RecordBufferWriteError("analysis", stream, "zero_capacity")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferWrite("analysis", stream, "error")
+			m.RecordBufferWriteError("analysis", stream, "zero_capacity")
 		}
 		return enhancedErr
 	}
@@ -272,9 +286,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	currentLength := ab.Length()
 	capacityUsed := float64(currentLength) / float64(capacity)
 
-	if analysisMetrics != nil {
-		analysisMetrics.UpdateBufferUtilization("analysis", stream, capacityUsed)
-		analysisMetrics.UpdateBufferSize("analysis", stream, currentLength)
+	if m := getAnalysisMetrics(); m != nil {
+		m.UpdateBufferUtilization("analysis", stream, capacityUsed)
+		m.UpdateBufferSize("analysis", stream, currentLength)
 	}
 
 	if capacityUsed > warningCapacityThreshold {
@@ -284,8 +298,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 				stream, capacityUsed*100, currentLength, capacity)
 		}
 
-		if analysisMetrics != nil && capacityUsed > 0.95 {
-			analysisMetrics.RecordBufferOverflow("analysis", stream)
+		if m := getAnalysisMetrics(); m != nil && capacityUsed > 0.95 {
+			m.RecordBufferOverflow("analysis", stream)
 		}
 	}
 
@@ -298,11 +312,11 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 
 		if err == nil {
 			// Record successful write metrics
-			if analysisMetrics != nil {
+			if m := getAnalysisMetrics(); m != nil {
 				duration := time.Since(start).Seconds()
-				analysisMetrics.RecordBufferWrite("analysis", stream, "success")
-				analysisMetrics.RecordBufferWriteDuration("analysis", stream, duration)
-				analysisMetrics.RecordBufferWriteBytes("analysis", stream, n)
+				m.RecordBufferWrite("analysis", stream, "success")
+				m.RecordBufferWriteDuration("analysis", stream, duration)
+				m.RecordBufferWriteBytes("analysis", stream, n)
 			}
 
 			if n < len(data) {
@@ -310,8 +324,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 				log.Printf("⚠️ Only wrote %d of %d bytes to buffer for stream %s (capacity: %d, free: %d)",
 					n, len(data), stream, capacity, ab.Free())
 
-				if analysisMetrics != nil {
-					analysisMetrics.RecordBufferWrite("analysis", stream, "partial")
+				if m := getAnalysisMetrics(); m != nil {
+					m.RecordBufferWrite("analysis", stream, "partial")
 				}
 			}
 
@@ -325,11 +339,11 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 			stream, ab.Free(), capacity, ab.Length(), len(data))
 
 		// Record retry metrics
-		if analysisMetrics != nil {
+		if m := getAnalysisMetrics(); m != nil {
 			if errors.Is(err, ringbuffer.ErrIsFull) {
-				analysisMetrics.RecordBufferWriteRetry("analysis", stream, "buffer_full")
+				m.RecordBufferWriteRetry("analysis", stream, "buffer_full")
 			} else {
-				analysisMetrics.RecordBufferWriteRetry("analysis", stream, "unexpected_error")
+				m.RecordBufferWriteRetry("analysis", stream, "unexpected_error")
 			}
 		}
 
@@ -352,10 +366,10 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 		stream, maxRetries, len(data), capacity, ab.Length(), ab.Free())
 
 	// Record data drop metrics
-	if analysisMetrics != nil {
-		analysisMetrics.RecordBufferWrite("analysis", stream, "error")
-		analysisMetrics.RecordBufferWriteError("analysis", stream, "retry_exhausted")
-		analysisMetrics.RecordAnalysisBufferDataDrop(stream, "retry_exhausted")
+	if m := getAnalysisMetrics(); m != nil {
+		m.RecordBufferWrite("analysis", stream, "error")
+		m.RecordBufferWriteError("analysis", stream, "retry_exhausted")
+		m.RecordAnalysisBufferDataDrop(stream, "retry_exhausted")
 	}
 
 	enhancedErr := errors.New(lastErr).
@@ -391,9 +405,9 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			Context("stream", stream).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferRead("analysis", stream, "error")
-			analysisMetrics.RecordBufferReadError("analysis", stream, "buffer_not_found")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferRead("analysis", stream, "error")
+			m.RecordBufferReadError("analysis", stream, "buffer_not_found")
 		}
 		return nil, enhancedErr
 	}
@@ -402,9 +416,9 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 	bytesWritten := ab.Length() - ab.Free()
 	if bytesWritten < readSize {
 		// Not enough data available - record metrics but return nil (not an error)
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferRead("analysis", stream, "insufficient_data")
-			analysisMetrics.RecordBufferUnderrun("analysis", stream)
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferRead("analysis", stream, "insufficient_data")
+			m.RecordBufferUnderrun("analysis", stream)
 		}
 		return nil, nil
 	}
@@ -432,9 +446,9 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			Context("buffer_free", ab.Free()).
 			Build()
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferRead("analysis", stream, "error")
-			analysisMetrics.RecordBufferReadError("analysis", stream, "read_failed")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferRead("analysis", stream, "error")
+			m.RecordBufferReadError("analysis", stream, "read_failed")
 		}
 		
 		// Return buffer to pool on error
@@ -459,11 +473,11 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 		fullData = fullData[:conf.BufferSize]
 
 		// Record successful read metrics
-		if analysisMetrics != nil {
+		if m := getAnalysisMetrics(); m != nil {
 			duration := time.Since(start).Seconds()
-			analysisMetrics.RecordBufferRead("analysis", stream, "success")
-			analysisMetrics.RecordBufferReadDuration("analysis", stream, duration)
-			analysisMetrics.RecordBufferReadBytes("analysis", stream, len(fullData))
+			m.RecordBufferRead("analysis", stream, "success")
+			m.RecordBufferReadDuration("analysis", stream, duration)
+			m.RecordBufferReadBytes("analysis", stream, len(fullData))
 		}
 
 		//log.Printf("✅ Read %d bytes from analysis buffer for stream %s", len(fullData), stream)
@@ -472,8 +486,8 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 		// If there isn't enough data even after appending, update prevData and return nil
 		prevData[stream] = fullData
 
-		if analysisMetrics != nil {
-			analysisMetrics.RecordBufferRead("analysis", stream, "insufficient_data")
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferRead("analysis", stream, "insufficient_data")
 		}
 		return nil, nil
 	}
@@ -504,8 +518,8 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 			if err != nil {
 				log.Printf("❌ Buffer read error: %v", err)
 
-				if analysisMetrics != nil {
-					analysisMetrics.RecordAnalysisBufferPoll(source, "error")
+				if m := getAnalysisMetrics(); m != nil {
+					m.RecordAnalysisBufferPoll(source, "error")
 				}
 
 				time.Sleep(1 * time.Second) // Wait for 1 second before trying again
@@ -514,14 +528,14 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 
 			// if buffer has 3 seconds of data, process it
 			if len(data) == conf.BufferSize {
-				if analysisMetrics != nil {
-					analysisMetrics.RecordAnalysisBufferPoll(source, "data_available")
+				if m := getAnalysisMetrics(); m != nil {
+					m.RecordAnalysisBufferPoll(source, "data_available")
 				}
 
 				/*if err := validatePCMData(data); err != nil {
 					log.Printf("Invalid PCM data for source %s: %v", source, err)
-					if analysisMetrics != nil {
-						analysisMetrics.RecordAudioDataValidationError(source, "pcm_validation")
+					if m := getAnalysisMetrics(); m != nil {
+						m.RecordAudioDataValidationError(source, "pcm_validation")
 					}
 					continue
 				}*/
@@ -533,16 +547,16 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 				//log.Printf("Processing data for source %s", source)
 				err := ProcessData(bn, data, startTime, source)
 
-				if analysisMetrics != nil {
+				if m := getAnalysisMetrics(); m != nil {
 					processingDuration := time.Since(processingStart).Seconds()
-					analysisMetrics.RecordAnalysisBufferProcessingDuration(source, processingDuration)
+					m.RecordAnalysisBufferProcessingDuration(source, processingDuration)
 				}
 
 				if err != nil {
 					log.Printf("❌ Error processing data for source %s: %v", source, err)
 				}
-			} else if analysisMetrics != nil {
-				analysisMetrics.RecordAnalysisBufferPoll(source, "insufficient_data")
+			} else if m := getAnalysisMetrics(); m != nil {
+				m.RecordAnalysisBufferPoll(source, "insufficient_data")
 			}
 		}
 	}
