@@ -4,6 +4,7 @@ package myaudio
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -13,8 +14,10 @@ import (
 )
 
 var (
-	processMetrics *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
-	float32Pool    *Float32Pool            // Global pool for float32 conversion buffers
+	processMetrics      *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
+	processMetricsMutex sync.RWMutex            // Mutex for thread-safe access to processMetrics
+	processMetricsOnce  sync.Once               // Ensures metrics are only set once
+	float32Pool         *Float32Pool            // Global pool for float32 conversion buffers
 )
 
 const (
@@ -23,9 +26,21 @@ const (
 	Float32BufferSize = conf.BufferSize / 2
 )
 
-// SetProcessMetrics sets the metrics instance for audio processing operations
+// SetProcessMetrics sets the metrics instance for audio processing operations.
+// This function is thread-safe and ensures metrics are only set once.
 func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	processMetrics = myAudioMetrics
+	processMetricsOnce.Do(func() {
+		processMetricsMutex.Lock()
+		defer processMetricsMutex.Unlock()
+		processMetrics = myAudioMetrics
+	})
+}
+
+// getProcessMetrics returns the current metrics instance in a thread-safe manner
+func getProcessMetrics() *metrics.MyAudioMetrics {
+	processMetricsMutex.RLock()
+	defer processMetricsMutex.RUnlock()
+	return processMetrics
 }
 
 // InitFloat32Pool initializes the global float32 pool for audio conversion.
