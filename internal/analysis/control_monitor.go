@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +54,7 @@ type ControlMonitor struct {
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics) *ControlMonitor {
 	return &ControlMonitor{
 		wg:                     wg,
 		controlChan:            controlChan,
@@ -65,6 +67,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		proc:                   proc,
 		bn:                     proc.Bn,
 		soundLevelPublishersWg: &sync.WaitGroup{},
+		metrics:                metrics,
 	}
 }
 
@@ -76,12 +79,27 @@ func (cm *ControlMonitor) Start() {
 	go cm.monitor()
 }
 
-// initializeTelemetryIfEnabled starts the telemetry endpoint if it's enabled in settings
+// initializeTelemetryIfEnabled starts the telemetry endpoint if it's enabled in settings.
+// Telemetry endpoint initialization is handled by control monitor to support hot reload,
+// unlike other endpoints that start directly in realtime.go. This allows users to
+// dynamically enable/disable metrics without restarting the application.
 func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
+	// Check if metrics is available
+	if cm.metrics == nil {
+		log.Printf("⚠️ Warning: Metrics not initialized, skipping telemetry endpoint initialization")
+		return
+	}
+	
 	settings := conf.Setting()
 	if settings.Realtime.Telemetry.Enabled {
 		cm.telemetryEndpointMutex.Lock()
 		defer cm.telemetryEndpointMutex.Unlock()
+		
+		// Validate listen address format
+		if err := cm.validateListenAddress(settings.Realtime.Telemetry.Listen); err != nil {
+			log.Printf("⚠️ Warning: Invalid telemetry listen address: %v", err)
+			return
+		}
 		
 		// Create quit channel
 		cm.telemetryQuitChan = make(chan struct{})
@@ -435,6 +453,14 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 // handleReconfigureTelemetry reconfigures the telemetry/metrics endpoint
 func (cm *ControlMonitor) handleReconfigureTelemetry() {
 	log.Printf("🔄 Reconfiguring telemetry endpoint...")
+	
+	// Check if metrics is available
+	if cm.metrics == nil {
+		log.Printf("❌ Error: Metrics not initialized")
+		cm.notifyError("Failed to reconfigure telemetry", fmt.Errorf("metrics not initialized"))
+		return
+	}
+	
 	settings := conf.Setting()
 
 	// Lock the mutex to ensure thread-safe access
@@ -454,6 +480,13 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 
 	// If telemetry is enabled, start new endpoint
 	if settings.Realtime.Telemetry.Enabled {
+		// Validate listen address format
+		if err := cm.validateListenAddress(settings.Realtime.Telemetry.Listen); err != nil {
+			log.Printf("❌ Invalid telemetry listen address: %v", err)
+			cm.notifyError("Invalid telemetry listen address", err)
+			return
+		}
+		
 		// Create quit channel for the new endpoint
 		cm.telemetryQuitChan = make(chan struct{})
 		
@@ -462,6 +495,7 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		if err != nil {
 			log.Printf("❌ Error initializing telemetry endpoint: %v", err)
 			cm.notifyError("Failed to initialize telemetry endpoint", err)
+			cm.telemetryQuitChan = nil  // Clean up the channel on error
 			return
 		}
 
@@ -475,4 +509,30 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		log.Printf("✅ Telemetry endpoint disabled")
 		cm.notifySuccess("Telemetry endpoint disabled")
 	}
+}
+
+// validateListenAddress checks if the listen address is in a valid format
+func (cm *ControlMonitor) validateListenAddress(address string) error {
+	if address == "" {
+		return fmt.Errorf("listen address cannot be empty")
+	}
+	
+	// Check if it contains a colon (for port)
+	if !strings.Contains(address, ":") {
+		return fmt.Errorf("listen address must include port (e.g., '0.0.0.0:8090')")
+	}
+	
+	// Split and validate components
+	parts := strings.Split(address, ":")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid address format, expected 'host:port'")
+	}
+	
+	// Validate port is numeric
+	port := parts[1]
+	if _, err := strconv.Atoi(port); err != nil {
+		return fmt.Errorf("invalid port number: %s", port)
+	}
+	
+	return nil
 }
