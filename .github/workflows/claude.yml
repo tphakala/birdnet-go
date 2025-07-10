@@ -49,14 +49,56 @@ jobs:
           # Optional: Trigger when specific user is assigned to an issue
           # assignee_trigger: "claude-bot"
           
-          # Optional: Allow Claude to run specific commands
-          # allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
+          # Allow Claude to run Go testing and development commands
+          allowed_tools: |
+            Bash(go test *)
+            Bash(go build *)
+            Bash(go mod *)
+            Bash(golangci-lint run *)
+            Bash(make *)
+            Bash(git *)
+            Read(*_test.go)
+            Edit(*_test.go)
+            MultiEdit(*_test.go)
+            Write(*_test.go)
+            Grep(*.go)
+            Glob(**/*_test.go)
+            Glob(**/*.go)
           
-          # Optional: Add custom instructions for Claude to customize its behavior for your project
-          # custom_instructions: |
-          #   Follow our coding standards
-          #   Ensure all new code has tests
-          #   Use TypeScript for new files
+          # Add Go and BirdNET-Go specific instructions
+          custom_instructions: |
+            You are working on BirdNET-Go, a Go implementation of BirdNET for real-time bird sound identification.
+            
+            ## Critical Rules
+            - **ALWAYS use `internal/errors` package** (never standard `errors`)
+            - **Run `golangci-lint run -v` before EVERY commit**
+            - **Follow all guidelines in CLAUDE.md exactly**
+            
+            ## Testing Guidelines
+            - Use `t.TempDir()` for temporary directories (automatic cleanup)
+            - Use `t.Parallel()` only when tests are truly independent
+            - Avoid `time.Sleep()` - use channels/synchronization instead
+            - Structure tests: setup → execution → assertion
+            - Use table-driven tests with `t.Run()` for comprehensive coverage
+            
+            ## Error Handling
+            - Always use `internal/errors` package
+            - Wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
+            - Specify `.Component()` and `.Category()` for telemetry
+            
+            ## Code Quality
+            - Use modern Go patterns (any instead of interface{})
+            - Use standard library first before external dependencies
+            - Follow security best practices
+            - Validate all user input
+            - Use `for i := range n` for Go 1.22+ patterns
+            
+            ## When fixing tests
+            - Focus ONLY on failing tests
+            - Read the test failure details carefully
+            - Understand the root cause before fixing
+            - Verify fixes by running tests
+            - Ensure fixes follow project patterns
           
           # Optional: Custom environment variables for Claude
           # claude_env: |
