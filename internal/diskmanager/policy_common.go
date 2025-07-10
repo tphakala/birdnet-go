@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -22,7 +23,11 @@ var (
 	serviceLogger   *slog.Logger
 	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
 	closeLogger     func() error
+	
+	// Thread-safe diskMetrics with explicit synchronization
 	diskMetrics     *metrics.DiskManagerMetrics // Package-level metrics
+	diskMetricsMu   sync.RWMutex                // Protects diskMetrics access
+	metricsInitOnce sync.Once                   // Ensures SetMetrics is called only once
 )
 
 func init() {
@@ -50,15 +55,29 @@ func GetLogger() *slog.Logger {
 	return serviceLogger
 }
 
-// SetMetrics sets the metrics instance for the diskmanager package
+// SetMetrics sets the metrics instance for the diskmanager package.
+// This function is thread-safe and ensures metrics are set only once.
+// Subsequent calls will be ignored to prevent race conditions.
 func SetMetrics(m *metrics.DiskManagerMetrics) {
-	diskMetrics = m
+	metricsInitOnce.Do(func() {
+		diskMetricsMu.Lock()
+		defer diskMetricsMu.Unlock()
+		diskMetrics = m
+	})
+}
+
+// getMetrics safely returns the current metrics instance.
+// This function is thread-safe and returns nil if metrics haven't been initialized.
+func getMetrics() *metrics.DiskManagerMetrics {
+	diskMetricsMu.RLock()
+	defer diskMetricsMu.RUnlock()
+	return diskMetrics
 }
 
 // updateDiskUsageMetrics updates disk usage metrics if metrics are available
 func updateDiskUsageMetrics(info DiskSpaceInfo) {
-	if diskMetrics != nil {
-		diskMetrics.UpdateDiskUsage(info.UsedBytes, info.TotalBytes)
+	if m := getMetrics(); m != nil {
+		m.UpdateDiskUsage(info.UsedBytes, info.TotalBytes)
 	}
 }
 
@@ -168,8 +187,8 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 		"species", file.Species)
 
 	// Record metrics before attempting deletion
-	if diskMetrics != nil {
-		diskMetrics.RecordFileProcessed(policy, "delete_attempt")
+	if m := getMetrics(); m != nil {
+		m.RecordFileProcessed(policy, "delete_attempt")
 	}
 
 	err := os.Remove(file.Path)
@@ -192,9 +211,9 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 			"error_category", enhancedErr.GetCategory())
 
 		// Record error metrics
-		if diskMetrics != nil {
-			diskMetrics.RecordCleanupError(policy, "file_deletion")
-			diskMetrics.RecordFileProcessed(policy, "error")
+		if m := getMetrics(); m != nil {
+			m.RecordCleanupError(policy, "file_deletion")
+			m.RecordFileProcessed(policy, "error")
 		}
 
 		return enhancedErr
@@ -208,10 +227,10 @@ func deleteAudioFile(file *FileInfo, debug bool, policy string) error {
 		"path", file.Path)
 
 	// Record successful deletion metrics
-	if diskMetrics != nil {
-		diskMetrics.RecordFilesDeleted(policy, 1)
-		diskMetrics.RecordBytesFreed(policy, float64(file.Size))
-		diskMetrics.RecordFileProcessed(policy, "deleted")
+	if m := getMetrics(); m != nil {
+		m.RecordFilesDeleted(policy, 1)
+		m.RecordBytesFreed(policy, float64(file.Size))
+		m.RecordFileProcessed(policy, "deleted")
 	}
 
 	return nil
@@ -241,9 +260,9 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 	// Delete the audio file (reuse common helper)
 	if err := deleteAudioFile(file, debug, policy); err != nil {
 		// Record timing for failed operations
-		if diskMetrics != nil {
+		if m := getMetrics(); m != nil {
 			duration := time.Since(startTime).Seconds()
-			diskMetrics.RecordCleanupDuration(policy, duration)
+			m.RecordCleanupDuration(policy, duration)
 		}
 		return err // Enhanced error already created in deleteAudioFile
 	}
@@ -286,8 +305,8 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 					"error_category", enhancedErr.GetCategory())
 
 				// Record spectrogram deletion error
-				if diskMetrics != nil {
-					diskMetrics.RecordCleanupError(policy, "spectrogram_deletion")
+				if m := getMetrics(); m != nil {
+					m.RecordCleanupError(policy, "spectrogram_deletion")
 				}
 			}
 		} else {
@@ -324,8 +343,8 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 					"error_category", enhancedErr.GetCategory())
 
 				// Record spectrogram deletion error
-				if diskMetrics != nil {
-					diskMetrics.RecordCleanupError(policy, "spectrogram_deletion")
+				if m := getMetrics(); m != nil {
+					m.RecordCleanupError(policy, "spectrogram_deletion")
 				}
 			}
 		} else {
@@ -342,16 +361,16 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 		}
 
 		// Record spectrogram deletion metrics
-		if diskMetrics != nil && spectrogramsDeleted > 0 {
-			diskMetrics.RecordFilesDeleted(policy, float64(spectrogramsDeleted))
+		if m := getMetrics(); m != nil && spectrogramsDeleted > 0 {
+			m.RecordFilesDeleted(policy, float64(spectrogramsDeleted))
 			// Note: We don't know spectrogram file sizes, so bytes freed is only for audio files
 		}
 	}
 
 	// Record operation timing
-	if diskMetrics != nil {
+	if m := getMetrics(); m != nil {
 		duration := time.Since(startTime).Seconds()
-		diskMetrics.RecordCleanupDuration(policy, duration)
+		m.RecordCleanupDuration(policy, duration)
 	}
 
 	serviceLogger.Info("File deletion completed",
@@ -386,9 +405,9 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 		"max_errors", maxErrors)
 
 	// Record error metrics
-	if diskMetrics != nil {
-		diskMetrics.RecordCleanupError(policy, "loop_error")
-		diskMetrics.RecordFileProcessed(policy, "error")
+	if m := getMetrics(); m != nil {
+		m.RecordCleanupError(policy, "loop_error")
+		m.RecordFileProcessed(policy, "error")
 	}
 
 	if *errorCount > maxErrors {
@@ -418,8 +437,8 @@ func handleDeletionErrorInLoop(filePath string, delErr error, errorCount *int, m
 			"enhanced_error_category", categoryForLog)
 
 		// Record critical error metric
-		if diskMetrics != nil {
-			diskMetrics.RecordCleanupError(policy, "too_many_errors")
+		if m := getMetrics(); m != nil {
+			m.RecordCleanupError(policy, "too_many_errors")
 		}
 
 		return true, loopErr // Stop processing
