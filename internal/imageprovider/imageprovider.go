@@ -64,9 +64,14 @@ func (b *BirdImage) GetTTL() time.Duration {
 }
 
 // BirdImageCache represents a cache for storing and retrieving bird images.
+// 
+// Thread Safety: BirdImageCache is safe for concurrent use. The provider field can be
+// changed at runtime using SetImageProvider/SetNonBirdImageProvider methods, and is
+// protected using atomic operations. This is necessary because a background refresh
+// goroutine may be accessing the provider while tests or other code changes it.
 type BirdImageCache struct {
-	provider     ImageProvider
-	providerName string // Added: Name of the provider (e.g., "wikimedia")
+	provider     atomic.Pointer[ImageProvider] // Atomic pointer for lock-free concurrent access
+	providerName string                        // Added: Name of the provider (e.g., "wikimedia")
 	dataMap      sync.Map
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
@@ -116,13 +121,13 @@ func (l *emptyImageProvider) Fetch(scientificName string) (BirdImage, error) {
 // SetNonBirdImageProvider allows setting a custom ImageProvider for non-bird entries
 func (c *BirdImageCache) SetNonBirdImageProvider(provider ImageProvider) {
 	imageProviderLogger.Debug("Setting non-bird image provider", "provider_type", fmt.Sprintf("%T", provider))
-	c.provider = provider
+	c.provider.Store(&provider)
 }
 
 // SetImageProvider allows setting a custom ImageProvider for testing purposes.
 func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 	imageProviderLogger.Debug("Setting image provider (test override)", "provider_type", fmt.Sprintf("%T", provider))
-	c.provider = provider
+	c.provider.Store(&provider)
 }
 
 const (
@@ -260,13 +265,15 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	// }
 
 	// Check if provider is set
-	if c.provider == nil {
+	providerPtr := c.provider.Load()
+	if providerPtr == nil {
 		logger.Warn("Cannot refresh entry: provider is nil")
 		// if c.debug {
 		// 	log.Printf("Debug: No provider available for %s", scientificName)
 		// }
 		return
 	}
+	provider := *providerPtr
 
 	// Fetch new image with background context to use more restrictive rate limiting
 	logger.Debug("Fetching new image data from provider (background refresh)")
@@ -275,7 +282,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	var birdImage BirdImage
 	var err error
 
-	if ctxProvider, ok := c.provider.(interface {
+	if ctxProvider, ok := provider.(interface {
 		FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error)
 	}); ok {
 		// Use background context for refresh operations
@@ -283,7 +290,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		birdImage, err = ctxProvider.FetchWithContext(ctx, scientificName)
 	} else {
 		// Fallback to regular fetch
-		birdImage, err = c.provider.Fetch(scientificName)
+		birdImage, err = provider.Fetch(scientificName)
 	}
 
 	if err != nil {
@@ -343,7 +350,6 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 
 	quit := make(chan struct{})
 	cache := &BirdImageCache{
-		provider:     e,
 		providerName: providerName, // Set provider name
 		metrics:      t.ImageProvider,
 		debug:        settings.Realtime.Dashboard.Thumbnails.Debug, // Keep for potential checks
@@ -351,6 +357,9 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 		// logger:       log.Default(), // Replaced by package logger
 		quit: quit,
 	}
+	
+	// Store the provider using atomic pointer
+	cache.provider.Store(&e)
 
 	// Load cached images into memory only if store is available
 	if store != nil {
@@ -822,7 +831,9 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 
 	// 2. Not in DB or DB load failed, fetch from the actual provider
 	logger.Info("Image not found in DB cache, fetching from provider")
-	if c.provider == nil {
+	
+	providerPtr := c.provider.Load()
+	if providerPtr == nil {
 		enhancedErr := errors.Newf("image provider for %s is not configured", c.providerName).
 			Component("imageprovider").
 			Category(errors.CategoryImageProvider).
@@ -833,13 +844,14 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		logger.Error("Cannot fetch image: provider is nil", "error", enhancedErr)
 		return BirdImage{}, enhancedErr
 	}
+	provider := *providerPtr
 
 	// Check if this provider is specifically disabled in config
 	// This requires access to the main settings, maybe pass relevant part to InitCache?
 	// For now, assume provider passed to InitCache is enabled.
 
 	providerStart := time.Now()
-	fetchedImage, fetchErr := c.provider.Fetch(scientificName)
+	fetchedImage, fetchErr := provider.Fetch(scientificName)
 	providerDuration := time.Since(providerStart)
 
 	if c.debug && providerDuration > 100*time.Millisecond {
@@ -983,7 +995,9 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Performing direct fetch from provider (bypassing cache checks)")
-	if c.provider == nil {
+	
+	providerPtr := c.provider.Load()
+	if providerPtr == nil {
 		enhancedErr := errors.Newf("image provider %s is not configured", c.providerName).
 			Component("imageprovider").
 			Category(errors.CategoryImageProvider).
@@ -994,8 +1008,9 @@ func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 		logger.Error("Cannot perform direct fetch: provider is nil", "error", enhancedErr)
 		return BirdImage{}, enhancedErr
 	}
+	provider := *providerPtr
 
-	img, err := c.provider.Fetch(scientificName)
+	img, err := provider.Fetch(scientificName)
 	if err != nil {
 		// Check if it's already an enhanced error, if not enhance it
 		var enhancedErr *errors.EnhancedError

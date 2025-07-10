@@ -543,6 +543,8 @@ func TestBirdImageCacheNilStore(t *testing.T) {
 
 // TestBirdImageCacheRefresh tests the cache refresh functionality
 func TestBirdImageCacheRefresh(t *testing.T) {
+	// Note: This test cannot run in parallel because it modifies the provider
+	// after cache creation, which races with the background refresh goroutine
 	t.Log("Starting TestBirdImageCacheRefresh")
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
