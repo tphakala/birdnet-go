@@ -70,7 +70,7 @@ var (
 
 func NewOAuth2Server() *OAuth2Server {
 	// Use the security logger from the start
-	securityLogger.Info("Initializing OAuth2 server")
+	logger().Info("Initializing OAuth2 server")
 	settings := conf.GetSettings()
 	debug := settings.Security.Debug
 
@@ -83,11 +83,11 @@ func NewOAuth2Server() *OAuth2Server {
 
 	// Check Session Secret strength early, regardless of persistence settings
 	if settings.Security.SessionSecret == "" {
-		securityLogger.Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
+		logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
 		// Consider adding a stricter check for production environments, e.g., panic.
 	} else if len(settings.Security.SessionSecret) < 32 {
 		// Check length as a proxy for entropy, 32 bytes is common for session keys
-		securityLogger.Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
+		logger().Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
 	}
 
 	// Pre-parse the Basic Auth Redirect URI
@@ -95,21 +95,21 @@ func NewOAuth2Server() *OAuth2Server {
 		parsedURI, err := url.Parse(settings.Security.BasicAuth.RedirectURI)
 		if err != nil {
 			// Log a critical error if the configured URI is invalid
-			securityLogger.Error("CRITICAL CONFIGURATION ERROR: Failed to parse BasicAuth.RedirectURI. Basic authentication will likely fail.", "uri", settings.Security.BasicAuth.RedirectURI, "error", err)
+			logger().Error("CRITICAL CONFIGURATION ERROR: Failed to parse BasicAuth.RedirectURI. Basic authentication will likely fail.", "uri", settings.Security.BasicAuth.RedirectURI, "error", err)
 			// Set to nil to ensure checks fail later
 			server.ExpectedBasicRedirectURI = nil
 		} else {
 			// Validate that the configured URI doesn't contain query or fragment
 			if parsedURI.RawQuery != "" || parsedURI.Fragment != "" {
-				securityLogger.Error("CRITICAL CONFIGURATION ERROR: BasicAuth.RedirectURI must not contain query parameters or fragments.", "uri", settings.Security.BasicAuth.RedirectURI)
+				logger().Error("CRITICAL CONFIGURATION ERROR: BasicAuth.RedirectURI must not contain query parameters or fragments.", "uri", settings.Security.BasicAuth.RedirectURI)
 				server.ExpectedBasicRedirectURI = nil // Fail validation
 			} else {
 				server.ExpectedBasicRedirectURI = parsedURI
-				securityLogger.Info("Pre-parsed and validated Basic Auth Redirect URI", "uri", parsedURI.String())
+				logger().Info("Pre-parsed and validated Basic Auth Redirect URI", "uri", parsedURI.String())
 			}
 		}
 	} else {
-		securityLogger.Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
+		logger().Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
 	}
 
 	// Initialize Gothic with the provided configuration
@@ -118,21 +118,21 @@ func NewOAuth2Server() *OAuth2Server {
 	// Set up token persistence
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
-		securityLogger.Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
+		logger().Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
 	} else {
 		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
 		server.persistTokens = true
-		securityLogger.Info("Token persistence configured", "file", server.tokensFile)
+		logger().Info("Token persistence configured", "file", server.tokensFile)
 
 		// Ensure the directory exists
 		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
-			securityLogger.Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
+			logger().Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
 			server.persistTokens = false
 		} else {
 			// Load any existing tokens
 			if err := server.loadTokens(context.Background()); err != nil {
 				// Log as Warn, as failure to load old tokens isn't fatal
-				securityLogger.Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
+				logger().Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
 			}
 		}
 	}
@@ -140,36 +140,36 @@ func NewOAuth2Server() *OAuth2Server {
 	// Clean up expired tokens every hour
 	server.StartAuthCleanup(time.Hour)
 
-	securityLogger.Info("OAuth2 server initialization complete")
+	logger().Info("OAuth2 server initialization complete")
 	return server
 }
 
 // InitializeGoth initializes social authentication providers.
 func InitializeGoth(settings *conf.Settings) {
-	securityLogger.Info("Initializing Goth providers")
+	logger().Info("Initializing Goth providers")
 	// Get path for storing sessions
 	var sessionPath string
 
 	if testConfigPath != "" {
-		securityLogger.Info("Using test config path for session storage", "path", testConfigPath)
+		logger().Info("Using test config path for session storage", "path", testConfigPath)
 		// Use test path if set
 		sessionPath = filepath.Join(testConfigPath, "sessions")
 	} else {
 		// Get path for storing sessions
 		configPaths, err := conf.GetDefaultConfigPaths()
 		if err != nil {
-			securityLogger.Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
+			logger().Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
 			// Fallback to in-memory store if config paths can't be retrieved
 			gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 			goto initProviders // Skip filesystem store setup
 		}
 		sessionPath = filepath.Join(configPaths[0], "sessions")
-		securityLogger.Info("Using filesystem session store", "path", sessionPath)
+		logger().Info("Using filesystem session store", "path", sessionPath)
 	}
 
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
-		securityLogger.Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
+		logger().Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
 		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
 	} else {
 		// Create persistent session store with properly sized keys
@@ -196,20 +196,20 @@ func InitializeGoth(settings *conf.Settings) {
 			Secure:   secureCookie,
 			SameSite: http.SameSiteLaxMode,
 		}
-		securityLogger.Info("Filesystem session store configured", "path", sessionPath, "max_age_seconds", maxAge, "secure", secureCookie)
+		logger().Info("Filesystem session store configured", "path", sessionPath, "max_age_seconds", maxAge, "secure", secureCookie)
 
 		// Set reasonable values for session cookie storage
 		maxSize := 1024 * 1024 // 1MB max size
 		store.MaxLength(maxSize)
-		securityLogger.Debug("Set session store max length", "max_bytes", maxSize)
+		logger().Debug("Set session store max length", "max_bytes", maxSize)
 	}
 
 initProviders:
-	securityLogger.Info("Configuring Goth providers")
+	logger().Info("Configuring Goth providers")
 	// Initialize Gothic providers
 	providers := make([]goth.Provider, 0, 2)
 	if settings.Security.GoogleAuth.Enabled && settings.Security.GoogleAuth.ClientID != "" && settings.Security.GoogleAuth.ClientSecret != "" {
-		securityLogger.Info("Enabling Google Auth provider")
+		logger().Info("Enabling Google Auth provider")
 		googleProvider :=
 			gothGoogle.New(settings.Security.GoogleAuth.ClientID,
 				settings.Security.GoogleAuth.ClientSecret,
@@ -219,24 +219,24 @@ initProviders:
 		googleProvider.SetAccessType("offline")
 		providers = append(providers, googleProvider)
 	} else {
-		securityLogger.Info("Google Auth provider disabled or not configured")
+		logger().Info("Google Auth provider disabled or not configured")
 	}
 	if settings.Security.GithubAuth.Enabled && settings.Security.GithubAuth.ClientID != "" && settings.Security.GithubAuth.ClientSecret != "" {
-		securityLogger.Info("Enabling GitHub Auth provider")
+		logger().Info("Enabling GitHub Auth provider")
 		providers = append(providers, github.New(settings.Security.GithubAuth.ClientID,
 			settings.Security.GithubAuth.ClientSecret,
 			settings.Security.GithubAuth.RedirectURI,
 			"user:email", // Scope for email
 		))
 	} else {
-		securityLogger.Info("GitHub Auth provider disabled or not configured")
+		logger().Info("GitHub Auth provider disabled or not configured")
 	}
 
 	if len(providers) > 0 {
 		goth.UseProviders(providers...)
-		securityLogger.Info("Goth providers initialized", "count", len(providers))
+		logger().Info("Goth providers initialized", "count", len(providers))
 	} else {
-		securityLogger.Warn("No Goth providers enabled or configured")
+		logger().Warn("No Goth providers enabled or configured")
 	}
 }
 
@@ -252,19 +252,19 @@ func createSessionKey(seed string) []byte {
 // SetTestConfigPath sets a test path for testing session persistence
 // It should be called before InitializeGoth and reset after the test
 func SetTestConfigPath(path string) {
-	securityLogger.Debug("Setting test config path", "path", path)
+	logger().Debug("Setting test config path", "path", path)
 	testConfigPath = path
 }
 
 func (s *OAuth2Server) UpdateProviders() {
-	securityLogger.Info("Updating Goth providers based on potentially changed settings")
+	logger().Info("Updating Goth providers based on potentially changed settings")
 	InitializeGoth(s.Settings)
 }
 
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	clientIP := net.ParseIP(c.RealIP())
-	logger := securityLogger.With("client_ip", c.RealIP())
+	logger := logger().With("client_ip", c.RealIP())
 	logger.Debug("Checking user authentication status")
 
 	if IsInLocalSubnet(clientIP) {
@@ -350,11 +350,11 @@ func isValidUserId(configuredIds, providedId string) bool {
 
 // GenerateAuthCode generates a new authorization code
 func (s *OAuth2Server) GenerateAuthCode() (string, error) {
-	securityLogger.Debug("Generating new authorization code")
+	logger().Debug("Generating new authorization code")
 	code := make([]byte, 32)
 	_, err := rand.Read(code)
 	if err != nil {
-		securityLogger.Error("Failed to read random bytes for auth code", "error", err)
+		logger().Error("Failed to read random bytes for auth code", "error", err)
 		return "", err
 	}
 	authCode := base64.URLEncoding.EncodeToString(code)
@@ -368,7 +368,7 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 		ExpiresAt: expiresAt,
 	}
 	// Do not log the authCode itself
-	securityLogger.Info("Generated and stored new authorization code", "expires_at", expiresAt)
+	logger().Info("Generated and stored new authorization code", "expires_at", expiresAt)
 	go s.persistTokensIfEnabled() // Persist changes
 	return authCode, nil
 }
@@ -377,7 +377,7 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 // It now accepts a context, although it's not directly used for internal operations yet.
 func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (string, error) {
 	// Do not log the code
-	logger := securityLogger.With("operation", "ExchangeAuthCode")
+	logger := logger().With("operation", "ExchangeAuthCode")
 
 	// Fast-fail if the client already gave up
 	if err := ctx.Err(); err != nil {
@@ -402,7 +402,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	}
 
 	if time.Now().After(authCode.ExpiresAt) {
-		securityLogger.Warn("Authorization code expired", "expired_at", authCode.ExpiresAt)
+		logger.Warn("Authorization code expired", "expired_at", authCode.ExpiresAt)
 		delete(s.authCodes, code)     // Clean up expired code
 		go s.persistTokensIfEnabled() // Persist removal
 		return "", errors.New("authorization code expired")
@@ -412,7 +412,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	tokenBytes := make([]byte, 32)
 	_, err := rand.Read(tokenBytes)
 	if err != nil {
-		securityLogger.Error("Failed to read random bytes for access token", "error", err)
+		logger.Error("Failed to read random bytes for access token", "error", err)
 		return "", err
 	}
 	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
@@ -427,7 +427,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	delete(s.authCodes, code)
 
 	// Do not log the accessToken
-	securityLogger.Info("Exchanged authorization code for new access token", "expires_at", expiresAt)
+	logger.Info("Exchanged authorization code for new access token", "expires_at", expiresAt)
 	go s.persistTokensIfEnabled() // Persist changes
 	return accessToken, nil
 }
@@ -435,29 +435,29 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 // ValidateAccessToken checks if an access token is valid and returns an error if not.
 func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	// Do not log the token
-	securityLogger.Debug("Validating access token")
+	logger().Debug("Validating access token")
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
 	accessToken, ok := s.accessTokens[token]
 	if !ok {
-		securityLogger.Debug("Access token not found")
+		logger().Debug("Access token not found")
 		return ErrTokenNotFound // Return specific error
 	}
 
 	if time.Now().After(accessToken.ExpiresAt) {
-		securityLogger.Debug("Access token expired", "expired_at", accessToken.ExpiresAt)
+		logger().Debug("Access token expired", "expired_at", accessToken.ExpiresAt)
 		// No need to delete here, cleanup routine handles it
 		return ErrTokenExpired // Return specific error
 	}
 
-	securityLogger.Debug("Access token is valid")
+	logger().Debug("Access token is valid")
 	return nil // Return nil on success
 }
 
 // IsAuthenticationEnabled checks if any authentication method is enabled
 func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
-	logger := securityLogger.With("ip", ip)
+	logger := logger().With("ip", ip)
 	logger.Debug("Checking if authentication is enabled for IP")
 	if s.IsRequestFromAllowedSubnet(ip) {
 		logger.Info("Authentication bypassed: request from allowed subnet")
@@ -477,7 +477,7 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 
 // IsRequestFromAllowedSubnet checks if the request IP is within allowed subnets
 func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
-	logger := securityLogger.With("ip", ipStr)
+	logger := logger().With("ip", ipStr)
 	logger.Debug("Checking if IP is in allowed subnet")
 
 	// Check if subnet bypass is enabled first
@@ -554,16 +554,16 @@ func (s *OAuth2Server) persistTokensIfEnabled() {
 // loadTokens loads tokens from the persistence file
 func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	if !s.persistTokens {
-		securityLogger.Debug("Token persistence is disabled, skipping load")
+		logger().Debug("Token persistence is disabled, skipping load")
 		return nil
 	}
 
-	securityLogger.Info("Attempting to load tokens from file", "file", s.tokensFile)
+	logger().Info("Attempting to load tokens from file", "file", s.tokensFile)
 
 	// Check context before potentially long file read
 	select {
 	case <-ctx.Done():
-		securityLogger.Warn("Context cancelled before loading tokens", "error", ctx.Err())
+		logger().Warn("Context cancelled before loading tokens", "error", ctx.Err())
 		return ctx.Err()
 	default:
 	}
@@ -572,15 +572,15 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	data, err := os.ReadFile(s.tokensFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			securityLogger.Info("Token file does not exist, skipping load", "file", s.tokensFile)
+			logger().Info("Token file does not exist, skipping load", "file", s.tokensFile)
 			return nil // Not an error if the file doesn't exist yet
 		}
-		securityLogger.Error("Failed to read token file", "file", s.tokensFile, "error", err)
+		logger().Error("Failed to read token file", "file", s.tokensFile, "error", err)
 		return fmt.Errorf("failed to read token file %s: %w", s.tokensFile, err)
 	}
 
 	if len(data) == 0 {
-		securityLogger.Info("Token file is empty, skipping load", "file", s.tokensFile)
+		logger().Info("Token file is empty, skipping load", "file", s.tokensFile)
 		return nil // Empty file is fine
 	}
 
@@ -591,7 +591,7 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	}
 
 	if err := json.Unmarshal(data, &storedData); err != nil {
-		securityLogger.Error("Failed to unmarshal token data from file", "file", s.tokensFile, "error", err)
+		logger().Error("Failed to unmarshal token data from file", "file", s.tokensFile, "error", err)
 		return fmt.Errorf("failed to unmarshal token data from %s: %w", s.tokensFile, err)
 	}
 
@@ -607,7 +607,7 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 			s.authCodes[code] = authCode
 			loadedAuthCodes++
 		} else {
-			securityLogger.Debug("Ignoring expired auth code during load", "expired_at", authCode.ExpiresAt)
+			logger().Debug("Ignoring expired auth code during load", "expired_at", authCode.ExpiresAt)
 		}
 	}
 
@@ -617,11 +617,11 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 			s.accessTokens[token] = accessToken
 			loadedAccessTokens++
 		} else {
-			securityLogger.Debug("Ignoring expired access token during load", "expired_at", accessToken.ExpiresAt)
+			logger().Debug("Ignoring expired access token during load", "expired_at", accessToken.ExpiresAt)
 		}
 	}
 
-	securityLogger.Info("Successfully loaded tokens from file",
+	logger().Info("Successfully loaded tokens from file",
 		"file", s.tokensFile,
 		"auth_codes_loaded", loadedAuthCodes,
 		"access_tokens_loaded", loadedAccessTokens,
@@ -632,11 +632,11 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 // saveTokens saves the current tokens to the persistence file
 func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	if !s.persistTokens {
-		securityLogger.Debug("Token persistence is disabled, skipping save")
+		logger().Debug("Token persistence is disabled, skipping save")
 		return nil
 	}
 
-	securityLogger.Debug("Attempting to save tokens to file", "file", s.tokensFile)
+	logger().Debug("Attempting to save tokens to file", "file", s.tokensFile)
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -653,7 +653,7 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	// Check context before marshaling/writing
 	select {
 	case <-ctx.Done():
-		securityLogger.Warn("Context cancelled before saving tokens", "error", ctx.Err())
+		logger().Warn("Context cancelled before saving tokens", "error", ctx.Err())
 		return ctx.Err()
 	default:
 	}
@@ -668,25 +668,25 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 
 	data, err := json.MarshalIndent(storedData, "", "  ")
 	if err != nil {
-		securityLogger.Error("Failed to marshal tokens for persistence", "error", err)
+		logger().Error("Failed to marshal tokens for persistence", "error", err)
 		return fmt.Errorf("failed to marshal tokens: %w", err)
 	}
 
 	// Write atomically if possible (write to temp file, then rename)
 	tempFile := s.tokensFile + ".tmp"
 	if err := os.WriteFile(tempFile, data, 0o600); err != nil {
-		securityLogger.Error("Failed to write tokens to temporary file", "file", tempFile, "error", err)
+		logger().Error("Failed to write tokens to temporary file", "file", tempFile, "error", err)
 		return fmt.Errorf("failed to write tokens to temp file %s: %w", tempFile, err)
 	}
 
 	if err := os.Rename(tempFile, s.tokensFile); err != nil {
-		securityLogger.Error("Failed to rename temporary token file to final destination", "temp_file", tempFile, "final_file", s.tokensFile, "error", err)
+		logger().Error("Failed to rename temporary token file to final destination", "temp_file", tempFile, "final_file", s.tokensFile, "error", err)
 		// Attempt to clean up temp file
 		_ = os.Remove(tempFile)
 		return fmt.Errorf("failed to rename temp token file %s to %s: %w", tempFile, s.tokensFile, err)
 	}
 
-	securityLogger.Debug("Successfully saved tokens to file",
+	logger().Debug("Successfully saved tokens to file",
 		"file", s.tokensFile,
 		"auth_codes_saved", len(authCodesCopy),
 		"access_tokens_saved", len(accessTokensCopy),
@@ -696,7 +696,7 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 
 // StartAuthCleanup starts a background goroutine to clean up expired codes and tokens
 func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
-	securityLogger.Info("Starting periodic cleanup of expired tokens and codes", "interval", interval)
+	logger().Info("Starting periodic cleanup of expired tokens and codes", "interval", interval)
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -716,7 +716,7 @@ func (s *OAuth2Server) cleanupExpired() {
 	accessTokensExpired := 0
 	needsSave := false
 
-	securityLogger.Debug("Running cleanup for expired tokens and codes")
+	logger().Debug("Running cleanup for expired tokens and codes")
 
 	for code, authCode := range s.authCodes {
 		if now.After(authCode.ExpiresAt) {
@@ -735,7 +735,7 @@ func (s *OAuth2Server) cleanupExpired() {
 	}
 
 	if authCodesExpired > 0 || accessTokensExpired > 0 {
-		securityLogger.Info("Cleaned up expired entries",
+		logger().Info("Cleaned up expired entries",
 			"auth_codes_removed", authCodesExpired,
 			"access_tokens_removed", accessTokensExpired,
 		)
@@ -743,15 +743,15 @@ func (s *OAuth2Server) cleanupExpired() {
 			go s.persistTokensIfEnabled() // Persist removals in background
 		}
 	} else {
-		securityLogger.Debug("No expired entries found during cleanup")
+		logger().Debug("No expired entries found during cleanup")
 	}
 }
 
 // Debug logs a debug message if debug mode is enabled
-// Deprecated: Use securityLogger.Debug directly
+// Deprecated: Use logger().Debug directly
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {
-		securityLogger.Debug(fmt.Sprintf(format, v...))
+		logger().Debug(fmt.Sprintf(format, v...))
 	}
 }
 
@@ -765,7 +765,7 @@ func (s *OAuth2Server) logThrottledError(key, msg string, err error, interval ti
 	s.mutex.Unlock() // Unlock early before logging
 
 	if !exists || time.Since(lastLogTime) > interval {
-		securityLogger.Error(msg, "key", key, "error", err)
+		logger().Error(msg, "key", key, "error", err)
 		s.mutex.Lock()
 		s.throttledMessages[key] = time.Now()
 		s.mutex.Unlock()

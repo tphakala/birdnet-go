@@ -18,7 +18,7 @@ import (
 
 // IsInLocalSubnet checks if the given IP is in the same subnet as any local network interface
 func IsInLocalSubnet(clientIP net.IP) bool {
-	logger := securityLogger.With("ip", clientIP.String())
+	logger := logger().With("ip", clientIP.String())
 	if clientIP == nil {
 		logger.Debug("IsInLocalSubnet check failed: client IP is nil")
 		return false
@@ -83,7 +83,7 @@ func getIPv4Subnet(ip net.IP) net.IP {
 
 // configureLocalNetworkCookieStore configures the cookie store for local network access
 func (s *OAuth2Server) configureLocalNetworkCookieStore() {
-	securityLogger.Info("Configuring cookie store for local network access (allowing non-HTTPS cookies)")
+	logger().Info("Configuring cookie store for local network access (allowing non-HTTPS cookies)")
 	// Configure session options based on store type
 	switch store := gothic.Store.(type) {
 	case *sessions.CookieStore:
@@ -113,7 +113,7 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 		}
 	default:
 		// Log the warning using structured logger
-		securityLogger.Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
+		logger().Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
 		// Create a default cookie store as fallback - only for reference, not actually used
 		// Use the configured session secret instead of a hardcoded value
 		sessionSecret := s.Settings.Security.SessionSecret
@@ -122,7 +122,7 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 			// This is still not ideal but better than a hardcoded string
 			sessionSecret = fmt.Sprintf("birdnet-go-%d", time.Now().UnixNano())
 			// Log the warning using structured logger
-			securityLogger.Warn("No session secret configured, using temporary value")
+			logger().Warn("No session secret configured, using temporary value")
 		}
 
 		// Note: This store is not actually used, it's only created as a reference
@@ -136,7 +136,7 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 	clientID := c.QueryParam("client_id")
 	redirectURI := c.QueryParam("redirect_uri")
-	logger := securityLogger.With("client_id", clientID, "redirect_uri", redirectURI)
+	logger := logger().With("client_id", clientID, "redirect_uri", redirectURI)
 	logger.Info("Handling basic authorization request")
 
 	if clientID != s.Settings.Security.BasicAuth.ClientID {
@@ -169,7 +169,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Verify client credentials from Authorization header
 	// Log the attempt, but DO NOT log the clientSecret
 	clientID, clientSecret, ok := c.Request().BasicAuth()
-	logger := securityLogger.With("client_id", clientID)
+	logger := logger().With("client_id", clientID)
 	logger.Info("Handling basic authorization token request")
 
 	if !ok {
@@ -259,7 +259,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 	code := c.QueryParam("code")
 	redirect := c.QueryParam("redirect")
-	logger := securityLogger.With("redirect", redirect)
+	logger := logger().With("redirect", redirect)
 	logger.Info("Handling basic authorization callback")
 
 	if code == "" {
