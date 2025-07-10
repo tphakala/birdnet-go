@@ -52,6 +52,8 @@ To ensure consistency across the codebase, follow these naming conventions for o
 - `db_delete` - Database delete operations
 - `transaction` - Database transaction operations
 
+**Note**: For DatastoreMetrics, database operations should include the table name using the format `operation:table` (e.g., `db_query:notes`, `db_insert:detections`). This allows proper tracking of per-table metrics.
+
 #### Model Operations
 - `model_load` - Loading ML models
 - `prediction` - Running predictions
