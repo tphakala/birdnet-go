@@ -132,11 +132,17 @@ realtime:
 
 **Important Notes:**
 - **FFmpeg 5.0+ uses `-timeout`** instead of the older `-stimeout` option
+- **Parameter placement is crucial**: The `-timeout` parameter must be placed **before** the RTSP URL in the command line for proper functionality
 - **Default timeout values:**
   - `-timeout`: 0 (no timeout, infinite wait)
   - `-listen_timeout`: -1 (infinite timeout)
 - **Units are microseconds** (1 second = 1,000,000 microseconds)
 - **Timeout functionality verified**: When a timeout occurs, FFmpeg will exit with "Connection timed out" error
+
+**Example:**
+```bash
+ffmpeg -rtsp_transport tcp -timeout 5000000 -i rtsp://usser:password@192.168.1.100/stream -vn -f s16le -ar 48000 -ac 1 -f null -
+```
 
 ### FFmpeg Parameter Defaults Reference
 
