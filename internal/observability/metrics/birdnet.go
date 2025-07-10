@@ -293,6 +293,8 @@ func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 
 // RecordOperation implements the Recorder interface.
 // It records operations related to BirdNET processing.
+// Supported operations: "prediction", "model_load", "detection"
+// Status values: "success", "error", or species name for "detection"
 func (m *BirdNETMetrics) RecordOperation(operation, status string) {
 	switch operation {
 	case "prediction":
@@ -312,6 +314,7 @@ func (m *BirdNETMetrics) RecordOperation(operation, status string) {
 
 // RecordDuration implements the Recorder interface.
 // It records duration metrics for various BirdNET operations.
+// Supported operations: "prediction", "chunk_process", "model_invoke", "range_filter", "process_time_ms"
 func (m *BirdNETMetrics) RecordDuration(operation string, seconds float64) {
 	switch operation {
 	case "prediction":
@@ -330,6 +333,8 @@ func (m *BirdNETMetrics) RecordDuration(operation string, seconds float64) {
 
 // RecordError implements the Recorder interface.
 // It records error metrics for BirdNET operations.
+// Supported operations: "prediction", "model_load"
+// Error types: "validation", "model_error", "tensor_error", "invoke_error", etc.
 func (m *BirdNETMetrics) RecordError(operation, errorType string) {
 	switch operation {
 	case "prediction":

@@ -9,9 +9,9 @@ import (
 // It captures all recorded metrics for verification in tests.
 type TestRecorder struct {
 	mu         sync.RWMutex
-	operations map[string]map[string]int    // operation -> status -> count
-	durations  map[string][]float64         // operation -> list of durations
-	errors     map[string]map[string]int    // operation -> errorType -> count
+	operations map[string]map[string]int // operation -> status -> count
+	durations  map[string][]float64      // operation -> list of durations
+	errors     map[string]map[string]int // operation -> errorType -> count
 }
 
 // NewTestRecorder creates a new test recorder instance.
@@ -129,6 +129,15 @@ func (r *TestRecorder) GetAllErrors() map[string]map[string]int {
 		}
 	}
 	return result
+}
+
+// HasRecordedMetrics returns true if any metrics have been recorded.
+// This is useful for negative tests to verify that no metrics were recorded.
+func (r *TestRecorder) HasRecordedMetrics() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return len(r.operations) > 0 || len(r.durations) > 0 || len(r.errors) > 0
 }
 
 // NoOpRecorder is a no-op implementation of the Recorder interface.
