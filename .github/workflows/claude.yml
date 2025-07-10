@@ -19,9 +19,9 @@ jobs:
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write
+      pull-requests: write
+      issues: write
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
@@ -29,6 +29,44 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Assign issue to Claude
+        if: github.event_name == 'issues' || github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get issue number
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          fi
+          
+          # Check if issue is already assigned to anyone
+          CURRENT_ASSIGNEE=$(gh issue view $ISSUE_NUMBER --json assignees --jq '.assignees[0].login // empty')
+          
+          if [[ -z "$CURRENT_ASSIGNEE" ]]; then
+            echo "Assigning issue #$ISSUE_NUMBER to indicate Claude is working on it"
+            # Assign to the repository owner or a service account
+            gh issue edit $ISSUE_NUMBER --add-assignee tphakala || echo "Could not assign issue"
+            
+            # Add a label to indicate Claude is working on this
+            gh label create "claude-working" --description "Claude is currently working on this issue" --color "1d76db" 2>/dev/null || true
+            gh issue edit $ISSUE_NUMBER --add-label "claude-working" || echo "Could not add label"
+            
+            # Add a comment to indicate Claude has been assigned
+            gh issue comment $ISSUE_NUMBER --body "🤖 **Claude Assigned**
+
+This issue has been automatically assigned to Claude for resolution. Claude will:
+- Analyze the problem
+- Implement fixes following project guidelines
+- Run tests to verify the solution
+- Create a pull request with the changes
+
+Status: **Working** 🔄" || echo "Could not add comment"
+          else
+            echo "Issue #$ISSUE_NUMBER is already assigned to $CURRENT_ASSIGNEE"
+          fi
 
       - name: Run Claude Code
         id: claude
@@ -99,8 +137,47 @@ jobs:
             - Understand the root cause before fixing
             - Verify fixes by running tests
             - Ensure fixes follow project patterns
+
+      - name: Update issue status after Claude completion
+        if: (github.event_name == 'issues' || github.event_name == 'issue_comment') && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get issue number
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+          fi
           
-          # Optional: Custom environment variables for Claude
-          # claude_env: |
-          #   NODE_ENV: test
+          # Check if Claude step was successful
+          if [[ "${{ steps.claude.outcome }}" == "success" ]]; then
+            echo "Claude completed successfully, updating issue status"
+            
+            # Remove working label and add completed label
+            gh label create "claude-completed" --description "Claude has completed work on this issue" --color "28a745" 2>/dev/null || true
+            gh issue edit $ISSUE_NUMBER --remove-label "claude-working" 2>/dev/null || true
+            gh issue edit $ISSUE_NUMBER --add-label "claude-completed" || echo "Could not update labels"
+            
+            # Add completion comment
+            gh issue comment $ISSUE_NUMBER --body "✅ **Claude Work Completed**
+
+Claude has finished analyzing and working on this issue. Please review any pull requests or changes that were made.
+
+Status: **Completed** ✅" || echo "Could not add completion comment"
+          else
+            echo "Claude encountered an issue, updating status"
+            
+            # Add error label
+            gh label create "claude-error" --description "Claude encountered an error while working on this issue" --color "dc3545" 2>/dev/null || true
+            gh issue edit $ISSUE_NUMBER --remove-label "claude-working" 2>/dev/null || true
+            gh issue edit $ISSUE_NUMBER --add-label "claude-error" || echo "Could not update labels"
+            
+            # Add error comment
+            gh issue comment $ISSUE_NUMBER --body "⚠️ **Claude Encountered an Issue**
+
+Claude was unable to complete work on this issue automatically. Please check the workflow logs for details and consider manual intervention.
+
+Status: **Needs Review** ⚠️" || echo "Could not add error comment"
+          fi
 
