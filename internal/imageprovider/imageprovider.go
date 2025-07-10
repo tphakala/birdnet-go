@@ -66,7 +66,8 @@ func (b *BirdImage) GetTTL() time.Duration {
 // BirdImageCache represents a cache for storing and retrieving bird images.
 type BirdImageCache struct {
 	provider     ImageProvider
-	providerName string // Added: Name of the provider (e.g., "wikimedia")
+	providerMu   sync.RWMutex // Protects provider field
+	providerName string       // Added: Name of the provider (e.g., "wikimedia")
 	dataMap      sync.Map
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
@@ -116,12 +117,16 @@ func (l *emptyImageProvider) Fetch(scientificName string) (BirdImage, error) {
 // SetNonBirdImageProvider allows setting a custom ImageProvider for non-bird entries
 func (c *BirdImageCache) SetNonBirdImageProvider(provider ImageProvider) {
 	imageProviderLogger.Debug("Setting non-bird image provider", "provider_type", fmt.Sprintf("%T", provider))
+	c.providerMu.Lock()
+	defer c.providerMu.Unlock()
 	c.provider = provider
 }
 
 // SetImageProvider allows setting a custom ImageProvider for testing purposes.
 func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 	imageProviderLogger.Debug("Setting image provider (test override)", "provider_type", fmt.Sprintf("%T", provider))
+	c.providerMu.Lock()
+	defer c.providerMu.Unlock()
 	c.provider = provider
 }
 
@@ -260,7 +265,11 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	// }
 
 	// Check if provider is set
-	if c.provider == nil {
+	c.providerMu.RLock()
+	provider := c.provider
+	c.providerMu.RUnlock()
+	
+	if provider == nil {
 		logger.Warn("Cannot refresh entry: provider is nil")
 		// if c.debug {
 		// 	log.Printf("Debug: No provider available for %s", scientificName)
@@ -275,7 +284,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	var birdImage BirdImage
 	var err error
 
-	if ctxProvider, ok := c.provider.(interface {
+	if ctxProvider, ok := provider.(interface {
 		FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error)
 	}); ok {
 		// Use background context for refresh operations
@@ -283,7 +292,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		birdImage, err = ctxProvider.FetchWithContext(ctx, scientificName)
 	} else {
 		// Fallback to regular fetch
-		birdImage, err = c.provider.Fetch(scientificName)
+		birdImage, err = provider.Fetch(scientificName)
 	}
 
 	if err != nil {
@@ -822,7 +831,12 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 
 	// 2. Not in DB or DB load failed, fetch from the actual provider
 	logger.Info("Image not found in DB cache, fetching from provider")
-	if c.provider == nil {
+	
+	c.providerMu.RLock()
+	provider := c.provider
+	c.providerMu.RUnlock()
+	
+	if provider == nil {
 		enhancedErr := errors.Newf("image provider for %s is not configured", c.providerName).
 			Component("imageprovider").
 			Category(errors.CategoryImageProvider).
@@ -839,7 +853,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	// For now, assume provider passed to InitCache is enabled.
 
 	providerStart := time.Now()
-	fetchedImage, fetchErr := c.provider.Fetch(scientificName)
+	fetchedImage, fetchErr := provider.Fetch(scientificName)
 	providerDuration := time.Since(providerStart)
 
 	if c.debug && providerDuration > 100*time.Millisecond {
@@ -983,7 +997,12 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Performing direct fetch from provider (bypassing cache checks)")
-	if c.provider == nil {
+	
+	c.providerMu.RLock()
+	provider := c.provider
+	c.providerMu.RUnlock()
+	
+	if provider == nil {
 		enhancedErr := errors.Newf("image provider %s is not configured", c.providerName).
 			Component("imageprovider").
 			Category(errors.CategoryImageProvider).
@@ -995,7 +1014,7 @@ func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 		return BirdImage{}, enhancedErr
 	}
 
-	img, err := c.provider.Fetch(scientificName)
+	img, err := provider.Fetch(scientificName)
 	if err != nil {
 		// Check if it's already an enhanced error, if not enhance it
 		var enhancedErr *errors.EnhancedError
