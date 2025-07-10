@@ -54,6 +54,61 @@ jobs:
             gh label create "claude-working" --description "Claude is currently working on this issue" --color "1d76db" 2>/dev/null || true
             gh issue edit $ISSUE_NUMBER --add-label "claude-working" || echo "Could not add label"
             
+            # Auto-assign package labels based on issue content
+            ISSUE_BODY=$(gh issue view $ISSUE_NUMBER --json body --jq '.body')
+            ISSUE_TITLE=$(gh issue view $ISSUE_NUMBER --json title --jq '.title')
+            COMBINED_TEXT="$ISSUE_TITLE $ISSUE_BODY"
+            
+            # Detect packages mentioned in the issue and add appropriate labels
+            if echo "$COMBINED_TEXT" | grep -i "analysis\|processor" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:analysis" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "audiocore\|audio.*core" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:audiocore" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "myaudio\|audio.*processing" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:myaudio" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "api\|endpoint\|http.*handler" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:api" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "birdnet\|neural.*network" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:birdnet" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "datastore\|database\|sql" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:datastore" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "diskmanager\|disk.*space" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:diskmanager" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "telemetry\|metrics" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:telemetry" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "monitor\|health.*check" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:monitor" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "mqtt\|messaging" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:mqtt" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "notification\|alert" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:notification" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "birdweather" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:birdweather" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "security\|auth\|login" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:security" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "config\|configuration" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:conf" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "error.*handling\|internal/errors" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:errors" 2>/dev/null || true
+            fi
+            if echo "$COMBINED_TEXT" | grep -i "test.*fail\|unit.*test" >/dev/null; then
+              gh issue edit $ISSUE_NUMBER --add-label "pkg:testing" 2>/dev/null || true
+            fi
+            
             # Add a comment to indicate Claude has been assigned
             gh issue comment $ISSUE_NUMBER --body "🤖 **Claude Assigned**
 

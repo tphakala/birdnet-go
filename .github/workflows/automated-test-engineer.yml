@@ -33,12 +33,20 @@ jobs:
             echo "## Failed Tests" > /tmp/failed-tests.md
             echo "" >> /tmp/failed-tests.md
             
+            # Extract package information for labeling
+            echo "" > /tmp/affected-packages.txt
+            
             # Parse JSON test output for failures
             if command -v jq >/dev/null 2>&1; then
               grep '"Action":"fail"' /tmp/gotest.log | jq -r '
                 select(.Test != null) | 
                 "- **\(.Package)/\(.Test)**: \(.Output // "Test failed")"
               ' | head -20 >> /tmp/failed-tests.md || true
+              
+              # Extract package names for labeling
+              grep '"Action":"fail"' /tmp/gotest.log | jq -r '
+                select(.Test != null) | .Package
+              ' | sed 's|github.com/tphakala/birdnet-go/||g' | sort -u >> /tmp/affected-packages.txt || true
             else
               grep -E '"Action":"fail"' /tmp/gotest.log | head -10 >> /tmp/failed-tests.md || true
             fi
@@ -137,10 +145,50 @@ jobs:
           gh label create "test-failure" --description "Issues related to failing unit tests" --color "d73a4a" 2>/dev/null || true
           gh label create "automated" --description "Issues created by automated systems" --color "0052cc" 2>/dev/null || true
           
+          # Determine package labels from affected packages
+          PACKAGE_LABELS="test-failure,automated"
+          if [[ -f "/tmp/affected-packages.txt" ]]; then
+            while read -r package; do
+              if [[ -n "$package" ]]; then
+                # Map package paths to labels
+                case "$package" in
+                  "internal/analysis"*) PACKAGE_LABELS+=",pkg:analysis" ;;
+                  "internal/audiocore"*) PACKAGE_LABELS+=",pkg:audiocore" ;;
+                  "internal/api"*) PACKAGE_LABELS+=",pkg:api" ;;
+                  "internal/birdnet"*) PACKAGE_LABELS+=",pkg:birdnet" ;;
+                  "internal/myaudio"*) PACKAGE_LABELS+=",pkg:myaudio" ;;
+                  "internal/datastore"*) PACKAGE_LABELS+=",pkg:datastore" ;;
+                  "internal/diskmanager"*) PACKAGE_LABELS+=",pkg:diskmanager" ;;
+                  "internal/telemetry"*) PACKAGE_LABELS+=",pkg:telemetry" ;;
+                  "internal/monitor"*) PACKAGE_LABELS+=",pkg:monitor" ;;
+                  "internal/events"*) PACKAGE_LABELS+=",pkg:events" ;;
+                  "internal/mqtt"*) PACKAGE_LABELS+=",pkg:mqtt" ;;
+                  "internal/notification"*) PACKAGE_LABELS+=",pkg:notification" ;;
+                  "internal/birdweather"*) PACKAGE_LABELS+=",pkg:birdweather" ;;
+                  "internal/security"*) PACKAGE_LABELS+=",pkg:security" ;;
+                  "internal/conf"*) PACKAGE_LABELS+=",pkg:conf" ;;
+                  "internal/httpcontroller"*) PACKAGE_LABELS+=",pkg:httpcontroller" ;;
+                  "internal/errors"*) PACKAGE_LABELS+=",pkg:errors" ;;
+                  "internal/logging"*) PACKAGE_LABELS+=",pkg:logging" ;;
+                  "internal/testing"*) PACKAGE_LABELS+=",pkg:testing" ;;
+                  "cmd/realtime"*) PACKAGE_LABELS+=",pkg:cmd-realtime" ;;
+                  "cmd/file"*) PACKAGE_LABELS+=",pkg:cmd-file" ;;
+                  "cmd/directory"*) PACKAGE_LABELS+=",pkg:cmd-directory" ;;
+                  "cmd/support"*) PACKAGE_LABELS+=",pkg:cmd-support" ;;
+                esac
+              fi
+            done < /tmp/affected-packages.txt
+          fi
+          
+          # Remove duplicate labels
+          PACKAGE_LABELS=$(echo "$PACKAGE_LABELS" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+          
+          echo "Applying labels: $PACKAGE_LABELS"
+          
           gh issue create \
             --repo ${{ github.repository }} \
             --title "🔴 Unit Tests Failing - Automated Fix Needed" \
-            --label "test-failure,automated" \
+            --label "$PACKAGE_LABELS" \
             --body-file /tmp/issue-body.md
 
       - name: Comment on existing issue
