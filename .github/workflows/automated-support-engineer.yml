@@ -8,7 +8,6 @@ on:
   schedule:
     # Check for unanswered issues every 5 minutes
     - cron: '*/5 * * * *'
-  workflow_dispatch:
 
 jobs:
   provide-support:
@@ -16,7 +15,7 @@ jobs:
     if: |
       (github.event_name == 'issues' && github.event.issue.user.login != 'tphakala' && !contains(github.event.issue.user.type, 'Bot')) ||
       (github.event_name == 'issue_comment' && github.event.comment.user.login != 'tphakala' && !contains(github.event.comment.user.type, 'Bot') && !contains(github.event.comment.body, '🤖 Automated Support')) ||
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'schedule')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,7 +47,7 @@ jobs:
 
       - name: Check for unanswered issues
         id: find-unanswered
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -122,7 +121,7 @@ jobs:
             - Provide relevant help or ask clarifying questions
             - Mention that a maintainer will review
             - Sign off warmly
-          prompt: |
+          direct_prompt: |
             @claude Please provide first-level support for this GitHub issue.
             
             ${{ github.event_name == 'issues' && format('New issue opened: #{0}\nTitle: {1}\nBody: {2}', github.event.issue.number, github.event.issue.title, github.event.issue.body) || '' }}
