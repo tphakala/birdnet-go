@@ -235,4 +235,3 @@ Claude was unable to complete work on this issue automatically. Please check the
 
 Status: **Needs Review** ⚠️" || echo "Could not add error comment"
           fi
-
