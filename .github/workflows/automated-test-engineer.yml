@@ -30,6 +30,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.event.inputs.target_ref }}
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -53,7 +54,6 @@ jobs:
           name: test-log
           path: /tmp/
           run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - name: Run tests and capture failures
@@ -86,6 +86,10 @@ jobs:
         id: create-branch
         if: steps.test-run.outputs.has_failures == 'true'
         run: |
+          # Configure git
+          git config user.name "Automated Test Engineer"
+          git config user.email "automated-test-engineer@birdnet-go.com"
+          
           BRANCH_NAME="fix/automated-test-fixes-$(date +%Y%m%d-%H%M%S)"
           git checkout -b $BRANCH_NAME
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
@@ -139,9 +143,6 @@ jobs:
       - name: Commit and push changes
         if: steps.test-run.outputs.has_failures == 'true'
         run: |
-          git config user.name "Automated Test Engineer"
-          git config user.email "automated-test-engineer@birdnet-go.com"
-          
           # Check if there are changes
           if [[ -n $(git status -s) ]]; then
             git add -A
