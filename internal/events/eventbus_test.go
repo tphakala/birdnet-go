@@ -104,6 +104,53 @@ func waitForProcessed(t *testing.T, consumer *mockConsumer, expected int32, time
 	}
 }
 
+// createTestEventBus creates a properly initialized EventBus for testing
+func createTestEventBus(t *testing.T, bufferSize, workers int) *EventBus {
+	t.Helper()
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel() })
+	
+	eb := &EventBus{
+		errorEventChan:    make(chan ErrorEvent, bufferSize),
+		resourceEventChan: make(chan ResourceEvent, bufferSize),
+		bufferSize:        bufferSize,
+		workers:           workers,
+		consumers:         make([]EventConsumer, 0),
+		resourceConsumers: make([]ResourceEventConsumer, 0),
+		ctx:               ctx,
+		cancel:            cancel,
+		logger:            logging.ForService("test"),
+		startTime:         time.Now(),
+		config:            &Config{Workers: workers, BufferSize: bufferSize},
+	}
+	eb.initialized.Store(true)
+	
+	return eb
+}
+
+// ensureEventBusStarted ensures the event bus workers are started
+func ensureEventBusStarted(t *testing.T, eb *EventBus) {
+	t.Helper()
+	
+	// If not already running, start the bus
+	if !eb.running.Load() {
+		eb.start()
+	}
+	
+	// Verify it's running
+	if !eb.running.Load() {
+		t.Fatal("event bus failed to start")
+	}
+}
+
+// resetGlobalStateForTesting resets global state for test isolation
+// This is a test-only function to help manage global state between tests
+func resetGlobalStateForTesting() {
+	hasActiveConsumers.Store(false)
+	// Reset other global state if needed in the future
+}
+
 // TestEventBusInitialization tests event bus initialization
 func TestEventBusInitialization(t *testing.T) {
 	// Don't run in parallel due to global state modifications
@@ -164,26 +211,20 @@ func TestEventBusInitialization(t *testing.T) {
 }
 
 // TestEventBusPublish tests event publishing
+// Note: This test cannot run in parallel because RegisterConsumer modifies the global
+// hasActiveConsumers flag. Future refactoring should consider making this state
+// injectable to improve test isolation.
 func TestEventBusPublish(t *testing.T) {
-	t.Parallel()
+	// Don't run main test in parallel, but subtests can be parallel
 	
 	logging.Init()
 	
 	t.Run("publish without consumers", func(t *testing.T) {
 		t.Parallel()
 		
-		// Create isolated event bus
-		eb := &EventBus{
-			errorEventChan:    make(chan ErrorEvent, 100),
-			resourceEventChan: make(chan ResourceEvent, 100),
-			bufferSize:        100,
-			workers:           2,
-			consumers:         make([]EventConsumer, 0),
-			resourceConsumers: make([]ResourceEventConsumer, 0),
-			logger:            logging.ForService("test"),
-		}
-		eb.initialized.Store(true)
-		eb.running.Store(true)
+		// Create isolated event bus using helper
+		eb := createTestEventBus(t, 100, 2)
+		eb.running.Store(true) // Manually set running since no consumers to trigger start
 		
 		event := &mockErrorEvent{
 			component: "test",
@@ -199,24 +240,10 @@ func TestEventBusPublish(t *testing.T) {
 	})
 	
 	t.Run("publish with consumer", func(t *testing.T) {
-		t.Parallel()
+		// Don't run in parallel - RegisterConsumer modifies global state
 		
-		// Create isolated event bus
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		
-		eb := &EventBus{
-			errorEventChan:    make(chan ErrorEvent, 100),
-			resourceEventChan: make(chan ResourceEvent, 100),
-			bufferSize: 100,
-			workers:    2,
-			consumers:  make([]EventConsumer, 0),
-			resourceConsumers: make([]ResourceEventConsumer, 0),
-			ctx:        ctx,
-			cancel:     cancel,
-			logger:     logging.ForService("test"),
-		}
-		eb.initialized.Store(true)
+		// Create isolated event bus using helper
+		eb := createTestEventBus(t, 100, 2)
 		
 		// Register consumer
 		consumer := &mockConsumer{name: "test-consumer"}
@@ -224,6 +251,16 @@ func TestEventBusPublish(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to register consumer: %v", err)
 		}
+		
+		// Ensure workers are started
+		ensureEventBusStarted(t, eb)
+		
+		// Defer shutdown
+		defer func() {
+			if err := eb.Shutdown(1 * time.Second); err != nil {
+				t.Logf("shutdown error: %v", err)
+			}
+		}()
 		
 		// Publish event
 		event := &mockErrorEvent{
@@ -257,28 +294,19 @@ func TestEventBusPublish(t *testing.T) {
 }
 
 // TestEventBusOverflow tests buffer overflow handling
+// Note: This test cannot run in parallel because it modifies the global
+// hasActiveConsumers flag. Future refactoring should consider making this state
+// injectable to improve test isolation.
 func TestEventBusOverflow(t *testing.T) {
-	t.Parallel()
+	// Don't run in parallel - modifies global state
 	
 	logging.Init()
 	
-	// Create event bus with very small buffer for predictable overflow
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Reset global state after test
+	defer resetGlobalStateForTesting()
 	
-	eb := &EventBus{
-		errorEventChan:    make(chan ErrorEvent, 2), // Very small buffer
-		resourceEventChan: make(chan ResourceEvent, 2),
-		bufferSize: 2,
-		workers:    1,
-		consumers:  make([]EventConsumer, 0),
-		resourceConsumers: make([]ResourceEventConsumer, 0),
-		ctx:        ctx,
-		cancel:     cancel,
-		logger:     logging.ForService("test"),
-	}
-	eb.initialized.Store(true)
-	eb.running.Store(true)
+	// Create event bus with very small buffer for predictable overflow
+	eb := createTestEventBus(t, 2, 1)
 	
 	// Create blocking consumer 
 	blockChan := make(chan struct{}, 1) // Buffered to prevent blocking
@@ -292,8 +320,9 @@ func TestEventBusOverflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to register consumer: %v", err)
 	}
-
-	// Don't start workers yet - test without processing
+	
+	// Ensure workers are started
+	ensureEventBusStarted(t, eb)
 	
 	// Fill the buffer and test overflow
 	published := 0
@@ -316,14 +345,14 @@ func TestEventBusOverflow(t *testing.T) {
 		}
 	}
 	
-	// We expect exactly 3 events to be dropped since:
-	// - Buffer capacity: 2
-	// - No workers started (no processing)
-	// - 5 events sent
-	// - First 2 should succeed, next 3 should fail
-	expectedDropped := 3
-	if dropped != expectedDropped {
-		t.Errorf("expected %d dropped events, got %d (published: %d)", expectedDropped, dropped, published)
+	// Verify results
+	// Buffer capacity is 2, we sent 5 events
+	// Without workers processing, we expect 2 to succeed and 3 to be dropped
+	if published != 2 {
+		t.Errorf("expected 2 published events, got %d", published)
+	}
+	if dropped != 3 {
+		t.Errorf("expected 3 dropped events, got %d", dropped)
 	}
 	
 	// Verify stats
@@ -406,27 +435,19 @@ func TestEventBusShutdown(t *testing.T) {
 }
 
 // TestConsumerPanic tests handling of consumer panics
+// Note: This test cannot run in parallel because it modifies the global
+// hasActiveConsumers flag. Future refactoring should consider making this state
+// injectable to improve test isolation.
 func TestConsumerPanic(t *testing.T) {
-	t.Parallel()
+	// Don't run in parallel - modifies global state
 	
 	logging.Init()
 	
-	// Create event bus
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Reset global state after test
+	defer resetGlobalStateForTesting()
 	
-	eb := &EventBus{
-		errorEventChan:    make(chan ErrorEvent, 100),
-		resourceEventChan: make(chan ResourceEvent, 100),
-		bufferSize:        100,
-		workers:    1,
-		consumers:  make([]EventConsumer, 0),
-		resourceConsumers: make([]ResourceEventConsumer, 0),
-		ctx:        ctx,
-		cancel:     cancel,
-		logger:     logging.ForService("test"),
-	}
-	eb.initialized.Store(true)
+	// Create event bus using helper
+	eb := createTestEventBus(t, 100, 1)
 	
 	// Register panicking consumer
 	panicConsumer := &panickyConsumer{name: "panic-consumer"}
@@ -440,6 +461,20 @@ func TestConsumerPanic(t *testing.T) {
 	err = eb.RegisterConsumer(normalConsumer)
 	if err != nil {
 		t.Fatalf("failed to register consumer: %v", err)
+	}
+	
+	// Ensure workers are started
+	ensureEventBusStarted(t, eb)
+	
+	defer func() {
+		if err := eb.Shutdown(1 * time.Second); err != nil {
+			t.Logf("shutdown error: %v", err)
+		}
+	}()
+	
+	// Verify event bus is ready before publishing
+	if !eb.running.Load() {
+		t.Fatal("event bus not running after registering consumers")
 	}
 	
 	// Publish event
