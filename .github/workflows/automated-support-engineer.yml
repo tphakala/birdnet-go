@@ -34,7 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ISSUE_NUMBER=${{ github.event.issue.number }}
-          
+
           # Check if we've already responded to this issue
           if gh api repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             --jq '.[] | select(.body | contains("🤖 Automated Support"))' | grep -q .; then
@@ -53,18 +53,18 @@ jobs:
         run: |
           # Find open issues without automated support responses
           echo "## Unanswered Issues" > /tmp/unanswered-issues.md
-          
+
           gh api repos/${{ github.repository }}/issues \
             --jq '.[] | select(.state == "open" and .user.login != "tphakala" and (.user.type | contains("Bot") | not))' \
             | jq -r '.number' | while read -r issue_num; do
-              
+
               # Check if issue has automated support response
               if ! gh api repos/${{ github.repository }}/issues/${issue_num}/comments \
                 --jq '.[] | select(.body | contains("🤖 Automated Support"))' | grep -q .; then
                 echo "- Issue #${issue_num}" >> /tmp/unanswered-issues.md
               fi
           done
-          
+
           # Check if we found any unanswered issues
           if grep -q "Issue #" /tmp/unanswered-issues.md; then
             echo "has_unanswered=true" >> $GITHUB_OUTPUT
@@ -95,7 +95,7 @@ jobs:
           custom_instructions: |
             You are a friendly and helpful first-level support engineer for the BirdNET-Go project.
             Your role is to provide initial assistance to users who open issues.
-            
+
             IMPORTANT GUIDELINES:
             1. Be kind, patient, and understanding
             2. Start your response with "🤖 Automated Support" to identify yourself
@@ -114,7 +114,7 @@ jobs:
             11. If it's a feature request, acknowledge it positively
             12. Check the README and documentation for relevant information
             13. Be encouraging and supportive
-            
+
             Response template structure:
             - Greeting and thanks
             - Acknowledge their issue/request
@@ -123,11 +123,11 @@ jobs:
             - Sign off warmly
           direct_prompt: |
             @claude Please provide first-level support for this GitHub issue.
-            
+
             ${{ github.event_name == 'issues' && format('New issue opened: #{0}\nTitle: {1}\nBody: {2}', github.event.issue.number, github.event.issue.title, github.event.issue.body) || '' }}
             ${{ github.event_name == 'issue_comment' && format('New comment on issue #{0}\nComment: {1}', github.event.issue.number, github.event.comment.body) || '' }}
             ${{ steps.find-unanswered.outputs.has_unanswered == 'true' && format('Provide support for unanswered issue #{0}', steps.find-unanswered.outputs.first_issue) || '' }}
-            
+
             Remember to:
             1. Start with "🤖 Automated Support"
             2. Be friendly and helpful
