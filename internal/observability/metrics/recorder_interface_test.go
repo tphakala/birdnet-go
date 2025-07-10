@@ -162,6 +162,43 @@ func TestGetAllErrors(t *testing.T) {
 	}
 }
 
+// TestHasRecordedMetrics verifies HasRecordedMetrics functionality of TestRecorder.
+func TestHasRecordedMetrics(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewTestRecorder()
+	
+	// Initially should have no metrics
+	if recorder.HasRecordedMetrics() {
+		t.Error("expected no metrics recorded initially")
+	}
+	
+	// Record an operation
+	recorder.RecordOperation("test", "success")
+	if !recorder.HasRecordedMetrics() {
+		t.Error("expected metrics to be recorded after operation")
+	}
+	
+	// Reset and check again
+	recorder.Reset()
+	if recorder.HasRecordedMetrics() {
+		t.Error("expected no metrics after reset")
+	}
+	
+	// Record a duration
+	recorder.RecordDuration("test", 0.1)
+	if !recorder.HasRecordedMetrics() {
+		t.Error("expected metrics to be recorded after duration")
+	}
+	
+	// Reset and record an error
+	recorder.Reset()
+	recorder.RecordError("test", "error")
+	if !recorder.HasRecordedMetrics() {
+		t.Error("expected metrics to be recorded after error")
+	}
+}
+
 // TestNoOpRecorder verifies that the NoOpRecorder correctly implements the Recorder interface.
 func TestNoOpRecorder(t *testing.T) {
 	t.Parallel()
@@ -232,11 +269,11 @@ func ExampleTestRecorder() {
 	// Record some operations
 	recorder.RecordOperation("prediction", "success")
 	recorder.RecordDuration("prediction", 0.123)
-	
+
 	// Later in the test, verify the operations
 	successCount := recorder.GetOperationCount("prediction", "success")
 	durations := recorder.GetDurations("prediction")
-	
+
 	_ = successCount // Use in assertions
 	_ = durations    // Use in assertions
 }

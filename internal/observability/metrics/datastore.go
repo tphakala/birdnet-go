@@ -693,6 +693,10 @@ func (m *DatastoreMetrics) RecordMaintenanceOperation(operation, status string) 
 
 // RecordOperation implements the Recorder interface.
 // It records various datastore operations with their status.
+// Supported operations: "db_query", "db_insert", "db_update", "db_delete", "transaction",
+// "note_create", "note_update", "note_delete", "note_get", "search", "analytics",
+// "cache_get", "cache_set", "cache_delete", "weather_data", "image_cache", "backup", "maintenance"
+// Status values: "success", "error"
 func (m *DatastoreMetrics) RecordOperation(operation, status string) {
 	// Map generic operations to specific datastore operations
 	switch operation {
