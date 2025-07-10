@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // ControlMonitor handles control signals for realtime analysis mode
@@ -41,6 +42,13 @@ type ControlMonitor struct {
 	soundLevelPublishersWg    *sync.WaitGroup
 	soundLevelPublishersDone  chan struct{}
 	soundLevelPublishersMutex sync.Mutex
+	
+	// Track telemetry endpoint
+	telemetryEndpoint      *observability.Endpoint
+	telemetryEndpointMutex sync.Mutex
+	telemetryQuitChan      chan struct{}
+	telemetryWg            sync.WaitGroup
+	metrics                *observability.Metrics
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
@@ -62,7 +70,35 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 
 // Start begins monitoring control signals
 func (cm *ControlMonitor) Start() {
+	// Initialize telemetry endpoint if enabled
+	cm.initializeTelemetryIfEnabled()
+	
 	go cm.monitor()
+}
+
+// initializeTelemetryIfEnabled starts the telemetry endpoint if it's enabled in settings
+func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
+	settings := conf.Setting()
+	if settings.Realtime.Telemetry.Enabled {
+		cm.telemetryEndpointMutex.Lock()
+		defer cm.telemetryEndpointMutex.Unlock()
+		
+		// Create quit channel
+		cm.telemetryQuitChan = make(chan struct{})
+		
+		// Initialize endpoint
+		endpoint, err := observability.NewEndpoint(settings, cm.metrics)
+		if err != nil {
+			log.Printf("Error initializing telemetry endpoint: %v", err)
+			return
+		}
+		
+		// Start the endpoint
+		endpoint.Start(&cm.telemetryWg, cm.telemetryQuitChan)
+		cm.telemetryEndpoint = endpoint
+		
+		log.Printf("📊 Telemetry endpoint started at %s", settings.Realtime.Telemetry.Listen)
+	}
 }
 
 // monitor listens for control signals and handles them
@@ -94,6 +130,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleUpdateDetectionIntervals()
 	case "reconfigure_sound_level":
 		cm.handleReconfigureSoundLevel()
+	case "reconfigure_telemetry":
+		cm.handleReconfigureTelemetry()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -391,5 +429,50 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	} else {
 		log.Printf("✅ Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
+	}
+}
+
+// handleReconfigureTelemetry reconfigures the telemetry/metrics endpoint
+func (cm *ControlMonitor) handleReconfigureTelemetry() {
+	log.Printf("🔄 Reconfiguring telemetry endpoint...")
+	settings := conf.Setting()
+
+	// Lock the mutex to ensure thread-safe access
+	cm.telemetryEndpointMutex.Lock()
+	defer cm.telemetryEndpointMutex.Unlock()
+
+	// Check if we need to stop existing endpoint
+	if cm.telemetryEndpoint != nil && cm.telemetryQuitChan != nil {
+		// Signal existing endpoint to stop
+		close(cm.telemetryQuitChan)
+		// Wait for it to finish
+		cm.telemetryWg.Wait()
+		cm.telemetryEndpoint = nil
+		cm.telemetryQuitChan = nil
+		log.Printf("✅ Stopped existing telemetry endpoint")
+	}
+
+	// If telemetry is enabled, start new endpoint
+	if settings.Realtime.Telemetry.Enabled {
+		// Create quit channel for the new endpoint
+		cm.telemetryQuitChan = make(chan struct{})
+		
+		// Initialize new endpoint
+		endpoint, err := observability.NewEndpoint(settings, cm.metrics)
+		if err != nil {
+			log.Printf("❌ Error initializing telemetry endpoint: %v", err)
+			cm.notifyError("Failed to initialize telemetry endpoint", err)
+			return
+		}
+
+		// Start the endpoint
+		endpoint.Start(&cm.telemetryWg, cm.telemetryQuitChan)
+		cm.telemetryEndpoint = endpoint
+
+		log.Printf("✅ Telemetry endpoint reconfigured at %s", settings.Realtime.Telemetry.Listen)
+		cm.notifySuccess(fmt.Sprintf("Telemetry endpoint reconfigured at %s", settings.Realtime.Telemetry.Listen))
+	} else {
+		log.Printf("✅ Telemetry endpoint disabled")
+		cm.notifySuccess("Telemetry endpoint disabled")
 	}
 }
