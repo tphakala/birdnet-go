@@ -274,7 +274,8 @@ func ReadAudioFileBuffered(settings *conf.Settings, callback AudioChunkCallback)
 }
 
 // SetFileMetrics sets the metrics instance for file operations.
-// This function is thread-safe and ensures metrics are only set once.
+// This function is thread-safe and ensures metrics are only set once per process lifetime.
+// Subsequent calls will be ignored due to sync.Once (idempotent behavior).
 func SetFileMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	fileMetricsOnce.Do(func() {
 		fileMetricsMutex.Lock()
