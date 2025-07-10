@@ -10,8 +10,16 @@ on:
     # Runs at 02:00 UTC every day
     - cron: '0 2 * * *'
   pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
+      - '**.md'
   workflow_dispatch:
   push:
+    paths-ignore:
+      - '.github/workflows/**'
+      - '**.md'
     branches:
       # Only run on push to main branch
       - main
