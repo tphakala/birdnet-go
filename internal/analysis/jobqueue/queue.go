@@ -527,27 +527,30 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 	defer cancel()
 
 	// Execute the job with proper context handling and error capture
-	var err error
-	done := make(chan struct{})
+	type result struct {
+		err error
+	}
+	resultChan := make(chan result, 1)
 
 	go func() {
 		// Add panic recovery to prevent goroutine crashes
 		defer func() {
 			if r := recover(); r != nil {
 				// Convert panic to error
-				err = fmt.Errorf("job execution panicked: %v", r)
+				resultChan <- result{err: fmt.Errorf("job execution panicked: %v", r)}
 			}
-			// Always close the channel at the end, regardless of how we exit
-			close(done)
 		}()
 
-		err = job.Action.Execute(job.Data)
+		err := job.Action.Execute(job.Data)
+		resultChan <- result{err: err}
 	}()
 
 	// Wait for completion, timeout, or cancellation
+	var err error
 	select {
-	case <-done:
-		// Normal completion, err is already set
+	case res := <-resultChan:
+		// Normal completion
+		err = res.err
 	case <-execCtx.Done():
 		// Context timeout or cancellation
 		ctxErr := execCtx.Err()

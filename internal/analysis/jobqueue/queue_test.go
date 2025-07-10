@@ -588,6 +588,11 @@ func TestRetryBackoff(t *testing.T) {
 	queue.ProcessImmediately(ctx)
 	time.Sleep(30 * time.Millisecond)
 
+	// Stop the queue to ensure all goroutines complete
+	if err := queue.Stop(); err != nil {
+		t.Errorf("Failed to stop queue: %v", err)
+	}
+
 	// Close the channel and collect execution times
 	close(executionTimes)
 	// Pre-allocate slice with expected capacity (initial execution + retries)
