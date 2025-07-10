@@ -183,16 +183,17 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 
 	// Capture slog output
 	var logBuffer bytes.Buffer
-	// Store original logger and defer restoration
-	originalLogger := securityLogger // Assuming securityLogger is accessible; if not, need to use a setter or other mechanism
 	originalLevel := securityLevelVar.Level()
 
 	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
-	securityLogger = slog.New(testHandler) // Temporarily replace package logger
+	testLogger := slog.New(testHandler)
+	
+	// Use the thread-safe setter to replace the logger
+	restore := setTestLogger(testLogger)
 	securityLevelVar.Set(slog.LevelDebug)  // Ensure debug logs are captured
 
 	defer func() {
-		securityLogger = originalLogger // Restore original logger
+		restore() // Restore original logger
 		securityLevelVar.Set(originalLevel)
 	}()
 
@@ -227,15 +228,17 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 
 	// Capture slog output
 	var logBuffer bytes.Buffer
-	originalLogger := securityLogger
 	originalLevel := securityLevelVar.Level()
 
 	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
-	securityLogger = slog.New(testHandler)
+	testLogger := slog.New(testHandler)
+	
+	// Use the thread-safe setter to replace the logger
+	restore := setTestLogger(testLogger)
 	securityLevelVar.Set(slog.LevelDebug)
 
 	defer func() {
-		securityLogger = originalLogger
+		restore()
 		securityLevelVar.Set(originalLevel)
 	}()
 
