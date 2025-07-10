@@ -48,7 +48,7 @@ func SetCaptureMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 // It returns nil if the buffer already exists or was successfully created.
 // This function is thread-safe and prevents race conditions during allocation.
 func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample int, source string) error {
-	// Check and allocate within the same lock to prevent race conditions
+	// Hold lock for entire operation to prevent race conditions
 	cbMutex.Lock()
 	defer cbMutex.Unlock()
 	
@@ -57,13 +57,8 @@ func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample i
 		return nil
 	}
 	
-	// Buffer doesn't exist, need to allocate
-	// Temporarily unlock to call AllocateCaptureBuffer which has its own locking
-	cbMutex.Unlock()
-	err := AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, source)
-	cbMutex.Lock()
-	
-	return err
+	// Buffer doesn't exist, allocate it while holding the lock
+	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, source)
 }
 
 // AllocateCaptureBuffer initializes an audio buffer for a single source.
@@ -76,6 +71,16 @@ func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample i
 //
 // To detect repeated allocation issues, monitor the "repeated_blocked" counter per source.
 func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, source string) error {
+	// Lock once for the entire operation
+	cbMutex.Lock()
+	defer cbMutex.Unlock()
+	
+	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, source)
+}
+
+// allocateCaptureBufferInternal performs the actual buffer allocation.
+// It must be called with cbMutex already held.
+func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample int, source string) error {
 	start := time.Now()
 	
 	// Track allocation attempt
@@ -190,11 +195,7 @@ func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sour
 		return enhancedErr
 	}
 
-	// Update global map safely
-	cbMutex.Lock()
-	defer cbMutex.Unlock()
-
-	// Check if buffer already exists
+	// Check if buffer already exists (caller must hold cbMutex)
 	if _, exists := captureBuffers[source]; exists {
 		// Log repeated allocation attempt
 		log.Printf("⚠️ Buffer allocation blocked: buffer already exists for source %s", source)
