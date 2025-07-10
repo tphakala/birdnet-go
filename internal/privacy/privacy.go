@@ -41,6 +41,10 @@ var (
 	
 	// Separator normalization pattern for API tokens
 	separatorRegex = regexp.MustCompile(`[:=]\s*`)
+	
+	// RTSP URL pattern for finding and sanitizing RTSP URLs with credentials
+	// Supports various formats including IPv6 addresses in brackets
+	rtspURLPattern = regexp.MustCompile(`rtsp://(?:[^:]+:[^@]+@)?(?:\[[0-9a-fA-F:]+\]|[^/:\s]+)(?::[0-9]+)?(?:/[^\s]*)?`)
 )
 
 // Common two-part TLDs that need special handling
@@ -135,6 +139,12 @@ func SanitizeRTSPUrl(source string) string {
 	
 	// Return sanitized URL
 	return parsedURL.String()
+}
+
+// SanitizeRTSPUrls finds and sanitizes all RTSP URLs in a given text
+// It uses regex pattern matching to identify RTSP URLs and replaces them with sanitized versions
+func SanitizeRTSPUrls(text string) string {
+	return rtspURLPattern.ReplaceAllStringFunc(text, SanitizeRTSPUrl)
 }
 
 // GenerateSystemID creates a unique system identifier

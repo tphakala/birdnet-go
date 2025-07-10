@@ -8,7 +8,6 @@ import (
 	"log"
 	"log/slog"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -57,10 +56,6 @@ const (
 
 // Use shared logger from integration file
 var streamLogger *slog.Logger
-
-// Pre-compiled regex for sanitizing RTSP URLs with credentials
-// Supports various formats including IPv6 addresses in brackets
-var rtspCredentialPattern = regexp.MustCompile(`rtsp://(?:[^:]+:[^@]+@)?(?:\[[0-9a-fA-F:]+\]|[^/:\s]+)(?::[0-9]+)?(?:/[^\s]*)?`)
 
 func init() {
 	// Use the shared integration logger for consistency
@@ -299,7 +294,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				s.recordFailure()
 				// Log process exit with sanitized error message
 				errorMsg := err.Error()
-				sanitizedError := privacy.SanitizeRTSPUrl(errorMsg)
+				sanitizedError := privacy.SanitizeRTSPUrls(errorMsg)
 
 				// Check if this was a silence timeout
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
@@ -473,8 +468,7 @@ func (s *FFmpegStream) processAudio() error {
 				stderrOutput := s.stderr.String()
 				s.cmdMu.Unlock()
 				// Sanitize stderr output to remove sensitive data
-				// Use pre-compiled regex to find and replace RTSP URLs with credentials
-				sanitizedOutput := rtspCredentialPattern.ReplaceAllStringFunc(stderrOutput, privacy.SanitizeRTSPUrl)
+				sanitizedOutput := privacy.SanitizeRTSPUrls(stderrOutput)
 				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").

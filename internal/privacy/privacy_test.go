@@ -191,6 +191,58 @@ func TestSanitizeRTSPUrl(t *testing.T) {
 	}
 }
 
+func TestSanitizeRTSPUrls(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Text with single RTSP URL with credentials",
+			input:    "Failed to connect to rtsp://admin:password@192.168.1.100:554/stream1",
+			expected: "Failed to connect to rtsp://192.168.1.100:554",
+		},
+		{
+			name:     "Text with multiple RTSP URLs",
+			input:    "Primary: rtsp://user:pass@cam1.local/stream Secondary: rtsp://admin:123@cam2.local:8554/live",
+			expected: "Primary: rtsp://cam1.local Secondary: rtsp://cam2.local:8554",
+		},
+		{
+			name:     "Text with RTSP URL without credentials",
+			input:    "Stream available at rtsp://192.168.1.50:554/stream",
+			expected: "Stream available at rtsp://192.168.1.50:554",
+		},
+		{
+			name:     "Text without RTSP URLs",
+			input:    "No RTSP streams found in the network",
+			expected: "No RTSP streams found in the network",
+		},
+		{
+			name:     "RTSP URL with IPv6 address",
+			input:    "Connect to rtsp://user:pass@[2001:db8::1]:554/stream",
+			expected: "Connect to rtsp://[2001:db8::1]:554",
+		},
+		{
+			name:     "Mixed content with RTSP and HTTP URLs",
+			input:    "RTSP: rtsp://admin:pass@cam.local/live HTTP: http://example.com/test",
+			expected: "RTSP: rtsp://cam.local HTTP: http://example.com/test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := SanitizeRTSPUrls(tt.input)
+			if result != tt.expected {
+				t.Errorf("SanitizeRTSPUrls() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGenerateSystemID(t *testing.T) {
 	t.Parallel()
 
