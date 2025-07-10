@@ -563,8 +563,7 @@ func TestFFmpegStream_ValidateUserTimeout(t *testing.T) {
 
 // TestFFmpegStream_TimeoutDetectionLogic tests the logic for detecting user-provided timeouts
 func TestFFmpegStream_TimeoutDetectionLogic(t *testing.T) {
-	// This test requires a mock configuration to work properly
-	// We'll test the core logic by examining the parameter detection
+	t.Parallel()
 	
 	tests := []struct {
 		name               string
@@ -618,17 +617,10 @@ func TestFFmpegStream_TimeoutDetectionLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test the timeout detection logic directly
-			hasUserTimeout := false
-			userTimeoutValue := ""
+			t.Parallel()
 			
-			for i, param := range tt.ffmpegParameters {
-				if param == "-timeout" && i+1 < len(tt.ffmpegParameters) {
-					hasUserTimeout = true
-					userTimeoutValue = tt.ffmpegParameters[i+1]
-					break
-				}
-			}
+			// Test the timeout detection logic using the actual helper function
+			hasUserTimeout, userTimeoutValue := detectUserTimeout(tt.ffmpegParameters)
 			
 			assert.Equal(t, tt.expectedUserTimeout, hasUserTimeout, "User timeout detection should match expected")
 			assert.Equal(t, tt.expectedTimeoutValue, userTimeoutValue, "User timeout value should match expected")
@@ -638,6 +630,8 @@ func TestFFmpegStream_TimeoutDetectionLogic(t *testing.T) {
 
 // TestFFmpegStream_TimeoutBehaviorIntegration tests the integration of timeout logic
 func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
+	t.Parallel()
+	
 	// This test verifies the timeout behavior integration by checking
 	// what arguments would be generated for different scenarios
 	
@@ -669,21 +663,13 @@ func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
 			// Create base args like in the actual function
 			args := []string{"-rtsp_transport", "tcp"}
 			
-			// Simulate the timeout detection logic
-			hasUserTimeout := false
-			userTimeoutValue := ""
-			if len(tt.ffmpegParameters) > 0 {
-				for i, param := range tt.ffmpegParameters {
-					if param == "-timeout" && i+1 < len(tt.ffmpegParameters) {
-						hasUserTimeout = true
-						userTimeoutValue = tt.ffmpegParameters[i+1]
-						break
-					}
-				}
-			}
+			// Use the actual helper function to detect timeout
+			hasUserTimeout, userTimeoutValue := detectUserTimeout(tt.ffmpegParameters)
 			
 			// Add default timeout if user hasn't provided one
 			if !hasUserTimeout {
@@ -725,6 +711,65 @@ func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 				}
 			}
 			assert.True(t, hasAnyTimeout, "Should always have a timeout parameter")
+		})
+	}
+}
+
+// TestDetectUserTimeout tests the helper function for detecting user timeouts
+func TestDetectUserTimeout(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		params         []string
+		expectedFound  bool
+		expectedValue  string
+	}{
+		{
+			name:          "empty_params",
+			params:        []string{},
+			expectedFound: false,
+			expectedValue: "",
+		},
+		{
+			name:          "no_timeout_param",
+			params:        []string{"-loglevel", "debug"},
+			expectedFound: false,
+			expectedValue: "",
+		},
+		{
+			name:          "timeout_with_value",
+			params:        []string{"-timeout", "5000000"},
+			expectedFound: true,
+			expectedValue: "5000000",
+		},
+		{
+			name:          "timeout_without_value",
+			params:        []string{"-timeout"},
+			expectedFound: false,
+			expectedValue: "",
+		},
+		{
+			name:          "timeout_in_middle",
+			params:        []string{"-loglevel", "debug", "-timeout", "10000000", "-rtsp_flags", "prefer_tcp"},
+			expectedFound: true,
+			expectedValue: "10000000",
+		},
+		{
+			name:          "first_timeout_wins",
+			params:        []string{"-timeout", "5000000", "-timeout", "10000000"},
+			expectedFound: true,
+			expectedValue: "5000000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			found, value := detectUserTimeout(tt.params)
+			assert.Equal(t, tt.expectedFound, found, "Detection result should match expected")
+			assert.Equal(t, tt.expectedValue, value, "Timeout value should match expected")
 		})
 	}
 }

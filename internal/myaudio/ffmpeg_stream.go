@@ -53,6 +53,10 @@ const (
 
 	// Maximum safe exponent for bit shift to prevent overflow
 	maxBackoffExponent = 20 // This allows up to 2^20 = ~1 million multiplier
+
+	// Timeout settings for FFmpeg RTSP streams
+	defaultTimeoutMicroseconds = 30000000 // 30 seconds in microseconds
+	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
 )
 
 // Use shared logger from integration file
@@ -366,21 +370,11 @@ func (s *FFmpegStream) startProcess() error {
 	rtspSettings := conf.Setting().Realtime.RTSP
 	
 	// Check if user has already provided a timeout parameter
-	hasUserTimeout := false
-	userTimeoutValue := ""
-	if len(rtspSettings.FFmpegParameters) > 0 {
-		for i, param := range rtspSettings.FFmpegParameters {
-			if param == "-timeout" && i+1 < len(rtspSettings.FFmpegParameters) {
-				hasUserTimeout = true
-				userTimeoutValue = rtspSettings.FFmpegParameters[i+1]
-				break
-			}
-		}
-	}
+	hasUserTimeout, userTimeoutValue := detectUserTimeout(rtspSettings.FFmpegParameters)
 	
-	// Add default 30-second timeout if user hasn't provided one
+	// Add default timeout if user hasn't provided one
 	if !hasUserTimeout {
-		args = append(args, "-timeout", "30000000") // 30 seconds in microseconds
+		args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
 	}
 	
 	// Add custom FFmpeg parameters from configuration (before input)
@@ -388,6 +382,8 @@ func (s *FFmpegStream) startProcess() error {
 		// Validate user timeout if provided
 		if hasUserTimeout {
 			if err := s.validateUserTimeout(userTimeoutValue); err != nil {
+				// Log warning but continue - prefer working stream with default timeout
+				// over failing completely due to user configuration error
 				streamLogger.Warn("invalid user timeout, using default",
 					"url", privacy.SanitizeRTSPUrl(s.url),
 					"user_timeout", userTimeoutValue,
@@ -395,7 +391,7 @@ func (s *FFmpegStream) startProcess() error {
 					"component", "ffmpeg-stream",
 					"operation", "validate_timeout")
 				// Add default timeout before user parameters
-				args = append(args, "-timeout", "30000000")
+				args = append(args, "-timeout", strconv.FormatInt(defaultTimeoutMicroseconds, 10))
 			}
 		}
 		args = append(args, rtspSettings.FFmpegParameters...)
@@ -1002,8 +998,19 @@ func (s *FFmpegStream) resetFailures() {
 	}
 }
 
+// detectUserTimeout scans FFmpeg parameters for an existing timeout setting
+// Returns true and the timeout value if found, false and empty string otherwise
+func detectUserTimeout(params []string) (found bool, value string) {
+	for i, param := range params {
+		if param == "-timeout" && i+1 < len(params) {
+			return true, params[i+1]
+		}
+	}
+	return false, ""
+}
+
 // validateUserTimeout validates a user-provided timeout value
-// The timeout should be in microseconds and at least 1 second (1000000 microseconds)
+// The timeout should be in microseconds and at least 1 second
 func (s *FFmpegStream) validateUserTimeout(timeoutStr string) error {
 	timeout, err := strconv.ParseInt(timeoutStr, 10, 64)
 	if err != nil {
@@ -1015,8 +1022,6 @@ func (s *FFmpegStream) validateUserTimeout(timeoutStr string) error {
 			Build()
 	}
 
-	// Minimum 1 second (1,000,000 microseconds)
-	const minTimeoutMicroseconds = 1000000
 	if timeout < minTimeoutMicroseconds {
 		return errors.Newf("timeout too short: %d microseconds (minimum: %d microseconds = 1 second)", timeout, minTimeoutMicroseconds).
 			Component("ffmpeg-stream").
