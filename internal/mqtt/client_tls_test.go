@@ -1,4 +1,5 @@
 // client_tls_test.go: Tests for secure MQTT (TLS/SSL) functionality
+//
 //nolint:misspell // Mosquitto is the correct name of the MQTT broker, not a misspelling of Mosquito
 package mqtt
 
@@ -19,10 +20,10 @@ const (
 	mosquittoTLSBroker = "tls://test.mosquitto.org:8883"
 	// Mosquitto test broker - Port 8887 has an expired certificate //nolint:misspell // Mosquitto is the correct name of the MQTT broker
 	mosquittoExpiredCertBroker = "tls://test.mosquitto.org:8887"
-	
+
 	// HiveMQ public broker
 	hivemqTLSBroker = "ssl://broker.hivemq.com:8883"
-	
+
 	// Test timeouts
 	tlsTestTimeout = 30 * time.Second
 )
@@ -220,7 +221,7 @@ func testSelfSignedCertificate(t *testing.T) {
 
 	// Now test without InsecureSkipVerify - should fail
 	client.Disconnect()
-	
+
 	settings.Realtime.MQTT.TLS.InsecureSkipVerify = false
 	client2, err := NewClient(settings, metrics)
 	if err != nil {
@@ -287,7 +288,7 @@ func testTLSAutoDetection(t *testing.T) {
 				t.Fatalf("Failed to create MQTT client: %v", err)
 			}
 
-			// The auto-detection logic is tested by the successful connections 
+			// The auto-detection logic is tested by the successful connections
 			// in other tests. We verify it works by successfully connecting
 			// with TLS schemes in the actual connection tests above.
 		})
@@ -333,7 +334,7 @@ func testTLSConnectionTest(t *testing.T) {
 
 	// Run the connection test
 	resultChan := make(chan TestResult, 10)
-	
+
 	// Run test in goroutine with proper cleanup
 	testDone := make(chan struct{})
 	go func() {
@@ -349,10 +350,10 @@ func testTLSConnectionTest(t *testing.T) {
 	}
 
 	stageResults := make(map[string]bool)
-	
+
 	// Read results with timeout
 	timeout := time.After(20 * time.Second)
-	
+
 loop:
 	for {
 		select {
@@ -360,10 +361,10 @@ loop:
 			if !ok {
 				break loop
 			}
-			
-			t.Logf("Test stage: %s - Success: %v, Message: %s", 
+
+			t.Logf("Test stage: %s - Success: %v, Message: %s",
 				result.Stage, result.Success, result.Message)
-			
+
 			if result.Error != "" {
 				t.Logf("  Error: %s", result.Error)
 			}
@@ -374,10 +375,10 @@ loop:
 					stageResults[stage] = result.Success
 				}
 			}
-			
+
 		case <-timeout:
 			t.Fatal("Test timed out waiting for results")
-			
+
 		case <-testDone:
 			// Close the channel when test is done
 			close(resultChan)
@@ -545,7 +546,7 @@ func BenchmarkTLSConnection(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		
+
 		for b.Loop() {
 			client, err := NewClient(settings, metrics)
 			if err != nil {
@@ -587,7 +588,7 @@ func BenchmarkTLSConnection(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		
+
 		for b.Loop() {
 			client, err := NewClient(settings, metrics)
 			if err != nil {

@@ -19,8 +19,8 @@ import (
 
 // global logger instances, initialized in Init()
 var (
-	structuredLogger     *slog.Logger
-	humanReadableLogger  *slog.Logger
+	structuredLogger    *slog.Logger
+	humanReadableLogger *slog.Logger
 	loggerMu            sync.RWMutex // Protects logger access
 )
 
@@ -79,14 +79,14 @@ func Init() {
 		currentLogLevel.Set(slog.LevelInfo)
 
 		// Ensure logs directory exists
-		err := os.MkdirAll("logs", 0o755)
+		err := os.MkdirAll("logs", 0o755) //nolint:gosec // accept 0o755 for now
 		if err != nil {
 			fmt.Printf("Failed to create logs directory: %v\n", err)
 			os.Exit(1) // bail out if we can't create the logs directory
 		}
 
 		// Structured logger (JSON) to file
-		structuredLogFile, err := os.OpenFile("logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		structuredLogFile, err := os.OpenFile("logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666) //nolint:gosec // accept 0o666 for now
 		if err != nil {
 			fmt.Printf("Failed to open structured log file: %v\n", err)
 			structuredLogFile = os.Stderr // Fallback
@@ -102,7 +102,7 @@ func Init() {
 			Level:       currentLogLevel,
 			ReplaceAttr: defaultReplaceAttr,
 		})
-		
+
 		// Human-readable logger (Text) to console
 		// os.Stdout is not typically closed by the application, so no closer needed here.
 		currentHumanReadableOutputCloser = nil
@@ -110,7 +110,7 @@ func Init() {
 			Level:       currentLogLevel,
 			ReplaceAttr: defaultReplaceAttr,
 		})
-		
+
 		// Set loggers with lock protection
 		loggerMu.Lock()
 		structuredLogger = slog.New(structuredHandler)
@@ -119,7 +119,7 @@ func Init() {
 
 		// Set the default logger
 		slog.SetDefault(structuredLogger)
-		
+
 		// Mark as initialized
 		initialized = true
 	})
@@ -173,7 +173,7 @@ func SetOutput(structuredOutput, humanReadableOutput io.Writer) error {
 		Level:       currentLogLevel,
 		ReplaceAttr: defaultReplaceAttr,
 	})
-	
+
 	// Update loggers with lock protection
 	loggerMu.Lock()
 	structuredLogger = slog.New(structuredHandler)
@@ -222,7 +222,7 @@ func ForService(serviceName string) *slog.Logger {
 	loggerMu.RLock()
 	logger := structuredLogger
 	loggerMu.RUnlock()
-	
+
 	if logger == nil {
 		return nil
 	}
@@ -272,7 +272,7 @@ func NewFileLogger(filePath, serviceName string, levelVar *slog.LevelVar) (*slog
 	// Ensure the directory exists (lumberjack doesn't create directories)
 	logDir := filepath.Dir(filePath)
 	if logDir != "." { // Avoid trying to create the current directory if filePath is just a filename
-		if err := os.MkdirAll(logDir, 0o755); err != nil {
+		if err := os.MkdirAll(logDir, 0o755); err != nil { //nolint:gosec // accept 0o755 for now
 			return nil, nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
 		}
 	}
