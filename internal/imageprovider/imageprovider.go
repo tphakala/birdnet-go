@@ -18,7 +18,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
-	"gorm.io/gorm"
 )
 
 // ErrImageNotFound indicates that the image provider could not find an image for the requested species.
@@ -419,8 +418,8 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	cachedImage, err = c.store.GetImageCache(query) // Use GetImageCache and handle two return values
 	if err != nil {
 		// Check if it's a record not found error (which is expected for cache misses)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			logger.Debug("Image not found in DB cache (GetImageCache returned gorm.ErrRecordNotFound)")
+		if errors.Is(err, datastore.ErrImageCacheNotFound) {
+			logger.Debug("Image not found in DB cache (GetImageCache returned ErrImageCacheNotFound)")
 			return nil, ErrCacheMiss
 		}
 		// Log database errors for other errors
@@ -433,12 +432,6 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 			Context("operation", "query_image_cache").
 			Build()
 		return nil, enhancedErr
-	}
-
-	// Check if cachedImage is nil (indicates 'not found' since err was nil)
-	if cachedImage == nil {
-		logger.Debug("Image not found in DB cache (GetImageCache returned nil)")
-		return nil, ErrCacheMiss
 	}
 
 	logger.Debug("Image found in DB cache", "cached_at", cachedImage.CachedAt)

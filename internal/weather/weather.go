@@ -276,6 +276,12 @@ func (s *Service) fetchAndSave() error {
 	}
 	
 	if err != nil {
+		// Handle "not modified" as a success case - no new data to save
+		if errors.Is(err, ErrWeatherDataNotModified) {
+			weatherLogger.Debug("Weather data not modified since last fetch", "provider", s.settings.Realtime.Weather.Provider)
+			return nil // Not an error, just no new data
+		}
+		
 		// Provider should log the specific error, we log the failure context here
 		weatherLogger.Error("Failed to fetch weather data from provider",
 			"provider", s.settings.Realtime.Weather.Provider,

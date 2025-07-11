@@ -3,6 +3,8 @@ package notification
 import (
 	"testing"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test helper functions
@@ -60,14 +62,23 @@ func mustDeleteNotification(t *testing.T, store *InMemoryStore, id string) {
 func assertNotificationExists(t *testing.T, store *InMemoryStore, id string, shouldExist bool) {
 	t.Helper()
 	notif, err := store.Get(id)
-	if err != nil {
-		t.Fatalf("Failed to get notification %s: %v", id, err)
-	}
-	if shouldExist && notif == nil {
-		t.Errorf("Expected notification %s to exist, but it doesn't", id)
-	}
-	if !shouldExist && notif != nil {
-		t.Errorf("Expected notification %s to not exist, but it does", id)
+	if shouldExist {
+		if err != nil {
+			t.Fatalf("Failed to get notification %s: %v", id, err)
+		}
+		if notif == nil {
+			t.Errorf("Expected notification %s to exist, but it doesn't", id)
+		}
+	} else {
+		if err != nil && !errors.Is(err, ErrNotificationNotFound) {
+			t.Fatalf("Unexpected error getting notification %s: %v", id, err)
+		}
+		if err == nil {
+			t.Errorf("Expected notification %s to not exist, but Get() returned no error", id)
+		}
+		if notif != nil {
+			t.Errorf("Expected notification %s to not exist, but it does", id)
+		}
 	}
 }
 

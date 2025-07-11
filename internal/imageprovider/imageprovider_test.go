@@ -92,7 +92,7 @@ func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.I
 		return img, nil
 	}
 	//log.Printf("Debug: GetImageCache MISS for %s provider %s", query.ScientificName, query.ProviderName)
-	return nil, nil //nolint:nilnil // Mock mimics real datastore behavior
+	return nil, datastore.ErrImageCacheNotFound
 }
 
 func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
@@ -183,7 +183,7 @@ func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil 
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
 }
-func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error)     { return nil, gorm.ErrRecordNotFound }
+func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error)     { return nil, datastore.ErrNoteReviewNotFound }
 func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error              { return nil }
 func (m *mockStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }
@@ -206,7 +206,7 @@ func (m *mockStore) CountSearchResults(query string) (int64, error)         { re
 func (m *mockStore) Transaction(fc func(tx *gorm.DB) error) error           { return nil }
 func (m *mockStore) LockNote(noteID string) error                           { return nil }
 func (m *mockStore) UnlockNote(noteID string) error                         { return nil }
-func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, gorm.ErrRecordNotFound }
+func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, datastore.ErrNoteLockNotFound }
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
 func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { return nil, nil }
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
@@ -353,7 +353,7 @@ func TestBirdImageCache(t *testing.T) {
 
 			// Verify that the image was cached in the store
 			cached, err := mockStore.GetImageCache(datastore.ImageCacheQuery{ScientificName: tt.scientificName, ProviderName: "mock"})
-			if err != nil {
+			if err != nil && !errors.Is(err, datastore.ErrImageCacheNotFound) {
 				t.Errorf("Failed to get cached image: %v", err)
 			}
 			if cached != nil && cached.URL != got.URL {
