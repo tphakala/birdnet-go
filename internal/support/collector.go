@@ -34,6 +34,11 @@ var (
 	closeLogger     func() error
 )
 
+// Sentinel errors for support collector operations
+var (
+	ErrJournalNotAvailable = errors.NewStd("journal logs not available")
+)
+
 func init() {
 	var err error
 	// Define log file path relative to working directory
@@ -467,7 +472,9 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	if err != nil {
 		// journalctl might not be available or service might not exist
 		// This is not a fatal error, just means no journald logs available
-		return nil, nil
+		// We intentionally ignore the error here and return empty logs
+		_ = err // explicitly ignore the error to satisfy nilerr linter
+		return nil, ErrJournalNotAvailable
 	}
 
 	// Parse JSON output line by line

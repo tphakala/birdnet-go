@@ -46,6 +46,11 @@ type YrResponse struct {
 	} `json:"properties"`
 }
 
+// Sentinel errors for weather operations
+var (
+	ErrWeatherNotModified = errors.NewStd("weather data not modified since last fetch")
+)
+
 // FetchWeather implements the Provider interface for YrNoProvider
 func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 	url := fmt.Sprintf("%s?lat=%.3f&lon=%.3f", YrNoBaseURL,
@@ -115,7 +120,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 			// Let's return nil, nil for now, indicating success but no new data.
 			// The calling code in weather.go needs to handle this case (currently doesn't explicitly)
 			// TODO: Refactor polling logic to handle (nil, nil) from FetchWeather gracefully.
-			return nil, nil // Indicate success, but no new data
+			return nil, ErrWeatherNotModified // Indicate success, but no new data
 		}
 
 		if resp.StatusCode != http.StatusOK {
