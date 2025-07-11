@@ -265,7 +265,7 @@ func (f *octaveBandFilter) processAudioSample(input float64) float64 {
 // ProcessAudioData processes audio samples and returns sound level data when 10-second window is complete
 func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData, error) {
 	if len(samples) == 0 {
-		return nil, nil // No data to process
+		return nil, ErrNoAudioData
 	}
 
 	// Ensure we have an even number of bytes (16-bit samples)
@@ -419,7 +419,7 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 		return soundLevelData, nil
 	}
 
-	return nil, nil // interval window not yet complete
+	return nil, ErrIntervalIncomplete // interval window not yet complete
 }
 
 // calculateRMS calculates Root Mean Square of audio samples
