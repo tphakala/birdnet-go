@@ -1,8 +1,7 @@
 {{define "notifications"}}
 <div class="col-span-12" x-data="notificationsPage" x-init="init()">
     <!-- Page Header -->
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold mb-2">Notifications</h1>
+    <div class="mb-4">
         <p class="text-base-content/70">View and manage all system notifications</p>
     </div>
 
@@ -427,6 +426,10 @@ document.addEventListener('alpine:init', () => {
                     const index = this.notifications.findIndex(n => n.id === id);
                     
                     if (index !== -1) {
+                        // Get the notification before removing it to check if it was unread
+                        const deletedNotification = this.notifications[index];
+                        const wasUnread = !deletedNotification.read;
+                        
                         // Remove the notification using splice for better reactivity
                         this.notifications.splice(index, 1);
                         
@@ -434,6 +437,14 @@ document.addEventListener('alpine:init', () => {
                         
                         // Update hasUnread flag
                         this.hasUnread = this.notifications.some(n => !n.read);
+                        
+                        // Dispatch event to update notification bell
+                        window.dispatchEvent(new CustomEvent('notification-deleted', {
+                            detail: {
+                                id: id,
+                                wasUnread: wasUnread
+                            }
+                        }));
                         
                         // If current page is now empty and not first page, go to previous page
                         if (this.notifications.length === 0 && this.currentPage > 1) {

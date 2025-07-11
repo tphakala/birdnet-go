@@ -30,6 +30,14 @@ document.addEventListener('alpine:init', () => {
             // Load sound preference
             this.soundEnabled = localStorage.getItem('notificationSound') === 'true';
             
+            // Create bound handler for cleanup
+            this.notificationDeletedHandler = (event) => {
+                this.handleNotificationDeleted(event.detail);
+            };
+            
+            // Listen for notification deletion events
+            window.addEventListener('notification-deleted', this.notificationDeletedHandler);
+            
             // Cleanup on page unload
             window.addEventListener('beforeunload', () => {
                 this.cleanup();
@@ -183,6 +191,28 @@ document.addEventListener('alpine:init', () => {
             this.unreadCount = this.notifications.filter(n => !n.read).length;
         },
         
+        // Handle notification deleted event from other components
+        handleNotificationDeleted(detail) {
+            // Remove the notification from our local array
+            const index = this.notifications.findIndex(n => n.id === detail.id);
+            if (index !== -1) {
+                this.notifications.splice(index, 1);
+                
+                // Update unread count if the deleted notification was unread
+                if (detail.wasUnread) {
+                    this.updateUnreadCount();
+                }
+                
+                if (this.debugMode) {
+                    console.log('Notification bell updated after deletion:', {
+                        id: detail.id,
+                        wasUnread: detail.wasUnread,
+                        newUnreadCount: this.unreadCount
+                    });
+                }
+            }
+        },
+        
         // Toggle dropdown
         toggleDropdown() {
             this.dropdownOpen = !this.dropdownOpen;
@@ -194,17 +224,13 @@ document.addEventListener('alpine:init', () => {
         
         // Handle notification click
         async handleNotificationClick(notification) {
+            // Mark as read if unread (fire and forget, don't wait)
             if (!notification.read) {
-                await this.markAsRead(notification.id);
+                this.markAsRead(notification.id);
             }
             
-            // Close dropdown
-            this.dropdownOpen = false;
-            
-            // Navigate based on notification type
-            if (notification.metadata?.link) {
-                window.location.href = notification.metadata.link;
-            }
+            // Navigate to notifications page
+            window.location.href = '/notifications';
         },
         
         // Helper function to safely get CSRF token
@@ -302,6 +328,10 @@ document.addEventListener('alpine:init', () => {
             }
             if (this.animationTimeout) {
                 clearTimeout(this.animationTimeout);
+            }
+            // Remove event listener
+            if (this.notificationDeletedHandler) {
+                window.removeEventListener('notification-deleted', this.notificationDeletedHandler);
             }
         }
     }));
