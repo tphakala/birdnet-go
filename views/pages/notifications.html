@@ -253,10 +253,9 @@
             </div>
         </nav>
     </div>
-</div>
-
-<!-- Delete Confirmation Modal -->
-<dialog id="deleteConfirmModal" class="modal">
+    
+    <!-- Delete Confirmation Modal -->
+    <dialog id="deleteConfirmModal" class="modal">
     <div class="modal-box">
         <h3 class="font-bold text-lg">Confirm Delete</h3>
         <p class="py-4">Are you sure you want to delete this notification?</p>
@@ -271,6 +270,7 @@
         <button>close</button>
     </form>
 </dialog>
+</div>
 
 <script>
 document.addEventListener('alpine:init', () => {
@@ -401,7 +401,12 @@ document.addEventListener('alpine:init', () => {
         },
 
         async confirmDelete() {
-            if (!this.pendingDeleteId) return;
+            console.log('confirmDelete called, pendingDeleteId:', this.pendingDeleteId);
+            
+            if (!this.pendingDeleteId) {
+                console.error('No pendingDeleteId set');
+                return;
+            }
             
             const id = this.pendingDeleteId;
             this.pendingDeleteId = null;
