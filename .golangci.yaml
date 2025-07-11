@@ -27,6 +27,8 @@ linters:
     #- ireturn
     - nilnil
     - nilerr
+    #- goconst
+    - gocyclo
     # Performance linters
     - prealloc
     - exhaustive
