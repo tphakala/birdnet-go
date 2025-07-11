@@ -24,6 +24,9 @@ linters:
     - staticcheck
     - ineffassign
     - bodyclose
+    #- ireturn
+    #- nilnil
+    #- nilerr
     # Performance linters
     - prealloc
     - exhaustive
