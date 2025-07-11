@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 	
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -200,8 +201,8 @@ func TestEventBusInitialization(t *testing.T) {
 		}
 		
 		eb, err := Initialize(config)
-		if err != nil {
-			t.Fatalf("failed to initialize: %v", err)
+		if !errors.Is(err, ErrEventBusDisabled) {
+			t.Fatalf("expected ErrEventBusDisabled, got: %v", err)
 		}
 		
 		if eb != nil {

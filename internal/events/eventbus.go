@@ -48,6 +48,11 @@ func init() {
 	}
 }
 
+// Sentinel errors for event bus operations
+var (
+	ErrEventBusDisabled = errors.Newf("event bus is disabled").Component("events").Category(errors.CategoryNotFound).Build()
+)
+
 // EventBus provides asynchronous event processing with non-blocking guarantees
 type EventBus struct {
 	// Channels for different event types
@@ -146,7 +151,7 @@ func Initialize(config *Config) (*EventBus, error) {
 	
 	// Skip initialization if disabled
 	if !config.Enabled {
-		return nil, nil
+		return nil, ErrEventBusDisabled
 	}
 	
 	// Set logger level based on debug flag

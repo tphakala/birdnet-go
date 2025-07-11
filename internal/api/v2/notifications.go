@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -308,17 +309,16 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 	service := notification.GetService()
 	notif, err := service.Get(id)
 	if err != nil {
+		if errors.Is(err, notification.ErrNotificationNotFound) {
+			return ctx.JSON(http.StatusNotFound, map[string]string{
+				"error": "Notification not found",
+			})
+		}
 		if c.apiLogger != nil {
 			c.apiLogger.Error("failed to get notification", "error", err, "id", id)
 		}
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notification",
-		})
-	}
-
-	if notif == nil {
-		return ctx.JSON(http.StatusNotFound, map[string]string{
-			"error": "Notification not found",
 		})
 	}
 
