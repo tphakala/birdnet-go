@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestNewSoundLevelProcessor_IntervalClamping tests that intervals are properly clamped
@@ -315,7 +316,7 @@ func TestProcessAudioData_IntervalCompletion(t *testing.T) {
 	// Process 4 seconds of data - should not return any results yet
 	for i := range 4 {
 		result, err := processor.ProcessAudioData(oneSecondData)
-		assert.NoError(t, err)
+		assert.True(t, err == nil || errors.Is(err, ErrIntervalIncomplete), "should return no error or ErrIntervalIncomplete (second %d)", i+1)
 		assert.Nil(t, result, "should not return data before interval completes (second %d)", i+1)
 	}
 
@@ -339,12 +340,12 @@ func TestProcessAudioData_EmptyData(t *testing.T) {
 
 	// Process empty data
 	result, err := processor.ProcessAudioData([]byte{})
-	assert.NoError(t, err)
+	assert.True(t, errors.Is(err, ErrNoAudioData), "empty data should return ErrNoAudioData")
 	assert.Nil(t, result, "empty data should return nil")
 
 	// Process nil data
 	result, err = processor.ProcessAudioData(nil)
-	assert.NoError(t, err)
+	assert.True(t, errors.Is(err, ErrNoAudioData), "nil data should return ErrNoAudioData")
 	assert.Nil(t, result, "nil data should return nil")
 }
 
@@ -358,7 +359,7 @@ func TestProcessAudioData_OddByteCount(t *testing.T) {
 	
 	// Should not panic and process normally
 	result, err := processor.ProcessAudioData(oddData)
-	assert.NoError(t, err)
+	assert.True(t, err == nil || errors.Is(err, ErrIntervalIncomplete), "should return no error or ErrIntervalIncomplete")
 	// Result will be nil because we haven't completed an interval
 	assert.Nil(t, result)
 }

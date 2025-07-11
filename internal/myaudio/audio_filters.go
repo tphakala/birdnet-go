@@ -20,6 +20,13 @@ var (
 	filterMetricsOnce   sync.Once               // Ensures metrics are only set once
 )
 
+// Sentinel errors for myaudio operations
+var (
+	ErrFilterDisabled     = errors.Newf("audio filter is disabled").Component("myaudio").Category(errors.CategoryNotFound).Build()
+	ErrNoAudioData        = errors.Newf("no audio data to process").Component("myaudio").Category(errors.CategoryNotFound).Build()
+	ErrIntervalIncomplete = errors.Newf("audio interval window not yet complete").Component("myaudio").Category(errors.CategoryNotFound).Build()
+)
+
 // SetFilterMetrics sets the metrics instance for filter operations.
 // This function is thread-safe and ensures metrics are only set once per process lifetime.
 // Subsequent calls will be ignored due to sync.Once (idempotent behavior).
@@ -83,6 +90,11 @@ func InitializeFilterChain(settings *conf.Settings) error {
 			// Create and add each filter
 			filter, err := createFilter(filterConfig, float64(conf.SampleRate))
 			if err != nil {
+				// Skip disabled filters (not an error condition)
+				if errors.Is(err, ErrFilterDisabled) {
+					continue
+				}
+				
 				enhancedErr := errors.New(err).
 					Component("myaudio").
 					Category(errors.CategoryConfiguration).
@@ -176,6 +188,11 @@ func UpdateFilterChain(settings *conf.Settings) error {
 			// Create a new filter based on the configuration
 			filter, err := createFilter(filterConfig, float64(conf.SampleRate))
 			if err != nil {
+				// Skip disabled filters (not an error condition)
+				if errors.Is(err, ErrFilterDisabled) {
+					continue
+				}
+				
 				enhancedErr := errors.New(err).
 					Component("myaudio").
 					Category(errors.CategoryConfiguration).
@@ -227,9 +244,9 @@ func UpdateFilterChain(settings *conf.Settings) error {
 
 // createFilter creates a single filter based on the configuration
 func createFilter(config conf.EqualizerFilter, sampleRate float64) (*equalizer.Filter, error) {
-	// If passes is 0 or less, return nil without an error (filter is off)
+	// If passes is 0 or less, return error indicating filter is disabled
 	if config.Passes <= 0 {
-		return nil, nil
+		return nil, ErrFilterDisabled
 	}
 
 	// Create different types of filters based on the configuration
