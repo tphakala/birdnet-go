@@ -478,6 +478,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "",
 			expectedStatus: http.StatusOK,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				assert.Equal(t, fileContent, rec.Body.Bytes())
 			},
 		},
@@ -486,6 +487,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "bytes=0-99",
 			expectedStatus: http.StatusPartialContent,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				assert.Equal(t, fileContent[0:100], rec.Body.Bytes())
 				assert.Equal(t, "bytes 0-99/1024", rec.Header().Get("Content-Range"))
 			},
@@ -495,6 +497,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "bytes=100-199",
 			expectedStatus: http.StatusPartialContent,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				assert.Equal(t, fileContent[100:200], rec.Body.Bytes())
 				assert.Equal(t, "bytes 100-199/1024", rec.Header().Get("Content-Range"))
 			},
@@ -504,6 +507,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "bytes=-100",
 			expectedStatus: http.StatusPartialContent,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				assert.Equal(t, fileContent[924:1024], rec.Body.Bytes())
 				assert.Equal(t, "bytes 924-1023/1024", rec.Header().Get("Content-Range"))
 			},
@@ -513,6 +517,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "bytes=924-",
 			expectedStatus: http.StatusPartialContent,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				assert.Equal(t, fileContent[924:1024], rec.Body.Bytes())
 				assert.Equal(t, "bytes 924-1023/1024", rec.Header().Get("Content-Range"))
 			},
@@ -522,6 +527,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "bytes=invalid",
 			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				assert.Len(t, rec.Body.Bytes(), 0, "416 responses should not include the file body")
 			},
 		},
@@ -530,6 +536,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			rangeHeader:    "bytes=2000-",
 			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				// No body validation needed
 			},
 		},

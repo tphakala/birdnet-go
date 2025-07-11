@@ -311,6 +311,7 @@ type UsageBasedTestHelper struct {
 
 // Execute runs the test with the given configuration
 func (h *UsageBasedTestHelper) Execute(t *testing.T) {
+	t.Helper()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

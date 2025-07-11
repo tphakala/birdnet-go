@@ -18,6 +18,7 @@ import (
 
 // Helper function to generate a test certificate
 func generateTestCertificate(t *testing.T) (caCert, clientCert, clientKey string) {
+	t.Helper()
 	// Generate RSA private key
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -382,6 +383,7 @@ func TestGetTLSManager(t *testing.T) {
 
 // Helper function to generate an EC private key
 func generateECKey(t *testing.T) string {
+	t.Helper()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate EC key: %v", err)
@@ -397,6 +399,7 @@ func generateECKey(t *testing.T) string {
 
 // Helper function to generate a PKCS8 private key
 func generatePKCS8Key(t *testing.T) string {
+	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("Failed to generate RSA key: %v", err)
