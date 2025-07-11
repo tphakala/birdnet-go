@@ -163,6 +163,7 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	
 	// Wait for rate limit window to pass using a helper function
 	waitForRateLimitReset := func(t *testing.T, rl *RateLimiter, timeout time.Duration) bool {
+		t.Helper()
 		deadline := time.Now().Add(timeout)
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
@@ -241,6 +242,7 @@ func TestTelemetryWorker_CircuitBreaker(t *testing.T) {
 	
 	// Create a test helper to wait for circuit recovery
 	waitForCircuitRecovery := func(t *testing.T, cb *CircuitBreaker, timeout time.Duration) bool {
+		t.Helper()
 		deadline := time.Now().Add(timeout)
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()

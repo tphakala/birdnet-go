@@ -26,6 +26,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			confidence: []float32{0.9, 0.7, 0.5},
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
+				t.Helper()
 				if len(results) != 3 {
 					t.Errorf("Expected 3 results, got %d", len(results))
 				}
@@ -67,6 +68,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			confidence: []float32{},
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
+				t.Helper()
 				if len(results) != 0 {
 					t.Errorf("Expected 0 results, got %d", len(results))
 				}
@@ -78,6 +80,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			confidence: []float32{0.95},
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
+				t.Helper()
 				if len(results) != 1 {
 					t.Errorf("Expected 1 result, got %d", len(results))
 				}
@@ -95,6 +98,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			confidence: generateTestConfidence(6522),
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
+				t.Helper()
 				if len(results) != 6522 {
 					t.Errorf("Expected 6522 results, got %d", len(results))
 				}
@@ -113,6 +117,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			confidence: []float32{0.0, 1.0, 0.5, 0.999},
 			wantErr:    false,
 			validate: func(t *testing.T, results []datastore.Results) {
+				t.Helper()
 				if results[0].Confidence != 0.0 {
 					t.Errorf("Expected confidence 0.0, got %f", results[0].Confidence)
 				}
@@ -167,6 +172,7 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			bufferSize: 3,
 			wantErr:    false,
 			validate: func(t *testing.T, buffer []datastore.Results, results []datastore.Results) {
+				t.Helper()
 				// Results should point to the same buffer
 				if &results[0] != &buffer[0] {
 					t.Error("Results should reference the same buffer")
@@ -221,6 +227,7 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			bufferSize: 0,
 			wantErr:    false,
 			validate: func(t *testing.T, buffer []datastore.Results, results []datastore.Results) {
+				t.Helper()
 				if len(results) != 0 {
 					t.Errorf("Expected 0 results, got %d", len(results))
 				}
@@ -233,6 +240,7 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			bufferSize: 3,
 			wantErr:    false,
 			validate: func(t *testing.T, buffer []datastore.Results, results []datastore.Results) {
+				t.Helper()
 				// First use
 				if results[0].Species != "Robin" || results[0].Confidence != 0.9 {
 					t.Errorf("First use failed")
@@ -529,6 +537,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			predictions: []float32{0, 0, 0},
 			sensitivity: 1.0,
 			validate: func(t *testing.T, results []float32) {
+				t.Helper()
 				for i, r := range results {
 					if math.Abs(float64(r)-0.5) > 0.0001 {
 						t.Errorf("Index %d: expected 0.5, got %f", i, r)
@@ -541,6 +550,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			predictions: []float32{-2, -1, 0, 1, 2},
 			sensitivity: 1.0,
 			validate: func(t *testing.T, results []float32) {
+				t.Helper()
 				// Sigmoid should be symmetric around 0.5
 				if math.Abs(float64(results[0]+results[4])-1.0) > 0.0001 {
 					t.Errorf("Sigmoid not symmetric: %f + %f != 1.0", results[0], results[4])
@@ -558,6 +568,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			predictions: []float32{1.0},
 			sensitivity: 2.0,
 			validate: func(t *testing.T, results []float32) {
+				t.Helper()
 				// Higher sensitivity should give higher confidence
 				sigmoid1 := 1.0 / (1.0 + math.Exp(-1.0))
 				sigmoid2 := 1.0 / (1.0 + math.Exp(-2.0))
@@ -574,6 +585,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			predictions: []float32{},
 			sensitivity: 1.0,
 			validate: func(t *testing.T, results []float32) {
+				t.Helper()
 				if len(results) != 0 {
 					t.Errorf("Expected empty result, got %d elements", len(results))
 				}
@@ -632,6 +644,7 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			sensitivity: 1.0,
 			bufferSize:  5,
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				t.Helper()
 				if len(original) != len(reuse) {
 					t.Errorf("Length mismatch: %d vs %d", len(original), len(reuse))
 				}
@@ -653,6 +666,7 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			sensitivity: 1.0,
 			bufferSize:  2, // Smaller than predictions
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				t.Helper()
 				if len(original) != len(reuse) {
 					t.Errorf("Length mismatch: %d vs %d", len(original), len(reuse))
 				}
@@ -674,6 +688,7 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			sensitivity: 1.0,
 			bufferSize:  0,
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				t.Helper()
 				if len(original) != 0 || len(reuse) != 0 {
 					t.Error("Empty inputs should produce empty outputs")
 				}
@@ -685,6 +700,7 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 			sensitivity: 2.0,
 			bufferSize:  5, // Larger than predictions
 			validate: func(t *testing.T, original []float32, reuse []float32, buffer []float32) {
+				t.Helper()
 				// Should fallback due to size mismatch
 				for i := range original {
 					if math.Abs(float64(original[i]-reuse[i])) > 0.0001 {
@@ -734,6 +750,7 @@ func TestGetTopKResults(t *testing.T) {
 			},
 			k: 3,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != k {
 					t.Errorf("Expected %d results, got %d", k, len(results))
 				}
@@ -762,6 +779,7 @@ func TestGetTopKResults(t *testing.T) {
 			},
 			k: 3,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != 3 {
 					t.Errorf("Expected 3 results, got %d", len(results))
 				}
@@ -779,6 +797,7 @@ func TestGetTopKResults(t *testing.T) {
 			},
 			k: 5,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != 2 {
 					t.Errorf("Expected 2 results (input length), got %d", len(results))
 				}
@@ -793,6 +812,7 @@ func TestGetTopKResults(t *testing.T) {
 			input: []datastore.Results{},
 			k:     5,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != 0 {
 					t.Errorf("Expected 0 results for empty input, got %d", len(results))
 				}
@@ -805,6 +825,7 @@ func TestGetTopKResults(t *testing.T) {
 			},
 			k: 0,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != 0 {
 					t.Errorf("Expected 0 results for k=0, got %d", len(results))
 				}
@@ -817,6 +838,7 @@ func TestGetTopKResults(t *testing.T) {
 			},
 			k: -1,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != 0 {
 					t.Errorf("Expected 0 results for negative k, got %d", len(results))
 				}
@@ -827,6 +849,7 @@ func TestGetTopKResults(t *testing.T) {
 			input: generateLargeTestResults(6522),
 			k: 10,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
+				t.Helper()
 				if len(results) != 10 {
 					t.Errorf("Expected 10 results, got %d", len(results))
 				}

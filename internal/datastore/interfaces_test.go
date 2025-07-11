@@ -9,6 +9,7 @@ import (
 // createDatabase initializes a temporary database for testing purposes.
 // It ensures the database connection is opened and handles potential errors.
 func createDatabase(t *testing.T, settings *conf.Settings) Interface {
+	t.Helper()
 	tempDir := t.TempDir()
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = tempDir + "/test.db"

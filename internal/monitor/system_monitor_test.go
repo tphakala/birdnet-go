@@ -23,6 +23,7 @@ func TestDiskMonitoring(t *testing.T) {
 			name:  "multiple paths",
 			paths: []string{"/", "/tmp"},
 			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
+				t.Helper()
 				// Verify that validated paths include both configured paths
 				monitor.mu.RLock()
 				_, rootValidated := monitor.validatedPaths["/"]
@@ -46,6 +47,7 @@ func TestDiskMonitoring(t *testing.T) {
 			name:  "empty paths defaults to root",
 			paths: []string{},
 			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
+				t.Helper()
 				// Verify that root path is validated
 				monitor.mu.RLock()
 				validated, exists := monitor.validatedPaths["/"]
@@ -58,6 +60,7 @@ func TestDiskMonitoring(t *testing.T) {
 			name:  "invalid path handling",
 			paths: []string{"/", "/this/path/does/not/exist"},
 			checkFunc: func(t *testing.T, monitor *SystemMonitor) {
+				t.Helper()
 				// Verify that valid path is marked as validated
 				monitor.mu.RLock()
 				rootValidated, rootExists := monitor.validatedPaths["/"]
