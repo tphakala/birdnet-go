@@ -16,6 +16,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/malgo"
 )
 
@@ -600,7 +601,10 @@ func processAudioFrame(
 	// Process sound level data if enabled (use the safe bufferToUse) - this may be nil if 10-second window isn't complete
 	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
 		if soundLevelData, err := ProcessSoundLevelData("malgo", bufferToUse); err != nil {
-			log.Printf("❌ Error processing sound level data: %v", err)
+			// Only log actual errors, not normal conditions
+			if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
+				log.Printf("❌ Error processing sound level data: %v", err)
+			}
 		} else if soundLevelData != nil {
 			// Attach sound level data when available
 			unifiedData.SoundLevel = soundLevelData

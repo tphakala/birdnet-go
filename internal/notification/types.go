@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Type represents the category of a notification
@@ -27,6 +28,11 @@ const (
 	TypeDetection Type = "detection"
 	// TypeSystem indicates a system status notification
 	TypeSystem Type = "system"
+)
+
+// Sentinel errors for notification operations
+var (
+	ErrNotificationNotFound = errors.Newf("notification not found").Component("notification").Category(errors.CategoryNotFound).Build()
 )
 
 // Priority represents the urgency level of a notification
@@ -222,7 +228,7 @@ func (s *InMemoryStore) Get(id string) (*Notification, error) {
 		notifCopy := *notif
 		return &notifCopy, nil
 	}
-	return nil, nil
+	return nil, ErrNotificationNotFound
 }
 
 // List returns filtered notifications

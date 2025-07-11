@@ -200,13 +200,6 @@ func (s *Service) MarkAsRead(id string) error {
 	if err != nil {
 		return err
 	}
-	if notification == nil {
-		return errors.Newf("notification not found").
-			Component("notification").
-			Category(errors.CategoryValidation).
-			Context("id", id).
-			Build()
-	}
 
 	notification.MarkAsRead()
 	return s.store.Update(notification)
@@ -224,13 +217,6 @@ func (s *Service) MarkAsAcknowledged(id string) error {
 	notification, err := s.store.Get(id)
 	if err != nil {
 		return err
-	}
-	if notification == nil {
-		return errors.Newf("notification not found").
-			Component("notification").
-			Category(errors.CategoryValidation).
-			Context("id", id).
-			Build()
 	}
 
 	notification.MarkAsAcknowledged()
