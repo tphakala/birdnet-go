@@ -630,21 +630,15 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	m.logger.Debug("Creating archive", "archive_path", archivePath, "backup_id", metadata.ID)
 	start := time.Now()
 
-	// Create the archive file
-	// Sanitize the path to prevent directory traversal attacks
-	sanitizedPath := filepath.Clean(archivePath)
-	archiveFile, err := os.Create(sanitizedPath) // #nosec G304 - path is sanitized and constructed from trusted components
+	// Create the archive file with secure path validation
+	secureOp := NewSecureFileOp("backup")
+	archiveFile, cleanPath, err := secureOp.SecureCreate(archivePath)
 	if err != nil {
-		return errors.New(err).
-			Component("backup").
-			Category(errors.CategoryFileIO).
-			Context("operation", "create_archive_file").
-			Context("archive_path", archivePath).
-			Build()
+		return err
 	}
 	defer func() {
 		if err := archiveFile.Close(); err != nil {
-			m.logger.Warn("Failed to close archive file", "archive_path", archivePath, "error", err)
+			m.logger.Warn("Failed to close archive file", "archive_path", cleanPath, "error", err)
 		}
 	}()
 
@@ -825,21 +819,17 @@ func (m *Manager) addBackupDataToArchive(ctx context.Context, tw *tar.Writer, re
 // Renamed from encryptAndWriteArchive for clarity.
 func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath string) error {
 	start := time.Now()
-	m.logger.Debug("Encrypting archive", "source", sourcePath, "destination", destPath)
-
+	
 	// Read the entire source file (archive) into memory.
 	// Consider streaming encryption for very large files if memory becomes an issue.
-	// Sanitize the path to prevent directory traversal attacks
-	sanitizedSourcePath := filepath.Clean(sourcePath)
-	plaintext, err := os.ReadFile(sanitizedSourcePath) // #nosec G304 - path is sanitized and constructed from trusted components
+	// Read source file with secure path validation
+	secureOp := NewSecureFileOp("backup")
+	plaintext, cleanSourcePath, err := secureOp.SecureReadFile(sourcePath)
 	if err != nil {
-		return errors.New(err).
-			Component("backup").
-			Category(errors.CategoryFileIO).
-			Context("operation", "read_archive_for_encryption").
-			Context("source_path", sourcePath).
-			Build()
+		return err
 	}
+	
+	m.logger.Debug("Encrypting archive", "source", cleanSourcePath, "destination", destPath)
 
 	// Get encryption key
 	key, err := m.GetEncryptionKey() // Assumes GetEncryptionKey is implemented in encryption.go

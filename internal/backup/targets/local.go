@@ -385,20 +385,15 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	dstPath := filepath.Join(t.path, filepath.Base(sourcePath))
 	err = t.withRetry(func() error {
 		return atomicWriteFile(dstPath, "backup-*.tmp", filePermissions, func(tempFile *os.File) error {
-			// Sanitize the path to prevent directory traversal attacks
-			sanitizedSourcePath := filepath.Clean(sourcePath)
-			srcFile, err := os.Open(sanitizedSourcePath) // #nosec G304 - path is sanitized and constructed from trusted components
+			// Open source file with secure path validation
+			secureOp := backup.NewSecureFileOp("backup")
+			srcFile, cleanSourcePath, err := secureOp.SecureOpen(sourcePath)
 			if err != nil {
-				return errors.New(err).
-					Component("backup").
-					Category(errors.CategoryFileIO).
-					Context("operation", "open_source_file").
-					Context("source_path", sourcePath).
-					Build()
+				return err
 			}
 			defer func() {
 				if err := srcFile.Close(); err != nil {
-					t.logger.Printf("local: failed to close source file: %v", err)
+					t.logger.Printf("local: failed to close source file %s: %v", cleanSourcePath, err)
 				}
 			}()
 
@@ -531,11 +526,10 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 			continue
 		}
 
-		// Read metadata file
+		// Read metadata file with secure path validation
 		metadataPath := filepath.Join(t.path, entry.Name())
-		// Sanitize the path to prevent directory traversal attacks
-		sanitizedMetadataPath := filepath.Clean(metadataPath)
-		metadataFile, err := os.Open(sanitizedMetadataPath) // #nosec G304 - path is sanitized and constructed from trusted components
+		secureOp := backup.NewSecureFileOp("backup")
+		metadataFile, cleanMetadataPath, err := secureOp.SecureOpen(metadataPath)
 		if err != nil {
 			t.logger.Printf("⚠️ Skipping backup %s: %v", backupName, err)
 			continue
@@ -545,13 +539,13 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&metadata); err != nil {
 			if err := metadataFile.Close(); err != nil {
-				t.logger.Printf("local: failed to close metadata file: %v", err)
+				t.logger.Printf("local: failed to close metadata file %s: %v", cleanMetadataPath, err)
 			}
 			t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", backupName, err)
 			continue
 		}
 		if err := metadataFile.Close(); err != nil {
-			t.logger.Printf("local: failed to close metadata file: %v", err)
+			t.logger.Printf("local: failed to close metadata file %s: %v", cleanMetadataPath, err)
 		}
 
 		backupInfo := backup.BackupInfo{
@@ -649,23 +643,17 @@ func (t *LocalTarget) Validate() error {
 			Build()
 	}
 
-	// Check if path is writable
+	// Check if path is writable with secure path validation
 	tmpFile := filepath.Join(t.path, "write_test")
-	// Sanitize the path to prevent directory traversal attacks
-	sanitizedTmpFile := filepath.Clean(tmpFile)
-	f, err := os.Create(sanitizedTmpFile) // #nosec G304 - path is sanitized and constructed from trusted components
+	secureOp := backup.NewSecureFileOp("backup")
+	f, cleanTmpFile, err := secureOp.SecureCreate(tmpFile)
 	if err != nil {
-		return errors.New(err).
-			Component("backup").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_target_writable").
-			Context("path", t.path).
-			Build()
+		return err
 	}
 	if err := f.Close(); err != nil {
-		t.logger.Printf("local: failed to close test file: %v", err)
+		t.logger.Printf("local: failed to close test file %s: %v", cleanTmpFile, err)
 	}
-	if err := os.Remove(tmpFile); err != nil {
+	if err := os.Remove(cleanTmpFile); err != nil {
 		t.logger.Printf("local: failed to remove test file: %v", err)
 	}
 
