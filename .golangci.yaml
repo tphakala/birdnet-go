@@ -28,6 +28,7 @@ linters:
     - nilnil
     - nilerr
     - thelper
+    - testifylint
     #- goconst
     - gocyclo
     # Performance linters
