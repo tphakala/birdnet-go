@@ -106,6 +106,9 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **Never access shared mutable state after releasing its protecting lock. Always capture needed values into local variables while holding the lock.**
 - **Accept Interfaces, Return Concrete Types**
 
+## Code Development Principles
+- **Follow DRY principle, avoid code duplication**
+
 ## Quick Reference
 - Always validate inputs
 - Prefer standard library

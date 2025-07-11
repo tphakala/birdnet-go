@@ -13,10 +13,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// TestCacheEffectiveness validates that caching effectively reduces external API calls
-func TestCacheEffectiveness(t *testing.T) {
-	t.Parallel()
-	// Create a mock provider that counts API calls
+// setupTestCache creates a new cache instance with mock provider for testing
+func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.BirdImageCache) {
+	t.Helper()
+	
 	mockProvider := &mockProviderWithAPICounter{
 		mockImageProvider: mockImageProvider{
 			fetchDelay: 10 * time.Millisecond,
@@ -35,10 +35,43 @@ func TestCacheEffectiveness(t *testing.T) {
 	}
 	cache.SetImageProvider(mockProvider)
 
+	return mockProvider, cache
+}
+
+// setupTestCacheWithSharedStore creates a new cache instance with shared store for testing
+func setupTestCacheWithSharedStore(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.BirdImageCache, datastore.Interface, *observability.Metrics) {
+	t.Helper()
+	
+	mockProvider := &mockProviderWithAPICounter{
+		mockImageProvider: mockImageProvider{
+			fetchDelay: 10 * time.Millisecond,
+		},
+	}
+
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+	cache.SetImageProvider(mockProvider)
+
+	return mockProvider, cache, mockStore, metrics
+}
+
+// TestCacheEffectiveness validates that caching effectively reduces external API calls
+func TestCacheEffectiveness(t *testing.T) {
+	t.Parallel()
+
 	// Test 1: Multiple requests for same species should only trigger one API call
 	t.Run("DeduplicationTest", func(t *testing.T) {
 		t.Parallel()
-		mockProvider.resetCounters()
+		mockProvider, cache := setupTestCache(t)
+
 		species := "Parus major"
 
 		// Make 10 concurrent requests
@@ -64,7 +97,8 @@ func TestCacheEffectiveness(t *testing.T) {
 	// Test 2: Subsequent requests should use cache
 	t.Run("CacheHitTest", func(t *testing.T) {
 		t.Parallel()
-		mockProvider.resetCounters()
+		mockProvider, cache := setupTestCache(t)
+
 		species := "Carduelis carduelis"
 
 		// First request - should hit API
@@ -95,7 +129,8 @@ func TestCacheEffectiveness(t *testing.T) {
 	// Test 3: DB cache persistence
 	t.Run("DBCachePersistenceTest", func(t *testing.T) {
 		t.Parallel()
-		mockProvider.resetCounters()
+		mockProvider, cache, mockStore, metrics := setupTestCacheWithSharedStore(t)
+
 		species := "Sturnus vulgaris"
 
 		// First request
