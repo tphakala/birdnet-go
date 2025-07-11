@@ -606,7 +606,7 @@ func TestRetryBackoff(t *testing.T) {
 	// But the job queue implementation counts attempts starting from 1, not 0
 	// So the actual number of executions is maxRetries + 1
 	expectedExecutions := maxRetries + 1 // Initial attempt + retries
-	assert.Equal(t, expectedExecutions, len(times), "Should have %d execution times", expectedExecutions)
+	assert.Len(t, times, expectedExecutions, "Should have %d execution times", expectedExecutions)
 	t.Logf("TestRetryBackoff: Recorded %d execution times", len(times))
 
 	// Check job stats
@@ -882,7 +882,7 @@ func TestQueueOverflow(t *testing.T) {
 
 	// Try to enqueue one more job, which should fail with ErrQueueFull
 	_, err = queue.Enqueue(regularAction, &TestData{ID: "overflow-job"}, RetryConfig{Enabled: false})
-	assert.True(t, errors.Is(err, ErrQueueFull), "Enqueue should fail with ErrQueueFull when queue is full")
+	assert.ErrorIs(t, err, ErrQueueFull, "Enqueue should fail with ErrQueueFull when queue is full")
 
 	// Now unblock the first job to make room
 	close(jobBlock)
@@ -893,7 +893,7 @@ func TestQueueOverflow(t *testing.T) {
 
 	// Now we should be able to enqueue a new job
 	_, err = queue.Enqueue(regularAction, &TestData{ID: "after-freeing-space"}, RetryConfig{Enabled: false})
-	assert.NoError(t, err, "Should be able to enqueue a job after making room")
+	require.NoError(t, err, "Should be able to enqueue a job after making room")
 
 	// Process remaining jobs to clean up
 	for i := 0; i < queueCapacity; i++ {
