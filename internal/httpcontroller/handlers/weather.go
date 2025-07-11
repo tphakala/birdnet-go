@@ -64,6 +64,8 @@ func (h *Handlers) getSunEvents(date string, loc *time.Location) (suncalc.SunEve
 	sunEvents, err := h.SunCalc.GetSunEventTimes(dateTime)
 	if err != nil {
 		// If sun events are not available, use default values
+		// We intentionally ignore the error here and provide fallback values
+		//nolint:nilerr // We intentionally ignore the error to provide fallback values
 		return suncalc.SunEventTimes{
 			CivilDawn: dateTime.Add(5 * time.Hour),  // Set civil dawn to 5:00 AM
 			Sunrise:   dateTime.Add(6 * time.Hour),  // Set sunrise to 6:00 AM
