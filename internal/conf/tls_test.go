@@ -61,20 +61,9 @@ type testCertificateData struct {
 }
 
 // setupTestEnvironment creates a test environment with temporary directory and TLS manager
-func setupTestEnvironment(t *testing.T) (tm *TLSManager, tempDir string, cleanup func()) {
+func setupTestEnvironment(t *testing.T) (tm *TLSManager, tempDir string) {
 	t.Helper()
-	var err error
-	tempDir, err = os.MkdirTemp("", "tls-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-
-	cleanup = func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Logf("Failed to remove temp dir: %v", err)
-		}
-	}
-
+	tempDir = t.TempDir()
 	tm = NewTLSManager(tempDir)
 	return
 }
@@ -130,8 +119,7 @@ func verifyCertificatesExist(t *testing.T, tm *TLSManager, service string, shoul
 
 func TestTLSManager(t *testing.T) {
 	t.Parallel()
-	tm, tempDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tm, tempDir := setupTestEnvironment(t)
 
 	// Generate test certificates
 	caCert, clientCert, clientKey := generateTestCertificate(t)

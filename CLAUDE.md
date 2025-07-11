@@ -108,6 +108,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 
 ## Code Development Principles
 - **Follow DRY principle, avoid code duplication**
+- Use `any` instead of `interface{}` to follow modern Go patterns
 
 ## Quick Reference
 - Always validate inputs

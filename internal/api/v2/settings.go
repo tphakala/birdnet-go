@@ -705,8 +705,8 @@ func handleSpeciesSection(settings *conf.Settings, data json.RawMessage, skipped
 
 // handleDashboardSection handles updates to the Dashboard section
 func handleDashboardSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// For now, allowing full updates to dashboard settings
-	// This could be enhanced with specific field restrictions
+	// Dashboard settings are considered safe for full updates as they contain only display preferences
+	// No sensitive configuration like authentication or system paths are involved
 	tempDashboardSettings := settings.Realtime.Dashboard
 	if err := json.Unmarshal(data, &tempDashboardSettings); err != nil {
 		return err
@@ -717,8 +717,8 @@ func handleDashboardSection(settings *conf.Settings, data json.RawMessage, skipp
 
 // handleWeatherSection handles updates to the Weather section
 func handleWeatherSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// For now, allowing full updates to weather settings
-	// This could be enhanced with specific field restrictions
+	// Weather settings are considered safe for full updates as they contain only API configuration
+	// No sensitive configuration like authentication keys or system paths are involved
 	tempWeatherSettings := settings.Realtime.Weather
 	if err := json.Unmarshal(data, &tempWeatherSettings); err != nil {
 		return err
@@ -729,8 +729,8 @@ func handleWeatherSection(settings *conf.Settings, data json.RawMessage, skipped
 
 // handleBirdweatherSection handles updates to the Birdweather section
 func handleBirdweatherSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// For now, allowing full updates to birdweather settings
-	// This could be enhanced with specific field restrictions
+	// Birdweather settings are considered safe for full updates as they contain only service configuration
+	// No sensitive configuration like authentication keys or system paths are involved
 	tempBirdweatherSettings := settings.Realtime.Birdweather
 	if err := json.Unmarshal(data, &tempBirdweatherSettings); err != nil {
 		return err
@@ -786,114 +786,6 @@ func getSettingsSection(settings *conf.Settings, section string) (interface{}, e
 	}
 }
 
-// updateAllowedSettings updates only the fields that are allowed to be changed
-func updateAllowedSettings(current, updated *conf.Settings) error {
-	// Use reflection to dynamically update fields
-	return updateAllowedFieldsRecursively(reflect.ValueOf(current).Elem(), reflect.ValueOf(updated).Elem(), getAllowedFieldMap())
-}
-
-// updateAllowedFieldsRecursively handles recursive field updates using reflection
-func updateAllowedFieldsRecursively(currentValue, updatedValue reflect.Value, allowedFields map[string]interface{}) error {
-	if currentValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
-		return fmt.Errorf("both values must be structs")
-	}
-
-	// Track fields that were skipped for logging purposes
-	var skippedFields []string
-
-	for i := 0; i < currentValue.NumField(); i++ {
-		fieldName := currentValue.Type().Field(i).Name
-		currentField := currentValue.Field(i)
-
-		// Check if this field exists in the updated struct
-		updatedField := updatedValue.FieldByName(fieldName)
-		if !updatedField.IsValid() {
-			continue
-		}
-
-		// Get JSON tag name for more readable logging
-		_, jsonTag := getFieldInfo(currentValue, i, fieldName, "")
-
-		// Process the field based on permissions and type
-		if err := processFieldLegacy(currentField, updatedField, fieldName, jsonTag,
-			allowedFields, &skippedFields); err != nil {
-			return err
-		}
-	}
-
-	// Log skipped fields for debugging purposes
-	if len(skippedFields) > 0 {
-		// Using fmt.Sprintf here as we don't have direct access to the logger
-		fmt.Printf("Settings update: Skipped protected fields: %s\n", strings.Join(skippedFields, ", "))
-	}
-
-	return nil
-}
-
-// processFieldLegacy handles a single field based on its permissions and type for the legacy function
-func processFieldLegacy(
-	currentField, updatedField reflect.Value,
-	fieldName, jsonTag string,
-	allowedFields map[string]interface{},
-	skippedFields *[]string,
-) error {
-	// Check if this field is in the allowed fields map
-	allowedSubfields, isAllowed := allowedFields[fieldName].(map[string]interface{})
-
-	if !isAllowed {
-		// If it's a bool in the map, it means the whole field is allowed (if true)
-		isAllowedBool, isBool := allowedFields[fieldName].(bool)
-		if !isBool || !isAllowedBool {
-			// Field is explicitly not allowed to be updated
-			*skippedFields = append(*skippedFields, jsonTag)
-			return nil // Skip this field
-		}
-
-		// The entire field is allowed to be updated
-		if currentField.CanSet() {
-			// Check if we need to validate this field
-			validationErr := validateField(fieldName, updatedField.Interface())
-			if validationErr != nil {
-				return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-			}
-			currentField.Set(updatedField)
-		}
-		return nil
-	}
-
-	// For struct fields, recursively update allowed subfields
-	if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
-		return updateAllowedFieldsRecursively(currentField, updatedField, allowedSubfields)
-	}
-
-	// For fields that are pointers to structs
-	if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
-		if currentField.IsNil() && !updatedField.IsNil() {
-			// Create a new struct of the appropriate type
-			newStruct := reflect.New(currentField.Type().Elem())
-			currentField.Set(newStruct)
-		}
-
-		if !currentField.IsNil() && !updatedField.IsNil() {
-			if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
-				return updateAllowedFieldsRecursively(currentField.Elem(), updatedField.Elem(), allowedSubfields)
-			}
-		}
-		return nil
-	}
-
-	// Update primitive fields or slices that are in the allowed list
-	if currentField.CanSet() {
-		// Check if we need to validate this field
-		validationErr := validateField(fieldName, updatedField.Interface())
-		if validationErr != nil {
-			return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-		}
-		currentField.Set(updatedField)
-	}
-
-	return nil
-}
 
 // validateField performs validation on specific fields that require extra checks
 // Returns nil if validation passes, error otherwise
