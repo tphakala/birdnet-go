@@ -347,6 +347,7 @@ func init() {
 	RegisterComponent("birdweather", "birdweather")
 	RegisterComponent("backup", "backup")
 	RegisterComponent("audiocore", "audiocore")
+	RegisterComponent("api", "api")
 }
 
 // Helper functions for auto-detection and categorization

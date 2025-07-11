@@ -14,6 +14,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -109,18 +110,63 @@ type TimeOfDayResponse struct {
 	TimeOfDay string `json:"timeOfDay"`
 }
 
-// GetDetections handles GET requests for detections
-func (c *Controller) GetDetections(ctx echo.Context) error {
-	// Parse query parameters
-	date := ctx.QueryParam("date")
-	hour := ctx.QueryParam("hour")
-	duration, _ := strconv.Atoi(ctx.QueryParam("duration"))
-	species := ctx.QueryParam("species")
-	search := ctx.QueryParam("search")
-	startDateStr := ctx.QueryParam("start_date")
-	endDateStr := ctx.QueryParam("end_date")
+// detectionQueryParams holds all query parameters for detection requests
+type detectionQueryParams struct {
+	Date         string
+	Hour         string
+	Duration     int
+	Species      string
+	Search       string
+	StartDate    string
+	EndDate      string
+	NumResults   int
+	Offset       int
+	QueryType    string
+}
 
-	// --- BEGIN CHANGE: Validate start_date and end_date ---
+// parseDetectionQueryParams extracts and validates query parameters from the request
+func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryParams, error) {
+	params := &detectionQueryParams{
+		Date:      ctx.QueryParam("date"),
+		Hour:      ctx.QueryParam("hour"),
+		Species:   ctx.QueryParam("species"),
+		Search:    ctx.QueryParam("search"),
+		StartDate: ctx.QueryParam("start_date"),
+		EndDate:   ctx.QueryParam("end_date"),
+		QueryType: ctx.QueryParam("queryType"),
+	}
+
+	// Parse duration
+	duration, _ := strconv.Atoi(ctx.QueryParam("duration"))
+	if duration <= 0 {
+		duration = 1
+	}
+	params.Duration = duration
+
+	// Validate dates
+	if err := c.validateDateParameters(params.StartDate, params.EndDate, ctx); err != nil {
+		return nil, err
+	}
+
+	// Parse and validate numResults
+	numResults, err := c.parseNumResults(ctx.QueryParam("numResults"))
+	if err != nil {
+		return nil, err
+	}
+	params.NumResults = numResults
+
+	// Parse and validate offset
+	offset, err := c.parseOffset(ctx.QueryParam("offset"))
+	if err != nil {
+		return nil, err
+	}
+	params.Offset = offset
+
+	return params, nil
+}
+
+// validateDateParameters validates start_date and end_date parameters
+func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx echo.Context) error {
 	if err := validateDateParam(startDateStr, "start_date"); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Invalid date parameter",
@@ -133,6 +179,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
 	if err := validateDateParam(endDateStr, "end_date"); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Invalid date parameter",
@@ -148,7 +195,6 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 
 	// Check if start_date is after end_date
 	if startDateStr != "" && endDateStr != "" {
-		// We know parsing works from validateDateParam
 		startDate, _ := time.Parse("2006-01-02", startDateStr)
 		endDate, _ := time.Parse("2006-01-02", endDateStr)
 		if startDate.After(endDate) {
@@ -164,179 +210,148 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, "start_date cannot be after end_date")
 		}
 	}
-	// --- END CHANGE ---
 
-	// --- BEGIN CHANGE: Validate numResults ---
-	numResultsStr := ctx.QueryParam("numResults")
-	var numResults int
+	return nil
+}
+
+// parseNumResults parses and validates the numResults parameter
+func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	if numResultsStr == "" {
-		numResults = 100 // Default value
-	} else {
-		// DEBUG LOGGING
-		log.Printf("[DEBUG] GetDetections: Raw numResults string: '%s'", numResultsStr)
-		var err error
-		numResults, err = strconv.Atoi(numResultsStr)
-		if err != nil {
-			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid numResults parameter",
-					"value", numResultsStr,
-					"error", err.Error(),
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for numResults: %v", err))
-		}
-		// DEBUG LOGGING
-		log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
-		// Add check for unreasonable values
-		if numResults <= 0 {
-			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid numResults parameter",
-					"value", numResults,
-					"error", "numResults must be greater than zero",
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, "numResults must be greater than zero")
-		} else if numResults > 1000 { // Enforce a reasonable maximum
-			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid numResults parameter",
-					"value", numResults,
-					"error", "numResults exceeds maximum allowed value (1000)",
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, "numResults exceeds maximum allowed value (1000)")
-		}
+		return 100, nil // Default value
 	}
-	// --- END CHANGE ---
 
-	// --- BEGIN CHANGE: Validate offset ---
-	offsetStr := ctx.QueryParam("offset")
-	var offset int
+	log.Printf("[DEBUG] GetDetections: Raw numResults string: '%s'", numResultsStr)
+	numResults, err := strconv.Atoi(numResultsStr)
+	if err != nil {
+		log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
+		// Log the enhanced error for telemetry
+		errors.Newf("invalid numeric value for numResults: %v", err).
+			Component("api").
+			Category(errors.CategoryValidation).
+			Context("parameter", "numResults").
+			Context("value", numResultsStr).
+			Build()
+		return 0, fmt.Errorf("Invalid numeric value for numResults: %v", err)
+	}
+
+	log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
+	if numResults <= 0 {
+		log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
+		// Log the enhanced error for telemetry
+		errors.New(errors.NewStd("numResults must be greater than zero")).
+			Component("api").
+			Category(errors.CategoryValidation).
+			Context("parameter", "numResults").
+			Context("value", numResults).
+			Build()
+		return 0, errors.NewStd("numResults must be greater than zero")
+	}
+
+	if numResults > 1000 {
+		log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
+		// Log the enhanced error for telemetry
+		errors.New(errors.NewStd("numResults exceeds maximum allowed value (1000)")).
+			Component("api").
+			Category(errors.CategoryValidation).
+			Context("parameter", "numResults").
+			Context("value", numResults).
+			Build()
+		return 0, errors.NewStd("numResults exceeds maximum allowed value (1000)")
+	}
+
+	return numResults, nil
+}
+
+// parseOffset parses and validates the offset parameter
+func (c *Controller) parseOffset(offsetStr string) (int, error) {
 	if offsetStr == "" {
-		offset = 0 // Default value
-	} else {
-		// DEBUG LOGGING
-		log.Printf("[DEBUG] GetDetections: Raw offset string: '%s'", offsetStr)
-		var err error
-		offset, err = strconv.Atoi(offsetStr)
-		if err != nil {
-			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid offset parameter",
-					"value", offsetStr,
-					"error", err.Error(),
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid numeric value for offset: %v", err))
-		}
-		// DEBUG LOGGING
-		log.Printf("[DEBUG] GetDetections: Parsed offset value: %d", offset)
-		// Add check for unreasonable values
-		if offset < 0 {
-			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Negative offset value: %d", offset)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid offset parameter",
-					"value", offset,
-					"error", "offset cannot be negative",
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, "offset cannot be negative")
-		}
-		const maxOffset = 1000000 // Define a reasonable maximum offset
-		if offset > maxOffset {
-			// DEBUG LOGGING
-			log.Printf("[DEBUG] GetDetections: Too large offset value: %d", offset)
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid offset parameter",
-					"value", offset,
-					"error", fmt.Sprintf("offset exceeds maximum allowed value (%d)", maxOffset),
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("offset exceeds maximum allowed value (%d)", maxOffset))
-		}
-	}
-	// --- END CHANGE ---
-
-	queryType := ctx.QueryParam("queryType") // "hourly", "species", "search", or "all"
-
-	// Default values are set above during parsing/validation
-	// Clamping is replaced by explicit error returns above
-	// // Set default values and enforce maximum limit (moved validation above)
-	// // Apply clamping AFTER successful parsing
-	// if numResults <= 0 { // <= 0 check is now handled by < 0 error check and default value
-	// 	numResults = 100
-	// } else if numResults > 1000 {
-	// 	// Enforce a maximum limit to prevent excessive loads
-	// 	numResults = 1000
-	// }
-
-	// // Ensure offset is non-negative for security and to prevent unexpected behavior
-	// if offset < 0 {
-	// 	offset = 0
-	// }
-
-	// Set default duration
-	if duration <= 0 {
-		duration = 1
+		return 0, nil // Default value
 	}
 
-	var notes []datastore.Note
-	var err error
-	var totalResults int64
+	log.Printf("[DEBUG] GetDetections: Raw offset string: '%s'", offsetStr)
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
+		// Log the enhanced error for telemetry
+		errors.Newf("invalid numeric value for offset: %v", err).
+			Component("api").
+			Category(errors.CategoryValidation).
+			Context("parameter", "offset").
+			Context("value", offsetStr).
+			Build()
+		return 0, fmt.Errorf("Invalid numeric value for offset: %v", err)
+	}
+
+	log.Printf("[DEBUG] GetDetections: Parsed offset value: %d", offset)
+	if offset < 0 {
+		log.Printf("[DEBUG] GetDetections: Negative offset value: %d", offset)
+		// Log the enhanced error for telemetry
+		errors.New(errors.NewStd("offset cannot be negative")).
+			Component("api").
+			Category(errors.CategoryValidation).
+			Context("parameter", "offset").
+			Context("value", offset).
+			Build()
+		return 0, errors.NewStd("offset cannot be negative")
+	}
+
+	const maxOffset = 1000000
+	if offset > maxOffset {
+		log.Printf("[DEBUG] GetDetections: Too large offset value: %d", offset)
+		// Log the enhanced error for telemetry
+		errors.Newf("offset exceeds maximum allowed value (%d)", maxOffset).
+			Component("api").
+			Category(errors.CategoryValidation).
+			Context("parameter", "offset").
+			Context("value", offset).
+			Context("max_allowed", maxOffset).
+			Build()
+		return 0, fmt.Errorf("offset exceeds maximum allowed value (%d)", maxOffset)
+	}
+
+	return offset, nil
+}
+
+// GetDetections handles GET requests for detections
+func (c *Controller) GetDetections(ctx echo.Context) error {
+	// Parse and validate query parameters
+	params, err := c.parseDetectionQueryParams(ctx)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to parse query parameters",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
 
 	// Log the retrieval attempt
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Retrieving detections",
-			"queryType", queryType,
-			"date", date,
-			"hour", hour,
-			"duration", duration,
-			"species", species,
-			"search", search,
-			"start_date", startDateStr,
-			"end_date", endDateStr,
-			"limit", numResults,
-			"offset", offset,
+			"queryType", params.QueryType,
+			"date", params.Date,
+			"hour", params.Hour,
+			"duration", params.Duration,
+			"species", params.Species,
+			"search", params.Search,
+			"start_date", params.StartDate,
+			"end_date", params.EndDate,
+			"limit", params.NumResults,
+			"offset", params.Offset,
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP(),
 		)
 	}
 
 	// Get notes based on query type
-	switch queryType {
-	case "hourly":
-		notes, totalResults, err = c.getHourlyDetections(date, hour, duration, numResults, offset)
-	case "species":
-		notes, totalResults, err = c.getSpeciesDetections(species, date, hour, duration, numResults, offset)
-	case "search":
-		notes, totalResults, err = c.getSearchDetections(search, numResults, offset)
-	default: // "all" or any other value
-		notes, totalResults, err = c.getAllDetections(numResults, offset)
-	}
-
+	notes, totalResults, err := c.getDetectionsByQueryType(params)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to retrieve detections",
-				"queryType", queryType,
+				"queryType", params.QueryType,
 				"error", err.Error(),
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP(),
@@ -346,51 +361,101 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	}
 
 	// Convert notes to response format
-	detections := []DetectionResponse{}
-	for i := range notes {
-		note := &notes[i]
-		detection := DetectionResponse{
-			ID:             note.ID,
-			Date:           note.Date,
-			Time:           note.Time,
-			Source:         note.Source,
-			BeginTime:      note.BeginTime.Format(time.RFC3339),
-			EndTime:        note.EndTime.Format(time.RFC3339),
-			SpeciesCode:    note.SpeciesCode,
-			ScientificName: note.ScientificName,
-			CommonName:     note.CommonName,
-			Confidence:     note.Confidence,
-			Locked:         note.Locked,
-		}
+	detections := c.convertNotesToDetectionResponses(notes)
 
-		// Handle verification status
-		switch note.Verified {
-		case "correct":
-			detection.Verified = "correct"
-		case "false_positive":
-			detection.Verified = "false_positive"
-		default:
-			detection.Verified = "unverified"
-		}
+	// Create paginated response
+	response := c.createPaginatedResponse(detections, totalResults, params.NumResults, params.Offset)
 
-		// Get comments if any
-		if len(note.Comments) > 0 {
-			comments := []string{}
-			for _, comment := range note.Comments {
-				comments = append(comments, comment.Entry)
-			}
-			detection.Comments = comments
-		}
-
-		detections = append(detections, detection)
+	// Log the successful response
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Detections retrieved successfully",
+			"queryType", params.QueryType,
+			"count", len(detections),
+			"total", response.Total,
+			"pages", response.TotalPages,
+			"currentPage", response.CurrentPage,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 	}
 
-	// Calculate pagination values
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// getDetectionsByQueryType retrieves detections based on the query type
+func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+	switch params.QueryType {
+	case "hourly":
+		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
+	case "species":
+		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
+	case "search":
+		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
+	default: // "all" or any other value
+		return c.getAllDetections(params.NumResults, params.Offset)
+	}
+}
+
+// convertNotesToDetectionResponses converts datastore notes to API detection responses
+func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note) []DetectionResponse {
+	detections := make([]DetectionResponse, 0, len(notes))
+	for i := range notes {
+		note := &notes[i]
+		detection := c.noteToDetectionResponse(note)
+		detections = append(detections, detection)
+	}
+	return detections
+}
+
+// noteToDetectionResponse converts a single note to a detection response
+func (c *Controller) noteToDetectionResponse(note *datastore.Note) DetectionResponse {
+	detection := DetectionResponse{
+		ID:             note.ID,
+		Date:           note.Date,
+		Time:           note.Time,
+		Source:         note.Source,
+		BeginTime:      note.BeginTime.Format(time.RFC3339),
+		EndTime:        note.EndTime.Format(time.RFC3339),
+		SpeciesCode:    note.SpeciesCode,
+		ScientificName: note.ScientificName,
+		CommonName:     note.CommonName,
+		Confidence:     note.Confidence,
+		Locked:         note.Locked,
+	}
+
+	// Handle verification status
+	detection.Verified = c.mapVerificationStatus(note.Verified)
+
+	// Get comments if any
+	if len(note.Comments) > 0 {
+		comments := make([]string, 0, len(note.Comments))
+		for _, comment := range note.Comments {
+			comments = append(comments, comment.Entry)
+		}
+		detection.Comments = comments
+	}
+
+	return detection
+}
+
+// mapVerificationStatus maps the database verification status to API response format
+func (c *Controller) mapVerificationStatus(status string) string {
+	switch status {
+	case "correct":
+		return "correct"
+	case "false_positive":
+		return "false_positive"
+	default:
+		return "unverified"
+	}
+}
+
+// createPaginatedResponse creates a paginated response structure
+func (c *Controller) createPaginatedResponse(detections []DetectionResponse, totalResults int64, numResults, offset int) PaginatedResponse {
 	currentPage := (offset / numResults) + 1
 	totalPages := int((totalResults + int64(numResults) - 1) / int64(numResults))
 
-	// Create paginated response
-	response := PaginatedResponse{
+	return PaginatedResponse{
 		Data:        detections,
 		Total:       totalResults,
 		Limit:       numResults,
@@ -398,21 +463,6 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		CurrentPage: currentPage,
 		TotalPages:  totalPages,
 	}
-
-	// Log the successful response
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Detections retrieved successfully",
-			"queryType", queryType,
-			"count", len(detections),
-			"total", totalResults,
-			"pages", totalPages,
-			"currentPage", currentPage,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-	}
-
-	return ctx.JSON(http.StatusOK, response)
 }
 
 // getHourlyDetections handles hourly query type logic
@@ -656,39 +706,7 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
 	}
 
-	detection := DetectionResponse{
-		ID:             note.ID,
-		Date:           note.Date,
-		Time:           note.Time,
-		Source:         note.Source,
-		BeginTime:      note.BeginTime.Format(time.RFC3339),
-		EndTime:        note.EndTime.Format(time.RFC3339),
-		SpeciesCode:    note.SpeciesCode,
-		ScientificName: note.ScientificName,
-		CommonName:     note.CommonName,
-		Confidence:     note.Confidence,
-		Locked:         note.Locked,
-	}
-
-	// Handle verification status
-	switch note.Verified {
-	case "correct":
-		detection.Verified = "correct"
-	case "false_positive":
-		detection.Verified = "false_positive"
-	default:
-		detection.Verified = "unverified"
-	}
-
-	// Get comments if any
-	if len(note.Comments) > 0 {
-		comments := []string{}
-		for _, comment := range note.Comments {
-			comments = append(comments, comment.Entry)
-		}
-		detection.Comments = comments
-	}
-
+	detection := c.noteToDetectionResponse(&note)
 	return ctx.JSON(http.StatusOK, detection)
 }
 
@@ -704,36 +722,7 @@ func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
-	detections := []DetectionResponse{}
-	for i := range notes {
-		note := &notes[i]
-		detection := DetectionResponse{
-			ID:             note.ID,
-			Date:           note.Date,
-			Time:           note.Time,
-			Source:         note.Source,
-			BeginTime:      note.BeginTime.Format(time.RFC3339),
-			EndTime:        note.EndTime.Format(time.RFC3339),
-			SpeciesCode:    note.SpeciesCode,
-			ScientificName: note.ScientificName,
-			CommonName:     note.CommonName,
-			Confidence:     note.Confidence,
-			Locked:         note.Locked,
-		}
-
-		// Handle verification status
-		switch note.Verified {
-		case "correct":
-			detection.Verified = "correct"
-		case "false_positive":
-			detection.Verified = "false_positive"
-		default:
-			detection.Verified = "unverified"
-		}
-
-		detections = append(detections, detection)
-	}
-
+	detections := c.convertNotesToDetectionResponses(notes)
 	return ctx.JSON(http.StatusOK, detections)
 }
 
