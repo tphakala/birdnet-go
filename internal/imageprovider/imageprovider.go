@@ -29,6 +29,8 @@ var ErrImageNotFound = errors.Newf("image not found by provider").
 	Build()
 
 // ErrCacheMiss indicates that the requested image was not found in the cache.
+// This sentinel error is used instead of returning nil, nil to avoid nilnil linter violations
+// while maintaining clear error semantics.
 var ErrCacheMiss = errors.Newf("image not found in cache").
 	Component("imageprovider").
 	Category(errors.CategoryImageCache).
@@ -40,6 +42,11 @@ type contextKey string
 
 // backgroundOperationKey is the context key for background operations
 const backgroundOperationKey contextKey = "background"
+
+// isRealError checks if an error is a genuine error (not a cache miss)
+func isRealError(err error) bool {
+	return err != nil && !errors.Is(err, ErrCacheMiss)
+}
 
 // ImageProvider defines the interface for fetching bird images.
 type ImageProvider interface {
@@ -800,7 +807,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		log.Printf("fetchAndStore: DB cache lookup for %s took %v", scientificName, dbDuration)
 	}
 
-	if err != nil && !errors.Is(err, ErrCacheMiss) {
+	if isRealError(err) {
 		// Logged within loadFromDBCache
 		// Continue to provider fetch, but log this DB error
 		logger.Warn("Error loading from DB cache, proceeding to fetch from provider", "db_error", err)
@@ -1363,7 +1370,7 @@ func (c *BirdImageCache) checkDatabaseCache(missingNames []string, result map[st
 	}
 
 	dbImages, err := c.batchLoadFromDB(missingNames)
-	if err != nil && !errors.Is(err, ErrCacheMiss) {
+	if isRealError(err) {
 		if c.debug {
 			log.Printf("GetBatch: Batch DB load error: %v", err)
 		}
