@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"gorm.io/gorm"
 )
 
 // ErrImageNotFound indicates that the image provider could not find an image for the requested species.
@@ -27,11 +28,25 @@ var ErrImageNotFound = errors.Newf("image not found by provider").
 	Context("error_type", "not_found").
 	Build()
 
+// ErrCacheMiss indicates that the requested image was not found in the cache.
+// This sentinel error is used instead of returning nil, nil to avoid nilnil linter violations
+// while maintaining clear error semantics.
+var ErrCacheMiss = errors.Newf("image not found in cache").
+	Component("imageprovider").
+	Category(errors.CategoryImageCache).
+	Context("error_type", "cache_miss").
+	Build()
+
 // contextKey is a type used for context keys to avoid collisions
 type contextKey string
 
 // backgroundOperationKey is the context key for background operations
 const backgroundOperationKey contextKey = "background"
+
+// isRealError checks if an error is a genuine error (not a cache miss)
+func isRealError(err error) bool {
+	return err != nil && !errors.Is(err, ErrCacheMiss)
+}
 
 // ImageProvider defines the interface for fetching bird images.
 type ImageProvider interface {
@@ -391,7 +406,7 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 		// if c.debug {
 		// 	log.Printf("Debug [%s]: DB store is nil, cannot load from cache for %s", c.providerName, scientificName)
 		// }
-		return nil, nil
+		return nil, ErrCacheMiss
 	}
 
 	var cachedImage *datastore.ImageCache // Correct type based on GetImageCache return
@@ -403,10 +418,13 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	logger.Debug("Querying DB for cached image")
 	cachedImage, err = c.store.GetImageCache(query) // Use GetImageCache and handle two return values
 	if err != nil {
-		// Log database errors, but don't treat 'not found' as an error for the cache
+		// Check if it's a record not found error (which is expected for cache misses)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Debug("Image not found in DB cache (GetImageCache returned gorm.ErrRecordNotFound)")
+			return nil, ErrCacheMiss
+		}
+		// Log database errors for other errors
 		logger.Error("Failed to get image from DB cache", "error", err)
-		// A specific not found error isn't exported, so we'll return nil, nil later if cachedImage is nil
-		// For now, just return the error to indicate a DB problem occurred
 		enhancedErr := errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryImageCache).
@@ -420,7 +438,7 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	// Check if cachedImage is nil (indicates 'not found' since err was nil)
 	if cachedImage == nil {
 		logger.Debug("Image not found in DB cache (GetImageCache returned nil)")
-		return nil, nil // Return nil, nil to indicate cache miss
+		return nil, ErrCacheMiss
 	}
 
 	logger.Debug("Image found in DB cache", "cached_at", cachedImage.CachedAt)
@@ -445,7 +463,7 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 
 	if c.store == nil {
 		logger.Warn("Cannot batch load from DB cache: DB store is nil")
-		return nil, nil
+		return nil, ErrCacheMiss
 	}
 
 	// Use the new batch query method for efficient loading
@@ -789,7 +807,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 		log.Printf("fetchAndStore: DB cache lookup for %s took %v", scientificName, dbDuration)
 	}
 
-	if err != nil {
+	if isRealError(err) {
 		// Logged within loadFromDBCache
 		// Continue to provider fetch, but log this DB error
 		logger.Warn("Error loading from DB cache, proceeding to fetch from provider", "db_error", err)
@@ -1352,7 +1370,7 @@ func (c *BirdImageCache) checkDatabaseCache(missingNames []string, result map[st
 	}
 
 	dbImages, err := c.batchLoadFromDB(missingNames)
-	if err != nil {
+	if isRealError(err) {
 		if c.debug {
 			log.Printf("GetBatch: Batch DB load error: %v", err)
 		}
