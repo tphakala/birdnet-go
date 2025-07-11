@@ -4,7 +4,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"golang.org/x/sync/singleflight"
 )
@@ -31,24 +31,34 @@ const (
 // Sentinel errors for media operations
 var (
 	// Audio file errors
-	ErrAudioFileNotFound    = errors.New("audio file not found")
-	ErrInvalidAudioPath     = errors.New("invalid audio path")
-	ErrPathTraversalAttempt = errors.New("security error: path attempts to traverse")
+	ErrAudioFileNotFound    = errors.NewStd("audio file not found")
+	ErrInvalidAudioPath     = errors.NewStd("invalid audio path")
+	ErrPathTraversalAttempt = errors.NewStd("security error: path attempts to traverse")
 
 	// Configuration errors
-	ErrFFmpegNotConfigured = errors.New("ffmpeg path not set in settings")
-	ErrSoxNotConfigured    = errors.New("sox path not set in settings")
+	ErrFFmpegNotConfigured = errors.NewStd("ffmpeg path not set in settings")
+	ErrSoxNotConfigured    = errors.NewStd("sox path not set in settings")
 
 	// Generation errors
-	ErrSpectrogramGeneration = errors.New("failed to generate spectrogram")
+	ErrSpectrogramGeneration = errors.NewStd("failed to generate spectrogram")
 
 	// Image errors
-	ErrImageNotFound             = errors.New("image not found")
-	ErrImageProviderNotAvailable = errors.New("image provider not available")
+	ErrImageNotFound             = errors.NewStd("image not found")
+	ErrImageProviderNotAvailable = errors.NewStd("image provider not available")
+	
+	// Sentinel errors for nilnil cases
+	ErrSpectrogramExists = errors.NewStd("spectrogram already exists")
+	ErrSpectrogramNotGenerated = errors.NewStd("spectrogram not generated")
 )
 
 // safeFilenamePattern is kept if needed elsewhere, but SecureFS handles validation now
 // var safeFilenamePattern = regexp.MustCompile(`^[\p{L}\p{N}_\-.]+$`)
+
+// Constants for spectrogram generation status
+const (
+	spectrogramStatusExists    = "exists"
+	spectrogramStatusGenerated = "generated"
+)
 
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
@@ -528,7 +538,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	_, err, _ = spectrogramGroup.Do(spectrogramKey, func() (interface{}, error) {
 		// Fast path inside the group – now race-free
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-			return nil, nil // File exists, no need to generate
+			return spectrogramStatusExists, nil // File exists, no need to generate
 		} else if !os.IsNotExist(err) {
 			// An unexpected error occurred checking for the spectrogram
 			return nil, fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
@@ -562,7 +572,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		} else {
 			log.Printf("Successfully generated spectrogram for '%s' using SoX", absAudioPath)
 		}
-		return nil, nil
+		return spectrogramStatusGenerated, nil // Successfully generated, no error
 	})
 
 	if err != nil {
