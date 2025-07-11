@@ -183,6 +183,11 @@ func (m *SystemInitManager) initializeEventBus() error {
 		
 		eventBus, err := events.Initialize(eventBusConfig)
 		if err != nil {
+			// Handle disabled event bus as non-error
+			if errors.Is(err, events.ErrEventBusDisabled) {
+				m.logger.Debug("Event bus disabled, skipping initialization")
+				return
+			}
 			m.eventBusErr = fmt.Errorf("event bus initialization failed: %w", err)
 			return
 		}

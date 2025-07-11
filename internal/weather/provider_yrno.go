@@ -17,6 +17,11 @@ const (
 	yrNoProviderName = "yrno"
 )
 
+// Sentinel errors for weather operations
+var (
+	ErrWeatherDataNotModified = errors.Newf("weather data not modified").Component("weather").Category(errors.CategoryNotFound).Build()
+)
+
 // YrResponse represents the structure of the Yr.no API response
 type YrResponse struct {
 	Properties struct {
@@ -110,12 +115,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 				logger.Debug("Failed to close response body", "error", err)
 			}
 			logger.Info("Weather data not modified since last fetch", "status_code", http.StatusNotModified, "last_modified", p.lastModified)
-			// Returning a specific error might be better, but for now, let upstream handle nil data
-			// For now, treat as non-error, but signal no new data maybe?
-			// Let's return nil, nil for now, indicating success but no new data.
-			// The calling code in weather.go needs to handle this case (currently doesn't explicitly)
-			// TODO: Refactor polling logic to handle (nil, nil) from FetchWeather gracefully.
-			return nil, nil // Indicate success, but no new data
+			return nil, ErrWeatherDataNotModified
 		}
 
 		if resp.StatusCode != http.StatusOK {
