@@ -92,7 +92,7 @@ func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.I
 		return img, nil
 	}
 	//log.Printf("Debug: GetImageCache MISS for %s provider %s", query.ScientificName, query.ProviderName)
-	return nil, nil
+	return nil, nil //nolint:nilnil // Mock mimics real datastore behavior
 }
 
 func (m *mockStore) SaveImageCache(cache *datastore.ImageCache) error {
@@ -163,7 +163,7 @@ func (m *mockStore) Close() error                                               
 func (m *mockStore) SetMetrics(metrics *datastore.Metrics)               {}
 func (m *mockStore) SetSunCalcMetrics(suncalcMetrics any)        {}
 func (m *mockStore) Optimize(ctx context.Context) error                          { return nil }
-func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                       { return nil, nil }
+func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                       { return []datastore.Note{}, nil }
 func (m *mockStore) GetTopBirdsData(date string, minConf float64) ([]datastore.Note, error) {
 	return nil, nil
 }
@@ -183,7 +183,7 @@ func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil 
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
 }
-func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error)     { return nil, nil }
+func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error)     { return nil, gorm.ErrRecordNotFound }
 func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error              { return nil }
 func (m *mockStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }
@@ -195,7 +195,7 @@ func (m *mockStore) GetDailyEvents(date string) (datastore.DailyEvents, error) {
 }
 func (m *mockStore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error  { return nil }
 func (m *mockStore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) { return nil, nil }
-func (m *mockStore) LatestHourlyWeather() (*datastore.HourlyWeather, error)          { return nil, nil }
+func (m *mockStore) LatestHourlyWeather() (*datastore.HourlyWeather, error)          { return nil, gorm.ErrRecordNotFound }
 func (m *mockStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
 	return nil, nil
 }
@@ -206,7 +206,7 @@ func (m *mockStore) CountSearchResults(query string) (int64, error)         { re
 func (m *mockStore) Transaction(fc func(tx *gorm.DB) error) error           { return nil }
 func (m *mockStore) LockNote(noteID string) error                           { return nil }
 func (m *mockStore) UnlockNote(noteID string) error                         { return nil }
-func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, nil }
+func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, gorm.ErrRecordNotFound }
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
 func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { return nil, nil }
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
