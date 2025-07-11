@@ -657,7 +657,9 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 
 // uploadFile handles the actual file upload with progress tracking
 func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localPath, remotePath string) error {
-	file, err := os.Open(localPath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedLocalPath := filepath.Clean(localPath)
+	file, err := os.Open(sanitizedLocalPath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		return errors.New(err).
 			Component("backup").

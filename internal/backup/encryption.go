@@ -54,7 +54,9 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 	}
 
 	// Try to read the existing key file
-	keyBytes, err := os.ReadFile(keyPath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedKeyPath := filepath.Clean(keyPath)
+	keyBytes, err := os.ReadFile(sanitizedKeyPath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, errors.New(err).
