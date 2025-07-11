@@ -675,31 +675,8 @@ func (c *BirdImageCache) loadCachedImages() error {
 func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 
-	// Fast path: check if already loaded
-	if val, ok := c.dataMap.Load(scientificName); ok {
-		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
-			// Check if it's a valid entry (including negative cache entries)
-			if imgPtr.URL != "" {
-				// Check if negative entry is still valid
-				if imgPtr.IsNegativeEntry() {
-					cutoff := time.Now().Add(-imgPtr.GetTTL())
-					if imgPtr.CachedAt.Before(cutoff) {
-						logger.Debug("Negative cache entry expired, removing from memory")
-						c.dataMap.Delete(scientificName)
-						// Continue to re-fetch
-					} else {
-						logger.Debug("Returning valid negative cache entry")
-						return BirdImage{}, true, ErrImageNotFound
-					}
-				} else {
-					logger.Debug("Initialization check: already in memory cache (fast path)")
-					return *imgPtr, true, nil
-				}
-			}
-		}
-	}
-
 	// Use a mutex for this specific scientific name to prevent concurrent fetches
+	// We get the mutex BEFORE any cache checks to prevent race conditions
 	muInterface, _ := c.Initializing.LoadOrStore(scientificName, &sync.Mutex{})
 	mu := muInterface.(*sync.Mutex)
 	mu.Lock()
@@ -713,21 +690,26 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 
 	logger.Debug("Acquired initialization lock")
 
-	// Double check: check cache again *after* acquiring the lock,
-	// in case another goroutine finished initializing while we were waiting.
+	// Check if already loaded after acquiring lock
 	if val, ok := c.dataMap.Load(scientificName); ok {
-		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil && imgPtr.URL != "" {
-			// Handle negative cache entries
-			if imgPtr.IsNegativeEntry() {
-				cutoff := time.Now().Add(-imgPtr.GetTTL())
-				if imgPtr.CachedAt.After(cutoff) {
-					logger.Debug("Returning valid negative cache entry after lock")
-					return BirdImage{}, true, ErrImageNotFound
+		if imgPtr, ok := val.(*BirdImage); ok && imgPtr != nil {
+			// Check if it's a valid entry (including negative cache entries)
+			if imgPtr.URL != "" {
+				// Check if negative entry is still valid
+				if imgPtr.IsNegativeEntry() {
+					cutoff := time.Now().Add(-imgPtr.GetTTL())
+					if imgPtr.CachedAt.Before(cutoff) {
+						logger.Debug("Negative cache entry expired, removing from memory")
+						c.dataMap.Delete(scientificName)
+						// Continue to re-fetch
+					} else {
+						logger.Debug("Returning valid negative cache entry after lock")
+						return BirdImage{}, true, ErrImageNotFound
+					}
+				} else {
+					logger.Debug("Initialization check: found in memory cache after acquiring lock")
+					return *imgPtr, true, nil // Indicate it was found in cache
 				}
-				// Expired, continue to re-fetch
-			} else {
-				logger.Debug("Initialization check: found in memory cache after acquiring lock")
-				return *imgPtr, true, nil // Indicate it was found in cache
 			}
 		}
 	}
