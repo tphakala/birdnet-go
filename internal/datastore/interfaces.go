@@ -24,6 +24,13 @@ import (
 // sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
 const sunriseSetWindowMinutes = 30
 
+// Sentinel errors for not found cases
+var (
+	ErrNoteReviewNotFound = errors.Newf("note review not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	ErrNoteLockNotFound   = errors.Newf("note lock not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	ErrImageCacheNotFound = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+)
+
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
 type Interface interface {
 	Open() error
@@ -850,7 +857,7 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // Return nil if no review exists
+			return nil, ErrNoteReviewNotFound
 		}
 		return nil, errors.New(err).
 			Component("datastore").
@@ -1063,7 +1070,7 @@ func (ds *DataStore) GetNoteLock(noteID string) (*NoteLock, error) {
 	err = ds.DB.Where("note_id = ?", id).First(&lock).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // Return nil if no lock exists
+			return nil, ErrNoteLockNotFound
 		}
 		return nil, errors.New(err).
 			Component("datastore").
@@ -1254,7 +1261,7 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 	if err := ds.DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).
 		Where("scientific_name = ? AND provider_name = ?", query.ScientificName, query.ProviderName).First(&cache).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // Return nil, nil when record is not found
+			return nil, ErrImageCacheNotFound
 		}
 		return nil, errors.New(err).
 			Component("datastore").
