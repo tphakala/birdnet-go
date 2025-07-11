@@ -261,10 +261,10 @@
         <h3 class="font-bold text-lg">Confirm Delete</h3>
         <p class="py-4">Are you sure you want to delete this notification?</p>
         <div class="modal-action">
-            <div class="flex gap-2">
-                <button @click="pendingDeleteId = null; document.getElementById('deleteConfirmModal').close()" class="btn btn-ghost">Cancel</button>
-                <button @click.prevent="confirmDelete()" type="button" class="btn btn-error">Delete</button>
-            </div>
+            <form method="dialog" class="flex gap-2">
+                <button @click="pendingDeleteId = null" class="btn btn-ghost">Cancel</button>
+                <button type="button" @click="confirmDelete()" class="btn btn-error">Delete</button>
+            </form>
         </div>
     </div>
     <form method="dialog" class="modal-backdrop">
