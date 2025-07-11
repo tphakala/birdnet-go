@@ -199,3 +199,53 @@ func TestInMemoryStoreMaxSize(t *testing.T) {
 		assertNotificationExists(t, store, notifications[idx].ID, true)
 	}
 }
+
+// TestInMemoryStoreDelete tests the Delete method edge cases
+func TestInMemoryStoreDelete(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+
+	// Test 1: Delete non-existent notification (should not error)
+	err := store.Delete("non-existent-id")
+	if err != nil {
+		t.Errorf("Delete non-existent notification returned error: %v", err)
+	}
+
+	// Test 2: Delete empty ID
+	err = store.Delete("")
+	if err != nil {
+		t.Errorf("Delete empty ID returned error: %v", err)
+	}
+
+	// Test 3: Create and delete notification
+	notif := NewNotification(TypeInfo, PriorityMedium, "Test", "Message")
+	mustSaveNotification(t, store, notif)
+	assertNotificationExists(t, store, notif.ID, true)
+	
+	mustDeleteNotification(t, store, notif.ID)
+	assertNotificationExists(t, store, notif.ID, false)
+	
+	// Test 4: Double delete (should not error)
+	err = store.Delete(notif.ID)
+	if err != nil {
+		t.Errorf("Double delete returned error: %v", err)
+	}
+
+	// Test 5: Delete updates unread count correctly
+	notif1 := NewNotification(TypeInfo, PriorityMedium, "Test 1", "Message 1")
+	notif2 := NewNotification(TypeInfo, PriorityMedium, "Test 2", "Message 2")
+	notif2.MarkAsRead()
+	
+	mustSaveNotification(t, store, notif1)
+	mustSaveNotification(t, store, notif2)
+	assertUnreadCount(t, store, 1, "Initial unread count")
+	
+	// Delete read notification - count should not change
+	mustDeleteNotification(t, store, notif2.ID)
+	assertUnreadCount(t, store, 1, "Unread count after deleting read notification")
+	
+	// Delete unread notification - count should decrease
+	mustDeleteNotification(t, store, notif1.ID)
+	assertUnreadCount(t, store, 0, "Unread count after deleting unread notification")
+}
