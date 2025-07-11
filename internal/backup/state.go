@@ -128,7 +128,7 @@ func (sm *StateManager) saveState() error {
 	stateSnapshot.LastUpdate = time.Now()
 
 	// Create state directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(sm.statePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(sm.statePath), 0o750); err != nil { // #nosec G301 - using more restrictive permissions
 		sm.logger.Error("Failed to create state directory", "path", filepath.Dir(sm.statePath), "error", err)
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}

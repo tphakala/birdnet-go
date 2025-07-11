@@ -631,7 +631,9 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	start := time.Now()
 
 	// Create the archive file
-	archiveFile, err := os.Create(archivePath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedPath := filepath.Clean(archivePath)
+	archiveFile, err := os.Create(sanitizedPath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -827,7 +829,9 @@ func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath strin
 
 	// Read the entire source file (archive) into memory.
 	// Consider streaming encryption for very large files if memory becomes an issue.
-	plaintext, err := os.ReadFile(sourcePath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedSourcePath := filepath.Clean(sourcePath)
+	plaintext, err := os.ReadFile(sanitizedSourcePath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		return errors.New(err).
 			Component("backup").

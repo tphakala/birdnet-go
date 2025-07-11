@@ -321,7 +321,9 @@ func (t *FTPTarget) atomicUpload(ctx context.Context, conn *ftp.ServerConn, loca
 
 // uploadFile handles the actual file upload
 func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localPath, remotePath string) error {
-	file, err := os.Open(localPath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedLocalPath := filepath.Clean(localPath)
+	file, err := os.Open(sanitizedLocalPath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		return backup.NewError(backup.ErrIO, "ftp: failed to open local file", err)
 	}

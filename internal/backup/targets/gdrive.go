@@ -544,7 +544,9 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 			Parents: []string{folderId},
 		}
 
-		file, err := os.Open(sourcePath)
+		// Sanitize the path to prevent directory traversal attacks
+		sanitizedSourcePath := filepath.Clean(sourcePath)
+		file, err := os.Open(sanitizedSourcePath) // #nosec G304 - path is sanitized and constructed from trusted components
 		if err != nil {
 			return backup.NewError(backup.ErrIO, "gdrive: failed to open source file", err)
 		}

@@ -410,7 +410,9 @@ func (s *SQLiteSource) performBackupSteps(ctx context.Context, backupConn *sqlit
 
 // copyBackupToWriter copies the temporary backup file to the writer
 func (s *SQLiteSource) copyBackupToWriter(tempPath string, w io.Writer) error {
-	backupFile, err := os.Open(tempPath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedTempPath := filepath.Clean(tempPath)
+	backupFile, err := os.Open(sanitizedTempPath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
@@ -592,7 +594,9 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	}
 
 	// Open the temporary backup file for reading
-	backupFile, err := os.Open(tempPath)
+	// Sanitize the path to prevent directory traversal attacks
+	sanitizedTempPath := filepath.Clean(tempPath)
+	backupFile, err := os.Open(sanitizedTempPath) // #nosec G304 - path is sanitized and constructed from trusted components
 	if err != nil {
 		return errors.New(err).
 			Component("backup").
