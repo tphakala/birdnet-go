@@ -107,7 +107,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 
 	// Check that we have the expected number of execution times
 	expectedExecutions := maxRetries + 1 // Initial attempt + retries
-	assert.Equal(t, expectedExecutions, len(executionTimes), "Should have %d execution times", expectedExecutions)
+	assert.Len(t, expectedExecutions, len(executionTimes), "Should have %d execution times", expectedExecutions)
 
 	// Check job stats
 	stats := queue.GetStats()
@@ -130,7 +130,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 		t.Logf("Execution %d: Expected %v, Got %v, Diff %v", i+1, expectedTimes[i], executionTimes[i], timeDiff)
 
 		// The difference should be small, accounting for jitter
-		assert.True(t, timeDiff < 5*time.Millisecond,
+		assert.Less(t, timeDiff, 5*time.Millisecond,
 			"Execution time %d should be close to expected time: expected %v, got %v",
 			i+1, expectedTimes[i], executionTimes[i])
 	}
