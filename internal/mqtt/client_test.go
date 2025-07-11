@@ -82,6 +82,7 @@ func isTestBrokerAvailable() bool {
 
 // Add debug logging helper
 func debugLog(t *testing.T, format string, args ...interface{}) {
+	t.Helper()
 	msg := fmt.Sprintf(format, args...)
 	log.Printf("[DEBUG] %s", msg)
 	t.Logf("[DEBUG] %s", msg)
@@ -468,6 +469,7 @@ func testMetricsCollection(t *testing.T) {
 
 // Add this helper function to get Histogram values
 func getHistogramValue(t *testing.T, histogram prometheus.Histogram) float64 {
+	t.Helper()
 	var metric dto.Metric
 	err := histogram.Write(&metric)
 	if err != nil {
@@ -478,6 +480,7 @@ func getHistogramValue(t *testing.T, histogram prometheus.Histogram) float64 {
 
 // Helper function to get the value of a Gauge metric
 func getGaugeValue(t *testing.T, gauge prometheus.Gauge) float64 {
+	t.Helper()
 	var metric dto.Metric
 	err := gauge.Write(&metric)
 	if err != nil {
@@ -488,6 +491,7 @@ func getGaugeValue(t *testing.T, gauge prometheus.Gauge) float64 {
 
 // Helper function to get the value of a Counter metric
 func getCounterValue(t *testing.T, counter prometheus.Counter) float64 {
+	t.Helper()
 	var metric dto.Metric
 	err := counter.Write(&metric)
 	if err != nil {
@@ -497,6 +501,7 @@ func getCounterValue(t *testing.T, counter prometheus.Counter) float64 {
 }
 
 func getCounterVecValue(t *testing.T, counterVec *prometheus.CounterVec) float64 {
+	t.Helper()
 	// Get all metric families
 	metricFamilies, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
@@ -713,11 +718,9 @@ func sanitizeClientID(id string) string {
 
 // createTestClient is a helper function that creates and configures an MQTT client for testing purposes.
 func createTestClient(t *testing.T, broker string) (Client, *observability.Metrics) {
+	t.Helper()
 	// Use test name as client ID to ensure uniqueness when running tests in parallel
-	clientID := "TestNode"
-	if t != nil {
-		clientID = sanitizeClientID(t.Name())
-	}
+	clientID := sanitizeClientID(t.Name())
 	
 	testSettings := &conf.Settings{
 		Main: struct {

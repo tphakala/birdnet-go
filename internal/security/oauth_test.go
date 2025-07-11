@@ -122,6 +122,7 @@ func TestOAuth2Server(t *testing.T) {
 		{
 			name: "generate and validate auth code",
 			test: func(t *testing.T, s *OAuth2Server) {
+				t.Helper()
 				// Initialize settings
 				s.Settings = &conf.Settings{
 					Security: conf.Security{
@@ -157,6 +158,7 @@ func TestOAuth2Server(t *testing.T) {
 		{
 			name: "subnet bypass validation",
 			test: func(t *testing.T, s *OAuth2Server) {
+				t.Helper()
 				s.Settings.Security.AllowSubnetBypass = conf.AllowSubnetBypass{
 					Enabled: true,
 					Subnet:  "192.168.1.0/24",

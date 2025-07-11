@@ -131,6 +131,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]interface{}) {
+				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
 				assert.Equal(t, "tcp://mqtt.example.com:1883", result["broker"], "Broker should match configuration")
 				assert.Equal(t, "birdnet/detections", result["topic"], "Topic should match configuration")
@@ -145,6 +146,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]interface{}) {
+				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT connection fails")
 				assert.Contains(t, result["last_error"], "error:connection:mqtt_broker", "Error should mention connection failure")
 			},
@@ -205,6 +207,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			bwLocationAcc:  50.0,
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]interface{}) {
+				t.Helper()
 				assert.False(t, result["enabled"].(bool), "Enabled should be false")
 				assert.Equal(t, "", result["station_id"], "Station ID should be empty")
 				assert.Equal(t, 0.7, result["threshold"], "Threshold should match configuration")
@@ -219,6 +222,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			bwLocationAcc:  100.0,
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]interface{}) {
+				t.Helper()
 				assert.True(t, result["enabled"].(bool), "Enabled should be true")
 				assert.Equal(t, "ABC123", result["station_id"], "Station ID should match configuration")
 				assert.Equal(t, 0.8, result["threshold"], "Threshold should match configuration")

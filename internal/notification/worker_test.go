@@ -222,6 +222,7 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 	if stats.CircuitState == "open" {
 		// Create a test helper to wait for circuit recovery
 		waitForCircuitRecovery := func(t *testing.T, cb *CircuitBreaker, timeout time.Duration) bool {
+			t.Helper()
 			deadline := time.Now().Add(timeout)
 			ticker := time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()

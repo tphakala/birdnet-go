@@ -27,6 +27,7 @@ linters:
     #- ireturn
     - nilnil
     - nilerr
+    - thelper
     #- goconst
     - gocyclo
     # Performance linters
