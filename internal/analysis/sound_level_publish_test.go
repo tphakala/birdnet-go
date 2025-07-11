@@ -46,6 +46,7 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 			},
 			shouldError: false,
 			checkJSON: func(t *testing.T, jsonData []byte) {
+				t.Helper()
 				var data map[string]any
 				err := json.Unmarshal(jsonData, &data)
 				require.NoError(t, err)
@@ -146,6 +147,7 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 			},
 			shouldError: false,
 			checkJSON: func(t *testing.T, jsonData []byte) {
+				t.Helper()
 				var data map[string]any
 				err := json.Unmarshal(jsonData, &data)
 				require.NoError(t, err)
@@ -172,6 +174,7 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 			},
 			shouldError: false,
 			checkJSON: func(t *testing.T, jsonData []byte) {
+				t.Helper()
 				var data map[string]any
 				err := json.Unmarshal(jsonData, &data)
 				require.NoError(t, err)
@@ -1185,6 +1188,7 @@ func TestMQTTPublishIntervalValidation(t *testing.T) {
 
 // runMQTTIntervalTest executes a single MQTT interval test
 func runMQTTIntervalTest(t *testing.T, tt mqttIntervalTest) {
+	t.Helper()
 	// Create test infrastructure
 	testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
 	publishEvents := make(chan publishEvent, 20)
@@ -1227,6 +1231,7 @@ func createMockProcessorWithEvents(publishEvents chan publishEvent) *processor.P
 // startMQTTPublisher starts the MQTT publisher goroutine
 func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{}, 
 	testSoundLevelChan chan myaudio.SoundLevelData, mockProc *processor.Processor) {
+	t.Helper()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1243,6 +1248,7 @@ func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{}
 
 // publishSoundLevelData publishes sound level data via mock MQTT
 func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockProc *processor.Processor) {
+	t.Helper()
 	ctx := context.Background()
 	topic := "test/soundlevel"
 	
@@ -1283,6 +1289,7 @@ func convertToCompactFormat(soundData myaudio.SoundLevelData) CompactSoundLevelD
 // startSoundLevelDataGenerator starts generating sound level data at intervals
 func startSoundLevelDataGenerator(t *testing.T, interval int, stopChan chan struct{}, 
 	testSoundLevelChan chan myaudio.SoundLevelData, testStartTime time.Time) {
+	t.Helper()
 	go func() {
 		intervalTicker := time.NewTicker(time.Duration(interval) * time.Second)
 		defer intervalTicker.Stop()
@@ -1331,6 +1338,7 @@ func createTestSoundLevelData(interval int) myaudio.SoundLevelData {
 // collectPublishEvents collects publish events for the test duration
 func collectPublishEvents(t *testing.T, publishEvents chan publishEvent, 
 	testDuration time.Duration, testStartTime time.Time) []publishEvent {
+	t.Helper()
 	var events []publishEvent
 	testTimer := time.NewTimer(testDuration)
 	defer testTimer.Stop()
@@ -1357,6 +1365,7 @@ func collectPublishEvents(t *testing.T, publishEvents chan publishEvent,
 
 // verifyPublishResults verifies the publish events meet expectations
 func verifyPublishResults(t *testing.T, events []publishEvent, tt mqttIntervalTest, testStartTime time.Time) {
+	t.Helper()
 	// Verify publish count
 	assert.Equal(t, tt.expectedPublishes, len(events),
 		"Expected %d MQTT publishes but got %d", tt.expectedPublishes, len(events))
@@ -1370,6 +1379,7 @@ func verifyPublishResults(t *testing.T, events []publishEvent, tt mqttIntervalTe
 
 // verifyPublishTiming verifies a publish happened at the expected time
 func verifyPublishTiming(t *testing.T, event publishEvent, index, interval int, testStartTime time.Time) {
+	t.Helper()
 	expectedTime := testStartTime.Add(time.Duration((index+1)*interval) * time.Second)
 	actualDelay := event.timestamp.Sub(expectedTime)
 	
@@ -1382,6 +1392,7 @@ func verifyPublishTiming(t *testing.T, event publishEvent, index, interval int, 
 
 // verifyPublishPayload verifies the payload structure and content
 func verifyPublishPayload(t *testing.T, event publishEvent, index, interval int) {
+	t.Helper()
 	var compactData CompactSoundLevelData
 	err := json.Unmarshal([]byte(event.payload), &compactData)
 	require.NoError(t, err, "Failed to unmarshal payload %d", index+1)

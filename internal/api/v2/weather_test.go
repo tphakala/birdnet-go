@@ -67,6 +67,7 @@ func TestGetDailyWeather(t *testing.T) {
 // setupWeatherTestEnvironment creates a test environment with Echo, MockDataStore, and Controller
 // specifically configured for weather API tests
 func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+	t.Helper()
 	// Create a new Echo instance
 	e := echo.New()
 

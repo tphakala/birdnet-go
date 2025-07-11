@@ -30,6 +30,7 @@ const (
 
 // skipIfNoTLSBroker skips the test if TLS brokers are not available
 func skipIfNoTLSBroker(t *testing.T) {
+	t.Helper()
 	if os.Getenv("SKIP_TLS_TESTS") == "true" {
 		t.Skip("Skipping TLS tests (SKIP_TLS_TESTS=true)")
 	}
@@ -502,6 +503,7 @@ func TestTLSConfigValidation(t *testing.T) {
 
 // skipIfNoTLSBrokerBench skips benchmarks if TLS brokers are not available
 func skipIfNoTLSBrokerBench(b *testing.B) {
+	b.Helper()
 	if os.Getenv("SKIP_TLS_TESTS") == "true" {
 		b.Skip("Skipping TLS tests (SKIP_TLS_TESTS=true)")
 	}

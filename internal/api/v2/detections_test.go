@@ -24,6 +24,7 @@ import (
 // decodePaginated is a helper to unmarshal a response body into a PaginatedResponse
 // and extract the data as a map slice for easier testing.
 func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, PaginatedResponse) {
+	t.Helper()
 	var response PaginatedResponse
 	err := json.Unmarshal(body, &response)
 	assert.NoError(t, err, "Failed to unmarshal response body")
@@ -121,6 +122,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 2, len(detections))
 			},
@@ -142,6 +144,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 1, len(detections))
 			},
@@ -162,6 +165,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 1, len(detections))
 			},
@@ -181,6 +185,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
 				assert.Equal(t, 1, len(detections))
 			},
@@ -196,6 +201,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest, // Expecting 400 Bad Request
 			expectedCount:  0,                     // Not relevant for error case
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				// Check recorder status and body for the error
 				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
 
@@ -214,6 +220,7 @@ func TestGetDetections(t *testing.T) {
 			mockSetup:      func(m *mock.Mock) { /* No DB interaction expected */ },
 			expectedCount:  0, // Not relevant for error case
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				// Check recorder status and body for the error
 				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
 
@@ -238,6 +245,7 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusOK, // Now expecting 200 OK
 			expectedCount:  0,
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				// Verify response is successful
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
@@ -255,6 +263,7 @@ func TestGetDetections(t *testing.T) {
 				// No DB interaction expected for bad request
 			},
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				// Check recorder status and body for the error
 				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
 
@@ -350,6 +359,7 @@ func TestGetDetection(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				var response DetectionResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -371,6 +381,7 @@ func TestGetDetection(t *testing.T) {
 			},
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				var response map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)
@@ -1119,6 +1130,7 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				var comments []datastore.NoteComment
 				err := json.Unmarshal(rec.Body.Bytes(), &comments)
 				assert.NoError(t, err)
@@ -1136,6 +1148,7 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedCount:  0,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				var comments []datastore.NoteComment
 				err := json.Unmarshal(rec.Body.Bytes(), &comments)
 				assert.NoError(t, err)
@@ -1151,6 +1164,7 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			expectedCount:  0,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
 				var response map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.NoError(t, err)

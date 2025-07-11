@@ -327,6 +327,7 @@ func (m *TestImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 
 // NewTestMetrics creates a new metrics instance for testing
 func NewTestMetrics(t *testing.T) *observability.Metrics {
+	t.Helper()
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		t.Fatalf("Failed to create test metrics: %v", err)
@@ -337,6 +338,7 @@ func NewTestMetrics(t *testing.T) *observability.Metrics {
 // setupAnalyticsTestEnvironment creates a test environment with Echo, MockDataStore, and Controller
 // for analytics tests
 func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+	t.Helper()
 	// Create a new Echo instance
 	e := echo.New()
 
