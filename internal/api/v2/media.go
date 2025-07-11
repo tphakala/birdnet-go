@@ -54,6 +54,12 @@ var (
 // safeFilenamePattern is kept if needed elsewhere, but SecureFS handles validation now
 // var safeFilenamePattern = regexp.MustCompile(`^[\p{L}\p{N}_\-.]+$`)
 
+// Constants for spectrogram generation status
+const (
+	spectrogramStatusExists    = "exists"
+	spectrogramStatusGenerated = "generated"
+)
+
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
 	if c.apiLogger != nil {
@@ -532,7 +538,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	_, err, _ = spectrogramGroup.Do(spectrogramKey, func() (interface{}, error) {
 		// Fast path inside the group – now race-free
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-			return "exists", nil // File exists, no need to generate
+			return spectrogramStatusExists, nil // File exists, no need to generate
 		} else if !os.IsNotExist(err) {
 			// An unexpected error occurred checking for the spectrogram
 			return nil, fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
@@ -566,7 +572,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		} else {
 			log.Printf("Successfully generated spectrogram for '%s' using SoX", absAudioPath)
 		}
-		return "generated", nil // Successfully generated, no error
+		return spectrogramStatusGenerated, nil // Successfully generated, no error
 	})
 
 	if err != nil {

@@ -20,11 +20,6 @@ var (
 	filterMetricsOnce   sync.Once               // Ensures metrics are only set once
 )
 
-// Sentinel errors for audio filter operations
-var (
-	ErrFilterDisabled = errors.NewStd("filter is disabled")
-)
-
 // SetFilterMetrics sets the metrics instance for filter operations.
 // This function is thread-safe and ensures metrics are only set once per process lifetime.
 // Subsequent calls will be ignored due to sync.Once (idempotent behavior).
@@ -234,7 +229,7 @@ func UpdateFilterChain(settings *conf.Settings) error {
 func createFilter(config conf.EqualizerFilter, sampleRate float64) (*equalizer.Filter, error) {
 	// If passes is 0 or less, return nil without an error (filter is off)
 	if config.Passes <= 0 {
-		return nil, ErrFilterDisabled
+		return nil, nil
 	}
 
 	// Create different types of filters based on the configuration

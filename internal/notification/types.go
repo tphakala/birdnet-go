@@ -11,12 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tphakala/birdnet-go/internal/errors"
-)
-
-// Sentinel errors for notification operations
-var (
-	ErrNotificationNotFound = errors.NewStd("notification not found")
 )
 
 // Type represents the category of a notification
@@ -228,7 +222,7 @@ func (s *InMemoryStore) Get(id string) (*Notification, error) {
 		notifCopy := *notif
 		return &notifCopy, nil
 	}
-	return nil, ErrNotificationNotFound
+	return nil, nil
 }
 
 // List returns filtered notifications
