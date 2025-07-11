@@ -32,6 +32,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **Log but continue** on individual failures in batch operations
 - **Provide detailed context** in error messages
 - **Use structured logging** for errors with metadata
+- **Use sentinel errors instead of `nil, nil`** - define `var ErrNotFound = errors.New("not found")` to avoid nilnil linter violations
 
 #### Security
 - Validate all user input (path traversal, command injection, SQL injection)
