@@ -33,7 +33,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 
 	// Create directory if it doesn't exist
 	dirPath := filepath.Dir(filename)
-	if err := os.MkdirAll(dirPath, 0o755); err != nil {
+	if err := os.MkdirAll(dirPath, 0o750); err != nil {
 		return errors.New(err).
 			Component("birdweather").
 			Category(errors.CategoryFileIO).

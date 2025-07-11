@@ -30,9 +30,9 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		tlsSettings    conf.MQTTTLSSettings
-		expectedError  string
+		name          string
+		tlsSettings   conf.MQTTTLSSettings
+		expectedError string
 	}{
 		{
 			name: "Non-existent CA certificate",
@@ -69,7 +69,7 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 			case "Non-existent client key":
 				// Create a dummy client certificate file
 				certPath := filepath.Join(tempDir, "client.crt")
-				if err := os.WriteFile(certPath, []byte("dummy cert"), 0o644); err != nil {
+				if err := os.WriteFile(certPath, []byte("dummy cert"), 0o600); err != nil {
 					t.Fatalf("Failed to create dummy cert file: %v", err)
 				}
 			case "Non-existent client certificate":
@@ -118,4 +118,3 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 		})
 	}
 }
-

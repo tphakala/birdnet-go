@@ -921,7 +921,7 @@ func (b *BwClient) Close() {
 
 // createDebugDirectory creates a directory for debug files and returns any error encountered
 func createDebugDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("couldn't create debug directory: %w", err)
 	}
 	return nil
