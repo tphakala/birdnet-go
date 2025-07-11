@@ -45,7 +45,7 @@ func (c CPUSpec) GetOptimalThreadCount() int {
 	return cpuid.CPU.LogicalCores
 }
 
-func determinePerformanceCores(brandName string) int {
+func determinePerformanceCores(brandName string) int { //nolint:gocyclo // ignore gocyclo warning for this function
 	brandName = strings.ToLower(brandName)
 
 	// Intel 12th, 13th, 14th gen and Core Ultra mapping

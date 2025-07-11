@@ -289,28 +289,28 @@ func processTLSCertificates(settings *conf.Settings, formValues map[string][]str
 		if !exists {
 			continue
 		}
-		
+
 		content := ""
 		if len(values) > 0 {
 			content = values[0]
 		}
-		
+
 		// If content is empty, clear the certificate path
 		if content == "" {
 			*certInfo.pathPtr = ""
 			delete(formValues, fieldName)
 			continue
 		}
-		
+
 		// Save certificate and get the path
 		path, err := tlsManager.SaveCertificate(certInfo.service, certInfo.certType, content)
 		if err != nil {
 			return fmt.Errorf("failed to save %s certificate: %w", fieldName, err)
 		}
-		
+
 		// Update the settings with the file path
 		*certInfo.pathPtr = path
-		
+
 		// Remove the form value so it doesn't get processed again
 		delete(formValues, fieldName)
 	}
@@ -335,7 +335,7 @@ func updateSettingsFromForm(settings *conf.Settings, formValues map[string][]str
 }
 
 // updateStructFromForm recursively updates a struct's fields from form values
-func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error { //nolint:gocognit // ignore gocognit warning for this function, maybe refactor later
+func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefix string) error { //nolint:gocognit,gocyclo // ignore warnings for this function, going to be obsoleted soon
 	t := v.Type()
 
 	// Iterate through all fields of the struct
