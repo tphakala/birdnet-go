@@ -40,12 +40,6 @@ var octaveBandCenterFreqs = []float64{
 	1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000,
 }
 
-// Sentinel errors for sound level operations
-var (
-	ErrNoAudioData      = errors.NewStd("no audio data to process")
-	ErrIntervalNotReady = errors.NewStd("interval window not yet complete")
-)
-
 // octaveBandFilter represents a digital filter for a 1/3rd octave band
 type octaveBandFilter struct {
 	centerFreq float64
@@ -271,7 +265,7 @@ func (f *octaveBandFilter) processAudioSample(input float64) float64 {
 // ProcessAudioData processes audio samples and returns sound level data when 10-second window is complete
 func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData, error) {
 	if len(samples) == 0 {
-		return nil, ErrNoAudioData // No data to process
+		return nil, nil // No data to process
 	}
 
 	// Ensure we have an even number of bytes (16-bit samples)
@@ -425,7 +419,7 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 		return soundLevelData, nil
 	}
 
-	return nil, ErrIntervalNotReady // interval window not yet complete
+	return nil, nil // interval window not yet complete
 }
 
 // calculateRMS calculates Root Mean Square of audio samples

@@ -472,8 +472,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	if err != nil {
 		// journalctl might not be available or service might not exist
 		// This is not a fatal error, just means no journald logs available
-		// We intentionally ignore the error here and return empty logs
-		_ = err // explicitly ignore the error to satisfy nilerr linter
+		serviceLogger.Debug("journalctl unavailable or service not found", "error", err)
 		return nil, ErrJournalNotAvailable
 	}
 
