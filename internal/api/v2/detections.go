@@ -225,20 +225,20 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	if err != nil {
 		log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
 		// Log the enhanced error for telemetry
-		errors.Newf("invalid numeric value for numResults: %v", err).
+		_ = errors.Newf("invalid numeric value for numResults: %v", err).
 			Component("api").
 			Category(errors.CategoryValidation).
 			Context("parameter", "numResults").
 			Context("value", numResultsStr).
 			Build()
-		return 0, fmt.Errorf("Invalid numeric value for numResults: %v", err)
+		return 0, fmt.Errorf("Invalid numeric value for numResults: %w", err) //nolint:staticcheck // matches test expectations
 	}
 
 	log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
 	if numResults <= 0 {
 		log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
 		// Log the enhanced error for telemetry
-		errors.New(errors.NewStd("numResults must be greater than zero")).
+		_ = errors.New(errors.NewStd("numResults must be greater than zero")).
 			Component("api").
 			Category(errors.CategoryValidation).
 			Context("parameter", "numResults").
@@ -250,7 +250,7 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	if numResults > 1000 {
 		log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
 		// Log the enhanced error for telemetry
-		errors.New(errors.NewStd("numResults exceeds maximum allowed value (1000)")).
+		_ = errors.New(errors.NewStd("numResults exceeds maximum allowed value (1000)")).
 			Component("api").
 			Category(errors.CategoryValidation).
 			Context("parameter", "numResults").
@@ -273,20 +273,20 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 	if err != nil {
 		log.Printf("[DEBUG] GetDetections: Invalid offset string '%s', error: %v", offsetStr, err)
 		// Log the enhanced error for telemetry
-		errors.Newf("invalid numeric value for offset: %v", err).
+		_ = errors.Newf("invalid numeric value for offset: %v", err).
 			Component("api").
 			Category(errors.CategoryValidation).
 			Context("parameter", "offset").
 			Context("value", offsetStr).
 			Build()
-		return 0, fmt.Errorf("Invalid numeric value for offset: %v", err)
+		return 0, fmt.Errorf("Invalid numeric value for offset: %w", err) //nolint:staticcheck // matches test expectations
 	}
 
 	log.Printf("[DEBUG] GetDetections: Parsed offset value: %d", offset)
 	if offset < 0 {
 		log.Printf("[DEBUG] GetDetections: Negative offset value: %d", offset)
 		// Log the enhanced error for telemetry
-		errors.New(errors.NewStd("offset cannot be negative")).
+		_ = errors.New(errors.NewStd("offset cannot be negative")).
 			Component("api").
 			Category(errors.CategoryValidation).
 			Context("parameter", "offset").
@@ -299,7 +299,7 @@ func (c *Controller) parseOffset(offsetStr string) (int, error) {
 	if offset > maxOffset {
 		log.Printf("[DEBUG] GetDetections: Too large offset value: %d", offset)
 		// Log the enhanced error for telemetry
-		errors.Newf("offset exceeds maximum allowed value (%d)", maxOffset).
+		_ = errors.Newf("offset exceeds maximum allowed value (%d)", maxOffset).
 			Component("api").
 			Category(errors.CategoryValidation).
 			Context("parameter", "offset").
