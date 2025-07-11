@@ -544,15 +544,15 @@ func (t *GDriveTarget) Store(ctx context.Context, sourcePath string, metadata *b
 			Parents: []string{folderId},
 		}
 
-		// Sanitize the path to prevent directory traversal attacks
-		sanitizedSourcePath := filepath.Clean(sourcePath)
-		file, err := os.Open(sanitizedSourcePath) // #nosec G304 - path is sanitized and constructed from trusted components
+		// Open source file with secure path validation
+		secureOp := backup.NewSecureFileOp("backup")
+		file, cleanSourcePath, err := secureOp.SecureOpen(sourcePath)
 		if err != nil {
-			return backup.NewError(backup.ErrIO, "gdrive: failed to open source file", err)
+			return err
 		}
 		defer func() {
 			if err := file.Close(); err != nil {
-				t.logger.Printf("gdrive: failed to close file: %v", err)
+				t.logger.Printf("gdrive: failed to close file %s: %v", cleanSourcePath, err)
 			}
 		}()
 
