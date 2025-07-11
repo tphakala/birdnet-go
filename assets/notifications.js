@@ -5,7 +5,7 @@ document.addEventListener('alpine:init', () => {
         notifications: [],
         unreadCount: 0,
         dropdownOpen: false,
-        loading: false,
+        loading: true, // Start with loading true to prevent flash
         hasUnread: false,
         sseConnection: null,
         reconnectTimeout: null,

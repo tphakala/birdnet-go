@@ -3,7 +3,7 @@
    ======================================================================== */
 
 /* Hide elements until Alpine.js (or similar) has processed them */
-[x-cloak=""] {
+[x-cloak], [x-cloak=""] {
   display: none !important;
 }
 
