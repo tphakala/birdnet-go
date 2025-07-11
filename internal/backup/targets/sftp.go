@@ -657,19 +657,16 @@ func (t *SFTPTarget) atomicUpload(ctx context.Context, client *sftp.Client, loca
 
 // uploadFile handles the actual file upload with progress tracking
 func (t *SFTPTarget) uploadFile(ctx context.Context, client *sftp.Client, localPath, remotePath string) error {
-	file, err := os.Open(localPath)
+	// Open local file with secure path validation
+	secureOp := backup.NewSecureFileOp("backup")
+	file, cleanLocalPath, err := secureOp.SecureOpen(localPath)
 	if err != nil {
-		return errors.New(err).
-			Component("backup").
-			Category(errors.CategoryFileIO).
-			Context("operation", "open_local_file").
-			Context("local_path", localPath).
-			Build()
+		return err
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
 			if t.config.Debug {
-				t.logger.Debug("SFTP: Failed to close local file", "path", localPath, "error", err)
+				t.logger.Debug("SFTP: Failed to close local file", "path", cleanLocalPath, "error", err)
 			}
 		}
 	}()

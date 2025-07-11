@@ -127,9 +127,12 @@ func (sm *StateManager) saveState() error {
 	// Update last update time (on the snapshot)
 	stateSnapshot.LastUpdate = time.Now()
 
-	// Create state directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(sm.statePath), 0o755); err != nil {
-		sm.logger.Error("Failed to create state directory", "path", filepath.Dir(sm.statePath), "error", err)
+	// Create state directory if it doesn't exist with secure permissions
+	secureOp := NewSecureFileOp("backup")
+	dirPath := filepath.Dir(sm.statePath)
+	cleanDirPath, err := secureOp.SecureMkdirAll(dirPath, DefaultDirectoryPermissions())
+	if err != nil {
+		sm.logger.Error("Failed to create state directory", "path", cleanDirPath, "error", err)
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
