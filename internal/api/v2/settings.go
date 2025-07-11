@@ -491,6 +491,26 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	})
 }
 
+// sectionHandler defines a function that handles updates for a specific settings section
+type sectionHandler func(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error
+
+// getSectionHandlers returns a map of section names to their handler functions
+func getSectionHandlers() map[string]sectionHandler {
+	return map[string]sectionHandler{
+		"birdnet":     handleBirdnetSection,
+		"webserver":   handleWebServerSection,
+		"security":    handleSecuritySection,
+		"main":        handleMainSection,
+		"audio":       handleAudioSection,
+		"mqtt":        handleMQTTSection,
+		"rtsp":        handleRTSPSection,
+		"species":     handleSpeciesSection,
+		"dashboard":   handleDashboardSection,
+		"weather":     handleWeatherSection,
+		"birdweather": handleBirdweatherSection,
+	}
+}
+
 // updateSettingsSectionWithTracking updates a specific section of the settings and tracks skipped fields
 func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
 	section = strings.ToLower(section)
@@ -500,207 +520,223 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 		return fmt.Errorf("invalid JSON for section %s: %w", section, err)
 	}
 
-	// For each section, we need to:
-	// 1. Unmarshal the data into a temporary struct
-	// 2. Apply the allowed field map restrictions
-	// 3. Update the actual settings section
-
-	switch section {
-	case "birdnet":
-		// Create a temporary copy for filtering
-		tempSettings := settings.BirdNET
-
-		// Apply the allowed fields filter using reflection
-		if err := json.Unmarshal(data, &tempSettings); err != nil {
-			return err
-		}
-
-		// Get the allowed fields for this section
-		allowedFieldsMap := getAllowedFieldMap()
-		birdnetAllowedFields, _ := allowedFieldsMap["BirdNET"].(map[string]interface{})
-
-		// Apply the allowed fields filter using reflection
-		if err := updateAllowedFieldsRecursivelyWithTracking(
-			reflect.ValueOf(&settings.BirdNET).Elem(),
-			reflect.ValueOf(&tempSettings).Elem(),
-			birdnetAllowedFields,
-			skippedFields,
-			"BirdNET",
-		); err != nil {
-			return err
-		}
-		return nil
-
-	case "webserver":
-		// Create a temporary copy for filtering
-		webServerSettings := settings.WebServer
-
-		// Unmarshal data into the temporary copy
-		if err := json.Unmarshal(data, &webServerSettings); err != nil {
-			return err
-		}
-
-		allowedFieldsMap := getAllowedFieldMap()
-		webserverAllowedFields, _ := allowedFieldsMap["WebServer"].(map[string]interface{})
-
-		if err := updateAllowedFieldsRecursivelyWithTracking(
-			reflect.ValueOf(&settings.WebServer).Elem(),
-			reflect.ValueOf(&webServerSettings).Elem(),
-			webserverAllowedFields,
-			skippedFields,
-			"WebServer",
-		); err != nil {
-			return err
-		}
-		return nil
-
-	case "security":
-		// Security settings are sensitive and should have very limited updateable fields
-		// For now, we're not allowing direct updates to security settings via the API
-		return fmt.Errorf("direct updates to security section are not supported for security reasons")
-
-	case "main":
-		// Create a temporary copy for filtering
-		mainSettings := settings.Main
-
-		// Unmarshal data into the temporary copy
-		if err := json.Unmarshal(data, &mainSettings); err != nil {
-			return err
-		}
-
-		// Here you would define which Main fields can be updated
-		// For now, we'll use an empty map to prevent any updates
-		mainFields := []string{"Main settings cannot be updated via API"}
-		*skippedFields = append(*skippedFields, mainFields...)
-		return fmt.Errorf("main settings cannot be updated via API")
-
-	case "audio":
-		// Create a temporary copy for filtering
-		audioSettings := settings.Realtime.Audio
-
-		// Unmarshal data into the temporary copy
-		if err := json.Unmarshal(data, &audioSettings); err != nil {
-			return err
-		}
-
-		allowedFieldsMap := getAllowedFieldMap()
-		realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
-		audioAllowedFields, _ := realtimeAllowedFields["Audio"].(map[string]interface{})
-
-		if err := updateAllowedFieldsRecursivelyWithTracking(
-			reflect.ValueOf(&settings.Realtime.Audio).Elem(),
-			reflect.ValueOf(&audioSettings).Elem(),
-			audioAllowedFields,
-			skippedFields,
-			"Realtime.Audio",
-		); err != nil {
-			return err
-		}
-		return nil
-
-	case "mqtt":
-		// Validate MQTT settings before applying
-		mqttSettings := settings.Realtime.MQTT
-
-		// Unmarshal data into the temporary copy
-		if err := json.Unmarshal(data, &mqttSettings); err != nil {
-			return err
-		}
-
-		// Perform any additional validation on MQTT settings
-		// For example, checking broker URL format, etc.
-		if mqttSettings.Enabled && mqttSettings.Broker == "" {
-			return fmt.Errorf("broker is required when MQTT is enabled")
-		}
-
-		// MQTT is allowed to be fully replaced according to getAllowedFieldMap
-		settings.Realtime.MQTT = mqttSettings
-		return nil
-
-	case "rtsp":
-		// Validate RTSP settings before applying
-		rtspSettings := settings.Realtime.RTSP
-
-		// Unmarshal data into the temporary copy
-		if err := json.Unmarshal(data, &rtspSettings); err != nil {
-			return err
-		}
-
-		// Perform any additional validation on RTSP settings
-		// For example, validating URLs format
-		for i, url := range rtspSettings.URLs {
-			if url == "" {
-				return fmt.Errorf("RTSP URL at index %d cannot be empty", i)
-			}
-
-			// Basic URL validation - could be more thorough
-			if !strings.HasPrefix(url, "rtsp://") {
-				return fmt.Errorf("RTSP URL at index %d must start with rtsp://", i)
-			}
-		}
-
-		// RTSP is allowed to be fully replaced according to getAllowedFieldMap
-		settings.Realtime.RTSP = rtspSettings
-		return nil
-
-	case "species":
-		// Create a temporary copy
-		speciesSettings := settings.Realtime.Species
-
-		// Unmarshal data into the temporary copy
-		if err := json.Unmarshal(data, &speciesSettings); err != nil {
-			return err
-		}
-
-		allowedFieldsMap := getAllowedFieldMap()
-		realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
-		speciesAllowedFields, _ := realtimeAllowedFields["Species"].(map[string]interface{})
-
-		if err := updateAllowedFieldsRecursivelyWithTracking(
-			reflect.ValueOf(&settings.Realtime.Species).Elem(),
-			reflect.ValueOf(&speciesSettings).Elem(),
-			speciesAllowedFields,
-			skippedFields,
-			"Realtime.Species",
-		); err != nil {
-			return err
-		}
-		return nil
-
-	// Add similar protection for other sections
-	case "dashboard":
-		// For now, allowing full updates to dashboard settings
-		// This could be enhanced with specific field restrictions
-		tempDashboardSettings := settings.Realtime.Dashboard
-		if err := json.Unmarshal(data, &tempDashboardSettings); err != nil {
-			return err
-		}
-		settings.Realtime.Dashboard = tempDashboardSettings
-		return nil
-
-	case "weather":
-		// For now, allowing full updates to weather settings
-		// This could be enhanced with specific field restrictions
-		tempWeatherSettings := settings.Realtime.Weather
-		if err := json.Unmarshal(data, &tempWeatherSettings); err != nil {
-			return err
-		}
-		settings.Realtime.Weather = tempWeatherSettings
-		return nil
-
-	case "birdweather":
-		// For now, allowing full updates to birdweather settings
-		// This could be enhanced with specific field restrictions
-		tempBirdweatherSettings := settings.Realtime.Birdweather
-		if err := json.Unmarshal(data, &tempBirdweatherSettings); err != nil {
-			return err
-		}
-		settings.Realtime.Birdweather = tempBirdweatherSettings
-		return nil
-
-	default:
+	// Get the handler for this section
+	handlers := getSectionHandlers()
+	handler, exists := handlers[section]
+	if !exists {
 		return fmt.Errorf("unknown settings section: %s", section)
 	}
+
+	// Execute the handler
+	return handler(settings, data, skippedFields)
+}
+
+// handleBirdnetSection handles updates to the BirdNET section
+func handleBirdnetSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Create a temporary copy for filtering
+	tempSettings := settings.BirdNET
+
+	// Apply the allowed fields filter using reflection
+	if err := json.Unmarshal(data, &tempSettings); err != nil {
+		return err
+	}
+
+	// Get the allowed fields for this section
+	allowedFieldsMap := getAllowedFieldMap()
+	birdnetAllowedFields, _ := allowedFieldsMap["BirdNET"].(map[string]interface{})
+
+	// Apply the allowed fields filter using reflection
+	return updateAllowedFieldsRecursivelyWithTracking(
+		reflect.ValueOf(&settings.BirdNET).Elem(),
+		reflect.ValueOf(&tempSettings).Elem(),
+		birdnetAllowedFields,
+		skippedFields,
+		"BirdNET",
+	)
+}
+
+// handleWebServerSection handles updates to the WebServer section
+func handleWebServerSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Create a temporary copy for filtering
+	webServerSettings := settings.WebServer
+
+	// Unmarshal data into the temporary copy
+	if err := json.Unmarshal(data, &webServerSettings); err != nil {
+		return err
+	}
+
+	allowedFieldsMap := getAllowedFieldMap()
+	webserverAllowedFields, _ := allowedFieldsMap["WebServer"].(map[string]interface{})
+
+	return updateAllowedFieldsRecursivelyWithTracking(
+		reflect.ValueOf(&settings.WebServer).Elem(),
+		reflect.ValueOf(&webServerSettings).Elem(),
+		webserverAllowedFields,
+		skippedFields,
+		"WebServer",
+	)
+}
+
+// handleSecuritySection handles updates to the Security section
+func handleSecuritySection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Security settings are sensitive and should have very limited updateable fields
+	// For now, we're not allowing direct updates to security settings via the API
+	return fmt.Errorf("direct updates to security section are not supported for security reasons")
+}
+
+// handleMainSection handles updates to the Main section
+func handleMainSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Create a temporary copy for filtering
+	mainSettings := settings.Main
+
+	// Unmarshal data into the temporary copy
+	if err := json.Unmarshal(data, &mainSettings); err != nil {
+		return err
+	}
+
+	// Here you would define which Main fields can be updated
+	// For now, we'll use an empty map to prevent any updates
+	mainFields := []string{"Main settings cannot be updated via API"}
+	*skippedFields = append(*skippedFields, mainFields...)
+	return fmt.Errorf("main settings cannot be updated via API")
+}
+
+// handleAudioSection handles updates to the Audio section
+func handleAudioSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Create a temporary copy for filtering
+	audioSettings := settings.Realtime.Audio
+
+	// Unmarshal data into the temporary copy
+	if err := json.Unmarshal(data, &audioSettings); err != nil {
+		return err
+	}
+
+	allowedFieldsMap := getAllowedFieldMap()
+	realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
+	audioAllowedFields, _ := realtimeAllowedFields["Audio"].(map[string]interface{})
+
+	return updateAllowedFieldsRecursivelyWithTracking(
+		reflect.ValueOf(&settings.Realtime.Audio).Elem(),
+		reflect.ValueOf(&audioSettings).Elem(),
+		audioAllowedFields,
+		skippedFields,
+		"Realtime.Audio",
+	)
+}
+
+// handleMQTTSection handles updates to the MQTT section
+func handleMQTTSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Validate MQTT settings before applying
+	mqttSettings := settings.Realtime.MQTT
+
+	// Unmarshal data into the temporary copy
+	if err := json.Unmarshal(data, &mqttSettings); err != nil {
+		return err
+	}
+
+	// Perform any additional validation on MQTT settings
+	// For example, checking broker URL format, etc.
+	if mqttSettings.Enabled && mqttSettings.Broker == "" {
+		return fmt.Errorf("broker is required when MQTT is enabled")
+	}
+
+	// MQTT is allowed to be fully replaced according to getAllowedFieldMap
+	settings.Realtime.MQTT = mqttSettings
+	return nil
+}
+
+// handleRTSPSection handles updates to the RTSP section
+func handleRTSPSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Validate RTSP settings before applying
+	rtspSettings := settings.Realtime.RTSP
+
+	// Unmarshal data into the temporary copy
+	if err := json.Unmarshal(data, &rtspSettings); err != nil {
+		return err
+	}
+
+	// Validate RTSP URLs
+	if err := validateRTSPURLs(rtspSettings.URLs); err != nil {
+		return err
+	}
+
+	// RTSP is allowed to be fully replaced according to getAllowedFieldMap
+	settings.Realtime.RTSP = rtspSettings
+	return nil
+}
+
+// validateRTSPURLs validates a slice of RTSP URLs
+func validateRTSPURLs(urls []string) error {
+	for i, url := range urls {
+		if url == "" {
+			return fmt.Errorf("RTSP URL at index %d cannot be empty", i)
+		}
+
+		// Basic URL validation - could be more thorough
+		if !strings.HasPrefix(url, "rtsp://") {
+			return fmt.Errorf("RTSP URL at index %d must start with rtsp://", i)
+		}
+	}
+	return nil
+}
+
+// handleSpeciesSection handles updates to the Species section
+func handleSpeciesSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// Create a temporary copy
+	speciesSettings := settings.Realtime.Species
+
+	// Unmarshal data into the temporary copy
+	if err := json.Unmarshal(data, &speciesSettings); err != nil {
+		return err
+	}
+
+	allowedFieldsMap := getAllowedFieldMap()
+	realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
+	speciesAllowedFields, _ := realtimeAllowedFields["Species"].(map[string]interface{})
+
+	return updateAllowedFieldsRecursivelyWithTracking(
+		reflect.ValueOf(&settings.Realtime.Species).Elem(),
+		reflect.ValueOf(&speciesSettings).Elem(),
+		speciesAllowedFields,
+		skippedFields,
+		"Realtime.Species",
+	)
+}
+
+// handleDashboardSection handles updates to the Dashboard section
+func handleDashboardSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// For now, allowing full updates to dashboard settings
+	// This could be enhanced with specific field restrictions
+	tempDashboardSettings := settings.Realtime.Dashboard
+	if err := json.Unmarshal(data, &tempDashboardSettings); err != nil {
+		return err
+	}
+	settings.Realtime.Dashboard = tempDashboardSettings
+	return nil
+}
+
+// handleWeatherSection handles updates to the Weather section
+func handleWeatherSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// For now, allowing full updates to weather settings
+	// This could be enhanced with specific field restrictions
+	tempWeatherSettings := settings.Realtime.Weather
+	if err := json.Unmarshal(data, &tempWeatherSettings); err != nil {
+		return err
+	}
+	settings.Realtime.Weather = tempWeatherSettings
+	return nil
+}
+
+// handleBirdweatherSection handles updates to the Birdweather section
+func handleBirdweatherSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
+	// For now, allowing full updates to birdweather settings
+	// This could be enhanced with specific field restrictions
+	tempBirdweatherSettings := settings.Realtime.Birdweather
+	if err := json.Unmarshal(data, &tempBirdweatherSettings); err != nil {
+		return err
+	}
+	settings.Realtime.Birdweather = tempBirdweatherSettings
+	return nil
 }
 
 // Helper functions
