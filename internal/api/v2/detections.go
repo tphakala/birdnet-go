@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -97,7 +98,7 @@ type DetectionRequest struct {
 
 // PaginatedResponse represents a paginated API response
 type PaginatedResponse struct {
-	Data        interface{} `json:"data"`
+	Data        any `json:"data"`
 	Total       int64       `json:"total"`
 	Limit       int         `json:"limit"`
 	Offset      int         `json:"offset"`
@@ -224,7 +225,8 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	numResults, err := strconv.Atoi(numResultsStr)
 	if err != nil {
 		log.Printf("[DEBUG] GetDetections: Invalid numResults string '%s', error: %v", numResultsStr, err)
-		// Log the enhanced error for telemetry
+		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
+		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
 		_ = errors.Newf("invalid numeric value for numResults: %v", err).
 			Component("api").
 			Category(errors.CategoryValidation).
@@ -237,7 +239,8 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	log.Printf("[DEBUG] GetDetections: Parsed numResults value: %d", numResults)
 	if numResults <= 0 {
 		log.Printf("[DEBUG] GetDetections: Zero or negative numResults value: %d", numResults)
-		// Log the enhanced error for telemetry
+		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
+		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
 		_ = errors.New(errors.NewStd("numResults must be greater than zero")).
 			Component("api").
 			Category(errors.CategoryValidation).
@@ -249,7 +252,8 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 
 	if numResults > 1000 {
 		log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
-		// Log the enhanced error for telemetry
+		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
+		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
 		_ = errors.New(errors.NewStd("numResults exceeds maximum allowed value (1000)")).
 			Component("api").
 			Category(errors.CategoryValidation).
@@ -842,7 +846,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		}
 
 		// Handle ignored species
-		if err := c.addToIgnoredSpecies(note, req.Verified, req.IgnoreSpecies); err != nil {
+		if err := c.addToIgnoredSpecies(req.Verified, req.IgnoreSpecies); err != nil {
 			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 		}
 	}
@@ -912,7 +916,7 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 }
 
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
-func (c *Controller) addToIgnoredSpecies(note *datastore.Note, verified, ignoreSpecies string) error {
+func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	if verified == "false_positive" && ignoreSpecies != "" {
 		return c.addSpeciesToIgnoredList(ignoreSpecies)
 	}
@@ -941,13 +945,7 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	settings := conf.GetSettings()
 
 	// Check if species is already in the excluded list
-	isExcluded := false
-	for _, s := range settings.Realtime.Species.Exclude {
-		if s == species {
-			isExcluded = true
-			break
-		}
-	}
+	isExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
 
 	// If not already excluded, add it
 	if !isExcluded {
