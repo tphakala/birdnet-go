@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -667,14 +668,42 @@ func handleRTSPSection(settings *conf.Settings, data json.RawMessage, skippedFie
 
 // validateRTSPURLs validates a slice of RTSP URLs
 func validateRTSPURLs(urls []string) error {
-	for i, url := range urls {
-		if url == "" {
+	for i, urlStr := range urls {
+		if urlStr == "" {
 			return fmt.Errorf("RTSP URL at index %d cannot be empty", i)
 		}
 
-		// Basic URL validation - could be more thorough
-		if !strings.HasPrefix(url, "rtsp://") {
-			return fmt.Errorf("RTSP URL at index %d must start with rtsp://", i)
+		// Parse the URL to validate its structure
+		parsedURL, err := url.Parse(urlStr)
+		if err != nil {
+			return fmt.Errorf("RTSP URL at index %d is malformed: %w", i, err)
+		}
+
+		// Check if the scheme is RTSP
+		if parsedURL.Scheme != "rtsp" {
+			return fmt.Errorf("RTSP URL at index %d must use rtsp:// scheme, got %s://", i, parsedURL.Scheme)
+		}
+
+		// Check if host is present
+		if parsedURL.Host == "" {
+			return fmt.Errorf("RTSP URL at index %d is missing host", i)
+		}
+
+		// Validate that the host part is properly formatted
+		// This includes checking for valid hostname or IP address
+		if parsedURL.Hostname() == "" {
+			return fmt.Errorf("RTSP URL at index %d has invalid hostname", i)
+		}
+
+		// If port is specified, validate it's a valid number
+		if portStr := parsedURL.Port(); portStr != "" {
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return fmt.Errorf("RTSP URL at index %d has invalid port: %w", i, err)
+			}
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("RTSP URL at index %d has port %d out of valid range (1-65535)", i, port)
+			}
 		}
 	}
 	return nil

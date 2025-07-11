@@ -112,8 +112,16 @@ func verifyCertificatesExist(t *testing.T, tm *TLSManager, service string, shoul
 		if !keyExists {
 			t.Error("Client key should exist")
 		}
-	} else if caExists || clientExists || keyExists {
-		t.Error("Certificates should not exist")
+	} else {
+		if caExists {
+			t.Error("CA certificate should not exist")
+		}
+		if clientExists {
+			t.Error("Client certificate should not exist")
+		}
+		if keyExists {
+			t.Error("Client key should not exist")
+		}
 	}
 }
 
