@@ -16,29 +16,29 @@ import (
 // TestCacheEffectiveness validates that caching effectively reduces external API calls
 func TestCacheEffectiveness(t *testing.T) {
 	t.Parallel()
-	// Create a mock provider that counts API calls
-	mockProvider := &mockProviderWithAPICounter{
-		mockImageProvider: mockImageProvider{
-			fetchDelay: 10 * time.Millisecond,
-		},
-	}
-
-	mockStore := newMockStore()
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
-
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
-	cache.SetImageProvider(mockProvider)
 
 	// Test 1: Multiple requests for same species should only trigger one API call
 	t.Run("DeduplicationTest", func(t *testing.T) {
 		t.Parallel()
-		mockProvider.resetCounters()
+		// Create separate instances for this test
+		mockProvider := &mockProviderWithAPICounter{
+			mockImageProvider: mockImageProvider{
+				fetchDelay: 10 * time.Millisecond,
+			},
+		}
+
+		mockStore := newMockStore()
+		metrics, err := observability.NewMetrics()
+		if err != nil {
+			t.Fatalf("Failed to create metrics: %v", err)
+		}
+
+		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+		if err != nil {
+			t.Fatalf("Failed to create cache: %v", err)
+		}
+		cache.SetImageProvider(mockProvider)
+
 		species := "Parus major"
 
 		// Make 10 concurrent requests
@@ -64,11 +64,29 @@ func TestCacheEffectiveness(t *testing.T) {
 	// Test 2: Subsequent requests should use cache
 	t.Run("CacheHitTest", func(t *testing.T) {
 		t.Parallel()
-		mockProvider.resetCounters()
+		// Create separate instances for this test
+		mockProvider := &mockProviderWithAPICounter{
+			mockImageProvider: mockImageProvider{
+				fetchDelay: 10 * time.Millisecond,
+			},
+		}
+
+		mockStore := newMockStore()
+		metrics, err := observability.NewMetrics()
+		if err != nil {
+			t.Fatalf("Failed to create metrics: %v", err)
+		}
+
+		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+		if err != nil {
+			t.Fatalf("Failed to create cache: %v", err)
+		}
+		cache.SetImageProvider(mockProvider)
+
 		species := "Carduelis carduelis"
 
 		// First request - should hit API
-		_, err := cache.Get(species)
+		_, err = cache.Get(species)
 		if err != nil {
 			t.Fatalf("Failed to get image: %v", err)
 		}
@@ -95,11 +113,29 @@ func TestCacheEffectiveness(t *testing.T) {
 	// Test 3: DB cache persistence
 	t.Run("DBCachePersistenceTest", func(t *testing.T) {
 		t.Parallel()
-		mockProvider.resetCounters()
+		// Create separate instances for this test
+		mockProvider := &mockProviderWithAPICounter{
+			mockImageProvider: mockImageProvider{
+				fetchDelay: 10 * time.Millisecond,
+			},
+		}
+
+		mockStore := newMockStore()
+		metrics, err := observability.NewMetrics()
+		if err != nil {
+			t.Fatalf("Failed to create metrics: %v", err)
+		}
+
+		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+		if err != nil {
+			t.Fatalf("Failed to create cache: %v", err)
+		}
+		cache.SetImageProvider(mockProvider)
+
 		species := "Sturnus vulgaris"
 
 		// First request
-		_, err := cache.Get(species)
+		_, err = cache.Get(species)
 		if err != nil {
 			t.Fatalf("Failed to get image: %v", err)
 		}
