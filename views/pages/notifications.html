@@ -262,7 +262,7 @@
         <p class="py-4">Are you sure you want to delete this notification?</p>
         <div class="modal-action">
             <form method="dialog" class="flex gap-2">
-                <button class="btn btn-ghost">Cancel</button>
+                <button @click="pendingDeleteId = null" class="btn btn-ghost">Cancel</button>
                 <button @click="confirmDelete()" class="btn btn-error">Delete</button>
             </form>
         </div>
@@ -415,11 +415,31 @@ document.addEventListener('alpine:init', () => {
                 });
                 
                 if (response.ok) {
+                    // Close the modal first
+                    document.getElementById('deleteConfirmModal').close();
+                    
+                    // Remove from local array
                     this.notifications = this.notifications.filter(n => n.id !== id);
                     this.hasUnread = this.notifications.some(n => !n.read);
+                    
+                    // If current page is now empty and not first page, go to previous page
+                    if (this.notifications.length === 0 && this.currentPage > 1) {
+                        this.currentPage--;
+                        await this.loadNotifications();
+                    }
+                } else {
+                    // Close modal and show error
+                    document.getElementById('deleteConfirmModal').close();
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('Failed to delete notification:', errorData.error || 'Unknown error');
+                    // Optionally show user-friendly error message
+                    alert(errorData.error || 'Failed to delete notification. Please try again.');
                 }
             } catch (error) {
+                // Close modal on error
+                document.getElementById('deleteConfirmModal').close();
                 console.error('Failed to delete notification:', error);
+                alert('Network error occurred. Please try again.');
             }
         },
 
