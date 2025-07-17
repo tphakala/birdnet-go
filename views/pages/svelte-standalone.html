@@ -1,0 +1,54 @@
+{{define "svelte-standalone"}}
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>BirdNET-Go {{.Title}}</title>
+  <script>
+    // Immediately set the theme before any content loads
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme-controller', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.documentElement.setAttribute('data-theme-controller', 'light');
+    }
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
+  <link rel="shortcut icon" href="/assets/images/favicon.ico">
+  
+  <!-- Load Tailwind CSS and custom CSS from old UI assets -->
+  <link href="/assets/tailwind.css?v={{.Settings.Version}}" rel="stylesheet" />
+  <link href="/assets/custom.css?v={{.Settings.Version}}" rel="stylesheet" />
+
+  <!-- Load Svelte CSS -->
+  <link rel="stylesheet" href="/ui/assets/index.css">
+  
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+</head>
+
+<body>
+  <!-- Svelte App Mount Point -->
+  <div id="app"></div>
+
+  <!-- Pass server configuration to Svelte app -->
+  <script>
+    window.BIRDNET_CONFIG = {
+      csrfToken: '{{.CSRFToken}}',
+      security: {
+        enabled: {{.Security.Enabled}},
+        accessAllowed: {{.Security.AccessAllowed}}
+      },
+      version: '{{.Settings.Version}}',
+      currentPath: window.location.pathname
+    };
+  </script>
+  
+  <!-- Load Svelte JS -->
+  <script type="module" src="/ui/assets/index.js"></script>
+</body>
+</html>
+{{end}}

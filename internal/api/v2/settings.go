@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -35,6 +38,12 @@ func (c *Controller) initSettingsRoutes() {
 	// Routes for settings
 	// GET /api/v2/settings - Retrieves all application settings
 	settingsGroup.GET("", c.GetAllSettings)
+	// GET /api/v2/settings/locales - Retrieves available locales for BirdNET (must be before /:section)
+	settingsGroup.GET("/locales", c.GetLocales)
+	// GET /api/v2/settings/imageproviders - Retrieves available image providers (must be before /:section)
+	settingsGroup.GET("/imageproviders", c.GetImageProviders)
+	// GET /api/v2/settings/systemid - Retrieves the system ID for support tracking (must be before /:section)
+	settingsGroup.GET("/systemid", c.GetSystemID)
 	// GET /api/v2/settings/:section - Retrieves settings for a specific section (e.g., birdnet, webserver)
 	settingsGroup.GET("/:section", c.GetSectionSettings)
 	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
@@ -1039,4 +1048,109 @@ func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // audioDeviceSettingChanged checks if audio device settings have changed
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.Realtime.Audio.Source != currentSettings.Realtime.Audio.Source
+}
+
+// LocaleData represents a locale with its code and full name
+type LocaleData struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// ImageProviderOption represents an image provider option
+type ImageProviderOption struct {
+	Value   string `json:"value"`
+	Display string `json:"display"`
+}
+
+// GetLocales handles GET /api/v2/settings/locales
+func (c *Controller) GetLocales(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting available locales")
+
+	// Return locales in the same format as v1 for compatibility
+	// This matches the client-side expectation of key-value pairs
+	locales := make(map[string]string)
+	for code, name := range conf.LocaleCodes {
+		locales[code] = name
+	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved locales successfully", "count", len(locales))
+
+	return ctx.JSON(http.StatusOK, locales)
+}
+
+// GetImageProviders handles GET /api/v2/settings/imageproviders
+func (c *Controller) GetImageProviders(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting available image providers")
+
+	// Prepare image provider options
+	providerOptionList := []ImageProviderOption{
+		{Value: "auto", Display: "Auto (Default)"}, // Always add auto first
+	}
+
+	providerCount := 0
+	if c.BirdImageCache != nil {
+		c.logAPIRequest(ctx, slog.LevelDebug, "BirdImageCache is available, checking for registry")
+		if registry := c.BirdImageCache.GetRegistry(); registry != nil {
+			c.logAPIRequest(ctx, slog.LevelDebug, "Registry found, ranging over providers")
+			registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+				c.logAPIRequest(ctx, slog.LevelDebug, "Found provider", "name", name)
+				// Simple capitalization for display name (Rune-aware)
+				var displayName string
+				if name != "" {
+					r, size := utf8.DecodeRuneInString(name)
+					displayName = strings.ToUpper(string(r)) + name[size:]
+				} else {
+					displayName = "(unknown)"
+				}
+				providerOptionList = append(providerOptionList, ImageProviderOption{Value: name, Display: displayName})
+				providerCount++
+				return true // Continue ranging
+			})
+
+			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
+			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
+				sub := providerOptionList[1:] // Create a sub-slice for sorting
+				sort.Slice(sub, func(i, j int) bool {
+					return sub[i].Display < sub[j].Display // Compare elements within the sub-slice
+				})
+			}
+		} else {
+			c.logAPIRequest(ctx, slog.LevelWarn, "ImageProviderRegistry is nil, cannot get provider names")
+		}
+	} else {
+		c.logAPIRequest(ctx, slog.LevelWarn, "BirdImageCache is nil, cannot get provider names")
+	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved image providers successfully", "count", len(providerOptionList), "provider_count", providerCount)
+
+	// Return in format expected by client: { providers: [...] }
+	response := map[string]any{
+		"providers": providerOptionList,
+	}
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// GetSystemID handles GET /api/v2/settings/systemid
+func (c *Controller) GetSystemID(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting system ID")
+
+	// Acquire read lock to ensure settings aren't being modified during read
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
+	settings := conf.Setting()
+	if settings == nil {
+		c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get system ID")
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", settings.SystemID)
+
+	// Return system ID in the format expected by the frontend
+	response := map[string]string{
+		"systemID": settings.SystemID,
+	}
+
+	return ctx.JSON(http.StatusOK, response)
 }
