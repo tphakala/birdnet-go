@@ -142,14 +142,69 @@ tasks:
     cmds:
       - air realtime
 
+  # Frontend build tasks
+  frontend-install:
+    desc: Install frontend dependencies
+    dir: frontend
+    cmds:
+      - npm install
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules/.package-lock.json
+
+  frontend-build:
+    desc: Build frontend for production
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run build
+    sources:
+      - src/**/*
+      - index.html
+      - vite.config.js
+      - package.json
+    generates:
+      - dist/**/*
+
+  frontend-dev:
+    desc: Start frontend development server
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run dev
+
+  frontend-lint:
+    desc: Lint frontend code
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run check:all
+
+  frontend-test:
+    desc: Run frontend tests
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run test
+
+  frontend-test-coverage:
+    desc: Run frontend tests with coverage
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run test:coverage
+
   clean:
     cmds:
       - go clean
       - rm -rf {{.BINARY_DIR}}/* tflite_c *.tar.gz *.zip
       - rm -f {{.AVICOMMONS_DATA_DIR}}/{{.AVICOMMONS_JSON_FILE}}
+      - rm -rf frontend/dist frontend/node_modules
 
   linux_amd64:
-    deps: [check-tools, check-tensorflow, download-avicommons-data]
+    deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
       TFLITE_LIB_ARCH: linux_amd64.tar.gz
@@ -164,7 +219,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   linux_arm64:
-    deps: [check-tools, check-tensorflow, download-avicommons-data]
+    deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
       TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
       TFLITE_LIB_ARCH: linux_arm64.tar.gz
@@ -182,7 +237,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   windows_amd64:
-    deps: [check-tools, check-tensorflow, download-avicommons-data]
+    deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
       TFLITE_LIB_DIR: /usr/x86_64-w64-mingw32/lib
       TFLITE_LIB_ARCH: windows_amd64.zip
@@ -197,7 +252,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
 
   darwin_amd64:
-    deps: [check-tools, check-tensorflow, download-avicommons-data]
+    deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_amd64.tar.gz
@@ -211,7 +266,7 @@ tasks:
         go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   darwin_arm64:
-    deps: [check-tools, check-tensorflow, download-avicommons-data]
+    deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
       TFLITE_LIB_DIR: /opt/homebrew/lib
       TFLITE_LIB_ARCH: darwin_arm64.tar.gz
