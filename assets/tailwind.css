@@ -7742,7 +7742,10 @@ html:has(.drawer-open.drawer-open) {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> ce8e708a (feat: implement modern Svelte 5 desktop UI with comprehensive component library)
 .text-warning-content {
   --tw-text-opacity: 1;
   color: var(--fallback-wac,oklch(var(--wac)/var(--tw-text-opacity, 1)));
