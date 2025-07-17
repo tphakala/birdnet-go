@@ -7,6 +7,9 @@ module.exports = {
     './views/*/*.html',
     './views/*/*/*.html',
     './assets/*.js',
+    // Svelte frontend paths
+    './frontend/src/**/*.{svelte,js,ts}',
+    './frontend/index.html',
   ],
   safelist: [
     'bg-red-500',
@@ -14,6 +17,14 @@ module.exports = {
     'bg-orange-400',
     'text-3xl',
     'lg:text-4xl',
+    // Responsive grid classes for Svelte
+    'md:grid-cols-2',
+    'md:grid-cols-3',
+    'lg:grid-cols-3',
+    'lg:grid-cols-4',
+    'gap-3',
+    'gap-4',
+    'gap-6',
   ],
   theme: {
     screens: {

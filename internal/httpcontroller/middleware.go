@@ -60,7 +60,7 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 		TokenLookup:    "header:X-CSRF-Token,form:_csrf",
 		CookieName:     "csrf",
 		CookiePath:     "/",
-		CookieHTTPOnly: true,
+		CookieHTTPOnly: false, // Allow JavaScript to read the cookie for hobby/LAN use
 		CookieSameSite: http.SameSiteLaxMode,
 		CookieSecure:   false, // Allow cookies over HTTP, if user is not
 		// using HTTPS they don't care about security anyway

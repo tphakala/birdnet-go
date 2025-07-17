@@ -951,11 +951,15 @@ func initializeMetrics() (*observability.Metrics, error) {
 }
 
 // initializeBirdImageCacheIfNeeded initializes the bird image cache if thumbnails are enabled
+// or if we need it for the settings UI to show available providers
 func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics) *imageprovider.BirdImageCache {
 	if settings.Realtime.Dashboard.Thumbnails.Summary || settings.Realtime.Dashboard.Thumbnails.Recent {
 		return initBirdImageCache(dataStore, metrics)
 	}
-	return nil
+	// Always initialize the cache so the settings UI can show available providers
+	// even when thumbnails are disabled - the cache will just not be used for actual image fetching
+	log.Println("Initializing bird image cache for settings UI (thumbnails disabled)")
+	return initBirdImageCache(dataStore, metrics)
 }
 
 // initializeAudioSources prepares and validates audio sources
