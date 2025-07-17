@@ -1,0 +1,359 @@
+<script lang="ts">
+  import { cn } from '$lib/utils/cn';
+  import {
+    filterSpeciesForAutocomplete,
+    validateSpecies,
+    formatSpeciesName,
+    sortSpecies,
+  } from '$lib/utils/speciesUtils';
+  // import type { Snippet } from 'svelte'; // Not used in this component
+
+  interface Props {
+    species?: string[];
+    allowedSpecies?: string[];
+    editable?: boolean;
+    maxItems?: number;
+    placeholder?: string;
+    label?: string;
+    helpText?: string;
+    sortable?: boolean;
+    className?: string;
+    onChange?: (_species: string[]) => void;
+    onValidate?: (_species: string) => boolean;
+  }
+
+  let {
+    species = [],
+    allowedSpecies = [],
+    editable = true,
+    maxItems,
+    placeholder = 'Enter species name...',
+    label,
+    helpText,
+    sortable = false,
+    className = '',
+    onChange,
+    onValidate,
+  }: Props = $props();
+
+  // State
+  let input = $state('');
+  let predictions = $state<string[]>([]);
+  let editingIndex = $state<number | null>(null);
+  let editingValue = $state('');
+  let draggedIndex = $state<number | null>(null);
+  let dragOverIndex = $state<number | null>(null);
+  let inputId = `species-input-${Math.random().toString(36).substr(2, 9)}`;
+  let listId = `species-list-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Derived
+  let canAddMore = $derived(!maxItems || species.length < maxItems);
+  let displaySpecies = $derived(sortable ? sortSpecies(species) : species);
+
+  // Update predictions when input changes
+  $effect(() => {
+    if (input.trim()) {
+      predictions = filterSpeciesForAutocomplete(
+        input,
+        allowedSpecies.length > 0 ? allowedSpecies : [],
+        species,
+        5
+      );
+    } else {
+      predictions = [];
+    }
+  });
+
+  function addSpecies() {
+    const trimmed = input.trim();
+
+    if (!trimmed) return;
+
+    // Check if already exists (case-insensitive)
+    if (species.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      input = '';
+      predictions = [];
+      return;
+    }
+
+    // Validate if custom validator provided
+    if (onValidate && !onValidate(trimmed)) {
+      return;
+    }
+
+    // Validate against allowed list if provided
+    if (allowedSpecies.length > 0 && !validateSpecies(trimmed, allowedSpecies)) {
+      return;
+    }
+
+    // Add to list
+    const newSpecies = [...species, trimmed];
+    species = newSpecies;
+
+    // Clear input
+    input = '';
+    predictions = [];
+
+    // Notify parent
+    onChange?.(newSpecies);
+  }
+
+  function removeSpecies(index: number) {
+    const newSpecies = species.filter((_, i) => i !== index);
+    species = newSpecies;
+    onChange?.(newSpecies);
+  }
+
+  function startEdit(index: number) {
+    editingIndex = index;
+    editingValue = species[index];
+    // Focus will be set in next tick via $effect
+  }
+
+  // Focus edit input when editing starts
+  $effect(() => {
+    if (editingIndex !== null) {
+      // Use nextTick to ensure DOM is updated
+      setTimeout(() => {
+        const editInput = document.querySelector(
+          `[data-edit-index="${editingIndex}"]`
+        ) as HTMLInputElement;
+        editInput?.focus();
+      }, 0);
+    }
+  });
+
+  function saveEdit() {
+    if (editingIndex === null) return;
+
+    const trimmed = editingValue.trim();
+    if (!trimmed) {
+      cancelEdit();
+      return;
+    }
+
+    // Check for duplicates (excluding current item)
+    const duplicate = species.some(
+      (s, i) => i !== editingIndex && s.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (duplicate) {
+      cancelEdit();
+      return;
+    }
+
+    // Update species
+    const newSpecies = [...species];
+    newSpecies[editingIndex] = trimmed;
+    species = newSpecies;
+
+    // Reset edit state
+    editingIndex = null;
+    editingValue = '';
+
+    onChange?.(newSpecies);
+  }
+
+  function cancelEdit() {
+    editingIndex = null;
+    editingValue = '';
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addSpecies();
+    }
+  }
+
+  function handleEditKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      saveEdit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelEdit();
+    }
+  }
+
+  // Drag and drop handlers
+  function handleDragStart(event: DragEvent, index: number) {
+    if (!editable || !sortable) return;
+
+    draggedIndex = index;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/html', ''); // Firefox requires this
+    }
+  }
+
+  function handleDragOver(event: DragEvent, index: number) {
+    if (!editable || !sortable || draggedIndex === null) return;
+
+    event.preventDefault();
+    dragOverIndex = index;
+  }
+
+  function handleDragEnd() {
+    if (!editable || !sortable || draggedIndex === null || dragOverIndex === null) return;
+
+    if (draggedIndex !== dragOverIndex) {
+      const newSpecies = [...species];
+      const [removed] = newSpecies.splice(draggedIndex, 1);
+      newSpecies.splice(dragOverIndex, 0, removed);
+      species = newSpecies;
+      onChange?.(newSpecies);
+    }
+
+    draggedIndex = null;
+    dragOverIndex = null;
+  }
+
+  function selectPrediction(prediction: string) {
+    input = prediction;
+    predictions = [];
+    addSpecies();
+  }
+</script>
+
+<div class={cn('species-manager', className)}>
+  {#if label}
+    <label for={inputId} class="label">
+      <span class="label-text">{label}</span>
+    </label>
+  {/if}
+
+  {#if editable && canAddMore}
+    <div class="form-control">
+      <div class="relative">
+        <input
+          id={inputId}
+          type="text"
+          bind:value={input}
+          onkeydown={handleKeyDown}
+          {placeholder}
+          class="input input-bordered w-full"
+          list={listId}
+        />
+
+        {#if predictions.length > 0}
+          <div
+            class="absolute z-10 w-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 max-h-48 overflow-auto"
+          >
+            {#each predictions as prediction}
+              <button
+                type="button"
+                onclick={() => selectPrediction(prediction)}
+                class="w-full px-4 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-none"
+              >
+                {formatSpeciesName(prediction)}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      {#if helpText}
+        <div class="label">
+          <span class="label-text-alt">{helpText}</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if species.length > 0}
+    <div class="mt-4 space-y-2">
+      {#each displaySpecies as item, index}
+        <div
+          class={cn(
+            'flex items-center gap-2 p-2 bg-base-200 rounded-lg',
+            dragOverIndex === index && 'ring-2 ring-primary'
+          )}
+          draggable={editable && sortable}
+          ondragstart={e => handleDragStart(e, index)}
+          ondragover={e => handleDragOver(e, index)}
+          ondragend={handleDragEnd}
+          role={editable && sortable ? 'listitem' : undefined}
+          tabindex={editable && sortable ? 0 : undefined}
+        >
+          {#if editable && sortable}
+            <svg
+              class="w-5 h-5 text-base-content/50 cursor-move"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 8h16M4 16h16"
+              />
+            </svg>
+          {/if}
+
+          <div class="flex-1">
+            {#if editingIndex === index}
+              <input
+                type="text"
+                bind:value={editingValue}
+                onkeydown={handleEditKeyDown}
+                onblur={saveEdit}
+                class="input input-sm input-bordered w-full"
+                data-edit-index={index}
+              />
+            {:else}
+              <span class="text-sm">{formatSpeciesName(item)}</span>
+            {/if}
+          </div>
+
+          {#if editable}
+            <div class="flex gap-1">
+              {#if editingIndex !== index}
+                <button
+                  type="button"
+                  onclick={() => startEdit(index)}
+                  class="btn btn-ghost btn-xs"
+                  aria-label="Edit species"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </button>
+              {/if}
+
+              <button
+                type="button"
+                onclick={() => removeSpecies(index)}
+                class="btn btn-ghost btn-xs text-error"
+                aria-label="Remove species"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {:else if !editable}
+    <p class="text-base-content/60 italic">No species added</p>
+  {/if}
+
+  {#if maxItems && species.length >= maxItems}
+    <p class="text-sm text-warning mt-2">
+      Maximum of {maxItems} species reached
+    </p>
+  {/if}
+</div>
