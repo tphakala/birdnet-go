@@ -4,9 +4,10 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
 
 # Build configuration
 [build]
-  # Pre-build command: Compile Tailwind CSS
+  # Pre-build command: Compile Tailwind CSS and Svelte frontend
   pre_cmd = [
     """
+    # Build Tailwind CSS
     if command -v tailwindcss >/dev/null 2>&1; then
       tailwindcss -i tailwind.input.css -o assets/tailwind.css
     elif command -v npx >/dev/null 2>&1; then
@@ -15,6 +16,13 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
     else
       echo "Error: Neither 'tailwindcss' binary nor 'npx' found. Please install Tailwind CSS."
       exit 1
+    fi
+    
+    # Build Svelte frontend if it exists
+    if [ -f "frontend/package.json" ]; then
+      echo "Building Svelte frontend..."
+      cd frontend && npm run build
+      cd ..
     fi
     """
   ]
@@ -37,15 +45,15 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
   delay = 1000  # Delay (in milliseconds) before restarting the app after a change
   
   # Directories to exclude from watching
-  exclude_dir = ["tmp", "vendor", "testdata", "bin"]
+  exclude_dir = ["tmp", "vendor", "testdata", "bin", "frontend/node_modules", "frontend/dist", "frontend/.svelte-kit"]
   exclude_file = []  # Files to exclude from watching (none specified)
   exclude_regex = ["_test.go"]  # Exclude test files
   exclude_unchanged = false  # Watch even files that haven't changed
   follow_symlink = false  # Don't follow symlinks
   full_bin = ""  # Additional arguments when running the built binary
-  include_dir = ["views", "internal", "assets"] # Directories to include (watches all if empty)
-  include_ext = ["go", "tpl", "tmpl", "html", "css", "js"]  # File extensions to watch
-  include_file = ["tailwind.config.js", "tailwind.input.css", "main.go"]  # Files to watch
+  include_dir = ["views", "internal", "assets", "frontend/src"] # Directories to include (watches all if empty)
+  include_ext = ["go", "tpl", "tmpl", "html", "css", "js", "svelte", "ts"]  # File extensions to watch
+  include_file = ["tailwind.config.js", "tailwind.input.css", "main.go", "frontend/vite.config.js", "frontend/package.json"]  # Files to watch
   kill_delay = "0s"  # Delay before killing the app on a rebuild
   log = "build-errors.log"  # File to log build errors
   send_interrupt = false  # Send interrupt signal before killing the app

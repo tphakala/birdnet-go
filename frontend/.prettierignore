@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.svelte-kit/
+build/
+package/
+*.config.js
+*.min.js
+*.min.css
