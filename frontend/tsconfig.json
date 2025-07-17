@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": false,
+    "declarationMap": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "verbatimModuleSyntax": true,
+    "baseUrl": ".",
+    "paths": {
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "src/vite-env.d.ts",
+    "src/vitest-env.d.ts",
+    "vite.config.js",
+    "tailwind.config.js",
+    "postcss.config.js"
+  ],
+  "exclude": ["node_modules", "dist", ".svelte-kit"]
+}
