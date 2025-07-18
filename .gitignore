@@ -23,9 +23,6 @@ birdnet.txt
 custom_confidence_list.txt
 node_modules
 Unraid/SUBMISSION.md
-
-# Frontend/Svelte build
 frontend/node_modules
-frontend/dist/*
-!frontend/dist/.gitkeep
+frontend/dist/
 frontend/.svelte-kit
