@@ -69,6 +69,10 @@ type Controller struct {
 	// Cleanup related fields
 	ctx    context.Context    // Context for managing goroutines
 	cancel context.CancelFunc // Cancel function for graceful shutdown
+	
+	// Test synchronization fields
+	goroutinesStarted chan struct{} // Signals when all background goroutines have started (test only)
+	wg                sync.WaitGroup // Tracks background goroutines for clean shutdown
 }
 
 // Define specific errors for token handling failures
@@ -156,6 +160,15 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
 	metrics *observability.Metrics) (*Controller, error) {
+	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics, true)
+}
+
+// NewWithOptions creates a new API controller with optional route initialization.
+// Set initializeRoutes to false for testing to avoid starting background goroutines.
+func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
+	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
+	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
+	metrics *observability.Metrics, initializeRoutes bool) (*Controller, error) {
 
 	if logger == nil {
 		logger = log.Default()
@@ -292,8 +305,14 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// Initialize SSE manager
 	c.sseManager = NewSSEManager(logger)
 
-	// Initialize routes
-	c.initRoutes()
+	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
+	if initializeRoutes {
+		// Initialize synchronization channel for testing
+		c.goroutinesStarted = make(chan struct{})
+		c.initRoutes()
+		// Signal that all goroutines have started
+		close(c.goroutinesStarted)
+	}
 
 	return c, nil // Return controller and nil error
 }
@@ -469,6 +488,9 @@ func (c *Controller) Shutdown() {
 		c.cancel()
 	}
 
+	// Wait for all goroutines to finish
+	c.wg.Wait()
+
 	// Close the API logger if it was initialized
 	if c.apiLoggerClose != nil {
 		if err := c.apiLoggerClose(); err != nil {
@@ -476,10 +498,6 @@ func (c *Controller) Shutdown() {
 		}
 	}
 
-	// Call shutdown methods of individual components
-	// Currently, only the system component needs cleanup
-	StopCPUMonitoring()
-	
 	// TODO: The go-cache library's janitor goroutine cannot be stopped.
 	// Consider migrating to a context-aware cache implementation.
 	if c.detectionCache != nil {
@@ -487,7 +505,7 @@ func (c *Controller) Shutdown() {
 	}
 
 	// Log shutdown
-	c.Debug("API Controller shutting down, CPU monitoring stopped")
+	c.Debug("API Controller shutting down")
 }
 
 // Error response structure
