@@ -260,7 +260,7 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 			// Check error response content
 			assert.Contains(t, fmt.Sprint(errorResp["error"]), "control channel not initialized")
 			assert.Contains(t, errorResp["message"], "System control interface not available")
-			assert.InDelta(t, float64(http.StatusInternalServerError), errorResp["code"], 0.01)
+			assert.Equal(t, http.StatusInternalServerError, int(errorResp["code"].(float64)))
 		})
 	}
 }
