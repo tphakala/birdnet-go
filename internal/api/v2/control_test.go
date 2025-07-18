@@ -19,6 +19,157 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runControlEndpointTest runs a control endpoint test with the given parameters
+func runControlEndpointTest(t *testing.T, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
+	t.Helper()
+	
+	// Setup
+	e, _, controller := setupTestEnvironment(t)
+
+	// Create a test control channel to capture the signal
+	controlChan := make(chan string, 1) // Buffered channel to avoid blocking
+	controller.controlChan = controlChan
+
+	// Create a request
+	req := httptest.NewRequest(method, path, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath(path)
+
+	// Test
+	require.NoError(t, handler(c))
+	{
+		// Check status code
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Check content type
+		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+		// Parse response body
+		var result ControlResult
+		err := json.Unmarshal(rec.Body.Bytes(), &result)
+		require.NoError(t, err)
+
+		// Check response content
+		assert.True(t, result.Success)
+		assert.Equal(t, expectedMessage, result.Message)
+		assert.Equal(t, expectedAction, result.Action)
+		assert.NotZero(t, result.Timestamp)
+
+		// Verify signal was sent to control channel
+		select {
+		case signal := <-controlChan:
+			assert.Equal(t, expectedSignal, signal)
+		case <-time.After(100 * time.Millisecond):
+			assert.Fail(t, "Control signal was not sent")
+		}
+	}
+}
+
+// runConcurrentControlRequestsTest runs multiple concurrent control requests test
+func runConcurrentControlRequestsTest(t *testing.T, handler func(echo.Context) error, path, expectedSignal string) {
+	t.Helper()
+	
+	// Setup
+	e, _, controller := setupTestEnvironment(t)
+
+	// Create a buffered channel to handle multiple signals
+	controlChan := make(chan string, 10)
+	controller.controlChan = controlChan
+
+	// Number of concurrent requests to make
+	numRequests := 5
+
+	// Use a wait group to synchronize the test
+	var wg sync.WaitGroup
+	wg.Add(numRequests)
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	// Launch multiple concurrent requests
+	for i := 0; i < numRequests; i++ {
+		go func() {
+			defer wg.Done()
+
+			// Create a new request for each goroutine
+			req := httptest.NewRequest(http.MethodPost, path, http.NoBody).WithContext(ctx)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			// Call the handler
+			err := handler(c)
+			assert.NoError(t, err, "Handler should not return an error during concurrent access")
+			assert.Equal(t, http.StatusOK, rec.Code, "Should return OK for concurrent requests")
+		}()
+	}
+
+	// Wait for all requests to complete
+	wg.Wait()
+
+	// Verify that all signals were sent to the channel
+	assert.Len(t, controlChan, numRequests, "All signals should be received")
+
+	// Drain the channel
+	for i := 0; i < numRequests; i++ {
+		signal := <-controlChan
+		assert.Equal(t, expectedSignal, signal, "Each signal should be the expected signal")
+	}
+}
+
+// runControlActionsWithBlockedChannelTest runs control endpoints test with a blocked channel
+func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Context) error) {
+	t.Helper()
+	
+	// Setup
+	e, _, controller := setupTestEnvironment(t)
+
+	// Create a non-buffered channel that will block
+	controlChan := make(chan string)
+	controller.controlChan = controlChan
+
+	// Start a goroutine that will eventually unblock the channel, but after the test timeout
+	go func() {
+		// Wait longer than the test will run to simulate a blocked receiver
+		time.Sleep(200 * time.Millisecond)
+		// Try to drain the channel if anything was sent
+		select {
+		case <-controlChan:
+			// Channel drained
+		default:
+			// Channel was empty
+		}
+	}()
+
+	// Create a context with timeout to ensure the test doesn't hang
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// Create a request with the timeout context
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Execute the handler with a separate goroutine and channel to detect completion
+	done := make(chan bool, 1)
+	go func() {
+		err := handler(c)
+		assert.NoError(t, err, "Handler should not return an error even with a blocked channel")
+		done <- true
+	}()
+
+	// Check if the handler completes within the timeout
+	select {
+	case <-done:
+		// Handler completed successfully without blocking indefinitely
+		assert.Equal(t, http.StatusRequestTimeout, rec.Code,
+			"Should return timeout error when channel is blocked")
+	case <-time.After(150 * time.Millisecond):
+		t.Fatal("Handler blocked indefinitely with a blocked channel")
+	}
+}
+
 // TestGetAvailableActions tests the GetAvailableActions endpoint
 func TestGetAvailableActions(t *testing.T) {
 	// Setup
@@ -73,136 +224,28 @@ func TestGetAvailableActions(t *testing.T) {
 // TestRestartAnalysis tests the RestartAnalysis endpoint
 func TestRestartAnalysis(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a test control channel to capture the signal
-	controlChan := make(chan string, 1) // Buffered channel to avoid blocking
-	controller.controlChan = controlChan
-
-	// Create a request
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/control/restart")
-
-	// Test
-	require.NoError(t, controller.RestartAnalysis(c))
-	{
-		// Check status code
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Check content type
-		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-
-		// Parse response body
-		var result ControlResult
-		err := json.Unmarshal(rec.Body.Bytes(), &result)
-		require.NoError(t, err)
-
-		// Check response content
-		assert.True(t, result.Success)
-		assert.Equal(t, "Analysis restart signal sent", result.Message)
-		assert.Equal(t, ActionRestartAnalysis, result.Action)
-		assert.NotZero(t, result.Timestamp)
-
-		// Verify signal was sent to control channel
-		select {
-		case signal := <-controlChan:
-			assert.Equal(t, SignalRestartAnalysis, signal)
-		case <-time.After(100 * time.Millisecond):
-			assert.Fail(t, "Control signal was not sent")
-		}
-	}
+	_, _, controller := setupTestEnvironment(t)
+	
+	runControlEndpointTest(t, http.MethodPost, "/api/v2/control/restart", controller.RestartAnalysis, 
+		"Analysis restart signal sent", ActionRestartAnalysis, SignalRestartAnalysis)
 }
 
 // TestReloadModel tests the ReloadModel endpoint
 func TestReloadModel(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a test control channel to capture the signal
-	controlChan := make(chan string, 1) // Buffered channel to avoid blocking
-	controller.controlChan = controlChan
-
-	// Create a request
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/reload", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/control/reload")
-
-	// Test
-	require.NoError(t, controller.ReloadModel(c))
-	{
-		// Check status code
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Check content type
-		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-
-		// Parse response body
-		var result ControlResult
-		err := json.Unmarshal(rec.Body.Bytes(), &result)
-		require.NoError(t, err)
-
-		// Check response content
-		assert.True(t, result.Success)
-		assert.Equal(t, "Model reload signal sent", result.Message)
-		assert.Equal(t, ActionReloadModel, result.Action)
-		assert.NotZero(t, result.Timestamp)
-
-		// Verify signal was sent to control channel
-		select {
-		case signal := <-controlChan:
-			assert.Equal(t, SignalReloadModel, signal)
-		case <-time.After(100 * time.Millisecond):
-			assert.Fail(t, "Control signal was not sent")
-		}
-	}
+	_, _, controller := setupTestEnvironment(t)
+	
+	runControlEndpointTest(t, http.MethodPost, "/api/v2/control/reload", controller.ReloadModel, 
+		"Model reload signal sent", ActionReloadModel, SignalReloadModel)
 }
 
 // TestRebuildFilter tests the RebuildFilter endpoint
 func TestRebuildFilter(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a test control channel to capture the signal
-	controlChan := make(chan string, 1) // Buffered channel to avoid blocking
-	controller.controlChan = controlChan
-
-	// Create a request
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/rebuild-filter", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/control/rebuild-filter")
-
-	// Test
-	require.NoError(t, controller.RebuildFilter(c))
-	{
-		// Check status code
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Check content type
-		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-
-		// Parse response body
-		var result ControlResult
-		err := json.Unmarshal(rec.Body.Bytes(), &result)
-		require.NoError(t, err)
-
-		// Check response content
-		assert.True(t, result.Success)
-		assert.Equal(t, "Filter rebuild signal sent", result.Message)
-		assert.Equal(t, ActionRebuildFilter, result.Action)
-		assert.NotZero(t, result.Timestamp)
-
-		// Verify signal was sent to control channel
-		select {
-		case signal := <-controlChan:
-			assert.Equal(t, SignalRebuildFilter, signal)
-		case <-time.After(100 * time.Millisecond):
-			assert.Fail(t, "Control signal was not sent")
-		}
-	}
+	_, _, controller := setupTestEnvironment(t)
+	
+	runControlEndpointTest(t, http.MethodPost, "/api/v2/control/rebuild-filter", controller.RebuildFilter, 
+		"Filter rebuild signal sent", ActionRebuildFilter, SignalRebuildFilter)
 }
 
 // TestControlActionsWithNilChannel tests the control endpoints with a nil control channel
@@ -427,102 +470,18 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 // to ensure they don't hang indefinitely
 func TestControlActionsWithBlockedChannel(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a non-buffered channel that will block
-	controlChan := make(chan string)
-	controller.controlChan = controlChan
-
-	// Start a goroutine that will eventually unblock the channel, but after the test timeout
-	go func() {
-		// Wait longer than the test will run to simulate a blocked receiver
-		time.Sleep(200 * time.Millisecond)
-		// Try to drain the channel if anything was sent
-		select {
-		case <-controlChan:
-			// Channel drained
-		default:
-			// Channel was empty
-		}
-	}()
-
-	// Create a context with timeout to ensure the test doesn't hang
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	// Create a request with the timeout context
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Execute the handler with a separate goroutine and channel to detect completion
-	done := make(chan bool, 1)
-	go func() {
-		err := controller.RestartAnalysis(c)
-		assert.NoError(t, err, "Handler should not return an error even with a blocked channel")
-		done <- true
-	}()
-
-	// Check if the handler completes within the timeout
-	select {
-	case <-done:
-		// Handler completed successfully without blocking indefinitely
-		assert.Equal(t, http.StatusRequestTimeout, rec.Code,
-			"Should return timeout error when channel is blocked")
-	case <-time.After(150 * time.Millisecond):
-		t.Fatal("Handler blocked indefinitely with a blocked channel")
-	}
+	_, _, controller := setupTestEnvironment(t)
+	
+	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
 }
 
 // TestConcurrentControlRequests tests that multiple concurrent control requests
 // are handled properly
 func TestConcurrentControlRequests(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a buffered channel to handle multiple signals
-	controlChan := make(chan string, 10)
-	controller.controlChan = controlChan
-
-	// Number of concurrent requests to make
-	numRequests := 5
-
-	// Use a wait group to synchronize the test
-	var wg sync.WaitGroup
-	wg.Add(numRequests)
-
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	// Launch multiple concurrent requests
-	for i := 0; i < numRequests; i++ {
-		go func() {
-			defer wg.Done()
-
-			// Create a new request for each goroutine
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Call the handler
-			err := controller.RestartAnalysis(c)
-			assert.NoError(t, err, "Handler should not return an error during concurrent access")
-			assert.Equal(t, http.StatusOK, rec.Code, "Should return OK for concurrent requests")
-		}()
-	}
-
-	// Wait for all requests to complete
-	wg.Wait()
-
-	// Verify that all signals were sent to the channel
-	assert.Len(t, controlChan, numRequests, "All signals should be received")
-
-	// Drain the channel
-	for i := 0; i < numRequests; i++ {
-		signal := <-controlChan
-		assert.Equal(t, SignalRestartAnalysis, signal, "Each signal should be the restart analysis signal")
-	}
+	_, _, controller := setupTestEnvironment(t)
+	
+	runConcurrentControlRequestsTest(t, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 
 // TestControlEndpointsAuthScenarios tests various authentication scenarios for control endpoints
@@ -627,102 +586,18 @@ func TestInvalidPayloads(t *testing.T) {
 // to ensure they don't hang indefinitely
 func TestControlActionsWithBlockedChannel_Advanced(t *testing.T) {
 	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a non-buffered channel that will block
-	controlChan := make(chan string)
-	controller.controlChan = controlChan
-
-	// Start a goroutine that will eventually unblock the channel, but after the test timeout
-	go func() {
-		// Wait longer than the test will run to simulate a blocked receiver
-		time.Sleep(200 * time.Millisecond)
-		// Try to drain the channel if anything was sent
-		select {
-		case <-controlChan:
-			// Channel drained
-		default:
-			// Channel was empty
-		}
-	}()
-
-	// Create a context with timeout to ensure the test doesn't hang
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	// Create a request with the timeout context
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Execute the handler with a separate goroutine and channel to detect completion
-	done := make(chan bool, 1)
-	go func() {
-		err := controller.RestartAnalysis(c)
-		assert.NoError(t, err, "Handler should not return an error even with a blocked channel")
-		done <- true
-	}()
-
-	// Check if the handler completes within the timeout
-	select {
-	case <-done:
-		// Handler completed successfully without blocking indefinitely
-		assert.Equal(t, http.StatusRequestTimeout, rec.Code,
-			"Should return timeout error when channel is blocked")
-	case <-time.After(150 * time.Millisecond):
-		t.Fatal("Handler blocked indefinitely with a blocked channel")
-	}
+	_, _, controller := setupTestEnvironment(t)
+	
+	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
 }
 
 // TestConcurrentControlRequests_Advanced tests that multiple concurrent control requests
 // are handled properly
 func TestConcurrentControlRequests_Advanced(t *testing.T) {
-	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Create a buffered channel to handle multiple signals
-	controlChan := make(chan string, 10)
-	controller.controlChan = controlChan
-
-	// Number of concurrent requests to make
-	numRequests := 5
-
-	// Use a wait group to synchronize the test
-	var wg sync.WaitGroup
-	wg.Add(numRequests)
-
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	// Launch multiple concurrent requests
-	for i := 0; i < numRequests; i++ {
-		go func() {
-			defer wg.Done()
-
-			// Create a new request for each goroutine
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Call the handler
-			err := controller.RestartAnalysis(c)
-			assert.NoError(t, err, "Handler should not return an error during concurrent access")
-			assert.Equal(t, http.StatusOK, rec.Code, "Should return OK for concurrent requests")
-		}()
-	}
-
-	// Wait for all requests to complete
-	wg.Wait()
-
-	// Verify that all signals were sent to the channel
-	assert.Len(t, controlChan, numRequests, "All signals should be received")
-
-	// Drain the channel
-	for i := 0; i < numRequests; i++ {
-		signal := <-controlChan
-		assert.Equal(t, SignalRestartAnalysis, signal, "Each signal should be the restart analysis signal")
-	}
+	// Setup  
+	_, _, controller := setupTestEnvironment(t)
+	
+	runConcurrentControlRequestsTest(t, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 
 // TestControlEndpointsAuthScenarios_Advanced tests various authentication scenarios for control endpoints

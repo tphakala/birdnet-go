@@ -10,6 +10,75 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// PoolStatsProvider interface for accessing pool statistics
+type PoolStatsProvider interface {
+	GetHits() uint64
+	GetMisses() uint64
+	GetDiscarded() uint64
+}
+
+// BufferPoolStatsAdapter adapts BufferPoolStats to PoolStatsProvider interface
+type BufferPoolStatsAdapter struct {
+	BufferPoolStats
+}
+
+func (s BufferPoolStatsAdapter) GetHits() uint64      { return s.Hits }
+func (s BufferPoolStatsAdapter) GetMisses() uint64    { return s.Misses }
+func (s BufferPoolStatsAdapter) GetDiscarded() uint64 { return s.Discarded }
+
+// Float32PoolStatsAdapter adapts Float32PoolStats to PoolStatsProvider interface
+type Float32PoolStatsAdapter struct {
+	Float32PoolStats
+}
+
+func (s Float32PoolStatsAdapter) GetHits() uint64      { return s.Hits }
+func (s Float32PoolStatsAdapter) GetMisses() uint64    { return s.Misses }
+func (s Float32PoolStatsAdapter) GetDiscarded() uint64 { return s.Discarded }
+
+// runPoolConcurrencyGeneric runs pool concurrency tests with generic operations
+func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int, 
+	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{})) {
+	t.Helper()
+	
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	for i := range numWorkers {
+		go func(workerID int) {
+			defer wg.Done()
+			
+			for range opsPerWorker {
+				buf := getOp()
+				validateBuffer(buf)
+				putOp(buf)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// runPoolConcurrencyWithStats runs pool concurrency tests and verifies stats
+func runPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWorker int,
+	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{}),
+	getStats func() PoolStatsProvider) {
+	t.Helper()
+	
+	runPoolConcurrencyGeneric(t, numWorkers, opsPerWorker, getOp, putOp, validateBuffer)
+	
+	// Verify stats are consistent
+	stats := getStats()
+	totalOps := uint64(numWorkers * opsPerWorker)
+	
+	hits := stats.GetHits()
+	misses := stats.GetMisses()
+	discarded := stats.GetDiscarded()
+	
+	// Allow some variance due to sync.Pool's per-CPU sharding
+	assert.InDelta(t, float64(totalOps), float64(hits+misses), float64(numWorkers*2))
+	assert.Equal(t, uint64(0), discarded)
+}
+
 func TestNewBufferPool(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -122,34 +191,17 @@ func TestBufferPoolConcurrency(t *testing.T) {
 	pool, err := NewBufferPool(bufferSize)
 	require.NoError(t, err)
 
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	for i := range numWorkers {
-		go func(workerID int) {
-			defer wg.Done()
-			
-			for j := range opsPerWorker {
-				buf := pool.Get()
-				assert.Len(t, buf, bufferSize)
-				
-				// Simulate some work with the buffer
-				buf[0] = byte(workerID)
-				buf[len(buf)-1] = byte(j)
-				
-				pool.Put(buf)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Verify stats are consistent
-	stats := pool.GetStats()
-	totalOps := uint64(numWorkers * opsPerWorker)
-	// Allow some variance due to sync.Pool's per-CPU sharding
-	assert.InDelta(t, float64(totalOps), float64(stats.Hits+stats.Misses), float64(numWorkers*2))
-	assert.Equal(t, uint64(0), stats.Discarded)
+	runPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
+		func() interface{} { return pool.Get() },
+		func(buf interface{}) { pool.Put(buf.([]byte)) },
+		func(buf interface{}) {
+			buffer := buf.([]byte)
+			assert.Len(t, buffer, bufferSize)
+			// Simulate some work with the buffer
+			buffer[0] = byte(0)
+			buffer[len(buffer)-1] = byte(1)
+		},
+		func() PoolStatsProvider { return BufferPoolStatsAdapter{pool.GetStats()} })
 }
 
 func TestBufferPoolMemoryReuse(t *testing.T) {

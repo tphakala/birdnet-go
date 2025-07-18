@@ -18,6 +18,46 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// runGetHourlyWeatherForDayNoDataTest runs the hourly weather endpoint test with no data for a given date
+func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
+	t.Helper()
+	
+	// Setup
+	e, mockDS, controller := setupWeatherTestEnvironment(t)
+
+	// Setup mock expectations to return empty data
+	mockDS.On("GetHourlyWeather", date).Return([]datastore.HourlyWeather{}, nil)
+
+	// Create a request
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/hourly/"+date, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/weather/hourly/:date")
+	c.SetParamNames("date")
+	c.SetParamValues(date)
+
+	// Test
+	if assert.NoError(t, controller.GetHourlyWeatherForDay(c)) {
+		// Check response
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Parse response body
+		var response struct {
+			Message string                  `json:"message"`
+			Data    []HourlyWeatherResponse `json:"data"`
+		}
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		// Check response content
+		assert.Equal(t, "No weather data found for the specified date", response.Message)
+		assert.Empty(t, response.Data)
+	}
+
+	// Verify mock expectations
+	mockDS.AssertExpectations(t)
+}
+
 // TestGetDailyWeather tests the daily weather endpoint
 func TestGetDailyWeather(t *testing.T) {
 	// Setup
@@ -256,40 +296,7 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 
 // TestGetHourlyWeatherForDayNoData tests the hourly weather endpoint with no data
 func TestGetHourlyWeatherForDayNoData(t *testing.T) {
-	// Setup
-	e, mockDS, controller := setupWeatherTestEnvironment(t)
-
-	// Setup mock expectations to return empty data
-	mockDS.On("GetHourlyWeather", "2023-01-01").Return([]datastore.HourlyWeather{}, nil)
-
-	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/hourly/2023-01-01", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/weather/hourly/:date")
-	c.SetParamNames("date")
-	c.SetParamValues("2023-01-01")
-
-	// Test
-	if assert.NoError(t, controller.GetHourlyWeatherForDay(c)) {
-		// Check response
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Parse response body
-		var response struct {
-			Message string                  `json:"message"`
-			Data    []HourlyWeatherResponse `json:"data"`
-		}
-		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		// Check response content
-		assert.Equal(t, "No weather data found for the specified date", response.Message)
-		assert.Empty(t, response.Data)
-	}
-
-	// Verify mock expectations
-	mockDS.AssertExpectations(t)
+	runGetHourlyWeatherForDayNoDataTest(t, "2023-01-01")
 }
 
 // TestGetHourlyWeatherForDayFutureDate tests the hourly weather endpoint with a future date
@@ -335,40 +342,7 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 
 // TestGetHourlyWeatherForDayInvalidDate tests the hourly weather endpoint with an invalid date
 func TestGetHourlyWeatherForDayInvalidDate(t *testing.T) {
-	// Setup
-	e, mockDS, controller := setupWeatherTestEnvironment(t)
-
-	// Setup mock expectations to return empty data
-	mockDS.On("GetHourlyWeather", "invalid-date").Return([]datastore.HourlyWeather{}, nil)
-
-	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/hourly/invalid-date", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/weather/hourly/:date")
-	c.SetParamNames("date")
-	c.SetParamValues("invalid-date")
-
-	// Test
-	if assert.NoError(t, controller.GetHourlyWeatherForDay(c)) {
-		// Check response
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Parse response body
-		var response struct {
-			Message string                  `json:"message"`
-			Data    []HourlyWeatherResponse `json:"data"`
-		}
-		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		// Check response content
-		assert.Equal(t, "No weather data found for the specified date", response.Message)
-		assert.Empty(t, response.Data)
-	}
-
-	// Verify mock expectations
-	mockDS.AssertExpectations(t)
+	runGetHourlyWeatherForDayNoDataTest(t, "invalid-date")
 }
 
 // TestGetHourlyWeatherForDatabaseError tests the hourly weather endpoint with a database error

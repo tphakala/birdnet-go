@@ -28,21 +28,23 @@ func parseURLOrFail(t *testing.T, rawURL string) *url.URL {
 	return parsedURL
 }
 
-// Correct client_id and redirect_uri result in redirection with auth code
-func TestHandleBasicAuthorizeSuccess(t *testing.T) {
+// setupOAuth2ServerTest creates a test OAuth2 server with configurable client credentials
+func setupOAuth2ServerTest(t *testing.T, requestClientID, requestRedirectURI, expectedClientID, expectedRedirectURI string) (*OAuth2Server, echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/?client_id="+requestClientID+"&redirect_uri="+requestRedirectURI, http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
+	parsedExpectedURI := parseURLOrFail(t, expectedRedirectURI)
 
 	server := &OAuth2Server{
 		Settings: &conf.Settings{
 			Security: conf.Security{
 				BasicAuth: conf.BasicAuth{
-					ClientID:    "validClientID",
-					RedirectURI: "http://valid.redirect",
+					ClientID:    expectedClientID,
+					RedirectURI: expectedRedirectURI,
 				},
 			},
 		},
@@ -50,6 +52,19 @@ func TestHandleBasicAuthorizeSuccess(t *testing.T) {
 		accessTokens:             make(map[string]AccessToken),
 		ExpectedBasicRedirectURI: parsedExpectedURI,
 	}
+
+	return server, c, rec
+}
+
+// setupOAuth2ServerTestWithValidCredentials creates a test OAuth2 server with matching client credentials
+func setupOAuth2ServerTestWithValidCredentials(t *testing.T, clientID, redirectURI string) (*OAuth2Server, echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	return setupOAuth2ServerTest(t, clientID, redirectURI, clientID, redirectURI)
+}
+
+// Correct client_id and redirect_uri result in redirection with auth code
+func TestHandleBasicAuthorizeSuccess(t *testing.T) {
+	server, c, rec := setupOAuth2ServerTestWithValidCredentials(t, "validClientID", "http://valid.redirect")
 
 	err := server.HandleBasicAuthorize(c)
 	if err != nil {
@@ -68,27 +83,8 @@ func TestHandleBasicAuthorizeSuccess(t *testing.T) {
 
 // Invalid client_id returns a 400 Bad Request
 func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
-	e := echo.New()
-	// Use an explicitly invalid client ID
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=invalidClientID&redirect_uri=http://valid.redirect", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
-
-	server := &OAuth2Server{
-		Settings: &conf.Settings{
-			Security: conf.Security{
-				BasicAuth: conf.BasicAuth{
-					ClientID:    "validClientID", // Set the expected valid client ID
-					RedirectURI: "http://valid.redirect",
-				},
-			},
-		},
-		authCodes:                make(map[string]AuthCode),
-		accessTokens:             make(map[string]AccessToken),
-		ExpectedBasicRedirectURI: parsedExpectedURI,
-	}
+	// Use an explicitly invalid client ID in request, but valid one in server config
+	server, c, rec := setupOAuth2ServerTest(t, "invalidClientID", "http://valid.redirect", "validClientID", "http://valid.redirect")
 
 	_ = server.HandleBasicAuthorize(c) // Error is checked via HTTP response code in test
 	resp := rec.Result()
@@ -109,26 +105,7 @@ func TestHandleBasicAuthorizeInvalidClientID(t *testing.T) {
 
 // Auth code generation succeeds without errors
 func TestHandleBasicAuthorizeAuthCodeGeneration(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
-
-	server := &OAuth2Server{
-		Settings: &conf.Settings{
-			Security: conf.Security{
-				BasicAuth: conf.BasicAuth{
-					ClientID:    "validClientID",
-					RedirectURI: "http://valid.redirect",
-				},
-			},
-		},
-		authCodes:                make(map[string]AuthCode),
-		accessTokens:             make(map[string]AccessToken),
-		ExpectedBasicRedirectURI: parsedExpectedURI,
-	}
+	server, c, rec := setupOAuth2ServerTestWithValidCredentials(t, "validClientID", "http://valid.redirect")
 
 	err := server.HandleBasicAuthorize(c)
 	if err != nil {
@@ -147,26 +124,7 @@ func TestHandleBasicAuthorizeAuthCodeGeneration(t *testing.T) {
 
 // Valid client_id and redirect_uri parameters are correctly parsed from query
 func TestHandleBasicAuthorizeValidParameters(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/?client_id=validClientID&redirect_uri=http://valid.redirect", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	parsedExpectedURI := parseURLOrFail(t, "http://valid.redirect")
-
-	server := &OAuth2Server{
-		Settings: &conf.Settings{
-			Security: conf.Security{
-				BasicAuth: conf.BasicAuth{
-					ClientID:    "validClientID",
-					RedirectURI: "http://valid.redirect",
-				},
-			},
-		},
-		authCodes:                make(map[string]AuthCode),
-		accessTokens:             make(map[string]AccessToken),
-		ExpectedBasicRedirectURI: parsedExpectedURI,
-	}
+	server, c, rec := setupOAuth2ServerTestWithValidCredentials(t, "validClientID", "http://valid.redirect")
 
 	err := server.HandleBasicAuthorize(c)
 	if err != nil {

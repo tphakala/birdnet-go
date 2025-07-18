@@ -17,6 +17,88 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runIntegrationConnectionHandlerTest runs table-driven tests for integration connection handlers
+func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, testCases []struct {
+	name           string
+	setupSettings  func(*Controller)
+	expectedStatus int
+	expectedBody   string
+}) {
+	t.Helper()
+	
+	// Run test cases
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			e, _, controller := setupTestEnvironment(t)
+
+			// Configure settings
+			tc.setupSettings(controller)
+
+			// Create request
+			req := httptest.NewRequest(http.MethodPost, endpoint, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			// Call handler
+			err := handlerFunc(controller, c)
+			require.NoError(t, err)
+
+			// Check status code
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+
+			// Check response body
+			if tc.expectedBody != "" {
+				assert.JSONEq(t, tc.expectedBody, strings.TrimSpace(rec.Body.String()))
+			}
+		})
+	}
+}
+
+// runIntegrationConnectionWithDisconnectionTest runs integration connection handlers test with client disconnection.
+// This helper is preserved for future use when mock injection becomes available in the test framework.
+// Currently skipped because it requires mocking package-level functions for network operations.
+func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, setupSettings func(*Controller)) {
+	t.Helper()
+	
+	// Skip this test since we can't override package-level functions in our test environment
+	t.Skip("This test requires mocking package-level functions - preserved for future implementation")
+
+	// Setup
+	e, _, controller := setupTestEnvironment(t)
+
+	// Configure settings
+	setupSettings(controller)
+
+	// Create a cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create request with the cancellable context
+	req := httptest.NewRequest(http.MethodPost, endpoint, http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Start the handler in a goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		// Cancel the context after a short delay to simulate client disconnection
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+
+		errChan <- handlerFunc(controller, c)
+	}()
+
+	// Wait for the handler to complete
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Handler took too long to complete")
+	}
+
+	// Verify the handler completed gracefully despite the client disconnection
+}
+
 // TestInitIntegrationsRoutesRegistration tests the registration of integration-related API endpoints
 func TestInitIntegrationsRoutesRegistration(t *testing.T) {
 	// Setup
@@ -272,55 +354,31 @@ func TestTestMQTTConnection(t *testing.T) {
 	// Define test cases
 	testCases := []struct {
 		name           string
-		mqttEnabled    bool
-		mqttBroker     string
+		setupSettings  func(*Controller)
 		expectedStatus int
 		expectedBody   string
 	}{
 		{
-			name:           "MQTT Not Enabled",
-			mqttEnabled:    false,
-			mqttBroker:     "tcp://mqtt.example.com:1883",
+			name: "MQTT Not Enabled",
+			setupSettings: func(controller *Controller) {
+				controller.Settings.Realtime.MQTT.Enabled = false
+				controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
+			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"MQTT is not enabled in settings"}`,
 		},
 		{
-			name:           "Broker Not Configured",
-			mqttEnabled:    true,
-			mqttBroker:     "",
+			name: "Broker Not Configured",
+			setupSettings: func(controller *Controller) {
+				controller.Settings.Realtime.MQTT.Enabled = true
+				controller.Settings.Realtime.MQTT.Broker = ""
+			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"success":false,"message":"MQTT broker not configured"}`,
 		},
 	}
 
-	// Run test cases
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Setup
-			e, _, controller := setupTestEnvironment(t)
-
-			// Configure settings
-			controller.Settings.Realtime.MQTT.Enabled = tc.mqttEnabled
-			controller.Settings.Realtime.MQTT.Broker = tc.mqttBroker
-
-			// Create request
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Call handler
-			err := controller.TestMQTTConnection(c)
-			require.NoError(t, err)
-
-			// Check status code
-			assert.Equal(t, tc.expectedStatus, rec.Code)
-
-			// Check response body
-			if tc.expectedBody != "" {
-				assert.JSONEq(t, tc.expectedBody, strings.TrimSpace(rec.Body.String()))
-			}
-		})
-	}
+	runIntegrationConnectionHandlerTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", testCases)
 }
 
 // TestTestBirdWeatherConnection tests the TestBirdWeatherConnection handler
@@ -328,55 +386,31 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 	// Define test cases
 	testCases := []struct {
 		name           string
-		bwEnabled      bool
-		bwID           string
+		setupSettings  func(*Controller)
 		expectedStatus int
 		expectedBody   string
 	}{
 		{
-			name:           "BirdWeather Not Enabled",
-			bwEnabled:      false,
-			bwID:           "ABC123",
+			name: "BirdWeather Not Enabled",
+			setupSettings: func(controller *Controller) {
+				controller.Settings.Realtime.Birdweather.Enabled = false
+				controller.Settings.Realtime.Birdweather.ID = "ABC123"
+			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"BirdWeather integration is not enabled in settings","state":"failed"}`,
 		},
 		{
-			name:           "Station ID Not Configured",
-			bwEnabled:      true,
-			bwID:           "",
+			name: "Station ID Not Configured",
+			setupSettings: func(controller *Controller) {
+				controller.Settings.Realtime.Birdweather.Enabled = true
+				controller.Settings.Realtime.Birdweather.ID = ""
+			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"success":false,"message":"BirdWeather station ID not configured","state":"failed"}`,
 		},
 	}
 
-	// Run test cases
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Setup
-			e, _, controller := setupTestEnvironment(t)
-
-			// Configure settings
-			controller.Settings.Realtime.Birdweather.Enabled = tc.bwEnabled
-			controller.Settings.Realtime.Birdweather.ID = tc.bwID
-
-			// Create request
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Call handler
-			err := controller.TestBirdWeatherConnection(c)
-			require.NoError(t, err)
-
-			// Check status code
-			assert.Equal(t, tc.expectedStatus, rec.Code)
-
-			// Check response body
-			if tc.expectedBody != "" {
-				assert.JSONEq(t, tc.expectedBody, strings.TrimSpace(rec.Body.String()))
-			}
-		})
-	}
+	runIntegrationConnectionHandlerTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
 }
 
 // TestWriteJSONResponse tests the writeJSONResponse helper function
@@ -423,84 +457,18 @@ func TestWriteJSONResponse(t *testing.T) {
 
 // Advanced test for MQTT connection with client disconnection
 func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
-	// Skip this test since we can't override package-level functions in our test environment
-	t.Skip("This test requires mocking package-level functions")
-
-	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Configure settings
-	controller.Settings.Realtime.MQTT.Enabled = true
-	controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
-
-	// Create a cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Create request with the cancellable context
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Start the handler in a goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		// Cancel the context after a short delay to simulate client disconnection
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-
-		errChan <- controller.TestMQTTConnection(c)
-	}()
-
-	// Wait for the handler to complete
-	select {
-	case err := <-errChan:
-		require.NoError(t, err)
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Handler took too long to complete")
-	}
-
-	// Verify the handler completed gracefully despite the client disconnection
+	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Controller) {
+		controller.Settings.Realtime.MQTT.Enabled = true
+		controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
+	})
 }
 
 // Advanced test for BirdWeather connection with client disconnection
 func TestBirdWeatherConnectionWithClientDisconnection(t *testing.T) {
-	// Skip this test since we can't override package-level functions in our test environment
-	t.Skip("This test requires mocking package-level functions")
-
-	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Configure settings
-	controller.Settings.Realtime.Birdweather.Enabled = true
-	controller.Settings.Realtime.Birdweather.ID = "ABC123"
-
-	// Create a cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Create request with the cancellable context
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Start the handler in a goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		// Cancel the context after a short delay to simulate client disconnection
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-
-		errChan <- controller.TestBirdWeatherConnection(c)
-	}()
-
-	// Wait for the handler to complete
-	select {
-	case err := <-errChan:
-		require.NoError(t, err)
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Handler took too long to complete")
-	}
-
-	// Verify the handler completed gracefully despite the client disconnection
+	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Controller) {
+		controller.Settings.Realtime.Birdweather.Enabled = true
+		controller.Settings.Realtime.Birdweather.ID = "ABC123"
+	})
 }
 
 // Test MQTT status with control channel
