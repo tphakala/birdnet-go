@@ -459,6 +459,51 @@ func (eb *EventBus) worker(id int) {
 	}
 }
 
+// processEvent is a generic event processor that handles both error and resource events
+func (eb *EventBus) processEvent(
+	consumerName string,
+	processFunc func() error,
+	logFields map[string]any,
+	logger *slog.Logger,
+) {
+	// Process in a recovery wrapper to prevent panics
+	defer func() {
+		if r := recover(); r != nil {
+			atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
+			fields := []any{"consumer", consumerName, "panic", r}
+			for k, v := range logFields {
+				fields = append(fields, k, v)
+			}
+			logger.Error("consumer panicked", fields...)
+		}
+	}()
+	
+	// Time consumer processing
+	consumerStart := time.Now()
+	err := processFunc()
+	consumerDuration := time.Since(consumerStart)
+	
+	// Warn about slow consumers
+	if consumerDuration > 100*time.Millisecond {
+		fields := []any{"consumer", consumerName, "duration_ms", consumerDuration.Milliseconds()}
+		for k, v := range logFields {
+			fields = append(fields, k, v)
+		}
+		logger.Warn("slow consumer detected", fields...)
+	}
+	
+	if err != nil {
+		atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
+		fields := []any{"consumer", consumerName, "error", err}
+		for k, v := range logFields {
+			fields = append(fields, k, v)
+		}
+		logger.Error("consumer error", fields...)
+	} else {
+		atomic.AddUint64(&eb.stats.EventsProcessed, 1)
+	}
+}
+
 // processErrorEvent sends the error event to all registered consumers
 func (eb *EventBus) processErrorEvent(event ErrorEvent, logger *slog.Logger) {
 	eb.mu.Lock()
@@ -467,46 +512,16 @@ func (eb *EventBus) processErrorEvent(event ErrorEvent, logger *slog.Logger) {
 	eb.mu.Unlock()
 	
 	for _, consumer := range consumers {
-		// Process in a recovery wrapper to prevent panics
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-					logger.Error("consumer panicked",
-						"consumer", consumer.Name(),
-						"panic", r,
-						"component", event.GetComponent(),
-						"category", event.GetCategory(),
-					)
-				}
-			}()
-			
-			// Time consumer processing
-			consumerStart := time.Now()
-			err := consumer.ProcessEvent(event)
-			consumerDuration := time.Since(consumerStart)
-			
-			// Warn about slow consumers
-			if consumerDuration > 100*time.Millisecond {
-				logger.Warn("slow consumer detected",
-					"consumer", consumer.Name(),
-					"duration_ms", consumerDuration.Milliseconds(),
-					"component", event.GetComponent(),
-				)
-			}
-			
-			if err != nil {
-				atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-				logger.Error("consumer error",
-					"consumer", consumer.Name(),
-					"error", err,
-					"component", event.GetComponent(),
-					"category", event.GetCategory(),
-				)
-			} else {
-				atomic.AddUint64(&eb.stats.EventsProcessed, 1)
-			}
-		}()
+		logFields := map[string]any{
+			"component": event.GetComponent(),
+			"category":  event.GetCategory(),
+		}
+		eb.processEvent(
+			consumer.Name(),
+			func() error { return consumer.ProcessEvent(event) },
+			logFields,
+			logger,
+		)
 	}
 }
 
@@ -519,46 +534,16 @@ func (eb *EventBus) processResourceEvent(event ResourceEvent, logger *slog.Logge
 	
 	// No type assertions needed - iterate directly over resource consumers
 	for _, consumer := range resourceConsumers {
-		// Process in a recovery wrapper to prevent panics
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-					logger.Error("consumer panicked",
-						"consumer", consumer.Name(),
-						"panic", r,
-						"resource_type", event.GetResourceType(),
-						"severity", event.GetSeverity(),
-					)
-				}
-			}()
-			
-			// Time consumer processing
-			consumerStart := time.Now()
-			err := consumer.ProcessResourceEvent(event)
-			consumerDuration := time.Since(consumerStart)
-			
-			// Warn about slow consumers
-			if consumerDuration > 100*time.Millisecond {
-				logger.Warn("slow consumer detected",
-					"consumer", consumer.Name(),
-					"duration_ms", consumerDuration.Milliseconds(),
-					"resource_type", event.GetResourceType(),
-				)
-			}
-			
-			if err != nil {
-				atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-				logger.Error("consumer error",
-					"consumer", consumer.Name(),
-					"error", err,
-					"resource_type", event.GetResourceType(),
-					"severity", event.GetSeverity(),
-				)
-			} else {
-				atomic.AddUint64(&eb.stats.EventsProcessed, 1)
-			}
-		}()
+		logFields := map[string]any{
+			"resource_type": event.GetResourceType(),
+			"severity":      event.GetSeverity(),
+		}
+		eb.processEvent(
+			consumer.Name(),
+			func() error { return consumer.ProcessResourceEvent(event) },
+			logFields,
+			logger,
+		)
 	}
 }
 

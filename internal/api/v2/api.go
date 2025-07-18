@@ -479,6 +479,11 @@ func (c *Controller) Shutdown() {
 	// Call shutdown methods of individual components
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
+	
+	// Stop the detection cache janitor by deleting all items and letting it exit
+	if c.detectionCache != nil {
+		c.detectionCache.Flush()
+	}
 
 	// Log shutdown
 	c.Debug("API Controller shutting down, CPU monitoring stopped")
