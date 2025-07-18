@@ -670,6 +670,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	sunCalc := &suncalc.SunCalc{}
 
 	// Create control channel with buffer to prevent blocking in tests
+	// Size 10 is sufficient for concurrent test scenarios (e.g., TestConcurrentControlRequests uses 5)
 	controlChan := make(chan string, 10)
 
 	// Create mock metrics for testing
