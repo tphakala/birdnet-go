@@ -36,20 +36,31 @@ type GenerateSupportDumpResponse struct {
 
 // GenerateSupportDump handles the generation and optional upload of support dumps
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
+	c.apiLogger.Debug("Support dump generation started")
+	
 	// Parse JSON request
 	var req GenerateSupportDumpRequest
 	if err := ctx.Bind(&req); err != nil {
+		c.apiLogger.Error("Failed to parse support dump request", "error", err)
 		return ctx.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:   "Failed to parse request",
 			Message: err.Error(),
 		})
 	}
 
+	c.apiLogger.Debug("Support dump request parsed",
+		"include_logs", req.IncludeLogs,
+		"include_config", req.IncludeConfig,
+		"include_system_info", req.IncludeSystemInfo,
+		"upload_to_sentry", req.UploadToSentry,
+		"has_user_message", req.UserMessage != "")
+
 	// Set defaults if nothing is selected
 	if !req.IncludeLogs && !req.IncludeConfig && !req.IncludeSystemInfo {
 		req.IncludeLogs = true
 		req.IncludeConfig = true
 		req.IncludeSystemInfo = true
+		c.apiLogger.Debug("Set default options for support dump")
 	}
 
 	// Get current settings
@@ -85,30 +96,38 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Collect data
+	c.apiLogger.Debug("Starting support data collection", "system_id", settings.SystemID)
 	dump, err := collector.Collect(ctx.Request().Context(), opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to collect support data",
 			"error", err,
 			"system_id", settings.SystemID,
+			"opts", opts,
 		)
 		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to collect support data",
 			Message: err.Error(),
 		})
 	}
+	c.apiLogger.Debug("Support data collected successfully", "dump_id", dump.ID)
 
 	// Create archive
+	c.apiLogger.Debug("Creating support archive", "dump_id", dump.ID)
 	archiveData, err := collector.CreateArchive(ctx.Request().Context(), dump, opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to create support archive",
 			"error", err,
 			"dump_id", dump.ID,
+			"context_err", ctx.Request().Context().Err(),
 		)
 		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to create support archive",
 			Message: err.Error(),
 		})
 	}
+	c.apiLogger.Debug("Support archive created successfully", 
+		"dump_id", dump.ID,
+		"archive_size", len(archiveData))
 
 	response := GenerateSupportDumpResponse{
 		Success:  true,

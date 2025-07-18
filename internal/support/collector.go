@@ -206,11 +206,30 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts CollectorOptions) ([]byte, error) {
 	serviceLogger.Info("support: creating archive", "dump_id", dump.ID)
 
+	// Check context early
+	select {
+	case <-ctx.Done():
+		serviceLogger.Warn("support: context cancelled before archive creation", "error", ctx.Err())
+		return nil, errors.New(ctx.Err()).
+			Component("support").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_archive").
+			Context("stage", "pre_creation").
+			Build()
+	default:
+		// Continue
+	}
+
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
+	defer func() {
+		if err := w.Close(); err != nil {
+			serviceLogger.Error("support: error in deferred zip close", "error", err)
+		}
+	}()
 
 	// Add metadata (keep this as JSON for easy parsing)
-	serviceLogger.Debug("support: adding metadata to archive")
+	serviceLogger.Debug("support: adding metadata to archive", "dump_id", dump.ID)
 	metadataFile, err := w.Create("metadata.json")
 	if err != nil {
 		serviceLogger.Error("support: failed to create metadata file in archive", "error", err)
@@ -239,6 +258,19 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Build()
 	}
 
+	// Check context before adding logs
+	select {
+	case <-ctx.Done():
+		serviceLogger.Warn("support: context cancelled before adding logs", "error", ctx.Err())
+		return nil, errors.New(ctx.Err()).
+			Component("support").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_archive").
+			Context("stage", "before_logs").
+			Build()
+	default:
+	}
+
 	// Add log files in original format
 	if opts.IncludeLogs {
 		serviceLogger.Debug("support: adding log files to archive", "anonymize_pii", opts.AnonymizePII)
@@ -246,6 +278,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			serviceLogger.Error("support: failed to add log files to archive", "error", err)
 			return nil, err
 		}
+		serviceLogger.Debug("support: log files added successfully")
 	}
 
 	// Add config file in original YAML format (scrubbed)
@@ -255,6 +288,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			serviceLogger.Error("support: failed to add config to archive", "error", err)
 			return nil, err
 		}
+		serviceLogger.Debug("support: config file added successfully")
 	}
 
 	// Add system info
@@ -277,8 +311,10 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Context("operation", "write_system_info").
 				Build()
 		}
+		serviceLogger.Debug("support: system info added successfully")
 	}
 
+	// Close the archive writer (note: deferred close is also present for safety)
 	if err := w.Close(); err != nil {
 		serviceLogger.Error("support: failed to close archive", "error", err)
 		return nil, errors.New(err).
@@ -435,23 +471,42 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 
 // collectLogs collects recent log entries
 func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
+	serviceLogger.Debug("support: collectLogs started", 
+		"duration", duration, 
+		"maxSize", maxSize,
+		"anonymizePII", anonymizePII)
+	
 	var logs []LogEntry
 
 	// Try to collect from journald first (systemd systems)
+	serviceLogger.Debug("support: attempting to collect journal logs")
 	journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII)
-	if err == nil && len(journalLogs) > 0 {
+	if err != nil {
+		if errors.Is(err, ErrJournalNotAvailable) {
+			serviceLogger.Debug("support: journal logs not available (expected on non-systemd systems)")
+		} else {
+			serviceLogger.Warn("support: error collecting journal logs", "error", err)
+		}
+	} else {
+		serviceLogger.Debug("support: collected journal logs", "count", len(journalLogs))
 		logs = append(logs, journalLogs...)
 	}
 
 	// Also check for log files in the data directory
+	serviceLogger.Debug("support: attempting to collect log files")
 	logFiles, err := c.collectLogFiles(duration, maxSize, anonymizePII)
-	if err == nil && len(logFiles) > 0 {
+	if err != nil {
+		serviceLogger.Warn("support: error collecting log files", "error", err)
+	} else {
+		serviceLogger.Debug("support: collected log files", "count", len(logFiles))
 		logs = append(logs, logFiles...)
 	}
 
 	// Sort logs by timestamp
+	serviceLogger.Debug("support: sorting logs by timestamp", "total_logs", len(logs))
 	sortLogsByTime(logs)
 
+	serviceLogger.Debug("support: collectLogs completed", "total_logs", len(logs))
 	return logs, nil
 }
 
@@ -548,7 +603,11 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 	// Also try to find logs relative to current working directory
 	if cwd, err := os.Getwd(); err == nil {
 		logPaths = append(logPaths, filepath.Join(cwd, "logs"))
+	} else {
+		serviceLogger.Debug("support: could not get working directory", "error", err)
 	}
+
+	serviceLogger.Debug("support: searching for log files", "paths", logPaths)
 
 	cutoffTime := time.Now().Add(-duration)
 	totalSize := int64(0)
@@ -557,28 +616,38 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 		// Check if path exists
 		info, err := os.Stat(logPath)
 		if err != nil {
+			serviceLogger.Debug("support: log path not accessible", "path", logPath, "error", err)
 			continue
 		}
 
 		// If it's a directory, look for log files
 		if info.IsDir() {
+			serviceLogger.Debug("support: scanning log directory", "path", logPath)
 			files, err := os.ReadDir(logPath)
 			if err != nil {
+				serviceLogger.Warn("support: failed to read log directory", "path", logPath, "error", err)
 				continue
 			}
 
+			serviceLogger.Debug("support: found files in directory", "path", logPath, "count", len(files))
 			for _, file := range files {
-				if strings.HasSuffix(file.Name(), ".log") {
-					fileLogs, size := c.parseLogFile(filepath.Join(logPath, file.Name()), cutoffTime, maxSize-totalSize, anonymizePII)
-					logs = append(logs, fileLogs...)
-					totalSize += size
-					if totalSize >= maxSize {
-						break
-					}
+				if !strings.HasSuffix(file.Name(), ".log") {
+					continue
+				}
+				fullPath := filepath.Join(logPath, file.Name())
+				serviceLogger.Debug("support: processing log file", "file", fullPath)
+				fileLogs, size := c.parseLogFile(fullPath, cutoffTime, maxSize-totalSize, anonymizePII)
+				serviceLogger.Debug("support: parsed log file", "file", fullPath, "entries", len(fileLogs), "size", size)
+				logs = append(logs, fileLogs...)
+				totalSize += size
+				if totalSize >= maxSize {
+					serviceLogger.Debug("support: reached max size limit", "totalSize", totalSize, "maxSize", maxSize)
+					break
 				}
 			}
 		} else {
 			// It's a file
+			serviceLogger.Debug("support: processing single log file", "path", logPath)
 			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize, anonymizePII)
 			logs = append(logs, fileLogs...)
 			totalSize += size
@@ -589,6 +658,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 		}
 	}
 
+	serviceLogger.Debug("support: collectLogFiles completed", "total_entries", len(logs), "total_size", totalSize)
 	return logs, nil
 }
 
