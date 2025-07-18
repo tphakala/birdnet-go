@@ -222,11 +222,6 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
-	defer func() {
-		if err := w.Close(); err != nil {
-			serviceLogger.Error("support: error in deferred zip close", "error", err)
-		}
-	}()
 
 	// Add metadata (keep this as JSON for easy parsing)
 	serviceLogger.Debug("support: adding metadata to archive", "dump_id", dump.ID)
@@ -314,7 +309,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 		serviceLogger.Debug("support: system info added successfully")
 	}
 
-	// Close the archive writer (note: deferred close is also present for safety)
+	// Close the archive writer
 	if err := w.Close(); err != nil {
 		serviceLogger.Error("support: failed to close archive", "error", err)
 		return nil, errors.New(err).
@@ -845,6 +840,11 @@ type logFileCollector struct {
 
 // addLogFilesToArchive adds log files to the archive in their original format
 func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, duration time.Duration, maxSize int64, anonymizePII bool) error {
+	serviceLogger.Debug("support: addLogFilesToArchive started",
+		"duration", duration,
+		"maxSize", maxSize,
+		"anonymizePII", anonymizePII)
+
 	lfc := &logFileCollector{
 		ctx:          ctx,
 		collector:    c,
@@ -857,27 +857,40 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 
 	// Get unique log paths
 	uniquePaths := c.getUniqueLogPaths()
+	serviceLogger.Debug("support: unique log paths identified", "count", len(uniquePaths), "paths", uniquePaths)
 
 	// Process each log path
 	for _, logPath := range uniquePaths {
 		if lfc.totalSize >= lfc.maxSize {
+			serviceLogger.Debug("support: stopping log collection - max size reached",
+				"totalSize", lfc.totalSize,
+				"maxSize", lfc.maxSize)
 			break
 		}
 
+		serviceLogger.Debug("support: processing log path for archive", "path", logPath)
 		if err := lfc.processLogPath(w, logPath); err != nil {
+			serviceLogger.Warn("support: error processing log path", "path", logPath, "error", err)
 			// Continue with next path on error
 			continue
 		}
 	}
 
 	// Add journald logs
+	serviceLogger.Debug("support: attempting to add journald logs to archive")
 	if err := lfc.addJournaldLogs(w, duration); err == nil {
 		lfc.logsAdded++
+		serviceLogger.Debug("support: journald logs added successfully")
+	} else {
+		serviceLogger.Debug("support: could not add journald logs", "error", err)
 	}
 
 	// Add README if no logs found
 	if lfc.logsAdded == 0 {
+		serviceLogger.Debug("support: no logs found, adding README note")
 		lfc.addNoLogsNote(w)
+	} else {
+		serviceLogger.Debug("support: logs added to archive", "count", lfc.logsAdded, "totalSize", lfc.totalSize)
 	}
 
 	return nil
