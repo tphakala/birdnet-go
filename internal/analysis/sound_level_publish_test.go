@@ -1015,42 +1015,7 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 	// Start publisher
 	var wg sync.WaitGroup
 	// Mock the MQTT publisher behavior
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-stopChan:
-				return
-			case soundData := <-testSoundLevelChan:
-				ctx := context.Background()
-				topic := "test/soundlevel"
-				compactData := CompactSoundLevelData{
-					TS:    soundData.Timestamp.Format(time.RFC3339),
-					Src:   soundData.Source,
-					Name:  soundData.Name,
-					Dur:   soundData.Duration,
-					Bands: make(map[string]CompactBandData),
-				}
-				for band, bandData := range soundData.OctaveBands {
-					compactData.Bands[band] = CompactBandData{
-						Freq: bandData.CenterFreq,
-						Min:  bandData.Min,
-						Max:  bandData.Max,
-						Mean: bandData.Mean,
-					}
-				}
-				jsonData, err := json.Marshal(compactData)
-				if err != nil {
-					t.Errorf("Failed to marshal compact data: %v", err)
-					return
-				}
-				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
-					t.Logf("Mock publish returned error (expected in some tests): %v", err)
-				}
-			}
-		}
-	}()
+	startMockMQTTPublisher(t, &wg, stopChan, testSoundLevelChan, mockProc)
 
 	// Test configuration - use minimum allowed interval
 	interval := 5 // 5 second intervals (minimum allowed)
@@ -1335,6 +1300,48 @@ func createTestSoundLevelData(interval int) myaudio.SoundLevelData {
 	}
 }
 
+// startMockMQTTPublisher starts a goroutine that publishes MQTT messages for test data
+func startMockMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan <-chan struct{}, 
+	testSoundLevelChan <-chan myaudio.SoundLevelData, mockProc *processor.Processor) {
+	t.Helper()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stopChan:
+				return
+			case soundData := <-testSoundLevelChan:
+				ctx := context.Background()
+				topic := "test/soundlevel"
+				compactData := CompactSoundLevelData{
+					TS:    soundData.Timestamp.Format(time.RFC3339),
+					Src:   soundData.Source,
+					Name:  soundData.Name,
+					Dur:   soundData.Duration,
+					Bands: make(map[string]CompactBandData),
+				}
+				for band, bandData := range soundData.OctaveBands {
+					compactData.Bands[band] = CompactBandData{
+						Freq: bandData.CenterFreq,
+						Min:  bandData.Min,
+						Max:  bandData.Max,
+						Mean: bandData.Mean,
+					}
+				}
+				jsonData, err := json.Marshal(compactData)
+				if err != nil {
+					t.Errorf("Failed to marshal compact data: %v", err)
+					return
+				}
+				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+					t.Logf("Mock publish returned error (expected in some tests): %v", err)
+				}
+			}
+		}
+	}()
+}
+
 // collectPublishEvents collects publish events for the test duration
 func collectPublishEvents(t *testing.T, publishEvents chan publishEvent, 
 	testDuration time.Duration, testStartTime time.Time) []publishEvent {
@@ -1497,45 +1504,7 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 
 	// Start MQTT publisher
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-stopChan:
-				return
-			case soundData := <-testSoundLevelChan:
-				// The publisher publishes immediately when receiving data
-				ctx := context.Background()
-				topic := "test/soundlevel"
-				compactData := CompactSoundLevelData{
-					TS:    soundData.Timestamp.Format(time.RFC3339),
-					Src:   soundData.Source,
-					Name:  soundData.Name,
-					Dur:   soundData.Duration,
-					Bands: make(map[string]CompactBandData),
-				}
-				for band, bandData := range soundData.OctaveBands {
-					compactData.Bands[band] = CompactBandData{
-						Freq: bandData.CenterFreq,
-						Min:  bandData.Min,
-						Max:  bandData.Max,
-						Mean: bandData.Mean,
-					}
-				}
-				jsonData, err := json.Marshal(compactData)
-				if err != nil {
-					t.Errorf("Failed to marshal compact data: %v", err)
-					return
-				}
-				// Errors are handled by the real publisher, but here we just attempt
-				if err := mockProc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
-					// This test expects some publishes to fail
-					t.Logf("Mock publish error (expected): %v", err)
-				}
-			}
-		}
-	}()
+	startMockMQTTPublisher(t, &wg, stopChan, testSoundLevelChan, mockProc)
 
 	// Send sound data and collect publish attempts
 	expectedAttempts := 4

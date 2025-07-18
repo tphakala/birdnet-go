@@ -5,6 +5,44 @@ import (
 	"testing"
 )
 
+// runBooleanTests runs table-driven tests for functions that take string input and return boolean
+func runBooleanTests(t *testing.T, testFunc func(string) bool, tests []struct {
+	name     string
+	input    string
+	expected bool
+}) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := testFunc(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %t, got %t for input %q", tt.expected, result, tt.input)
+			}
+		})
+	}
+}
+
+// runScrubTests runs table-driven tests for scrubbing functions that take string input and return string
+func runScrubTests(t *testing.T, testFunc func(string) string, tests []struct {
+	name     string
+	input    string
+	expected string
+}) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			
+			result := testFunc(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, but got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestScrubMessage(t *testing.T) {
 	t.Parallel()
 
@@ -619,16 +657,7 @@ func TestIsCommonStreamName(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			
-			result := isCommonStreamName(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected isCommonStreamName(%q) = %v, got %v", tt.input, tt.expected, result)
-			}
-		})
-	}
+	runBooleanTests(t, isCommonStreamName, tests)
 }
 
 func TestIsNumeric(t *testing.T) {
@@ -681,16 +710,7 @@ func TestIsNumeric(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			
-			result := isNumeric(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected isNumeric(%q) = %v, got %v", tt.input, tt.expected, result)
-			}
-		})
-	}
+	runBooleanTests(t, isNumeric, tests)
 }
 
 func TestIsHexChar(t *testing.T) {
@@ -887,16 +907,7 @@ func TestScrubCoordinates(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			
-			result := ScrubCoordinates(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
-		})
-	}
+	runScrubTests(t, ScrubCoordinates, tests)
 }
 
 func TestScrubAPITokens(t *testing.T) {
@@ -949,16 +960,7 @@ func TestScrubAPITokens(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			
-			result := ScrubAPITokens(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, but got %q", tt.expected, result)
-			}
-		})
-	}
+	runScrubTests(t, ScrubAPITokens, tests)
 }
 
 

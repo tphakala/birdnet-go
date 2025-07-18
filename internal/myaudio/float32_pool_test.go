@@ -125,34 +125,17 @@ func TestFloat32PoolConcurrency(t *testing.T) {
 	pool, err := NewFloat32Pool(bufferSize)
 	require.NoError(t, err)
 
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	for i := range numWorkers {
-		go func(workerID int) {
-			defer wg.Done()
-			
-			for j := range opsPerWorker {
-				buf := pool.Get()
-				assert.Len(t, buf, bufferSize)
-				
-				// Simulate some work with the buffer
-				buf[0] = float32(workerID)
-				buf[len(buf)-1] = float32(j)
-				
-				pool.Put(buf)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Verify stats are consistent
-	stats := pool.GetStats()
-	totalOps := uint64(numWorkers * opsPerWorker)
-	// Allow some variance due to sync.Pool's per-CPU sharding
-	assert.InDelta(t, float64(totalOps), float64(stats.Hits+stats.Misses), float64(numWorkers*2))
-	assert.Equal(t, uint64(0), stats.Discarded)
+	runPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
+		func() interface{} { return pool.Get() },
+		func(buf interface{}) { pool.Put(buf.([]float32)) },
+		func(buf interface{}) {
+			buffer := buf.([]float32)
+			assert.Len(t, buffer, bufferSize)
+			// Simulate some work with the buffer
+			buffer[0] = float32(0)
+			buffer[len(buffer)-1] = float32(1)
+		},
+		func() PoolStatsProvider { return Float32PoolStatsAdapter{pool.GetStats()} })
 }
 
 func TestFloat32PoolMemoryReuse(t *testing.T) {
