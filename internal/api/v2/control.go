@@ -93,7 +93,14 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, actions)
 }
 
-// handleControlSignal is a common handler for control operations
+// handleControlSignal is a common handler for control operations that sends signals through the control channel.
+// Parameters:
+//   - ctx: The Echo context for the HTTP request
+//   - signal: The control signal to send (e.g., SignalRestartAnalysis, SignalReloadModel)
+//   - action: The action name for logging and response (e.g., ActionRestartAnalysis)
+//   - logMessage: Initial log message when request is received
+//   - successMessage: Message to return in the response when successful
+// Returns an error if the control channel is nil or if the request times out
 func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
 	if c.apiLogger != nil {
 		c.apiLogger.Info(logMessage,
