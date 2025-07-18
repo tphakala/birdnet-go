@@ -73,9 +73,10 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - Handle JSON encoding errors even after headers set
 - Use safe type assertions: `if v, ok := x.(Type); ok { }`
 - Avoid circular dependencies in init code (use `fmt.Errorf` not internal errors)
-- **Avoid recursive implementations** - use standard library equivalents
-- **Document test-only methods** clearly to prevent production use
-- **Use explicit conversions** over clever arithmetic (e.g., `fmt.Sprintf` vs rune math)
+- Avoid recursive implementations - use standard library equivalents
+- Document test-only methods - clearly to prevent production use
+- Use explicit conversions - over clever arithmetic (e.g., `fmt.Sprintf` vs rune math)
+- Do not use magic numbers or strings - assign consts with descriptive names
 
 ### Project Structure
 - `/cmd/` - Viper managed cli commands
