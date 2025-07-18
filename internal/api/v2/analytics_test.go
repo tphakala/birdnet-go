@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -79,18 +80,18 @@ func TestGetSpeciesSummary(t *testing.T) {
 		// Parse response body
 		var response []map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Len(t, response, 2)
 		assert.Equal(t, "Turdus migratorius", response[0]["scientific_name"])
 		assert.Equal(t, "American Robin", response[0]["common_name"])
 		assert.Equal(t, "amerob", response[0]["species_code"])
-		assert.Equal(t, float64(42), response[0]["count"])
+		assert.InDelta(t, 42, response[0]["count"], 0.01)
 		assert.Equal(t, "Cyanocitta cristata", response[1]["scientific_name"])
 		assert.Equal(t, "Blue Jay", response[1]["common_name"])
 		assert.Equal(t, "blujay", response[1]["species_code"])
-		assert.Equal(t, float64(27), response[1]["count"])
+		assert.InDelta(t, 27, response[1]["count"], 0.01)
 	}
 
 	// Verify mock expectations
@@ -122,7 +123,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	err := handler(c)
 	
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	
 	// Check response code
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -130,7 +131,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	// Parse error response
 	var errorResponse map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	
 	// Check error message
 	assert.Contains(t, errorResponse["message"], "Failed to get species summary data")
@@ -181,12 +182,12 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 		// Parse response body
 		var response []map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Len(t, response, 1)
 		assert.Equal(t, "Turdus migratorius", response[0]["scientific_name"])
-		assert.Equal(t, float64(10), response[0]["count"])
+		assert.InDelta(t, 10, response[0]["count"], 0.01)
 	}
 
 	// Verify mock expectations
@@ -238,7 +239,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 		// Parse response body - the actual implementation returns a single object, not an array
 		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, date, response["date"])
@@ -250,11 +251,11 @@ func TestGetHourlyAnalytics(t *testing.T) {
 		assert.Len(t, counts, 24, "Expected 24 hours in counts array")
 
 		// Check specific hour counts that were set in our mock
-		assert.Equal(t, float64(5), counts[0], "Hour 0 should have 5 counts")
-		assert.Equal(t, float64(3), counts[1], "Hour 1 should have 3 counts")
+		assert.InDelta(t, 5, counts[0], 0.01, "Hour 0 should have 5 counts")
+		assert.InDelta(t, 3, counts[1], 0.01, "Hour 1 should have 3 counts")
 
 		// Check the total
-		assert.Equal(t, float64(8), response["total"], "Total should be sum of all counts")
+		assert.InDelta(t, 8, response["total"], 0.01, "Total should be sum of all counts")
 	}
 
 	// Verify mock expectations
@@ -309,13 +310,13 @@ func TestGetDailyAnalytics(t *testing.T) {
 		// Parse response body - the actual implementation returns an object with a 'data' array
 		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response metadata
 		assert.Equal(t, startDate, response["start_date"])
 		assert.Equal(t, endDate, response["end_date"])
 		assert.Equal(t, species, response["species"])
-		assert.Equal(t, float64(20), response["total"]) // 12 + 8 = 20
+		assert.InDelta(t, 20, response["total"], 0.01) // 12 + 8 = 20
 
 		// Check data array
 		data, ok := response["data"].([]any)
@@ -325,12 +326,12 @@ func TestGetDailyAnalytics(t *testing.T) {
 		// Check first data item
 		item1 := data[0].(map[string]any)
 		assert.Equal(t, "2023-01-01", item1["date"])
-		assert.Equal(t, float64(12), item1["count"])
+		assert.InDelta(t, 12, item1["count"], 0.01)
 
 		// Check second data item
 		item2 := data[1].(map[string]any)
 		assert.Equal(t, "2023-01-02", item2["date"])
-		assert.Equal(t, float64(8), item2["count"])
+		assert.InDelta(t, 8, item2["count"], 0.01)
 	}
 
 	// Verify mock expectations
@@ -388,7 +389,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 		// Parse response body
 		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		data, ok := response["data"].([]any)
@@ -527,7 +528,7 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 				if tc.expectedBody != "" {
 					var errorResp map[string]any
 					err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
-					assert.NoError(t, err)
+					require.NoError(t, err)
 					if errVal, ok := errorResp["error"]; ok {
 						assert.Contains(t, fmt.Sprint(errVal), tc.expectedBody)
 					}
@@ -685,7 +686,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// Verify no error occurred
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -693,7 +694,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Parse the response
 	var response []SpeciesDailySummary
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify we got the expected number of species (2 in this case)
 	assert.Len(t, response, 2)
@@ -835,7 +836,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// Verify no error occurred
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -843,10 +844,10 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	// Parse the response
 	var response []SpeciesDailySummary
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify we got the expected number of species
-	assert.Equal(t, 2, len(response))
+	assert.Len(t, response, 2)
 
 	// Verify each species has a count of 1
 	for _, species := range response {
@@ -892,7 +893,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// Verify no error occurred
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -900,10 +901,10 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	// Parse the response
 	var response []SpeciesDailySummary
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify we got an empty result
-	assert.Equal(t, 0, len(response))
+	assert.Empty(t, response)
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)
@@ -975,7 +976,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// Verify no error occurred
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -983,10 +984,10 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	// Parse the response
 	var response []SpeciesDailySummary
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify we got one species
-	assert.Equal(t, 1, len(response))
+	assert.Len(t, response, 1)
 
 	// Verify the first and latest times are correct
 	species := response[0]
@@ -1060,10 +1061,10 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// Verify no error occurred
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the threshold was correctly normalized (70% -> 0.7)
-	assert.Equal(t, 0.7, expectedMinConfidence)
+	assert.InDelta(t, 0.7, expectedMinConfidence, 0.01)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -1071,7 +1072,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	// Parse the response
 	var response []SpeciesDailySummary
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response only includes species with confidence >= 0.7
 	for _, species := range response {
@@ -1156,7 +1157,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// Verify no error occurred
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -1164,10 +1165,10 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	// Parse the response
 	var response []SpeciesDailySummary
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify we got exactly 2 species (limited)
-	assert.Equal(t, 2, len(response))
+	assert.Len(t, response, 2)
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)
@@ -1192,7 +1193,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	err := controller.GetDailySpeciesSummary(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the response status code is 500 Internal Server Error
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -1200,7 +1201,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	// Parse the error response
 	var errorResponse map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check that the error response contains the expected fields
 	assert.Contains(t, errorResponse, "error")
@@ -1210,5 +1211,5 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	// Check the error message
 	assert.Contains(t, errorResponse["error"].(string), "database connection error")
 	assert.Equal(t, "Failed to get daily species data", errorResponse["message"])
-	assert.Equal(t, float64(http.StatusInternalServerError), errorResponse["code"])
+	assert.InDelta(t, http.StatusInternalServerError, errorResponse["code"], 0.01)
 }

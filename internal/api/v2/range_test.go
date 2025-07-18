@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 )
 
@@ -83,13 +84,13 @@ func TestGetRangeFilterSpeciesCount(t *testing.T) {
 		// Parse response
 		var response RangeFilterSpeciesCount
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, 3, response.Count)
-		assert.Equal(t, float32(0.01), response.Threshold)
-		assert.Equal(t, 60.1699, response.Location.Latitude)
-		assert.Equal(t, 24.9384, response.Location.Longitude)
+		assert.InDelta(t, float32(0.01), response.Threshold, 0.001)
+		assert.InDelta(t, 60.1699, response.Location.Latitude, 0.001)
+		assert.InDelta(t, 24.9384, response.Location.Longitude, 0.001)
 		assert.False(t, response.LastUpdated.IsZero())
 	}
 }
@@ -113,12 +114,12 @@ func TestGetRangeFilterSpeciesList(t *testing.T) {
 		// Parse response
 		var response RangeFilterSpeciesList
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, 3, response.Count)
 		assert.Len(t, response.Species, 3)
-		assert.Equal(t, float32(0.01), response.Threshold)
+		assert.InDelta(t, float32(0.01), response.Threshold, 0.001)
 
 		// Check first species
 		firstSpecies := response.Species[0]
@@ -155,7 +156,7 @@ func TestTestRangeFilterWithoutProcessor(t *testing.T) {
 
 	// Test
 	err := controller.TestRangeFilter(c)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code (should be 500 due to missing processor)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -163,7 +164,7 @@ func TestTestRangeFilterWithoutProcessor(t *testing.T) {
 	// Parse error response
 	var response ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, response.Message, "BirdNET processor not available")
 }
 
@@ -262,7 +263,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 
 			// Test
 			err := controller.TestRangeFilter(c)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check response code
 			assert.Equal(t, tt.expectedStatus, rec.Code)
@@ -270,7 +271,7 @@ func TestTestRangeFilterValidation(t *testing.T) {
 			// Parse error response
 			var response ErrorResponse
 			err = json.Unmarshal(rec.Body.Bytes(), &response)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Contains(t, response.Message, tt.expectedError)
 		})
 	}
@@ -292,7 +293,7 @@ func TestRebuildRangeFilterWithoutProcessor(t *testing.T) {
 
 	// Test
 	err := controller.RebuildRangeFilter(c)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code (should be 500 due to missing processor)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -300,6 +301,6 @@ func TestRebuildRangeFilterWithoutProcessor(t *testing.T) {
 	// Parse error response
 	var response ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, response.Message, "BirdNET processor not available")
 }

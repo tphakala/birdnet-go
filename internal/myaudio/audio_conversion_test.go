@@ -132,10 +132,10 @@ func TestConvertToFloat32_AllBitDepths(t *testing.T) {
 			result, err := ConvertToFloat32(tt.input, tt.bitDepth)
 			
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Len(t, result, 1) // Should return single channel
 			}
@@ -188,7 +188,7 @@ func TestFloat32PoolIntegration(t *testing.T) {
 	finalStats := float32Pool.GetStats()
 	// sync.Pool behavior is non-deterministic and depends on GC pressure
 	// Just verify that the pool was used (had both hits and/or misses)
-	assert.Greater(t, finalStats.Hits+finalStats.Misses, uint64(0))
+	assert.Positive(t, finalStats.Hits+finalStats.Misses)
 }
 
 // TestConvert16BitToFloat32_NonStandardSize tests conversion with non-standard buffer sizes

@@ -44,10 +44,10 @@ func TestProcessorChainAddRemove(t *testing.T) {
 	proc2 := &mockProcessor{id: "proc2"}
 
 	err := chain.AddProcessor(proc1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = chain.AddProcessor(proc2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Get processors
 	processors := chain.GetProcessors()
@@ -55,23 +55,23 @@ func TestProcessorChainAddRemove(t *testing.T) {
 
 	// Try to add duplicate
 	err = chain.AddProcessor(proc1)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 
 	// Try to add nil
 	err = chain.AddProcessor(nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Remove processor
 	err = chain.RemoveProcessor("proc1")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	processors = chain.GetProcessors()
 	assert.Len(t, processors, 1)
 
 	// Remove non-existent
 	err = chain.RemoveProcessor("proc1")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
 
@@ -88,7 +88,7 @@ func TestProcessorChainProcess(t *testing.T) {
 	}
 
 	output, err := chain.Process(ctx, input)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, input, output)
 
 	// Add processors that modify data
@@ -117,14 +117,14 @@ func TestProcessorChainProcess(t *testing.T) {
 	}
 
 	err = chain.AddProcessor(proc1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = chain.AddProcessor(proc2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Process through chain
 	output, err = chain.Process(ctx, input)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 
 	// Verify processing: (1,2,3,4) -> double -> (2,4,6,8) -> add 1 -> (3,5,7,9)
@@ -146,7 +146,7 @@ func TestProcessorChainProcessError(t *testing.T) {
 	}
 
 	err := chain.AddProcessor(proc)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	input := &AudioData{
 		Buffer:    []byte{1, 2, 3, 4},
@@ -155,7 +155,7 @@ func TestProcessorChainProcessError(t *testing.T) {
 	}
 
 	output, err := chain.Process(ctx, input)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, output)
 }
 
@@ -167,7 +167,7 @@ func TestProcessorChainContextCancellation(t *testing.T) {
 	// Add a processor
 	proc := &mockProcessor{id: "proc"}
 	err := chain.AddProcessor(proc)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Cancel context
 	cancel()
@@ -179,7 +179,7 @@ func TestProcessorChainContextCancellation(t *testing.T) {
 	}
 
 	output, err := chain.Process(ctx, input)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
 	assert.Nil(t, output)
 }
@@ -192,9 +192,9 @@ func TestProcessorChainGetProcessors(t *testing.T) {
 	proc2 := &mockProcessor{id: "proc2"}
 
 	err := chain.AddProcessor(proc1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = chain.AddProcessor(proc2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Get processors should return a copy
 	processors := chain.GetProcessors()

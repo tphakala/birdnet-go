@@ -168,7 +168,7 @@ func TestMergePaths(t *testing.T) {
 	}
 
 	// Should not have duplicates
-	assert.Equal(t, 4, len(merged), "Should have exactly 4 unique paths")
+	assert.Len(t, merged, 4, "Should have exactly 4 unique paths")
 }
 
 func TestSystemMonitorIntegration(t *testing.T) {

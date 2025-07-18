@@ -43,10 +43,10 @@ func TestNewFloat32Pool(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pool, err := NewFloat32Pool(tt.size)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, pool)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, pool)
 				assert.Equal(t, tt.size, pool.size)
 			}
@@ -134,7 +134,7 @@ func TestFloat32PoolConcurrency(t *testing.T) {
 			
 			for j := range opsPerWorker {
 				buf := pool.Get()
-				require.Len(t, buf, bufferSize)
+				assert.Len(t, buf, bufferSize)
 				
 				// Simulate some work with the buffer
 				buf[0] = float32(workerID)
@@ -176,7 +176,7 @@ func TestFloat32PoolMemoryReuse(t *testing.T) {
 	// Verify stats show both hits and misses
 	stats := pool.GetStats()
 	// sync.Pool behavior is non-deterministic, so we just verify basic functionality
-	assert.Greater(t, stats.Misses, uint64(0)) // At least some allocations
+	assert.Positive(t, stats.Misses) // At least some allocations
 	// Don't assert on hits as sync.Pool may release buffers under memory pressure
 }
 
@@ -193,7 +193,7 @@ func TestFloat32PoolClear(t *testing.T) {
 	}
 
 	initialStats := pool.GetStats()
-	assert.Greater(t, initialStats.Misses, uint64(0))
+	assert.Positive(t, initialStats.Misses)
 
 	// Clear the pool
 	pool.Clear()
@@ -268,8 +268,8 @@ func TestFloat32PoolStress(t *testing.T) {
 	t.Logf("Hit rate: %.2f%%", float64(stats.Hits)/float64(stats.Hits+stats.Misses)*100)
 	t.Logf("Stats: %+v", stats)
 	
-	assert.Greater(t, ops, uint64(0))
+	assert.Positive(t, ops)
 	// Allow some variance due to sync.Pool's per-CPU sharding
 	assert.InDelta(t, float64(ops), float64(stats.Hits+stats.Misses), float64(numWorkers*2))
-	assert.Greater(t, stats.Hits, uint64(0)) // Should have some reuse
+	assert.Positive(t, stats.Hits) // Should have some reuse
 }

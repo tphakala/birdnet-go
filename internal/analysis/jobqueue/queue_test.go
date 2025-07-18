@@ -882,7 +882,7 @@ func TestQueueOverflow(t *testing.T) {
 
 	// Try to enqueue one more job, which should fail with ErrQueueFull
 	_, err = queue.Enqueue(regularAction, &TestData{ID: "overflow-job"}, RetryConfig{Enabled: false})
-	assert.ErrorIs(t, err, ErrQueueFull, "Enqueue should fail with ErrQueueFull when queue is full")
+	require.ErrorIs(t, err, ErrQueueFull, "Enqueue should fail with ErrQueueFull when queue is full")
 
 	// Now unblock the first job to make room
 	close(jobBlock)
@@ -1092,8 +1092,8 @@ func TestHangingJobTimeout(t *testing.T) {
 	go func() {
 		// Enqueue the job
 		job, err := queue.Enqueue(action, data, config)
-		require.NoError(t, err, "Failed to enqueue job")
-		require.NotNil(t, job, "Job should not be nil")
+		assert.NoError(t, err, "Failed to enqueue job")
+		assert.NotNil(t, job, "Job should not be nil")
 
 		// Signal that the job has been enqueued
 		close(done)
@@ -1182,7 +1182,7 @@ func TestContextCancellation(t *testing.T) {
 
 	// The stop should succeed even though the job is still running
 	// because we're using a timeout
-	assert.NoError(t, err, "Queue stop should succeed with timeout")
+	require.NoError(t, err, "Queue stop should succeed with timeout")
 
 	// Check that the action was executed
 	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
@@ -1374,7 +1374,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 				config := RetryConfig{Enabled: false}
 
 				_, err := queue.Enqueue(action, data, config)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 		}(i)
 	}
@@ -1499,7 +1499,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	// Check if shutdown completed without error
 	select {
 	case err := <-shutdownErr:
-		assert.NoError(t, err, "Graceful shutdown should complete without error")
+		require.NoError(t, err, "Graceful shutdown should complete without error")
 	case <-time.After(3 * time.Second):
 		t.Fatal("Shutdown didn't complete in time")
 	}
@@ -1542,7 +1542,7 @@ func TestRateLimiting(t *testing.T) {
 	}
 
 	t.Logf("Successfully enqueued: %d, Rejected: %d", successCount.Load(), rejectionCount.Load())
-	assert.Greater(t, rejectionCount.Load(), int32(0), "Some jobs should be rejected due to queue full")
+	assert.Positive(t, rejectionCount.Load(), "Some jobs should be rejected due to queue full")
 	assert.Equal(t, int32(5), successCount.Load(), "Only 5 jobs should be successfully enqueued")
 }
 
@@ -1832,7 +1832,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	assert.Equal(t, 1, stats.FailedJobs, "Failed jobs should be 1")
 	assert.Equal(t, 0, stats.PendingJobs, "Pending jobs should be 0")
 	assert.Equal(t, 100, stats.MaxQueueSize, "Max queue size should be 100")
-	assert.Equal(t, 0.0, stats.QueueUtilization, "Queue utilization should be 0%")
+	assert.InDelta(t, 0.0, stats.QueueUtilization, 0.01, "Queue utilization should be 0%")
 }
 
 // TestMemoryManagementWithLargeJobLoads tests that the job queue properly manages memory

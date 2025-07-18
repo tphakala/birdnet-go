@@ -66,6 +66,7 @@ linters:
       # Check exhaustiveness of enum switch statements
       default-signifies-exhaustive: true
 issues:
+  max-issues-per-linter: 0
   max-same-issues: 0
   uniq-by-line: true
   new: false

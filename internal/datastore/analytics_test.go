@@ -106,7 +106,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Equal(t, "amerob", robin.SpeciesCode)
 		assert.Equal(t, 2, robin.Count)
 		assert.InDelta(t, 0.875, robin.AvgConfidence, 0.001)
-		assert.Equal(t, 0.90, robin.MaxConfidence)
+		assert.InDelta(t, 0.90, robin.MaxConfidence, 0.01)
 
 		// Check Blue Jay summary (should have one species_code due to MAX aggregate)
 		blueJay := findSpeciesByScientificName(summaries, "Cyanocitta cristata")
@@ -115,7 +115,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Contains(t, []string{"blujay", "blujay1"}, blueJay.SpeciesCode) // MAX will pick one
 		assert.Equal(t, 2, blueJay.Count)
 		assert.InDelta(t, 0.775, blueJay.AvgConfidence, 0.001)
-		assert.Equal(t, 0.80, blueJay.MaxConfidence)
+		assert.InDelta(t, 0.80, blueJay.MaxConfidence, 0.01)
 
 		// Check Northern Cardinal summary
 		cardinal := findSpeciesByScientificName(summaries, "Cardinalis cardinalis") //nolint:misspell // This is the correct scientific name
@@ -123,8 +123,8 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Equal(t, "Northern Cardinal", cardinal.CommonName)
 		assert.Equal(t, "norcar", cardinal.SpeciesCode)
 		assert.Equal(t, 1, cardinal.Count)
-		assert.Equal(t, 0.95, cardinal.AvgConfidence)
-		assert.Equal(t, 0.95, cardinal.MaxConfidence)
+		assert.InDelta(t, 0.95, cardinal.AvgConfidence, 0.01)
+		assert.InDelta(t, 0.95, cardinal.MaxConfidence, 0.01)
 	})
 
 	t.Run("with start date filter", func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Equal(t, "Poecile carolinensis", chickadee.ScientificName)
 		assert.Equal(t, 3, chickadee.Count)
 		assert.InDelta(t, 0.80, chickadee.AvgConfidence, 0.001)
-		assert.Equal(t, 0.90, chickadee.MaxConfidence)
+		assert.InDelta(t, 0.90, chickadee.MaxConfidence, 0.01)
 		// MAX() should pick one of the species codes
 		assert.Contains(t, []string{"carchi", "carchi2", "carchi3"}, chickadee.SpeciesCode)
 	})

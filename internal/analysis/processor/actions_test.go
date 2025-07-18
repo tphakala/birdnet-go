@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -92,8 +92,8 @@ func TestMqttAction_Execute_NotConnected(t *testing.T) {
 	err := action.Execute(nil)
 
 	// Assert
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "MQTT client not connected")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "MQTT client not connected")
 	mockClient.AssertExpectations(t)
 	mockClient.AssertNotCalled(t, "Connect", mock.Anything)
 	mockClient.AssertNotCalled(t, "Publish", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"))
@@ -145,7 +145,7 @@ func TestMqttAction_Execute_Connected(t *testing.T) {
 	err := action.Execute(nil)
 
 	// Assert
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	mockClient.AssertExpectations(t)
 	mockClient.AssertNotCalled(t, "Connect", mock.Anything)
 }
