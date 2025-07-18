@@ -136,8 +136,6 @@ var cpuCache = &CPUCache{
 	lastUpdated: time.Now(),
 }
 
-// Store the cancel function for CPU monitoring to enable proper cleanup
-var cpuMonitorCancel context.CancelFunc
 
 // UpdateCPUCache updates the cached CPU usage data
 func UpdateCPUCache(ctx context.Context) {
@@ -278,10 +276,8 @@ func (c *Controller) initSystemRoutes() {
 		c.apiLogger.Info("Initializing system routes")
 	}
 
-	// Start CPU usage monitoring in background with context for controlled shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	cpuMonitorCancel = cancel // Store for later cleanup
-	go UpdateCPUCache(ctx)
+	// Start CPU usage monitoring in background with controller's context for controlled shutdown
+	go UpdateCPUCache(c.ctx)
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Started CPU usage monitoring")
@@ -1427,23 +1423,3 @@ func skipFilesystem(fstype string) bool {
 	return false
 }
 
-// StopCPUMonitoring stops the CPU monitoring goroutine by canceling its context.
-// This function is called by the Controller.Shutdown method during application shutdown.
-// It ensures that the background goroutine started by UpdateCPUCache is properly terminated
-// to prevent resource leaks when the application exits.
-//
-// Note: This function is safe to call multiple times as it sets cpuMonitorCancel to nil
-// after the first call.
-func StopCPUMonitoring() {
-	// Use a consistent logger for this function since it's static and may not have access to controller
-	logger := log.Default()
-
-	if cpuMonitorCancel != nil {
-		logger.Println("Stopping CPU monitoring...")
-		cpuMonitorCancel()
-		cpuMonitorCancel = nil // Prevent double cancellation
-		logger.Println("CPU monitoring stopped successfully")
-	} else {
-		logger.Println("CPU monitoring already stopped or never started")
-	}
-}
