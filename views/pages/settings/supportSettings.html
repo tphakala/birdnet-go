@@ -152,6 +152,10 @@
             // Show initial status
             this.updateStatus('Preparing support dump...', 'info', 10);
             
+            // Create an AbortController for timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+            
             fetch('/api/v2/support/generate', {
                 method: 'POST',
                 headers: {
@@ -159,6 +163,7 @@
                     'X-CSRF-Token': CSRF_TOKEN
                 },
                 credentials: 'same-origin',
+                signal: controller.signal,
                 body: JSON.stringify({
                     include_logs: this.supportDump.includeLogs,
                     include_config: this.supportDump.includeConfig,
@@ -168,8 +173,14 @@
                 })
             })
             .then(response => {
+                clearTimeout(timeoutId);
                 if (!response.ok) {
-                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    // Try to get error details from response
+                    return response.json().then(err => {
+                        throw new Error(err.error || `Server error: ${response.status} ${response.statusText}`);
+                    }).catch(() => {
+                        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    });
                 }
                 return response.json();
             })
@@ -203,8 +214,14 @@
                 }
             })
             .catch(error => {
+                clearTimeout(timeoutId);
                 this.generating = false;
-                this.updateStatus('Error: ' + error.message, 'error', 0);
+                if (error.name === 'AbortError') {
+                    this.updateStatus('Request timed out. Support dumps with many logs may take longer - please try again with fewer logs selected.', 'error', 0);
+                } else {
+                    this.updateStatus('Error: ' + error.message, 'error', 0);
+                }
+                console.error('Support dump generation error:', error);
             });
         },
         updateStatus(message, type, percent) {
