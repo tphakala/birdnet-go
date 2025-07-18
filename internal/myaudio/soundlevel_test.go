@@ -135,7 +135,7 @@ func TestNewSoundLevelProcessor_BufferSizing(t *testing.T) {
 			require.NotNil(t, processor)
 
 			// Verify interval buffer is sized correctly
-			assert.Equal(t, tt.expectedBufferSize, len(processor.intervalBuffer.secondMeasurements),
+			assert.Len(t, processor.intervalBuffer.secondMeasurements, tt.expectedBufferSize,
 				"intervalBuffer should have space for %d second measurements", tt.expectedBufferSize)
 
 			// Verify each second measurement map is initialized
@@ -151,11 +151,11 @@ func TestNewSoundLevelProcessor_BufferSizing(t *testing.T) {
 					expectedFilters++
 				}
 			}
-			assert.Equal(t, expectedFilters, len(processor.filters),
+			assert.Len(t, processor.filters, expectedFilters,
 				"should have filters for all frequencies below Nyquist (%f Hz)", nyquistFreq)
 
 			// Verify second buffers are created for each filter
-			assert.Equal(t, len(processor.filters), len(processor.secondBuffers),
+			assert.Len(t, processor.secondBuffers, len(processor.filters),
 				"should have one second buffer per filter")
 
 			// Verify each second buffer is properly initialized
@@ -244,7 +244,7 @@ func TestSoundLevelProcessor_ThreadSafety(t *testing.T) {
 	wg.Wait()
 
 	// If we get here without panicking, thread safety is working
-	assert.True(t, true, "concurrent access should not cause panics")
+	// Test completed successfully if we reach this point without panics
 }
 
 
@@ -322,7 +322,7 @@ func TestProcessAudioData_IntervalCompletion(t *testing.T) {
 
 	// Process the 5th second - should now return data
 	result, err := processor.ProcessAudioData(oneSecondData)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, result, "should return data when interval completes")
 	
 	if result != nil {

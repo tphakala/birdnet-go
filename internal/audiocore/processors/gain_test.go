@@ -16,22 +16,22 @@ func TestGainProcessorCreation(t *testing.T) {
 	t.Parallel()
 	// Valid gain
 	proc, err := NewGainProcessor("test-gain", 1.5)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, proc)
 
 	gainProc, ok := proc.(*GainProcessor)
 	require.True(t, ok, "Expected processor to be a *GainProcessor")
 	assert.Equal(t, "test-gain", gainProc.ID())
-	assert.Equal(t, 1.5, gainProc.GetGain())
+	assert.InDelta(t, 1.5, gainProc.GetGain(), 0.01)
 
 	// Invalid gain - too low
 	proc, err = NewGainProcessor("test", -1.0)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, proc)
 
 	// Invalid gain - too high
 	proc, err = NewGainProcessor("test", 11.0)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, proc)
 }
 
@@ -45,7 +45,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		require.NoError(t, err)
 		
 		output, err := proc.Process(ctx, nil)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, output)
 	})
 
@@ -67,7 +67,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, input, output)
 	})
 
@@ -98,7 +98,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, output)
 
 		// Check output values
@@ -132,7 +132,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, output)
 
 		// Check clipping
@@ -165,7 +165,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, output)
 
 		// Check output values
@@ -198,12 +198,12 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, output)
 
 		// Check clipping to [-1.0, 1.0]
-		assert.Equal(t, float32(1.0), math.Float32frombits(binary.LittleEndian.Uint32(output.Buffer[0:4])))
-		assert.Equal(t, float32(-1.0), math.Float32frombits(binary.LittleEndian.Uint32(output.Buffer[4:8])))
+		assert.InDelta(t, float32(1.0), math.Float32frombits(binary.LittleEndian.Uint32(output.Buffer[0:4])), 0.01)
+		assert.InDelta(t, float32(-1.0), math.Float32frombits(binary.LittleEndian.Uint32(output.Buffer[4:8])), 0.01)
 	})
 
 	t.Run("Unsupported Encoding", func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, output)
 	})
 
@@ -249,7 +249,7 @@ func TestGainProcessorProcess(t *testing.T) {
 		}
 
 		output, err := proc.Process(ctx, input)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, context.Canceled, err)
 		assert.Nil(t, output)
 	})
@@ -265,18 +265,18 @@ func TestGainProcessorSetGain(t *testing.T) {
 
 	// Valid gain
 	err = gainProc.SetGain(1.5)
-	assert.NoError(t, err)
-	assert.Equal(t, 1.5, gainProc.GetGain())
+	require.NoError(t, err)
+	assert.InDelta(t, 1.5, gainProc.GetGain(), 0.01)
 
 	// Invalid gain - too low
 	err = gainProc.SetGain(-0.1)
-	assert.Error(t, err)
-	assert.Equal(t, 1.5, gainProc.GetGain()) // Should remain unchanged
+	require.Error(t, err)
+	assert.InDelta(t, 1.5, gainProc.GetGain(), 0.01) // Should remain unchanged
 
 	// Invalid gain - too high
 	err = gainProc.SetGain(10.1)
-	assert.Error(t, err)
-	assert.Equal(t, 1.5, gainProc.GetGain()) // Should remain unchanged
+	require.Error(t, err)
+	assert.InDelta(t, 1.5, gainProc.GetGain(), 0.01) // Should remain unchanged
 }
 
 func TestGainProcessorFormats(t *testing.T) {

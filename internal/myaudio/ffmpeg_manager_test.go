@@ -23,11 +23,11 @@ func TestFFmpegManager_StartStop(t *testing.T) {
 
 	// Test starting a stream
 	err := manager.StartStream(url, transport, audioChan)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test that we can't start the same stream twice
 	err = manager.StartStream(url, transport, audioChan)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stream already exists")
 
 	// Verify stream is active
@@ -36,11 +36,11 @@ func TestFFmpegManager_StartStop(t *testing.T) {
 
 	// Test stopping the stream
 	err = manager.StopStream(url)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test that we can't stop a non-existent stream
 	err = manager.StopStream(url)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no stream found")
 
 	// Verify stream is no longer active
@@ -77,7 +77,7 @@ func TestFFmpegManager_MultipleStreams(t *testing.T) {
 
 	// Stop one stream
 	err := manager.StopStream(urls[1])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify correct streams remain
 	activeStreams = manager.GetActiveStreams()
@@ -103,7 +103,7 @@ func TestFFmpegManager_RestartStream(t *testing.T) {
 
 	// Test restarting the stream
 	err = manager.RestartStream(url)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Stream should still be active
 	activeStreams := manager.GetActiveStreams()
@@ -111,7 +111,7 @@ func TestFFmpegManager_RestartStream(t *testing.T) {
 
 	// Test restarting non-existent stream
 	err = manager.RestartStream("rtsp://nonexistent.example.com/stream")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no stream found")
 }
 
@@ -188,7 +188,7 @@ func TestFFmpegManager_Shutdown(t *testing.T) {
 
 	// Verify no streams are active
 	activeStreams = manager.GetActiveStreams()
-	assert.Len(t, activeStreams, 0)
+	assert.Empty(t, activeStreams)
 
 	// Note: Starting new streams after shutdown might succeed
 	// The manager doesn't prevent new streams after shutdown in the current implementation
@@ -367,7 +367,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	health := manager.HealthCheck()
 	
 	// Health map should match active streams
-	assert.Equal(t, len(activeStreams), len(health))
+	assert.Len(t, health, len(activeStreams))
 	for _, url := range activeStreams {
 		_, exists := health[url]
 		assert.True(t, exists, "Health info should exist for active stream %s", url)
@@ -443,5 +443,5 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 	// Verify final state
 	activeStreams := manager.GetActiveStreams()
 	health := manager.HealthCheck()
-	assert.Equal(t, len(activeStreams), len(health))
+	assert.Len(t, health, len(activeStreams))
 }

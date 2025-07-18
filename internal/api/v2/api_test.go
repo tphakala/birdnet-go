@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -36,7 +37,8 @@ func TestHealthCheck(t *testing.T) {
 	startTime := time.Now()
 
 	// Test
-	if assert.NoError(t, controller.HealthCheck(c)) {
+	require.NoError(t, controller.HealthCheck(c))
+	{
 		// Calculate response time
 		responseTime := time.Since(startTime)
 
@@ -52,7 +54,7 @@ func TestHealthCheck(t *testing.T) {
 		// Parse response body
 		var response map[string]interface{}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check required fields
 		assert.Equal(t, "healthy", response["status"], "Status should be 'healthy'")
@@ -116,7 +118,7 @@ func TestHealthCheck(t *testing.T) {
 
 		if timestamp, exists := response["timestamp"]; exists {
 			_, err := time.Parse(time.RFC3339, timestamp.(string))
-			assert.NoError(t, err, "Timestamp should be in RFC3339 format")
+			require.NoError(t, err, "Timestamp should be in RFC3339 format")
 		}
 	}
 
@@ -139,13 +141,13 @@ func TestHandleError(t *testing.T) {
 		"Error message", http.StatusBadRequest)
 
 	// Assertions
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	// Parse response body
 	var response ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response content
 	assert.Equal(t, "code=400, message=Test error", response.Error)

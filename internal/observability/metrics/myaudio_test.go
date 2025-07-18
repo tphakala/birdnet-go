@@ -7,13 +7,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecordAudioConversion(t *testing.T) {
 	// Create a new registry for testing
 	registry := prometheus.NewRegistry()
 	m, err := NewMyAudioMetrics(registry)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test various bit depths
 	testCases := []struct {
@@ -42,7 +43,7 @@ func TestRecordAudioConversion(t *testing.T) {
 				strconv.Itoa(tc.bitDepth), // Updated implementation
 				tc.status,
 			))
-			assert.Equal(t, float64(1), count)
+			assert.InDelta(t, float64(1), count, 0.01)
 		})
 	}
 }
@@ -51,7 +52,7 @@ func TestRecordAudioConversionError(t *testing.T) {
 	// Create a new registry for testing
 	registry := prometheus.NewRegistry()
 	m, err := NewMyAudioMetrics(registry)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test various error scenarios
 	testCases := []struct {
@@ -77,7 +78,7 @@ func TestRecordAudioConversionError(t *testing.T) {
 				strconv.Itoa(tc.bitDepth), // Updated implementation
 				tc.errorType,
 			))
-			assert.Equal(t, float64(1), count)
+			assert.InDelta(t, float64(1), count, 0.01)
 		})
 	}
 }
@@ -86,7 +87,7 @@ func TestRecordAudioConversionError(t *testing.T) {
 func BenchmarkRecordAudioConversion_FmtSprintf(b *testing.B) {
 	registry := prometheus.NewRegistry()
 	m, err := NewMyAudioMetrics(registry)
-	assert.NoError(b, err)
+	require.NoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -97,7 +98,7 @@ func BenchmarkRecordAudioConversion_FmtSprintf(b *testing.B) {
 func BenchmarkRecordAudioConversionError_FmtSprintf(b *testing.B) {
 	registry := prometheus.NewRegistry()
 	m, err := NewMyAudioMetrics(registry)
-	assert.NoError(b, err)
+	require.NoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -109,7 +110,7 @@ func TestRecordBufferAllocationAttempt(t *testing.T) {
 	// Create a new registry for testing
 	registry := prometheus.NewRegistry()
 	m, err := NewMyAudioMetrics(registry)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test allocation attempt tracking scenarios
 	testCases := []struct {
@@ -136,7 +137,7 @@ func TestRecordBufferAllocationAttempt(t *testing.T) {
 				tc.source,
 				tc.result,
 			))
-			assert.Equal(t, tc.expected, count)
+			assert.InDelta(t, tc.expected, count, 0.01)
 		})
 	}
 	
@@ -158,16 +159,16 @@ func TestRecordBufferAllocationAttempt(t *testing.T) {
 		attemptedCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
 			"capture", source, "attempted",
 		))
-		assert.Equal(t, float64(4), attemptedCount, "Should have 4 attempted allocations")
+		assert.InDelta(t, float64(4), attemptedCount, 0.01, "Should have 4 attempted allocations")
 		
 		firstAllocCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
 			"capture", source, "first_allocation",
 		))
-		assert.Equal(t, float64(1), firstAllocCount, "Should have 1 successful first allocation")
+		assert.InDelta(t, float64(1), firstAllocCount, 0.01, "Should have 1 successful first allocation")
 		
 		blockedCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
 			"capture", source, "repeated_blocked",
 		))
-		assert.Equal(t, float64(3), blockedCount, "Should have 3 blocked repeated allocations")
+		assert.InDelta(t, float64(3), blockedCount, 0.01, "Should have 3 blocked repeated allocations")
 	})
 }

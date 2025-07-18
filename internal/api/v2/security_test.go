@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -93,7 +94,7 @@ func setPathParamsFromPath(c echo.Context, path string) {
 // assertSuccessfulResponse checks for expected 2xx status and optional body fragment.
 func assertSuccessfulResponse(t *testing.T, tcName string, expectedStatus int, rec *httptest.ResponseRecorder, handlerErr error, expectedBodyFragment string) {
 	t.Helper()
-	assert.NoErrorf(t, handlerErr, "tc=%s unexpected error", tcName)
+	require.NoErrorf(t, handlerErr, "tc=%s unexpected error", tcName)
 	assert.Equal(t, expectedStatus, rec.Code, "Test Case '%s': Unexpected status code for success case. Expected %d, got %d", tcName, expectedStatus, rec.Code)
 	if expectedBodyFragment != "" {
 		assert.Contains(t, rec.Body.String(), expectedBodyFragment, "Test Case '%s': Response body does not contain expected fragment '%s'", tcName, expectedBodyFragment)

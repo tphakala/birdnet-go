@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestGetAvailableActions tests the GetAvailableActions endpoint
@@ -30,7 +31,8 @@ func TestGetAvailableActions(t *testing.T) {
 	c.SetPath("/api/v2/control/actions")
 
 	// Test
-	if assert.NoError(t, controller.GetAvailableActions(c)) {
+	require.NoError(t, controller.GetAvailableActions(c))
+	{
 		// Check status code
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -40,10 +42,10 @@ func TestGetAvailableActions(t *testing.T) {
 		// Parse response body
 		var actions []ControlAction
 		err := json.Unmarshal(rec.Body.Bytes(), &actions)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
-		assert.Len(t, actions, 3, "Should have 3 control actions")
+		require.Len(t, actions, 3, "Should have 3 control actions")
 
 		// Verify actions include all expected types
 		var hasRestartAction, hasReloadAction, hasRebuildFilterAction bool
@@ -84,7 +86,8 @@ func TestRestartAnalysis(t *testing.T) {
 	c.SetPath("/api/v2/control/restart")
 
 	// Test
-	if assert.NoError(t, controller.RestartAnalysis(c)) {
+	require.NoError(t, controller.RestartAnalysis(c))
+	{
 		// Check status code
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -94,7 +97,7 @@ func TestRestartAnalysis(t *testing.T) {
 		// Parse response body
 		var result ControlResult
 		err := json.Unmarshal(rec.Body.Bytes(), &result)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.True(t, result.Success)
@@ -128,7 +131,8 @@ func TestReloadModel(t *testing.T) {
 	c.SetPath("/api/v2/control/reload")
 
 	// Test
-	if assert.NoError(t, controller.ReloadModel(c)) {
+	require.NoError(t, controller.ReloadModel(c))
+	{
 		// Check status code
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -138,7 +142,7 @@ func TestReloadModel(t *testing.T) {
 		// Parse response body
 		var result ControlResult
 		err := json.Unmarshal(rec.Body.Bytes(), &result)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.True(t, result.Success)
@@ -172,7 +176,8 @@ func TestRebuildFilter(t *testing.T) {
 	c.SetPath("/api/v2/control/rebuild-filter")
 
 	// Test
-	if assert.NoError(t, controller.RebuildFilter(c)) {
+	require.NoError(t, controller.RebuildFilter(c))
+	{
 		// Check status code
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -182,7 +187,7 @@ func TestRebuildFilter(t *testing.T) {
 		// Parse response body
 		var result ControlResult
 		err := json.Unmarshal(rec.Body.Bytes(), &result)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.True(t, result.Success)
@@ -244,18 +249,18 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 			err := tc.handler(c)
 
 			// Check that the error is properly handled by the controller
-			assert.NoError(t, err, "Handler should not return error even when control channel is nil")
+			require.NoError(t, err, "Handler should not return error even when control channel is nil")
 			assert.Equal(t, http.StatusInternalServerError, rec.Code, "Should return 500 Internal Server Error")
 
 			// Parse error response
 			var errorResp map[string]interface{}
 			err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check error response content
 			assert.Contains(t, fmt.Sprint(errorResp["error"]), "control channel not initialized")
 			assert.Contains(t, errorResp["message"], "System control interface not available")
-			assert.Equal(t, float64(http.StatusInternalServerError), errorResp["code"])
+			assert.Equal(t, http.StatusInternalServerError, int(errorResp["code"].(float64)))
 		})
 	}
 }
@@ -305,12 +310,12 @@ func TestControlResultStructure(t *testing.T) {
 
 	// Marshal to JSON
 	jsonData, err := json.Marshal(result)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify JSON structure
 	var jsonMap map[string]interface{}
 	err = json.Unmarshal(jsonData, &jsonMap)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check fields
 	assert.Equal(t, true, jsonMap["success"])
@@ -329,12 +334,12 @@ func TestControlActionStructure(t *testing.T) {
 
 	// Marshal to JSON
 	jsonData, err := json.Marshal(action)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify JSON structure
 	var jsonMap map[string]interface{}
 	err = json.Unmarshal(jsonData, &jsonMap)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check fields
 	assert.Equal(t, ActionReloadModel, jsonMap["action"])
@@ -392,7 +397,7 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 
 			// Call handler directly (bypass middleware)
 			err := h.handler(c)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Verify response
 			assert.Equal(t, http.StatusOK, rec.Code)
@@ -400,7 +405,7 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 			// Parse response
 			var result ControlResult
 			err = json.Unmarshal(rec.Body.Bytes(), &result)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check fields
 			assert.True(t, result.Success)
@@ -511,7 +516,7 @@ func TestConcurrentControlRequests(t *testing.T) {
 	wg.Wait()
 
 	// Verify that all signals were sent to the channel
-	assert.Equal(t, numRequests, len(controlChan), "All signals should be received")
+	assert.Len(t, controlChan, numRequests, "All signals should be received")
 
 	// Drain the channel
 	for i := 0; i < numRequests; i++ {
@@ -578,7 +583,7 @@ func TestControlEndpointsAuthScenarios(t *testing.T) {
 			if tc.expectedStatus == http.StatusOK {
 				var result ControlResult
 				err := json.Unmarshal(rec.Body.Bytes(), &result)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.True(t, result.Success)
 				assert.Equal(t, ActionRestartAnalysis, result.Action)
 			}
@@ -606,7 +611,7 @@ func TestInvalidPayloads(t *testing.T) {
 	err := controller.RestartAnalysis(c)
 
 	// The handler should still work with invalid payloads since it doesn't expect any
-	assert.NoError(t, err, "Handler should not return an error with invalid payload")
+	require.NoError(t, err, "Handler should not return an error with invalid payload")
 	assert.Equal(t, http.StatusOK, rec.Code, "Should return OK even with invalid payload")
 
 	// Verify the signal was sent
@@ -711,7 +716,7 @@ func TestConcurrentControlRequests_Advanced(t *testing.T) {
 	wg.Wait()
 
 	// Verify that all signals were sent to the channel
-	assert.Equal(t, numRequests, len(controlChan), "All signals should be received")
+	assert.Len(t, controlChan, numRequests, "All signals should be received")
 
 	// Drain the channel
 	for i := 0; i < numRequests; i++ {
@@ -768,7 +773,7 @@ func TestControlEndpointsAuthScenarios_Advanced(t *testing.T) {
 			if authValidator(token) {
 				// Call the handler directly
 				err := controller.RestartAnalysis(c)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				// Verify successful response
 				assert.Equal(t, http.StatusOK, rec.Code)
@@ -776,7 +781,7 @@ func TestControlEndpointsAuthScenarios_Advanced(t *testing.T) {
 				// Parse response
 				var result ControlResult
 				err = json.Unmarshal(rec.Body.Bytes(), &result)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				// Check fields
 				assert.True(t, result.Success)
@@ -821,7 +826,7 @@ func TestInvalidPayloads_Advanced(t *testing.T) {
 	err := controller.RestartAnalysis(c)
 
 	// The handler should still work with invalid payloads since it doesn't expect any
-	assert.NoError(t, err, "Handler should not return an error with invalid payload")
+	require.NoError(t, err, "Handler should not return an error with invalid payload")
 	assert.Equal(t, http.StatusOK, rec.Code, "Should return OK even with invalid payload")
 
 	// Verify the signal was sent

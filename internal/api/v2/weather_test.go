@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -50,7 +51,7 @@ func TestGetDailyWeather(t *testing.T) {
 		// Parse response body
 		var response DailyWeatherResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, "2023-01-01", response.Date)
@@ -108,7 +109,7 @@ func TestGetDailyWeatherMissingDate(t *testing.T) {
 	err := controller.GetDailyWeather(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -116,7 +117,7 @@ func TestGetDailyWeatherMissingDate(t *testing.T) {
 	// Parse error response
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check error message
 	assert.Equal(t, "Date parameter is required", errorResponse.Message)
@@ -142,7 +143,7 @@ func TestGetDailyWeatherDatabaseError(t *testing.T) {
 	err := controller.GetDailyWeather(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -150,7 +151,7 @@ func TestGetDailyWeatherDatabaseError(t *testing.T) {
 	// Parse error response
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check error message
 	assert.Equal(t, "Failed to get daily weather data", errorResponse.Message)
@@ -217,23 +218,23 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 			Data []HourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Len(t, response.Data, 2)
 
 		// Check first hour data
 		assert.Equal(t, "12:00:00", response.Data[0].Time)
-		assert.Equal(t, 5.5, response.Data[0].Temperature)
-		assert.Equal(t, 4.0, response.Data[0].FeelsLike)
-		assert.Equal(t, 3.2, response.Data[0].TempMin)
-		assert.Equal(t, 6.8, response.Data[0].TempMax)
+		assert.InDelta(t, 5.5, response.Data[0].Temperature, 0.01)
+		assert.InDelta(t, 4.0, response.Data[0].FeelsLike, 0.01)
+		assert.InDelta(t, 3.2, response.Data[0].TempMin, 0.01)
+		assert.InDelta(t, 6.8, response.Data[0].TempMax, 0.01)
 		assert.Equal(t, 1013, response.Data[0].Pressure)
 		assert.Equal(t, 75, response.Data[0].Humidity)
 		assert.Equal(t, 10000, response.Data[0].Visibility)
-		assert.Equal(t, 4.5, response.Data[0].WindSpeed)
+		assert.InDelta(t, 4.5, response.Data[0].WindSpeed, 0.01)
 		assert.Equal(t, 270, response.Data[0].WindDeg)
-		assert.Equal(t, 7.2, response.Data[0].WindGust)
+		assert.InDelta(t, 7.2, response.Data[0].WindGust, 0.01)
 		assert.Equal(t, 40, response.Data[0].Clouds)
 		assert.Equal(t, "Clouds", response.Data[0].WeatherMain)
 		assert.Equal(t, "scattered clouds", response.Data[0].WeatherDesc)
@@ -241,8 +242,8 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 
 		// Check second hour data
 		assert.Equal(t, "13:00:00", response.Data[1].Time)
-		assert.Equal(t, 6.0, response.Data[1].Temperature)
-		assert.Equal(t, 4.5, response.Data[1].FeelsLike)
+		assert.InDelta(t, 6.0, response.Data[1].Temperature, 0.01)
+		assert.InDelta(t, 4.5, response.Data[1].FeelsLike, 0.01)
 		assert.Equal(t, 70, response.Data[1].Humidity)
 		assert.Equal(t, "Clouds", response.Data[1].WeatherMain)
 		assert.Equal(t, "broken clouds", response.Data[1].WeatherDesc)
@@ -280,7 +281,7 @@ func TestGetHourlyWeatherForDayNoData(t *testing.T) {
 			Data    []HourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, "No weather data found for the specified date", response.Message)
@@ -321,7 +322,7 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 			Data    []HourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, "No weather data available for future date", response.Message)
@@ -359,7 +360,7 @@ func TestGetHourlyWeatherForDayInvalidDate(t *testing.T) {
 			Data    []HourlyWeatherResponse `json:"data"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		assert.Equal(t, "No weather data found for the specified date", response.Message)
@@ -390,7 +391,7 @@ func TestGetHourlyWeatherForDayDatabaseError(t *testing.T) {
 	err := controller.GetHourlyWeatherForDay(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -398,7 +399,7 @@ func TestGetHourlyWeatherForDayDatabaseError(t *testing.T) {
 	// Parse error response
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check error message
 	assert.Equal(t, "Failed to get hourly weather data", errorResponse.Message)
@@ -456,14 +457,14 @@ func TestGetHourlyWeatherForHour(t *testing.T) {
 		// Parse response body
 		var response HourlyWeatherResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content for hour 13
 		assert.Equal(t, "13:00:00", response.Time)
-		assert.Equal(t, 6.0, response.Temperature)
-		assert.Equal(t, 4.5, response.FeelsLike)
-		assert.Equal(t, 3.5, response.TempMin)
-		assert.Equal(t, 7.0, response.TempMax)
+		assert.InDelta(t, 6.0, response.Temperature, 0.01)
+		assert.InDelta(t, 4.5, response.FeelsLike, 0.01)
+		assert.InDelta(t, 3.5, response.TempMin, 0.01)
+		assert.InDelta(t, 7.0, response.TempMax, 0.01)
 		assert.Equal(t, "Clear", response.WeatherMain)
 		assert.Equal(t, "clear sky", response.WeatherDesc)
 	}
@@ -503,7 +504,7 @@ func TestGetHourlyWeatherForHourNotFound(t *testing.T) {
 	err := controller.GetHourlyWeatherForHour(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code
 	assert.Equal(t, http.StatusNotFound, rec.Code)
@@ -511,7 +512,7 @@ func TestGetHourlyWeatherForHourNotFound(t *testing.T) {
 	// Parse error response
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check error message
 	assert.Equal(t, "Weather data not found for specified hour", errorResponse.Message)
@@ -537,7 +538,7 @@ func TestGetHourlyWeatherForHourInvalidHour(t *testing.T) {
 	err := controller.GetHourlyWeatherForHour(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -545,7 +546,7 @@ func TestGetHourlyWeatherForHourInvalidHour(t *testing.T) {
 	// Parse error response
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check error message
 	assert.Equal(t, "Invalid hour format", errorResponse.Message)
@@ -605,7 +606,7 @@ func TestGetWeatherForDetection(t *testing.T) {
 		// Parse response body
 		var response DetectionWeatherResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		// Daily weather
@@ -617,8 +618,8 @@ func TestGetWeatherForDetection(t *testing.T) {
 
 		// Hourly weather (closest to 12:30)
 		assert.Equal(t, "12:00:00", response.Hourly.Time)
-		assert.Equal(t, 5.5, response.Hourly.Temperature)
-		assert.Equal(t, 4.0, response.Hourly.FeelsLike)
+		assert.InDelta(t, 5.5, response.Hourly.Temperature, 0.01)
+		assert.InDelta(t, 4.0, response.Hourly.FeelsLike, 0.01)
 		assert.Equal(t, "Clouds", response.Hourly.WeatherMain)
 		assert.Equal(t, "scattered clouds", response.Hourly.WeatherDesc)
 	}
@@ -643,7 +644,7 @@ func TestGetWeatherForDetectionMissingID(t *testing.T) {
 	err := controller.GetWeatherForDetection(c)
 
 	// The controller's HandleError method returns a JSON response, not an error
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check response code
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -651,7 +652,7 @@ func TestGetWeatherForDetectionMissingID(t *testing.T) {
 	// Parse error response
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check error message
 	assert.Equal(t, "Detection ID is required", errorResponse.Message)
@@ -703,7 +704,7 @@ func TestGetLatestWeather(t *testing.T) {
 			Time   string                `json:"timestamp"`
 		}
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check response content
 		// Daily weather should be present
@@ -716,8 +717,8 @@ func TestGetLatestWeather(t *testing.T) {
 
 		// Hourly weather
 		assert.Equal(t, "15:00:00", response.Hourly.Time)
-		assert.Equal(t, 7.5, response.Hourly.Temperature)
-		assert.Equal(t, 6.0, response.Hourly.FeelsLike)
+		assert.InDelta(t, 7.5, response.Hourly.Temperature, 0.01)
+		assert.InDelta(t, 6.0, response.Hourly.FeelsLike, 0.01)
 		assert.Equal(t, "Clear", response.Hourly.WeatherMain)
 		assert.Equal(t, "clear sky", response.Hourly.WeatherDesc)
 

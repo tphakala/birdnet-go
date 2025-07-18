@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // TestInitIntegrationsRoutesRegistration tests the registration of integration-related API endpoints
@@ -172,7 +173,7 @@ func TestGetMQTTStatus(t *testing.T) {
 
 			// Call handler - we'll patch the client creation in the real system
 			err := controller.GetMQTTStatus(c)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check status code
 			assert.Equal(t, tc.expectedStatus, rec.Code)
@@ -180,7 +181,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			// Parse and validate response
 			var result map[string]interface{}
 			err = json.Unmarshal(rec.Body.Bytes(), &result)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			tc.validateResult(t, result)
 		})
@@ -209,9 +210,9 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			validateResult: func(t *testing.T, result map[string]interface{}) {
 				t.Helper()
 				assert.False(t, result["enabled"].(bool), "Enabled should be false")
-				assert.Equal(t, "", result["station_id"], "Station ID should be empty")
-				assert.Equal(t, 0.7, result["threshold"], "Threshold should match configuration")
-				assert.Equal(t, 50.0, result["location_accuracy"], "Location accuracy should match configuration")
+				assert.Empty(t, result["station_id"], "Station ID should be empty")
+				assert.InDelta(t, 0.7, result["threshold"], 0.01, "Threshold should match configuration")
+				assert.InDelta(t, 50.0, result["location_accuracy"], 0.01, "Location accuracy should match configuration")
 			},
 		},
 		{
@@ -225,8 +226,8 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 				t.Helper()
 				assert.True(t, result["enabled"].(bool), "Enabled should be true")
 				assert.Equal(t, "ABC123", result["station_id"], "Station ID should match configuration")
-				assert.Equal(t, 0.8, result["threshold"], "Threshold should match configuration")
-				assert.Equal(t, 100.0, result["location_accuracy"], "Location accuracy should match configuration")
+				assert.InDelta(t, 0.8, result["threshold"], 0.01, "Threshold should match configuration")
+				assert.InDelta(t, 100.0, result["location_accuracy"], 0.01, "Location accuracy should match configuration")
 			},
 		},
 	}
@@ -250,7 +251,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 
 			// Call the handler
 			err := controller.GetBirdWeatherStatus(c)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check status code
 			assert.Equal(t, tc.expectedStatus, rec.Code)
@@ -258,7 +259,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			// Parse response body
 			var result map[string]interface{}
 			err = json.Unmarshal(rec.Body.Bytes(), &result)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Validate the result using the test case's validation function
 			tc.validateResult(t, result)
@@ -309,7 +310,7 @@ func TestTestMQTTConnection(t *testing.T) {
 
 			// Call handler
 			err := controller.TestMQTTConnection(c)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check status code
 			assert.Equal(t, tc.expectedStatus, rec.Code)
@@ -365,7 +366,7 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 
 			// Call handler
 			err := controller.TestBirdWeatherConnection(c)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check status code
 			assert.Equal(t, tc.expectedStatus, rec.Code)
@@ -404,16 +405,16 @@ func TestWriteJSONResponse(t *testing.T) {
 
 	// Call the function
 	err := controller.writeJSONResponse(c, testData)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Parse the response
 	var result map[string]interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &result)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify the result
 	assert.Equal(t, "value1", result["key1"])
-	assert.Equal(t, float64(42), result["key2"])
+	assert.InDelta(t, 42, result["key2"], 0.01)
 	assert.Equal(t, true, result["key3"])
 	assert.IsType(t, map[string]interface{}{}, result["nested"])
 	nestedMap := result["nested"].(map[string]interface{})
@@ -453,7 +454,7 @@ func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
 	// Wait for the handler to complete
 	select {
 	case err := <-errChan:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Handler took too long to complete")
 	}
@@ -494,7 +495,7 @@ func TestBirdWeatherConnectionWithClientDisconnection(t *testing.T) {
 	// Wait for the handler to complete
 	select {
 	case err := <-errChan:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Handler took too long to complete")
 	}
@@ -524,7 +525,7 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 
 	// Call handler
 	err := controller.GetMQTTStatus(c)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check status code
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -532,7 +533,7 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 	// Parse response body
 	var result map[string]interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &result)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Basic validation since we can't mock the MQTT client creation directly
 	assert.Contains(t, result, "connected")
@@ -563,7 +564,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		err := controller.TestMQTTConnection(c)
 
 		// For streaming responses, we verify that the handler completes without error
-		assert.NoError(t, err, "Handler should not return an error")
+		require.NoError(t, err, "Handler should not return an error")
 
 		// And that the HTTP status is set correctly
 		assert.Equal(t, http.StatusOK, rec.Code, "HTTP status should be OK")
@@ -586,7 +587,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		err := controller.TestBirdWeatherConnection(c)
 
 		// For streaming responses, we verify that the handler completes without error
-		assert.NoError(t, err, "Handler should not return an error")
+		require.NoError(t, err, "Handler should not return an error")
 
 		// And that the HTTP status is set correctly
 		assert.Equal(t, http.StatusOK, rec.Code, "HTTP status should be OK")
@@ -617,7 +618,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 		// Call handler - should return no error even when context is cancelled
 		err := controller.TestMQTTConnection(c)
-		assert.NoError(t, err, "Handler should not return an error")
+		require.NoError(t, err, "Handler should not return an error")
 	})
 
 	t.Run("BirdWeather Connection Context Cancellation", func(t *testing.T) {
@@ -645,7 +646,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 		// Call handler - should return no error even when context is cancelled
 		err := controller.TestBirdWeatherConnection(c)
-		assert.NoError(t, err, "Handler should not return an error")
+		require.NoError(t, err, "Handler should not return an error")
 	})
 
 	t.Run("MQTT Status Error Handling", func(t *testing.T) {
@@ -665,7 +666,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 		// Call handler
 		err := controller.GetMQTTStatus(c)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Check status code
 		assert.Equal(t, http.StatusOK, rec.Code)
@@ -673,7 +674,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		// Parse and validate response
 		var result MQTTStatus
 		err = json.Unmarshal(rec.Body.Bytes(), &result)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Connected should be false with a connection error
 		assert.False(t, result.Connected, "Connected should be false when MQTT connection fails")
