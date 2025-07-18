@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -510,13 +511,20 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	// Calculate since time
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
 
-	// Run journalctl command
+	// Limit to 5000 most recent lines to prevent timeout
+	const maxJournalLines = 5000
+	serviceLogger.Debug("support: running journalctl", 
+		"since", since,
+		"maxLines", maxJournalLines)
+
+	// Run journalctl command with line limit
 	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",
 		"-o", "json",
-		"--no-hostname")
+		"--no-hostname",
+		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -526,18 +534,35 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		return nil, ErrJournalNotAvailable
 	}
 
+	serviceLogger.Debug("support: journalctl output received", "size", len(output))
+
 	// Parse JSON output line by line
 	lines := strings.Split(string(output), "\n")
+	serviceLogger.Debug("support: parsing journal entries", "lineCount", len(lines))
+	
 	// Pre-allocate logs slice based on number of lines
 	logs := make([]LogEntry, 0, len(lines))
-	for _, line := range lines {
+	parsedCount := 0
+	skippedCount := 0
+	
+	for i, line := range lines {
 		if line == "" {
 			continue
+		}
+
+		// Log progress every 1000 lines
+		if i > 0 && i%1000 == 0 {
+			serviceLogger.Debug("support: journal parsing progress", 
+				"processed", i, 
+				"total", len(lines),
+				"parsed", parsedCount,
+				"skipped", skippedCount)
 		}
 
 		var entry map[string]any
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			// Skip malformed JSON lines silently
+			skippedCount++
 			continue
 		}
 
@@ -578,7 +603,14 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 			Message:   message,
 			Source:    "journald",
 		})
+		parsedCount++
 	}
+
+	serviceLogger.Debug("support: journal parsing completed", 
+		"totalLines", len(lines),
+		"parsedEntries", parsedCount,
+		"skippedEntries", skippedCount,
+		"resultCount", len(logs))
 
 	return logs, nil
 }
@@ -1219,16 +1251,23 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 // getJournaldLogs retrieves logs from journald as a string
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	
+	// Use same line limit as collectJournalLogs
+	const maxJournalLines = 5000
+	
 	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
-		"--no-pager")
+		"--no-pager",
+		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
 
 	output, err := cmd.Output()
 	if err != nil {
+		serviceLogger.Debug("support: getJournaldLogs failed", "error", err)
 		return ""
 	}
 
+	serviceLogger.Debug("support: getJournaldLogs retrieved", "size", len(output))
 	return string(output)
 }
 
