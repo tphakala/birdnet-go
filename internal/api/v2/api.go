@@ -69,6 +69,10 @@ type Controller struct {
 	// Cleanup related fields
 	ctx    context.Context    // Context for managing goroutines
 	cancel context.CancelFunc // Cancel function for graceful shutdown
+	
+	// Test synchronization fields
+	goroutinesStarted chan struct{} // Signals when all background goroutines have started (test only)
+	wg                sync.WaitGroup // Tracks background goroutines for clean shutdown
 }
 
 // Define specific errors for token handling failures
@@ -303,7 +307,11 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
+		// Initialize synchronization channel for testing
+		c.goroutinesStarted = make(chan struct{})
 		c.initRoutes()
+		// Signal that all goroutines have started
+		close(c.goroutinesStarted)
 	}
 
 	return c, nil // Return controller and nil error
@@ -479,6 +487,9 @@ func (c *Controller) Shutdown() {
 	if c.cancel != nil {
 		c.cancel()
 	}
+
+	// Wait for all goroutines to finish
+	c.wg.Wait()
 
 	// Close the API logger if it was initialized
 	if c.apiLoggerClose != nil {

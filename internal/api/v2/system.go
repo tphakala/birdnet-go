@@ -277,7 +277,11 @@ func (c *Controller) initSystemRoutes() {
 	}
 
 	// Start CPU usage monitoring in background with controller's context for controlled shutdown
-	go UpdateCPUCache(c.ctx)
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		UpdateCPUCache(c.ctx)
+	}()
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Started CPU usage monitoring")
