@@ -669,14 +669,15 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	// Mock the sun calculator constructor
 	sunCalc := &suncalc.SunCalc{}
 
-	// Create control channel
-	controlChan := make(chan string)
+	// Create control channel with buffer to prevent blocking in tests
+	// Size 10 is sufficient for concurrent test scenarios (e.g., TestConcurrentControlRequests uses 5)
+	controlChan := make(chan string, 10)
 
 	// Create mock metrics for testing
 	mockMetrics, _ := observability.NewMetrics()
 
-	// Create API controller
-	controller, err := New(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics)
+	// Create API controller without initializing routes to avoid starting background goroutines
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics, false)
 	if err != nil {
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}
