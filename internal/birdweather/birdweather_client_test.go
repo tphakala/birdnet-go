@@ -2,17 +2,20 @@ package birdweather
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // MockSettings creates mock settings for testing
@@ -23,6 +26,9 @@ func MockSettings() *conf.Settings {
 			Longitude: -74.0060, // Sample coordinates (New York City)
 		},
 		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				FfmpegPath: findFFmpegPath(), // Find FFmpeg for testing
+			},
 			Birdweather: conf.BirdweatherSettings{
 				ID:               "test-station-123",
 				LocationAccuracy: 100, // 100 meters accuracy
@@ -30,6 +36,54 @@ func MockSettings() *conf.Settings {
 			},
 		},
 	}
+}
+
+// findFFmpegPath attempts to find FFmpeg executable for testing
+func findFFmpegPath() string {
+	// Try to find ffmpeg in PATH
+	if path, err := exec.LookPath("ffmpeg"); err == nil {
+		return path
+	}
+	return "" // Return empty if not found
+}
+
+// createTestFLACData creates FLAC-encoded audio data for testing
+func createTestFLACData(t *testing.T) []byte {
+	t.Helper()
+	// Create test PCM data (1 second of 48kHz mono audio)
+	pcmData := make([]byte, 48000*2) // 2 bytes per sample for 16-bit
+	
+	// Fill with simple sine wave pattern for more realistic audio
+	for i := 0; i < len(pcmData); i += 2 {
+		// Simple 440Hz sine wave
+		sample := int16(3276) // Low amplitude to avoid clipping (10% of max)
+		pcmData[i] = byte(sample & 0xFF)
+		pcmData[i+1] = byte((sample >> 8) & 0xFF)
+	}
+	
+	ffmpegPath := findFFmpegPath()
+	if ffmpegPath == "" {
+		t.Skip("FFmpeg not found in PATH, skipping FLAC test")
+	}
+	
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// Use the same custom args as in the main code
+	customArgs := []string{
+		"-af", "volume=15.0dB", // Simple gain adjustment
+		"-c:a", "flac",
+		"-f", "flac",
+	}
+	
+	// Use the myaudio package to create FLAC data
+	flacBuffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
+	if err != nil {
+		t.Fatalf("Failed to create test FLAC data: %v", err)
+	}
+	
+	return flacBuffer.Bytes()
 }
 
 // TestMain runs setup/teardown for all tests in this package
@@ -240,9 +294,9 @@ func TestUploadSoundscape(t *testing.T) {
 				"id": 12345,
 				"stationId": 67890,
 				"timestamp": "2023-01-01T12:00:00.000Z",
-				"url": "https://example.com/soundscape.wav",
+				"url": "https://example.com/soundscape.flac",
 				"filesize": 48000,
-				"extension": "wav",
+				"extension": "flac",
 				"duration": 3.0
 			}
 		}`); err != nil {
@@ -260,8 +314,8 @@ func TestUploadSoundscape(t *testing.T) {
 		server: server,
 	}
 
-	// Create test PCM data
-	pcmData := make([]byte, 48000) // 1 second of 48kHz mono audio
+	// Create test PCM data (create FLAC data using PCM)
+	pcmData := make([]byte, 48000*2) // 1 second of 48kHz mono audio (2 bytes per sample)
 	timestamp := "2023-01-01T12:00:00.000-0500"
 
 	// Call the method under test
@@ -337,7 +391,7 @@ func TestUploadSoundscape_ServerError(t *testing.T) {
 	}
 
 	// Create test PCM data
-	pcmData := make([]byte, 48000)
+	pcmData := make([]byte, 48000*2) // 2 bytes per sample for 16-bit
 	timestamp := "2023-01-01T12:00:00.000-0500"
 
 	// Call the method under test
@@ -501,9 +555,9 @@ func TestPublish(t *testing.T) {
 					"id": 12345,
 					"stationId": 67890,
 					"timestamp": "2023-01-01T12:00:00.000Z",
-					"url": "https://example.com/soundscape.wav",
+					"url": "https://example.com/soundscape.flac",
 					"filesize": 48000,
-					"extension": "wav",
+					"extension": "flac",
 					"duration": 3.0
 				}
 			}`); err != nil {
@@ -542,7 +596,7 @@ func TestPublish(t *testing.T) {
 		Confidence:     0.95,
 	}
 
-	pcmData := make([]byte, 48000) // 1 second of 48kHz mono audio
+	pcmData := make([]byte, 48000*2) // 1 second of 48kHz mono audio (2 bytes per sample)
 
 	// Call the method under test
 	err := client.Publish(note, pcmData)
