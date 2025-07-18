@@ -335,8 +335,8 @@
                         </label>
                     </div>
 
-                    <!-- Upload Option (only shown if telemetry is enabled) -->
-                    <div x-show="{{.Settings.Sentry.Enabled}}" class="mt-4">
+                    <!-- Upload Option (always available) -->
+                    <div class="mt-4">
                         {{template "checkbox" dict
                             "id" "uploadToSentry"
                             "model" "supportDump.uploadToSentry"
@@ -364,11 +364,19 @@
                                     Privacy-compliant with sensitive data removed
                                 </p>
                             </div>
-                            <div class="text-xs text-warning/80 flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Uncheck only if you prefer to handle the support file manually
+                            <div class="text-xs text-base-content/60 space-y-1">
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Support uploads work independently of error tracking settings
+                                </p>
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Uncheck only if you prefer to handle the support file manually
+                                </p>
                             </div>
                         </div>
                     </div>

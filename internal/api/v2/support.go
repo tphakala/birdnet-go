@@ -116,33 +116,46 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		FileSize: len(archiveData),
 	}
 
-	// Upload to Sentry if requested and telemetry is enabled
-	switch {
-	case req.UploadToSentry && settings.Sentry.Enabled:
-		uploader := telemetry.GetAttachmentUploader()
-		if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
-			// Log error but don't fail the request
-			c.apiLogger.Error("Failed to upload support dump to Sentry",
-				"error", err,
-				"dump_id", dump.ID,
-			)
-			response.Message = "Support dump generated successfully but upload failed"
-		} else {
-			response.UploadedAt = time.Now().UTC().Format(time.RFC3339)
-			response.Message = "Support dump generated and uploaded successfully"
-			c.apiLogger.Info("Support dump uploaded to Sentry",
-				"dump_id", dump.ID,
-				"system_id", settings.SystemID,
-			)
+	// Upload to Sentry if requested (works regardless of telemetry setting)
+	if req.UploadToSentry {
+		// Initialize minimal Sentry if needed
+		if !settings.Sentry.Enabled {
+			if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
+				c.apiLogger.Error("Failed to initialize minimal Sentry for support upload",
+					"error", err,
+					"dump_id", dump.ID,
+				)
+				response.Message = "Support dump generated successfully but upload initialization failed"
+				req.UploadToSentry = false // Fall back to download
+			}
 		}
-	case req.UploadToSentry && !settings.Sentry.Enabled:
-		response.Message = "Support dump generated successfully (upload skipped - telemetry disabled)"
-	default:
+
+		// Proceed with upload if still requested
+		if req.UploadToSentry {
+			uploader := telemetry.GetAttachmentUploader()
+			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
+				// Log error but don't fail the request
+				c.apiLogger.Error("Failed to upload support dump to Sentry",
+					"error", err,
+					"dump_id", dump.ID,
+				)
+				response.Message = "Support dump generated successfully but upload failed"
+			} else {
+				response.UploadedAt = time.Now().UTC().Format(time.RFC3339)
+				response.Message = "Support dump generated and uploaded successfully"
+				c.apiLogger.Info("Support dump uploaded to Sentry",
+					"dump_id", dump.ID,
+					"system_id", settings.SystemID,
+					"telemetry_enabled", settings.Sentry.Enabled,
+				)
+			}
+		}
+	} else {
 		response.Message = "Support dump generated successfully"
 	}
 
 	// If not uploading, provide download option
-	if !req.UploadToSentry || !settings.Sentry.Enabled {
+	if !req.UploadToSentry {
 		// Store temporarily for download
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
 		if err := os.WriteFile(tempFile, archiveData, 0o600); err != nil {
