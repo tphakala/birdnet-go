@@ -3,24 +3,29 @@
 package api
 
 import (
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"go.uber.org/goleak"
 )
 
 // TestControllerShutdownCleansUpGoroutines verifies that background goroutines
 // are properly cleaned up when the controller is shut down
 func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
-	// Get baseline goroutine count before creating controller
-	runtime.GC() // Force GC to clean up any lingering goroutines
-	time.Sleep(100 * time.Millisecond) // Give time for cleanup
-	baselineCount := runtime.NumGoroutine()
+	// Defer goleak check to verify no goroutines leak after test
+	defer goleak.VerifyNone(t, 
+		// Ignore goroutines from testing framework and other standard libraries
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+		// Ignore the go-cache janitor which we can't control
+		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
+		// Ignore lumberjack logger goroutines
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 
 	// Create Echo instance
 	e := echo.New()
@@ -52,63 +57,40 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	require.NoError(t, err)
 
-	// Wait for goroutines to start
-	time.Sleep(200 * time.Millisecond)
-
-	// Get count with controller running
-	runningCount := runtime.NumGoroutine()
-	
-	// Should have more goroutines than baseline (CPU monitoring, support cleanup, cache janitors, etc.)
-	assert.Greater(t, runningCount, baselineCount, "Should have started background goroutines")
+	// Wait for goroutines to start using the synchronization channel
+	if controller.goroutinesStarted != nil {
+		<-controller.goroutinesStarted
+	}
 
 	// Shutdown the controller
 	controller.Shutdown()
-
-	// Wait for goroutines to terminate
-	time.Sleep(500 * time.Millisecond)
-
-	// Force GC again to clean up
-	runtime.GC()
-	time.Sleep(100 * time.Millisecond)
-
-	// Get final count
-	finalCount := runtime.NumGoroutine()
-
-	// Should be back close to baseline (may have a few extra from the test framework itself)
-	// Allow some tolerance as the exact count can vary
-	tolerance := 5
-	assert.LessOrEqual(t, finalCount, baselineCount+tolerance, 
-		"Goroutine count after shutdown should be close to baseline. Baseline: %d, Final: %d", 
-		baselineCount, finalCount)
-
-	// The important check is that we have fewer goroutines than when running
-	assert.Less(t, finalCount, runningCount, 
-		"Should have fewer goroutines after shutdown. Running: %d, Final: %d",
-		runningCount, finalCount)
+	
+	// Close control channel to prevent any lingering goroutines
+	close(controlChan)
 }
 
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
 // routes doesn't start unnecessary goroutines
 func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Get baseline goroutine count
-	runtime.GC()
-	time.Sleep(100 * time.Millisecond)
-	baselineCount := runtime.NumGoroutine()
+	// Register cleanup with goleak at the beginning
+	t.Cleanup(func() {
+		goleak.VerifyNone(t, 
+			// Ignore goroutines from testing framework and other standard libraries
+			goleak.IgnoreTopFunction("testing.(*T).Run"),
+			goleak.IgnoreTopFunction("runtime.gopark"),
+			goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+			// Ignore the go-cache janitor which we can't control
+			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
+			// Ignore lumberjack logger goroutines
+			goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		)
+	})
 
 	// Setup test environment (which uses NewWithOptions with initializeRoutes=false)
 	_, _, controller := setupTestEnvironment(t)
 
-	// Wait a bit to ensure no goroutines are starting
-	time.Sleep(200 * time.Millisecond)
+	// Since routes are not initialized, goroutinesStarted should be nil
+	require.Nil(t, controller.goroutinesStarted, "goroutinesStarted channel should not be created without route initialization")
 
-	// Get count with controller
-	withControllerCount := runtime.NumGoroutine()
-
-	// Should not have significantly more goroutines (just the cache janitor)
-	// Allow for some variance due to test framework
-	assert.LessOrEqual(t, withControllerCount, baselineCount+3, 
-		"Should not start many goroutines without route initialization")
-
-	// Cleanup
-	controller.Shutdown()
+	// Controller shutdown is handled by setupTestEnvironment's t.Cleanup()
 }

@@ -232,7 +232,11 @@ func (c *Controller) initSupportRoutes() {
 
 	// Start cleanup goroutine for old support dumps with proper context
 	if c.ctx != nil {
-		go c.startSupportDumpCleanup(c.ctx)
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			c.startSupportDumpCleanup(c.ctx)
+		}()
 	}
 }
 
