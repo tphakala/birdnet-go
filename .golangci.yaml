@@ -24,6 +24,9 @@ linters:
     - staticcheck
     - ineffassign
     - bodyclose
+    - fatcontext
+    - iface
+    - dupl
     #- ireturn
     - nilnil
     - nilerr
