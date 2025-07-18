@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testIntegrationConnectionHandler runs table-driven tests for integration connection handlers
-func testIntegrationConnectionHandler(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, testCases []struct {
+// runIntegrationConnectionHandlerTest runs table-driven tests for integration connection handlers
+func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, testCases []struct {
 	name           string
 	setupSettings  func(*Controller)
 	expectedStatus int
@@ -55,12 +55,14 @@ func testIntegrationConnectionHandler(t *testing.T, handlerFunc func(*Controller
 	}
 }
 
-// testIntegrationConnectionWithDisconnection tests integration connection handlers with client disconnection
-func testIntegrationConnectionWithDisconnection(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, setupSettings func(*Controller)) {
+// runIntegrationConnectionWithDisconnectionTest runs integration connection handlers test with client disconnection.
+// This helper is preserved for future use when mock injection becomes available in the test framework.
+// Currently skipped because it requires mocking package-level functions for network operations.
+func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, setupSettings func(*Controller)) {
 	t.Helper()
 	
 	// Skip this test since we can't override package-level functions in our test environment
-	t.Skip("This test requires mocking package-level functions")
+	t.Skip("This test requires mocking package-level functions - preserved for future implementation")
 
 	// Setup
 	e, _, controller := setupTestEnvironment(t)
@@ -376,7 +378,7 @@ func TestTestMQTTConnection(t *testing.T) {
 		},
 	}
 
-	testIntegrationConnectionHandler(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", testCases)
+	runIntegrationConnectionHandlerTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", testCases)
 }
 
 // TestTestBirdWeatherConnection tests the TestBirdWeatherConnection handler
@@ -408,7 +410,7 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 		},
 	}
 
-	testIntegrationConnectionHandler(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
+	runIntegrationConnectionHandlerTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
 }
 
 // TestWriteJSONResponse tests the writeJSONResponse helper function
@@ -455,7 +457,7 @@ func TestWriteJSONResponse(t *testing.T) {
 
 // Advanced test for MQTT connection with client disconnection
 func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
-	testIntegrationConnectionWithDisconnection(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Controller) {
+	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Controller) {
 		controller.Settings.Realtime.MQTT.Enabled = true
 		controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
 	})
@@ -463,7 +465,7 @@ func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
 
 // Advanced test for BirdWeather connection with client disconnection
 func TestBirdWeatherConnectionWithClientDisconnection(t *testing.T) {
-	testIntegrationConnectionWithDisconnection(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Controller) {
+	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Controller) {
 		controller.Settings.Realtime.Birdweather.Enabled = true
 		controller.Settings.Realtime.Birdweather.ID = "ABC123"
 	})

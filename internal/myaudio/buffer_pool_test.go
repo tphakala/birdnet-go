@@ -1,7 +1,6 @@
 package myaudio
 
 import (
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,8 +10,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testPoolConcurrencyGeneric tests pool concurrency with generic operations
-func testPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int, 
+// PoolStatsProvider interface for accessing pool statistics
+type PoolStatsProvider interface {
+	GetHits() uint64
+	GetMisses() uint64
+	GetDiscarded() uint64
+}
+
+// BufferPoolStatsAdapter adapts BufferPoolStats to PoolStatsProvider interface
+type BufferPoolStatsAdapter struct {
+	BufferPoolStats
+}
+
+func (s BufferPoolStatsAdapter) GetHits() uint64      { return s.Hits }
+func (s BufferPoolStatsAdapter) GetMisses() uint64    { return s.Misses }
+func (s BufferPoolStatsAdapter) GetDiscarded() uint64 { return s.Discarded }
+
+// Float32PoolStatsAdapter adapts Float32PoolStats to PoolStatsProvider interface
+type Float32PoolStatsAdapter struct {
+	Float32PoolStats
+}
+
+func (s Float32PoolStatsAdapter) GetHits() uint64      { return s.Hits }
+func (s Float32PoolStatsAdapter) GetMisses() uint64    { return s.Misses }
+func (s Float32PoolStatsAdapter) GetDiscarded() uint64 { return s.Discarded }
+
+// runPoolConcurrencyGeneric runs pool concurrency tests with generic operations
+func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int, 
 	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{})) {
 	t.Helper()
 	
@@ -34,33 +58,25 @@ func testPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int,
 	wg.Wait()
 }
 
-// testPoolConcurrencyWithStats tests pool concurrency and verifies stats
-func testPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWorker int,
+// runPoolConcurrencyWithStats runs pool concurrency tests and verifies stats
+func runPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWorker int,
 	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{}),
-	getStats func() interface{}) {
+	getStats func() PoolStatsProvider) {
 	t.Helper()
 	
-	testPoolConcurrencyGeneric(t, numWorkers, opsPerWorker, getOp, putOp, validateBuffer)
+	runPoolConcurrencyGeneric(t, numWorkers, opsPerWorker, getOp, putOp, validateBuffer)
 	
 	// Verify stats are consistent
 	stats := getStats()
 	totalOps := uint64(numWorkers * opsPerWorker)
 	
-	// Use reflection to get stats fields
-	statsValue := reflect.ValueOf(stats)
-	hitsField := statsValue.FieldByName("Hits")
-	missesField := statsValue.FieldByName("Misses")
-	discardedField := statsValue.FieldByName("Discarded")
+	hits := stats.GetHits()
+	misses := stats.GetMisses()
+	discarded := stats.GetDiscarded()
 	
-	if hitsField.IsValid() && missesField.IsValid() && discardedField.IsValid() {
-		hits := hitsField.Uint()
-		misses := missesField.Uint()
-		discarded := discardedField.Uint()
-		
-		// Allow some variance due to sync.Pool's per-CPU sharding
-		assert.InDelta(t, float64(totalOps), float64(hits+misses), float64(numWorkers*2))
-		assert.Equal(t, uint64(0), discarded)
-	}
+	// Allow some variance due to sync.Pool's per-CPU sharding
+	assert.InDelta(t, float64(totalOps), float64(hits+misses), float64(numWorkers*2))
+	assert.Equal(t, uint64(0), discarded)
 }
 
 func TestNewBufferPool(t *testing.T) {
@@ -175,7 +191,7 @@ func TestBufferPoolConcurrency(t *testing.T) {
 	pool, err := NewBufferPool(bufferSize)
 	require.NoError(t, err)
 
-	testPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
+	runPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
 		func() interface{} { return pool.Get() },
 		func(buf interface{}) { pool.Put(buf.([]byte)) },
 		func(buf interface{}) {
@@ -185,7 +201,7 @@ func TestBufferPoolConcurrency(t *testing.T) {
 			buffer[0] = byte(0)
 			buffer[len(buffer)-1] = byte(1)
 		},
-		func() interface{} { return pool.GetStats() })
+		func() PoolStatsProvider { return BufferPoolStatsAdapter{pool.GetStats()} })
 }
 
 func TestBufferPoolMemoryReuse(t *testing.T) {
