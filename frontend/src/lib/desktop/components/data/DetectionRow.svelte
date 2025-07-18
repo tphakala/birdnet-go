@@ -36,6 +36,7 @@
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
+  import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
 
   interface Props {
@@ -154,25 +155,7 @@
   // Placeholder function for thumbnail URL
   function getThumbnailUrl(scientificName: string): string {
     // TODO: Replace with actual thumbnail API endpoint
-    return `/api/v1/thumbnails/${encodeURIComponent(scientificName)}`;
-  }
-
-  // Format spectrogram URL - using detection ID for v2 API
-  function getSpectrogramUrl(detection: Detection): string {
-    if (detection.clipName) {
-      return `/api/v1/media/spectrogram?clip=${encodeURIComponent(detection.clipName)}`;
-    }
-    // Fallback to using detection ID
-    return `/api/v1/media/spectrogram?id=${detection.id}`;
-  }
-
-  // Format audio URL - using detection ID for v2 API
-  function getAudioUrl(detection: Detection): string {
-    if (detection.clipName) {
-      return `/api/v1/media/audio?clip=${encodeURIComponent(detection.clipName)}`;
-    }
-    // Fallback to using detection ID
-    return `/api/v1/media/audio?id=${detection.id}`;
+    return `/api/v2/media/species-image?name=${encodeURIComponent(scientificName)}`;
   }
 </script>
 
@@ -245,50 +228,16 @@
 
   <!-- Recording/Spectrogram -->
   <div class={showThumbnails ? 'col-span-2' : 'col-span-3'}>
-    <div class="audio-player-container relative min-w-[50px] max-w-[200px]">
-      <!-- Spectrogram Image -->
-      <img
-        loading="lazy"
-        width="400"
-        src={getSpectrogramUrl(detection)}
-        alt="Spectrogram"
-        class="w-full h-auto rounded-md object-contain"
-        onerror={e => {
-          const img = e.currentTarget as HTMLImageElement;
-          img.onerror = null;
-          img.src = '/assets/images/spectrogram-placeholder.svg';
-        }}
-      />
-
-      <!-- Audio player placeholder overlay -->
-      <div
-        class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300 opacity-0 hover:opacity-100 hidden md:block"
-      >
-        <div class="flex items-center justify-center">
-          <button
-            class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20"
-            title="Audio player coming soon"
-            aria-label="Play audio (coming soon)"
-            disabled
-          >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-              />
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
+    <AudioPlayer
+      audioUrl="/api/v2/audio/{detection.id}"
+      detectionId={detection.id.toString()}
+      width={200}
+      height={80}
+      showSpectrogram={true}
+      showDownload={true}
+      className="w-full max-w-[200px]"
+      controlsClassName="bg-base-100 border border-base-300 text-xs p-1"
+    />
   </div>
 
   <!-- Action Menu -->
