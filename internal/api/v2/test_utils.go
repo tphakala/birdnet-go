@@ -681,6 +681,14 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}
 
+	// Register cleanup to stop background goroutines
+	t.Cleanup(func() {
+		// Shutdown the controller properly
+		controller.Shutdown()
+		// Close control channel to signal goroutines to exit
+		close(controlChan)
+	})
+
 	return e, mockDS, controller
 }
 
