@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -206,11 +207,25 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts CollectorOptions) ([]byte, error) {
 	serviceLogger.Info("support: creating archive", "dump_id", dump.ID)
 
+	// Check context early
+	select {
+	case <-ctx.Done():
+		serviceLogger.Warn("support: context cancelled before archive creation", "error", ctx.Err())
+		return nil, errors.New(ctx.Err()).
+			Component("support").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_archive").
+			Context("stage", "pre_creation").
+			Build()
+	default:
+		// Continue
+	}
+
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
 	// Add metadata (keep this as JSON for easy parsing)
-	serviceLogger.Debug("support: adding metadata to archive")
+	serviceLogger.Debug("support: adding metadata to archive", "dump_id", dump.ID)
 	metadataFile, err := w.Create("metadata.json")
 	if err != nil {
 		serviceLogger.Error("support: failed to create metadata file in archive", "error", err)
@@ -239,6 +254,19 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			Build()
 	}
 
+	// Check context before adding logs
+	select {
+	case <-ctx.Done():
+		serviceLogger.Warn("support: context cancelled before adding logs", "error", ctx.Err())
+		return nil, errors.New(ctx.Err()).
+			Component("support").
+			Category(errors.CategoryNetwork).
+			Context("operation", "create_archive").
+			Context("stage", "before_logs").
+			Build()
+	default:
+	}
+
 	// Add log files in original format
 	if opts.IncludeLogs {
 		serviceLogger.Debug("support: adding log files to archive", "anonymize_pii", opts.AnonymizePII)
@@ -246,6 +274,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			serviceLogger.Error("support: failed to add log files to archive", "error", err)
 			return nil, err
 		}
+		serviceLogger.Debug("support: log files added successfully")
 	}
 
 	// Add config file in original YAML format (scrubbed)
@@ -255,6 +284,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 			serviceLogger.Error("support: failed to add config to archive", "error", err)
 			return nil, err
 		}
+		serviceLogger.Debug("support: config file added successfully")
 	}
 
 	// Add system info
@@ -277,8 +307,10 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Context("operation", "write_system_info").
 				Build()
 		}
+		serviceLogger.Debug("support: system info added successfully")
 	}
 
+	// Close the archive writer
 	if err := w.Close(); err != nil {
 		serviceLogger.Error("support: failed to close archive", "error", err)
 		return nil, errors.New(err).
@@ -435,23 +467,42 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 
 // collectLogs collects recent log entries
 func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
+	serviceLogger.Debug("support: collectLogs started", 
+		"duration", duration, 
+		"maxSize", maxSize,
+		"anonymizePII", anonymizePII)
+	
 	var logs []LogEntry
 
 	// Try to collect from journald first (systemd systems)
+	serviceLogger.Debug("support: attempting to collect journal logs")
 	journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII)
-	if err == nil && len(journalLogs) > 0 {
+	if err != nil {
+		if errors.Is(err, ErrJournalNotAvailable) {
+			serviceLogger.Debug("support: journal logs not available (expected on non-systemd systems)")
+		} else {
+			serviceLogger.Warn("support: error collecting journal logs", "error", err)
+		}
+	} else {
+		serviceLogger.Debug("support: collected journal logs", "count", len(journalLogs))
 		logs = append(logs, journalLogs...)
 	}
 
 	// Also check for log files in the data directory
+	serviceLogger.Debug("support: attempting to collect log files")
 	logFiles, err := c.collectLogFiles(duration, maxSize, anonymizePII)
-	if err == nil && len(logFiles) > 0 {
+	if err != nil {
+		serviceLogger.Warn("support: error collecting log files", "error", err)
+	} else {
+		serviceLogger.Debug("support: collected log files", "count", len(logFiles))
 		logs = append(logs, logFiles...)
 	}
 
 	// Sort logs by timestamp
+	serviceLogger.Debug("support: sorting logs by timestamp", "total_logs", len(logs))
 	sortLogsByTime(logs)
 
+	serviceLogger.Debug("support: collectLogs completed", "total_logs", len(logs))
 	return logs, nil
 }
 
@@ -460,13 +511,20 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	// Calculate since time
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
 
-	// Run journalctl command
+	// Limit to 5000 most recent lines to prevent timeout
+	const maxJournalLines = 5000
+	serviceLogger.Debug("support: running journalctl", 
+		"since", since,
+		"maxLines", maxJournalLines)
+
+	// Run journalctl command with line limit
 	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",
 		"-o", "json",
-		"--no-hostname")
+		"--no-hostname",
+		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -476,18 +534,35 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		return nil, ErrJournalNotAvailable
 	}
 
+	serviceLogger.Debug("support: journalctl output received", "size", len(output))
+
 	// Parse JSON output line by line
 	lines := strings.Split(string(output), "\n")
+	serviceLogger.Debug("support: parsing journal entries", "lineCount", len(lines))
+	
 	// Pre-allocate logs slice based on number of lines
 	logs := make([]LogEntry, 0, len(lines))
-	for _, line := range lines {
+	parsedCount := 0
+	skippedCount := 0
+	
+	for i, line := range lines {
 		if line == "" {
 			continue
+		}
+
+		// Log progress every 1000 lines
+		if i > 0 && i%1000 == 0 {
+			serviceLogger.Debug("support: journal parsing progress", 
+				"processed", i, 
+				"total", len(lines),
+				"parsed", parsedCount,
+				"skipped", skippedCount)
 		}
 
 		var entry map[string]any
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			// Skip malformed JSON lines silently
+			skippedCount++
 			continue
 		}
 
@@ -528,7 +603,14 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 			Message:   message,
 			Source:    "journald",
 		})
+		parsedCount++
 	}
+
+	serviceLogger.Debug("support: journal parsing completed", 
+		"totalLines", len(lines),
+		"parsedEntries", parsedCount,
+		"skippedEntries", skippedCount,
+		"resultCount", len(logs))
 
 	return logs, nil
 }
@@ -548,7 +630,11 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 	// Also try to find logs relative to current working directory
 	if cwd, err := os.Getwd(); err == nil {
 		logPaths = append(logPaths, filepath.Join(cwd, "logs"))
+	} else {
+		serviceLogger.Debug("support: could not get working directory", "error", err)
 	}
+
+	serviceLogger.Debug("support: searching for log files", "paths", logPaths)
 
 	cutoffTime := time.Now().Add(-duration)
 	totalSize := int64(0)
@@ -557,28 +643,38 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 		// Check if path exists
 		info, err := os.Stat(logPath)
 		if err != nil {
+			serviceLogger.Debug("support: log path not accessible", "path", logPath, "error", err)
 			continue
 		}
 
 		// If it's a directory, look for log files
 		if info.IsDir() {
+			serviceLogger.Debug("support: scanning log directory", "path", logPath)
 			files, err := os.ReadDir(logPath)
 			if err != nil {
+				serviceLogger.Warn("support: failed to read log directory", "path", logPath, "error", err)
 				continue
 			}
 
+			serviceLogger.Debug("support: found files in directory", "path", logPath, "count", len(files))
 			for _, file := range files {
-				if strings.HasSuffix(file.Name(), ".log") {
-					fileLogs, size := c.parseLogFile(filepath.Join(logPath, file.Name()), cutoffTime, maxSize-totalSize, anonymizePII)
-					logs = append(logs, fileLogs...)
-					totalSize += size
-					if totalSize >= maxSize {
-						break
-					}
+				if !strings.HasSuffix(file.Name(), ".log") {
+					continue
+				}
+				fullPath := filepath.Join(logPath, file.Name())
+				serviceLogger.Debug("support: processing log file", "file", fullPath)
+				fileLogs, size := c.parseLogFile(fullPath, cutoffTime, maxSize-totalSize, anonymizePII)
+				serviceLogger.Debug("support: parsed log file", "file", fullPath, "entries", len(fileLogs), "size", size)
+				logs = append(logs, fileLogs...)
+				totalSize += size
+				if totalSize >= maxSize {
+					serviceLogger.Debug("support: reached max size limit", "totalSize", totalSize, "maxSize", maxSize)
+					break
 				}
 			}
 		} else {
 			// It's a file
+			serviceLogger.Debug("support: processing single log file", "path", logPath)
 			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize, anonymizePII)
 			logs = append(logs, fileLogs...)
 			totalSize += size
@@ -589,6 +685,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 		}
 	}
 
+	serviceLogger.Debug("support: collectLogFiles completed", "total_entries", len(logs), "total_size", totalSize)
 	return logs, nil
 }
 
@@ -775,6 +872,11 @@ type logFileCollector struct {
 
 // addLogFilesToArchive adds log files to the archive in their original format
 func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, duration time.Duration, maxSize int64, anonymizePII bool) error {
+	serviceLogger.Debug("support: addLogFilesToArchive started",
+		"duration", duration,
+		"maxSize", maxSize,
+		"anonymizePII", anonymizePII)
+
 	lfc := &logFileCollector{
 		ctx:          ctx,
 		collector:    c,
@@ -787,27 +889,40 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 
 	// Get unique log paths
 	uniquePaths := c.getUniqueLogPaths()
+	serviceLogger.Debug("support: unique log paths identified", "count", len(uniquePaths), "paths", uniquePaths)
 
 	// Process each log path
 	for _, logPath := range uniquePaths {
 		if lfc.totalSize >= lfc.maxSize {
+			serviceLogger.Debug("support: stopping log collection - max size reached",
+				"totalSize", lfc.totalSize,
+				"maxSize", lfc.maxSize)
 			break
 		}
 
+		serviceLogger.Debug("support: processing log path for archive", "path", logPath)
 		if err := lfc.processLogPath(w, logPath); err != nil {
+			serviceLogger.Warn("support: error processing log path", "path", logPath, "error", err)
 			// Continue with next path on error
 			continue
 		}
 	}
 
 	// Add journald logs
+	serviceLogger.Debug("support: attempting to add journald logs to archive")
 	if err := lfc.addJournaldLogs(w, duration); err == nil {
 		lfc.logsAdded++
+		serviceLogger.Debug("support: journald logs added successfully")
+	} else {
+		serviceLogger.Debug("support: could not add journald logs", "error", err)
 	}
 
 	// Add README if no logs found
 	if lfc.logsAdded == 0 {
+		serviceLogger.Debug("support: no logs found, adding README note")
 		lfc.addNoLogsNote(w)
+	} else {
+		serviceLogger.Debug("support: logs added to archive", "count", lfc.logsAdded, "totalSize", lfc.totalSize)
 	}
 
 	return nil
@@ -1136,16 +1251,23 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 // getJournaldLogs retrieves logs from journald as a string
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	
+	// Use same line limit as collectJournalLogs
+	const maxJournalLines = 5000
+	
 	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
-		"--no-pager")
+		"--no-pager",
+		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
 
 	output, err := cmd.Output()
 	if err != nil {
+		serviceLogger.Debug("support: getJournaldLogs failed", "error", err)
 		return ""
 	}
 
+	serviceLogger.Debug("support: getJournaldLogs retrieved", "size", len(output))
 	return string(output)
 }
 
