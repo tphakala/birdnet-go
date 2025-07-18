@@ -86,7 +86,7 @@ func TestDebugTriggerError(t *testing.T) {
 			err := c.DebugTriggerError(ctx)
 			
 			if tt.wantCode == http.StatusOK {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.wantCode, rec.Code)
 				
 				var resp DebugResponse
@@ -121,7 +121,7 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 		ctx := e.NewContext(req, rec)
 		
 		err := c.DebugTriggerError(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 		
 		var resp map[string]string
@@ -139,7 +139,7 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 		ctx := e.NewContext(req, rec)
 		
 		err := c.DebugTriggerNotification(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 	
@@ -151,7 +151,7 @@ func TestDebugEndpointsRequireDebugMode(t *testing.T) {
 		ctx := e.NewContext(req, rec)
 		
 		err := c.DebugSystemStatus(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 }

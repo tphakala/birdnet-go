@@ -35,12 +35,12 @@ func TestRecordDuration(t *testing.T) {
 
 	predDurations := recorder.GetDurations("prediction")
 	require.Len(t, predDurations, 2, "should have 2 prediction durations")
-	assert.Equal(t, 0.123, predDurations[0], "first prediction duration should be 0.123")
-	assert.Equal(t, 0.456, predDurations[1], "second prediction duration should be 0.456")
+	assert.InDelta(t, 0.123, predDurations[0], 0.01, "first prediction duration should be 0.123")
+	assert.InDelta(t, 0.456, predDurations[1], 0.01, "second prediction duration should be 0.456")
 
 	chunkDurations := recorder.GetDurations("chunk_process")
 	require.Len(t, chunkDurations, 1, "should have 1 chunk process duration")
-	assert.Equal(t, 0.789, chunkDurations[0], "chunk duration should be 0.789")
+	assert.InDelta(t, 0.789, chunkDurations[0], 0.01, "chunk duration should be 0.789")
 
 	// Test non-existent operation
 	durations := recorder.GetDurations("non_existent")
@@ -346,6 +346,6 @@ func TestRecorderUsageExample(t *testing.T) {
 
 	durations := testRecorder.GetDurations("work")
 	require.Len(t, durations, 1, "should have 1 duration recorded")
-	assert.Equal(t, simulatedDuration.Seconds(), durations[0], 
+	assert.InDelta(t, simulatedDuration.Seconds(), durations[0], 0.01, 
 		"recorded duration should match simulated duration")
 }

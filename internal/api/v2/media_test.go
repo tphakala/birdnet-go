@@ -375,7 +375,7 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Make request to the HTTP server
 			resp, err := client.Get(server.URL + tc.endpoint)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
 					t.Errorf("Failed to close response body: %v", err)
@@ -388,7 +388,7 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			// Check response body for successful requests
 			if tc.expectedStatus == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedBody, string(body))
 			}
 		})
@@ -528,7 +528,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
 			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				assert.Len(t, rec.Body.Bytes(), 0, "416 responses should not include the file body")
+				assert.Empty(t, rec.Body.Bytes(), "416 responses should not include the file body")
 			},
 		},
 		{
@@ -578,7 +578,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 			// Handle potential handler errors (less likely now with http.ServeContent)
 			if tc.expectedStatus >= 400 {
 				if handlerErr != nil {
-					assert.Error(t, handlerErr)
+					require.Error(t, handlerErr)
 					// Use errors.As for robust error checking
 					var httpErr *echo.HTTPError
 					if errors.As(handlerErr, &httpErr) {
@@ -587,7 +587,7 @@ func TestRangeHeaderHandling(t *testing.T) {
 				}
 			} else {
 				// Expect no error from the handler itself on success
-				assert.NoError(t, handlerErr)
+				require.NoError(t, handlerErr)
 			}
 
 			// Run validation function for successful responses

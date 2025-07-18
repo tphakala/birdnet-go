@@ -104,12 +104,12 @@ func TestBufferOperations(t *testing.T) {
 
 	t.Run("Resize", func(t *testing.T) {
 		err := buf.Resize(50)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 50, buf.Len())
 
 		// Resize larger than capacity
 		err = buf.Resize(10000)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 10000, buf.Len())
 		assert.GreaterOrEqual(t, buf.Cap(), 10000)
 
@@ -120,19 +120,19 @@ func TestBufferOperations(t *testing.T) {
 
 	t.Run("Slice", func(t *testing.T) {
 		err := buf.Resize(100)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Valid slice
 		slice, err := buf.Slice(10, 20)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, slice, 10)
 
 		// Invalid slices
 		_, err = buf.Slice(-1, 10)
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = buf.Slice(0, 200)
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		_, err = buf.Slice(20, 10)
 		assert.Error(t, err)

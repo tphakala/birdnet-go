@@ -37,8 +37,8 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 		
 		// Shutdown should return context error immediately
 		err := manager.Shutdown(ctx)
-		assert.Error(t, err)
-		assert.Equal(t, context.DeadlineExceeded, err)
+		require.Error(t, err)
+		require.Equal(t, context.DeadlineExceeded, err)
 	})
 	
 	t.Run("Shutdown completes within timeout", func(t *testing.T) {
@@ -62,8 +62,8 @@ func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
 		
 		// Shutdown should return context error
 		err := manager.Shutdown(ctx)
-		assert.Error(t, err)
-		assert.Equal(t, context.Canceled, err)
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
 	})
 }
 

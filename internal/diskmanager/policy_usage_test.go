@@ -88,7 +88,7 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
 
 			if tc.eligibleForDeletion {
-				assert.NoError(t, err, "File should be eligible for deletion: %s", tc.description)
+				require.NoError(t, err, "File should be eligible for deletion: %s", tc.description)
 				assert.Equal(t, "bubo_bubo", fileInfo.Species, "Species should be correctly parsed")
 				assert.Equal(t, 80, fileInfo.Confidence, "Confidence should be correctly parsed")
 
@@ -148,7 +148,7 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
 
 			if tc.shouldSucceed {
-				assert.NoError(t, err, "Should parse successfully")
+				require.NoError(t, err, "Should parse successfully")
 				assert.Equal(t, "bubo_bubo", fileInfo.Species)
 				assert.Equal(t, 80, fileInfo.Confidence)
 
@@ -173,7 +173,7 @@ func TestParseFileInfoMp3Extension(t *testing.T) {
 	fileInfo, err := parseFileInfo("/test/bubo_bubo_80p_20250130T184446Z.mp3", mockInfo)
 
 	// The bug would cause an error here because it only trims .wav extension
-	assert.NoError(t, err, "Should parse MP3 files correctly")
+	require.NoError(t, err, "Should parse MP3 files correctly")
 	assert.Equal(t, "bubo_bubo", fileInfo.Species)
 	assert.Equal(t, 80, fileInfo.Confidence)
 
@@ -240,7 +240,7 @@ func TestParseFileInfoProductionFormat(t *testing.T) {
 			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
 
 			if tc.shouldSucceed {
-				assert.NoError(t, err, "Should parse successfully: "+tc.description)
+				require.NoError(t, err, "Should parse successfully: "+tc.description)
 				assert.Equal(t, tc.expectedSpec, fileInfo.Species, "Species should be correctly parsed")
 				assert.Equal(t, tc.expectedConf, fileInfo.Confidence, "Confidence should be correctly parsed")
 
@@ -595,7 +595,7 @@ func TestUsageBasedCleanupWithAllFileTypes(t *testing.T) {
 	}
 
 	// Check that at least some file types were processed
-	assert.True(t, len(fileTypeProcessed) > 0, "Some files should have been deleted")
+	assert.NotEmpty(t, fileTypeProcessed, "Some files should have been deleted")
 
 	// Count how many bubo_bubo files were deleted to verify minClipsPerSpecies is respected
 	buboFilesDeleted := 0
@@ -806,7 +806,7 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 	expectedDiskUtilization := int(initialDiskUsage - (2 * diskUsageReductionPerFile))
 
 	// Verify the return values
-	assert.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
+	require.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
 	assert.Equal(t, 2, result.ClipsRemoved, "UsageBasedCleanup should remove 2 clips")
 	assert.Equal(t, expectedDiskUtilization, result.DiskUtilization,
 		"UsageBasedCleanup should return %d%% disk utilization", expectedDiskUtilization)
@@ -978,7 +978,7 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	)
 
 	// Verify the return values
-	assert.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
+	require.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
 	assert.Equal(t, 0, result.ClipsRemoved, "UsageBasedCleanup should not remove any clips")
 	assert.Equal(t, int(initialDiskUsage), result.DiskUtilization,
 		"UsageBasedCleanup should return %d%% disk utilization", int(initialDiskUsage))
@@ -1053,7 +1053,7 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	expectedDiskUtilization := int(initialDiskUsage - (2 * diskUsageReductionPerFile))
 
 	// Verify the return values
-	assert.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
+	require.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
 	assert.Equal(t, 2, result.ClipsRemoved, "UsageBasedCleanup should remove 2 clips")
 	assert.Equal(t, expectedDiskUtilization, result.DiskUtilization,
 		"UsageBasedCleanup should return %d%% disk utilization", expectedDiskUtilization)

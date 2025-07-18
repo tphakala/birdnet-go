@@ -53,9 +53,9 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 
 				bands := data["octave_bands"].(map[string]any)
 				band := bands["1000_Hz"].(map[string]any)
-				assert.Equal(t, -60.5, band["min_db"])
-				assert.Equal(t, -40.2, band["max_db"])
-				assert.Equal(t, -50.3, band["mean_db"])
+				assert.InDelta(t, -60.5, band["min_db"], 0.01)
+				assert.InDelta(t, -40.2, band["max_db"], 0.01)
+				assert.InDelta(t, -50.3, band["mean_db"], 0.01)
 			},
 		},
 		{
@@ -181,7 +181,7 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 
 				bands := data["octave_bands"].(map[string]any)
 				band := bands["1000_Hz"].(map[string]any)
-				assert.Equal(t, -200.0, band["min_db"])
+				assert.InDelta(t, -200.0, band["min_db"], 0.01)
 			},
 		},
 	}
@@ -193,9 +193,9 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 			jsonData, err := json.Marshal(tt.soundData)
 
 			if tt.shouldError {
-				assert.Error(t, err, "Expected JSON marshaling to fail for %s", tt.name)
+				require.Error(t, err, "Expected JSON marshaling to fail for %s", tt.name)
 			} else {
-				assert.NoError(t, err, "Expected JSON marshaling to succeed for %s", tt.name)
+				require.NoError(t, err, "Expected JSON marshaling to succeed for %s", tt.name)
 				if tt.checkJSON != nil {
 					tt.checkJSON(t, jsonData)
 				}
@@ -436,7 +436,7 @@ func TestSoundLevelChannelFlow(t *testing.T) {
 		received = append(received, data)
 	}
 
-	assert.Equal(t, len(testData), len(received))
+	assert.Len(t, received, len(testData))
 	for i, data := range received {
 		assert.Equal(t, testData[i].Source, data.Source)
 		assert.Equal(t, testData[i].Name, data.Name)
@@ -746,7 +746,7 @@ func TestSoundLevelPublishIntervalSimulation(t *testing.T) {
 			wg.Wait()
 
 			// Verify publish count
-			assert.Equal(t, tt.expectedPublishCount, len(publishTimes),
+			assert.Len(t, publishTimes, tt.expectedPublishCount,
 				"Expected %d publishes but got %d", tt.expectedPublishCount, len(publishTimes))
 
 			// Verify publish timing
@@ -1118,7 +1118,7 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 	wg.Wait()
 
 	// Verify we got the expected number of publishes
-	assert.Equal(t, numIntervals, len(payloads),
+	assert.Len(t, payloads, numIntervals,
 		"Expected %d publishes but got %d", numIntervals, len(payloads))
 
 	// Verify each payload is valid and contains expected data
@@ -1133,7 +1133,7 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 
 		// Verify timestamp format
 		_, err = time.Parse(time.RFC3339, compactData.TS)
-		assert.NoError(t, err, "Invalid timestamp format in payload %d", i+1)
+		require.NoError(t, err, "Invalid timestamp format in payload %d", i+1)
 
 		t.Logf("Interval %d: Published %d bands at %s", i+1, len(compactData.Bands), compactData.TS)
 	}
@@ -1367,7 +1367,7 @@ func collectPublishEvents(t *testing.T, publishEvents chan publishEvent,
 func verifyPublishResults(t *testing.T, events []publishEvent, tt mqttIntervalTest, testStartTime time.Time) {
 	t.Helper()
 	// Verify publish count
-	assert.Equal(t, tt.expectedPublishes, len(events),
+	assert.Len(t, events, tt.expectedPublishes,
 		"Expected %d MQTT publishes but got %d", tt.expectedPublishes, len(events))
 
 	// Verify each publish
@@ -1399,7 +1399,7 @@ func verifyPublishPayload(t *testing.T, event publishEvent, index, interval int)
 	
 	assert.Equal(t, "test-device", compactData.Src)
 	assert.Equal(t, interval, compactData.Dur)
-	assert.Equal(t, 2, len(compactData.Bands))
+	assert.Len(t, compactData.Bands, 2)
 	assert.Contains(t, event.topic, "soundlevel")
 }
 
@@ -1584,7 +1584,7 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 	}
 
 	// Verify all data was attempted to be published despite errors
-	assert.Equal(t, 4, len(attempts), "All data should be attempted to publish")
+	assert.Len(t, attempts, 4, "All data should be attempted to publish")
 
 	close(stopChan)
 	wg.Wait()

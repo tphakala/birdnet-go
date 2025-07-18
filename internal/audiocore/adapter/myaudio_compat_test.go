@@ -116,7 +116,7 @@ func TestCalculateAudioLevel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := adapter.calculateAudioLevel(tt.buffer)
 			if tt.expected == 0 {
-				assert.Equal(t, float32(0), result, "Expected zero audio level")
+				assert.InDelta(t, float32(0), result, 0.001, "Expected zero audio level")
 			} else {
 				assert.InDelta(t, tt.expected, result, 0.001, "Audio level calculation mismatch")
 			}
@@ -164,7 +164,7 @@ func TestSoundLevelAnalyzer(t *testing.T) {
 		band, ok := result.OctaveBands["1000"]
 		assert.True(t, ok, "Expected 1000Hz octave band to be present")
 		if ok {
-			assert.Equal(t, 60.0, band.Mean, "Expected mean 60.0 for 1000Hz band")
+			assert.InDelta(t, 60.0, band.Mean, 0.01, "Expected mean 60.0 for 1000Hz band")
 		}
 	}
 }

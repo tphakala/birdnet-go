@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -490,7 +491,7 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 		
 		// If journalctl is not available or service doesn't exist, we should get our sentinel error
 		if err != nil {
-			assert.ErrorIs(t, err, ErrJournalNotAvailable, "Expected ErrJournalNotAvailable when journal is not available")
+			require.ErrorIs(t, err, ErrJournalNotAvailable, "Expected ErrJournalNotAvailable when journal is not available")
 			assert.Nil(t, logs, "Expected nil logs when error is returned")
 		}
 		// If journalctl is available, logs might be returned or empty

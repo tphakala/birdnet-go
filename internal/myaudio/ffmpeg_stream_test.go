@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -286,7 +287,7 @@ func TestFFmpegStream_HandleAudioData(t *testing.T) {
 	}
 	
 	err := stream.handleAudioData(testData)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	
 	// Check if data was sent to audio channel
 	select {
@@ -340,7 +341,7 @@ func TestFFmpegStream_DataRateCalculation(t *testing.T) {
 
 	// Calculate rate
 	rate, err := calc.getRate()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Greater(t, rate, 0.0)
 }
 
@@ -423,7 +424,7 @@ func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
 	// Verify final state is consistent
 	health := stream.GetHealth()
 	assert.NotNil(t, health)
-	assert.Greater(t, health.TotalBytesReceived, int64(0))
+	assert.Positive(t, health.TotalBytesReceived)
 }
 
 func TestFFmpegStream_BackoffOverflowProtection(t *testing.T) {
@@ -571,7 +572,7 @@ func TestFFmpegStream_ValidateUserTimeout(t *testing.T) {
 			err := stream.validateUserTimeout(tt.timeoutStr)
 			
 			if tt.expectError {
-				assert.Error(t, err, "Expected error for timeout: %s", tt.timeoutStr)
+				require.Error(t, err, "Expected error for timeout: %s", tt.timeoutStr)
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains, "Error should contain expected text")
 				}

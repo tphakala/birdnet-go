@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestInvalidFileNameErrorMessages tests that the error messages for invalid file names are detailed
@@ -40,7 +41,7 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 
 			// Call parseFileInfo and check the error message
 			_, err := parseFileInfo("/test/"+tc.filename, mockInfo)
-			assert.Error(t, err, "Should return an error for invalid file name")
+			require.Error(t, err, "Should return an error for invalid file name")
 			assert.Contains(t, err.Error(), tc.expectedErrText, "Error message should contain expected text")
 		})
 	}
@@ -57,10 +58,10 @@ func TestGetAudioFilesContinuesOnError(t *testing.T) {
 
 	// Create the files
 	err := os.WriteFile(validFile, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
-	assert.NoError(t, err, "Should be able to create valid file")
+	require.NoError(t, err, "Should be able to create valid file")
 
 	err = os.WriteFile(invalidFile, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
-	assert.NoError(t, err, "Should be able to create invalid file")
+	require.NoError(t, err, "Should be able to create invalid file")
 
 	// Create a mock DB
 	mockDB := &MockDB{}
@@ -69,7 +70,7 @@ func TestGetAudioFilesContinuesOnError(t *testing.T) {
 	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, true)
 
 	// Should not return an error as long as at least one file is valid
-	assert.NoError(t, err, "Should not return an error when at least one file is valid")
+	require.NoError(t, err, "Should not return an error when at least one file is valid")
 	assert.Len(t, files, 1, "Should return one valid file")
 	assert.Equal(t, "bubo_bubo", files[0].Species, "Should correctly parse the valid file")
 }
@@ -95,7 +96,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	// Create all the files
 	for _, file := range append(validFiles, invalidFiles...) {
 		err := os.WriteFile(file, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
-		assert.NoError(t, err, "Should be able to create file: %s", file)
+		require.NoError(t, err, "Should be able to create file: %s", file)
 	}
 
 	// Create a mock DB
@@ -105,7 +106,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, true)
 
 	// Should not return an error as long as at least one file is valid
-	assert.NoError(t, err, "Should not return an error when at least one file is valid")
+	require.NoError(t, err, "Should not return an error when at least one file is valid")
 	assert.Len(t, files, len(validFiles), "Should return only the valid files")
 
 	// Verify that all valid files were processed correctly
@@ -124,16 +125,16 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 		baseName := filepath.Base(file)
 		newPath := filepath.Join(invalidOnlyDir, baseName)
 		err := os.WriteFile(newPath, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
-		assert.NoError(t, err, "Should be able to create file: %s", newPath)
+		require.NoError(t, err, "Should be able to create file: %s", newPath)
 	}
 
 	// Call GetAudioFiles with all invalid files
 	files, err = GetAudioFiles(invalidOnlyDir, allowedFileTypes, mockDB, true)
 
 	// Should return an error when all files are invalid
-	assert.Error(t, err, "Should return an error when all files are invalid")
+	require.Error(t, err, "Should return an error when all files are invalid")
 	assert.Contains(t, err.Error(), "diskmanager: failed to parse any audio files", "Error should indicate no valid files were found")
-	assert.Len(t, files, 0, "Should return no files when all are invalid")
+	assert.Empty(t, files, "Should return no files when all are invalid")
 }
 
 // TestGetDiskUsage tests that GetDiskUsage returns a valid disk usage percentage
@@ -145,7 +146,7 @@ func TestGetDiskUsage(t *testing.T) {
 	usage, err := GetDiskUsage(tempDir)
 
 	// Verify the return values
-	assert.NoError(t, err, "GetDiskUsage should not return an error")
+	require.NoError(t, err, "GetDiskUsage should not return an error")
 	assert.GreaterOrEqual(t, usage, 0.0, "Disk usage should be greater than or equal to 0%")
 	assert.LessOrEqual(t, usage, 100.0, "Disk usage should be less than or equal to 100%")
 }
