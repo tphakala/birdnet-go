@@ -18,8 +18,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// testGetHourlyWeatherForDayNoData tests the hourly weather endpoint with no data for a given date
-func testGetHourlyWeatherForDayNoData(t *testing.T, date string) {
+// runGetHourlyWeatherForDayNoDataTest runs the hourly weather endpoint test with no data for a given date
+func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
 	t.Helper()
 	
 	// Setup
@@ -296,7 +296,7 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 
 // TestGetHourlyWeatherForDayNoData tests the hourly weather endpoint with no data
 func TestGetHourlyWeatherForDayNoData(t *testing.T) {
-	testGetHourlyWeatherForDayNoData(t, "2023-01-01")
+	runGetHourlyWeatherForDayNoDataTest(t, "2023-01-01")
 }
 
 // TestGetHourlyWeatherForDayFutureDate tests the hourly weather endpoint with a future date
@@ -342,7 +342,7 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 
 // TestGetHourlyWeatherForDayInvalidDate tests the hourly weather endpoint with an invalid date
 func TestGetHourlyWeatherForDayInvalidDate(t *testing.T) {
-	testGetHourlyWeatherForDayNoData(t, "invalid-date")
+	runGetHourlyWeatherForDayNoDataTest(t, "invalid-date")
 }
 
 // TestGetHourlyWeatherForDatabaseError tests the hourly weather endpoint with a database error

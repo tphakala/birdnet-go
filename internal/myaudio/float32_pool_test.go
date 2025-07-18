@@ -125,7 +125,7 @@ func TestFloat32PoolConcurrency(t *testing.T) {
 	pool, err := NewFloat32Pool(bufferSize)
 	require.NoError(t, err)
 
-	testPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
+	runPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
 		func() interface{} { return pool.Get() },
 		func(buf interface{}) { pool.Put(buf.([]float32)) },
 		func(buf interface{}) {
@@ -135,7 +135,7 @@ func TestFloat32PoolConcurrency(t *testing.T) {
 			buffer[0] = float32(0)
 			buffer[len(buffer)-1] = float32(1)
 		},
-		func() interface{} { return pool.GetStats() })
+		func() PoolStatsProvider { return Float32PoolStatsAdapter{pool.GetStats()} })
 }
 
 func TestFloat32PoolMemoryReuse(t *testing.T) {

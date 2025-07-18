@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testControlEndpoint tests a control endpoint with the given parameters
-func testControlEndpoint(t *testing.T, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
+// runControlEndpointTest runs a control endpoint test with the given parameters
+func runControlEndpointTest(t *testing.T, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
 	t.Helper()
 	
 	// Setup
@@ -66,8 +66,8 @@ func testControlEndpoint(t *testing.T, method, path string, handler func(echo.Co
 	}
 }
 
-// testConcurrentControlRequests tests multiple concurrent control requests
-func testConcurrentControlRequests(t *testing.T, handler func(echo.Context) error, path, expectedSignal string) {
+// runConcurrentControlRequestsTest runs multiple concurrent control requests test
+func runConcurrentControlRequestsTest(t *testing.T, handler func(echo.Context) error, path, expectedSignal string) {
 	t.Helper()
 	
 	// Setup
@@ -118,8 +118,8 @@ func testConcurrentControlRequests(t *testing.T, handler func(echo.Context) erro
 	}
 }
 
-// testControlActionsWithBlockedChannel tests control endpoints with a blocked channel
-func testControlActionsWithBlockedChannel(t *testing.T, handler func(echo.Context) error) {
+// runControlActionsWithBlockedChannelTest runs control endpoints test with a blocked channel
+func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Context) error) {
 	t.Helper()
 	
 	// Setup
@@ -226,7 +226,7 @@ func TestRestartAnalysis(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
 	
-	testControlEndpoint(t, http.MethodPost, "/api/v2/control/restart", controller.RestartAnalysis, 
+	runControlEndpointTest(t, http.MethodPost, "/api/v2/control/restart", controller.RestartAnalysis, 
 		"Analysis restart signal sent", ActionRestartAnalysis, SignalRestartAnalysis)
 }
 
@@ -235,7 +235,7 @@ func TestReloadModel(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
 	
-	testControlEndpoint(t, http.MethodPost, "/api/v2/control/reload", controller.ReloadModel, 
+	runControlEndpointTest(t, http.MethodPost, "/api/v2/control/reload", controller.ReloadModel, 
 		"Model reload signal sent", ActionReloadModel, SignalReloadModel)
 }
 
@@ -244,7 +244,7 @@ func TestRebuildFilter(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
 	
-	testControlEndpoint(t, http.MethodPost, "/api/v2/control/rebuild-filter", controller.RebuildFilter, 
+	runControlEndpointTest(t, http.MethodPost, "/api/v2/control/rebuild-filter", controller.RebuildFilter, 
 		"Filter rebuild signal sent", ActionRebuildFilter, SignalRebuildFilter)
 }
 
@@ -472,7 +472,7 @@ func TestControlActionsWithBlockedChannel(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
 	
-	testControlActionsWithBlockedChannel(t, controller.RestartAnalysis)
+	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
 }
 
 // TestConcurrentControlRequests tests that multiple concurrent control requests
@@ -481,7 +481,7 @@ func TestConcurrentControlRequests(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
 	
-	testConcurrentControlRequests(t, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
+	runConcurrentControlRequestsTest(t, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 
 // TestControlEndpointsAuthScenarios tests various authentication scenarios for control endpoints
@@ -588,7 +588,7 @@ func TestControlActionsWithBlockedChannel_Advanced(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
 	
-	testControlActionsWithBlockedChannel(t, controller.RestartAnalysis)
+	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
 }
 
 // TestConcurrentControlRequests_Advanced tests that multiple concurrent control requests
@@ -597,7 +597,7 @@ func TestConcurrentControlRequests_Advanced(t *testing.T) {
 	// Setup  
 	_, _, controller := setupTestEnvironment(t)
 	
-	testConcurrentControlRequests(t, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
+	runConcurrentControlRequestsTest(t, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 
 // TestControlEndpointsAuthScenarios_Advanced tests various authentication scenarios for control endpoints
