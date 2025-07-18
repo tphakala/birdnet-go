@@ -15,6 +15,11 @@ import (
 	"log/slog"
 )
 
+const (
+	// slowConsumerThreshold defines the duration after which a consumer is considered slow
+	slowConsumerThreshold = 100 * time.Millisecond
+)
+
 // Package-level logger for event bus operations
 var (
 	logger      *slog.Logger
@@ -470,7 +475,9 @@ func (eb *EventBus) processEvent(
 	defer func() {
 		if r := recover(); r != nil {
 			atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-			fields := []any{"consumer", consumerName, "panic", r}
+			// Pre-allocate fields slice for better performance
+			fields := make([]any, 0, 4+len(logFields)*2)
+			fields = append(fields, "consumer", consumerName, "panic", r)
 			for k, v := range logFields {
 				fields = append(fields, k, v)
 			}
@@ -484,8 +491,10 @@ func (eb *EventBus) processEvent(
 	consumerDuration := time.Since(consumerStart)
 	
 	// Warn about slow consumers
-	if consumerDuration > 100*time.Millisecond {
-		fields := []any{"consumer", consumerName, "duration_ms", consumerDuration.Milliseconds()}
+	if consumerDuration > slowConsumerThreshold {
+		// Pre-allocate fields slice for better performance
+		fields := make([]any, 0, 6+len(logFields)*2)
+		fields = append(fields, "consumer", consumerName, "duration_ms", consumerDuration.Milliseconds())
 		for k, v := range logFields {
 			fields = append(fields, k, v)
 		}
@@ -494,7 +503,9 @@ func (eb *EventBus) processEvent(
 	
 	if err != nil {
 		atomic.AddUint64(&eb.stats.ConsumerErrors, 1)
-		fields := []any{"consumer", consumerName, "error", err}
+		// Pre-allocate fields slice for better performance
+		fields := make([]any, 0, 6+len(logFields)*2)
+		fields = append(fields, "consumer", consumerName, "error", err)
 		for k, v := range logFields {
 			fields = append(fields, k, v)
 		}

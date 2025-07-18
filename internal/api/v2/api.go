@@ -480,7 +480,8 @@ func (c *Controller) Shutdown() {
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
 	
-	// Stop the detection cache janitor by deleting all items and letting it exit
+	// TODO: The go-cache library's janitor goroutine cannot be stopped.
+	// Consider migrating to a context-aware cache implementation.
 	if c.detectionCache != nil {
 		c.detectionCache.Flush()
 	}
