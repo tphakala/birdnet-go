@@ -479,6 +479,12 @@ func (c *Controller) Shutdown() {
 	// Call shutdown methods of individual components
 	// Currently, only the system component needs cleanup
 	StopCPUMonitoring()
+	
+	// TODO: The go-cache library's janitor goroutine cannot be stopped.
+	// Consider migrating to a context-aware cache implementation.
+	if c.detectionCache != nil {
+		c.detectionCache.Flush()
+	}
 
 	// Log shutdown
 	c.Debug("API Controller shutting down, CPU monitoring stopped")

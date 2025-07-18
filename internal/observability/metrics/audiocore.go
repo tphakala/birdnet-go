@@ -53,6 +53,9 @@ type AudioCoreMetrics struct {
 	gainAdjustments     *prometheus.CounterVec
 	gainLevels          *prometheus.HistogramVec
 	gainClippingEvents  *prometheus.CounterVec
+
+	// collectors is a slice of all collectors for easier iteration
+	collectors []prometheus.Collector
 }
 
 // NewAudioCoreMetrics creates and registers new audiocore metrics
@@ -327,77 +330,56 @@ func (m *AudioCoreMetrics) initMetrics() error {
 		[]string{"processor_id", "sample_format"},
 	)
 
+	// Initialize collectors slice with all metrics
+	m.collectors = []prometheus.Collector{
+		m.activeSources,
+		m.processedFrames,
+		m.processingErrors,
+		m.processingDuration,
+		m.sourceStartTotal,
+		m.sourceStopTotal,
+		m.sourceErrors,
+		m.sourceDataRate,
+		m.sourceUptime,
+		m.sourceGainLevel,
+		m.bufferPoolSize,
+		m.bufferPoolHits,
+		m.bufferPoolMisses,
+		m.bufferPoolEvictions,
+		m.bufferAllocations,
+		m.bufferInUse,
+		m.processorExecutions,
+		m.processorDuration,
+		m.processorErrors,
+		m.processorChainLength,
+		m.audioDataBytes,
+		m.audioDataDuration,
+		m.audioDataDropped,
+		m.audioFormatChanges,
+		m.ffmpegProcesses,
+		m.ffmpegRestarts,
+		m.ffmpegHealthChecks,
+		m.ffmpegDataReceived,
+		m.gainAdjustments,
+		m.gainLevels,
+		m.gainClippingEvents,
+	}
+
 	return nil
 }
 
 // Describe implements the Collector interface
 func (m *AudioCoreMetrics) Describe(ch chan<- *prometheus.Desc) {
-	m.activeSources.Describe(ch)
-	m.processedFrames.Describe(ch)
-	m.processingErrors.Describe(ch)
-	m.processingDuration.Describe(ch)
-	m.sourceStartTotal.Describe(ch)
-	m.sourceStopTotal.Describe(ch)
-	m.sourceErrors.Describe(ch)
-	m.sourceDataRate.Describe(ch)
-	m.sourceUptime.Describe(ch)
-	m.sourceGainLevel.Describe(ch)
-	m.bufferPoolSize.Describe(ch)
-	m.bufferPoolHits.Describe(ch)
-	m.bufferPoolMisses.Describe(ch)
-	m.bufferPoolEvictions.Describe(ch)
-	m.bufferAllocations.Describe(ch)
-	m.bufferInUse.Describe(ch)
-	m.processorExecutions.Describe(ch)
-	m.processorDuration.Describe(ch)
-	m.processorErrors.Describe(ch)
-	m.processorChainLength.Describe(ch)
-	m.audioDataBytes.Describe(ch)
-	m.audioDataDuration.Describe(ch)
-	m.audioDataDropped.Describe(ch)
-	m.audioFormatChanges.Describe(ch)
-	m.ffmpegProcesses.Describe(ch)
-	m.ffmpegRestarts.Describe(ch)
-	m.ffmpegHealthChecks.Describe(ch)
-	m.ffmpegDataReceived.Describe(ch)
-	m.gainAdjustments.Describe(ch)
-	m.gainLevels.Describe(ch)
-	m.gainClippingEvents.Describe(ch)
+	for _, collector := range m.collectors {
+		collector.Describe(ch)
+	}
 }
 
 // Collect implements the Collector interface
 func (m *AudioCoreMetrics) Collect(ch chan<- prometheus.Metric) {
-	m.activeSources.Collect(ch)
-	m.processedFrames.Collect(ch)
-	m.processingErrors.Collect(ch)
-	m.processingDuration.Collect(ch)
-	m.sourceStartTotal.Collect(ch)
-	m.sourceStopTotal.Collect(ch)
-	m.sourceErrors.Collect(ch)
-	m.sourceDataRate.Collect(ch)
-	m.sourceUptime.Collect(ch)
-	m.sourceGainLevel.Collect(ch)
-	m.bufferPoolSize.Collect(ch)
-	m.bufferPoolHits.Collect(ch)
-	m.bufferPoolMisses.Collect(ch)
-	m.bufferPoolEvictions.Collect(ch)
-	m.bufferAllocations.Collect(ch)
-	m.bufferInUse.Collect(ch)
-	m.processorExecutions.Collect(ch)
-	m.processorDuration.Collect(ch)
-	m.processorErrors.Collect(ch)
-	m.processorChainLength.Collect(ch)
-	m.audioDataBytes.Collect(ch)
-	m.audioDataDuration.Collect(ch)
-	m.audioDataDropped.Collect(ch)
-	m.audioFormatChanges.Collect(ch)
-	m.ffmpegProcesses.Collect(ch)
-	m.ffmpegRestarts.Collect(ch)
-	m.ffmpegHealthChecks.Collect(ch)
-	m.ffmpegDataReceived.Collect(ch)
-	m.gainAdjustments.Collect(ch)
-	m.gainLevels.Collect(ch)
-	m.gainClippingEvents.Collect(ch)
+	for _, collector := range m.collectors {
+		collector.Collect(ch)
+	}
 }
 
 // Manager metrics recording methods
