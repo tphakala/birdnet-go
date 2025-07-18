@@ -152,6 +152,10 @@
             // Show initial status
             this.updateStatus('Preparing support dump...', 'info', 10);
             
+            // Create an AbortController for timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+            
             fetch('/api/v2/support/generate', {
                 method: 'POST',
                 headers: {
@@ -159,6 +163,7 @@
                     'X-CSRF-Token': CSRF_TOKEN
                 },
                 credentials: 'same-origin',
+                signal: controller.signal,
                 body: JSON.stringify({
                     include_logs: this.supportDump.includeLogs,
                     include_config: this.supportDump.includeConfig,
@@ -168,8 +173,14 @@
                 })
             })
             .then(response => {
+                clearTimeout(timeoutId);
                 if (!response.ok) {
-                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    // Try to get error details from response
+                    return response.json().then(err => {
+                        throw new Error(err.error || `Server error: ${response.status} ${response.statusText}`);
+                    }).catch(() => {
+                        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    });
                 }
                 return response.json();
             })
@@ -203,8 +214,14 @@
                 }
             })
             .catch(error => {
+                clearTimeout(timeoutId);
                 this.generating = false;
-                this.updateStatus('Error: ' + error.message, 'error', 0);
+                if (error.name === 'AbortError') {
+                    this.updateStatus('Request timed out. Support dumps with many logs may take longer - please try again with fewer logs selected.', 'error', 0);
+                } else {
+                    this.updateStatus('Error: ' + error.message, 'error', 0);
+                }
+                console.error('Support dump generation error:', error);
             });
         },
         updateStatus(message, type, percent) {
@@ -335,8 +352,8 @@
                         </label>
                     </div>
 
-                    <!-- Upload Option (only shown if telemetry is enabled) -->
-                    <div x-show="{{.Settings.Sentry.Enabled}}" class="mt-4">
+                    <!-- Upload Option (always available) -->
+                    <div class="mt-4">
                         {{template "checkbox" dict
                             "id" "uploadToSentry"
                             "model" "supportDump.uploadToSentry"
@@ -364,11 +381,19 @@
                                     Privacy-compliant with sensitive data removed
                                 </p>
                             </div>
-                            <div class="text-xs text-warning/80 flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Uncheck only if you prefer to handle the support file manually
+                            <div class="text-xs text-base-content/60 space-y-1">
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Support uploads work independently of error tracking settings
+                                </p>
+                                <p class="flex items-start gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mt-0.5 flex-shrink-0 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Uncheck only if you prefer to handle the support file manually
+                                </p>
                             </div>
                         </div>
                     </div>

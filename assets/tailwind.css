@@ -6985,10 +6985,6 @@ html:has(.drawer-toggle:checked) {
   color: var(--fallback-wa,oklch(var(--wa)/var(--tw-text-opacity, 1)));
 }
 
-.text-warning\/80 {
-  color: var(--fallback-wa,oklch(var(--wa)/0.8));
-}
-
 .text-white {
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
