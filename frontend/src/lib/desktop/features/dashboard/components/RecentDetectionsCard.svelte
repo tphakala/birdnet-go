@@ -182,31 +182,10 @@
                     detectionId={detection.id.toString()}
                     width={140}
                     height={50}
-                    showSpectrogram={false}
+                    showSpectrogram={true}
                     className="flex-1 max-w-[140px]"
                     controlsClassName="bg-base-100 border border-base-300 text-xs p-1"
                   />
-                  <button
-                    class="btn btn-xs btn-ghost"
-                    onclick={e => showExpandedAudioPlayer(detection, e)}
-                    title="View spectrogram"
-                    aria-label="View spectrogram"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                  </button>
                 </div>
               </div>
             </div>
@@ -221,77 +200,7 @@
   </div>
 </section>
 
-<!-- Expanded Audio Player Modal -->
-{#if showExpandedPlayer && expandedDetection}
-  <div class="modal modal-open">
-    <div class="modal-box w-11/12 max-w-2xl">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="font-bold text-lg">Audio Recording</h3>
-        <button
-          class="btn btn-sm btn-circle btn-ghost"
-          onclick={closeExpandedPlayer}
-          aria-label="Close audio player modal"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
-      </div>
 
-      <!-- Detection Info -->
-      <div class="mb-4 p-3 bg-base-200 rounded">
-        <div class="flex items-center gap-3">
-          <img
-            src="/api/v2/species/{expandedDetection.speciesCode}/thumbnail"
-            alt={expandedDetection.commonName}
-            class="w-12 h-12 rounded object-cover"
-            onerror={handleImageError}
-          />
-          <div>
-            <div class="font-medium">{expandedDetection.commonName}</div>
-            <div class="text-sm text-base-content/60">{expandedDetection.scientificName}</div>
-            <div class="text-xs text-base-content/50">
-              {expandedDetection.date} at {expandedDetection.time}
-            </div>
-          </div>
-          <div class="ml-auto">
-            <ConfidenceCircle confidence={expandedDetection.confidence} />
-          </div>
-        </div>
-      </div>
-
-      <!-- Full Audio Player with Spectrogram -->
-      <AudioPlayer
-        audioUrl="/api/v2/audio/{expandedDetection.id}"
-        detectionId={expandedDetection.id.toString()}
-        width={400}
-        height={200}
-        showSpectrogram={true}
-        showDownload={true}
-        className="w-full"
-      />
-    </div>
-    <div
-      class="modal-backdrop"
-      role="button"
-      tabindex="0"
-      onclick={closeExpandedPlayer}
-      onkeydown={e => (e.key === 'Escape' ? closeExpandedPlayer() : null)}
-      aria-label="Close modal"
-    ></div>
-  </div>
-{/if}
 
 <style>
   /* Status Badge Styles */
@@ -392,7 +301,6 @@
     font-weight: 600;
     line-height: 1;
   }
-
 
   /* Thumbnail Container */
   .thumbnail-container {
