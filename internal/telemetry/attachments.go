@@ -77,8 +77,8 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 		"scrubbed_message", scrubbedMessage)
 
 	if !au.enabled {
-		logTelemetryWarn(nil, "telemetry: upload blocked - telemetry not enabled")
-		err := errors.Newf("telemetry is not enabled - cannot upload support dump").
+		logTelemetryWarn(nil, "telemetry: upload blocked - uploader not enabled")
+		err := errors.Newf("attachment uploader is not enabled").
 			Component("telemetry").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "upload_support_dump")

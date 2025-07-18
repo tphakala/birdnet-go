@@ -503,3 +503,59 @@ func GetAttachmentUploader() *AttachmentUploader {
 
 	return attachmentUploader
 }
+
+// InitMinimalSentryForSupport initializes a minimal Sentry client just for support uploads
+// This allows support bundle uploads without enabling full telemetry
+func InitMinimalSentryForSupport(systemID, version string) error {
+	deferredMutex.Lock()
+	defer deferredMutex.Unlock()
+
+	// If already initialized (either minimal or full), return
+	if sentryInitialized {
+		return nil
+	}
+
+	// Use the same DSN as full initialization
+	const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
+
+	// Initialize with minimal configuration
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn:              sentryDSN,
+		SampleRate:       0, // Don't capture any errors automatically
+		TracesSampleRate: 0, // No performance monitoring
+		Debug:            false,
+		AttachStacktrace: false,
+		Environment:      "production",
+		ServerName:       "", // No server identification
+		Release:          fmt.Sprintf("birdnet-go@%s", version),
+		// Only allow support dump events
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			// Only allow events tagged as support dumps
+			if event.Tags == nil || event.Tags["type"] != "support_dump" {
+				return nil // Drop all non-support events
+			}
+			// Apply privacy filters
+			event.Message = privacy.ScrubMessage(event.Message)
+			event.User = sentry.User{ID: systemID} // Only include system ID
+			event.ServerName = ""
+			event.Modules = nil
+			event.Request = nil
+			return event
+		},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize minimal Sentry: %w", err)
+	}
+
+	// Mark as initialized but with limited functionality
+	sentryInitialized = true
+	
+	// Create an enabled attachment uploader
+	attachmentUploader = NewAttachmentUploader(true)
+
+	logTelemetryInfo(nil, "telemetry: minimal Sentry initialized for support uploads only",
+		"system_id", systemID)
+
+	return nil
+}
