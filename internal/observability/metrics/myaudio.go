@@ -75,6 +75,9 @@ type MyAudioMetrics struct {
 	audioSampleCountTotal   *prometheus.CounterVec
 	birdnetResultsTotal     *prometheus.CounterVec
 	audioQueueOperations    *prometheus.CounterVec
+
+	// collectors is a slice of all collectors for easier iteration
+	collectors []prometheus.Collector
 }
 
 // NewMyAudioMetrics creates and registers new myaudio metrics
@@ -471,105 +474,70 @@ func (m *MyAudioMetrics) initMetrics() error {
 		[]string{"source", "operation", "status"}, // operation: enqueue, dequeue
 	)
 
+	// Initialize collectors slice with all metrics
+	m.collectors = []prometheus.Collector{
+		m.bufferAllocationsTotal,
+		m.bufferAllocationDuration,
+		m.bufferAllocationErrors,
+		m.bufferAllocationAttempts,
+		m.bufferAllocationSizes,
+		m.bufferCapacityGauge,
+		m.bufferUtilizationGauge,
+		m.bufferSizeGauge,
+		m.bufferWritesTotal,
+		m.bufferWriteDuration,
+		m.bufferWriteErrors,
+		m.bufferWriteRetries,
+		m.bufferWriteBytesTotal,
+		m.bufferReadsTotal,
+		m.bufferReadDuration,
+		m.bufferReadErrors,
+		m.bufferReadBytesTotal,
+		m.bufferOverflowsTotal,
+		m.bufferUnderrunsTotal,
+		m.bufferWraparoundsTotal,
+		m.analysisBufferProcessingDuration,
+		m.analysisBufferPollTotal,
+		m.analysisBufferDataDropsTotal,
+		m.captureBufferSegmentReadsTotal,
+		m.captureBufferSegmentReadDuration,
+		m.captureBufferTimestampErrorsTotal,
+		m.audioDataValidationErrors,
+		m.audioSilenceDetections,
+		m.audioDataCorruptionTotal,
+		m.fileOperationsTotal,
+		m.fileOperationDuration,
+		m.fileOperationErrors,
+		m.fileSizesTotal,
+		m.audioFileInfoGauge,
+		m.audioProcessingTotal,
+		m.audioProcessingDuration,
+		m.audioProcessingErrors,
+		m.audioConversionsTotal,
+		m.audioConversionDuration,
+		m.audioConversionErrors,
+		m.audioInferenceDuration,
+		m.audioDataSizeTotal,
+		m.audioSampleCountTotal,
+		m.birdnetResultsTotal,
+		m.audioQueueOperations,
+	}
+
 	return nil
 }
 
 // Describe implements the Collector interface
 func (m *MyAudioMetrics) Describe(ch chan<- *prometheus.Desc) {
-	m.bufferAllocationsTotal.Describe(ch)
-	m.bufferAllocationDuration.Describe(ch)
-	m.bufferAllocationErrors.Describe(ch)
-	m.bufferAllocationAttempts.Describe(ch)
-	m.bufferAllocationSizes.Describe(ch)
-	m.bufferCapacityGauge.Describe(ch)
-	m.bufferUtilizationGauge.Describe(ch)
-	m.bufferSizeGauge.Describe(ch)
-	m.bufferWritesTotal.Describe(ch)
-	m.bufferWriteDuration.Describe(ch)
-	m.bufferWriteErrors.Describe(ch)
-	m.bufferWriteRetries.Describe(ch)
-	m.bufferWriteBytesTotal.Describe(ch)
-	m.bufferReadsTotal.Describe(ch)
-	m.bufferReadDuration.Describe(ch)
-	m.bufferReadErrors.Describe(ch)
-	m.bufferReadBytesTotal.Describe(ch)
-	m.bufferOverflowsTotal.Describe(ch)
-	m.bufferUnderrunsTotal.Describe(ch)
-	m.bufferWraparoundsTotal.Describe(ch)
-	m.analysisBufferProcessingDuration.Describe(ch)
-	m.analysisBufferPollTotal.Describe(ch)
-	m.analysisBufferDataDropsTotal.Describe(ch)
-	m.captureBufferSegmentReadsTotal.Describe(ch)
-	m.captureBufferSegmentReadDuration.Describe(ch)
-	m.captureBufferTimestampErrorsTotal.Describe(ch)
-	m.audioDataValidationErrors.Describe(ch)
-	m.audioSilenceDetections.Describe(ch)
-	m.audioDataCorruptionTotal.Describe(ch)
-	m.fileOperationsTotal.Describe(ch)
-	m.fileOperationDuration.Describe(ch)
-	m.fileOperationErrors.Describe(ch)
-	m.fileSizesTotal.Describe(ch)
-	m.audioFileInfoGauge.Describe(ch)
-	m.audioProcessingTotal.Describe(ch)
-	m.audioProcessingDuration.Describe(ch)
-	m.audioProcessingErrors.Describe(ch)
-	m.audioConversionsTotal.Describe(ch)
-	m.audioConversionDuration.Describe(ch)
-	m.audioConversionErrors.Describe(ch)
-	m.audioInferenceDuration.Describe(ch)
-	m.audioDataSizeTotal.Describe(ch)
-	m.audioSampleCountTotal.Describe(ch)
-	m.birdnetResultsTotal.Describe(ch)
-	m.audioQueueOperations.Describe(ch)
+	for _, collector := range m.collectors {
+		collector.Describe(ch)
+	}
 }
 
 // Collect implements the Collector interface
 func (m *MyAudioMetrics) Collect(ch chan<- prometheus.Metric) {
-	m.bufferAllocationsTotal.Collect(ch)
-	m.bufferAllocationDuration.Collect(ch)
-	m.bufferAllocationErrors.Collect(ch)
-	m.bufferAllocationAttempts.Collect(ch)
-	m.bufferAllocationSizes.Collect(ch)
-	m.bufferCapacityGauge.Collect(ch)
-	m.bufferUtilizationGauge.Collect(ch)
-	m.bufferSizeGauge.Collect(ch)
-	m.bufferWritesTotal.Collect(ch)
-	m.bufferWriteDuration.Collect(ch)
-	m.bufferWriteErrors.Collect(ch)
-	m.bufferWriteRetries.Collect(ch)
-	m.bufferWriteBytesTotal.Collect(ch)
-	m.bufferReadsTotal.Collect(ch)
-	m.bufferReadDuration.Collect(ch)
-	m.bufferReadErrors.Collect(ch)
-	m.bufferReadBytesTotal.Collect(ch)
-	m.bufferOverflowsTotal.Collect(ch)
-	m.bufferUnderrunsTotal.Collect(ch)
-	m.bufferWraparoundsTotal.Collect(ch)
-	m.analysisBufferProcessingDuration.Collect(ch)
-	m.analysisBufferPollTotal.Collect(ch)
-	m.analysisBufferDataDropsTotal.Collect(ch)
-	m.captureBufferSegmentReadsTotal.Collect(ch)
-	m.captureBufferSegmentReadDuration.Collect(ch)
-	m.captureBufferTimestampErrorsTotal.Collect(ch)
-	m.audioDataValidationErrors.Collect(ch)
-	m.audioSilenceDetections.Collect(ch)
-	m.audioDataCorruptionTotal.Collect(ch)
-	m.fileOperationsTotal.Collect(ch)
-	m.fileOperationDuration.Collect(ch)
-	m.fileOperationErrors.Collect(ch)
-	m.fileSizesTotal.Collect(ch)
-	m.audioFileInfoGauge.Collect(ch)
-	m.audioProcessingTotal.Collect(ch)
-	m.audioProcessingDuration.Collect(ch)
-	m.audioProcessingErrors.Collect(ch)
-	m.audioConversionsTotal.Collect(ch)
-	m.audioConversionDuration.Collect(ch)
-	m.audioConversionErrors.Collect(ch)
-	m.audioInferenceDuration.Collect(ch)
-	m.audioDataSizeTotal.Collect(ch)
-	m.audioSampleCountTotal.Collect(ch)
-	m.birdnetResultsTotal.Collect(ch)
-	m.audioQueueOperations.Collect(ch)
+	for _, collector := range m.collectors {
+		collector.Collect(ch)
+	}
 }
 
 // Buffer allocation recording methods

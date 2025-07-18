@@ -73,6 +73,9 @@ type DatastoreMetrics struct {
 	backupOperationsTotal      *prometheus.CounterVec
 	backupDuration             *prometheus.HistogramVec
 	maintenanceOperationsTotal *prometheus.CounterVec
+
+	// collectors is a slice of all collectors for easier iteration
+	collectors []prometheus.Collector
 }
 
 // NewDatastoreMetrics creates and registers new datastore metrics
@@ -397,93 +400,64 @@ func (m *DatastoreMetrics) initMetrics() error {
 		[]string{"operation", "status"},
 	)
 
+	// Initialize collectors slice with all metrics
+	m.collectors = []prometheus.Collector{
+		m.dbOperationsTotal,
+		m.dbOperationDuration,
+		m.dbOperationErrorsTotal,
+		m.dbTransactionsTotal,
+		m.dbTransactionDuration,
+		m.dbTransactionRetriesTotal,
+		m.dbTransactionErrorsTotal,
+		m.dbConnectionsActiveGauge,
+		m.dbConnectionsIdleGauge,
+		m.dbConnectionsMaxGauge,
+		m.dbQueryResultSizeHist,
+		m.noteOperationsTotal,
+		m.noteOperationDuration,
+		m.noteLockOperationsTotal,
+		m.noteLockDuration,
+		m.searchOperationsTotal,
+		m.searchOperationDuration,
+		m.searchResultSizeHist,
+		m.searchFilterComplexity,
+		m.analyticsOperationsTotal,
+		m.analyticsOperationDuration,
+		m.analyticsQueryComplexity,
+		m.cacheOperationsTotal,
+		m.cacheSizeGauge,
+		m.cacheHitRatio,
+		m.weatherDataOperationsTotal,
+		m.weatherDataDuration,
+		m.imageCacheOperationsTotal,
+		m.imageCacheDuration,
+		m.imageCacheSizeGauge,
+		m.dbSizeBytesGauge,
+		m.dbTableRowCountGauge,
+		m.dbIndexSizeBytesGauge,
+		m.lockContentionTotal,
+		m.lockWaitTimeHistogram,
+		m.activeLockCountGauge,
+		m.backupOperationsTotal,
+		m.backupDuration,
+		m.maintenanceOperationsTotal,
+	}
+
 	return nil
 }
 
 // Describe implements the Collector interface
 func (m *DatastoreMetrics) Describe(ch chan<- *prometheus.Desc) {
-	m.dbOperationsTotal.Describe(ch)
-	m.dbOperationDuration.Describe(ch)
-	m.dbOperationErrorsTotal.Describe(ch)
-	m.dbTransactionsTotal.Describe(ch)
-	m.dbTransactionDuration.Describe(ch)
-	m.dbTransactionRetriesTotal.Describe(ch)
-	m.dbTransactionErrorsTotal.Describe(ch)
-	m.dbConnectionsActiveGauge.Describe(ch)
-	m.dbConnectionsIdleGauge.Describe(ch)
-	m.dbConnectionsMaxGauge.Describe(ch)
-	m.dbQueryResultSizeHist.Describe(ch)
-	m.noteOperationsTotal.Describe(ch)
-	m.noteOperationDuration.Describe(ch)
-	m.noteLockOperationsTotal.Describe(ch)
-	m.noteLockDuration.Describe(ch)
-	m.searchOperationsTotal.Describe(ch)
-	m.searchOperationDuration.Describe(ch)
-	m.searchResultSizeHist.Describe(ch)
-	m.searchFilterComplexity.Describe(ch)
-	m.analyticsOperationsTotal.Describe(ch)
-	m.analyticsOperationDuration.Describe(ch)
-	m.analyticsQueryComplexity.Describe(ch)
-	m.cacheOperationsTotal.Describe(ch)
-	m.cacheSizeGauge.Describe(ch)
-	m.cacheHitRatio.Describe(ch)
-	m.weatherDataOperationsTotal.Describe(ch)
-	m.weatherDataDuration.Describe(ch)
-	m.imageCacheOperationsTotal.Describe(ch)
-	m.imageCacheDuration.Describe(ch)
-	m.imageCacheSizeGauge.Describe(ch)
-	m.dbSizeBytesGauge.Describe(ch)
-	m.dbTableRowCountGauge.Describe(ch)
-	m.dbIndexSizeBytesGauge.Describe(ch)
-	m.lockContentionTotal.Describe(ch)
-	m.lockWaitTimeHistogram.Describe(ch)
-	m.activeLockCountGauge.Describe(ch)
-	m.backupOperationsTotal.Describe(ch)
-	m.backupDuration.Describe(ch)
-	m.maintenanceOperationsTotal.Describe(ch)
+	for _, collector := range m.collectors {
+		collector.Describe(ch)
+	}
 }
 
 // Collect implements the Collector interface
 func (m *DatastoreMetrics) Collect(ch chan<- prometheus.Metric) {
-	m.dbOperationsTotal.Collect(ch)
-	m.dbOperationDuration.Collect(ch)
-	m.dbOperationErrorsTotal.Collect(ch)
-	m.dbTransactionsTotal.Collect(ch)
-	m.dbTransactionDuration.Collect(ch)
-	m.dbTransactionRetriesTotal.Collect(ch)
-	m.dbTransactionErrorsTotal.Collect(ch)
-	m.dbConnectionsActiveGauge.Collect(ch)
-	m.dbConnectionsIdleGauge.Collect(ch)
-	m.dbConnectionsMaxGauge.Collect(ch)
-	m.dbQueryResultSizeHist.Collect(ch)
-	m.noteOperationsTotal.Collect(ch)
-	m.noteOperationDuration.Collect(ch)
-	m.noteLockOperationsTotal.Collect(ch)
-	m.noteLockDuration.Collect(ch)
-	m.searchOperationsTotal.Collect(ch)
-	m.searchOperationDuration.Collect(ch)
-	m.searchResultSizeHist.Collect(ch)
-	m.searchFilterComplexity.Collect(ch)
-	m.analyticsOperationsTotal.Collect(ch)
-	m.analyticsOperationDuration.Collect(ch)
-	m.analyticsQueryComplexity.Collect(ch)
-	m.cacheOperationsTotal.Collect(ch)
-	m.cacheSizeGauge.Collect(ch)
-	m.cacheHitRatio.Collect(ch)
-	m.weatherDataOperationsTotal.Collect(ch)
-	m.weatherDataDuration.Collect(ch)
-	m.imageCacheOperationsTotal.Collect(ch)
-	m.imageCacheDuration.Collect(ch)
-	m.imageCacheSizeGauge.Collect(ch)
-	m.dbSizeBytesGauge.Collect(ch)
-	m.dbTableRowCountGauge.Collect(ch)
-	m.dbIndexSizeBytesGauge.Collect(ch)
-	m.lockContentionTotal.Collect(ch)
-	m.lockWaitTimeHistogram.Collect(ch)
-	m.activeLockCountGauge.Collect(ch)
-	m.backupOperationsTotal.Collect(ch)
-	m.backupDuration.Collect(ch)
-	m.maintenanceOperationsTotal.Collect(ch)
+	for _, collector := range m.collectors {
+		collector.Collect(ch)
+	}
 }
 
 // Database operation recording methods
