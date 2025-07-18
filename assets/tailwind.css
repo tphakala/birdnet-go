@@ -6409,10 +6409,6 @@ html:has(.drawer-open.drawer-open) {
   width: 2.5rem;
 }
 
-.w-11\/12 {
-  width: 91.666667%;
-}
-
 .w-12 {
   width: 3rem;
 }
@@ -6543,10 +6539,6 @@ html:has(.drawer-open.drawer-open) {
 
 .min-w-\[50px\] {
   min-width: 50px;
-}
-
-.max-w-2xl {
-  max-width: 42rem;
 }
 
 .max-w-3xl {
@@ -8136,10 +8128,6 @@ html {
 .hover\:text-primary:hover {
   --tw-text-opacity: 1;
   color: var(--fallback-p,oklch(var(--p)/var(--tw-text-opacity, 1)));
-}
-
-.hover\:opacity-100:hover {
-  opacity: 1;
 }
 
 .hover\:shadow-md:hover {
