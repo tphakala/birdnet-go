@@ -33,12 +33,12 @@ func TestCaptureBufferSingleAllocation(t *testing.T) {
 
 			// Second allocation should fail
 			err = AllocateCaptureBuffer(tc.duration, tc.sampleRate, tc.bytesPerSample, tc.source)
-			assert.Error(t, err, "Second allocation should fail")
+			require.Error(t, err, "Second allocation should fail")
 			assert.Contains(t, err.Error(), "already exists")
 
 			// Using AllocateCaptureBufferIfNeeded should succeed without error
 			err = AllocateCaptureBufferIfNeeded(tc.duration, tc.sampleRate, tc.bytesPerSample, tc.source)
-			assert.NoError(t, err, "AllocateCaptureBufferIfNeeded should not error on existing buffer")
+			require.NoError(t, err, "AllocateCaptureBufferIfNeeded should not error on existing buffer")
 
 			// Clean up
 			err = RemoveCaptureBuffer(tc.source)
@@ -168,13 +168,13 @@ func TestBufferLifecycleWithErrors(t *testing.T) {
 			err := AllocateCaptureBuffer(tc.duration, tc.sampleRate, tc.bytesPerSample, tc.source)
 
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.errorContains)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				// Clean up successful allocation
 				err = RemoveCaptureBuffer(tc.source)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -188,7 +188,7 @@ func TestInitCaptureBuffers(t *testing.T) {
 
 	// First initialization should succeed
 	err := InitCaptureBuffers(60, 48000, 2, sources)
-	assert.NoError(t, err, "Initial buffer initialization should succeed")
+	require.NoError(t, err, "Initial buffer initialization should succeed")
 
 	// Verify all buffers were created
 	for _, source := range sources {
@@ -197,7 +197,7 @@ func TestInitCaptureBuffers(t *testing.T) {
 
 	// Second initialization should also succeed (using AllocateCaptureBufferIfNeeded internally)
 	err = InitCaptureBuffers(60, 48000, 2, sources)
-	assert.NoError(t, err, "Repeated initialization should not error")
+	require.NoError(t, err, "Repeated initialization should not error")
 
 	// Verify buffers still exist
 	for _, source := range sources {

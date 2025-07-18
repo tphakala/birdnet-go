@@ -62,19 +62,19 @@ func TestManagerCreateAndStart(t *testing.T) {
 	// Add a mock source
 	source := newMockSource("test-source", "Test Source")
 	err := manager.AddSource(source)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Start the manager
 	ctx := context.Background()
 	err = manager.Start(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify source is active
 	assert.True(t, source.IsActive())
 
 	// Stop the manager
 	err = manager.Stop()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify source is stopped
 	assert.False(t, source.IsActive())
@@ -91,12 +91,12 @@ func TestManagerAddDuplicateSource(t *testing.T) {
 	// Add first source
 	source1 := newMockSource("duplicate-id", "Source 1")
 	err := manager.AddSource(source1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Try to add duplicate
 	source2 := newMockSource("duplicate-id", "Source 2")
 	err = manager.AddSource(source2)
-	assert.Error(t, err)
+	require.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "already exists")
 	}
@@ -114,13 +114,13 @@ func TestManagerMaxSources(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		source := newMockSource("source-"+strconv.Itoa(i), "Source")
 		err := manager.AddSource(source)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	// Try to exceed limit
 	source := newMockSource("extra-source", "Extra Source")
 	err := manager.AddSource(source)
-	assert.Error(t, err)
+	require.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "max sources reached")
 	}
@@ -137,15 +137,15 @@ func TestManagerRemoveSource(t *testing.T) {
 	// Add a source
 	source := newMockSource("remove-test", "Test Source")
 	err := manager.AddSource(source)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Remove it
 	err = manager.RemoveSource("remove-test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Try to remove non-existent
 	err = manager.RemoveSource("remove-test")
-	assert.Error(t, err)
+	require.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "not found")
 	}
@@ -162,7 +162,7 @@ func TestManagerGetSource(t *testing.T) {
 	// Add a source
 	source := newMockSource("get-test", "Test Source")
 	err := manager.AddSource(source)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Get existing source
 	retrieved, exists := manager.GetSource("get-test")
@@ -185,16 +185,16 @@ func TestManagerProcessorChain(t *testing.T) {
 	// Add a source
 	source := newMockSource("chain-test", "Test Source")
 	err := manager.AddSource(source)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Set processor chain
 	chain := NewProcessorChain()
 	err = manager.SetProcessorChain("chain-test", chain)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Try to set chain for non-existent source
 	err = manager.SetProcessorChain("non-existent", chain)
-	assert.Error(t, err)
+	require.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "not found")
 	}
@@ -212,12 +212,12 @@ func TestManagerStartupErrors(t *testing.T) {
 	source := newMockSource("fail-source", "Failing Source")
 	source.startErr = assert.AnError
 	err := manager.AddSource(source)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Start should fail
 	ctx := context.Background()
 	err = manager.Start(ctx)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestManagerAlreadyStarted(t *testing.T) {
@@ -231,18 +231,18 @@ func TestManagerAlreadyStarted(t *testing.T) {
 	// Start manager
 	ctx := context.Background()
 	err := manager.Start(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Try to start again
 	err = manager.Start(ctx)
-	assert.Error(t, err)
+	require.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "already started")
 	}
 
 	// Clean up
 	err = manager.Stop()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestManagerNotStarted(t *testing.T) {
@@ -255,7 +255,7 @@ func TestManagerNotStarted(t *testing.T) {
 
 	// Try to stop without starting
 	err := manager.Stop()
-	assert.Error(t, err)
+	require.Error(t, err)
 	if err != nil {
 		assert.Contains(t, err.Error(), "not started")
 	}
@@ -273,12 +273,12 @@ func TestManagerAudioOutput(t *testing.T) {
 	// Add a source
 	source := newMockSource("output-test", "Test Source")
 	err := manager.AddSource(source)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Start manager
 	ctx := context.Background()
 	err = manager.Start(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Send some audio data
 	testData := AudioData{
@@ -330,5 +330,5 @@ func TestManagerAudioOutput(t *testing.T) {
 
 	// Clean up
 	err = manager.Stop()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

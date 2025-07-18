@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -68,8 +69,8 @@ func TestTokenPersistence(t *testing.T) {
 	}
 
 	// Verify only valid tokens were loaded
-	assert.NoError(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
-	assert.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
+	require.NoError(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
+	require.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
 
 	// Check token file contents directly
 	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json"))
@@ -120,8 +121,8 @@ func TestFilesystemStore(t *testing.T) {
 	assert.NotNil(t, store.Options, "Store options should not be nil")
 	assert.Equal(t, "/", store.Options.Path, "Path should be /")
 	assert.Equal(t, 86400*7, store.Options.MaxAge, "MaxAge should be 7 days")
-	assert.Equal(t, false, store.Options.Secure, "Secure should match RedirectToHTTPS")
-	assert.Equal(t, true, store.Options.HttpOnly, "HttpOnly should be true")
+	assert.False(t, store.Options.Secure, "Secure should match RedirectToHTTPS")
+	assert.True(t, store.Options.HttpOnly, "HttpOnly should be true")
 
 	// Verify the sessions directory was created with correct permissions
 	sessionsDir := filepath.Join(tempDir, "sessions")
@@ -151,7 +152,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 
 	cookieStore, ok := gothic.Store.(*sessions.CookieStore)
 	assert.True(t, ok, "Gothic store should be a CookieStore")
-	assert.Equal(t, false, cookieStore.Options.Secure, "Secure should be false for local network")
+	assert.False(t, cookieStore.Options.Secure, "Secure should be false for local network")
 
 	// Test with FilesystemStore
 	tempDir := t.TempDir()
@@ -161,7 +162,7 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 
 	fileStore, ok := gothic.Store.(*sessions.FilesystemStore)
 	assert.True(t, ok, "Gothic store should be a FilesystemStore")
-	assert.Equal(t, false, fileStore.Options.Secure, "Secure should be false for local network")
+	assert.False(t, fileStore.Options.Secure, "Secure should be false for local network")
 }
 
 // TestConfigureLocalNetworkWithUnknownStore tests handling of unknown store types
@@ -281,7 +282,7 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 
 	// Should handle error gracefully
 	err := server.loadTokens(ctx)
-	assert.Error(t, err, "Loading corrupted file should return error")
+	require.Error(t, err, "Loading corrupted file should return error")
 	// Check for a more specific part of the error
 	assert.Contains(t, err.Error(), "failed to unmarshal token data", "Error message should indicate unmarshal failure")
 }
@@ -326,7 +327,7 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 
 	// Should handle error gracefully
 	err := server.saveTokens(ctx)
-	assert.Error(t, err, "Saving tokens to unwritable directory should return error")
+	require.Error(t, err, "Saving tokens to unwritable directory should return error")
 	// Check for a more specific part of the error related to file writing/renaming
 	assert.Contains(t, err.Error(), "failed to write tokens to temp file", "Error message should indicate temp file write failure or rename failure")
 }
@@ -355,11 +356,11 @@ func TestAtomicTokenSaving(t *testing.T) {
 
 	// Save tokens
 	err := server.saveTokens(ctx)
-	assert.NoError(t, err, "Should save tokens without errors")
+	require.NoError(t, err, "Should save tokens without errors")
 
 	// Verify the main file exists
 	_, err = os.Stat(tokensFile)
-	assert.NoError(t, err, "Token file should exist")
+	require.NoError(t, err, "Token file should exist")
 
 	// Verify the temp file does not exist (should be cleaned up)
 	_, err = os.Stat(tokensFile + ".tmp")
@@ -374,10 +375,10 @@ func TestAtomicTokenSaving(t *testing.T) {
 	var storedData StoredTokenData
 
 	data, err := os.ReadFile(tokensFile)
-	assert.NoError(t, err, "Should be able to read token file")
+	require.NoError(t, err, "Should be able to read token file")
 
 	err = json.Unmarshal(data, &storedData)
-	assert.NoError(t, err, "Token file should contain valid JSON matching StoredTokenData struct")
+	require.NoError(t, err, "Token file should contain valid JSON matching StoredTokenData struct")
 	assert.NotNil(t, storedData.AccessTokens, "AccessTokens map should not be nil")
 	_, ok := storedData.AccessTokens["test_token"]
 	assert.True(t, ok, "Tokens file should contain the test_token in the access_tokens map")

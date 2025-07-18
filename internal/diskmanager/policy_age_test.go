@@ -322,7 +322,7 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 		result := runTest(true)
 
 		// Verify return values (same checks as before)
-		assert.NoError(t, result.Err, "[KeepTrue] AgeBasedCleanup should not return an error")
+		require.NoError(t, result.Err, "[KeepTrue] AgeBasedCleanup should not return an error")
 		assert.Equal(t, 2, result.ClipsRemoved, "[KeepTrue] AgeBasedCleanup should remove 2 audio clips")
 		expectedDiskUtilization := 90 - (2 * 5)
 		assert.Equal(t, expectedDiskUtilization, result.DiskUtilization, "[KeepTrue] Incorrect disk utilization")
@@ -343,7 +343,7 @@ func TestAgeBasedCleanupReturnValues(t *testing.T) {
 		result := runTest(false)
 
 		// Verify return values (should be the same as KeepTrue)
-		assert.NoError(t, result.Err, "[KeepFalse] AgeBasedCleanup should not return an error")
+		require.NoError(t, result.Err, "[KeepFalse] AgeBasedCleanup should not return an error")
 		assert.Equal(t, 2, result.ClipsRemoved, "[KeepFalse] AgeBasedCleanup should remove 2 audio clips")
 		expectedDiskUtilization := 90 - (2 * 5)
 		assert.Equal(t, expectedDiskUtilization, result.DiskUtilization, "[KeepFalse] Incorrect disk utilization")
@@ -419,7 +419,7 @@ func TestAgeBasedCleanupMinClipsGlobal(t *testing.T) {
 	)
 
 	// --- Assertions --- Expected 2 deletions total (the 2 oldest bubo_bubo)
-	assert.NoError(t, result.Err, "Cleanup should not return an error")
+	require.NoError(t, result.Err, "Cleanup should not return an error")
 	assert.Equal(t, 2, result.ClipsRemoved, "Should remove 2 clips (oldest 2 of A), keeping 1 of A and 1 of B")
 	expectedDisk := initialDiskUtilization - (2 * utilizationReductionPerFile) // Only 2 deletions
 	assert.Equal(t, expectedDisk, result.DiskUtilization, "Incorrect final disk utilization")
@@ -484,7 +484,7 @@ func TestAgeBasedCleanupShortRetention(t *testing.T) {
 	)
 
 	// --- Assertions ---
-	assert.NoError(t, result.Err, "AgeBasedCleanup simulation should run without error")
+	require.NoError(t, result.Err, "AgeBasedCleanup simulation should run without error")
 	assert.Equal(t, 2, result.ClipsRemoved, "Should remove 2 clips (oldest bubo, old anas)")
 
 	// Verify file existence

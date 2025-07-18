@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -27,7 +28,7 @@ func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, Pagin
 	t.Helper()
 	var response PaginatedResponse
 	err := json.Unmarshal(body, &response)
-	assert.NoError(t, err, "Failed to unmarshal response body")
+	require.NoError(t, err, "Failed to unmarshal response body")
 
 	// Short-circuit if the payload is empty
 	if response.Data == nil {
@@ -124,7 +125,7 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Equal(t, 2, len(detections))
+				assert.Len(t, detections, 2)
 			},
 		},
 		{
@@ -146,7 +147,7 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Equal(t, 1, len(detections))
+				assert.Len(t, detections, 1)
 			},
 		},
 		{
@@ -167,7 +168,7 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Equal(t, 1, len(detections))
+				assert.Len(t, detections, 1)
 			},
 		},
 		{
@@ -187,7 +188,7 @@ func TestGetDetections(t *testing.T) {
 			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
 				t.Helper()
 				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Equal(t, 1, len(detections))
+				assert.Len(t, detections, 1)
 			},
 		},
 		{
@@ -208,9 +209,8 @@ func TestGetDetections(t *testing.T) {
 				// Check the response body for the error message
 				var errResp map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				if assert.NoError(t, err, "Failed to unmarshal error response") {
-					assert.Contains(t, errResp["message"], "numResults must be greater than zero", "Error message mismatch in response body")
-				}
+				require.NoError(t, err, "Failed to unmarshal error response")
+				assert.Contains(t, errResp["message"], "numResults must be greater than zero", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -227,9 +227,8 @@ func TestGetDetections(t *testing.T) {
 				// Check the response body for the error message
 				var errResp map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				if assert.NoError(t, err, "Failed to unmarshal error response") {
-					assert.Contains(t, errResp["message"], "Invalid numeric value for offset", "Error message mismatch in response body")
-				}
+				require.NoError(t, err, "Failed to unmarshal error response")
+				assert.Contains(t, errResp["message"], "Invalid numeric value for offset", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -249,7 +248,7 @@ func TestGetDetections(t *testing.T) {
 				// Verify response is successful
 				var response PaginatedResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			},
 		},
 		{
@@ -270,9 +269,8 @@ func TestGetDetections(t *testing.T) {
 				// Check the response body for the error message
 				var errResp map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				if assert.NoError(t, err, "Failed to unmarshal error response") {
-					assert.Contains(t, errResp["message"], "numResults exceeds maximum allowed value", "Error message mismatch in response body")
-				}
+				require.NoError(t, err, "Failed to unmarshal error response")
+				assert.Contains(t, errResp["message"], "numResults exceeds maximum allowed value", "Error message mismatch in response body")
 			},
 		},
 	}
@@ -362,11 +360,11 @@ func TestGetDetection(t *testing.T) {
 				t.Helper()
 				var response DetectionResponse
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, uint(1), response.ID)
 				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
 				assert.Equal(t, "American Crow", response.CommonName)
-				assert.Equal(t, 0.95, response.Confidence)
+				assert.InDelta(t, 0.95, response.Confidence, 0.01)
 				assert.Equal(t, "correct", response.Verified)
 				assert.False(t, response.Locked)
 				assert.Len(t, response.Comments, 1)
@@ -384,7 +382,7 @@ func TestGetDetection(t *testing.T) {
 				t.Helper()
 				var response map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, "Detection not found", response["error"])
 			},
 		},
@@ -406,7 +404,7 @@ func TestGetDetection(t *testing.T) {
 			// Call handler
 			err := controller.GetDetection(c)
 			if tc.expectedStatus == http.StatusOK {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
 			// Check response
@@ -514,23 +512,23 @@ func TestGetRecentDetections(t *testing.T) {
 
 			// Check response
 			if tc.expectedStatus == http.StatusOK {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Parse response
 				var detections []DetectionResponse
 				err = json.Unmarshal(rec.Body.Bytes(), &detections)
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedCount, len(detections))
+				require.NoError(t, err)
+				assert.Len(t, detections, tc.expectedCount)
 			} else {
 				// For error cases, the controller returns a JSON error response, not an echo.HTTPError
-				assert.NoError(t, err) // The error is handled inside the controller
+				require.NoError(t, err) // The error is handled inside the controller
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
 				var errorResp map[string]interface{}
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
 			}
 
@@ -606,17 +604,17 @@ func TestDeleteDetection(t *testing.T) {
 
 			// Check response
 			if tc.expectedStatus == http.StatusNoContent {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 			} else {
 				// For error cases, the controller returns a JSON error response, not an echo.HTTPError
-				assert.NoError(t, err) // The error is handled inside the controller
+				require.NoError(t, err) // The error is handled inside the controller
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
 				var errorResp map[string]interface{}
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
 			}
 
@@ -732,23 +730,23 @@ func TestReviewDetection(t *testing.T) {
 
 			// Check response
 			if tc.expectedStatus == http.StatusOK {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Parse response
 				var response map[string]string
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, "success", response["status"])
 			} else {
 				// For error cases, the controller returns a JSON error response, not an echo.HTTPError
-				assert.NoError(t, err) // The error is handled inside the controller
+				require.NoError(t, err) // The error is handled inside the controller
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
 				var errorResp map[string]interface{}
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
 			}
 
@@ -825,17 +823,17 @@ func TestLockDetection(t *testing.T) {
 
 			// Check response
 			if tc.expectedStatus == http.StatusNoContent {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 			} else {
 				// For error cases, check the response
-				assert.NoError(t, err) // The error is handled inside the controller
+				require.NoError(t, err) // The error is handled inside the controller
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
 				var errorResp map[string]interface{}
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
 			}
 
@@ -897,13 +895,13 @@ func TestIgnoreSpecies(t *testing.T) {
 
 			// Check response
 			if tc.expectedStatus == http.StatusNoContent {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 			} else {
 				// For error cases, check the response
 				var response map[string]string
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Contains(t, response, "error")
 			}
 		})
@@ -954,9 +952,9 @@ func TestAddCommentMethod(t *testing.T) {
 
 			// Check result
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
 			// Verify mock expectations
@@ -1056,17 +1054,17 @@ func TestGetNoteComments(t *testing.T) {
 
 			// Check response
 			if tc.expectedStatus == http.StatusOK {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Parse response
 				var comments []datastore.NoteComment
 				err = json.Unmarshal(rec.Body.Bytes(), &comments)
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedCount, len(comments))
+				require.NoError(t, err)
+				assert.Len(t, comments, tc.expectedCount)
 			} else {
 				// For error cases
-				assert.Error(t, err)
+				require.Error(t, err)
 				var httpErr *echo.HTTPError
 				ok := errors.As(err, &httpErr)
 				assert.True(t, ok)
@@ -1133,8 +1131,8 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 				t.Helper()
 				var comments []datastore.NoteComment
 				err := json.Unmarshal(rec.Body.Bytes(), &comments)
-				assert.NoError(t, err)
-				assert.Equal(t, 2, len(comments))
+				require.NoError(t, err)
+				assert.Len(t, comments, 2)
 				assert.Equal(t, "First comment", comments[0].Entry)
 				assert.Contains(t, comments[1].Entry, "Second comment with special chars")
 			},
@@ -1151,8 +1149,8 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 				t.Helper()
 				var comments []datastore.NoteComment
 				err := json.Unmarshal(rec.Body.Bytes(), &comments)
-				assert.NoError(t, err)
-				assert.Equal(t, 0, len(comments))
+				require.NoError(t, err)
+				assert.Empty(t, comments)
 			},
 		},
 		{
@@ -1167,7 +1165,7 @@ func TestGetNoteCommentsWithHandler(t *testing.T) {
 				t.Helper()
 				var response map[string]string
 				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, "Comments not found", response["error"])
 			},
 		},
@@ -1217,7 +1215,7 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 			"comment":  "This is a correct identification",
 		}
 		jsonData, err := json.Marshal(reviewRequest)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Setup mock behavior - note is not locked initially, but becomes locked
 		mockDS.On("Get", "1").Return(mockNote, nil).Times(2)
@@ -1262,8 +1260,8 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		var resp1, resp2 map[string]interface{}
 		err1 := json.Unmarshal(rec1.Body.Bytes(), &resp1)
 		err2 := json.Unmarshal(rec2.Body.Bytes(), &resp2)
-		assert.NoError(t, err1)
-		assert.NoError(t, err2)
+		require.NoError(t, err1)
+		require.NoError(t, err2)
 
 		// Check error messages
 		assert.Contains(t, resp1["message"], "failed to acquire lock")
@@ -1299,7 +1297,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 		"verified": "correct",
 	}
 	jsonData, err := json.Marshal(reviewRequest)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Number of concurrent requests to make
 	numConcurrent := 10
@@ -1406,7 +1404,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 		"verified": "correct",
 	}
 	jsonData, err := json.Marshal(reviewRequest)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Adjust concurrency level based on platform
 	// Windows might need lower concurrency to avoid resource exhaustion
