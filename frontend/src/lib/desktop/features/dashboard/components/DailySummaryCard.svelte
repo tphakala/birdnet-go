@@ -122,11 +122,18 @@
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
 
+  // Sort data by count in descending order for dynamic updates
+  const sortedData = $derived(
+    data.length === 0 
+      ? [] 
+      : [...data].sort((a, b) => b.count - a.count)
+  );
+
   // Calculate global maximum count across all species for proper heatmap scaling
   const globalMaxHourlyCount = $derived(
-    data.length === 0
+    sortedData.length === 0
       ? 1
-      : Math.max(...data.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
+      : Math.max(...sortedData.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
   );
 </script>
 
@@ -136,8 +143,8 @@
     <div class="flex items-center justify-between mb-4">
       <span class="card-title grow text-base sm:text-xl"
         >Daily Summary
-        {#if data.length > 0}
-          <span class="species-ball bg-primary text-primary-content ml-2">{data.length}</span>
+        {#if sortedData.length > 0}
+          <span class="species-ball bg-primary text-primary-content ml-2">{sortedData.length}</span>
         {/if}
       </span>
       <div class="flex items-center gap-2">
@@ -240,7 +247,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each data as item}
+            {#each sortedData as item}
               <tr
                 class="hover"
                 class:cursor-pointer={onRowClick || onDetectionView}
@@ -265,7 +272,7 @@
                     {#if column.key === 'common_name'}
                       <div class="flex items-center gap-2">
                         <img
-                          src={item.thumbnail_url}
+                          src={item.thumbnail_url || `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
                           alt={item.common_name}
                           class="w-8 h-8 rounded object-cover"
                           onerror={handleImageError}
@@ -286,7 +293,7 @@
                           class="progress progress-primary h-full"
                           style:width="{Math.min(
                             100,
-                            (item.count / Math.max(...data.map(d => d.count))) * 100
+                            (item.count / Math.max(...sortedData.map(d => d.count))) * 100
                           )}%"
                         >
                           <span
@@ -334,7 +341,7 @@
             {/each}
           </tbody>
         </table>
-        {#if data.length === 0}
+        {#if sortedData.length === 0}
           <div class="text-center py-8 text-base-content/60">No species detected on this date</div>
         {/if}
       </div>
