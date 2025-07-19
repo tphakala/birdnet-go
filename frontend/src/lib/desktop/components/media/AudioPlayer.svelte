@@ -27,12 +27,13 @@
   interface Props {
     audioUrl: string;
     detectionId: string;
-    width?: number;
-    height?: number;
+    width?: number | string;
+    height?: number | string;
     showSpectrogram?: boolean;
     showDownload?: boolean;
     className?: string;
     controlsClassName?: string;
+    responsive?: boolean;
   }
 
   let {
@@ -43,7 +44,8 @@
     showSpectrogram = true,
     showDownload = true,
     className = '',
-    controlsClassName = ''
+    controlsClassName = '',
+    responsive = false
   }: Props = $props();
 
   // Audio and UI elements
@@ -363,14 +365,15 @@
   </svg>`;
 </script>
 
-<div bind:this={playerContainer} class={cn('relative group', className)} style="width: {width}px; height: {height}px;">
+<div bind:this={playerContainer} class={cn('relative group', className)} style={responsive ? '' : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}>
   {#if spectrogramUrl}
     <img 
       src={spectrogramUrl}
       alt="Audio spectrogram"
       loading="lazy"
-      class="w-full h-full object-cover rounded-md border border-base-300"
-      style="width: {width}px; height: {height}px;"
+      class={responsive ? "w-full h-auto object-contain rounded-md border border-base-300" : "w-full h-full object-cover rounded-md border border-base-300"}
+      style={responsive ? '' : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+      width={responsive ? 400 : undefined}
     />
   {/if}
 
