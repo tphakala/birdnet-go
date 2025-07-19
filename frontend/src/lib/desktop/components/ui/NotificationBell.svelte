@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import ReconnectingEventSource from 'reconnecting-eventsource';
   import { cn } from '$lib/utils/cn';
 
   interface Notification {
@@ -36,15 +37,10 @@
   let soundEnabled = $state(false);
 
   // Internal state
-  let sseConnection: globalThis.EventSource | null = null;
-  let reconnectTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
-  let reconnectDelay = 1000;
+  let sseConnection: ReconnectingEventSource | null = null;
   let animationTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
-
-  // Constants
-  const MAX_RECONNECT_DELAY = 30000;
 
   // Computed
   const visibleNotifications = $derived(notifications.filter(n => shouldShowNotification(n)));
@@ -94,39 +90,46 @@
     }
   }
 
-  // Connect to SSE for real-time notifications
+  // Connect to SSE for real-time notifications using ReconnectingEventSource
   function connectSSE() {
     if (sseConnection) {
       sseConnection.close();
+      sseConnection = null;
     }
 
-    sseConnection = new globalThis.EventSource('/api/v2/notifications/stream');
+    try {
+      // ReconnectingEventSource with configuration
+      sseConnection = new ReconnectingEventSource('/api/v2/notifications/stream', {
+        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
+        withCredentials: false
+      });
 
-    sseConnection.onopen = () => {
-      reconnectDelay = 1000; // Reset delay on successful connection
-    };
+      sseConnection.onopen = () => {
+        console.log('Notification SSE connection opened');
+      };
 
-    sseConnection.onmessage = event => {
-      try {
-        const data: SSEMessage = JSON.parse(event.data);
-        handleSSEMessage(data);
-      } catch {
-        // Failed to parse SSE message
-      }
-    };
+      sseConnection.onmessage = event => {
+        try {
+          const data: SSEMessage = JSON.parse(event.data);
+          handleSSEMessage(data);
+        } catch (error) {
+          console.error('Failed to parse notification SSE message:', error);
+        }
+      };
 
-    sseConnection.onerror = () => {
-      if (sseConnection?.readyState !== globalThis.EventSource.CLOSED) {
-        sseConnection?.close();
-      }
-
-      // Don't reconnect if page is being unloaded or offline
-      if (!globalThis.window.navigator.onLine || globalThis.document.hidden) {
-        return;
-      }
-
-      scheduleReconnect();
-    };
+      sseConnection.onerror = (error: Event) => {
+        console.error('Notification SSE error:', error);
+        // ReconnectingEventSource handles reconnection automatically
+        // Don't reconnect if page is being unloaded or offline
+        if (!globalThis.window.navigator.onLine || globalThis.document.hidden) {
+          sseConnection?.close();
+        }
+      };
+    } catch (error) {
+      console.error('Failed to create ReconnectingEventSource:', error);
+      // Try again in 5 seconds if initial setup fails
+      setTimeout(() => connectSSE(), 5000);
+    }
   }
 
   // Handle SSE messages
@@ -304,19 +307,6 @@
     return date.toLocaleDateString();
   }
 
-  // Schedule reconnection
-  function scheduleReconnect() {
-    if (reconnectTimeout) {
-      globalThis.clearTimeout(reconnectTimeout);
-    }
-
-    reconnectTimeout = globalThis.setTimeout(() => {
-      connectSSE();
-
-      // Exponential backoff
-      reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
-    }, reconnectDelay);
-  }
 
   // Handle notification deleted event
   function handleNotificationDeleted(event: CustomEvent<{ id: string; wasUnread: boolean }>) {
@@ -344,9 +334,7 @@
   function cleanup() {
     if (sseConnection) {
       sseConnection.close();
-    }
-    if (reconnectTimeout) {
-      globalThis.clearTimeout(reconnectTimeout);
+      sseConnection = null;
     }
     if (animationTimeout) {
       globalThis.clearTimeout(animationTimeout);

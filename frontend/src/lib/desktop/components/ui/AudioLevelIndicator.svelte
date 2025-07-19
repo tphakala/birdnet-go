@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn';
+  import ReconnectingEventSource from 'reconnecting-eventsource';
 
   interface AudioLevelData {
     level: number;
@@ -36,13 +37,11 @@
   const HEARTBEAT_INTERVAL = 20000;
 
   // Internal state
-  let eventSource: globalThis.EventSource | null = null;
+  let eventSource: ReconnectingEventSource | null = null;
   let audioElement: HTMLAudioElement | null = null;
   let hlsInstance: any = null; // HLS.js instance
   let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
-  let reconnectAttempts = 0;
-  let reconnectDelay = 1000;
   let isNavigating = false;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
@@ -74,7 +73,7 @@
     return levels[source]?.name || source;
   }
 
-  // Setup EventSource for audio levels
+  // Setup EventSource for audio levels using ReconnectingEventSource
   function setupEventSource() {
     if (isNavigating || eventSource) return;
 
@@ -82,7 +81,15 @@
 
     try {
       // TODO: Update to v2 API when available
-      eventSource = new globalThis.EventSource('/api/v1/audio-level');
+      // ReconnectingEventSource with configuration
+      eventSource = new ReconnectingEventSource('/api/v1/audio-level', {
+        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
+        withCredentials: false // Set to true if you need CORS credentials
+      });
+
+      eventSource.onopen = () => {
+        console.log('Audio level SSE connection opened');
+      };
 
       eventSource.onmessage = event => {
         if (isNavigating) {
@@ -93,15 +100,13 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'audio-level' && data.levels) {
-            reconnectAttempts = 0;
-            reconnectDelay = 1000;
-
             // Update levels
             levels = data.levels;
 
             // Track zero level times
-            Object.entries(levels).forEach(([source, data]) => {
-              if (data.level === 0) {
+            Object.entries(levels).forEach(([source, levelData]) => {
+              const audioData = levelData as AudioLevelData;
+              if (audioData.level === 0) {
                 if (!zeroLevelTime[source]) {
                   zeroLevelTime[source] = Date.now();
                 }
@@ -126,31 +131,26 @@
             }
 
             // Update smoothed volumes
-            Object.entries(levels).forEach(([source, data]) => {
+            Object.entries(levels).forEach(([source, levelData]) => {
+              const audioData = levelData as AudioLevelData;
               const oldVolume = smoothedVolumes[source] || 0;
               smoothedVolumes[source] =
-                SMOOTHING_FACTOR * data.level + (1 - SMOOTHING_FACTOR) * oldVolume;
+                SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume;
             });
           }
-        } catch {
-          // Silently handle SSE data processing errors
+        } catch (error) {
+          console.error('Failed to parse audio level data:', error);
         }
       };
 
-      eventSource.onerror = () => {
-        // Handle EventSource error
-        cleanupEventSource();
-
-        if (!isNavigating && reconnectAttempts < 10) {
-          globalThis.setTimeout(() => {
-            reconnectAttempts++;
-            reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
-            setupEventSource();
-          }, reconnectDelay);
-        }
+      eventSource.onerror = (error: Event) => {
+        console.error('Audio level SSE error:', error);
+        // ReconnectingEventSource handles reconnection automatically
+        // No need for manual reconnection logic
       };
-    } catch {
-      // Handle EventSource setup error
+    } catch (error) {
+      console.error('Failed to create ReconnectingEventSource:', error);
+      // Try again in 5 seconds if initial setup fails
       globalThis.setTimeout(() => setupEventSource(), 5000);
     }
   }
