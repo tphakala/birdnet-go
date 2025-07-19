@@ -37,23 +37,59 @@
       sortable: true,
       className: 'font-medium',
     },
-    {
-      key: 'count',
-      header: 'Count',
-      sortable: true,
-      align: 'center',
-      className: 'text-center',
-    },
   ];
 
-  // Add hourly columns
+  // Add total detections column (only visible on XL screens)
+  columns.push({
+    key: 'total_detections',
+    header: 'Detections',
+    align: 'center',
+    className: 'hidden 2xl:table-cell px-3',
+    render: (item: DailySpeciesSummary) => item.count,
+  });
+
+  // Add all 24 hourly columns
   for (let hour = 0; hour < 24; hour++) {
     columns.push({
       key: `hour_${hour}`,
       header: hour.toString().padStart(2, '0'),
       align: 'center',
-      className: 'px-1 text-xs',
-      render: (item: DailySpeciesSummary) => item.hourly_counts[hour] || '',
+      className: 'hour-data hourly-count px-0',
+      render: (item: DailySpeciesSummary) => item.hourly_counts[hour] || 0,
+    });
+  }
+
+  // Add bi-hourly columns (every 2 hours)
+  for (let hour = 0; hour < 24; hour += 2) {
+    columns.push({
+      key: `bi_hour_${hour}`,
+      header: hour.toString().padStart(2, '0'),
+      align: 'center',
+      className: 'hour-data bi-hourly-count bi-hourly px-0',
+      render: (item: DailySpeciesSummary) => {
+        // Sum counts for 2-hour period
+        const count1 = item.hourly_counts[hour] || 0;
+        const count2 = item.hourly_counts[hour + 1] || 0;
+        return count1 + count2;
+      },
+    });
+  }
+
+  // Add six-hourly columns (every 6 hours)
+  for (let hour = 0; hour < 24; hour += 6) {
+    columns.push({
+      key: `six_hour_${hour}`,
+      header: hour.toString().padStart(2, '0'),
+      align: 'center',
+      className: 'hour-data six-hourly-count six-hourly px-0',
+      render: (item: DailySpeciesSummary) => {
+        // Sum counts for 6-hour period
+        let sum = 0;
+        for (let h = hour; h < hour + 6 && h < 24; h++) {
+          sum += item.hourly_counts[h] || 0;
+        }
+        return sum;
+      },
     });
   }
 
@@ -76,14 +112,14 @@
     }
   }
 
-  function handleHourClick(species: DailySpeciesSummary, hour: number) {
+  function handleHourClick(species: DailySpeciesSummary, hour: number, duration: number = 1) {
     if (onDetectionView) {
       onDetectionView({
         queryType: 'species',
         species: species.common_name,
         date: selectedDate,
         hour: hour.toString(),
-        duration: 1,
+        duration: duration,
         numResults: 100,
         offset: 0,
       });
@@ -102,13 +138,13 @@
     }
   }
 
-  function handleHourHeaderClick(hour: number) {
+  function handleHourHeaderClick(hour: number, duration: number = 1) {
     if (onDetectionView) {
       onDetectionView({
         queryType: 'hourly',
         date: selectedDate,
         hour: hour.toString(),
-        duration: 1,
+        duration: duration,
         numResults: 100,
         offset: 0,
       });
@@ -135,6 +171,37 @@
       ? 1
       : Math.max(...sortedData.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
   );
+
+  // Calculate max for bi-hourly intervals
+  const globalMaxBiHourlyCount = $derived(() => {
+    if (sortedData.length === 0) return 1;
+    
+    let maxCount = 0;
+    sortedData.forEach(species => {
+      for (let hour = 0; hour < 24; hour += 2) {
+        const sum = (species.hourly_counts[hour] || 0) + (species.hourly_counts[hour + 1] || 0);
+        maxCount = Math.max(maxCount, sum);
+      }
+    });
+    return maxCount || 1;
+  });
+
+  // Calculate max for six-hourly intervals
+  const globalMaxSixHourlyCount = $derived(() => {
+    if (sortedData.length === 0) return 1;
+    
+    let maxCount = 0;
+    sortedData.forEach(species => {
+      for (let hour = 0; hour < 24; hour += 6) {
+        let sum = 0;
+        for (let h = hour; h < hour + 6 && h < 24; h++) {
+          sum += species.hourly_counts[h] || 0;
+        }
+        maxCount = Math.max(maxCount, sum);
+      }
+    });
+    return maxCount || 1;
+  });
 </script>
 
 <section class="card col-span-12 bg-base-100 shadow-sm">
@@ -224,8 +291,8 @@
             <tr>
               {#each columns as column}
                 <th
-                  class="py-0 px-2 sm:px-4 {column.className || ''} {column.key?.startsWith('hour_')
-                    ? 'hour-header hourly-count'
+                  class="py-0 px-2 sm:px-4 {column.className || ''} {column.key?.startsWith('hour_') || column.key?.startsWith('bi_hour_') || column.key?.startsWith('six_hour_')
+                    ? 'hour-header'
                     : ''}"
                   style:text-align={column.align || 'left'}
                   scope="col"
@@ -234,8 +301,26 @@
                     {@const hour = parseInt(column.key.split('_')[1])}
                     <button
                       class="hover:text-primary cursor-pointer"
-                      onclick={() => handleHourHeaderClick(hour)}
+                      onclick={() => handleHourHeaderClick(hour, 1)}
                       title="View all detections for {hour.toString().padStart(2, '0')}:00"
+                    >
+                      {column.header}
+                    </button>
+                  {:else if column.key?.startsWith('bi_hour_')}
+                    {@const hour = parseInt(column.key.split('_')[2])}
+                    <button
+                      class="hover:text-primary cursor-pointer"
+                      onclick={() => handleHourHeaderClick(hour, 2)}
+                      title="View all detections for {hour.toString().padStart(2, '0')}:00-{(hour + 2).toString().padStart(2, '0')}:00"
+                    >
+                      {column.header}
+                    </button>
+                  {:else if column.key?.startsWith('six_hour_')}
+                    {@const hour = parseInt(column.key.split('_')[2])}
+                    <button
+                      class="hover:text-primary cursor-pointer"
+                      onclick={() => handleHourHeaderClick(hour, 6)}
+                      title="View all detections for {hour.toString().padStart(2, '0')}:00-{(hour + 6).toString().padStart(2, '0')}:00"
                     >
                       {column.header}
                     </button>
@@ -262,11 +347,44 @@
               >
                 {#each columns as column}
                   <td
-                    class="py-0 px-2 sm:px-4 {column.className || ''} {column.key?.startsWith(
-                      'hour_'
-                    )
-                      ? 'hour-data hourly-count'
-                      : ''}"
+                    class="py-0 px-0 {column.className || ''} {(() => {
+                      // Apply heatmap color class and text-center to td for hour columns
+                      let classes = [];
+                      if (column.key?.startsWith('hour_')) {
+                        const hour = parseInt(column.key.split('_')[1]);
+                        const count = item.hourly_counts[hour];
+                        classes.push('text-center', 'h-full');
+                        if (count > 0) {
+                          const intensity = Math.min(9, Math.floor((count / globalMaxHourlyCount) * 9));
+                          classes.push(`heatmap-color-${intensity}`);
+                        } else {
+                          classes.push('heatmap-color-0');
+                        }
+                      } else if (column.key?.startsWith('bi_hour_')) {
+                        const hour = parseInt(column.key.split('_')[2]);
+                        const count = column.render ? Number(column.render(item, 0)) : 0;
+                        classes.push('text-center', 'h-full');
+                        if (count > 0) {
+                          const intensity = Math.min(9, Math.floor((count / globalMaxBiHourlyCount()) * 9));
+                          classes.push(`heatmap-color-${intensity}`);
+                        } else {
+                          classes.push('heatmap-color-0');
+                        }
+                      } else if (column.key?.startsWith('six_hour_')) {
+                        const hour = parseInt(column.key.split('_')[2]);
+                        const count = column.render ? Number(column.render(item, 0)) : 0;
+                        classes.push('text-center', 'h-full');
+                        if (count > 0) {
+                          const intensity = Math.min(9, Math.floor((count / globalMaxSixHourlyCount()) * 9));
+                          classes.push(`heatmap-color-${intensity}`);
+                        } else {
+                          classes.push('heatmap-color-0');
+                        }
+                      } else {
+                        classes.push('px-2', 'sm:px-4');
+                      }
+                      return classes.join(' ');
+                    })()}"
                     style:text-align={column.align || 'left'}
                   >
                     {#if column.key === 'common_name'}
@@ -279,40 +397,27 @@
                         />
                         <span class="text-sm">{item.common_name}</span>
                       </div>
-                    {:else if column.key === 'count'}
-                      <button
-                        class="w-full bg-base-300 rounded-full overflow-hidden relative h-6 hover:bg-base-200 transition-colors cursor-pointer"
-                        class:count-increased={item.countIncreased && !prefersReducedMotion}
-                        onclick={e => {
-                          e.stopPropagation();
-                          handleCountClick(item);
-                        }}
-                        title="View all detections for {item.common_name}"
-                      >
-                        <div
-                          class="progress progress-primary h-full"
-                          style:width="{Math.min(
-                            100,
-                            (item.count / Math.max(...sortedData.map(d => d.count))) * 100
-                          )}%"
-                        >
-                          <span
-                            class="text-xs text-base-content absolute right-1 top-1/2 transform -translate-y-1/2 animated-counter"
-                          >
-                            {item.count}
-                          </span>
+                    {:else if column.key === 'total_detections'}
+                      {@const maxCount = Math.max(...sortedData.map(d => d.count))}
+                      {@const width = (item.count / maxCount) * 100}
+                      {@const roundedWidth = Math.round(width / 5) * 5}
+                      <div class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative">
+                        <div class="progress progress-primary bg-gray-400 dark:bg-gray-400 progress-width-{roundedWidth}">
+                          {#if width >= 45 && width <= 59}
+                            <span class="text-2xs text-gray-100 dark:text-base-300 absolute right-1 top-1/2 transform -translate-y-1/2">{item.count}</span>
+                          {/if}
                         </div>
-                      </button>
+                        {#if width < 45 || width > 59}
+                          <span class="text-2xs {width > 59 ? 'text-gray-100 dark:text-base-300' : 'text-gray-400 dark:text-base-400'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{item.count}</span>
+                        {/if}
+                      </div>
                     {:else if column.key?.startsWith('hour_')}
                       {@const hour = parseInt(column.key.split('_')[1])}
                       {@const count = item.hourly_counts[hour]}
                       {#if count > 0}
-                        {@const intensity = Math.min(
-                          9,
-                          Math.floor((count / globalMaxHourlyCount) * 9)
-                        )}
                         <button
-                          class="heatmap-cell heatmap-color-{intensity} cursor-pointer"
+                          type="button"
+                          class="w-full h-full"
                           class:hour-updated={item.hourlyUpdated?.includes(hour) &&
                             !prefersReducedMotion}
                           title="{count} detections at {hour
@@ -320,15 +425,53 @@
                             .padStart(2, '0')}:00 - Click to view"
                           onclick={e => {
                             e.stopPropagation();
-                            handleHourClick(item, hour);
+                            handleHourClick(item, hour, 1);
                           }}
                         >
-                          <span class="text-xs">{count}</span>
+                          {count}
                         </button>
                       {:else}
-                        <div class="heatmap-cell heatmap-color-0">
-                          <span class="text-xs text-base-content/30">·</span>
-                        </div>
+                        -
+                      {/if}
+                    {:else if column.key?.startsWith('bi_hour_')}
+                      {@const hour = parseInt(column.key.split('_')[2])}
+                      {@const count = column.render ? Number(column.render(item, 0)) : 0}
+                      {#if count > 0}
+                        <button
+                          type="button"
+                          class="w-full h-full"
+                          title="{count} detections from {hour
+                            .toString()
+                            .padStart(2, '0')}:00-{(hour + 2).toString().padStart(2, '0')}:00 - Click to view"
+                          onclick={e => {
+                            e.stopPropagation();
+                            handleHourClick(item, hour, 2);
+                          }}
+                        >
+                          {count}
+                        </button>
+                      {:else}
+                        -
+                      {/if}
+                    {:else if column.key?.startsWith('six_hour_')}
+                      {@const hour = parseInt(column.key.split('_')[2])}
+                      {@const count = column.render ? Number(column.render(item, 0)) : 0}
+                      {#if count > 0}
+                        <button
+                          type="button"
+                          class="w-full h-full"
+                          title="{count} detections from {hour
+                            .toString()
+                            .padStart(2, '0')}:00-{(hour + 6).toString().padStart(2, '0')}:00 - Click to view"
+                          onclick={e => {
+                            e.stopPropagation();
+                            handleHourClick(item, hour, 6);
+                          }}
+                        >
+                          {count}
+                        </button>
+                      {:else}
+                        -
                       {/if}
                     {:else if column.render}
                       {column.render(item, 0)}
@@ -350,29 +493,7 @@
 </section>
 
 <style>
-  /* Removed duplicate styles - using existing classes from custom.css:
-   * - Heatmap colors already defined in custom.css
-   * - .species-ball already defined in custom.css  
-   * - .sticky-header already defined in custom.css
-   */
-
-  .heatmap-cell {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 1.5rem;
-    min-width: 2rem;
-    border-radius: 0.25rem;
-    transition: background-color 0.2s ease;
-  }
-
-  .heatmap-cell:hover {
-    transform: scale(1.1);
-    z-index: 5;
-    position: relative;
-  }
-
-  /* Phase 2: Dynamic Update Animations */
+  /* Dynamic Update Animations - not in custom.css */
 
   /* Count increment animation */
   @keyframes countPop {
@@ -429,22 +550,32 @@
     animation: heatmapFlash 0.8s ease-out;
   }
 
-  /* Animated counter */
-  .animated-counter {
-    display: inline-block;
-    transition: transform 0.3s ease-out;
-  }
-
   /* Respect user's reduced motion preference */
   @media (prefers-reduced-motion: reduce) {
     .count-increased,
     .new-species,
-    .hour-updated,
-    .animated-counter {
+    .hour-updated {
       animation: none;
       transition: none;
     }
   }
 
-  /* Responsive hour column display handled by custom.css */
+  /* All responsive display and heatmap styles are handled by custom.css */
+  
+  /* Button styling to match the original .hour-data a styles */
+  .hour-data button {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    font-size: inherit;
+    font-family: inherit;
+  }
 </style>
