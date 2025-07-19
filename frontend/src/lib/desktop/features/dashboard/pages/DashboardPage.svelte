@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ReconnectingEventSource from 'reconnecting-eventsource';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
   import type {
@@ -16,7 +17,7 @@
   let isLoadingDetections = $state(true);
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
-  
+
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
     if (typeof window !== 'undefined') {
@@ -33,11 +34,11 @@
 
   // Detection limit state to sync with RecentDetectionsCard
   let detectionLimit = $state(getInitialDetectionLimit());
-  
+
   // Animation state for new detections
   let newDetectionIds = $state(new Set<number>());
   let detectionArrivalTimes = $state(new Map<number, number>());
-  
+
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
   let updateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -85,7 +86,7 @@
     newDetectionIds.clear();
     detectionArrivalTimes.clear();
     clearDailySummaryAnimations();
-    
+
     // For SSE mode, just fetch fresh data without affecting the connection
     if (connectionStatus === 'connected') {
       fetchRecentDetections();
@@ -104,9 +105,9 @@
       ...species,
       isNew: false,
       countIncreased: false,
-      hourlyUpdated: []
+      hourlyUpdated: [],
     }));
-    
+
     // Clear any pending animation cleanup timers
     animationCleanupTimers.forEach(timer => clearTimeout(timer));
     animationCleanupTimers.clear();
@@ -118,151 +119,194 @@
     if (animationCleanupTimers.size > 50) {
       console.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
       const oldestTimer = animationCleanupTimers.values().next().value;
-      clearTimeout(oldestTimer);
-      animationCleanupTimers.delete(oldestTimer);
+      if (oldestTimer) {
+        clearTimeout(oldestTimer);
+        animationCleanupTimers.delete(oldestTimer);
+      }
     }
-    
+
     const timer = setTimeout(() => {
       cleanupFn();
       animationCleanupTimers.delete(timer);
     }, delay);
-    
+
     animationCleanupTimers.add(timer);
     return timer;
   }
 
   // SSE connection for real-time detection updates
-  let eventSource: EventSource | null = null;
-  let refreshInterval: ReturnType<typeof setInterval>;
+  let eventSource: ReconnectingEventSource | null = null;
   let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
-  let sseRetryCount = $state(0);
-  const maxSSERetries = 3;
 
-  // Connect to SSE stream for real-time updates
-  function connectToDetectionStream() {
-    if (eventSource) {
-      eventSource.close();
-    }
+  // Process new detection from SSE
+  function handleNewDetection(detection: Detection) {
+    // Mark detection as new for animation and track arrival time
+    const arrivalTime = Date.now();
+    newDetectionIds.add(detection.id);
+    detectionArrivalTimes.set(detection.id, arrivalTime);
 
-    connectionStatus = 'connecting';
-    eventSource = new EventSource('/api/v2/detections/stream');
+    // Add new detection to beginning of list and limit to user's selected limit
+    recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
 
-    eventSource.addEventListener('connected', (event) => {
-      connectionStatus = 'connected';
-      sseRetryCount = 0;
-      console.log('Connected to detection stream:', JSON.parse(event.data));
-    });
+    // Queue daily summary update with debouncing
+    queueDailySummaryUpdate(detection);
 
-    eventSource.addEventListener('detection', (event) => {
-      try {
-        const detectionData = JSON.parse(event.data);
-        // Convert SSEDetectionData to Detection format
-        const detection: Detection = {
-          id: detectionData.ID as number,
-          commonName: detectionData.CommonName as string,
-          scientificName: detectionData.ScientificName as string,
-          confidence: detectionData.Confidence as number,
-          date: detectionData.Date as string,
-          time: detectionData.Time as string,
-          speciesCode: detectionData.SpeciesCode as string,
-          verified: (detectionData.Verified || 'unverified') as Detection['verified'],
-          locked: (detectionData.Locked || false) as boolean,
-          source: (detectionData.Source || '') as string,
-          beginTime: (detectionData.BeginTime || '') as string,
-          endTime: (detectionData.EndTime || '') as string
-        };
-
-        // Mark detection as new for animation and track arrival time
-        const arrivalTime = Date.now();
-        newDetectionIds.add(detection.id);
-        detectionArrivalTimes.set(detection.id, arrivalTime);
-        
-        // Add new detection to beginning of list and limit to user's selected limit
-        recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
-        
-        // Queue daily summary update with debouncing
-        queueDailySummaryUpdate(detection);
-        
-        // Remove animation class after animation completes (600ms animation + 400ms buffer)
-        setTimeout(() => {
-          newDetectionIds.delete(detection.id);
-          detectionArrivalTimes.delete(detection.id);
-        }, 1000);
-      } catch (error) {
-        console.error('Error parsing SSE detection data:', error);
-      }
-    });
-
-    eventSource.addEventListener('heartbeat', (event) => {
-      // SSE connection is alive, no action needed
-      const heartbeatData = JSON.parse(event.data);
-      console.debug('SSE heartbeat received, clients:', heartbeatData.clients);
-    });
-
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-      connectionStatus = 'error';
-      
-      // Retry logic with exponential backoff
-      if (sseRetryCount < maxSSERetries) {
-        sseRetryCount++;
-        const retryDelay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
-        console.log(`Retrying SSE connection in ${retryDelay}ms (attempt ${sseRetryCount}/${maxSSERetries})`);
-        
-        setTimeout(() => {
-          if (eventSource?.readyState === EventSource.CLOSED) {
-            connectToDetectionStream();
-          }
-        }, retryDelay);
-      } else {
-        console.log('Max SSE retries reached, falling back to polling');
-        fallbackToPolling();
-      }
-    };
+    // Remove animation class after animation completes (600ms animation + 400ms buffer)
+    setTimeout(() => {
+      newDetectionIds.delete(detection.id);
+      detectionArrivalTimes.delete(detection.id);
+    }, 1000);
   }
 
-  // Fallback to polling when SSE fails
-  function fallbackToPolling() {
-    connectionStatus = 'polling';
+  // Connect to SSE stream for real-time updates using ReconnectingEventSource
+  function connectToDetectionStream() {
+    console.log('Connecting to SSE stream at /api/v2/detections/stream');
+    connectionStatus = 'connecting';
+    
+    // Clean up existing connection
     if (eventSource) {
       eventSource.close();
       eventSource = null;
     }
 
-    // Start polling every 30 seconds
-    refreshInterval = setInterval(() => {
-      fetchRecentDetections();
-    }, 30000);
+    try {
+      // ReconnectingEventSource with configuration
+      eventSource = new ReconnectingEventSource('/api/v2/detections/stream', {
+        max_retry_time: 30000, // Max 30 seconds between reconnection attempts
+        withCredentials: false
+      });
+
+      eventSource.onopen = () => {
+        console.log('SSE connection opened');
+        connectionStatus = 'connected';
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Check if this is a structured message with eventType
+          if (data.eventType) {
+            switch (data.eventType) {
+              case 'connected':
+                console.log('Connected to detection stream:', data);
+                connectionStatus = 'connected';
+                break;
+                
+              case 'detection':
+                handleSSEDetection(data);
+                break;
+                
+              case 'heartbeat':
+                console.debug('SSE heartbeat received, clients:', data.clients);
+                connectionStatus = 'connected';
+                break;
+                
+              default:
+                console.log('Unknown event type:', data.eventType);
+            }
+          } else if (data.ID && data.CommonName) {
+            // This looks like a direct detection event
+            connectionStatus = 'connected';
+            handleSSEDetection(data);
+          }
+        } catch (error) {
+          console.error('Failed to parse SSE message:', error);
+        }
+      };
+
+      // Handle specific event types
+      eventSource.addEventListener('connected', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          const data = JSON.parse(messageEvent.data);
+          console.log('Connected event received:', data);
+          connectionStatus = 'connected';
+        } catch (error) {
+          console.error('Failed to parse connected event:', error);
+        }
+      });
+
+      eventSource.addEventListener('detection', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          const data = JSON.parse(messageEvent.data);
+          connectionStatus = 'connected';
+          handleSSEDetection(data);
+        } catch (error) {
+          console.error('Failed to parse detection event:', error);
+        }
+      });
+
+      eventSource.addEventListener('heartbeat', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          const data = JSON.parse(messageEvent.data);
+          console.debug('Heartbeat event received, clients:', data.clients);
+          connectionStatus = 'connected';
+        } catch (error) {
+          console.error('Failed to parse heartbeat event:', error);
+        }
+      });
+
+      eventSource.onerror = (error: Event) => {
+        console.error('SSE connection error:', error);
+        connectionStatus = 'error';
+        // ReconnectingEventSource handles reconnection automatically
+        // No need for manual reconnection logic
+      };
+    } catch (error) {
+      console.error('Failed to create ReconnectingEventSource:', error);
+      connectionStatus = 'error';
+      // Try again in 5 seconds if initial setup fails
+      setTimeout(() => connectToDetectionStream(), 5000);
+    }
+  }
+
+  // Helper function to process SSE detection data
+  function handleSSEDetection(detectionData: any) {
+    try {
+      // Convert SSEDetectionData to Detection format
+      const detection: Detection = {
+        id: detectionData.ID as number,
+        commonName: detectionData.CommonName as string,
+        scientificName: detectionData.ScientificName as string,
+        confidence: detectionData.Confidence as number,
+        date: detectionData.Date as string,
+        time: detectionData.Time as string,
+        speciesCode: detectionData.SpeciesCode as string,
+        verified: (detectionData.Verified || 'unverified') as Detection['verified'],
+        locked: (detectionData.Locked || false) as boolean,
+        source: (detectionData.Source || '') as string,
+        beginTime: (detectionData.BeginTime || '') as string,
+        endTime: (detectionData.EndTime || '') as string,
+      };
+
+      handleNewDetection(detection);
+    } catch (error) {
+      console.error('Error processing detection data:', error);
+    }
   }
 
   onMount(() => {
     fetchDailySummary();
     fetchRecentDetections();
 
-    // Try SSE first, fallback to polling if not supported
-    if (typeof EventSource !== 'undefined') {
-      connectToDetectionStream();
-    } else {
-      console.log('EventSource not supported, using polling');
-      fallbackToPolling();
-    }
+    // Setup SSE connection for real-time updates
+    connectToDetectionStream();
 
     return () => {
       // Clean up SSE connection
       if (eventSource) {
         eventSource.close();
+        eventSource = null;
       }
-      
-      // Clean up polling interval
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
-      }
-      
+
       // Clean up debounce timer
       if (updateTimer) {
         clearTimeout(updateTimer);
       }
-      
+
       // Clean up animation timers
       animationCleanupTimers.forEach(timer => clearTimeout(timer));
       animationCleanupTimers.clear();
@@ -278,7 +322,7 @@
       updateTimer = null;
     }
     updateQueue.clear();
-    
+
     // Clear animations
     clearDailySummaryAnimations();
   }
@@ -327,29 +371,33 @@
     if (detection.date !== selectedDate) {
       return;
     }
-    
+
     // Performance: Skip if too many pending updates to prevent UI freeze
     if (updateQueue.size > 20) {
-      console.warn('Too many pending daily summary updates, skipping to prevent performance issues');
+      console.warn(
+        'Too many pending daily summary updates, skipping to prevent performance issues'
+      );
       return;
     }
-    
+
     // Add to queue (overwrites previous detection for same species)
     updateQueue.set(detection.speciesCode, detection);
-    
+
     // Clear existing timer and set new one
     if (updateTimer) {
       clearTimeout(updateTimer);
     }
-    
+
     updateTimer = setTimeout(() => {
       // Process all queued updates in order of species code for consistency
-      const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) => a.localeCompare(b));
-      
+      const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) =>
+        a.localeCompare(b)
+      );
+
       sortedUpdates.forEach(([_, queuedDetection]) => {
         updateDailySummary(queuedDetection);
       });
-      
+
       updateQueue.clear();
       updateTimer = null;
     }, 150); // Batch updates within 150ms window
@@ -363,10 +411,8 @@
     }
 
     const hour = new Date(`${detection.date} ${detection.time}`).getHours();
-    const existingIndex = dailySummary.findIndex(
-      s => s.species_code === detection.speciesCode
-    );
-    
+    const existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+
     if (existingIndex >= 0) {
       // Update existing species
       const updated = { ...dailySummary[existingIndex] };
@@ -377,16 +423,31 @@
       updated.hourly_counts[hour]++;
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
-      
-      // Update the array immutably
-      dailySummary = [
+
+      // Remove the species from its current position
+      const withoutUpdated = [
         ...dailySummary.slice(0, existingIndex),
-        updated,
-        ...dailySummary.slice(existingIndex + 1)
+        ...dailySummary.slice(existingIndex + 1),
       ];
-      
-      console.log(`Updated existing species: ${detection.commonName} (count: ${updated.count}, hour: ${hour})`);
-      
+
+      // Find the correct position for the updated species based on its new count
+      const newPosition = withoutUpdated.findIndex(s => s.count < updated.count);
+      if (newPosition === -1) {
+        // Add to end if it has the lowest count
+        dailySummary = [...withoutUpdated, updated];
+      } else {
+        // Insert at the correct position
+        dailySummary = [
+          ...withoutUpdated.slice(0, newPosition),
+          updated,
+          ...withoutUpdated.slice(newPosition),
+        ];
+      }
+
+      console.log(
+        `Updated existing species: ${detection.commonName} (count: ${updated.count}, hour: ${hour})`
+      );
+
       // Clear animation flags after animation completes
       scheduleAnimationCleanup(() => {
         const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
@@ -394,15 +455,14 @@
           const cleared = { ...dailySummary[currentIndex] };
           cleared.countIncreased = false;
           cleared.hourlyUpdated = [];
-          
+
           dailySummary = [
             ...dailySummary.slice(0, currentIndex),
             cleared,
-            ...dailySummary.slice(currentIndex + 1)
+            ...dailySummary.slice(currentIndex + 1),
           ];
         }
       }, 1000);
-      
     } else {
       // Add new species
       const newSpecies: DailySpeciesSummary = {
@@ -415,22 +475,40 @@
         first_heard: detection.time,
         latest_heard: detection.time,
         thumbnail_url: `/api/v2/species/${detection.speciesCode}/thumbnail`,
-        isNew: true
+        isNew: true,
       };
       newSpecies.hourly_counts[hour] = 1;
-      
-      // Add to beginning of array
-      dailySummary = [newSpecies, ...dailySummary];
-      
-      console.log(`Added new species: ${detection.commonName} (count: 1, hour: ${hour})`);
-      
+
+      // Insert new species in correct position based on count (sorted descending)
+      const insertPosition = dailySummary.findIndex(s => s.count < newSpecies.count);
+      if (insertPosition === -1) {
+        // Add to end if it has the lowest count
+        dailySummary = [...dailySummary, newSpecies];
+      } else {
+        // Insert at the correct position
+        dailySummary = [
+          ...dailySummary.slice(0, insertPosition),
+          newSpecies,
+          ...dailySummary.slice(insertPosition),
+        ];
+      }
+
+      console.log(
+        `Added new species: ${detection.commonName} (count: 1, hour: ${hour}) at position ${insertPosition === -1 ? dailySummary.length - 1 : insertPosition}`
+      );
+
       // Clear animation flag after animation completes
       scheduleAnimationCleanup(() => {
-        if (dailySummary.length > 0 && dailySummary[0].species_code === detection.speciesCode) {
-          const cleared = { ...dailySummary[0] };
+        const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+        if (currentIndex >= 0) {
+          const cleared = { ...dailySummary[currentIndex] };
           cleared.isNew = false;
-          
-          dailySummary = [cleared, ...dailySummary.slice(1)];
+
+          dailySummary = [
+            ...dailySummary.slice(0, currentIndex),
+            cleared,
+            ...dailySummary.slice(currentIndex + 1),
+          ];
         }
       }, 800);
     }
