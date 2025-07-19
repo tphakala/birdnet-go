@@ -54,18 +54,120 @@
     }
   }
 
-  // Auto-refresh recent detections every 30 seconds
+  // Manual refresh function that works with both SSE and polling
+  function handleManualRefresh() {
+    // For SSE mode, just fetch fresh data without affecting the connection
+    if (connectionStatus === 'connected') {
+      fetchRecentDetections();
+    } else {
+      // For polling mode or when SSE is not working, use regular fetch
+      fetchRecentDetections();
+    }
+  }
+
+  // SSE connection for real-time detection updates
+  let eventSource: EventSource | null = null;
   let refreshInterval: ReturnType<typeof setInterval>;
+  let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
+  let sseRetryCount = $state(0);
+  const maxSSERetries = 3;
+
+  // Connect to SSE stream for real-time updates
+  function connectToDetectionStream() {
+    if (eventSource) {
+      eventSource.close();
+    }
+
+    connectionStatus = 'connecting';
+    eventSource = new EventSource('/api/v2/detections/stream');
+
+    eventSource.addEventListener('connected', (event) => {
+      connectionStatus = 'connected';
+      sseRetryCount = 0;
+      console.log('Connected to detection stream:', JSON.parse(event.data));
+    });
+
+    eventSource.addEventListener('detection', (event) => {
+      try {
+        const detectionData = JSON.parse(event.data);
+        // Convert SSEDetectionData to Detection format
+        const detection = {
+          id: detectionData.ID,
+          commonName: detectionData.CommonName,
+          scientificName: detectionData.ScientificName,
+          confidence: detectionData.Confidence,
+          date: detectionData.Date,
+          time: detectionData.Time,
+          speciesCode: detectionData.SpeciesCode,
+          verified: detectionData.Verified || 'unverified',
+          locked: detectionData.Locked || false
+        };
+
+        // Add new detection to beginning of list and limit to current selection
+        recentDetections = [detection, ...recentDetections].slice(0, 50);
+      } catch (error) {
+        console.error('Error parsing SSE detection data:', error);
+      }
+    });
+
+    eventSource.addEventListener('heartbeat', (event) => {
+      // SSE connection is alive, no action needed
+      const heartbeatData = JSON.parse(event.data);
+      console.debug('SSE heartbeat received, clients:', heartbeatData.clients);
+    });
+
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      connectionStatus = 'error';
+      
+      // Retry logic with exponential backoff
+      if (sseRetryCount < maxSSERetries) {
+        sseRetryCount++;
+        const retryDelay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
+        console.log(`Retrying SSE connection in ${retryDelay}ms (attempt ${sseRetryCount}/${maxSSERetries})`);
+        
+        setTimeout(() => {
+          if (eventSource?.readyState === EventSource.CLOSED) {
+            connectToDetectionStream();
+          }
+        }, retryDelay);
+      } else {
+        console.log('Max SSE retries reached, falling back to polling');
+        fallbackToPolling();
+      }
+    };
+  }
+
+  // Fallback to polling when SSE fails
+  function fallbackToPolling() {
+    connectionStatus = 'polling';
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+
+    // Start polling every 30 seconds
+    refreshInterval = setInterval(() => {
+      fetchRecentDetections();
+    }, 30000);
+  }
 
   onMount(() => {
     fetchDailySummary();
     fetchRecentDetections();
 
-    refreshInterval = setInterval(() => {
-      fetchRecentDetections();
-    }, 30000);
+    // Try SSE first, fallback to polling if not supported
+    if (typeof EventSource !== 'undefined') {
+      connectToDetectionStream();
+    } else {
+      console.log('EventSource not supported, using polling');
+      fallbackToPolling();
+    }
 
     return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
       if (refreshInterval) {
         clearInterval(refreshInterval);
       }
@@ -152,6 +254,7 @@
     loading={isLoadingDetections}
     error={detectionsError}
     onRowClick={handleDetectionClick}
-    onRefresh={fetchRecentDetections}
+    onRefresh={handleManualRefresh}
+    {connectionStatus}
   />
 </div>
