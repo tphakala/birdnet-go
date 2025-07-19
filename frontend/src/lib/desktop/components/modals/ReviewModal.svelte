@@ -28,7 +28,7 @@
   $effect(() => {
     if (detection) {
       const verified = detection.review?.verified;
-      reviewStatus = (verified === 'correct' || verified === 'false_positive') ? verified : 'correct';
+      reviewStatus = verified === 'correct' || verified === 'false_positive' ? verified : 'correct';
       lockDetection = detection.locked || false;
       ignoreSpecies = isExcluded;
       comment = (detection.comments?.[0] as any)?.entry || '';
