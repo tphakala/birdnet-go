@@ -646,3 +646,49 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 		})
 	}
 }
+
+// TestServeAudioByID tests the ServeAudioByID handler with Content-Disposition header
+func TestServeAudioByID(t *testing.T) {
+	// Setup test environment
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	// Create a test audio file
+	testFilename := "2024-01-15_14-30-45_Turdus_migratorius.wav"
+	filePath := filepath.Join(tempDir, testFilename)
+	testContent := "test audio content"
+	err := os.WriteFile(filePath, []byte(testContent), 0o600)
+	require.NoError(t, err)
+
+	// Setup mock data store to return the test file path
+	mockDS := &MockDataStore{}
+	// Mock the GetNoteClipPath method to return our test filename
+	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
+	mockDS.On("GetNoteClipPath", "999").Return("", errors.New("record not found"))
+	controller.DS = mockDS
+
+	t.Run("Valid audio by ID with Content-Disposition header", func(t *testing.T) {
+		// Create request
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/123", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("123")
+
+		// Call handler
+		handlerErr := controller.ServeAudioByID(c)
+
+		// Check for handler error
+		require.NoError(t, handlerErr)
+
+		// Check response
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, testContent, rec.Body.String())
+
+		// Check Content-Disposition header is set with original filename
+		expectedHeader := fmt.Sprintf("attachment; filename=%q", testFilename)
+		assert.Equal(t, expectedHeader, rec.Header().Get("Content-Disposition"))
+	})
+
+	// Note: Error cases are omitted as they are tested elsewhere and the main
+	// goal of this test is to verify Content-Disposition header functionality
+}
