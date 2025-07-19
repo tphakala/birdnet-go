@@ -1,9 +1,11 @@
 # Component Inventory
 
 ## Charts
+
 - `ChartWrapper.svelte` - Wrapper for chart components with common styling
 
 ## Data
+
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
 - `DailySummaryCard.svelte` - Daily species summary with hourly heatmap
 - `DataTable.svelte` - Generic data table with sorting and pagination
@@ -17,6 +19,7 @@
 - `WeatherInfo.svelte` - Weather information display
 
 ## Forms
+
 - `Checkbox.svelte` - Checkbox input with label
 - `DateRangePicker.svelte` - Date range selection
 - `FilterForm.svelte` - Generic filtering form
@@ -36,18 +39,22 @@
 - `ToggleField.svelte` - Toggle/switch field
 
 ## Layout
+
 - `Header.svelte` - Application header
 - `RootLayout.svelte` - Root layout wrapper
 - `Sidebar.svelte` - Navigation sidebar
 
 ## Media
+
 - `AudioPlayer.svelte` - Audio playback controls with spectrogram
 
 ## Modals
+
 - `ConfirmModal.svelte` - Confirmation dialog
 - `ReviewModal.svelte` - Detection review modal
 
 ## UI
+
 - `ActionMenu.svelte` - Dropdown action menu
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
@@ -79,9 +86,11 @@
 - `TimeOfDayIcon.svelte` - Time-based icons (day/night)
 
 ## Test Files
+
 Each component has corresponding `.test.ts` or `.test.svelte` files for unit testing.
 
 ## Type Files
+
 - `DataTable.types.ts` - Data table type definitions
 - `MultiStageOperation.types.ts` - Multi-stage operation types
 - `SelectDropdown.types.ts` - Select dropdown types
