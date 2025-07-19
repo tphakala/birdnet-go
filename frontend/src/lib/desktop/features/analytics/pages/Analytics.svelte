@@ -834,7 +834,7 @@
 
     let minDate: number | undefined = undefined;
     let maxDate: number | undefined = undefined;
-    
+
     if (filters.timePeriod !== 'all') {
       if (filters.startDate) minDate = new Date(filters.startDate).getTime();
       if (filters.endDate) maxDate = new Date(filters.endDate).getTime();
@@ -849,7 +849,7 @@
     }
 
     if (maxDate) {
-      maxDate = maxDate + (24 * 60 * 60 * 1000); // Add one day in milliseconds
+      maxDate = maxDate + 24 * 60 * 60 * 1000; // Add one day in milliseconds
     }
 
     charts.newSpecies = new Chart(ctx, {
@@ -1140,7 +1140,8 @@
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
                           onerror={e =>
-                            ((e.currentTarget as HTMLImageElement).src = '/assets/images/bird-placeholder.svg')}
+                            ((e.currentTarget as HTMLImageElement).src =
+                              '/assets/images/bird-placeholder.svg')}
                           loading="lazy"
                         />
                       </div>
