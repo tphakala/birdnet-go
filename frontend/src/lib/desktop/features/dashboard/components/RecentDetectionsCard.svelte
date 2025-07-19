@@ -20,17 +20,17 @@
     detectionArrivalTimes?: Map<number, number>;
   }
 
-  let { 
-    data = [], 
-    loading = false, 
-    error = null, 
-    onRowClick, 
-    onRefresh, 
-    limit = 5, 
-    onLimitChange, 
+  let {
+    data = [],
+    loading = false,
+    error = null,
+    onRowClick,
+    onRefresh,
+    limit = 5,
+    onLimitChange,
     connectionStatus = 'polling',
     newDetectionIds = new Set(),
-    detectionArrivalTimes = new Map() // Reserved for future staggered animations
+    detectionArrivalTimes = new Map(), // Reserved for future staggered animations
   }: Props = $props();
 
   // State for number of detections to show
@@ -43,7 +43,7 @@
 
   function handleLimitChange(newLimit: number) {
     selectedLimit = newLimit;
-    
+
     // Save to localStorage
     if (typeof window !== 'undefined') {
       try {
@@ -52,7 +52,7 @@
         console.error('Failed to save detection limit:', e);
       }
     }
-    
+
     // Call parent callback
     if (onLimitChange) {
       onLimitChange(newLimit);
@@ -188,39 +188,39 @@
   function getConnectionStatusInfo(status: string) {
     switch (status) {
       case 'connected':
-        return { 
-          text: 'Live', 
-          color: 'text-green-600', 
+        return {
+          text: 'Live',
+          color: 'text-green-600',
           icon: '●',
-          title: 'Real-time updates active'
+          title: 'Real-time updates active',
         };
       case 'connecting':
-        return { 
-          text: 'Connecting', 
-          color: 'text-yellow-600', 
+        return {
+          text: 'Connecting',
+          color: 'text-yellow-600',
           icon: '●',
-          title: 'Connecting to real-time updates'
+          title: 'Connecting to real-time updates',
         };
       case 'error':
-        return { 
-          text: 'Disconnected', 
-          color: 'text-red-600', 
+        return {
+          text: 'Disconnected',
+          color: 'text-red-600',
           icon: '●',
-          title: 'Real-time connection failed'
+          title: 'Real-time connection failed',
         };
       case 'polling':
-        return { 
-          text: 'Polling', 
-          color: 'text-blue-600', 
+        return {
+          text: 'Polling',
+          color: 'text-blue-600',
           icon: '⟳',
-          title: 'Using 30-second refresh polling'
+          title: 'Using 30-second refresh polling',
         };
       default:
-        return { 
-          text: 'Unknown', 
-          color: 'text-gray-600', 
+        return {
+          text: 'Unknown',
+          color: 'text-gray-600',
           icon: '?',
-          title: 'Connection status unknown'
+          title: 'Connection status unknown',
         };
     }
   }
@@ -234,10 +234,7 @@
         <span class="card-title grow text-base sm:text-xl">Recent Detections</span>
         {#snippet connectionIndicator()}
           {@const statusInfo = getConnectionStatusInfo(connectionStatus)}
-          <div 
-            class="flex items-center gap-1 text-xs {statusInfo.color}"
-            title={statusInfo.title}
-          >
+          <div class="flex items-center gap-1 text-xs {statusInfo.color}" title={statusInfo.title}>
             <span class="text-sm">{statusInfo.icon}</span>
             <span>{statusInfo.text}</span>
           </div>
@@ -249,7 +246,7 @@
         <select
           id="numDetections"
           bind:value={selectedLimit}
-          onchange={(e) => handleLimitChange(parseInt(e.currentTarget.value, 10))}
+          onchange={e => handleLimitChange(parseInt(e.currentTarget.value, 10))}
           class="select select-sm focus-visible:outline-none"
         >
           <option value={5}>5</option>
@@ -409,71 +406,6 @@
   </div>
 </section>
 
-
-
-<style>
-  /* Use existing confidence circle styles from custom.css - no additional styles needed */
-
-  /* Thumbnail Container - additional styles for RecentDetections */
-  .thumbnail-container {
-    min-height: 60px;
-  }
-
-  /* Audio Player Container */
-  .audio-player-container {
-    position: relative;
-    width: 100%;
-  }
-  
-  /* Ensure AudioPlayer fills container width */
-  .audio-player-container :global(.group) {
-    width: 100% !important;
-    height: auto !important;
-  }
-  
-  /* Responsive spectrogram sizing - let it maintain natural aspect ratio */
-  .audio-player-container :global(img) {
-    object-fit: contain !important;
-    height: auto !important;
-    width: 100% !important;
-    max-width: 400px;
-  }
-
-  /* Grid alignment - items-center is handled by Tailwind class */
-
-  /* Detection row theme-aware styling with hover effects */
-  .detection-row {
-    border-bottom: 1px solid hsl(var(--bc) / 0.1);
-    transition: transform 0.3s ease-out, background-color 0.15s ease-in-out;
-  }
-
-  /* New detection animations - theme-aware fade-in */
-  .new-detection {
-    animation: slideInFade 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-  }
-
-  @keyframes slideInFade {
-    0% {
-      transform: translateY(-30px);
-      opacity: 0;
-      background-color: hsl(var(--p) / 0.2);
-      border-left: 4px solid hsl(var(--p));
-    }
-    50% {
-      background-color: hsl(var(--p) / 0.15);
-      border-left: 4px solid hsl(var(--p));
-    }
-    100% {
-      transform: translateY(0);
-      opacity: 1;
-      background-color: transparent;
-      border-left: none;
-    }
-  }
-
-  /* Smooth transitions handled above in .detection-row */
-</style>
-
 <!-- Modals -->
 {#if selectedDetection}
   <ReviewModal
@@ -486,7 +418,7 @@
     }}
     onSave={async (verified, lockDetection, ignoreSpecies, comment) => {
       if (!selectedDetection) return;
-      
+
       await fetchWithCSRF(`/api/v2/detections/${selectedDetection.id}/review`, {
         method: 'POST',
         headers: {
@@ -521,3 +453,68 @@
     }}
   />
 {/if}
+
+<style>
+  /* Use existing confidence circle styles from custom.css - no additional styles needed */
+
+  /* Thumbnail Container - additional styles for RecentDetections */
+  .thumbnail-container {
+    min-height: 60px;
+  }
+
+  /* Audio Player Container */
+  .audio-player-container {
+    position: relative;
+    width: 100%;
+  }
+
+  /* Ensure AudioPlayer fills container width */
+  .audio-player-container :global(.group) {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Responsive spectrogram sizing - let it maintain natural aspect ratio */
+  .audio-player-container :global(img) {
+    object-fit: contain !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: 400px;
+  }
+
+  /* Grid alignment - items-center is handled by Tailwind class */
+
+  /* Detection row theme-aware styling with hover effects */
+  .detection-row {
+    border-bottom: 1px solid hsl(var(--bc) / 0.1);
+    transition:
+      transform 0.3s ease-out,
+      background-color 0.15s ease-in-out;
+  }
+
+  /* New detection animations - theme-aware fade-in */
+  .new-detection {
+    animation: slideInFade 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  }
+
+  @keyframes slideInFade {
+    0% {
+      transform: translateY(-30px);
+      opacity: 0;
+      background-color: hsl(var(--p) / 0.2);
+      border-left: 4px solid hsl(var(--p));
+    }
+    50% {
+      background-color: hsl(var(--p) / 0.15);
+      border-left: 4px solid hsl(var(--p));
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+      background-color: transparent;
+      border-left: none;
+    }
+  }
+
+  /* Smooth transitions handled above in .detection-row */
+</style>
