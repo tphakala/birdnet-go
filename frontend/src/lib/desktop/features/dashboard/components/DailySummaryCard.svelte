@@ -125,7 +125,7 @@
       <span class="card-title grow text-base sm:text-xl"
         >Daily Summary
         {#if data.length > 0}
-          <span class="species-ball bg-blue-500 text-white ml-2">{data.length}</span>
+          <span class="species-ball bg-primary text-primary-content ml-2">{data.length}</span>
         {/if}
       </span>
       <div class="flex items-center gap-2">
@@ -214,7 +214,7 @@
                   {#if column.key?.startsWith('hour_')}
                     {@const hour = parseInt(column.key.split('_')[1])}
                     <button
-                      class="hover:text-blue-600 cursor-pointer"
+                      class="hover:text-primary cursor-pointer"
                       onclick={() => handleHourHeaderClick(hour)}
                       title="View all detections for {hour.toString().padStart(2, '0')}:00"
                     >
@@ -261,7 +261,7 @@
                       </div>
                     {:else if column.key === 'count'}
                       <button
-                        class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative h-6 hover:bg-base-200 transition-colors cursor-pointer"
+                        class="w-full bg-base-300 rounded-full overflow-hidden relative h-6 hover:bg-base-200 transition-colors cursor-pointer"
                         onclick={e => {
                           e.stopPropagation();
                           handleCountClick(item);
@@ -269,14 +269,14 @@
                         title="View all detections for {item.common_name}"
                       >
                         <div
-                          class="progress progress-primary bg-gray-400 dark:bg-gray-400 h-full"
+                          class="progress progress-primary h-full"
                           style:width="{Math.min(
                             100,
                             (item.count / Math.max(...data.map(d => d.count))) * 100
                           )}%"
                         >
                           <span
-                            class="text-xs text-gray-100 dark:text-base-300 absolute right-1 top-1/2 transform -translate-y-1/2"
+                            class="text-xs text-base-content absolute right-1 top-1/2 transform -translate-y-1/2"
                           >
                             {item.count}
                           </span>
@@ -289,8 +289,7 @@
                         {@const maxCount = Math.max(...item.hourly_counts.filter(c => c > 0))}
                         {@const intensity = Math.min(9, Math.floor((count / maxCount) * 9))}
                         <button
-                          class="heatmap-cell cursor-pointer"
-                          style:background-color="var(--heatmap-color-{intensity})"
+                          class="heatmap-cell heatmap-color-{intensity} cursor-pointer"
                           title="{count} detections at {hour
                             .toString()
                             .padStart(2, '0')}:00 - Click to view"
@@ -302,7 +301,7 @@
                           <span class="text-xs">{count}</span>
                         </button>
                       {:else}
-                        <div class="heatmap-cell" style:background-color="var(--heatmap-color-0)">
+                        <div class="heatmap-cell heatmap-color-0">
                           <span class="text-xs text-base-content/30">·</span>
                         </div>
                       {/if}
@@ -326,51 +325,11 @@
 </section>
 
 <style>
-  :root {
-    --heatmap-color-0: #f0f9fc;
-    --heatmap-color-1: #e0f3f8;
-    --heatmap-color-2: #d1edf4;
-    --heatmap-color-3: #c1e7f0;
-    --heatmap-color-4: #b2e1ec;
-    --heatmap-color-5: #a2dbe8;
-    --heatmap-color-6: #93d5e4;
-    --heatmap-color-7: #83cfe0;
-    --heatmap-color-8: #74c9dc;
-    --heatmap-color-9: #64c3d8;
-  }
-
-  :global([data-theme='dark']) {
-    --heatmap-color-0: #001a20;
-    --heatmap-color-1: #003440;
-    --heatmap-color-2: #004e60;
-    --heatmap-color-3: #006880;
-    --heatmap-color-4: #0082a0;
-    --heatmap-color-5: #009cc0;
-    --heatmap-color-6: #00b6e0;
-    --heatmap-color-7: #00d0ff;
-    --heatmap-color-8: #1ad6ff;
-    --heatmap-color-9: #33dcff;
-  }
-
-  .species-ball {
-    min-width: 1rem;
-    height: 1.25rem;
-    display: inline-flex;
-    padding: 0.2rem 0.25rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 1rem;
-    font-size: 0.75rem;
-    line-height: 1;
-  }
-
-  thead.sticky-header {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    height: 2rem;
-    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
-  }
+  /* Removed duplicate styles - using existing classes from custom.css:
+   * - Heatmap colors already defined in custom.css
+   * - .species-ball already defined in custom.css  
+   * - .sticky-header already defined in custom.css
+   */
 
   .heatmap-cell {
     display: flex;
@@ -388,35 +347,5 @@
     position: relative;
   }
 
-  /* Responsive hour column display */
-  .hour-header,
-  .hour-data,
-  .hourly-count {
-    display: none;
-  }
-
-  /* Show hourly columns on larger screens */
-  @media (min-width: 1400px) {
-    .hour-header.hourly-count,
-    .hour-data.hourly-count,
-    .hourly-count {
-      display: table-cell;
-    }
-  }
-
-  /* Medium screens - show some hourly columns */
-  @media (min-width: 1024px) and (max-width: 1399px) {
-    .hour-header.hourly-count:nth-child(n + 5):nth-child(-n + 25):nth-child(2n),
-    .hour-data.hourly-count:nth-child(n + 5):nth-child(-n + 25):nth-child(2n) {
-      display: table-cell;
-    }
-  }
-
-  /* Smaller screens - show fewer hourly columns */
-  @media (min-width: 768px) and (max-width: 1023px) {
-    .hour-header.hourly-count:nth-child(n + 5):nth-child(-n + 25):nth-child(4n),
-    .hour-data.hourly-count:nth-child(n + 5):nth-child(-n + 25):nth-child(4n) {
-      display: table-cell;
-    }
-  }
+  /* Responsive hour column display handled by custom.css */
 </style>
