@@ -80,6 +80,7 @@
     // Clear animation state on manual refresh
     newDetectionIds.clear();
     detectionArrivalTimes.clear();
+    clearDailySummaryAnimations();
     
     // For SSE mode, just fetch fresh data without affecting the connection
     if (connectionStatus === 'connected') {
@@ -88,6 +89,16 @@
       // For polling mode or when SSE is not working, use regular fetch
       fetchRecentDetections();
     }
+  }
+
+  // Clear animation states from daily summary
+  function clearDailySummaryAnimations() {
+    dailySummary = dailySummary.map(species => ({
+      ...species,
+      isNew: false,
+      countIncreased: false,
+      hourlyUpdated: []
+    }));
   }
 
   // SSE connection for real-time detection updates
@@ -138,6 +149,9 @@
         
         // Add new detection to beginning of list and limit to user's selected limit
         recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
+        
+        // Update daily summary with new detection
+        updateDailySummary(detection);
         
         // Remove animation class after animation completes (600ms animation + 400ms buffer)
         setTimeout(() => {
@@ -218,6 +232,7 @@
     const date = new Date(selectedDate);
     date.setDate(date.getDate() - 1);
     selectedDate = date.toISOString().split('T')[0];
+    clearDailySummaryAnimations();
     fetchDailySummary();
   }
 
@@ -227,17 +242,20 @@
     const today = new Date().toISOString().split('T')[0];
     if (date.toISOString().split('T')[0] <= today) {
       selectedDate = date.toISOString().split('T')[0];
+      clearDailySummaryAnimations();
       fetchDailySummary();
     }
   }
 
   function goToToday() {
     selectedDate = new Date().toISOString().split('T')[0];
+    clearDailySummaryAnimations();
     fetchDailySummary();
   }
 
   function handleDateChange(date: string) {
     selectedDate = date;
+    clearDailySummaryAnimations();
     fetchDailySummary();
   }
 
@@ -246,6 +264,83 @@
     detectionLimit = newLimit;
     // Trim existing detections to new limit
     recentDetections = recentDetections.slice(0, newLimit);
+  }
+
+  // Update daily summary when new detection arrives via SSE
+  function updateDailySummary(detection: Detection) {
+    // Only update if detection is for the currently selected date
+    if (detection.date !== selectedDate) {
+      return;
+    }
+
+    const hour = new Date(`${detection.date} ${detection.time}`).getHours();
+    const existingIndex = dailySummary.findIndex(
+      s => s.species_code === detection.speciesCode
+    );
+    
+    if (existingIndex >= 0) {
+      // Update existing species
+      const updated = { ...dailySummary[existingIndex] };
+      updated.previousCount = updated.count;
+      updated.count++;
+      updated.countIncreased = true;
+      updated.hourly_counts = [...updated.hourly_counts];
+      updated.hourly_counts[hour]++;
+      updated.hourlyUpdated = [hour];
+      updated.latest_heard = detection.time;
+      
+      // Update the array immutably
+      dailySummary = [
+        ...dailySummary.slice(0, existingIndex),
+        updated,
+        ...dailySummary.slice(existingIndex + 1)
+      ];
+      
+      // Clear animation flags after animation completes
+      setTimeout(() => {
+        const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
+        if (currentIndex >= 0) {
+          const cleared = { ...dailySummary[currentIndex] };
+          cleared.countIncreased = false;
+          cleared.hourlyUpdated = [];
+          
+          dailySummary = [
+            ...dailySummary.slice(0, currentIndex),
+            cleared,
+            ...dailySummary.slice(currentIndex + 1)
+          ];
+        }
+      }, 1000);
+      
+    } else {
+      // Add new species
+      const newSpecies: DailySpeciesSummary = {
+        scientific_name: detection.scientificName,
+        common_name: detection.commonName,
+        species_code: detection.speciesCode,
+        count: 1,
+        hourly_counts: Array(24).fill(0),
+        high_confidence: detection.confidence >= 0.8,
+        first_heard: detection.time,
+        latest_heard: detection.time,
+        thumbnail_url: `/api/v2/species/${detection.speciesCode}/thumbnail`,
+        isNew: true
+      };
+      newSpecies.hourly_counts[hour] = 1;
+      
+      // Add to beginning of array
+      dailySummary = [newSpecies, ...dailySummary];
+      
+      // Clear animation flag after animation completes
+      setTimeout(() => {
+        if (dailySummary.length > 0 && dailySummary[0].species_code === detection.speciesCode) {
+          const cleared = { ...dailySummary[0] };
+          cleared.isNew = false;
+          
+          dailySummary = [cleared, ...dailySummary.slice(1)];
+        }
+      }, 800);
+    }
   }
 
   // Handle detection click
