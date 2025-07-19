@@ -15,7 +15,6 @@
     onRefresh: () => void;
     limit?: number;
     onLimitChange?: (limit: number) => void;
-    connectionStatus?: 'connecting' | 'connected' | 'error' | 'polling';
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
   }
@@ -28,7 +27,6 @@
     onRefresh,
     limit = 5,
     onLimitChange,
-    connectionStatus = 'polling',
     newDetectionIds = new Set(),
     detectionArrivalTimes = new Map(), // Reserved for future staggered animations
   }: Props = $props();
@@ -184,46 +182,6 @@
     showConfirmModal = true;
   }
 
-  // Helper to get connection status display info
-  function getConnectionStatusInfo(status: string) {
-    switch (status) {
-      case 'connected':
-        return {
-          text: 'Live',
-          color: 'text-green-600',
-          icon: '●',
-          title: 'Real-time updates active',
-        };
-      case 'connecting':
-        return {
-          text: 'Connecting',
-          color: 'text-yellow-600',
-          icon: '●',
-          title: 'Connecting to real-time updates',
-        };
-      case 'error':
-        return {
-          text: 'Disconnected',
-          color: 'text-red-600',
-          icon: '●',
-          title: 'Real-time connection failed',
-        };
-      case 'polling':
-        return {
-          text: 'Polling',
-          color: 'text-blue-600',
-          icon: '⟳',
-          title: 'Using 30-second refresh polling',
-        };
-      default:
-        return {
-          text: 'Unknown',
-          color: 'text-gray-600',
-          icon: '?',
-          title: 'Connection status unknown',
-        };
-    }
-  }
 </script>
 
 <section class="card col-span-12 bg-base-100 shadow-sm">
@@ -232,14 +190,6 @@
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
         <span class="card-title grow text-base sm:text-xl">Recent Detections</span>
-        {#snippet connectionIndicator()}
-          {@const statusInfo = getConnectionStatusInfo(connectionStatus)}
-          <div class="flex items-center gap-1 text-xs {statusInfo.color}" title={statusInfo.title}>
-            <span class="text-sm">{statusInfo.icon}</span>
-            <span>{statusInfo.text}</span>
-          </div>
-        {/snippet}
-        {@render connectionIndicator()}
       </div>
       <div class="flex items-center gap-2">
         <label for="numDetections" class="label-text text-sm">Show:</label>
