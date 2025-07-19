@@ -29,7 +29,7 @@ export function getCsrfToken(): string | null {
     const token = metaTag.getAttribute('content');
     if (token) return token;
   }
-  
+
   // Fallback to cookie (though it's HttpOnly so this won't work)
   const cookies = document.cookie.split(';');
   for (const cookie of cookies) {

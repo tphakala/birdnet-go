@@ -1,31 +1,31 @@
 /**
  * csrf.ts
- * 
+ *
  * CSRF (Cross-Site Request Forgery) token management store for secure API requests.
  * Handles token retrieval, storage, and automatic inclusion in request headers.
- * 
+ *
  * Usage:
  * - API utilities that need CSRF protection
  * - Form submissions requiring CSRF tokens
  * - Any server communication that modifies state
  * - Header generation for fetch requests
- * 
+ *
  * Features:
  * - Multiple token source support (meta tags, cookies)
  * - Automatic token retrieval and caching
  * - Header generation for API requests
  * - Fallback mechanisms for token availability
- * 
+ *
  * Security:
  * - Prevents CSRF attacks on state-changing operations
  * - Validates server-generated tokens
  * - Integrates with server-side CSRF middleware
  * - Follows OWASP CSRF prevention guidelines
- * 
+ *
  * Token Sources (in priority order):
  * 1. HTML meta tag: <meta name="csrf-token" content="...">
  * 2. HTTP cookie: csrf_token=...
- * 
+ *
  * API Integration:
  * - Automatically includes X-CSRF-Token header
  * - Used by fetchWithCSRF utility function

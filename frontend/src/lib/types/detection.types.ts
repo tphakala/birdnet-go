@@ -99,8 +99,8 @@ export interface DailySpeciesSummary {
   latest_heard: string;
   thumbnail_url: string;
   // Animation state flags
-  isNew?: boolean;                    // New species row animation
-  countIncreased?: boolean;           // Count increment animation
-  hourlyUpdated?: number[];           // Which hours were just updated
-  previousCount?: number;             // For animated counter
+  isNew?: boolean; // New species row animation
+  countIncreased?: boolean; // Count increment animation
+  hourlyUpdated?: number[]; // Which hours were just updated
+  previousCount?: number; // For animated counter
 }
