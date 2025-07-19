@@ -353,12 +353,22 @@
               <!-- Thumbnail -->
               <div class="col-span-2 relative flex items-center">
                 <div class="thumbnail-container w-full">
-                  <img
-                    src="/api/v2/species/{detection.speciesCode}/thumbnail"
-                    alt={detection.commonName}
-                    class="w-full h-auto rounded-md object-contain max-h-16"
-                    onerror={handleImageError}
-                  />
+                  <button
+                    class="flex items-center justify-center"
+                    onclick={() => handleRowClick(detection)}
+                    tabindex="-1"
+                  >
+                    <img
+                      loading="lazy"
+                      src="/api/v2/media/species-image?name={encodeURIComponent(detection.scientificName)}"
+                      alt={detection.commonName}
+                      class="w-full h-auto rounded-md object-contain"
+                      onerror={handleImageError}
+                    />
+                  </button>
+                  <div class="thumbnail-tooltip hidden">
+                    <!-- TODO: Add thumbnail attribution when available -->
+                  </div>
                 </div>
               </div>
 
@@ -457,9 +467,10 @@
 <style>
   /* Use existing confidence circle styles from custom.css - no additional styles needed */
 
-  /* Thumbnail Container - additional styles for RecentDetections */
+  /* Thumbnail Container - matches original template styling */
   .thumbnail-container {
-    min-height: 60px;
+    position: relative;
+    display: inline-block;
   }
 
   /* Audio Player Container */
