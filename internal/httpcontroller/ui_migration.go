@@ -54,7 +54,7 @@ func (s *Server) SetupUIRedirects(config *UIMigrationConfig) {
 }
 
 // AddSvelteRoute adds a new Svelte-based UI route
-func (s *Server) AddSvelteRoute(path string, title string, authorized bool) {
+func (s *Server) AddSvelteRoute(path, title string, authorized bool) {
 	route := PageRouteConfig{
 		Path:         "/ui" + path,
 		TemplateName: "svelte-standalone",
