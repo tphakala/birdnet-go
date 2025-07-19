@@ -116,6 +116,12 @@
   }
 
   const isToday = $derived(selectedDate === new Date().toISOString().split('T')[0]);
+  
+  // Check for reduced motion preference for performance and accessibility
+  const prefersReducedMotion = $derived(
+    typeof window !== 'undefined' && 
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 </script>
 
 <section class="card col-span-12 bg-base-100 shadow-sm">
@@ -232,6 +238,7 @@
               <tr
                 class="hover"
                 class:cursor-pointer={onRowClick || onDetectionView}
+                class:new-species={item.isNew && !prefersReducedMotion}
                 onclick={() => {
                   if (onRowClick) {
                     onRowClick(item);
@@ -262,6 +269,7 @@
                     {:else if column.key === 'count'}
                       <button
                         class="w-full bg-base-300 rounded-full overflow-hidden relative h-6 hover:bg-base-200 transition-colors cursor-pointer"
+                        class:count-increased={item.countIncreased && !prefersReducedMotion}
                         onclick={e => {
                           e.stopPropagation();
                           handleCountClick(item);
@@ -276,7 +284,7 @@
                           )}%"
                         >
                           <span
-                            class="text-xs text-base-content absolute right-1 top-1/2 transform -translate-y-1/2"
+                            class="text-xs text-base-content absolute right-1 top-1/2 transform -translate-y-1/2 animated-counter"
                           >
                             {item.count}
                           </span>
@@ -290,6 +298,7 @@
                         {@const intensity = Math.min(9, Math.floor((count / maxCount) * 9))}
                         <button
                           class="heatmap-cell heatmap-color-{intensity} cursor-pointer"
+                          class:hour-updated={item.hourlyUpdated?.includes(hour) && !prefersReducedMotion}
                           title="{count} detections at {hour
                             .toString()
                             .padStart(2, '0')}:00 - Click to view"
@@ -345,6 +354,79 @@
     transform: scale(1.1);
     z-index: 5;
     position: relative;
+  }
+
+  /* Phase 2: Dynamic Update Animations */
+  
+  /* Count increment animation */
+  @keyframes countPop {
+    0% { 
+      transform: scale(1); 
+    }
+    50% { 
+      transform: scale(1.3); 
+      background-color: hsl(var(--su) / 0.3);
+      box-shadow: 0 0 10px hsl(var(--su) / 0.5);
+    }
+    100% { 
+      transform: scale(1); 
+      background-color: transparent;
+    }
+  }
+
+  .count-increased {
+    animation: countPop 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* New species row animation */
+  @keyframes newSpeciesSlide {
+    0% { 
+      transform: translateY(-30px); 
+      opacity: 0; 
+      background-color: hsl(var(--p) / 0.15);
+    }
+    100% { 
+      transform: translateY(0); 
+      opacity: 1; 
+      background-color: transparent;
+    }
+  }
+
+  .new-species {
+    animation: newSpeciesSlide 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  /* Heatmap cell update flash */
+  @keyframes heatmapFlash {
+    0%, 100% { 
+      box-shadow: none; 
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 12px hsl(var(--p));
+      transform: scale(1.1);
+    }
+  }
+
+  .hour-updated {
+    animation: heatmapFlash 0.8s ease-out;
+  }
+
+  /* Animated counter */
+  .animated-counter {
+    display: inline-block;
+    transition: transform 0.3s ease-out;
+  }
+
+  /* Respect user's reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .count-increased,
+    .new-species,
+    .hour-updated,
+    .animated-counter {
+      animation: none;
+      transition: none;
+    }
   }
 
   /* Responsive hour column display handled by custom.css */

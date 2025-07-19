@@ -37,6 +37,10 @@
   // Animation state for new detections
   let newDetectionIds = $state(new Set<number>());
   let detectionArrivalTimes = $state(new Map<number, number>());
+  
+  // Debouncing for rapid daily summary updates
+  let updateQueue = $state(new Map<string, Detection>());
+  let updateTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Fetch functions
   async function fetchDailySummary() {
@@ -91,6 +95,9 @@
     }
   }
 
+  // Animation cleanup timers
+  let animationCleanupTimers = $state(new Set<ReturnType<typeof setTimeout>>());
+
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
     dailySummary = dailySummary.map(species => ({
@@ -99,6 +106,29 @@
       countIncreased: false,
       hourlyUpdated: []
     }));
+    
+    // Clear any pending animation cleanup timers
+    animationCleanupTimers.forEach(timer => clearTimeout(timer));
+    animationCleanupTimers.clear();
+  }
+
+  // Centralized animation cleanup with timer tracking and limit
+  function scheduleAnimationCleanup(cleanupFn: () => void, delay: number) {
+    // Performance: Limit concurrent animations to prevent overwhelming the UI
+    if (animationCleanupTimers.size > 50) {
+      console.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
+      const oldestTimer = animationCleanupTimers.values().next().value;
+      clearTimeout(oldestTimer);
+      animationCleanupTimers.delete(oldestTimer);
+    }
+    
+    const timer = setTimeout(() => {
+      cleanupFn();
+      animationCleanupTimers.delete(timer);
+    }, delay);
+    
+    animationCleanupTimers.add(timer);
+    return timer;
   }
 
   // SSE connection for real-time detection updates
@@ -150,8 +180,8 @@
         // Add new detection to beginning of list and limit to user's selected limit
         recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
         
-        // Update daily summary with new detection
-        updateDailySummary(detection);
+        // Queue daily summary update with debouncing
+        queueDailySummaryUpdate(detection);
         
         // Remove animation class after animation completes (600ms animation + 400ms buffer)
         setTimeout(() => {
@@ -218,21 +248,46 @@
     }
 
     return () => {
+      // Clean up SSE connection
       if (eventSource) {
         eventSource.close();
       }
+      
+      // Clean up polling interval
       if (refreshInterval) {
         clearInterval(refreshInterval);
       }
+      
+      // Clean up debounce timer
+      if (updateTimer) {
+        clearTimeout(updateTimer);
+      }
+      
+      // Clean up animation timers
+      animationCleanupTimers.forEach(timer => clearTimeout(timer));
+      animationCleanupTimers.clear();
     };
   });
 
   // Date navigation
+  // Enhanced date change handler with cleanup
+  function handleDateChangeWithCleanup() {
+    // Clear pending updates for old date
+    if (updateTimer) {
+      clearTimeout(updateTimer);
+      updateTimer = null;
+    }
+    updateQueue.clear();
+    
+    // Clear animations
+    clearDailySummaryAnimations();
+  }
+
   function previousDay() {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() - 1);
     selectedDate = date.toISOString().split('T')[0];
-    clearDailySummaryAnimations();
+    handleDateChangeWithCleanup();
     fetchDailySummary();
   }
 
@@ -242,20 +297,20 @@
     const today = new Date().toISOString().split('T')[0];
     if (date.toISOString().split('T')[0] <= today) {
       selectedDate = date.toISOString().split('T')[0];
-      clearDailySummaryAnimations();
+      handleDateChangeWithCleanup();
       fetchDailySummary();
     }
   }
 
   function goToToday() {
     selectedDate = new Date().toISOString().split('T')[0];
-    clearDailySummaryAnimations();
+    handleDateChangeWithCleanup();
     fetchDailySummary();
   }
 
   function handleDateChange(date: string) {
     selectedDate = date;
-    clearDailySummaryAnimations();
+    handleDateChangeWithCleanup();
     fetchDailySummary();
   }
 
@@ -264,6 +319,40 @@
     detectionLimit = newLimit;
     // Trim existing detections to new limit
     recentDetections = recentDetections.slice(0, newLimit);
+  }
+
+  // Queue daily summary updates with debouncing for rapid updates
+  function queueDailySummaryUpdate(detection: Detection) {
+    // Only update if detection is for the currently selected date
+    if (detection.date !== selectedDate) {
+      return;
+    }
+    
+    // Performance: Skip if too many pending updates to prevent UI freeze
+    if (updateQueue.size > 20) {
+      console.warn('Too many pending daily summary updates, skipping to prevent performance issues');
+      return;
+    }
+    
+    // Add to queue (overwrites previous detection for same species)
+    updateQueue.set(detection.speciesCode, detection);
+    
+    // Clear existing timer and set new one
+    if (updateTimer) {
+      clearTimeout(updateTimer);
+    }
+    
+    updateTimer = setTimeout(() => {
+      // Process all queued updates in order of species code for consistency
+      const sortedUpdates = Array.from(updateQueue.entries()).sort(([a], [b]) => a.localeCompare(b));
+      
+      sortedUpdates.forEach(([_, queuedDetection]) => {
+        updateDailySummary(queuedDetection);
+      });
+      
+      updateQueue.clear();
+      updateTimer = null;
+    }, 150); // Batch updates within 150ms window
   }
 
   // Update daily summary when new detection arrives via SSE
@@ -296,8 +385,10 @@
         ...dailySummary.slice(existingIndex + 1)
       ];
       
+      console.log(`Updated existing species: ${detection.commonName} (count: ${updated.count}, hour: ${hour})`);
+      
       // Clear animation flags after animation completes
-      setTimeout(() => {
+      scheduleAnimationCleanup(() => {
         const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
         if (currentIndex >= 0) {
           const cleared = { ...dailySummary[currentIndex] };
@@ -331,8 +422,10 @@
       // Add to beginning of array
       dailySummary = [newSpecies, ...dailySummary];
       
+      console.log(`Added new species: ${detection.commonName} (count: 1, hour: ${hour})`);
+      
       // Clear animation flag after animation completes
-      setTimeout(() => {
+      scheduleAnimationCleanup(() => {
         if (dailySummary.length > 0 && dailySummary[0].species_code === detection.speciesCode) {
           const cleared = { ...dailySummary[0] };
           cleared.isNew = false;
