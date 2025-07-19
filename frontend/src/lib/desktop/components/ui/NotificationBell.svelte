@@ -80,7 +80,7 @@
       const response = await fetch('/api/v2/notifications?limit=20&status=unread');
       if (response.ok) {
         const data = await response.json();
-        notifications = (data.notifications || []).filter(n => shouldShowNotification(n));
+        notifications = (data.notifications || []).filter((n: Notification) => shouldShowNotification(n));
         updateUnreadCount();
       }
     } catch {
