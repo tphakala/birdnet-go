@@ -467,11 +467,12 @@ send_telemetry_event() {
     local level="${3:-info}"
     local context="${4:-}"
     
+    # Collect system info before background process
+    local system_info
+    system_info=$(collect_system_info)
+    
     # Run in background to not block installation
     {
-        # Collect system info
-        local system_info
-        system_info=$(collect_system_info)
         
         # Build JSON payload
         local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
