@@ -285,6 +285,13 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
 	}
 
+	// Extract the original filename from the clip path for download
+	originalFilename := filepath.Base(clipPath)
+	if originalFilename != "" && originalFilename != "." && originalFilename != "/" {
+		// Set Content-Disposition header to preserve original filename when downloading
+		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", originalFilename))
+	}
+
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
 	// Use ServeRelativeFile as clipPath is already relative to the baseDir
