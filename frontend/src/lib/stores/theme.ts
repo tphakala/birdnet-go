@@ -1,15 +1,15 @@
 /**
  * theme.ts
- * 
+ *
  * Theme management store for application-wide dark/light mode control.
  * Handles theme persistence, system preference detection, and DOM updates.
- * 
+ *
  * Usage:
  * - Theme toggle components in headers/settings
  * - Application initialization for theme setup
  * - System preference synchronization
  * - Theme persistence across sessions
- * 
+ *
  * Features:
  * - Light/dark theme switching
  * - System preference detection and following
@@ -17,25 +17,25 @@
  * - Automatic DOM attribute updates
  * - Real-time theme change listeners
  * - SSR-safe initialization
- * 
+ *
  * Theme Integration:
  * - Works with DaisyUI theme system
  * - Updates CSS custom properties
  * - Manages data-theme attributes
  * - Coordinates with Tailwind dark mode
- * 
+ *
  * System Integration:
  * - Detects prefers-color-scheme media query
  * - Follows system theme changes automatically
  * - Respects user preference override
  * - Graceful fallback to light theme
- * 
+ *
  * State Management:
  * - Reactive theme store
  * - Toggle functionality
  * - Initialization helpers
  * - Change event handling
- * 
+ *
  * Persistence:
  * - localStorage for user preferences
  * - DOM attribute synchronization

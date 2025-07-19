@@ -1,15 +1,15 @@
 /**
  * settings.ts
- * 
+ *
  * Comprehensive settings management store for BirdNET-Go application configuration.
  * Handles all application settings including BirdNET AI parameters, integrations, and system config.
- * 
+ *
  * Usage:
  * - Settings pages for configuration management
  * - Real-time settings updates across the application
  * - Change detection for unsaved modifications
  * - Centralized configuration state management
- * 
+ *
  * Features:
  * - Complete settings state management
  * - Automatic change detection and persistence
@@ -17,7 +17,7 @@
  * - Debounced save operations
  * - Integration with settings API
  * - TypeScript interfaces for all setting types
- * 
+ *
  * Settings Categories:
  * - Node: Basic node identification and location
  * - BirdNET: AI model parameters and thresholds
@@ -26,13 +26,13 @@
  * - Output: Data export and notification settings
  * - Security: Authentication and access control
  * - Debug: Development and troubleshooting options
- * 
+ *
  * Change Detection:
  * - Tracks unsaved changes across all settings
  * - Provides dirty state indicators
  * - Handles form validation and error states
  * - Supports bulk save operations
- * 
+ *
  * State Management:
  * - Centralized store for all configuration
  * - Reactive derived stores for change detection
