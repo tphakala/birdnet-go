@@ -16,6 +16,27 @@
   let isLoadingDetections = $state(true);
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
+  
+  // Function to get initial detection limit from localStorage
+  function getInitialDetectionLimit(): number {
+    if (typeof window !== 'undefined') {
+      const savedLimit = localStorage.getItem('recentDetectionLimit');
+      if (savedLimit) {
+        const parsed = parseInt(savedLimit, 10);
+        if (!isNaN(parsed) && [5, 10, 25, 50].includes(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return 5; // Default value
+  }
+
+  // Detection limit state to sync with RecentDetectionsCard
+  let detectionLimit = $state(getInitialDetectionLimit());
+  
+  // Animation state for new detections
+  let newDetectionIds = $state(new Set<number>());
+  let detectionArrivalTimes = $state(new Map<number, number>());
 
   // Fetch functions
   async function fetchDailySummary() {
@@ -56,6 +77,10 @@
 
   // Manual refresh function that works with both SSE and polling
   function handleManualRefresh() {
+    // Clear animation state on manual refresh
+    newDetectionIds.clear();
+    detectionArrivalTimes.clear();
+    
     // For SSE mode, just fetch fresh data without affecting the connection
     if (connectionStatus === 'connected') {
       fetchRecentDetections();
@@ -91,20 +116,34 @@
       try {
         const detectionData = JSON.parse(event.data);
         // Convert SSEDetectionData to Detection format
-        const detection = {
-          id: detectionData.ID,
-          commonName: detectionData.CommonName,
-          scientificName: detectionData.ScientificName,
-          confidence: detectionData.Confidence,
-          date: detectionData.Date,
-          time: detectionData.Time,
-          speciesCode: detectionData.SpeciesCode,
-          verified: detectionData.Verified || 'unverified',
-          locked: detectionData.Locked || false
+        const detection: Detection = {
+          id: detectionData.ID as number,
+          commonName: detectionData.CommonName as string,
+          scientificName: detectionData.ScientificName as string,
+          confidence: detectionData.Confidence as number,
+          date: detectionData.Date as string,
+          time: detectionData.Time as string,
+          speciesCode: detectionData.SpeciesCode as string,
+          verified: (detectionData.Verified || 'unverified') as Detection['verified'],
+          locked: (detectionData.Locked || false) as boolean,
+          source: (detectionData.Source || '') as string,
+          beginTime: (detectionData.BeginTime || '') as string,
+          endTime: (detectionData.EndTime || '') as string
         };
 
-        // Add new detection to beginning of list and limit to current selection
-        recentDetections = [detection, ...recentDetections].slice(0, 50);
+        // Mark detection as new for animation and track arrival time
+        const arrivalTime = Date.now();
+        newDetectionIds.add(detection.id);
+        detectionArrivalTimes.set(detection.id, arrivalTime);
+        
+        // Add new detection to beginning of list and limit to user's selected limit
+        recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
+        
+        // Remove animation class after animation completes (600ms animation + 400ms buffer)
+        setTimeout(() => {
+          newDetectionIds.delete(detection.id);
+          detectionArrivalTimes.delete(detection.id);
+        }, 1000);
       } catch (error) {
         console.error('Error parsing SSE detection data:', error);
       }
@@ -202,6 +241,13 @@
     fetchDailySummary();
   }
 
+  // Handle detection limit change from RecentDetectionsCard
+  function handleDetectionLimitChange(newLimit: number) {
+    detectionLimit = newLimit;
+    // Trim existing detections to new limit
+    recentDetections = recentDetections.slice(0, newLimit);
+  }
+
   // Handle detection click
   function handleDetectionClick(detection: Detection) {
     // Navigate to detection details or open modal
@@ -253,8 +299,12 @@
     data={recentDetections}
     loading={isLoadingDetections}
     error={detectionsError}
+    limit={detectionLimit}
+    onLimitChange={handleDetectionLimitChange}
     onRowClick={handleDetectionClick}
     onRefresh={handleManualRefresh}
     {connectionStatus}
+    {newDetectionIds}
+    {detectionArrivalTimes}
   />
 </div>

@@ -16,20 +16,25 @@
     limit?: number;
     onLimitChange?: (limit: number) => void;
     connectionStatus?: 'connecting' | 'connected' | 'error' | 'polling';
+    newDetectionIds?: Set<number>;
+    detectionArrivalTimes?: Map<number, number>;
   }
 
-  let { data = [], loading = false, error = null, onRowClick, onRefresh, limit = 10, onLimitChange, connectionStatus = 'polling' }: Props = $props();
+  let { 
+    data = [], 
+    loading = false, 
+    error = null, 
+    onRowClick, 
+    onRefresh, 
+    limit = 5, 
+    onLimitChange, 
+    connectionStatus = 'polling',
+    newDetectionIds = new Set(),
+    detectionArrivalTimes = new Map() // Reserved for future staggered animations
+  }: Props = $props();
 
   // State for number of detections to show
   let selectedLimit = $state(limit);
-
-  // Load saved limit from localStorage on component mount
-  if (typeof window !== 'undefined') {
-    const savedLimit = localStorage.getItem('recentDetectionLimit');
-    if (savedLimit) {
-      selectedLimit = parseInt(savedLimit, 10);
-    }
-  }
 
   // Update selectedLimit when prop changes
   $effect(() => {
@@ -54,22 +59,7 @@
     }
   }
 
-  // Modal state for expanded audio player
-  let expandedDetection = $state<Detection | null>(null);
-  let showExpandedPlayer = $state(false);
-
-  function showExpandedAudioPlayer(detection: Detection, event?: Event) {
-    if (event) {
-      event.stopPropagation(); // Prevent row click
-    }
-    expandedDetection = detection;
-    showExpandedPlayer = true;
-  }
-
-  function closeExpandedPlayer() {
-    showExpandedPlayer = false;
-    expandedDetection = null;
-  }
+  // Modal state for expanded audio player (removed - not currently used)
 
   function handleRowClick(detection: Detection) {
     if (onRowClick) {
@@ -79,16 +69,16 @@
 
   function getStatusBadge(verified: string, locked: boolean) {
     if (locked) {
-      return { type: 'locked', text: 'Locked', class: 'status-badge-locked' };
+      return { type: 'locked', text: 'Locked', class: 'status-badge locked' };
     }
 
     switch (verified) {
       case 'correct':
-        return { type: 'correct', text: 'Verified', class: 'status-badge-correct' };
+        return { type: 'correct', text: 'Verified', class: 'status-badge correct' };
       case 'false_positive':
-        return { type: 'false', text: 'False', class: 'status-badge-false' };
+        return { type: 'false', text: 'False', class: 'status-badge false' };
       default:
-        return { type: 'unverified', text: 'Unverified', class: 'status-badge-unverified' };
+        return { type: 'unverified', text: 'Unverified', class: 'status-badge unverified' };
     }
   }
 
@@ -106,7 +96,7 @@
     title: '',
     message: '',
     confirmLabel: 'Confirm',
-    onConfirm: () => {},
+    onConfirm: async () => {},
   });
 
   // Action handlers
@@ -333,9 +323,12 @@
         <div class="divide-y divide-base-200">
           {#each data.slice(0, selectedLimit) as detection}
             {@const badge = getStatusBadge(detection.verified, detection.locked)}
+            {@const isNew = newDetectionIds.has(detection.id)}
             <div
-              class="grid grid-cols-12 gap-4 items-center px-4 py-1 hover:bg-base-50 dark:hover:bg-base-200/50 transition-colors"
+              class="grid grid-cols-12 gap-4 items-center px-4 py-1 hover:bg-base-200/30 transition-colors detection-row"
               class:cursor-pointer={onRowClick}
+              class:new-detection={isNew}
+              style=""
               role="button"
               tabindex="0"
               onclick={() => handleRowClick(detection)}
@@ -387,7 +380,6 @@
                   <AudioPlayer
                     audioUrl="/api/v2/audio/{detection.id}"
                     detectionId={detection.id.toString()}
-                    responsive={true}
                     showSpectrogram={true}
                     className="w-full h-auto"
                   />
@@ -420,111 +412,10 @@
 
 
 <style>
-  /* Status Badge Styles */
-  .status-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    white-space: nowrap;
-    border: 1px solid;
-  }
+  /* Use existing confidence circle styles from custom.css - no additional styles needed */
 
-  .status-badge-unverified {
-    color: #6b7280;
-    background-color: #f3f4f6;
-    border-color: #d1d5db;
-  }
-
-  .status-badge-correct {
-    color: #059669;
-    background-color: #ecfdf5;
-    border-color: #a7f3d0;
-  }
-
-  .status-badge-false {
-    color: #dc2626;
-    background-color: #fef2f2;
-    border-color: #fecaca;
-  }
-
-  .status-badge-locked {
-    color: #d97706;
-    background-color: #fffbeb;
-    border-color: #fed7aa;
-  }
-
-  /* Dark theme status badges */
-  :global([data-theme='dark']) .status-badge-unverified {
-    color: #9ca3af;
-    background-color: rgba(107, 114, 128, 0.1);
-    border-color: rgba(107, 114, 128, 0.3);
-  }
-
-  :global([data-theme='dark']) .status-badge-correct {
-    color: #10b981;
-    background-color: rgba(5, 150, 105, 0.1);
-    border-color: rgba(5, 150, 105, 0.3);
-  }
-
-  :global([data-theme='dark']) .status-badge-false {
-    color: #ef4444;
-    background-color: rgba(220, 38, 38, 0.1);
-    border-color: rgba(220, 38, 38, 0.3);
-  }
-
-  :global([data-theme='dark']) .status-badge-locked {
-    color: #f59e0b;
-    background-color: rgba(217, 119, 6, 0.1);
-    border-color: rgba(217, 119, 6, 0.3);
-  }
-
-  /* Confidence Circle */
-  .confidence-circle {
-    width: 42px;
-    height: 42px;
-    position: relative;
-    border-radius: 50%;
-    background: var(--lighter-color, #f3f4f6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid;
-  }
-
-  .confidence-circle.confidence-high {
-    --lighter-color: #ecfdf5;
-    border-color: #059669;
-    color: #059669;
-  }
-
-  .confidence-circle.confidence-medium {
-    --lighter-color: #fffbeb;
-    border-color: #d97706;
-    color: #d97706;
-  }
-
-  .confidence-circle.confidence-low {
-    --lighter-color: #fef2f2;
-    border-color: #dc2626;
-    color: #dc2626;
-  }
-
-  .confidence-text {
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1;
-  }
-
-  /* Thumbnail Container */
+  /* Thumbnail Container - additional styles for RecentDetections */
   .thumbnail-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     min-height: 60px;
   }
 
@@ -548,25 +439,39 @@
     max-width: 400px;
   }
 
-  /* Row styling for better height management */
-  .grid {
-    align-items: center;
-  }
+  /* Grid alignment - items-center is handled by Tailwind class */
 
-  /* Hover Effects */
-  .grid:hover {
-    transition: background-color 0.15s ease-in-out;
-  }
-
-  /* Improved spacing */
+  /* Detection row theme-aware styling with hover effects */
   .detection-row {
-    padding: 0.5rem 1rem;
-    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    border-bottom: 1px solid hsl(var(--bc) / 0.1);
+    transition: transform 0.3s ease-out, background-color 0.15s ease-in-out;
   }
 
-  .detection-row:hover {
-    background-color: var(--hover-bg, #f9fafb);
+  /* New detection animations - theme-aware fade-in */
+  .new-detection {
+    animation: slideInFade 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
   }
+
+  @keyframes slideInFade {
+    0% {
+      transform: translateY(-30px);
+      opacity: 0;
+      background-color: hsl(var(--p) / 0.2);
+      border-left: 4px solid hsl(var(--p));
+    }
+    50% {
+      background-color: hsl(var(--p) / 0.15);
+      border-left: 4px solid hsl(var(--p));
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+      background-color: transparent;
+      border-left: none;
+    }
+  }
+
+  /* Smooth transitions handled above in .detection-row */
 </style>
 
 <!-- Modals -->
