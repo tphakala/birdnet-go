@@ -236,7 +236,6 @@
       showSpectrogram={true}
       showDownload={true}
       className="w-full max-w-[200px]"
-      controlsClassName="bg-base-100 border border-base-300 text-xs p-1"
     />
   </div>
 

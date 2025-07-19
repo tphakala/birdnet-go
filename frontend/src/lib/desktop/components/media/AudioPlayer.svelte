@@ -1,352 +1,534 @@
+<!--
+  AudioPlayer Component
+  
+  Advanced audio player with Web Audio API integration, featuring:
+  - Gain control (volume boost up to +24dB)
+  - High-pass filter with configurable frequency
+  - Dynamic range compression
+  - Visual spectrogram display
+  - Play/pause controls with progress tracking
+  - Download functionality
+  
+  Props:
+  - audioUrl: URL of the audio file to play
+  - detectionId: Unique ID for the detection
+  - width: Player width in pixels (default: 200)
+  - height: Player height in pixels (default: 80)
+  - showSpectrogram: Show spectrogram image (default: true)
+  - showDownload: Show download button (default: true)
+  - className: Additional CSS classes
+  - controlsClassName: CSS classes for controls container
+-->
+
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { cn } from '$lib/utils/cn';
-  import type { Snippet } from 'svelte';
+  import { cn } from '$lib/utils/cn.js';
 
   interface Props {
     audioUrl: string;
-    spectrogramUrl?: string;
-    detectionId?: string;
+    detectionId: string;
     width?: number;
     height?: number;
-    showDownload?: boolean;
     showSpectrogram?: boolean;
-    autoPlay?: boolean;
+    showDownload?: boolean;
     className?: string;
-    spectrogramClassName?: string;
     controlsClassName?: string;
-    onPlay?: () => void;
-    onPause?: () => void;
-    onEnded?: () => void;
-    // eslint-disable-next-line no-unused-vars
-    onTimeUpdate?: (currentTime: number, duration: number) => void;
-    children?: Snippet;
   }
 
   let {
     audioUrl,
-    spectrogramUrl,
     detectionId,
-    width = 400,
-    height = 200,
-    showDownload = true,
+    width = 200,
+    height = 80,
     showSpectrogram = true,
-    autoPlay = false,
+    showDownload = true,
     className = '',
-    spectrogramClassName = '',
-    controlsClassName = '',
-    onPlay,
-    onPause,
-    onEnded,
-    onTimeUpdate,
-    children,
+    controlsClassName = ''
   }: Props = $props();
 
-  let audioElement = $state<HTMLAudioElement>();
-  let spectrogramContainer = $state<HTMLDivElement>();
-  let progressBar = $state<HTMLDivElement>();
-  let positionIndicator = $state<HTMLDivElement>();
+  // Audio and UI elements
+  let audioElement: HTMLAudioElement;
+  let playerContainer: HTMLDivElement;
+  let playPauseButton: HTMLButtonElement;
+  let progressBar: HTMLDivElement;
+  let volumeControl: HTMLDivElement;
+  let filterControl: HTMLDivElement;
+  let volumeSlider: HTMLDivElement;
+  let filterSlider: HTMLDivElement;
 
+  // Audio state
   let isPlaying = $state(false);
   let currentTime = $state(0);
   let duration = $state(0);
-  let isLoading = $state(true);
-  let hasError = $state(false);
-  let updateInterval: number | null = null;
+  let progress = $state(0);
+  let isLoading = $state(false);
+  let error = $state<string | null>(null);
+  let updateInterval: number | undefined;
 
-  // Calculate progress percentage
-  const progressPercent = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+  // Audio processing state
+  let audioContext: AudioContext | null = null;
+  let audioNodes: {
+    source: MediaElementAudioSourceNode;
+    gain: GainNode;
+    compressor: DynamicsCompressorNode;
+    filters: { highPass: BiquadFilterNode };
+  } | null = null;
 
-  // Format time display
+  // Control state
+  let gainValue = $state(0); // dB
+  let filterFreq = $state(20); // Hz
+  let showVolumeSlider = $state(false);
+  let showFilterSlider = $state(false);
+  let showControls = $state(true); // Will be set based on width
+  let isMobile = $state(false);
+
+  // Constants
+  const GAIN_MAX_DB = 24;
+  const FILTER_HP_MIN_FREQ = 20;
+  const FILTER_HP_MAX_FREQ = 10000;
+  const FILTER_HP_DEFAULT_FREQ = 20;
+
+  // Computed values
+  const spectrogramUrl = $derived(
+    showSpectrogram ? `/api/v2/spectrogram/${detectionId}` : null
+  );
+
+  const playPauseId = $derived(`playPause-${detectionId}`);
+  const audioId = $derived(`audio-${detectionId}`);
+  const progressId = $derived(`progress-${detectionId}`);
+
+  // Utility functions
+  const dbToGain = (db: number): number => Math.pow(10, db / 20);
+  const gainToDb = (gain: number): number => 20 * Math.log10(gain);
   const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const currentTimeFormatted = $derived(formatTime(currentTime));
-  const durationFormatted = $derived(formatTime(duration));
-
-  // Play/pause toggle
-  function togglePlayPause() {
-    if (!audioElement) return;
-
-    if (audioElement.paused) {
-      audioElement.play().catch(_err => {
-        // Error playing audio
-        hasError = true;
-      });
-    } else {
-      audioElement.pause();
+  // Audio context setup
+  const initializeAudioContext = async () => {
+    try {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      return audioContext;
+    } catch (e) {
+      console.warn('Web Audio API is not supported in this browser');
+      return null;
     }
-  }
+  };
 
-  // Update progress
-  function updateProgress() {
-    if (!audioElement) return;
-    currentTime = audioElement.currentTime;
-    duration = audioElement.duration || 0;
+  // Create audio processing nodes
+  const createAudioNodes = (audioContext: AudioContext, audio: HTMLAudioElement) => {
+    const audioSource = audioContext.createMediaElementSource(audio);
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 1;
 
-    if (onTimeUpdate) {
-      onTimeUpdate(currentTime, duration);
-    }
-  }
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = 'highpass';
+    highPassFilter.frequency.value = FILTER_HP_DEFAULT_FREQ;
+    highPassFilter.Q.value = 1;
 
-  // Seek to position
-  function seekToPosition(event: MouseEvent) {
-    if (!audioElement || !duration) return;
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.value = -24;
+    compressor.knee.value = 30;
+    compressor.ratio.value = 12;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.25;
 
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const pos = (event.clientX - rect.left) / rect.width;
-    audioElement.currentTime = pos * duration;
-    updateProgress();
-  }
+    audioSource
+      .connect(highPassFilter)
+      .connect(gainNode)
+      .connect(compressor)
+      .connect(audioContext.destination);
 
-  // Handle keyboard controls on progress bar
-  function handleKeyDown(event: KeyboardEvent) {
-    if (!audioElement || !duration) return;
-
-    const step = 5; // 5 seconds step
-
-    switch (event.key) {
-      case 'ArrowLeft':
-        event.preventDefault();
-        audioElement.currentTime = Math.max(0, audioElement.currentTime - step);
-        updateProgress();
-        break;
-      case 'ArrowRight':
-        event.preventDefault();
-        audioElement.currentTime = Math.min(duration, audioElement.currentTime + step);
-        updateProgress();
-        break;
-      case ' ':
-      case 'Enter':
-        event.preventDefault();
-        togglePlayPause();
-        break;
-    }
-  }
+    return {
+      source: audioSource,
+      gain: gainNode,
+      compressor,
+      filters: {
+        highPass: highPassFilter
+      }
+    };
+  };
 
   // Audio event handlers
-  function handlePlay() {
-    isPlaying = true;
-    updateInterval = window.setInterval(updateProgress, 100);
-    onPlay?.();
-  }
+  const handlePlayPause = async () => {
+    if (!audioElement) return;
 
-  function handlePause() {
-    isPlaying = false;
-    if (updateInterval) {
-      window.clearInterval(updateInterval);
-      updateInterval = null;
+    try {
+      if (isPlaying) {
+        audioElement.pause();
+      } else {
+        // Initialize audio context on first play
+        if (!audioContext) {
+          audioContext = await initializeAudioContext();
+          if (audioContext && !audioNodes) {
+            audioNodes = createAudioNodes(audioContext, audioElement);
+          }
+        }
+        
+        await audioElement.play();
+      }
+    } catch (err) {
+      console.error('Error playing audio:', err);
+      error = 'Failed to play audio';
     }
-    onPause?.();
-  }
+  };
 
-  function handleEnded() {
-    isPlaying = false;
-    if (updateInterval) {
-      window.clearInterval(updateInterval);
-      updateInterval = null;
+  const updateProgress = () => {
+    if (!audioElement) return;
+    currentTime = audioElement.currentTime;
+    if (duration > 0) {
+      progress = (currentTime / duration) * 100;
     }
-    currentTime = 0;
-    onEnded?.();
-  }
+  };
+  
+  const startInterval = () => {
+    if (updateInterval) clearInterval(updateInterval);
+    updateInterval = setInterval(updateProgress, 100);
+  };
+  
+  const stopInterval = () => {
+    if (updateInterval) {
+      clearInterval(updateInterval);
+      updateInterval = undefined;
+    }
+  };
 
-  function handleLoadedMetadata() {
-    isLoading = false;
-    duration = audioElement?.duration || 0;
+  const handleTimeUpdate = () => {
+    // Keep as fallback but primary updates come from interval
     updateProgress();
-  }
+  };
 
-  function handleError() {
+  const handleLoadedMetadata = () => {
+    if (!audioElement) return;
+    duration = audioElement.duration;
     isLoading = false;
-    hasError = true;
-    // Error loading audio
-  }
+    error = null;
+  };
 
-  onMount(() => {
-    if (audioElement && autoPlay) {
-      audioElement.play().catch(_err => {
-        // Autoplay failed
-      });
+  const handleProgressClick = (event: MouseEvent) => {
+    if (!audioElement || !progressBar) return;
+    
+    const rect = progressBar.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickPercent = clickX / rect.width;
+    const newTime = clickPercent * duration;
+    
+    audioElement.currentTime = Math.max(0, Math.min(newTime, duration));
+  };
+
+  // Volume control
+  const updateGain = (newGainDb: number) => {
+    gainValue = Math.max(-60, Math.min(GAIN_MAX_DB, newGainDb));
+    if (audioNodes) {
+      audioNodes.gain.gain.value = dbToGain(gainValue);
     }
+  };
+
+  const handleVolumeSlider = (event: MouseEvent) => {
+    if (!volumeSlider) return;
+    
+    const rect = volumeSlider.getBoundingClientRect();
+    const clickY = event.clientY - rect.top;
+    const clickPercent = 1 - (clickY / rect.height);
+    const newGainDb = (clickPercent * (GAIN_MAX_DB + 60)) - 60;
+    
+    updateGain(newGainDb);
+  };
+
+  // Filter control
+  const updateFilter = (newFreq: number) => {
+    filterFreq = Math.max(FILTER_HP_MIN_FREQ, Math.min(FILTER_HP_MAX_FREQ, newFreq));
+    if (audioNodes) {
+      audioNodes.filters.highPass.frequency.value = filterFreq;
+    }
+  };
+
+  const handleFilterSlider = (event: MouseEvent) => {
+    if (!filterSlider) return;
+    
+    const rect = filterSlider.getBoundingClientRect();
+    const clickY = event.clientY - rect.top;
+    const clickPercent = 1 - (clickY / rect.height);
+    const newFreq = FILTER_HP_MIN_FREQ + (clickPercent * (FILTER_HP_MAX_FREQ - FILTER_HP_MIN_FREQ));
+    
+    updateFilter(newFreq);
+  };
+
+  // Lifecycle
+  onMount(() => {
+    // Check if mobile
+    isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    // Check width for control visibility
+    if (playerContainer) {
+      const checkWidth = () => {
+        showControls = playerContainer.offsetWidth >= 175;
+      };
+      checkWidth();
+      
+      const resizeObserver = new ResizeObserver(checkWidth);
+      resizeObserver.observe(playerContainer);
+      
+      onDestroy(() => resizeObserver.disconnect());
+    }
+    
+    if (audioElement) {
+      audioElement.addEventListener('play', () => { 
+        isPlaying = true; 
+        startInterval();
+      });
+      audioElement.addEventListener('pause', () => { 
+        isPlaying = false; 
+        stopInterval();
+      });
+      audioElement.addEventListener('ended', () => {
+        isPlaying = false;
+        stopInterval();
+      });
+      audioElement.addEventListener('timeupdate', handleTimeUpdate);
+      audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audioElement.addEventListener('loadstart', () => { isLoading = true; });
+      audioElement.addEventListener('error', () => { 
+        error = 'Failed to load audio'; 
+        isLoading = false; 
+      });
+      
+      // If already playing when mounted, start interval
+      if (!audioElement.paused) {
+        startInterval();
+      }
+    }
+    
+    // Auto-hide sliders after 5 seconds
+    let sliderTimeout: number | undefined;
+    
+    const resetSliderTimeout = () => {
+      if (sliderTimeout) clearTimeout(sliderTimeout);
+      sliderTimeout = setTimeout(() => {
+        showVolumeSlider = false;
+        showFilterSlider = false;
+      }, 5000);
+    };
+    
+    // Watch for slider visibility changes
+    $effect(() => {
+      if (showVolumeSlider || showFilterSlider) {
+        resetSliderTimeout();
+      }
+    });
   });
 
   onDestroy(() => {
-    if (updateInterval) {
-      window.clearInterval(updateInterval);
+    stopInterval();
+    if (audioNodes) {
+      audioNodes.source.disconnect();
+      audioNodes.gain.disconnect();
+      audioNodes.compressor.disconnect();
+      audioNodes.filters.highPass.disconnect();
+    }
+    if (audioContext) {
+      audioContext.close();
     }
   });
 
-  // Generate spectrogram URL if not provided
-  const computedSpectrogramUrl = $derived(
-    spectrogramUrl ?? (detectionId ? `/api/v2/spectrogram/${detectionId}?width=${width}` : '')
-  );
+  // SVG Icons
+  const playIcon = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+  </svg>`;
+
+  const pauseIcon = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+  </svg>`;
+
+  const downloadIcon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+  </svg>`;
+
+  const volumeIcon = `<svg width="16" height="16" viewBox="0 0 24 24" style="color: white;" aria-hidden="true">
+    <path d="M12 5v14l-7-7h-3v-4h3l7-7z" fill="currentColor"/>
+    <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+    <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+  </svg>`;
+
+  const filterIcon = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+  </svg>`;
 </script>
 
-<div class={cn('audio-player', className)}>
-  <audio
-    bind:this={audioElement}
-    src={audioUrl}
-    onplay={handlePlay}
-    onpause={handlePause}
-    onended={handleEnded}
-    onloadedmetadata={handleLoadedMetadata}
-    onerror={handleError}
-    class="hidden"
-  ></audio>
-
-  {#if showSpectrogram && computedSpectrogramUrl}
-    <div
-      bind:this={spectrogramContainer}
-      class={cn('relative cursor-pointer overflow-hidden rounded', spectrogramClassName)}
-      style:width="{width}px"
-      style:height="{height}px"
-      onclick={seekToPosition}
-      onkeydown={handleKeyDown}
-      role="button"
-      tabindex="0"
-      aria-label="Seek in audio"
-    >
-      {#if isLoading}
-        <div class="absolute inset-0 flex items-center justify-center bg-base-200">
-          <span class="loading loading-spinner loading-md"></span>
-        </div>
-      {/if}
-
-      {#if hasError}
-        <div class="absolute inset-0 flex items-center justify-center bg-base-200">
-          <div class="text-center">
-            <svg
-              class="mx-auto h-12 w-12 text-base-content/30"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            <p class="mt-2 text-sm text-base-content/50">Failed to load audio</p>
-          </div>
-        </div>
-      {:else}
-        <img
-          src={computedSpectrogramUrl}
-          alt="Audio spectrogram"
-          class="h-full w-full object-cover"
-          onerror={() => (hasError = true)}
-        />
-
-        <!-- Play position indicator -->
-        <div
-          bind:this={positionIndicator}
-          class="absolute bottom-0 top-0 w-0.5 bg-primary pointer-events-none transition-all"
-          style:left="{progressPercent}%"
-          style:opacity={currentTime > 0 && currentTime < duration ? 0.7 : 0}
-          aria-hidden="true"
-        ></div>
-      {/if}
-
-      <!-- Custom content overlay -->
-      {#if children}
-        <div class="absolute inset-0 pointer-events-none">
-          {@render children()}
-        </div>
-      {/if}
-    </div>
+<div bind:this={playerContainer} class={cn('relative group', className)} style="width: {width}px; height: {height}px;">
+  {#if spectrogramUrl}
+    <img 
+      src={spectrogramUrl}
+      alt="Audio spectrogram"
+      loading="lazy"
+      class="w-full h-full object-cover rounded-md border border-base-300"
+      style="width: {width}px; height: {height}px;"
+    />
   {/if}
 
-  <!-- Audio controls -->
-  <div
-    class={cn(
-      'flex items-center gap-2 rounded bg-base-200 p-2',
-      showSpectrogram && computedSpectrogramUrl ? '-mt-1 rounded-t-none' : '',
-      controlsClassName
-    )}
+  <!-- Audio element -->
+  <audio 
+    bind:this={audioElement}
+    id={audioId}
+    src={audioUrl}
+    preload="metadata"
+    class="hidden"
   >
-    <!-- Play/Pause button -->
-    <button
-      class="btn btn-sm btn-circle btn-ghost"
-      onclick={togglePlayPause}
-      disabled={hasError}
-      aria-label={isPlaying ? 'Pause' : 'Play'}
-      aria-pressed={isPlaying}
+    <track kind="captions" />
+  </audio>
+
+  <!-- Volume control (top controls) -->
+  {#if showControls}
+  <div bind:this={volumeControl} 
+       class="absolute top-2 right-2 volume-control transition-opacity duration-200"
+       class:opacity-0={!isMobile && !showVolumeSlider}
+       class:group-hover:opacity-100={!isMobile}>
+    <button 
+      class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+      onclick={() => {
+        showVolumeSlider = !showVolumeSlider;
+        if (showVolumeSlider) showFilterSlider = false;
+      }}
+      aria-label="Volume control"
     >
-      {#if isPlaying}
-        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      {:else}
-        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      {/if}
+      {@html volumeIcon}
+      <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
     </button>
-
-    <!-- Progress bar -->
-    <div
-      bind:this={progressBar}
-      class="relative h-1.5 flex-1 cursor-pointer rounded-full bg-base-300"
-      onclick={seekToPosition}
-      onkeydown={handleKeyDown}
-      role="slider"
-      tabindex="0"
-      aria-label="Audio playback position"
-      aria-valuemin="0"
-      aria-valuemax={duration}
-      aria-valuenow={currentTime}
-      aria-valuetext={currentTimeFormatted}
-    >
-      <div
-        class="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
-        style:width="{progressPercent}%"
-        aria-hidden="true"
-      ></div>
-    </div>
-
-    <!-- Time display -->
-    <span class="text-xs font-medium tabular-nums">
-      {currentTimeFormatted} / {durationFormatted}
-    </span>
-
-    <!-- Download button -->
-    {#if showDownload}
-      <a
-        href={audioUrl}
-        download
-        class="btn btn-sm btn-circle btn-ghost"
-        aria-label="Download audio file"
+    
+    {#if showVolumeSlider}
+      <div 
+        bind:this={volumeSlider}
+        class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 volume-slider z-50"
+        style="left: calc(100% + 4px); height: {height}px;"
+        onclick={handleVolumeSlider}
       >
-        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-          />
-        </svg>
-      </a>
+        <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
+          <div 
+            class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
+            style="height: {(gainValue / GAIN_MAX_DB) * 100}%"
+          ></div>
+        </div>
+      </div>
     {/if}
   </div>
+  {/if}
+
+  <!-- Filter control (top controls) -->
+  {#if showControls}
+  <div bind:this={filterControl} 
+       class="absolute top-2 left-2 filter-control transition-opacity duration-200"
+       class:opacity-0={!isMobile && !showFilterSlider}
+       class:group-hover:opacity-100={!isMobile}>
+    <button 
+      class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+      onclick={() => {
+        showFilterSlider = !showFilterSlider;
+        if (showFilterSlider) showVolumeSlider = false;
+      }}
+      aria-label="Filter control"
+    >
+      <span class="text-xs text-white">HP: {Math.round(filterFreq)} Hz</span>
+    </button>
+    
+    {#if showFilterSlider}
+      <div 
+        bind:this={filterSlider}
+        class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 filter-slider z-50"
+        style="right: calc(100% + 4px); height: {height}px;"
+        onclick={handleFilterSlider}
+      >
+        <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
+          <div 
+            class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
+            style="height: {Math.log(filterFreq/FILTER_HP_MIN_FREQ) / Math.log(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ) * 100}%"
+            ></div>
+        </div>
+      </div>
+    {/if}
+  </div>
+  {/if}
+
+  <!-- Play position indicator -->
+  <div 
+    class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
+    style="left: {progress}%; transition: left 0.1s linear; opacity: {(progress > 0 && progress < 100) ? '0.7' : '0'};"
+  ></div>
+
+  <!-- Bottom overlay controls -->
+  <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300"
+       class:opacity-0={!isMobile}
+       class:group-hover:opacity-100={!isMobile}
+       class:opacity-100={isMobile}>
+    <div class="flex items-center justify-between">
+      <!-- Play/Pause button -->
+      <button 
+        bind:this={playPauseButton}
+        id={playPauseId}
+        class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0"
+        onclick={handlePlayPause}
+        disabled={isLoading}
+        aria-label={isPlaying ? 'Pause' : 'Play'}
+      >
+        {#if isLoading}
+          <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        {:else}
+          {@html isPlaying ? pauseIcon : playIcon}
+        {/if}
+      </button>
+
+      <!-- Progress bar -->
+      <div 
+        bind:this={progressBar}
+        id={progressId}
+        class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
+        onclick={handleProgressClick}
+      >
+        <div 
+          class="bg-blue-600 h-1.5 rounded-full transition-all duration-100"
+          style="width: {progress}%"
+        ></div>
+      </div>
+
+      <!-- Current time -->
+      <span class="text-xs font-medium text-white flex-shrink-0">{formatTime(currentTime)}</span>
+
+      <!-- Download button -->
+      {#if showDownload}
+        <a 
+          href={audioUrl}
+          download 
+          class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
+          aria-label="Download audio"
+        >
+          {@html downloadIcon}
+        </a>
+      {/if}
+    </div>
+  </div>
+
+
+  <!-- Error message -->
+  {#if error}
+    <div class="absolute inset-0 flex items-center justify-center bg-red-100 dark:bg-red-900 rounded-md">
+      <span class="text-red-600 dark:text-red-300 text-sm">{error}</span>
+    </div>
+  {/if}
 </div>
+
+<style>
+  .volume-slider, .filter-slider {
+    z-index: 1000;
+  }
+  
+  .volume-control button, .filter-control button {
+    backdrop-filter: blur(4px);
+  }
+</style>
