@@ -425,20 +425,30 @@ configure_telemetry() {
 
 # Function to collect anonymous system information
 collect_system_info() {
-    local os_name="${ID:-unknown}"
-    local os_version="${VERSION_ID:-unknown}"
+    local os_name="unknown"
+    local os_version="unknown"
     local cpu_arch=$(uname -m)
     local docker_version="unknown"
     local pi_model="none"
+    
+    # Read OS information from /etc/os-release
+    if [ -f /etc/os-release ]; then
+        # Source the file to get the variables
+        . /etc/os-release
+        os_name="${ID:-unknown}"
+        os_version="${VERSION_ID:-unknown}"
+    fi
     
     # Get Docker version if available
     if command_exists docker; then
         docker_version=$(docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
     fi
     
-    # Detect Raspberry Pi model
+    # Detect Raspberry Pi model or WSL
     if [ -f /proc/device-tree/model ]; then
         pi_model=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | sed 's/Raspberry Pi/RPi/g' || echo "none")
+    elif grep -q microsoft /proc/version 2>/dev/null; then
+        pi_model="wsl"
     fi
     
     # Output as JSON
@@ -1617,6 +1627,16 @@ handle_container_update() {
     fi
     
     print_message "✅ Update completed successfully" "$GREEN"
+    
+    # Send upgrade completion telemetry with context
+    local system_info
+    system_info=$(collect_system_info)
+    local os_name=$(echo "$system_info" | jq -r '.os_name' 2>/dev/null || echo "unknown")
+    local pi_model=$(echo "$system_info" | jq -r '.pi_model' 2>/dev/null || echo "none")
+    local cpu_arch=$(echo "$system_info" | jq -r '.cpu_arch' 2>/dev/null || echo "unknown")
+    
+    send_telemetry_event "info" "Upgrade completed successfully" "info" "step=handle_container_update,type=upgrade,os=${os_name},pi_model=${pi_model},arch=${cpu_arch},service_updated=${service_needs_update}"
+    
     return 0
 }
 
@@ -1753,7 +1773,22 @@ start_birdnet_go() {
         exit 1
     fi
     print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
-    send_telemetry_event "info" "Installation completed successfully" "info" "step=start_birdnet_go"
+    # Determine if this is a fresh install or an upgrade
+    local install_type="installation"
+    if [ "$FRESH_INSTALL" = "true" ]; then
+        install_type="installation"
+    else
+        install_type="upgrade"
+    fi
+    
+    # Send appropriate telemetry event with more context
+    local system_info
+    system_info=$(collect_system_info)
+    local os_name=$(echo "$system_info" | jq -r '.os_name' 2>/dev/null || echo "unknown")
+    local pi_model=$(echo "$system_info" | jq -r '.pi_model' 2>/dev/null || echo "none")
+    local cpu_arch=$(echo "$system_info" | jq -r '.cpu_arch' 2>/dev/null || echo "unknown")
+    
+    send_telemetry_event "info" "${install_type^} completed successfully" "info" "step=start_birdnet_go,type=${install_type},os=${os_name},pi_model=${pi_model},arch=${cpu_arch},port=${WEB_PORT}"
 
     print_message "\n🐳 Waiting for container to start..." "$YELLOW"
     
@@ -2356,8 +2391,14 @@ configure_location
 # Configure security
 configure_auth
 
-# Configure telemetry
-configure_telemetry
+# Configure telemetry (only if not already configured or fresh install)
+if [ "$FRESH_INSTALL" = "true" ] || [ "$TELEMETRY_ENABLED" = "" ]; then
+    configure_telemetry
+else
+    print_message "\n📊 Using existing telemetry configuration: $([ "$TELEMETRY_ENABLED" = "true" ] && echo "enabled" || echo "disabled")" "$GREEN"
+    # Save telemetry config to ensure install ID is preserved
+    save_telemetry_config
+fi
 
 # Optimize settings
 optimize_settings
