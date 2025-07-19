@@ -116,11 +116,17 @@
   }
 
   const isToday = $derived(selectedDate === new Date().toISOString().split('T')[0]);
-  
+
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
-    typeof window !== 'undefined' && 
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+
+  // Calculate global maximum count across all species for proper heatmap scaling
+  const globalMaxHourlyCount = $derived(
+    data.length === 0
+      ? 1
+      : Math.max(...data.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
   );
 </script>
 
@@ -294,11 +300,14 @@
                       {@const hour = parseInt(column.key.split('_')[1])}
                       {@const count = item.hourly_counts[hour]}
                       {#if count > 0}
-                        {@const maxCount = Math.max(...item.hourly_counts.filter(c => c > 0))}
-                        {@const intensity = Math.min(9, Math.floor((count / maxCount) * 9))}
+                        {@const intensity = Math.min(
+                          9,
+                          Math.floor((count / globalMaxHourlyCount) * 9)
+                        )}
                         <button
                           class="heatmap-cell heatmap-color-{intensity} cursor-pointer"
-                          class:hour-updated={item.hourlyUpdated?.includes(hour) && !prefersReducedMotion}
+                          class:hour-updated={item.hourlyUpdated?.includes(hour) &&
+                            !prefersReducedMotion}
                           title="{count} detections at {hour
                             .toString()
                             .padStart(2, '0')}:00 - Click to view"
@@ -357,19 +366,19 @@
   }
 
   /* Phase 2: Dynamic Update Animations */
-  
+
   /* Count increment animation */
   @keyframes countPop {
-    0% { 
-      transform: scale(1); 
+    0% {
+      transform: scale(1);
     }
-    50% { 
-      transform: scale(1.3); 
+    50% {
+      transform: scale(1.3);
       background-color: hsl(var(--su) / 0.3);
       box-shadow: 0 0 10px hsl(var(--su) / 0.5);
     }
-    100% { 
-      transform: scale(1); 
+    100% {
+      transform: scale(1);
       background-color: transparent;
     }
   }
@@ -380,14 +389,14 @@
 
   /* New species row animation */
   @keyframes newSpeciesSlide {
-    0% { 
-      transform: translateY(-30px); 
-      opacity: 0; 
+    0% {
+      transform: translateY(-30px);
+      opacity: 0;
       background-color: hsl(var(--p) / 0.15);
     }
-    100% { 
-      transform: translateY(0); 
-      opacity: 1; 
+    100% {
+      transform: translateY(0);
+      opacity: 1;
       background-color: transparent;
     }
   }
@@ -398,11 +407,12 @@
 
   /* Heatmap cell update flash */
   @keyframes heatmapFlash {
-    0%, 100% { 
-      box-shadow: none; 
+    0%,
+    100% {
+      box-shadow: none;
       transform: scale(1);
     }
-    50% { 
+    50% {
       box-shadow: 0 0 12px hsl(var(--p));
       transform: scale(1.1);
     }
