@@ -184,7 +184,6 @@
                     height={50}
                     showSpectrogram={true}
                     className="flex-1 max-w-[140px]"
-                    controlsClassName="bg-base-100 border border-base-300 text-xs p-1"
                   />
                 </div>
               </div>
