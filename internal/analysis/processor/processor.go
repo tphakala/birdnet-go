@@ -635,6 +635,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			EventTracker:   p.GetEventTracker(),
 			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
+			Ds:             p.Ds,
 		})
 	}
 

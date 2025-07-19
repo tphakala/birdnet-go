@@ -1,6 +1,7 @@
 package httpcontroller
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -20,14 +21,19 @@ func (s *Server) SetupSvelteRoutes() {
 	s.Echo.GET("/ui/assets/*", func(c echo.Context) error {
 		// Get the requested path
 		path := c.Param("*")
-		
+
 		// Open the file from embedded FS
 		file, err := frontend.DistFS.Open(path)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound, "File not found")
 		}
-		defer file.Close()
-		
+		defer func() {
+			if err := file.Close(); err != nil {
+				// Log error but don't fail the request
+				log.Printf("Error closing file %s: %v", path, err)
+			}
+		}()
+
 		// Set correct MIME type based on file extension
 		contentType := "application/octet-stream"
 		if len(path) > 4 {
@@ -41,10 +47,10 @@ func (s *Server) SetupSvelteRoutes() {
 		if len(path) > 3 && path[len(path)-3:] == ".js" {
 			contentType = "application/javascript; charset=utf-8"
 		}
-		
+
 		// Set content type header
 		c.Response().Header().Set("Content-Type", contentType)
-		
+
 		// Serve the file
 		return c.Stream(http.StatusOK, contentType, file)
 	})
