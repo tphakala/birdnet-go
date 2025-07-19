@@ -45,7 +45,7 @@
     showDownload = true,
     className = '',
     controlsClassName = '',
-    responsive = false
+    responsive = false,
   }: Props = $props();
 
   // Audio and UI elements
@@ -91,9 +91,7 @@
   const FILTER_HP_DEFAULT_FREQ = 20;
 
   // Computed values
-  const spectrogramUrl = $derived(
-    showSpectrogram ? `/api/v2/spectrogram/${detectionId}` : null
-  );
+  const spectrogramUrl = $derived(showSpectrogram ? `/api/v2/spectrogram/${detectionId}` : null);
 
   const playPauseId = $derived(`playPause-${detectionId}`);
   const audioId = $derived(`audio-${detectionId}`);
@@ -112,11 +110,11 @@
   const initializeAudioContext = async () => {
     try {
       audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
+
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
       }
-      
+
       return audioContext;
     } catch (e) {
       console.warn('Web Audio API is not supported in this browser');
@@ -153,8 +151,8 @@
       gain: gainNode,
       compressor,
       filters: {
-        highPass: highPassFilter
-      }
+        highPass: highPassFilter,
+      },
     };
   };
 
@@ -173,7 +171,7 @@
             audioNodes = createAudioNodes(audioContext, audioElement);
           }
         }
-        
+
         await audioElement.play();
       }
     } catch (err) {
@@ -189,12 +187,12 @@
       progress = (currentTime / duration) * 100;
     }
   };
-  
+
   const startInterval = () => {
     if (updateInterval) clearInterval(updateInterval);
     updateInterval = setInterval(updateProgress, 100);
   };
-  
+
   const stopInterval = () => {
     if (updateInterval) {
       clearInterval(updateInterval);
@@ -216,12 +214,12 @@
 
   const handleProgressClick = (event: MouseEvent) => {
     if (!audioElement || !progressBar) return;
-    
+
     const rect = progressBar.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const clickPercent = clickX / rect.width;
     const newTime = clickPercent * duration;
-    
+
     audioElement.currentTime = Math.max(0, Math.min(newTime, duration));
   };
 
@@ -235,12 +233,12 @@
 
   const handleVolumeSlider = (event: MouseEvent) => {
     if (!volumeSlider) return;
-    
+
     const rect = volumeSlider.getBoundingClientRect();
     const clickY = event.clientY - rect.top;
-    const clickPercent = 1 - (clickY / rect.height);
-    const newGainDb = (clickPercent * (GAIN_MAX_DB + 60)) - 60;
-    
+    const clickPercent = 1 - clickY / rect.height;
+    const newGainDb = clickPercent * (GAIN_MAX_DB + 60) - 60;
+
     updateGain(newGainDb);
   };
 
@@ -254,12 +252,12 @@
 
   const handleFilterSlider = (event: MouseEvent) => {
     if (!filterSlider) return;
-    
+
     const rect = filterSlider.getBoundingClientRect();
     const clickY = event.clientY - rect.top;
-    const clickPercent = 1 - (clickY / rect.height);
-    const newFreq = FILTER_HP_MIN_FREQ + (clickPercent * (FILTER_HP_MAX_FREQ - FILTER_HP_MIN_FREQ));
-    
+    const clickPercent = 1 - clickY / rect.height;
+    const newFreq = FILTER_HP_MIN_FREQ + clickPercent * (FILTER_HP_MAX_FREQ - FILTER_HP_MIN_FREQ);
+
     updateFilter(newFreq);
   };
 
@@ -267,27 +265,27 @@
   onMount(() => {
     // Check if mobile
     isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
+
     // Check width for control visibility
     if (playerContainer) {
       const checkWidth = () => {
         showControls = playerContainer.offsetWidth >= 175;
       };
       checkWidth();
-      
+
       const resizeObserver = new ResizeObserver(checkWidth);
       resizeObserver.observe(playerContainer);
-      
+
       onDestroy(() => resizeObserver.disconnect());
     }
-    
+
     if (audioElement) {
-      audioElement.addEventListener('play', () => { 
-        isPlaying = true; 
+      audioElement.addEventListener('play', () => {
+        isPlaying = true;
         startInterval();
       });
-      audioElement.addEventListener('pause', () => { 
-        isPlaying = false; 
+      audioElement.addEventListener('pause', () => {
+        isPlaying = false;
         stopInterval();
       });
       audioElement.addEventListener('ended', () => {
@@ -296,21 +294,23 @@
       });
       audioElement.addEventListener('timeupdate', handleTimeUpdate);
       audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
-      audioElement.addEventListener('loadstart', () => { isLoading = true; });
-      audioElement.addEventListener('error', () => { 
-        error = 'Failed to load audio'; 
-        isLoading = false; 
+      audioElement.addEventListener('loadstart', () => {
+        isLoading = true;
       });
-      
+      audioElement.addEventListener('error', () => {
+        error = 'Failed to load audio';
+        isLoading = false;
+      });
+
       // If already playing when mounted, start interval
       if (!audioElement.paused) {
         startInterval();
       }
     }
-    
+
     // Auto-hide sliders after 5 seconds
     let sliderTimeout: number | undefined;
-    
+
     const resetSliderTimeout = () => {
       if (sliderTimeout) clearTimeout(sliderTimeout);
       sliderTimeout = setTimeout(() => {
@@ -318,7 +318,7 @@
         showFilterSlider = false;
       }, 5000);
     };
-    
+
     // Watch for slider visibility changes
     $effect(() => {
       if (showVolumeSlider || showFilterSlider) {
@@ -365,114 +365,128 @@
   </svg>`;
 </script>
 
-<div bind:this={playerContainer} class={cn('relative group', className)} style={responsive ? '' : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}>
+<div
+  bind:this={playerContainer}
+  class={cn('relative group', className)}
+  style={responsive
+    ? ''
+    : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+>
   {#if spectrogramUrl}
-    <img 
+    <img
       src={spectrogramUrl}
       alt="Audio spectrogram"
       loading="lazy"
-      class={responsive ? "w-full h-auto object-contain rounded-md border border-base-300" : "w-full h-full object-cover rounded-md border border-base-300"}
-      style={responsive ? '' : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+      class={responsive
+        ? 'w-full h-auto object-contain rounded-md border border-base-300'
+        : 'w-full h-full object-cover rounded-md border border-base-300'}
+      style={responsive
+        ? ''
+        : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       width={responsive ? 400 : undefined}
     />
   {/if}
 
   <!-- Audio element -->
-  <audio 
-    bind:this={audioElement}
-    id={audioId}
-    src={audioUrl}
-    preload="metadata"
-    class="hidden"
-  >
+  <audio bind:this={audioElement} id={audioId} src={audioUrl} preload="metadata" class="hidden">
     <track kind="captions" />
   </audio>
 
   <!-- Volume control (top controls) -->
   {#if showControls}
-  <div bind:this={volumeControl} 
-       class="absolute top-2 right-2 volume-control transition-opacity duration-200"
-       class:opacity-0={!isMobile && !showVolumeSlider}
-       class:group-hover:opacity-100={!isMobile}>
-    <button 
-      class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
-      onclick={() => {
-        showVolumeSlider = !showVolumeSlider;
-        if (showVolumeSlider) showFilterSlider = false;
-      }}
-      aria-label="Volume control"
+    <div
+      bind:this={volumeControl}
+      class="absolute top-2 right-2 volume-control transition-opacity duration-200"
+      class:opacity-0={!isMobile && !showVolumeSlider}
+      class:group-hover:opacity-100={!isMobile}
     >
-      {@html volumeIcon}
-      <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
-    </button>
-    
-    {#if showVolumeSlider}
-      <div 
-        bind:this={volumeSlider}
-        class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 volume-slider z-50"
-        style="left: calc(100% + 4px); height: {height}px;"
-        onclick={handleVolumeSlider}
+      <button
+        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+        onclick={() => {
+          showVolumeSlider = !showVolumeSlider;
+          if (showVolumeSlider) showFilterSlider = false;
+        }}
+        aria-label="Volume control"
       >
-        <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
-          <div 
-            class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
-            style="height: {(gainValue / GAIN_MAX_DB) * 100}%"
-          ></div>
+        {@html volumeIcon}
+        <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
+      </button>
+
+      {#if showVolumeSlider}
+        <div
+          bind:this={volumeSlider}
+          class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 volume-slider z-50"
+          style="left: calc(100% + 4px); height: {height}px;"
+          onclick={handleVolumeSlider}
+        >
+          <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
+            <div
+              class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
+              style="height: {(gainValue / GAIN_MAX_DB) * 100}%"
+            ></div>
+          </div>
         </div>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    </div>
   {/if}
 
   <!-- Filter control (top controls) -->
   {#if showControls}
-  <div bind:this={filterControl} 
-       class="absolute top-2 left-2 filter-control transition-opacity duration-200"
-       class:opacity-0={!isMobile && !showFilterSlider}
-       class:group-hover:opacity-100={!isMobile}>
-    <button 
-      class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
-      onclick={() => {
-        showFilterSlider = !showFilterSlider;
-        if (showFilterSlider) showVolumeSlider = false;
-      }}
-      aria-label="Filter control"
+    <div
+      bind:this={filterControl}
+      class="absolute top-2 left-2 filter-control transition-opacity duration-200"
+      class:opacity-0={!isMobile && !showFilterSlider}
+      class:group-hover:opacity-100={!isMobile}
     >
-      <span class="text-xs text-white">HP: {Math.round(filterFreq)} Hz</span>
-    </button>
-    
-    {#if showFilterSlider}
-      <div 
-        bind:this={filterSlider}
-        class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 filter-slider z-50"
-        style="right: calc(100% + 4px); height: {height}px;"
-        onclick={handleFilterSlider}
+      <button
+        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+        onclick={() => {
+          showFilterSlider = !showFilterSlider;
+          if (showFilterSlider) showVolumeSlider = false;
+        }}
+        aria-label="Filter control"
       >
-        <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
-          <div 
-            class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
-            style="height: {Math.log(filterFreq/FILTER_HP_MIN_FREQ) / Math.log(FILTER_HP_MAX_FREQ/FILTER_HP_MIN_FREQ) * 100}%"
+        <span class="text-xs text-white">HP: {Math.round(filterFreq)} Hz</span>
+      </button>
+
+      {#if showFilterSlider}
+        <div
+          bind:this={filterSlider}
+          class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 filter-slider z-50"
+          style="right: calc(100% + 4px); height: {height}px;"
+          onclick={handleFilterSlider}
+        >
+          <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
+            <div
+              class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
+              style="height: {(Math.log(filterFreq / FILTER_HP_MIN_FREQ) /
+                Math.log(FILTER_HP_MAX_FREQ / FILTER_HP_MIN_FREQ)) *
+                100}%"
             ></div>
+          </div>
         </div>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    </div>
   {/if}
 
   <!-- Play position indicator -->
-  <div 
+  <div
     class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-    style="left: {progress}%; transition: left 0.1s linear; opacity: {(progress > 0 && progress < 100) ? '0.7' : '0'};"
+    style="left: {progress}%; transition: left 0.1s linear; opacity: {progress > 0 && progress < 100
+      ? '0.7'
+      : '0'};"
   ></div>
 
   <!-- Bottom overlay controls -->
-  <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300"
-       class:opacity-0={!isMobile}
-       class:group-hover:opacity-100={!isMobile}
-       class:opacity-100={isMobile}>
+  <div
+    class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300"
+    class:opacity-0={!isMobile}
+    class:group-hover:opacity-100={!isMobile}
+    class:opacity-100={isMobile}
+  >
     <div class="flex items-center justify-between">
       <!-- Play/Pause button -->
-      <button 
+      <button
         bind:this={playPauseButton}
         id={playPauseId}
         class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0"
@@ -481,20 +495,22 @@
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {#if isLoading}
-          <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          <div
+            class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+          ></div>
         {:else}
           {@html isPlaying ? pauseIcon : playIcon}
         {/if}
       </button>
 
       <!-- Progress bar -->
-      <div 
+      <div
         bind:this={progressBar}
         id={progressId}
         class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
         onclick={handleProgressClick}
       >
-        <div 
+        <div
           class="bg-blue-600 h-1.5 rounded-full transition-all duration-100"
           style="width: {progress}%"
         ></div>
@@ -505,9 +521,9 @@
 
       <!-- Download button -->
       {#if showDownload}
-        <a 
+        <a
           href={audioUrl}
-          download 
+          download
           class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
           aria-label="Download audio"
         >
@@ -517,21 +533,24 @@
     </div>
   </div>
 
-
   <!-- Error message -->
   {#if error}
-    <div class="absolute inset-0 flex items-center justify-center bg-red-100 dark:bg-red-900 rounded-md">
+    <div
+      class="absolute inset-0 flex items-center justify-center bg-red-100 dark:bg-red-900 rounded-md"
+    >
       <span class="text-red-600 dark:text-red-300 text-sm">{error}</span>
     </div>
   {/if}
 </div>
 
 <style>
-  .volume-slider, .filter-slider {
+  .volume-slider,
+  .filter-slider {
     z-index: 1000;
   }
-  
-  .volume-control button, .filter-control button {
+
+  .volume-control button,
+  .filter-control button {
     backdrop-filter: blur(4px);
   }
 </style>
