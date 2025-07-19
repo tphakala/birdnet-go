@@ -30,6 +30,22 @@ frontend/
 └── dist/                                         # Build output
 ```
 
+## Available Task commands
+
+Project uses `task` for building etc.
+In most cases task frontend-dev is not required as developer has hot reloading server running with `air`
+
+```bash
+task: Available tasks for this project:
+* download-avicommons-data:       Download the Avicommons latest.json data file if it doesn't exist
+* frontend-build:                 Build frontend for production
+* frontend-dev:                   Start frontend development server
+* frontend-install:               Install frontend dependencies
+* frontend-lint:                  Lint frontend code
+* frontend-test:                  Run frontend tests
+* frontend-test-coverage:         Run frontend tests with coverage
+```
+
 ## Code Quality (Run Before Commits)
 
 ```bash
@@ -82,7 +98,7 @@ function getCsrfToken(): string | null {
   // 1. Check meta tag (primary)
   const meta = document.querySelector('meta[name="csrf-token"]');
   if (meta?.getAttribute('content')) return meta.getAttribute('content');
-  
+
   // 2. Check cookie (fallback)
   const match = document.cookie.match(/csrf=([^;]+)/);
   return match?.[1] || null;
@@ -91,6 +107,33 @@ function getCsrfToken(): string | null {
 // Include in headers
 headers.set('X-CSRF-Token', getCsrfToken());
 ```
+
+## Server-Sent Events (SSE)
+
+Use `reconnecting-eventsource` package for real-time updates with automatic reconnection handling.
+
+```javascript
+import ReconnectingEventSource from 'reconnecting-eventsource';
+
+// Create connection with automatic reconnection
+const eventSource = new ReconnectingEventSource('/api/endpoint', {
+  max_retry_time: 30000, // Max 30 seconds between reconnection attempts
+  withCredentials: false
+});
+
+// Handle events
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // Process data
+};
+
+// Cleanup
+eventSource.close();
+```
+
+- See `/frontend/doc/reconnecting-eventsource.md` for full implementation guide
+- No manual reconnection logic needed
+- Automatic exponential backoff
 
 ## Guidelines
 
@@ -101,4 +144,4 @@ headers.set('X-CSRF-Token', getCsrfToken());
 - Run `npm run check:all` before commits
 - Address accessibility by ARIA roles, semantic markup, keyboard event handlers
 - Write and run Vitest tests
-- **Document all components** - Include comprehensive HTML comments at the top of each component describing purpose, usage, features, and props
+- Document all components - Include comprehensive HTML comments at the top of each component describing purpose, usage, features, and props
