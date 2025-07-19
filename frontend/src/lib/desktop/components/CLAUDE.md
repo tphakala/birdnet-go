@@ -32,6 +32,7 @@ components/
 ## Testing
 
 Each component should have corresponding test files:
+
 - Unit tests: `.test.ts`
 - Component tests: `.test.svelte`
 
