@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-undef, no-console */
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
@@ -10,7 +11,7 @@ const DEFAULT_CONFIG = {
   timeout: 60000,
   waitTime: 5000,
   outputDir: '../doc',
-  fullPage: true
+  fullPage: true,
 };
 
 // Parse command line arguments
@@ -120,11 +121,11 @@ Examples:
 
 async function takeScreenshot() {
   const { url, filename, config } = parseArgs();
-  
+
   // Resolve output path
   const outputDir = path.resolve(__dirname, config.outputDir);
   const outputPath = path.join(outputDir, filename);
-  
+
   // Ensure output directory exists
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -132,7 +133,7 @@ async function takeScreenshot() {
 
   const browser = await chromium.launch();
   const context = await browser.newContext({
-    viewport: { width: config.width, height: config.height }
+    viewport: { width: config.width, height: config.height },
   });
   const page = await context.newPage();
 
@@ -143,7 +144,7 @@ async function takeScreenshot() {
 
     await page.goto(url, {
       waitUntil: 'domcontentloaded',
-      timeout: config.timeout
+      timeout: config.timeout,
     });
 
     // Wait for dynamic content to load
@@ -155,17 +156,21 @@ async function takeScreenshot() {
       const html = document.documentElement;
 
       const height = Math.max(
-        body.scrollHeight, body.offsetHeight,
-        html.clientHeight, html.scrollHeight, html.offsetHeight
+        body.scrollHeight,
+        body.offsetHeight,
+        html.clientHeight,
+        html.scrollHeight,
+        html.offsetHeight
       );
 
-      const mainContent = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+      const mainContent =
+        document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
       const contentRect = mainContent.getBoundingClientRect();
 
       return {
         fullHeight: height,
         contentHeight: Math.max(contentRect.height, height),
-        viewportHeight: window.innerHeight
+        viewportHeight: window.innerHeight,
       };
     });
 
@@ -179,7 +184,7 @@ async function takeScreenshot() {
 
     await page.screenshot({
       path: outputPath,
-      fullPage: config.fullPage
+      fullPage: config.fullPage,
     });
 
     console.log(`Screenshot saved successfully: ${outputPath}`);
