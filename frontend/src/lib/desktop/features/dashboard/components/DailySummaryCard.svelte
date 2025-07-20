@@ -125,7 +125,6 @@
     }
   }
 
-
   // Navigates to all detections across all species for a specific time period
   function handleHourHeaderClick(hour: number, duration: number = 1) {
     if (onDetectionView) {
@@ -283,9 +282,10 @@
                 <th
                   class="py-0 {column.key === 'common_name'
                     ? 'pl-2 pr-6 sm:pl-4 sm:pr-8'
-                    : 'px-2 sm:px-4'} {column.className || ''}" class:hour-header={column.key?.startsWith('hour_') ||
-                  column.key?.startsWith('bi_hour_') ||
-                  column.key?.startsWith('six_hour_')}
+                    : 'px-2 sm:px-4'} {column.className || ''}"
+                  class:hour-header={column.key?.startsWith('hour_') ||
+                    column.key?.startsWith('bi_hour_') ||
+                    column.key?.startsWith('six_hour_')}
                   style:text-align={column.align || 'left'}
                   scope="col"
                 >

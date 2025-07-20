@@ -363,7 +363,6 @@
     <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
     <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
   </svg>`;
-
 </script>
 
 <div
@@ -417,12 +416,13 @@
         <div
           bind:this={volumeSlider}
           class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 volume-slider z-50"
-          style:left="calc(100% + 4px)" style:height="{height}px"
+          style:left="calc(100% + 4px)"
+          style:height="{height}px"
           role="button"
           tabindex="0"
           aria-label="Volume gain control: {gainValue} dB"
           onclick={handleVolumeSlider}
-          onkeydown={(e) => {
+          onkeydown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               const rect = volumeSlider.getBoundingClientRect();
@@ -466,12 +466,13 @@
         <div
           bind:this={filterSlider}
           class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 filter-slider z-50"
-          style:right="calc(100% + 4px)" style:height="{height}px"
+          style:right="calc(100% + 4px)"
+          style:height="{height}px"
           role="button"
           tabindex="0"
           aria-label="High-pass filter control: {Math.round(filterFreq)} Hz"
           onclick={handleFilterSlider}
-          onkeydown={(e) => {
+          onkeydown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               const rect = filterSlider.getBoundingClientRect();
@@ -497,9 +498,9 @@
   <!-- Play position indicator -->
   <div
     class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-    style:left="{progress}%" style:transition="left 0.1s linear" style:opacity="{progress > 0 && progress < 100
-      ? '0.7'
-      : '0'}"
+    style:left="{progress}%"
+    style:transition="left 0.1s linear"
+    style:opacity={progress > 0 && progress < 100 ? '0.7' : '0'}
   ></div>
 
   <!-- Bottom overlay controls -->
@@ -537,7 +538,7 @@
         tabindex="0"
         aria-label="Seek audio progress: {Math.floor(currentTime)} / {Math.floor(duration)} seconds"
         onclick={handleProgressClick}
-        onkeydown={(e) => {
+        onkeydown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             const rect = progressBar.getBoundingClientRect();

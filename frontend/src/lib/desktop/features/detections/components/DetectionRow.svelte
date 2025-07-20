@@ -30,9 +30,9 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
-  import ConfidenceCircle from './ConfidenceCircle.svelte';
-  import StatusBadges from './StatusBadges.svelte';
-  import WeatherIcon from './WeatherIcon.svelte';
+  import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
+  import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
+  import WeatherIcon from '$lib/desktop/components/data/WeatherIcon.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';

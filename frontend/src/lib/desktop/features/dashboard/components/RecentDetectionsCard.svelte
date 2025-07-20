@@ -29,7 +29,7 @@
     limit = 5,
     onLimitChange,
     newDetectionIds = new Set(),
-    detectionArrivalTimes: _detectionArrivalTimes = new Map() // Reserved for future staggered animations
+    detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
   }: Props = $props();
 
   // State for number of detections to show

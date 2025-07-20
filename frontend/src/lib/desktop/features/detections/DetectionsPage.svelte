@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { DetectionsListData, DetectionQueryParams } from '$lib/types/detection.types';
-  import DetectionsList from '$lib/desktop/components/data/DetectionsList.svelte';
+  import DetectionsCard from './components/DetectionsCard.svelte';
 
   let detectionsData = $state<DetectionsListData | null>(null);
   let loading = $state(true);
@@ -91,7 +91,7 @@
 </script>
 
 <div class="col-span-12 space-y-6">
-  <DetectionsList
+  <DetectionsCard
     data={detectionsData}
     {loading}
     {error}
