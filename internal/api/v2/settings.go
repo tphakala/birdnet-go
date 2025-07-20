@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -895,6 +896,23 @@ func getBlockedFieldMap() map[string]interface{} {
 		"ValidationWarnings": true, // Runtime validation state
 		"Input":              true, // File/directory analysis mode config
 		
+		// BirdNET section - block runtime fields
+		"BirdNET": map[string]interface{}{
+			"Labels": true, // Runtime list populated from label file
+			// Block RangeFilter runtime fields
+			"RangeFilter": map[string]interface{}{
+				"Species":     true, // Runtime species list populated by range filter
+				"LastUpdated": true, // Runtime timestamp of last filter update
+			},
+		},
+		
+		// Realtime section - block runtime fields
+		"Realtime": map[string]interface{}{
+			"Audio": map[string]interface{}{
+				"SoxAudioTypes": true, // Runtime list of supported audio types
+			},
+		},
+		
 		// All other fields are allowed by default
 	}
 }
@@ -916,10 +934,22 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		reconfigActions = append(reconfigActions, "rebuild_range_filter")
 	}
 
+	// Check species interval settings
+	if speciesIntervalSettingsChanged(oldSettings, currentSettings) || oldSettings.Realtime.Interval != currentSettings.Realtime.Interval {
+		c.Debug("Species interval settings changed, triggering update")
+		reconfigActions = append(reconfigActions, "update_detection_intervals")
+	}
+
 	// Check MQTT settings
 	if mqttSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("MQTT settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_mqtt")
+	}
+
+	// Check BirdWeather settings
+	if birdWeatherSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("BirdWeather settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_birdweather")
 	}
 
 	// Check RTSP settings
@@ -928,10 +958,31 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		reconfigActions = append(reconfigActions, "reconfigure_rtsp_sources")
 	}
 
+	// Check sound level monitoring settings
+	if soundLevelSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
+	}
+
+	// Check telemetry settings
+	if telemetrySettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Telemetry settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_telemetry")
+	}
+
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
 		// No action here as restart is manual
+	}
+
+	// Check audio equalizer settings
+	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
+		c.Debug("Audio equalizer settings changed, updating filter chain")
+		// Handle audio equalizer changes synchronously as it returns an error
+		if err := c.handleEqualizerChange(currentSettings); err != nil {
+			return fmt.Errorf("failed to update audio equalizer: %w", err)
+		}
 	}
 
 	// Trigger reconfigurations asynchronously
@@ -981,13 +1032,21 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 
 // rangeFilterSettingsChanged checks if range filter settings have changed
 func rangeFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
-	// Check for changes in BirdNET latitude
-	if oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude {
+	// Check for changes in species include/exclude lists
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Include, currentSettings.Realtime.Species.Include) {
+		return true
+	}
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Exclude, currentSettings.Realtime.Species.Exclude) {
 		return true
 	}
 
-	// Check for changes in BirdNET longitude
-	if oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude {
+	// Check for changes in BirdNET range filter settings
+	if !reflect.DeepEqual(oldSettings.BirdNET.RangeFilter, currentSettings.BirdNET.RangeFilter) {
+		return true
+	}
+
+	// Check for changes in BirdNET latitude and longitude
+	if oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude || oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude {
 		return true
 	}
 
@@ -1004,7 +1063,12 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldMQTT.Broker != newMQTT.Broker ||
 		oldMQTT.Topic != newMQTT.Topic ||
 		oldMQTT.Username != newMQTT.Username ||
-		oldMQTT.Password != newMQTT.Password
+		oldMQTT.Password != newMQTT.Password ||
+		oldMQTT.Retain != newMQTT.Retain ||
+		oldMQTT.TLS.InsecureSkipVerify != newMQTT.TLS.InsecureSkipVerify ||
+		oldMQTT.TLS.CACert != newMQTT.TLS.CACert ||
+		oldMQTT.TLS.ClientCert != newMQTT.TLS.ClientCert ||
+		oldMQTT.TLS.ClientKey != newMQTT.TLS.ClientKey
 }
 
 // rtspSettingsChanged checks if RTSP settings have changed
@@ -1034,6 +1098,113 @@ func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // audioDeviceSettingChanged checks if audio device settings have changed
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.Realtime.Audio.Source != currentSettings.Realtime.Audio.Source
+}
+
+// speciesIntervalSettingsChanged checks if any species-specific interval settings have changed
+func speciesIntervalSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Get the old and new species configs
+	oldSpeciesConfigs := oldSettings.Realtime.Species.Config
+	newSpeciesConfigs := currentSettings.Realtime.Species.Config
+
+	// Create a set of all species keys from both old and new configs for efficient iteration
+	allSpecies := make(map[string]bool)
+	for species := range oldSpeciesConfigs {
+		allSpecies[species] = true
+	}
+	for species := range newSpeciesConfigs {
+		allSpecies[species] = true
+	}
+
+	// Single loop to check all species in both old and new configs
+	for species := range allSpecies {
+		oldConfig, existedInOld := oldSpeciesConfigs[species]
+		newConfig, existsInNew := newSpeciesConfigs[species]
+
+		// Case 1: Species exists in both configs but interval changed
+		if existedInOld && existsInNew && oldConfig.Interval != newConfig.Interval {
+			return true
+		}
+
+		// Case 2: Species was removed and had a custom interval
+		if existedInOld && !existsInNew && oldConfig.Interval > 0 {
+			return true
+		}
+
+		// Case 3: New species was added with a custom interval
+		if !existedInOld && existsInNew && newConfig.Interval > 0 {
+			return true
+		}
+	}
+
+	// No relevant changes detected
+	return false
+}
+
+// birdWeatherSettingsChanged checks if BirdWeather integration settings have changed
+func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in BirdWeather enabled state
+	if oldSettings.Realtime.Birdweather.Enabled != currentSettings.Realtime.Birdweather.Enabled {
+		return true
+	}
+
+	// Check for changes in BirdWeather credentials and configuration
+	if oldSettings.Realtime.Birdweather.ID != currentSettings.Realtime.Birdweather.ID ||
+		oldSettings.Realtime.Birdweather.Threshold != currentSettings.Realtime.Birdweather.Threshold ||
+		oldSettings.Realtime.Birdweather.LocationAccuracy != currentSettings.Realtime.Birdweather.LocationAccuracy {
+		return true
+	}
+
+	// Check for debug mode changes
+	if oldSettings.Realtime.Birdweather.Debug != currentSettings.Realtime.Birdweather.Debug {
+		return true
+	}
+
+	return false
+}
+
+// soundLevelSettingsChanged checks if sound level monitoring settings have changed
+func soundLevelSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in enabled state
+	if oldSettings.Realtime.Audio.SoundLevel.Enabled != currentSettings.Realtime.Audio.SoundLevel.Enabled {
+		return true
+	}
+
+	// Check for changes in interval (only if enabled)
+	if currentSettings.Realtime.Audio.SoundLevel.Enabled &&
+		oldSettings.Realtime.Audio.SoundLevel.Interval != currentSettings.Realtime.Audio.SoundLevel.Interval {
+		return true
+	}
+
+	return false
+}
+
+// telemetrySettingsChanged checks if telemetry/observability settings have changed
+func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in enabled state
+	if oldSettings.Realtime.Telemetry.Enabled != currentSettings.Realtime.Telemetry.Enabled {
+		return true
+	}
+
+	// Check for changes in listen address (only if enabled)
+	if currentSettings.Realtime.Telemetry.Enabled &&
+		oldSettings.Realtime.Telemetry.Listen != currentSettings.Realtime.Telemetry.Listen {
+		return true
+	}
+
+	return false
+}
+
+// equalizerSettingsChanged checks if audio equalizer settings have changed
+func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) bool {
+	return !reflect.DeepEqual(oldSettings, newSettings)
+}
+
+// handleEqualizerChange updates the audio filter chain when equalizer settings change
+func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
+	if err := myaudio.UpdateFilterChain(settings); err != nil {
+		return fmt.Errorf("failed to update audio filter chain: %w", err)
+	}
+	return nil
 }
 
 // LocaleData represents a locale with its code and full name
