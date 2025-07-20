@@ -926,54 +926,71 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	if birdnetSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("BirdNET settings changed, triggering reload")
 		reconfigActions = append(reconfigActions, "reload_birdnet")
+		// Send toast notification
+		_ = c.BroadcastToast("Reloading BirdNET model with new settings...", "info", 5000)
 	}
 
 	// Check range filter settings
 	if rangeFilterSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Range filter settings changed, triggering rebuild")
 		reconfigActions = append(reconfigActions, "rebuild_range_filter")
+		// Send toast notification
+		_ = c.BroadcastToast("Rebuilding species range filter...", "info", 4000)
 	}
 
 	// Check species interval settings
 	if speciesIntervalSettingsChanged(oldSettings, currentSettings) || oldSettings.Realtime.Interval != currentSettings.Realtime.Interval {
 		c.Debug("Species interval settings changed, triggering update")
 		reconfigActions = append(reconfigActions, "update_detection_intervals")
+		// Send toast notification
+		_ = c.BroadcastToast("Updating detection intervals...", "info", 3000)
 	}
 
 	// Check MQTT settings
 	if mqttSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("MQTT settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_mqtt")
+		// Send toast notification
+		_ = c.BroadcastToast("Reconfiguring MQTT connection...", "info", 4000)
 	}
 
 	// Check BirdWeather settings
 	if birdWeatherSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("BirdWeather settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_birdweather")
+		// Send toast notification
+		_ = c.BroadcastToast("Reconfiguring BirdWeather integration...", "info", 4000)
 	}
 
 	// Check RTSP settings
 	if rtspSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("RTSP settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_rtsp_sources")
+		// Send toast notification
+		_ = c.BroadcastToast("Reconfiguring RTSP sources...", "info", 4000)
 	}
 
 	// Check sound level monitoring settings
 	if soundLevelSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
+		// Send toast notification
+		_ = c.BroadcastToast("Reconfiguring sound level monitoring...", "info", 3000)
 	}
 
 	// Check telemetry settings
 	if telemetrySettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Telemetry settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_telemetry")
+		// Send toast notification
+		_ = c.BroadcastToast("Reconfiguring telemetry settings...", "info", 3000)
 	}
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
-		// No action here as restart is manual
+		// Send toast notification about restart requirement
+		_ = c.BroadcastToast("Audio device changed. Restart required to apply changes.", "warning", 8000)
 	}
 
 	// Check audio equalizer settings
@@ -981,8 +998,12 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Audio equalizer settings changed, updating filter chain")
 		// Handle audio equalizer changes synchronously as it returns an error
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
+			// Send error toast
+			_ = c.BroadcastToast("Failed to update audio equalizer settings", "error", 5000)
 			return fmt.Errorf("failed to update audio equalizer: %w", err)
 		}
+		// Send success toast
+		_ = c.BroadcastToast("Audio equalizer settings updated", "success", 3000)
 	}
 
 	// Trigger reconfigurations asynchronously

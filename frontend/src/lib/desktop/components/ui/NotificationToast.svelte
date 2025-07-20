@@ -51,13 +51,14 @@
     error: 'alert-error',
   };
 
+  // Position classes are handled by ToastContainer, not individual toasts
   const positionClasses: Record<ToastPosition, string> = {
-    'top-left': 'toast-start toast-top',
-    'top-center': 'toast-center toast-top',
-    'top-right': 'toast-end toast-top',
-    'bottom-left': 'toast-start toast-bottom',
-    'bottom-center': 'toast-center toast-bottom',
-    'bottom-right': 'toast-end toast-bottom',
+    'top-left': '',
+    'top-center': '',
+    'top-right': '',
+    'bottom-left': '',
+    'bottom-center': '',
+    'bottom-right': '',
   };
 
   const iconPaths: Record<ToastType, string> = {
@@ -93,7 +94,7 @@
 </script>
 
 {#if isVisible}
-  <div class={cn('toast', positionClasses[position])}>
+  <div class={cn('w-full max-w-xs', positionClasses[position])}>
     <div
       class={cn('alert', typeClasses[type], className)}
       role="alert"

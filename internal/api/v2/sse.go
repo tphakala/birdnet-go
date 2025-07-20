@@ -37,15 +37,25 @@ type SSEEvent struct {
 	Timestamp time.Time   `json:"timestamp"`
 }
 
+// SSEToastData represents toast message data sent via SSE
+type SSEToastData struct {
+	Message   string    `json:"message"`
+	Type      string    `json:"type"` // "info", "success", "warning", "error"
+	Duration  int       `json:"duration,omitempty"` // Duration in milliseconds
+	EventType string    `json:"eventType"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // SSEClient represents a connected SSE client
 type SSEClient struct {
 	ID             string
 	Channel        chan SSEDetectionData
 	SoundLevelChan chan SSESoundLevelData
+	ToastChan      chan SSEToastData
 	Request        *http.Request
 	Response       http.ResponseWriter
 	Done           chan bool
-	StreamType     string // "detections", "soundlevels", or "all"
+	StreamType     string // "detections", "soundlevels", "toasts", or "all"
 }
 
 // SSEManager manages SSE connections and broadcasts
@@ -81,6 +91,9 @@ func (m *SSEManager) RemoveClient(clientID string) {
 		close(client.Channel)
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
+		}
+		if client.ToastChan != nil {
+			close(client.ToastChan)
 		}
 		close(client.Done)
 		delete(m.clients, clientID)
@@ -163,6 +176,45 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 	}
 }
 
+// BroadcastToast sends toast message data to all connected clients
+func (m *SSEManager) BroadcastToast(toast *SSEToastData) {
+	m.mutex.RLock()
+
+	if len(m.clients) == 0 {
+		m.mutex.RUnlock()
+		return // No clients to broadcast to
+	}
+
+	// Collect blocked client IDs to remove them after releasing the lock
+	var blockedClients []string
+
+	for clientID, client := range m.clients {
+		// Only send to clients that want toast data
+		if client.StreamType == "toasts" || client.StreamType == "all" {
+			if client.ToastChan != nil {
+				select {
+				case client.ToastChan <- *toast:
+					// Successfully sent to client
+				case <-time.After(100 * time.Millisecond): // Short timeout for toast messages
+					// Client channel is blocked, collect ID for removal
+					if m.logger != nil {
+						m.logger.Printf("SSE client %s appears blocked on toast channel, will remove", clientID)
+					}
+					blockedClients = append(blockedClients, clientID)
+				}
+			}
+		}
+	}
+
+	// Release the read lock before removing clients
+	m.mutex.RUnlock()
+
+	// Remove blocked clients without holding the lock to avoid deadlock
+	for _, clientID := range blockedClients {
+		go m.RemoveClient(clientID)
+	}
+}
+
 // GetClientCount returns the number of connected clients
 func (m *SSEManager) GetClientCount() int {
 	m.mutex.RLock()
@@ -204,206 +256,247 @@ func (c *Controller) initSSERoutes() {
 	// SSE endpoint for sound level stream with rate limiting
 	c.Group.GET("/soundlevels/stream", c.StreamSoundLevels, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
+	// SSE endpoint for toast messages stream with rate limiting
+	c.Group.GET("/toasts/stream", c.StreamToasts, middleware.RateLimiterWithConfig(rateLimiterConfig))
+
 	// SSE status endpoint - shows connected client count
 	c.Group.GET("/sse/status", c.GetSSEStatus)
 }
 
-// StreamDetections handles the SSE connection for real-time detection streaming
-func (c *Controller) StreamDetections(ctx echo.Context) error {
-	// Set SSE headers
+// setSSEHeaders sets the required headers for Server-Sent Events
+func setSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Content-Type", "text/event-stream")
 	ctx.Response().Header().Set("Cache-Control", "no-cache")
 	ctx.Response().Header().Set("Connection", "keep-alive")
 	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+}
 
-	// Generate client ID
+// createSSEClient creates a new SSE client with common settings
+func createSSEClient(clientID string, ctx echo.Context, streamType string) *SSEClient {
+	return &SSEClient{
+		ID:         clientID,
+		Request:    ctx.Request(),
+		Response:   ctx.Response(),
+		Done:       make(chan bool),
+		StreamType: streamType,
+	}
+}
+
+// sendConnectionMessage sends the initial connection message to the client
+func (c *Controller) sendConnectionMessage(ctx echo.Context, clientID, message, streamType string) error {
+	data := map[string]string{
+		"clientId": clientID,
+		"message":  message,
+	}
+	if streamType != "" {
+		data["type"] = streamType
+	}
+	return c.sendSSEMessage(ctx, "connected", data)
+}
+
+// logSSEConnection logs SSE client connection/disconnection events
+func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string, connected bool) {
+	if c.apiLogger == nil {
+		return
+	}
+	
+	action := "connected"
+	if !connected {
+		action = "disconnected"
+	}
+	
+	c.apiLogger.Info(fmt.Sprintf("SSE %s client %s", streamType, action),
+		"client_id", clientID,
+		"ip", ip,
+		"user_agent", userAgent,
+	)
+}
+
+// sendSSEHeartbeat sends a heartbeat message to keep the connection alive
+func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType string) error {
+	data := map[string]interface{}{
+		"timestamp": time.Now().Unix(),
+		"clients":   c.sseManager.GetClientCount(),
+	}
+	if streamType != "" {
+		data["type"] = streamType
+	}
+	
+	if err := c.sendSSEMessage(ctx, "heartbeat", data); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("SSE heartbeat failed, client likely disconnected",
+				"client_id", clientID,
+				"error", err.Error(),
+			)
+		}
+		return err
+	}
+	return nil
+}
+
+// handleSSEStream handles the common SSE stream setup and teardown
+func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logPrefix string, setupFunc func(*SSEClient), eventLoop func(echo.Context, *SSEClient, string) error) error {
+	// Set SSE headers
+	setSSEHeaders(ctx)
+
+	// Generate client ID and create client
 	clientID := generateCorrelationID()
-
-	// Create client
-	client := &SSEClient{
-		ID:       clientID,
-		Channel:  make(chan SSEDetectionData, 100), // Increased buffer for high detection periods
-		Request:  ctx.Request(),
-		Response: ctx.Response(),
-		Done:     make(chan bool),
+	client := createSSEClient(clientID, ctx, streamType)
+	
+	// Allow custom setup
+	if setupFunc != nil {
+		setupFunc(client)
 	}
 
 	// Add client to manager
 	c.sseManager.AddClient(client)
 
 	// Send initial connection message
-	if err := c.sendSSEMessage(ctx, "connected", map[string]string{
-		"clientId": clientID,
-		"message":  "Connected to detection stream",
-	}); err != nil {
+	if err := c.sendConnectionMessage(ctx, clientID, message, streamType); err != nil {
 		c.sseManager.RemoveClient(clientID)
 		return err
 	}
 
 	// Log the connection
-	if c.apiLogger != nil {
-		c.apiLogger.Info("SSE client connected",
-			"client_id", clientID,
-			"ip", ctx.RealIP(),
-			"user_agent", ctx.Request().UserAgent(),
-		)
-	}
+	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), logPrefix, true)
 
 	// Handle the SSE connection
 	defer func() {
 		c.sseManager.RemoveClient(clientID)
-		if c.apiLogger != nil {
-			c.apiLogger.Info("SSE client disconnected",
-				"client_id", clientID,
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logSSEConnection(clientID, ctx.RealIP(), "", logPrefix, false)
 	}()
 
-	// Keep connection alive and send detections
-	ticker := time.NewTicker(30 * time.Second) // Heartbeat every 30 seconds
-	defer ticker.Stop()
+	// Run the event loop
+	return eventLoop(ctx, client, clientID)
+}
 
-	for {
-		select {
-		case detection := <-client.Channel:
-			// Send detection data
-			if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Error("Failed to send SSE detection",
-						"client_id", clientID,
-						"error", err.Error(),
-					)
+// StreamDetections handles the SSE connection for real-time detection streaming
+func (c *Controller) StreamDetections(ctx echo.Context) error {
+	return c.handleSSEStream(ctx, "detections", "Connected to detection stream", "detection",
+		func(client *SSEClient) {
+			client.Channel = make(chan SSEDetectionData, 100) // Increased buffer for high detection periods
+		},
+		func(ctx echo.Context, client *SSEClient, clientID string) error {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case detection := <-client.Channel:
+					// Send detection data
+					if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
+						if c.apiLogger != nil {
+							c.apiLogger.Error("Failed to send SSE detection",
+								"client_id", clientID,
+								"error", err.Error(),
+							)
+						}
+						return err
+					}
+
+				case <-ticker.C:
+					// Send heartbeat
+					if err := c.sendSSEHeartbeat(ctx, clientID, ""); err != nil {
+						return err
+					}
+
+				case <-ctx.Request().Context().Done():
+					// Client disconnected
+					return nil
+
+				case <-client.Done:
+					// Client marked for removal
+					return nil
 				}
-				return err
 			}
-
-		case <-ticker.C:
-			// Send heartbeat
-			if err := c.sendSSEMessage(ctx, "heartbeat", map[string]interface{}{
-				"timestamp": time.Now().Unix(),
-				"clients":   c.sseManager.GetClientCount(),
-			}); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("SSE heartbeat failed, client likely disconnected",
-						"client_id", clientID,
-						"error", err.Error(),
-					)
-				}
-				return err
-			}
-
-		case <-ctx.Request().Context().Done():
-			// Client disconnected
-			return nil
-
-		case <-client.Done:
-			// Client marked for removal
-			return nil
-		}
-	}
+		})
 }
 
 // StreamSoundLevels handles the SSE connection for real-time sound level streaming
 func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
-	// Set SSE headers
-	ctx.Response().Header().Set("Content-Type", "text/event-stream")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+	return c.handleSSEStream(ctx, "soundlevels", "Connected to sound level stream", "sound level",
+		func(client *SSEClient) {
+			client.Channel = make(chan SSEDetectionData, 1)    // Small buffer, not used for sound levels
+			client.SoundLevelChan = make(chan SSESoundLevelData, 100) // Buffer for sound level data
+		},
+		func(ctx echo.Context, client *SSEClient, clientID string) error {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
 
-	// Generate client ID
-	clientID := generateCorrelationID()
+			for {
+				select {
+				case soundLevel := <-client.SoundLevelChan:
+					// Send sound level data
+					if err := c.sendSSEMessage(ctx, "soundlevel", soundLevel); err != nil {
+						if c.apiLogger != nil {
+							c.apiLogger.Error("Failed to send SSE sound level",
+								"client_id", clientID,
+								"error", err.Error(),
+							)
+						}
+						return err
+					}
 
-	// Create client
-	client := &SSEClient{
-		ID:             clientID,
-		Channel:        make(chan SSEDetectionData, 1),    // Small buffer, not used for sound levels
-		SoundLevelChan: make(chan SSESoundLevelData, 100), // Buffer for sound level data
-		Request:        ctx.Request(),
-		Response:       ctx.Response(),
-		Done:           make(chan bool),
-		StreamType:     "soundlevels",
-	}
+				case <-ticker.C:
+					// Send heartbeat
+					if err := c.sendSSEHeartbeat(ctx, clientID, "soundlevels"); err != nil {
+						return err
+					}
 
-	// Add client to manager
-	c.sseManager.AddClient(client)
+				case <-ctx.Request().Context().Done():
+					// Client disconnected
+					return nil
 
-	// Send initial connection message
-	if err := c.sendSSEMessage(ctx, "connected", map[string]string{
-		"clientId": clientID,
-		"message":  "Connected to sound level stream",
-		"type":     "soundlevels",
-	}); err != nil {
-		c.sseManager.RemoveClient(clientID)
-		return err
-	}
-
-	// Log the connection
-	if c.apiLogger != nil {
-		c.apiLogger.Info("SSE sound level client connected",
-			"client_id", clientID,
-			"ip", ctx.RealIP(),
-			"user_agent", ctx.Request().UserAgent(),
-		)
-	}
-
-	// Handle the SSE connection
-	defer func() {
-		c.sseManager.RemoveClient(clientID)
-		if c.apiLogger != nil {
-			c.apiLogger.Info("SSE sound level client disconnected",
-				"client_id", clientID,
-				"ip", ctx.RealIP(),
-			)
-		}
-	}()
-
-	// Keep connection alive and send sound levels
-	ticker := time.NewTicker(30 * time.Second) // Heartbeat every 30 seconds
-	defer ticker.Stop()
-
-	for {
-		select {
-		case soundLevel := <-client.SoundLevelChan:
-			// Send sound level data
-			if err := c.sendSSEMessage(ctx, "soundlevel", soundLevel); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Error("Failed to send SSE sound level",
-						"client_id", clientID,
-						"error", err.Error(),
-					)
+				case <-client.Done:
+					// Client marked for removal
+					return nil
 				}
-				return err
 			}
+		})
+}
 
-		case <-ticker.C:
-			// Send heartbeat
-			if err := c.sendSSEMessage(ctx, "heartbeat", map[string]interface{}{
-				"timestamp": time.Now().Unix(),
-				"clients":   c.sseManager.GetClientCount(),
-				"type":      "soundlevels",
-			}); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("SSE heartbeat failed, client likely disconnected",
-						"client_id", clientID,
-						"error", err.Error(),
-					)
+// StreamToasts handles the SSE connection for real-time toast message streaming
+func (c *Controller) StreamToasts(ctx echo.Context) error {
+	return c.handleSSEStream(ctx, "toasts", "Connected to toast stream", "toast",
+		func(client *SSEClient) {
+			client.Channel = make(chan SSEDetectionData, 1) // Small buffer, not used for toasts
+			client.ToastChan = make(chan SSEToastData, 10)  // Buffer for toast messages
+		},
+		func(ctx echo.Context, client *SSEClient, clientID string) error {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case toast := <-client.ToastChan:
+					// Send toast data
+					if err := c.sendSSEMessage(ctx, "toast", toast); err != nil {
+						if c.apiLogger != nil {
+							c.apiLogger.Error("Failed to send SSE toast",
+								"client_id", clientID,
+								"error", err.Error(),
+							)
+						}
+						return err
+					}
+
+				case <-ticker.C:
+					// Send heartbeat
+					if err := c.sendSSEHeartbeat(ctx, clientID, "toasts"); err != nil {
+						return err
+					}
+
+				case <-ctx.Request().Context().Done():
+					// Client disconnected
+					return nil
+
+				case <-client.Done:
+					// Client marked for removal
+					return nil
 				}
-				return err
 			}
-
-		case <-ctx.Request().Context().Done():
-			// Client disconnected
-			return nil
-
-		case <-client.Done:
-			// Client marked for removal
-			return nil
-		}
-	}
+		})
 }
 
 // sendSSEMessage sends a Server-Sent Event message
@@ -507,5 +600,23 @@ func (c *Controller) BroadcastSoundLevel(soundLevel *myaudio.SoundLevelData) err
 	}
 
 	c.sseManager.BroadcastSoundLevel(&sseData)
+	return nil
+}
+
+// BroadcastToast is a helper method to broadcast toast messages from the controller
+func (c *Controller) BroadcastToast(message, toastType string, duration int) error {
+	if c.sseManager == nil {
+		return fmt.Errorf("SSE manager not initialized")
+	}
+
+	toast := SSEToastData{
+		Message:   message,
+		Type:      toastType,
+		Duration:  duration,
+		EventType: "toast",
+		Timestamp: time.Now(),
+	}
+
+	c.sseManager.BroadcastToast(&toast)
 	return nil
 }

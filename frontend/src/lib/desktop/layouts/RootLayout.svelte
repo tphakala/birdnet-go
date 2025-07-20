@@ -6,6 +6,9 @@
   import Sidebar from './DesktopSidebar.svelte';
   import { auth as authStore } from '$lib/stores/auth';
   import { csrf as csrfStore } from '$lib/stores/csrf';
+  import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
+  import { sseNotifications } from '$lib/stores/sseNotifications';
+  import { initSSEToasts } from '$lib/stores/sseToasts';
 
   interface Props {
     title?: string;
@@ -37,6 +40,9 @@
 
     // Initialize auth state
     authStore.init(securityEnabled, accessAllowed);
+
+    // Initialize SSE toasts for hot reload notifications
+    initSSEToasts();
 
     // Set theme from localStorage
     const savedTheme = globalThis.localStorage.getItem('theme');
@@ -130,6 +136,9 @@
   <!-- Global Loading Indicator (hidden by default in Svelte UI) -->
   <!-- This was for HTMX loading states, not needed in Svelte -->
 </div>
+
+<!-- Global Toast Container -->
+<ToastContainer />
 
 <style>
   /* Ensure consistent drawer behavior */
