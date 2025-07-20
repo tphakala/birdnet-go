@@ -723,13 +723,6 @@ func createTestClient(t *testing.T, broker string) (Client, *observability.Metri
 	clientID := sanitizeClientID(t.Name())
 	
 	testSettings := &conf.Settings{
-		Main: struct {
-			Name      string
-			TimeAs24h bool
-			Log       conf.LogConfig
-		}{
-			Name: clientID,
-		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
 				Broker:   broker,
@@ -738,6 +731,7 @@ func createTestClient(t *testing.T, broker string) (Client, *observability.Metri
 			},
 		},
 	}
+	testSettings.Main.Name = clientID
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		if t != nil {

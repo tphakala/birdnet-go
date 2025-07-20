@@ -61,13 +61,6 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 
 		// Create temporary settings for the test
 		settings = &conf.Settings{
-			Main: struct {
-				Name      string
-				TimeAs24h bool
-				Log       conf.LogConfig
-			}{
-				Name: "BirdNET-Go-Test", // Test client ID
-			},
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
 					Enabled:  testConfig.Enabled,
@@ -85,6 +78,7 @@ func (h *Handlers) TestMQTT(c echo.Context) error {
 				},
 			},
 		}
+		settings.Main.Name = "BirdNET-Go-Test"
 	} else {
 		// For GET requests, use the current settings
 		settings = h.Settings
