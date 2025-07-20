@@ -80,8 +80,8 @@
 
   let dashboardSettingsHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.webServer?.dashboard,
-      (store.formData as any)?.webServer?.dashboard
+      (store.originalData as any)?.realtime?.dashboard,
+      (store.formData as any)?.realtime?.dashboard
     )
   );
 
@@ -330,13 +330,13 @@
   }
 
   function updateDashboardSetting(key: string, value: any) {
-    settingsActions.updateSection('webServer', {
+    settingsActions.updateSection('realtime', {
       dashboard: { ...settings.dashboard, [key]: value },
     });
   }
 
   function updateThumbnailSetting(key: string, value: any) {
-    settingsActions.updateSection('webServer', {
+    settingsActions.updateSection('realtime', {
       dashboard: {
         ...settings.dashboard,
         thumbnails: { ...settings.dashboard.thumbnails, [key]: value },

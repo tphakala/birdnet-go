@@ -323,7 +323,6 @@ export interface WebServerSettings {
   port?: string;
   log?: LogConfig;
   liveStream?: LiveStreamSettings;
-  dashboard?: Dashboard;
 }
 
 // Dashboard settings
@@ -562,8 +561,6 @@ function createEmptySettings(): SettingsFormData {
         provider: 'none',
         enabled: false,
       },
-    },
-    webServer: {
       dashboard: {
         thumbnails: {
           summary: true,
@@ -574,6 +571,7 @@ function createEmptySettings(): SettingsFormData {
         summaryLimit: 100,
       },
     },
+    webServer: {},
     security: {
       autoTLS: {
         enabled: false,
@@ -664,7 +662,7 @@ export const speciesSettings = derived(settingsStore, $store => $store.formData.
 
 export const dashboardSettings = derived(
   settingsStore,
-  $store => $store.formData.webServer?.dashboard
+  $store => $store.formData.realtime?.dashboard
 );
 
 export const securitySettings = derived(settingsStore, $store => $store.formData.security);
@@ -691,10 +689,12 @@ export const settingsActions = {
     settingsStore.update(state => ({ ...state, isLoading: true, error: null }));
     try {
       const data = await settingsAPI.load();
+      const mergedData = { ...createEmptySettings(), ...data };
+
       settingsStore.update(state => ({
         ...state,
-        formData: { ...createEmptySettings(), ...data },
-        originalData: JSON.parse(JSON.stringify({ ...createEmptySettings(), ...data })),
+        formData: mergedData,
+        originalData: JSON.parse(JSON.stringify(mergedData)),
         isLoading: false,
       }));
     } catch (error) {
@@ -709,26 +709,31 @@ export const settingsActions = {
   },
 
   updateSection<K extends keyof SettingsFormData>(section: K, data: Partial<SettingsFormData[K]>) {
-    settingsStore.update(state => ({
-      ...state,
-      formData: {
-        ...state.formData,
-        [section]: { ...(state.formData[section] || {}), ...data },
-      },
-    }));
+    console.log(`Updating section '${section}' with data:`, data);
+    settingsStore.update(state => {
+      const newSectionData = { ...(state.formData[section] || {}), ...data };
+      console.log(`New ${section} data:`, newSectionData);
+      return {
+        ...state,
+        formData: {
+          ...state.formData,
+          [section]: newSectionData,
+        },
+      };
+    });
   },
 
   async saveSettings() {
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
     try {
       const currentState = get(settingsStore);
+
       await settingsAPI.save(currentState.formData);
 
-      // Reload settings after save to get the actual saved values
-      await settingsActions.loadSettings();
-
+      // Update originalData to match the saved formData (no reload needed)
       settingsStore.update(state => ({
         ...state,
+        originalData: JSON.parse(JSON.stringify(state.formData)),
         isSaving: false,
       }));
     } catch (error) {

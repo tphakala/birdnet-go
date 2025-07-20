@@ -242,7 +242,7 @@ func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]strin
 	err := updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(current).Elem(),
 		reflect.ValueOf(updated).Elem(),
-		getAllowedFieldMap(),
+		getBlockedFieldMap(), // Using blacklist instead of whitelist
 		&skippedFields,
 		"",
 	)
@@ -250,9 +250,10 @@ func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]strin
 }
 
 // updateAllowedFieldsRecursivelyWithTracking handles recursive field updates and tracks skipped fields
+// Using BLACKLIST approach - fields are allowed by default unless blocked or marked with yaml:"-"
 func updateAllowedFieldsRecursivelyWithTracking(
 	currentValue, updatedValue reflect.Value,
-	allowedFields map[string]interface{},
+	blockedFields map[string]interface{},
 	skippedFields *[]string,
 	prefix string,
 ) error {
@@ -261,8 +262,21 @@ func updateAllowedFieldsRecursivelyWithTracking(
 	}
 
 	for i := 0; i < currentValue.NumField(); i++ {
-		fieldName := currentValue.Type().Field(i).Name
+		fieldInfo := currentValue.Type().Field(i)
+		fieldName := fieldInfo.Name
 		currentField := currentValue.Field(i)
+
+		// Skip fields marked with yaml:"-" (runtime-only fields)
+		yamlTag := fieldInfo.Tag.Get("yaml")
+		if yamlTag == "-" {
+			fieldPath := prefix
+			if fieldPath != "" {
+				fieldPath += "."
+			}
+			fieldPath += fieldName
+			*skippedFields = append(*skippedFields, fieldPath + " (runtime-only)")
+			continue
+		}
 
 		// Get updated field and skip if not valid
 		updatedField := updatedValue.FieldByName(fieldName)
@@ -275,7 +289,7 @@ func updateAllowedFieldsRecursivelyWithTracking(
 
 		// Process the field based on permissions and type
 		if err := processField(currentField, updatedField, fieldName, fieldPath, jsonTag,
-			allowedFields, skippedFields); err != nil {
+			blockedFields, skippedFields); err != nil {
 			return err
 		}
 	}
@@ -309,39 +323,41 @@ func getFieldInfo(valueType reflect.Value, fieldIndex int, fieldName, prefix str
 func processField(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	allowedFields map[string]interface{},
+	blockedFields map[string]interface{},
 	skippedFields *[]string,
 ) error {
-	// Check field permissions
-	allowedSubfields, isAllowedAsMap := allowedFields[fieldName].(map[string]interface{})
+	// Check field permissions using blacklist approach
+	blockedSubfields, isBlockedAsMap := blockedFields[fieldName].(map[string]interface{})
 
-	if !isAllowedAsMap {
-		// Handle field based on permission (if it's a simple boolean permission)
+	if !isBlockedAsMap {
+		// Handle field based on permission (if it's a simple boolean permission or not in blocklist)
 		return handleFieldPermission(currentField, updatedField, fieldName, fieldPath, jsonTag,
-			allowedFields, skippedFields)
+			blockedFields, skippedFields)
 	}
 
 	// Handle field based on its type (struct, pointer, or primitive)
 	return handleFieldByType(currentField, updatedField, fieldName, fieldPath, jsonTag,
-		allowedSubfields, skippedFields)
+		blockedSubfields, skippedFields)
 }
 
 // handleFieldPermission processes a field based on its permission settings
 func handleFieldPermission(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	allowedFields map[string]interface{},
+	blockedFields map[string]interface{},
 	skippedFields *[]string,
 ) error {
-	// If it's a bool in the map, it means the whole field is allowed (if true)
-	isAllowedBool, isBool := allowedFields[fieldName].(bool)
-	if !isBool || !isAllowedBool {
-		// Field is explicitly not allowed to be updated
-		*skippedFields = append(*skippedFields, fieldPath)
-		return nil // Skip this field
+	// INVERTED LOGIC: Default is to ALLOW unless explicitly blocked
+	// Check if field is in the blocklist
+	if blocked, exists := blockedFields[fieldName]; exists {
+		if blockedBool, isBool := blocked.(bool); isBool && blockedBool {
+			// Field is explicitly blocked
+			*skippedFields = append(*skippedFields, fieldPath)
+			return nil // Skip this field
+		}
 	}
 
-	// The entire field is allowed to be updated
+	// By default, the field is allowed to be updated
 	if currentField.CanSet() {
 		// Check if we need to validate this field
 		validationErr := validateField(fieldName, updatedField.Interface())
@@ -358,17 +374,17 @@ func handleFieldPermission(
 func handleFieldByType(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	allowedSubfields map[string]interface{},
+	blockedSubfields map[string]interface{},
 	skippedFields *[]string,
 ) error {
 	// For struct fields
 	if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
-		return handleStructField(currentField, updatedField, fieldPath, allowedSubfields, skippedFields)
+		return handleStructField(currentField, updatedField, fieldPath, blockedSubfields, skippedFields)
 	}
 
 	// For fields that are pointers to structs
 	if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
-		return handlePointerField(currentField, updatedField, fieldPath, allowedSubfields, skippedFields)
+		return handlePointerField(currentField, updatedField, fieldPath, blockedSubfields, skippedFields)
 	}
 
 	// For primitive fields or other types
@@ -379,13 +395,13 @@ func handleFieldByType(
 func handleStructField(
 	currentField, updatedField reflect.Value,
 	fieldPath string,
-	allowedSubfields map[string]interface{},
+	blockedSubfields map[string]interface{},
 	skippedFields *[]string,
 ) error {
 	return updateAllowedFieldsRecursivelyWithTracking(
 		currentField,
 		updatedField,
-		allowedSubfields,
+		blockedSubfields,
 		skippedFields,
 		fieldPath,
 	)
@@ -395,7 +411,7 @@ func handleStructField(
 func handlePointerField(
 	currentField, updatedField reflect.Value,
 	fieldPath string,
-	allowedSubfields map[string]interface{},
+	blockedSubfields map[string]interface{},
 	skippedFields *[]string,
 ) error {
 	// Create a new struct if current is nil but updated is not
@@ -410,7 +426,7 @@ func handlePointerField(
 			return updateAllowedFieldsRecursivelyWithTracking(
 				currentField.Elem(),
 				updatedField.Elem(),
-				allowedSubfields,
+				blockedSubfields,
 				skippedFields,
 				fieldPath,
 			)
@@ -551,15 +567,15 @@ func handleBirdnetSection(settings *conf.Settings, data json.RawMessage, skipped
 		return err
 	}
 
-	// Get the allowed fields for this section
-	allowedFieldsMap := getAllowedFieldMap()
-	birdnetAllowedFields, _ := allowedFieldsMap["BirdNET"].(map[string]interface{})
+	// Get the blocked fields for this section (blacklist approach)
+	blockedFieldsMap := getBlockedFieldMap()
+	birdnetBlockedFields, _ := blockedFieldsMap["BirdNET"].(map[string]interface{})
 
-	// Apply the allowed fields filter using reflection
+	// Apply the blocked fields filter using reflection
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.BirdNET).Elem(),
 		reflect.ValueOf(&tempSettings).Elem(),
-		birdnetAllowedFields,
+		birdnetBlockedFields,
 		skippedFields,
 		"BirdNET",
 	)
@@ -575,13 +591,13 @@ func handleWebServerSection(settings *conf.Settings, data json.RawMessage, skipp
 		return err
 	}
 
-	allowedFieldsMap := getAllowedFieldMap()
-	webserverAllowedFields, _ := allowedFieldsMap["WebServer"].(map[string]interface{})
+	blockedFieldsMap := getBlockedFieldMap()
+	webserverBlockedFields, _ := blockedFieldsMap["WebServer"].(map[string]interface{})
 
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.WebServer).Elem(),
 		reflect.ValueOf(&webServerSettings).Elem(),
-		webserverAllowedFields,
+		webserverBlockedFields,
 		skippedFields,
 		"WebServer",
 	)
@@ -621,14 +637,14 @@ func handleAudioSection(settings *conf.Settings, data json.RawMessage, skippedFi
 		return err
 	}
 
-	allowedFieldsMap := getAllowedFieldMap()
-	realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
-	audioAllowedFields, _ := realtimeAllowedFields["Audio"].(map[string]interface{})
+	blockedFieldsMap := getBlockedFieldMap()
+	realtimeBlockedFields, _ := blockedFieldsMap["Realtime"].(map[string]interface{})
+	audioBlockedFields, _ := realtimeBlockedFields["Audio"].(map[string]interface{})
 
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.Realtime.Audio).Elem(),
 		reflect.ValueOf(&audioSettings).Elem(),
-		audioAllowedFields,
+		audioBlockedFields,
 		skippedFields,
 		"Realtime.Audio",
 	)
@@ -728,14 +744,14 @@ func handleSpeciesSection(settings *conf.Settings, data json.RawMessage, skipped
 		return err
 	}
 
-	allowedFieldsMap := getAllowedFieldMap()
-	realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
-	speciesAllowedFields, _ := realtimeAllowedFields["Species"].(map[string]interface{})
+	blockedFieldsMap := getBlockedFieldMap()
+	realtimeBlockedFields, _ := blockedFieldsMap["Realtime"].(map[string]interface{})
+	speciesBlockedFields, _ := realtimeBlockedFields["Species"].(map[string]interface{})
 
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.Realtime.Species).Elem(),
 		reflect.ValueOf(&speciesSettings).Elem(),
-		speciesAllowedFields,
+		speciesBlockedFields,
 		skippedFields,
 		"Realtime.Species",
 	)
@@ -863,53 +879,23 @@ func validateField(fieldName string, value interface{}) error {
 	return nil
 }
 
-// getAllowedFieldMap returns a map of fields that are allowed to be updated
-// The structure uses nested maps to represent the structure of the settings
-// true means the whole field is allowed, a nested map means only specific subfields are allowed
+// getBlockedFieldMap returns a map of fields that are BLOCKED from being updated
+// Using BLACKLIST approach - all fields are allowed by default except:
+// 1. Fields marked with yaml:"-" tag (automatically skipped)
+// 2. Fields explicitly listed here for security reasons
 //
-// IMPORTANT: This is a critical security mechanism for preventing sensitive or runtime-only
-// fields from being modified via the API. When adding new fields to the Settings struct:
-//  1. Fields NOT in this map will be automatically protected (default deny)
-//  2. Add new user-configurable fields explicitly to this map
-//  3. NEVER add sensitive data fields (credentials, tokens, etc.) or runtime-state fields here
-//     unless they are explicitly designed to be configured via the API
-//  4. For nested structures, use nested maps to allow only specific subfields
-func getAllowedFieldMap() map[string]interface{} {
+// IMPORTANT: Only add fields here if they pose a security risk
+// Most runtime-only fields should use yaml:"-" tag instead
+func getBlockedFieldMap() map[string]interface{} {
 	return map[string]interface{}{
-		"BirdNET": map[string]interface{}{
-			"Locale":     true,
-			"Threads":    true,
-			"ModelPath":  true,
-			"LabelPath":  true,
-			"UseXNNPACK": true,
-			"Latitude":   true,
-			"Longitude":  true,
-		},
-		"WebServer": map[string]interface{}{
-			"Port":  true,
-			"Debug": true,
-		},
-		"Realtime": map[string]interface{}{
-			"Interval":       true,
-			"ProcessingTime": true,
-			"Audio": map[string]interface{}{
-				"Source": true,
-				"Export": map[string]interface{}{
-					"Enabled": true,
-					"Path":    true,
-					"Type":    true,
-					"Bitrate": true,
-				},
-				"Equalizer": true,
-			},
-			"MQTT": true, // Allow complete update of MQTT settings
-			"RTSP": true, // Allow complete update of RTSP settings
-			"Species": map[string]interface{}{
-				"Include": true,
-				"Exclude": true,
-				"Config":  true,
-			},
-		},
+		// Block these top-level runtime fields
+		"Version":            true, // Runtime version info
+		"BuildDate":          true, // Build time info
+		"SystemID":           true, // Unique system identifier
+		"ValidationWarnings": true, // Runtime validation state
+		"Input":              true, // File/directory analysis mode config
+		
+		// All other fields are allowed by default
 	}
 }
 

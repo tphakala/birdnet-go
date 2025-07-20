@@ -4,7 +4,12 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsStore, settingsActions, audioSettings, rtspSettings } from '$lib/stores/settings';
+  import {
+    settingsStore,
+    settingsActions,
+    audioSettings,
+    rtspSettings,
+  } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
@@ -301,7 +306,10 @@
           settingsActions.updateSection('realtime', {
             audio: {
               ...$audioSettings,
-              soundLevel: { ...settings.audio.soundLevel, enabled: settings.audio.soundLevel.enabled },
+              soundLevel: {
+                ...settings.audio.soundLevel,
+                enabled: settings.audio.soundLevel.enabled,
+              },
             },
           })}
       />
