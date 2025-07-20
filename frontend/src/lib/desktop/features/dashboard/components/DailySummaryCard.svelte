@@ -2,6 +2,7 @@
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary, DetectionQueryParams } from '$lib/types/detection.types';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -35,7 +36,7 @@
       key: 'common_name',
       header: 'Species',
       sortable: true,
-      className: 'font-medium',
+      className: 'font-medium w-0 whitespace-nowrap',
     },
   ];
 
@@ -44,7 +45,7 @@
     key: 'total_detections',
     header: 'Detections',
     align: 'center',
-    className: 'hidden 2xl:table-cell px-3',
+    className: 'hidden 2xl:table-cell px-4 w-100',
     render: (item: DailySpeciesSummary) => item.count,
   });
 
@@ -93,13 +94,9 @@
     });
   }
 
-  // Helper function to handle image error
-  function handleImageError(e: Event) {
-    const target = e.currentTarget as globalThis.HTMLImageElement;
-    target.src = '/assets/images/bird-placeholder.svg';
-  }
 
   // Navigation handlers for detections
+  // Navigates to species-specific detections view for the selected date
   function handleSpeciesClick(species: DailySpeciesSummary) {
     if (onDetectionView) {
       onDetectionView({
@@ -112,6 +109,7 @@
     }
   }
 
+  // Navigates to detections for a specific species within a time period (1, 2, or 6 hours)
   function handleHourClick(species: DailySpeciesSummary, hour: number, duration: number = 1) {
     if (onDetectionView) {
       onDetectionView({
@@ -126,6 +124,7 @@
     }
   }
 
+  // Navigates to all detections for a specific species on the selected date
   function handleCountClick(species: DailySpeciesSummary) {
     if (onDetectionView) {
       onDetectionView({
@@ -138,6 +137,7 @@
     }
   }
 
+  // Navigates to all detections across all species for a specific time period
   function handleHourHeaderClick(hour: number, duration: number = 1) {
     if (onDetectionView) {
       onDetectionView({
@@ -172,7 +172,7 @@
       : Math.max(...sortedData.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
   );
 
-  // Calculate max for bi-hourly intervals
+  // Calculate max count for bi-hourly intervals (every 2 hours) to normalize heatmap intensity
   const globalMaxBiHourlyCount = $derived(() => {
     if (sortedData.length === 0) return 1;
     
@@ -186,7 +186,7 @@
     return maxCount || 1;
   });
 
-  // Calculate max for six-hourly intervals
+  // Calculate max count for six-hourly intervals (every 6 hours) to normalize heatmap intensity
   const globalMaxSixHourlyCount = $derived(() => {
     if (sortedData.length === 0) return 1;
     
@@ -211,10 +211,12 @@
       <span class="card-title grow text-base sm:text-xl"
         >Daily Summary
         {#if sortedData.length > 0}
+          <!-- Number of species detected -->
           <span class="species-ball bg-primary text-primary-content ml-2">{sortedData.length}</span>
         {/if}
       </span>
       <div class="flex items-center gap-2">
+        <!-- Previous day button -->
         <button onclick={onPreviousDay} class="btn btn-sm btn-ghost" aria-label="Previous day">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -232,8 +234,10 @@
           </svg>
         </button>
 
+        <!-- Date picker -->
         <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
 
+        <!-- Next day button -->
         <button
           onclick={onNextDay}
           class="btn btn-sm btn-ghost"
@@ -286,18 +290,19 @@
       </div>
     {:else}
       <div class="overflow-x-auto">
-        <table class="table table-zebra h-full">
+        <table class="table table-zebra h-full w-full table-auto">
           <thead class="sticky-header text-xs">
             <tr>
               {#each columns as column}
+                <!-- Hourly, bi-hourly, and six-hourly headers -->
                 <th
-                  class="py-0 px-2 sm:px-4 {column.className || ''} {column.key?.startsWith('hour_') || column.key?.startsWith('bi_hour_') || column.key?.startsWith('six_hour_')
+                  class="py-0 {column.key === 'common_name' ? 'pl-2 pr-6 sm:pl-4 sm:pr-8' : 'px-2 sm:px-4'} {column.className || ''} {column.key?.startsWith('hour_') || column.key?.startsWith('bi_hour_') || column.key?.startsWith('six_hour_')
                     ? 'hour-header'
                     : ''}"
                   style:text-align={column.align || 'left'}
                   scope="col"
                 >
-                  {#if column.key?.startsWith('hour_')}
+                  {#if column.key?.startsWith('hour_')} <!-- Hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[1])}
                     <button
                       class="hover:text-primary cursor-pointer"
@@ -306,7 +311,7 @@
                     >
                       {column.header}
                     </button>
-                  {:else if column.key?.startsWith('bi_hour_')}
+                  {:else if column.key?.startsWith('bi_hour_')} <!-- Bi-hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[2])}
                     <button
                       class="hover:text-primary cursor-pointer"
@@ -315,7 +320,7 @@
                     >
                       {column.header}
                     </button>
-                  {:else if column.key?.startsWith('six_hour_')}
+                  {:else if column.key?.startsWith('six_hour_')} <!-- Six-hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[2])}
                     <button
                       class="hover:text-primary cursor-pointer"
@@ -350,17 +355,19 @@
                     class="py-0 px-0 {column.className || ''} {(() => {
                       // Apply heatmap color class and text-center to td for hour columns
                       let classes = [];
-                      if (column.key?.startsWith('hour_')) {
+                      if (column.key?.startsWith('hour_')) { // Hourly columns
                         const hour = parseInt(column.key.split('_')[1]);
                         const count = item.hourly_counts[hour];
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
+                          // Calculate intensity based on count and global max count
                           const intensity = Math.min(9, Math.floor((count / globalMaxHourlyCount) * 9));
                           classes.push(`heatmap-color-${intensity}`);
                         } else {
+                          // If no detections, set intensity to 0
                           classes.push('heatmap-color-0');
                         }
-                      } else if (column.key?.startsWith('bi_hour_')) {
+                      } else if (column.key?.startsWith('bi_hour_')) { // Bi-hourly columns
                         const hour = parseInt(column.key.split('_')[2]);
                         const count = column.render ? Number(column.render(item, 0)) : 0;
                         classes.push('text-center', 'h-full');
@@ -370,7 +377,7 @@
                         } else {
                           classes.push('heatmap-color-0');
                         }
-                      } else if (column.key?.startsWith('six_hour_')) {
+                      } else if (column.key?.startsWith('six_hour_')) { // Six-hourly columns
                         const hour = parseInt(column.key.split('_')[2]);
                         const count = column.render ? Number(column.render(item, 0)) : 0;
                         classes.push('text-center', 'h-full');
@@ -380,6 +387,8 @@
                         } else {
                           classes.push('heatmap-color-0');
                         }
+                      } else if (column.key === 'common_name') {
+                        classes.push('pl-2', 'pr-6', 'sm:pl-4', 'sm:pr-8');
                       } else {
                         classes.push('px-2', 'sm:px-4');
                       }
@@ -388,30 +397,36 @@
                     style:text-align={column.align || 'left'}
                   >
                     {#if column.key === 'common_name'}
+                      <!-- Species thumbnail -->
                       <div class="flex items-center gap-2">
                         <img
                           src={item.thumbnail_url || `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
                           alt={item.common_name}
                           class="w-8 h-8 rounded object-cover"
-                          onerror={handleImageError}
+                          onerror={handleBirdImageError}
                         />
+                        <!-- Species name -->
                         <span class="text-sm">{item.common_name}</span>
                       </div>
                     {:else if column.key === 'total_detections'}
+                      <!-- Total detections bar -->
                       {@const maxCount = Math.max(...sortedData.map(d => d.count))}
                       {@const width = (item.count / maxCount) * 100}
                       {@const roundedWidth = Math.round(width / 5) * 5}
                       <div class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative">
                         <div class="progress progress-primary bg-gray-400 dark:bg-gray-400 progress-width-{roundedWidth}">
                           {#if width >= 45 && width <= 59}
+                            <!-- Total detections count for large bars -->
                             <span class="text-2xs text-gray-100 dark:text-base-300 absolute right-1 top-1/2 transform -translate-y-1/2">{item.count}</span>
                           {/if}
                         </div>
                         {#if width < 45 || width > 59}
+                          <!-- Total detections count for small bars -->
                           <span class="text-2xs {width > 59 ? 'text-gray-100 dark:text-base-300' : 'text-gray-400 dark:text-base-400'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">{item.count}</span>
                         {/if}
                       </div>
                     {:else if column.key?.startsWith('hour_')}
+                      <!-- Hourly detections count -->
                       {@const hour = parseInt(column.key.split('_')[1])}
                       {@const count = item.hourly_counts[hour]}
                       {#if count > 0}
@@ -434,9 +449,11 @@
                         -
                       {/if}
                     {:else if column.key?.startsWith('bi_hour_')}
+                      <!-- Bi-hourly detections count -->
                       {@const hour = parseInt(column.key.split('_')[2])}
                       {@const count = column.render ? Number(column.render(item, 0)) : 0}
                       {#if count > 0}
+                        <!-- Bi-hourly detections count button -->
                         <button
                           type="button"
                           class="w-full h-full"
@@ -454,9 +471,11 @@
                         -
                       {/if}
                     {:else if column.key?.startsWith('six_hour_')}
+                      <!-- Six-hourly detections count -->
                       {@const hour = parseInt(column.key.split('_')[2])}
                       {@const count = column.render ? Number(column.render(item, 0)) : 0}
                       {#if count > 0}
+                        <!-- Six-hourly detections count button -->
                         <button
                           type="button"
                           class="w-full h-full"
@@ -476,6 +495,7 @@
                     {:else if column.render}
                       {column.render(item, 0)}
                     {:else}
+                      <!-- Default column rendering -->
                       <span class="text-sm">{(item as any)[column.key]}</span>
                     {/if}
                   </td>
