@@ -32,7 +32,6 @@
     showSpectrogram?: boolean;
     showDownload?: boolean;
     className?: string;
-    controlsClassName?: string;
     responsive?: boolean;
   }
 
@@ -44,18 +43,24 @@
     showSpectrogram = true,
     showDownload = true,
     className = '',
-    controlsClassName = '',
     responsive = false,
   }: Props = $props();
 
   // Audio and UI elements
   let audioElement: HTMLAudioElement;
   let playerContainer: HTMLDivElement;
+  // @ts-ignore - Used with bind:this
   let playPauseButton: HTMLButtonElement;
   let progressBar: HTMLDivElement;
+  // svelte-ignore non_reactive_update
+  // @ts-ignore - Used with bind:this
   let volumeControl: HTMLDivElement;
+  // svelte-ignore non_reactive_update
+  // @ts-ignore - Used with bind:this
   let filterControl: HTMLDivElement;
+  // svelte-ignore non_reactive_update
   let volumeSlider: HTMLDivElement;
+  // svelte-ignore non_reactive_update
   let filterSlider: HTMLDivElement;
 
   // Audio state
@@ -65,7 +70,7 @@
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
-  let updateInterval: number | undefined;
+  let updateInterval: ReturnType<typeof setInterval> | undefined;
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -99,7 +104,6 @@
 
   // Utility functions
   const dbToGain = (db: number): number => Math.pow(10, db / 20);
-  const gainToDb = (gain: number): number => 20 * Math.log10(gain);
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -309,7 +313,7 @@
     }
 
     // Auto-hide sliders after 5 seconds
-    let sliderTimeout: number | undefined;
+    let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
 
     const resetSliderTimeout = () => {
       if (sliderTimeout) clearTimeout(sliderTimeout);
@@ -360,9 +364,6 @@
     <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
   </svg>`;
 
-  const filterIcon = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
-  </svg>`;
 </script>
 
 <div
@@ -416,13 +417,25 @@
         <div
           bind:this={volumeSlider}
           class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 volume-slider z-50"
-          style="left: calc(100% + 4px); height: {height}px;"
+          style:left="calc(100% + 4px)" style:height="{height}px"
+          role="button"
+          tabindex="0"
+          aria-label="Volume gain control: {gainValue} dB"
           onclick={handleVolumeSlider}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              const rect = volumeSlider.getBoundingClientRect();
+              const centerY = rect.top + rect.height / 2;
+              const mockEvent = { clientY: centerY } as MouseEvent;
+              handleVolumeSlider(mockEvent);
+            }
+          }}
         >
           <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
             <div
               class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
-              style="height: {(gainValue / GAIN_MAX_DB) * 100}%"
+              style:height="{(gainValue / GAIN_MAX_DB) * 100}%"
             ></div>
           </div>
         </div>
@@ -453,13 +466,25 @@
         <div
           bind:this={filterSlider}
           class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 filter-slider z-50"
-          style="right: calc(100% + 4px); height: {height}px;"
+          style:right="calc(100% + 4px)" style:height="{height}px"
+          role="button"
+          tabindex="0"
+          aria-label="High-pass filter control: {Math.round(filterFreq)} Hz"
           onclick={handleFilterSlider}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              const rect = filterSlider.getBoundingClientRect();
+              const centerY = rect.top + rect.height / 2;
+              const mockEvent = { clientY: centerY } as MouseEvent;
+              handleFilterSlider(mockEvent);
+            }
+          }}
         >
           <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
             <div
               class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
-              style="height: {(Math.log(filterFreq / FILTER_HP_MIN_FREQ) /
+              style:height="{(Math.log(filterFreq / FILTER_HP_MIN_FREQ) /
                 Math.log(FILTER_HP_MAX_FREQ / FILTER_HP_MIN_FREQ)) *
                 100}%"
             ></div>
@@ -472,9 +497,9 @@
   <!-- Play position indicator -->
   <div
     class="absolute top-0 bottom-0 w-0.5 bg-gray-100 pointer-events-none"
-    style="left: {progress}%; transition: left 0.1s linear; opacity: {progress > 0 && progress < 100
+    style:left="{progress}%" style:transition="left 0.1s linear" style:opacity="{progress > 0 && progress < 100
       ? '0.7'
-      : '0'};"
+      : '0'}"
   ></div>
 
   <!-- Bottom overlay controls -->
@@ -508,11 +533,23 @@
         bind:this={progressBar}
         id={progressId}
         class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
+        role="button"
+        tabindex="0"
+        aria-label="Seek audio progress: {Math.floor(currentTime)} / {Math.floor(duration)} seconds"
         onclick={handleProgressClick}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const rect = progressBar.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const mockEvent = { clientX: centerX } as MouseEvent;
+            handleProgressClick(mockEvent);
+          }
+        }}
       >
         <div
           class="bg-blue-600 h-1.5 rounded-full transition-all duration-100"
-          style="width: {progress}%"
+          style:width="{progress}%"
         ></div>
       </div>
 

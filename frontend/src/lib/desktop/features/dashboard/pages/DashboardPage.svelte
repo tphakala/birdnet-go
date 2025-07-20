@@ -90,7 +90,10 @@
       const config = await response.json();
       // API returns uppercase field names (e.g., "Summary" not "summary")
       showThumbnails = config.Thumbnails?.Summary ?? true;
-      console.log('Dashboard config loaded:', { Summary: config.Thumbnails?.Summary, showThumbnails });
+      console.log('Dashboard config loaded:', {
+        Summary: config.Thumbnails?.Summary,
+        showThumbnails,
+      });
     } catch (error) {
       console.error('Error fetching dashboard config:', error);
       // Keep default value (true) on error
@@ -179,7 +182,7 @@
   function connectToDetectionStream() {
     console.log('Connecting to SSE stream at /api/v2/detections/stream');
     connectionStatus = 'connecting';
-    
+
     // Clean up existing connection
     if (eventSource) {
       eventSource.close();
@@ -190,7 +193,7 @@
       // ReconnectingEventSource with configuration
       eventSource = new ReconnectingEventSource('/api/v2/detections/stream', {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-        withCredentials: false
+        withCredentials: false,
       });
 
       eventSource.onopen = () => {
@@ -198,10 +201,10 @@
         connectionStatus = 'connected';
       };
 
-      eventSource.onmessage = (event) => {
+      eventSource.onmessage = event => {
         try {
           const data = JSON.parse(event.data);
-          
+
           // Check if this is a structured message with eventType
           if (data.eventType) {
             switch (data.eventType) {
@@ -209,16 +212,16 @@
                 console.log('Connected to detection stream:', data);
                 connectionStatus = 'connected';
                 break;
-                
+
               case 'detection':
                 handleSSEDetection(data);
                 break;
-                
+
               case 'heartbeat':
                 console.debug('SSE heartbeat received, clients:', data.clients);
                 connectionStatus = 'connected';
                 break;
-                
+
               default:
                 console.log('Unknown event type:', data.eventType);
             }
@@ -588,7 +591,6 @@
     onLimitChange={handleDetectionLimitChange}
     onRowClick={handleDetectionClick}
     onRefresh={handleManualRefresh}
-    {connectionStatus}
     {newDetectionIds}
     {detectionArrivalTimes}
   />
