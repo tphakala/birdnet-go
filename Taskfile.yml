@@ -182,6 +182,14 @@ tasks:
     cmds:
       - npm run check:all
 
+  frontend-lint-fix:
+    desc: Fix frontend linting issues automatically
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run format
+      - npm run lint -- --fix
+
   frontend-test:
     desc: Run frontend tests
     dir: frontend
