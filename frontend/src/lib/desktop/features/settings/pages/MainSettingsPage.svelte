@@ -7,15 +7,16 @@
   import {
     settingsStore,
     settingsActions,
-    nodeSettings,
+    mainSettings,
     birdnetSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
   import { onMount } from 'svelte';
+  import { api } from '$lib/utils/api';
 
   let settings = $derived({
-    main: $nodeSettings || { name: '' },
+    main: $mainSettings || { name: '' },
     birdnet: $birdnetSettings || {
       sensitivity: 1.0,
       threshold: 0.8,
@@ -63,8 +64,8 @@
   let store = $derived($settingsStore);
 
   // Check for changes in each section
-  let nodeSettingsHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.node, (store.formData as any)?.node)
+  let mainSettingsHasChanges = $derived(
+    hasSettingsChanged((store.originalData as any)?.main, (store.formData as any)?.main)
   );
 
   let birdnetSettingsHasChanges = $derived(
@@ -240,21 +241,12 @@
     rangeFilterError = null;
 
     try {
-      const response = await fetch('/api/v2/range/species/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': (window as any).CSRF_TOKEN || '',
-        },
-        body: JSON.stringify({
-          latitude: settings.birdnet.latitude,
-          longitude: settings.birdnet.longitude,
-          threshold: settings.birdnet.rangeFilter.threshold,
-        }),
+      const data = await api.post('/api/v2/range/species/test', {
+        latitude: settings.birdnet.latitude,
+        longitude: settings.birdnet.longitude,
+        threshold: settings.birdnet.rangeFilter.threshold,
       });
-
-      if (!response.ok) throw new Error('Failed to test range filter');
-      const data = await response.json();
+      
       rangeFilterSpeciesCount = data.count;
 
       if (showRangeFilterModal) {
@@ -281,14 +273,7 @@
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
       });
 
-      const response = await fetch(`/api/v2/range/species/list?${params}`, {
-        headers: {
-          'X-CSRF-Token': (window as any).CSRF_TOKEN || '',
-        },
-      });
-
-      if (!response.ok) throw new Error('Failed to load species list');
-      const data = await response.json();
+      const data = await api.get(`/api/v2/range/species/list?${params}`);
       rangeFilterSpecies = data.species || [];
       rangeFilterSpeciesCount = data.count;
     } catch (error) {
@@ -305,8 +290,8 @@
   });
 
   // Update handlers
-  function updateNodeName(name: string) {
-    settingsActions.updateSection('node', { name });
+  function updateMainName(name: string) {
+    settingsActions.updateSection('main', { name });
   }
 
   function updateBirdnetSetting(key: string, value: any) {
@@ -349,12 +334,12 @@
 </script>
 
 <div class="space-y-4">
-  <!-- Node Settings Section -->
+  <!-- Main Settings Section -->
   <SettingsSection
-    title="Node Settings"
-    description="Configure node specific settings"
+    title="Main Settings"
+    description="Configure main application settings"
     defaultOpen={true}
-    hasChanges={nodeSettingsHasChanges}
+    hasChanges={mainSettingsHasChanges}
   >
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
       <TextInput
@@ -364,7 +349,7 @@
         placeholder="Enter node name"
         helpText="Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
         disabled={store.isLoading || store.isSaving}
-        onchange={updateNodeName}
+        onchange={() => updateMainName(settings.main.name)}
       />
     </div>
   </SettingsSection>

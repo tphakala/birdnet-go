@@ -43,12 +43,15 @@ import { writable, derived, get } from 'svelte/store';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 
 // Type definitions for settings - Updated interfaces
-export interface NodeSettings {
+export interface MainSettings {
   name: string;
-  identifier: string;
-  location?: {
-    latitude: number;
-    longitude: number;
+  timeAs24h?: boolean;
+  log?: {
+    enabled: boolean;
+    path: string;
+    rotation: string;
+    maxSize: number;
+    rotationDay: string;
   };
 }
 
@@ -293,7 +296,11 @@ export interface SupportSettings {
 
 // Main settings form data interface
 export interface SettingsFormData {
-  node: NodeSettings;
+  debug?: boolean;
+  version?: string;
+  buildDate?: string;
+  systemId?: string;
+  main: MainSettings;
   birdnet: BirdNetSettings;
   audio: AudioSettings;
   filters: FilterSettings;
@@ -330,9 +337,8 @@ export interface TestResult {
 // Initialize empty settings data
 function createEmptySettings(): SettingsFormData {
   return {
-    node: {
+    main: {
       name: '',
-      identifier: '',
     },
     birdnet: {
       modelPath: '',
@@ -507,7 +513,7 @@ const initialState: GlobalSettingsState = {
   originalData: createEmptySettings(),
   isLoading: false,
   isSaving: false,
-  activeSection: 'node',
+  activeSection: 'main',
   error: null,
 };
 
@@ -525,8 +531,8 @@ export const isLoading = derived(settingsStore, $store => $store.isLoading);
 
 export const isSaving = derived(settingsStore, $store => $store.isSaving);
 
-// Section-specific derived stores
-export const nodeSettings = derived(settingsStore, $store => $store.formData.node);
+// Section-specific derived stores  
+export const mainSettings = derived(settingsStore, $store => $store.formData.main);
 
 export const birdnetSettings = derived(settingsStore, $store => $store.formData.birdnet);
 
@@ -579,11 +585,13 @@ export const settingsActions = {
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
     try {
       const currentState = get(settingsStore);
-      const savedData = await settingsAPI.save(currentState.formData);
+      await settingsAPI.save(currentState.formData);
+      
+      // Reload settings after save to get the actual saved values
+      await settingsActions.loadSettings();
+      
       settingsStore.update(state => ({
         ...state,
-        formData: savedData,
-        originalData: JSON.parse(JSON.stringify(savedData)),
         isSaving: false,
       }));
     } catch (error) {
