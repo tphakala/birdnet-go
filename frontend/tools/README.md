@@ -28,16 +28,16 @@ node screenshot.js http://192.168.4.152:8080/ui/settings --width 1920 --height 1
 
 ### Command Line Options
 
-| Option | Short | Description | Default |
-|--------|-------|-------------|---------|
-| `--output` | `-o` | Output filename | Auto-generated |
-| `--width` | `-w` | Viewport width (pixels) | 1400 |
-| `--height` | `-h` | Viewport height (pixels) | 1800 |
-| `--timeout` | `-t` | Page load timeout (ms) | 60000 |
-| `--wait` | | Wait time after load (ms) | 5000 |
-| `--dir` | | Output directory | ../doc |
-| `--no-fullpage` | | Capture viewport only | false |
-| `--help` | | Show help message | |
+| Option          | Short | Description               | Default        |
+| --------------- | ----- | ------------------------- | -------------- |
+| `--output`      | `-o`  | Output filename           | Auto-generated |
+| `--width`       | `-w`  | Viewport width (pixels)   | 1400           |
+| `--height`      | `-h`  | Viewport height (pixels)  | 1800           |
+| `--timeout`     | `-t`  | Page load timeout (ms)    | 60000          |
+| `--wait`        |       | Wait time after load (ms) | 5000           |
+| `--dir`         |       | Output directory          | ../doc         |
+| `--no-fullpage` |       | Capture viewport only     | false          |
+| `--help`        |       | Show help message         |                |
 
 ### Examples
 
@@ -86,16 +86,19 @@ Screenshots are saved to `frontend/doc/` by default. The tool will:
 ### Troubleshooting
 
 **Timeout errors:**
+
 - Increase timeout with `--timeout 120000`
 - Check if the development server is running
 - Verify the URL is accessible
 
 **Missing content:**
+
 - Increase wait time with `--wait 10000`
 - Use `--no-fullpage` for viewport-only capture
 - Check browser console for JavaScript errors
 
 **Installation issues:**
+
 - Run `npx playwright install-deps` for system dependencies
 - Ensure Node.js version compatibility (v16+)
 

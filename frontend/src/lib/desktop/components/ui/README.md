@@ -14,16 +14,19 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 ## 📚 Component Categories
 
 ### Layout & Structure
+
 - [Card](#card) - Flexible container with header, body, and footer
 - [CollapsibleCard](#collapsiblecard) - Expandable card with toggle functionality
 - [CollapsibleSection](#collapsiblesection) - Collapsible content sections
 
 ### Form Elements
+
 - [Input](#input) - Text, number, date, and other input types
 - [Select](#select) - Dropdown selection component
 - [DatePicker](#datepicker) - Date selection interface
 
 ### Feedback & Status
+
 - [Badge](#badge) - Status indicators and labels
 - [ProgressBar](#progressbar) - Progress visualization with thresholds
 - [LoadingSpinner](#loadingspinner) - Loading state indicator
@@ -32,27 +35,32 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 - [NotificationToast](#notificationtoast) - Toast notifications
 
 ### Navigation & Interaction
+
 - [Modal](#modal) - Dialog and confirmation modals
 - [Pagination](#pagination) - Page navigation component
 - [ActionMenu](#actionmenu) - Context action menu
 
 ### Data Display
+
 - [ProcessTable](#processtable) - System process information
 - [SystemInfoCard](#systeminfocard) - System information display
 - [SettingsCard](#settingscard) - Configuration settings card
 - [SettingsSection](#settingssection) - Settings organization
 
 ### Media & Audio
+
 - [AudioLevelIndicator](#audiolevelindicator) - Audio level visualization
 - [ThemeToggle](#themetoggle) - Theme switching component
 - [TimeOfDayIcon](#timeofdayicon) - Time-based icon display
 
 ### Advanced
+
 - [MultiStageOperation](#multistageoperation) - Multi-step operation handler
 - [NotificationBell](#notificationbell) - Notification indicator
 - [SearchBox](#searchbox) - Search input with functionality
 
 ### Utilities
+
 - [image-utils.ts](#image-utils) - Image handling utilities
 
 ---
@@ -60,13 +68,23 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 ## 📖 Component Documentation
 
 ### Badge
+
 **File**: `Badge.svelte`
 
 A versatile badge component for status indicators and labels.
 
 ```typescript
 interface Props {
-  variant?: 'primary' | 'secondary' | 'accent' | 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'ghost';
+  variant?:
+    | 'primary'
+    | 'secondary'
+    | 'accent'
+    | 'neutral'
+    | 'info'
+    | 'success'
+    | 'warning'
+    | 'error'
+    | 'ghost';
   size?: 'xs' | 'sm' | 'md' | 'lg';
   text?: string;
   outline?: boolean;
@@ -76,6 +94,7 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
 <Badge variant="success" size="sm" text="Active" />
 <Badge variant="warning" outline>
@@ -84,6 +103,7 @@ interface Props {
 ```
 
 **Features:**
+
 - 9 color variants
 - 4 size options
 - Outline styling
@@ -92,6 +112,7 @@ interface Props {
 ---
 
 ### Card
+
 **File**: `Card.svelte`
 
 Flexible container component with header, body, and footer sections.
@@ -108,6 +129,7 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
 <Card title="Card Title" padding={true}>
   {#snippet children()}
@@ -120,6 +142,7 @@ interface Props {
 ```
 
 **Features:**
+
 - Optional title or custom header
 - Configurable padding
 - Three content sections
@@ -127,6 +150,7 @@ interface Props {
 ---
 
 ### Modal
+
 **File**: `Modal.svelte`
 
 Comprehensive modal component with multiple types and configurations.
@@ -154,14 +178,15 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
-<Modal 
-  isOpen={showModal} 
-  title="Confirm Action" 
+<Modal
+  isOpen={showModal}
+  title="Confirm Action"
   type="confirm"
   confirmLabel="Delete"
   confirmVariant="error"
-  onClose={() => showModal = false}
+  onClose={() => (showModal = false)}
   onConfirm={handleDelete}
 >
   {#snippet children()}
@@ -171,6 +196,7 @@ interface Props {
 ```
 
 **Features:**
+
 - Multiple modal types
 - 5 size variants
 - Async confirm handlers
@@ -181,13 +207,23 @@ interface Props {
 ---
 
 ### Input
+
 **File**: `Input.svelte`
 
 Comprehensive input component supporting multiple input types.
 
 ```typescript
 interface Props {
-  type?: 'text' | 'email' | 'password' | 'number' | 'date' | 'datetime-local' | 'time' | 'url' | 'tel';
+  type?:
+    | 'text'
+    | 'email'
+    | 'password'
+    | 'number'
+    | 'date'
+    | 'datetime-local'
+    | 'time'
+    | 'url'
+    | 'tel';
   value?: string | number;
   id?: string;
   name?: string;
@@ -203,23 +239,14 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
-<Input 
-  type="text" 
-  bind:value={name} 
-  placeholder="Enter name" 
-  required 
-/>
-<Input 
-  type="number" 
-  bind:value={count} 
-  min={0} 
-  max={100} 
-  step={1} 
-/>
+<Input type="text" bind:value={name} placeholder="Enter name" required />
+<Input type="number" bind:value={count} min={0} max={100} step={1} />
 ```
 
 **Features:**
+
 - Multiple input types
 - Two-way binding
 - Form validation
@@ -228,6 +255,7 @@ interface Props {
 ---
 
 ### Select
+
 **File**: `Select.svelte`
 
 Dropdown selection component with option support.
@@ -249,18 +277,20 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
-<Select 
+<Select
   bind:value={selectedOption}
   options={[
     { value: 'option1', label: 'Option 1' },
-    { value: 'option2', label: 'Option 2' }
+    { value: 'option2', label: 'Option 2' },
   ]}
   placeholder="Choose option"
 />
 ```
 
 **Features:**
+
 - Structured option format
 - Two-way binding
 - Placeholder support
@@ -269,6 +299,7 @@ interface Props {
 ---
 
 ### ProgressBar
+
 **File**: `ProgressBar.svelte`
 
 Advanced progress bar with dynamic coloring and animations.
@@ -295,15 +326,16 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
-<ProgressBar 
-  value={75} 
+<ProgressBar
+  value={75}
   max={100}
   showLabel={true}
   colorThresholds={[
     { value: 30, variant: 'error' },
     { value: 70, variant: 'warning' },
-    { value: 100, variant: 'success' }
+    { value: 100, variant: 'success' },
   ]}
   striped={true}
   animated={true}
@@ -311,6 +343,7 @@ interface Props {
 ```
 
 **Features:**
+
 - Dynamic color thresholds
 - Custom label formatting
 - Striped and animated styles
@@ -319,6 +352,7 @@ interface Props {
 ---
 
 ### LoadingSpinner
+
 **File**: `LoadingSpinner.svelte`
 
 Simple loading indicator with size and color options.
@@ -332,12 +366,14 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
 <LoadingSpinner size="md" label="Loading..." />
 <LoadingSpinner size="lg" color="text-secondary" />
 ```
 
 **Features:**
+
 - 5 size options
 - Custom color support
 - Screen reader accessibility
@@ -345,6 +381,7 @@ interface Props {
 ---
 
 ### EmptyState
+
 **File**: `EmptyState.svelte`
 
 Empty state placeholder with optional action button.
@@ -366,18 +403,20 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
-<EmptyState 
+<EmptyState
   title="No Data Found"
   description="There are no items to display"
   action={{
-    label: "Add Item",
-    onClick: handleAddItem
+    label: 'Add Item',
+    onClick: handleAddItem,
   }}
 />
 ```
 
 **Features:**
+
 - Default or custom icons
 - Optional action button
 - Flexible content
@@ -385,6 +424,7 @@ interface Props {
 ---
 
 ### ErrorAlert
+
 **File**: `ErrorAlert.svelte`
 
 Alert component for errors, warnings, and notifications.
@@ -401,16 +441,13 @@ interface Props {
 ```
 
 **Usage:**
+
 ```svelte
-<ErrorAlert 
-  type="error" 
-  message="An error occurred"
-  dismissible={true}
-  onDismiss={handleDismiss}
-/>
+<ErrorAlert type="error" message="An error occurred" dismissible={true} onDismiss={handleDismiss} />
 ```
 
 **Features:**
+
 - 4 alert types with icons
 - Dismissible functionality
 - Message or snippet content
@@ -418,28 +455,27 @@ interface Props {
 ---
 
 ### Image Utils
+
 **File**: `image-utils.ts`
 
 Utility functions for image handling.
 
 ```typescript
-export function handleBirdImageError(e: Event): void
+export function handleBirdImageError(e: Event): void;
 ```
 
 **Usage:**
+
 ```svelte
 <script>
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
 </script>
 
-<img 
-  src="/api/species-image/{species}" 
-  alt="Bird"
-  onerror={handleBirdImageError}
-/>
+<img src="/api/species-image/{species}" alt="Bird" onerror={handleBirdImageError} />
 ```
 
 **Features:**
+
 - Bird-specific error handling
 - Automatic placeholder fallback
 
@@ -498,28 +534,30 @@ export function handleBirdImageError(e: Event): void
 ## 🚀 Usage Best Practices
 
 ### Prefer Existing Components
+
 - Always check this inventory before creating new components
 - Extend existing components rather than duplicating functionality
 - Use composition patterns with snippets for flexibility
 
 ### Import Patterns
+
 ```svelte
-// Correct import path
-import Badge from '$lib/desktop/components/ui/Badge.svelte';
-import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
+// Correct import path import Badge from '$lib/desktop/components/ui/Badge.svelte'; import {handleBirdImageError}
+from '$lib/desktop/components/ui/image-utils.js';
 ```
 
 ### Snippet Usage
+
 ```svelte
 <Card>
   {#snippet header()}
     <h2>Custom Header</h2>
   {/snippet}
-  
+
   {#snippet children()}
     <p>Card content</p>
   {/snippet}
-  
+
   {#snippet footer()}
     <button class="btn">Action</button>
   {/snippet}
@@ -527,14 +565,15 @@ import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js'
 ```
 
 ### State Management
+
 ```svelte
 <script>
   // Reactive state
   let count = $state(0);
-  
+
   // Derived values
   let doubled = $derived(count * 2);
-  
+
   // Bindable props
   let { value = $bindable() } = $props();
 </script>

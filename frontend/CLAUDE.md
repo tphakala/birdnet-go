@@ -130,11 +130,11 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 // Create connection with automatic reconnection
 const eventSource = new ReconnectingEventSource('/api/endpoint', {
   max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-  withCredentials: false
+  withCredentials: false,
 });
 
 // Handle events
-eventSource.onmessage = (event) => {
+eventSource.onmessage = event => {
   const data = JSON.parse(event.data);
   // Process data
 };
