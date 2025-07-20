@@ -9,6 +9,7 @@
     settingsActions,
     mainSettings,
     birdnetSettings,
+    dashboardSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
@@ -48,16 +49,14 @@
       username: '',
       password: '',
     },
-    ui: {
-      dashboard: {
-        thumbnails: {
-          summary: true,
-          recent: true,
-          imageProvider: 'wikimedia',
-          fallbackPolicy: 'all',
-        },
-        summaryLimit: 100,
+    dashboard: $dashboardSettings || {
+      thumbnails: {
+        summary: true,
+        recent: true,
+        imageProvider: 'wikimedia',
+        fallbackPolicy: 'all',
       },
+      summaryLimit: 100,
     },
   });
 
@@ -79,8 +78,11 @@
     )
   );
 
-  let uiSettingsHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.ui, (store.formData as any)?.ui)
+  let dashboardSettingsHasChanges = $derived(
+    hasSettingsChanged(
+      (store.originalData as any)?.webServer?.dashboard,
+      (store.formData as any)?.webServer?.dashboard
+    )
   );
 
   // Locale options
@@ -241,12 +243,15 @@
     rangeFilterError = null;
 
     try {
-      const data = await api.post('/api/v2/range/species/test', {
-        latitude: settings.birdnet.latitude,
-        longitude: settings.birdnet.longitude,
-        threshold: settings.birdnet.rangeFilter.threshold,
-      });
-      
+      const data = await api.post<{ count: number; species?: any[] }>(
+        '/api/v2/range/species/test',
+        {
+          latitude: settings.birdnet.latitude,
+          longitude: settings.birdnet.longitude,
+          threshold: settings.birdnet.rangeFilter.threshold,
+        }
+      );
+
       rangeFilterSpeciesCount = data.count;
 
       if (showRangeFilterModal) {
@@ -273,7 +278,9 @@
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
       });
 
-      const data = await api.get(`/api/v2/range/species/list?${params}`);
+      const data = await api.get<{ count: number; species: any[] }>(
+        `/api/v2/range/species/list?${params}`
+      );
       rangeFilterSpecies = data.species || [];
       rangeFilterSpeciesCount = data.count;
     } catch (error) {
@@ -323,13 +330,18 @@
   }
 
   function updateDashboardSetting(key: string, value: any) {
-    // UI settings not implemented in current store structure
-    console.log('Dashboard setting update:', key, value);
+    settingsActions.updateSection('webServer', {
+      dashboard: { ...settings.dashboard, [key]: value },
+    });
   }
 
   function updateThumbnailSetting(key: string, value: any) {
-    // UI settings not implemented in current store structure
-    console.log('Thumbnail setting update:', key, value);
+    settingsActions.updateSection('webServer', {
+      dashboard: {
+        ...settings.dashboard,
+        thumbnails: { ...settings.dashboard.thumbnails, [key]: value },
+      },
+    });
   }
 </script>
 
@@ -765,7 +777,7 @@
     title="User Interface Settings"
     description="Customize user interface"
     defaultOpen={true}
-    hasChanges={uiSettingsHasChanges}
+    hasChanges={dashboardSettingsHasChanges}
   >
     <div class="space-y-6">
       <div>
@@ -773,7 +785,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
           <NumberField
             label="Max Number of Species on Daily Summary Table"
-            value={settings.ui.dashboard.summaryLimit}
+            value={settings.dashboard.summaryLimit}
             onUpdate={value => updateDashboardSetting('summaryLimit', value)}
             min={10}
             max={1000}
@@ -784,7 +796,7 @@
 
         <div class="mt-4">
           <Checkbox
-            bind:checked={settings.ui.dashboard.thumbnails.summary}
+            bind:checked={settings.dashboard.thumbnails.summary}
             label="Show Thumbnails on Daily Summary table"
             helpText="Enable to show thumbnails of detected species on the daily summary table"
             disabled={store.isLoading || store.isSaving}
@@ -792,7 +804,7 @@
           />
 
           <Checkbox
-            bind:checked={settings.ui.dashboard.thumbnails.recent}
+            bind:checked={settings.dashboard.thumbnails.recent}
             label="Show Thumbnails on Recent Detections list"
             helpText="Enable to show thumbnails of detected species on the recent detections list"
             disabled={store.isLoading || store.isSaving}
@@ -802,7 +814,7 @@
           <div class:opacity-50={!multipleProvidersAvailable}>
             <SelectField
               id="image-provider"
-              bind:value={settings.ui.dashboard.thumbnails.imageProvider}
+              bind:value={settings.dashboard.thumbnails.imageProvider}
               label="Image Provider"
               options={providerOptions}
               helpText="Select the preferred image provider for bird thumbnails"
@@ -814,7 +826,7 @@
           {#if multipleProvidersAvailable}
             <SelectField
               id="fallback-policy"
-              bind:value={settings.ui.dashboard.thumbnails.fallbackPolicy}
+              bind:value={settings.dashboard.thumbnails.fallbackPolicy}
               label="Fallback Policy"
               options={[
                 { value: 'all', label: 'Try all providers in sequence' },

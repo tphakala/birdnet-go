@@ -4,18 +4,14 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsStore, settingsActions, audioSettings } from '$lib/stores/settings';
+  import { settingsStore, settingsActions, audioSettings, rtspSettings } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
 
-  let settings = $derived(
-    $audioSettings || {
+  let settings = $derived({
+    audio: $audioSettings || {
       source: '',
-      rtsp: {
-        transport: 'tcp' as const,
-        urls: [] as RTSPUrl[],
-      },
       soundLevel: {
         enabled: false,
         interval: 60,
@@ -38,49 +34,53 @@
         minClips: 10,
         keepSpectrograms: false,
       },
-    }
-  );
+    },
+    rtsp: $rtspSettings || {
+      transport: 'tcp' as const,
+      urls: [] as RTSPUrl[],
+    },
+  });
   let store = $derived($settingsStore);
 
   // Check for changes in audio settings sections (only core capture settings)
   let audioCaptureHasChanges = $derived(
     hasSettingsChanged(
       {
-        source: (store.originalData as any)?.audio?.source,
-        rtsp: (store.originalData as any)?.audio?.rtsp,
+        source: (store.originalData as any)?.realtime?.audio?.source,
+        rtsp: (store.originalData as any)?.realtime?.rtsp,
       },
       {
-        source: (store.formData as any)?.audio?.source,
-        rtsp: (store.formData as any)?.audio?.rtsp,
+        source: (store.formData as any)?.realtime?.audio?.source,
+        rtsp: (store.formData as any)?.realtime?.rtsp,
       }
     )
   );
 
   let audioExportHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.audio?.export,
-      (store.formData as any)?.audio?.export
+      (store.originalData as any)?.realtime?.audio?.export,
+      (store.formData as any)?.realtime?.audio?.export
     )
   );
 
   let audioRetentionHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.audio?.export?.retention,
-      (store.formData as any)?.audio?.export?.retention
+      (store.originalData as any)?.realtime?.audio?.retention,
+      (store.formData as any)?.realtime?.audio?.retention
     )
   );
 
   let audioFiltersHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.audio?.equalizer,
-      (store.formData as any)?.audio?.equalizer
+      (store.originalData as any)?.realtime?.audio?.equalizer,
+      (store.formData as any)?.realtime?.audio?.equalizer
     )
   );
 
   let soundLevelHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.audio?.soundLevel,
-      (store.formData as any)?.audio?.soundLevel
+      (store.originalData as any)?.realtime?.audio?.soundLevel,
+      (store.formData as any)?.realtime?.audio?.soundLevel
     )
   );
 
@@ -118,58 +118,60 @@
 
   // Retention settings with proper structure
   let retentionSettings = $derived({
-    policy: settings.retention?.policy || 'none',
-    maxAge: settings.retention?.maxAge || '7d',
-    maxUsage: settings.retention?.maxUsage || '80%',
-    minClips: settings.retention?.minClips || 10,
-    keepSpectrograms: settings.retention?.keepSpectrograms || false,
+    policy: settings.audio.retention?.policy || 'none',
+    maxAge: settings.audio.retention?.maxAge || '7d',
+    maxUsage: settings.audio.retention?.maxUsage || '80%',
+    minClips: settings.audio.retention?.minClips || 10,
+    keepSpectrograms: settings.audio.retention?.keepSpectrograms || false,
   });
 
   // Update handlers
   function updateAudioSource(source: string) {
-    settingsActions.updateSection('audio', { source });
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, source },
+    });
   }
 
   function updateRTSPTransport(transport: 'tcp' | 'udp') {
-    settingsActions.updateSection('audio', {
+    settingsActions.updateSection('realtime', {
       rtsp: { ...settings.rtsp, transport },
     });
   }
 
   function updateRTSPUrls(urls: RTSPUrl[]) {
-    settingsActions.updateSection('audio', {
+    settingsActions.updateSection('realtime', {
       rtsp: { ...settings.rtsp, urls },
     });
   }
 
   function updateExportEnabled(enabled: boolean) {
-    settingsActions.updateSection('audio', {
-      export: { ...settings.export, enabled },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, export: { ...settings.audio.export, enabled } },
     });
   }
 
   function updateExportFormat(format: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus') {
-    settingsActions.updateSection('audio', {
-      export: { ...settings.export, format },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, export: { ...settings.audio.export, format } },
     });
   }
 
   function updateExportQuality(quality: string) {
-    settingsActions.updateSection('audio', {
-      export: { ...settings.export, quality },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, export: { ...settings.audio.export, quality } },
     });
   }
 
   // Update retention settings
   function updateRetentionPolicy(policy: string) {
-    settingsActions.updateSection('audio', {
-      retention: { ...retentionSettings, policy },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, retention: { ...retentionSettings, policy } },
     });
   }
 
   function updateRetentionMaxAge(maxAge: string) {
-    settingsActions.updateSection('audio', {
-      retention: { ...retentionSettings, maxAge },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, retention: { ...retentionSettings, maxAge } },
     });
   }
 
@@ -178,20 +180,20 @@
     if (!maxUsage.endsWith('%') && !isNaN(Number(maxUsage))) {
       maxUsage = maxUsage + '%';
     }
-    settingsActions.updateSection('audio', {
-      retention: { ...retentionSettings, maxUsage },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, retention: { ...retentionSettings, maxUsage } },
     });
   }
 
   function updateRetentionMinClips(minClips: number) {
-    settingsActions.updateSection('audio', {
-      retention: { ...retentionSettings, minClips },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, retention: { ...retentionSettings, minClips } },
     });
   }
 
   function updateRetentionKeepSpectrograms(keepSpectrograms: boolean) {
-    settingsActions.updateSection('audio', {
-      retention: { ...retentionSettings, keepSpectrograms },
+    settingsActions.updateSection('realtime', {
+      audio: { ...$audioSettings, retention: { ...retentionSettings, keepSpectrograms } },
     });
   }
 </script>
@@ -210,7 +212,7 @@
         <h4 class="text-lg font-medium pb-2">Sound Card Source</h4>
         <SelectField
           id="audio-source"
-          bind:value={settings.source}
+          bind:value={settings.audio.source}
           label="Audio Source (requires application restart to take effect)"
           placeholder="No sound card capture"
           disabled={store.isLoading || store.isSaving}
@@ -269,12 +271,15 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.equalizer.enabled}
+        bind:checked={settings.audio.equalizer.enabled}
         label="Enable Audio Equalizer"
         disabled={store.isLoading || store.isSaving}
         onchange={() =>
-          settingsActions.updateSection('audio', {
-            equalizer: { ...settings.equalizer, enabled: settings.equalizer.enabled },
+          settingsActions.updateSection('realtime', {
+            audio: {
+              ...$audioSettings,
+              equalizer: { ...settings.audio.equalizer, enabled: settings.audio.equalizer.enabled },
+            },
           })}
       />
     </div>
@@ -289,23 +294,29 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.soundLevel.enabled}
+        bind:checked={settings.audio.soundLevel.enabled}
         label="Enable Sound Level Monitoring"
         disabled={store.isLoading || store.isSaving}
         onchange={() =>
-          settingsActions.updateSection('audio', {
-            soundLevel: { ...settings.soundLevel, enabled: settings.soundLevel.enabled },
+          settingsActions.updateSection('realtime', {
+            audio: {
+              ...$audioSettings,
+              soundLevel: { ...settings.audio.soundLevel, enabled: settings.audio.soundLevel.enabled },
+            },
           })}
       />
 
-      {#if settings.soundLevel.enabled}
+      {#if settings.audio.soundLevel.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
           <NumberField
             label="Measurement Interval (seconds)"
-            value={settings.soundLevel.interval}
+            value={settings.audio.soundLevel.interval}
             onUpdate={value =>
-              settingsActions.updateSection('audio', {
-                soundLevel: { ...settings.soundLevel, interval: value },
+              settingsActions.updateSection('realtime', {
+                audio: {
+                  ...$audioSettings,
+                  soundLevel: { ...settings.audio.soundLevel, interval: value },
+                },
               })}
             min={5}
             max={300}
@@ -352,20 +363,23 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.export.enabled}
+        bind:checked={settings.audio.export.enabled}
         label="Enable Audio Export"
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateExportEnabled(settings.export.enabled)}
+        onchange={() => updateExportEnabled(settings.audio.export.enabled)}
       />
 
-      {#if settings.export.enabled}
+      {#if settings.audio.export.enabled}
         <Checkbox
-          bind:checked={settings.export.debug}
+          bind:checked={settings.audio.export.debug}
           label="Enable Debug Mode"
           disabled={store.isLoading || store.isSaving}
           onchange={() =>
-            settingsActions.updateSection('audio', {
-              export: { ...settings.export, debug: settings.export.debug },
+            settingsActions.updateSection('realtime', {
+              audio: {
+                ...$audioSettings,
+                export: { ...settings.audio.export, debug: settings.audio.export.debug },
+              },
             })}
         />
 
@@ -373,20 +387,20 @@
           <!-- Export Path -->
           <TextInput
             id="export-path"
-            bind:value={settings.export.path}
+            bind:value={settings.audio.export.path}
             label="Export Path"
             placeholder="clips/"
             disabled={store.isLoading || store.isSaving}
             onchange={value =>
-              settingsActions.updateSection('audio', {
-                export: { ...settings.export, path: value },
+              settingsActions.updateSection('realtime', {
+                audio: { ...$audioSettings, export: { ...settings.audio.export, path: value } },
               })}
           />
 
           <!-- Export Type -->
           <SelectField
             id="export-type"
-            bind:value={settings.export.format}
+            bind:value={settings.audio.export.format}
             label="Export Type"
             options={exportFormatOptions}
             disabled={store.isLoading || store.isSaving}
@@ -396,13 +410,13 @@
           <!-- Bitrate -->
           <TextInput
             id="export-bitrate"
-            bind:value={settings.export.quality}
+            bind:value={settings.audio.export.quality}
             label="Bitrate"
             placeholder="96k"
             disabled={store.isLoading ||
               store.isSaving ||
               !ffmpegAvailable ||
-              !['aac', 'opus', 'mp3'].includes(settings.export.format)}
+              !['aac', 'opus', 'mp3'].includes(settings.audio.export.format)}
             onchange={updateExportQuality}
           />
         </div>

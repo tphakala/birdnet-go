@@ -3,40 +3,43 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
-  import { settingsStore, settingsActions, filterSettings } from '$lib/stores/settings';
+  import {
+    settingsStore,
+    settingsActions,
+    privacyFilterSettings,
+    dogBarkFilterSettings,
+  } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 
-  let settings = $derived(
-    $filterSettings || {
-      privacy: {
-        enabled: false,
-        confidence: 0.5,
-        debug: false,
-      },
-      dogBark: {
-        enabled: false,
-        confidence: 0.5,
-        remember: 30,
-        debug: false,
-        species: [],
-      },
-    }
-  );
+  let settings = $derived({
+    privacy: $privacyFilterSettings || {
+      enabled: false,
+      confidence: 0.5,
+      debug: false,
+    },
+    dogBark: $dogBarkFilterSettings || {
+      enabled: false,
+      confidence: 0.5,
+      remember: 30,
+      debug: false,
+      species: [],
+    },
+  });
 
   let store = $derived($settingsStore);
 
   // Track changes for each section separately
   let privacyFilterHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.filters?.privacy,
-      (store.formData as any)?.filters?.privacy
+      (store.originalData as any)?.realtime?.privacyFilter,
+      (store.formData as any)?.realtime?.privacyFilter
     )
   );
 
   let dogBarkFilterHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.filters?.dogBark,
-      (store.formData as any)?.filters?.dogBark
+      (store.originalData as any)?.realtime?.dogBarkFilter,
+      (store.formData as any)?.realtime?.dogBarkFilter
     )
   );
 
@@ -60,33 +63,33 @@
 
   // Privacy filter update handlers
   function updatePrivacyEnabled(enabled: boolean) {
-    settingsActions.updateSection('filters', {
-      privacy: { ...(settings.privacy as any), enabled },
+    settingsActions.updateSection('realtime', {
+      privacyFilter: { ...(settings.privacy as any), enabled },
     });
   }
 
   function updatePrivacyConfidence(confidence: number) {
-    settingsActions.updateSection('filters', {
-      privacy: { ...(settings.privacy as any), confidence },
+    settingsActions.updateSection('realtime', {
+      privacyFilter: { ...(settings.privacy as any), confidence },
     });
   }
 
   // Dog bark filter update handlers
   function updateDogBarkEnabled(enabled: boolean) {
-    settingsActions.updateSection('filters', {
-      dogBark: { ...(settings.dogBark as any), enabled },
+    settingsActions.updateSection('realtime', {
+      dogBarkFilter: { ...(settings.dogBark as any), enabled },
     });
   }
 
   function updateDogBarkConfidence(confidence: number) {
-    settingsActions.updateSection('filters', {
-      dogBark: { ...(settings.dogBark as any), confidence },
+    settingsActions.updateSection('realtime', {
+      dogBarkFilter: { ...(settings.dogBark as any), confidence },
     });
   }
 
   function updateDogBarkRemember(remember: number) {
-    settingsActions.updateSection('filters', {
-      dogBark: { ...(settings.dogBark as any), remember },
+    settingsActions.updateSection('realtime', {
+      dogBarkFilter: { ...(settings.dogBark as any), remember },
     });
   }
 
@@ -102,8 +105,8 @@
     if ((settings.dogBark as any).species.includes(trimmedSpecies)) return; // Already exists
 
     const updatedSpecies = [...(settings.dogBark as any).species, trimmedSpecies];
-    settingsActions.updateSection('filters', {
-      dogBark: { ...(settings.dogBark as any), species: updatedSpecies },
+    settingsActions.updateSection('realtime', {
+      dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
     });
   }
 
@@ -111,8 +114,8 @@
     const updatedSpecies = (settings.dogBark as any).species.filter(
       (_: string, i: number) => i !== index
     );
-    settingsActions.updateSection('filters', {
-      dogBark: { ...(settings.dogBark as any), species: updatedSpecies },
+    settingsActions.updateSection('realtime', {
+      dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
     });
   }
 
@@ -127,8 +130,8 @@
     const updatedSpecies = [...(settings.dogBark as any).species];
     updatedSpecies[editIndex] = editSpecies.trim();
 
-    settingsActions.updateSection('filters', {
-      dogBark: { ...(settings.dogBark as any), species: updatedSpecies },
+    settingsActions.updateSection('realtime', {
+      dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
     });
 
     cancelEdit();
