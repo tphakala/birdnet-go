@@ -20,7 +20,7 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 // Create connection with options
 const eventSource = new ReconnectingEventSource('/api/endpoint', {
   max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-  withCredentials: false // Set to true if you need CORS credentials
+  withCredentials: false, // Set to true if you need CORS credentials
 });
 
 // Handle connection open
@@ -29,7 +29,7 @@ eventSource.onopen = () => {
 };
 
 // Handle messages
-eventSource.onmessage = (event) => {
+eventSource.onmessage = event => {
   try {
     const data = JSON.parse(event.data);
     // Process data
@@ -39,7 +39,7 @@ eventSource.onmessage = (event) => {
 };
 
 // Handle errors (reconnection is automatic)
-eventSource.onerror = (error) => {
+eventSource.onerror = error => {
   console.error('SSE error:', error);
   // No manual reconnection needed - handled automatically
 };
@@ -63,19 +63,27 @@ declare module 'reconnecting-eventsource' {
 
   class ReconnectingEventSource extends EventTarget {
     constructor(url: string, options?: ReconnectingEventSourceOptions);
-    
+
     readonly url: string;
     readonly readyState: number;
     readonly withCredentials: boolean;
-    
+
     onopen: ((event: Event) => void) | null;
     onmessage: ((event: MessageEvent) => void) | null;
     onerror: ((event: Event) => void) | null;
-    
+
     close(): void;
-    addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
-    removeEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions): void;
-    
+    addEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions
+    ): void;
+    removeEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions
+    ): void;
+
     static readonly CONNECTING: 0;
     static readonly OPEN: 1;
     static readonly CLOSED: 2;
@@ -101,6 +109,7 @@ declare module 'reconnecting-eventsource' {
 ## Migration from Manual Reconnection
 
 ### Before (Manual Reconnection)
+
 ```typescript
 let eventSource: EventSource | null = null;
 let reconnectAttempts = 0;
@@ -108,7 +117,7 @@ let reconnectDelay = 1000;
 
 function setupEventSource() {
   eventSource = new EventSource('/api/endpoint');
-  
+
   eventSource.onerror = () => {
     if (!isNavigating && reconnectAttempts < 10) {
       setTimeout(() => {
@@ -122,6 +131,7 @@ function setupEventSource() {
 ```
 
 ### After (ReconnectingEventSource)
+
 ```typescript
 import ReconnectingEventSource from 'reconnecting-eventsource';
 
@@ -129,10 +139,10 @@ let eventSource: ReconnectingEventSource | null = null;
 
 function setupEventSource() {
   eventSource = new ReconnectingEventSource('/api/endpoint', {
-    max_retry_time: 30000
+    max_retry_time: 30000,
   });
-  
-  eventSource.onerror = (error) => {
+
+  eventSource.onerror = error => {
     console.error('SSE error:', error);
     // Reconnection handled automatically
   };
