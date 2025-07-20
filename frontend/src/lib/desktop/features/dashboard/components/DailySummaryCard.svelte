@@ -9,6 +9,7 @@
     loading?: boolean;
     error?: string | null;
     selectedDate: string;
+    showThumbnails?: boolean;
     onRowClick?: (_species: DailySpeciesSummary) => void;
     onPreviousDay: () => void;
     onNextDay: () => void;
@@ -22,6 +23,7 @@
     loading = false,
     error = null,
     selectedDate,
+    showThumbnails = true,
     onRowClick,
     onPreviousDay,
     onNextDay,
@@ -397,14 +399,16 @@
                     style:text-align={column.align || 'left'}
                   >
                     {#if column.key === 'common_name'}
-                      <!-- Species thumbnail -->
+                      <!-- Species thumbnail and name -->
                       <div class="flex items-center gap-2">
-                        <img
-                          src={item.thumbnail_url || `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
-                          alt={item.common_name}
-                          class="w-8 h-8 rounded object-cover"
-                          onerror={handleBirdImageError}
-                        />
+                        {#if showThumbnails}
+                          <img
+                            src={item.thumbnail_url || `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
+                            alt={item.common_name}
+                            class="w-8 h-8 rounded object-cover"
+                            onerror={handleBirdImageError}
+                          />
+                        {/if}
                         <!-- Species name -->
                         <span class="text-sm">{item.common_name}</span>
                       </div>
