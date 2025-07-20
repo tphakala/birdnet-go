@@ -11,13 +11,23 @@
   // Extract query parameters from URL
   function getQueryParams(): DetectionQueryParams {
     const params = new URLSearchParams(window.location.search);
+    const search = params.get('search');
+    
+    // Set queryType to 'search' if search parameter is present
+    let queryType = params.get('queryType') as DetectionQueryParams['queryType'];
+    if (search && !queryType) {
+      queryType = 'search';
+    } else if (!queryType) {
+      queryType = 'all';
+    }
+    
     return {
-      queryType: (params.get('queryType') as DetectionQueryParams['queryType']) || 'all',
+      queryType,
       date: params.get('date') || new Date().toISOString().split('T')[0],
       hour: params.get('hour') || undefined,
       duration: params.get('duration') ? parseInt(params.get('duration')!) : undefined,
       species: params.get('species') || undefined,
-      search: params.get('search') || undefined,
+      search: search || undefined,
       numResults: parseInt(params.get('numResults') || '50'),
       offset: parseInt(params.get('offset') || '0'),
     };
@@ -85,8 +95,36 @@
     window.location.href = `/detections/${id}`;
   }
 
+  // Listen for search updates from SearchBox
+  function handleSearchUpdate(event: Event) {
+    const customEvent = event as CustomEvent<{ search: string }>;
+    const { search } = customEvent.detail;
+    // Update URL parameters to include new search
+    const params = new URLSearchParams(window.location.search);
+    if (search) {
+      params.set('search', search);
+    } else {
+      params.delete('search');
+    }
+
+    // Update URL without navigation
+    const url = new URL(window.location.href);
+    url.search = params.toString();
+    window.history.replaceState({}, '', url.toString());
+
+    // Refresh detections with new search
+    fetchDetections();
+  }
+
   onMount(() => {
     fetchDetections();
+
+    // Listen for search updates from SearchBox
+    window.addEventListener('searchUpdate', handleSearchUpdate);
+
+    return () => {
+      window.removeEventListener('searchUpdate', handleSearchUpdate);
+    };
   });
 </script>
 

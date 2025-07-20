@@ -19,14 +19,42 @@
     onSearch,
     onNavigate,
     size = 'sm',
-    showOnPages = ['dashboard'],
+    showOnPages = ['dashboard', 'detections'],
     currentPage = 'dashboard',
   }: Props = $props();
 
   let searchQuery = $state(value);
-  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
   let isSearching = $state(false);
   let inputRef = $state<HTMLInputElement>();
+  let showDropdown = $state(false);
+  let selectedIndex = $state(-1);
+  let searchHistory = $state<string[]>([]);
+  let suggestions = $state<string[]>([]);
+
+  // Load search history from localStorage
+  $effect(() => {
+    if (typeof globalThis.window !== 'undefined') {
+      const saved = globalThis.localStorage.getItem('birdnet-search-history');
+      if (saved) {
+        try {
+          searchHistory = JSON.parse(saved).slice(0, 10); // Keep last 10 searches
+        } catch (e) {
+          searchHistory = [];
+        }
+      }
+    }
+  });
+
+  // Initialize search query from URL if on detections page
+  $effect(() => {
+    if (typeof globalThis.window !== 'undefined' && currentPage === 'detections') {
+      const params = new URLSearchParams(globalThis.window.location.search);
+      const searchParam = params.get('search');
+      if (searchParam) {
+        searchQuery = searchParam;
+      }
+    }
+  });
 
   // Check if search should be visible on current page
   const isVisible = $derived(showOnPages.includes(currentPage.toLowerCase()));
@@ -55,86 +83,199 @@
     }
   });
 
-  // Handle input change with debounce
-  function handleInput(event: Event) {
-    const target = event.target as HTMLInputElement;
-    searchQuery = target.value;
+  // Save search to history
+  function saveToHistory(query: string) {
+    if (!query.trim()) return;
 
-    // Clear existing timeout
-    if (searchTimeout) {
-      globalThis.clearTimeout(searchTimeout);
+    // Remove if already exists
+    const filtered = searchHistory.filter(item => item !== query);
+    // Add to beginning
+    const newHistory = [query, ...filtered].slice(0, 10);
+    searchHistory = newHistory;
+
+    // Save to localStorage
+    if (typeof globalThis.window !== 'undefined') {
+      globalThis.localStorage.setItem('birdnet-search-history', JSON.stringify(newHistory));
+    }
+  }
+
+  // Remove item from search history
+  function removeFromHistory(query: string) {
+    const newHistory = searchHistory.filter(item => item !== query);
+    searchHistory = newHistory;
+
+    // Update suggestions to remove the deleted item
+    suggestions = suggestions.filter(item => item !== query);
+
+    // Save to localStorage
+    if (typeof globalThis.window !== 'undefined') {
+      globalThis.localStorage.setItem('birdnet-search-history', JSON.stringify(newHistory));
     }
 
-    // Don't search for empty queries
-    if (!searchQuery.trim()) {
-      isSearching = false;
-      return;
+    // Hide dropdown if no suggestions left
+    if (suggestions.length === 0) {
+      showDropdown = false;
     }
+  }
 
-    // Set searching state
-    isSearching = true;
+  // Handle input change
+  function handleInput() {
+    selectedIndex = -1;
 
-    // Debounce search (200ms delay like the original)
-    searchTimeout = setTimeout(() => {
-      performSearch();
-    }, 200);
+    // Show dropdown when typing
+    if (searchQuery.length > 0) {
+      showDropdown = true;
+      // Filter search history based on current input
+      suggestions = searchHistory.filter(item =>
+        item.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    } else if (searchHistory.length > 0) {
+      // Show all recent searches when input is cleared
+      suggestions = searchHistory.slice(0, 8);
+      showDropdown = true;
+    } else {
+      showDropdown = false;
+      suggestions = [];
+    }
   }
 
   // Perform the search
   async function performSearch() {
-    if (!searchQuery.trim()) {
-      isSearching = false;
+    const query = searchQuery.trim();
+    if (!query) {
       return;
     }
 
-    // TODO: Implement search API call when v2 endpoint is available
-    // Expected endpoint: /api/v2/detections/search or similar
-    // Parameters: { query: searchQuery, limit: 20 }
+    showDropdown = false;
+    isSearching = true;
 
-    // TODO: Search API not implemented for query: ${searchQuery}
+    // Save to search history
+    saveToHistory(query);
 
-    // For now, just call the onSearch callback if provided
+    // Call the onSearch callback if provided
     if (onSearch) {
-      onSearch(searchQuery);
+      onSearch(query);
     }
 
-    // In the future, this would make an API call like:
-    /*
-    try {
-      const response = await fetch(`/api/v2/detections/search?query=${encodeURIComponent(searchQuery)}`);
-      if (response.ok) {
-        const results = await response.json();
-        // Handle results
+    // If we're already on detections page, just update the URL without full navigation
+    if (currentPage === 'detections') {
+      const url = new URL(globalThis.window.location.href);
+      url.searchParams.set('search', query);
+      globalThis.window.history.replaceState({}, '', url.toString());
+
+      // Trigger a custom event to notify the detections page of the search change
+      globalThis.window.dispatchEvent(
+        new CustomEvent('searchUpdate', {
+          detail: { search: query },
+        })
+      );
+    } else {
+      // Navigate to detections page with search query
+      if (onNavigate) {
+        onNavigate(`/ui/detections?search=${encodeURIComponent(query)}`);
       }
-    } catch (error) {
-      console.error('Search failed:', error);
     }
-    */
 
     isSearching = false;
-
-    // TODO: Navigate to search results page when API is ready
-    // For now, just log or call navigation callback
-    if (onNavigate) {
-      onNavigate(`/search?query=${encodeURIComponent(searchQuery)}`);
-    }
   }
 
   // Handle form submission
   function handleSubmit(event: Event) {
     event.preventDefault();
-    if (searchTimeout) {
-      globalThis.clearTimeout(searchTimeout);
-    }
     performSearch();
   }
 
-  // Handle keyboard shortcuts
+  // Handle suggestion click
+  function handleSuggestionClick(suggestion: string) {
+    searchQuery = suggestion;
+    showDropdown = false;
+    performSearch();
+  }
+
+  // Handle focus events
+  function handleFocus() {
+    if (searchQuery.length > 0) {
+      // Show recent searches when focused, even if input is empty
+      suggestions = searchHistory.filter(item =>
+        item.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      if (suggestions.length > 0) {
+        showDropdown = true;
+      }
+    } else if (searchHistory.length > 0) {
+      // Show recent searches when focused on empty input
+      suggestions = searchHistory.slice(0, 8); // Show up to 8 recent searches
+      showDropdown = true;
+    }
+  }
+
+  function handleBlur(event: FocusEvent) {
+    // Delay hiding dropdown to allow for clicks
+    setTimeout(() => {
+      showDropdown = false;
+      selectedIndex = -1;
+    }, 150);
+  }
+
+  // Clear search
+  function clearSearch() {
+    searchQuery = '';
+    showDropdown = false;
+    selectedIndex = -1;
+    inputRef?.focus();
+
+    // If on detections page, clear search and refresh
+    if (currentPage === 'detections') {
+      const url = new URL(globalThis.window.location.href);
+      url.searchParams.delete('search');
+      globalThis.window.history.replaceState({}, '', url.toString());
+
+      globalThis.window.dispatchEvent(
+        new CustomEvent('searchUpdate', {
+          detail: { search: '' },
+        })
+      );
+    }
+  }
+
+  // Handle keyboard navigation and search
   function handleKeyDown(event: KeyboardEvent) {
-    // Clear search on Escape
-    if (event.key === 'Escape') {
-      searchQuery = '';
-      inputRef?.blur();
+    if (!showDropdown) {
+      // Just handle Escape and Enter when dropdown is closed
+      if (event.key === 'Escape') {
+        searchQuery = '';
+        inputRef?.blur();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        performSearch();
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        selectedIndex = selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : -1;
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        selectedIndex = selectedIndex > -1 ? selectedIndex - 1 : suggestions.length - 1;
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+          searchQuery = suggestions[selectedIndex];
+        }
+        showDropdown = false;
+        performSearch();
+        break;
+      case 'Escape':
+        showDropdown = false;
+        selectedIndex = -1;
+        if (!searchQuery) {
+          inputRef?.blur();
+        }
+        break;
     }
   }
 
@@ -163,51 +304,135 @@
       onsubmit={handleSubmit}
       class="relative w-full md:w-3/4 lg:w-4/5 xl:w-5/6 max-w-4xl mx-auto"
     >
-      <input
-        bind:this={inputRef}
-        type="text"
-        name="search"
-        value={searchQuery}
-        oninput={handleInput}
-        onkeydown={handleKeyDown}
-        aria-label={placeholder}
-        {placeholder}
-        class={cn(
-          'input rounded-full focus:outline-none w-full font-normal transition-all',
-          sizeClasses().input,
-          sizeClasses().padding,
-          isSearching && 'opacity-75'
-        )}
-      />
+      <div class="relative">
+        <input
+          bind:this={inputRef}
+          bind:value={searchQuery}
+          type="text"
+          name="search"
+          oninput={handleInput}
+          onkeydown={handleKeyDown}
+          onfocus={handleFocus}
+          onblur={handleBlur}
+          aria-label={placeholder}
+          {placeholder}
+          autocomplete="off"
+          class={cn(
+            'input rounded-full focus:outline-none w-full font-normal transition-all',
+            sizeClasses().input,
+            sizeClasses().padding,
+            isSearching && 'opacity-75',
+            showDropdown && 'rounded-b-none'
+          )}
+        />
 
-      <!-- Search icon or loading spinner -->
-      <div
-        class="absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3 pointer-events-none"
-        aria-hidden="true"
-      >
-        {#if isSearching}
-          <span class="loading loading-spinner loading-sm"></span>
-        {:else}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="1.5"
-            stroke="currentColor"
-            class={sizeClasses().icon}
+        <!-- Clear button (X) -->
+        {#if searchQuery.length > 0}
+          <button
+            type="button"
+            onclick={clearSearch}
+            class="absolute inset-y-0 right-8 sm:right-10 flex items-center pr-2 hover:bg-base-200 rounded-full"
+            aria-label="Clear search"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-            />
-          </svg>
+            <svg
+              class="w-4 h-4 text-base-content/60"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         {/if}
-      </div>
 
-      <!-- Keyboard shortcut hint -->
-      <div class="absolute inset-y-0 left-0 hidden lg:flex items-center pl-3 pointer-events-none">
-        <kbd class="kbd kbd-xs text-base-content/40">⌘K</kbd>
+        <!-- Search icon or loading spinner -->
+        <div
+          class="absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3 pointer-events-none"
+          aria-hidden="true"
+        >
+          {#if isSearching}
+            <span class="loading loading-spinner loading-sm"></span>
+          {:else}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class={sizeClasses().icon}
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
+          {/if}
+        </div>
+
+        <!-- Search suggestions dropdown -->
+        {#if showDropdown && suggestions.length > 0}
+          <div
+            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-lg z-50 max-h-80 overflow-y-auto"
+          >
+            {#each suggestions as suggestion, index}
+              <div
+                class={cn(
+                  'w-full flex items-center gap-3 border-b border-base-200 last:border-b-0 group hover:bg-base-200',
+                  selectedIndex === index && 'bg-base-200'
+                )}
+              >
+                <!-- Main suggestion button -->
+                <button
+                  type="button"
+                  onclick={() => handleSuggestionClick(suggestion)}
+                  class="flex-grow flex items-center gap-3 px-4 py-2 text-left"
+                >
+                  <!-- History icon -->
+                  <svg
+                    class="w-4 h-4 text-base-content/60 flex-shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <span class="flex-grow text-sm">{suggestion}</span>
+                </button>
+
+                <!-- Remove from history button -->
+                <button
+                  type="button"
+                  onclick={e => {
+                    e.stopPropagation();
+                    removeFromHistory(suggestion);
+                  }}
+                  class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded"
+                  aria-label="Remove from history"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
     </form>
   </div>

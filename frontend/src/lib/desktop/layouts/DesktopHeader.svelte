@@ -52,17 +52,15 @@
     }
   }
 
-  // TODO: When implementing search API
+  // Handle search queries (quick search functionality)
   function handleSearch(query: string) {
-    // TODO: Search API implementation needed
     if (onSearch) {
       onSearch(query);
     }
   }
 
-  // TODO: When implementing navigation
+  // Handle navigation (including search results navigation)
   function handleNavigate(url: string) {
-    // TODO: Navigation implementation needed
     if (onNavigate) {
       onNavigate(url);
     } else {
