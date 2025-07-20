@@ -97,12 +97,14 @@ export interface DatabaseSettings {
 
 export interface AudioSettings {
   source: string;
-  rtsp: RTSPSettings;
-  quality: AudioQuality;
-  equalizer: EqualizerSettings;
+  ffmpegPath?: string;
+  soxPath?: string;
+  streamTransport?: string;
   export: ExportSettings;
-  retention: RetentionSettings;
   soundLevel: SoundLevelSettings;
+  useAudioCore?: boolean;
+  equalizer: EqualizerSettings;
+  retention?: RetentionSettings;
 }
 
 export interface SoundLevelSettings {
@@ -294,7 +296,116 @@ export interface SupportSettings {
   };
 }
 
-// Main settings form data interface
+// Realtime settings matching backend structure
+export interface RealtimeSettings {
+  interval?: number;
+  processingTime?: boolean;
+  audio?: AudioSettings;
+  dashboard?: Dashboard;
+  dynamicThreshold?: DynamicThresholdSettings;
+  log?: {
+    enabled: boolean;
+    path: string;
+  };
+  birdweather?: BirdWeatherSettings;
+  privacyFilter?: PrivacyFilterSettings;
+  dogBarkFilter?: DogBarkFilterSettings;
+  rtsp?: RTSPSettings;
+  mqtt?: MQTTSettings;
+  telemetry?: TelemetrySettings;
+  monitoring?: MonitoringSettings;
+  species?: SpeciesSettings;
+  weather?: WeatherSettings;
+}
+
+// WebServer settings
+export interface WebServerSettings {
+  port?: string;
+  log?: LogConfig;
+  liveStream?: LiveStreamSettings;
+  dashboard?: Dashboard;
+}
+
+// Dashboard settings
+export interface Dashboard {
+  thumbnails: Thumbnails;
+  summaryLimit: number;
+}
+
+export interface Thumbnails {
+  debug?: boolean;
+  summary: boolean;
+  recent: boolean;
+  imageProvider: string;
+  fallbackPolicy: string;
+}
+
+// Log config
+export interface LogConfig {
+  enabled: boolean;
+  path: string;
+  level?: string;
+  rotation?: string;
+  maxSize?: number;
+  rotationDay?: string;
+}
+
+// Telemetry settings
+export interface TelemetrySettings {
+  enabled: boolean;
+  endpoint?: string;
+}
+
+// Monitoring settings
+export interface MonitoringSettings {
+  enabled: boolean;
+  interval: number;
+}
+
+// RTSP settings - using existing RTSPSettings interface above
+
+// Live stream settings
+export interface LiveStreamSettings {
+  enabled?: boolean;
+}
+
+// Output settings
+export interface OutputSettings {
+  file?: {
+    enabled: boolean;
+    path: string;
+    type: string;
+  };
+  sqlite?: {
+    enabled: boolean;
+    path: string;
+  };
+  mysql?: {
+    enabled: boolean;
+    username: string;
+    password: string;
+    database: string;
+    host: string;
+    port: string;
+  };
+}
+
+// Backup settings
+export interface BackupSettings {
+  enabled?: boolean;
+  interval?: string;
+  path?: string;
+}
+
+// Sentry settings (was SupportSettings)
+export interface SentrySettings {
+  enabled: boolean;
+  dsn?: string;
+  environment?: string;
+  includePrivateInfo?: boolean;
+}
+
+// Main settings form data interface - EXACTLY matching backend structure
 export interface SettingsFormData {
   debug?: boolean;
   version?: string;
@@ -302,12 +413,13 @@ export interface SettingsFormData {
   systemId?: string;
   main: MainSettings;
   birdnet: BirdNetSettings;
-  audio: AudioSettings;
-  filters: FilterSettings;
-  integration: IntegrationSettings;
-  security: SecuritySettings;
-  species: SpeciesSettings;
-  support: SupportSettings;
+  input?: unknown; // Not exposed via JSON
+  realtime?: RealtimeSettings;
+  webServer?: WebServerSettings;
+  security?: SecuritySettings;
+  sentry?: SentrySettings;
+  output?: OutputSettings;
+  backup?: BackupSettings;
 }
 
 // Global settings state interface
@@ -373,55 +485,49 @@ function createEmptySettings(): SettingsFormData {
         password: '',
       },
     },
-    audio: {
-      source: '',
-      rtsp: {
-        transport: 'tcp',
-        urls: [],
+    realtime: {
+      interval: 15,
+      processingTime: false,
+      audio: {
+        source: '',
+        ffmpegPath: '',
+        soxPath: '',
+        streamTransport: 'auto',
+        export: {
+          format: 'wav',
+          quality: '96k',
+          enabled: false,
+          debug: false,
+          path: 'clips/',
+        },
+        retention: {
+          policy: 'none',
+          maxAge: '7d',
+          maxUsage: '80%',
+          minClips: 10,
+          keepSpectrograms: false,
+        },
+        soundLevel: {
+          enabled: false,
+          interval: 60,
+        },
+        equalizer: {
+          enabled: false,
+          filters: [],
+        },
       },
-      quality: {
-        sampleRate: 48000,
-        bitRate: 192,
-        channels: 1,
-      },
-      equalizer: {
-        enabled: false,
-        filters: [],
-      },
-      export: {
-        format: 'wav',
-        quality: '96k',
-        enabled: false,
-        debug: false,
-        path: 'clips/',
-      },
-      retention: {
-        policy: 'none',
-        maxAge: '7d',
-        maxUsage: '80%',
-        minClips: 10,
-        keepSpectrograms: false,
-      },
-      soundLevel: {
-        enabled: false,
-        interval: 60,
-      },
-    },
-    filters: {
-      privacy: {
+      privacyFilter: {
         enabled: false,
         confidence: 0.5,
         debug: false,
       },
-      dogBark: {
+      dogBarkFilter: {
         enabled: false,
         confidence: 0.5,
         remember: 30,
         debug: false,
         species: [],
       },
-    },
-    integration: {
       birdweather: {
         enabled: false,
         id: '',
@@ -441,16 +547,31 @@ function createEmptySettings(): SettingsFormData {
           skipVerify: false,
         },
       },
-      observability: {
-        prometheus: {
+      species: {
+        include: {
           enabled: false,
-          port: 9090,
-          path: '/metrics',
+          species: [],
         },
+        exclude: {
+          enabled: false,
+          species: [],
+        },
+        config: {},
       },
       weather: {
         provider: 'none',
         enabled: false,
+      },
+    },
+    webServer: {
+      dashboard: {
+        thumbnails: {
+          summary: true,
+          recent: true,
+          imageProvider: 'wikimedia',
+          fallbackPolicy: 'all',
+        },
+        summaryLimit: 100,
       },
     },
     security: {
@@ -480,29 +601,11 @@ function createEmptySettings(): SettingsFormData {
         subnets: [],
       },
     },
-    species: {
-      include: {
-        enabled: false,
-        species: [],
-      },
-      exclude: {
-        enabled: false,
-        species: [],
-      },
-      config: {},
-    },
-    support: {
-      sentry: {
-        enabled: false,
-        dsn: '',
-        environment: 'production',
-        includePrivateInfo: false,
-      },
-      telemetry: {
-        enabled: true,
-        includeSystemInfo: true,
-        includeAudioInfo: false,
-      },
+    sentry: {
+      enabled: false,
+      dsn: '',
+      environment: 'production',
+      includePrivateInfo: false,
     },
   };
 }
@@ -531,22 +634,56 @@ export const isLoading = derived(settingsStore, $store => $store.isLoading);
 
 export const isSaving = derived(settingsStore, $store => $store.isSaving);
 
-// Section-specific derived stores  
+// Section-specific derived stores matching backend structure
 export const mainSettings = derived(settingsStore, $store => $store.formData.main);
 
 export const birdnetSettings = derived(settingsStore, $store => $store.formData.birdnet);
 
-export const audioSettings = derived(settingsStore, $store => $store.formData.audio);
+export const realtimeSettings = derived(settingsStore, $store => $store.formData.realtime);
 
-export const filterSettings = derived(settingsStore, $store => $store.formData.filters);
+export const audioSettings = derived(settingsStore, $store => $store.formData.realtime?.audio);
 
-export const integrationSettings = derived(settingsStore, $store => $store.formData.integration);
+export const privacyFilterSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.privacyFilter
+);
+
+export const dogBarkFilterSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.dogBarkFilter
+);
+
+export const birdweatherSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.birdweather
+);
+
+export const mqttSettings = derived(settingsStore, $store => $store.formData.realtime?.mqtt);
+
+export const speciesSettings = derived(settingsStore, $store => $store.formData.realtime?.species);
+
+export const dashboardSettings = derived(
+  settingsStore,
+  $store => $store.formData.webServer?.dashboard
+);
 
 export const securitySettings = derived(settingsStore, $store => $store.formData.security);
 
-export const speciesSettings = derived(settingsStore, $store => $store.formData.species);
+export const sentrySettings = derived(settingsStore, $store => $store.formData.sentry);
 
-export const supportSettings = derived(settingsStore, $store => $store.formData.support);
+export const rtspSettings = derived(settingsStore, $store => $store.formData.realtime?.rtsp);
+
+export const integrationSettings = derived(settingsStore, $store => ({
+  birdweather: $store.formData.realtime?.birdweather,
+  mqtt: $store.formData.realtime?.mqtt,
+  observability: $store.formData.realtime?.monitoring, // assuming monitoring maps to observability
+  weather: $store.formData.realtime?.weather,
+}));
+
+export const supportSettings = derived(settingsStore, $store => ({
+  sentry: $store.formData.sentry,
+  telemetry: $store.formData.realtime?.telemetry,
+}));
 
 // Settings actions
 export const settingsActions = {
@@ -576,7 +713,7 @@ export const settingsActions = {
       ...state,
       formData: {
         ...state.formData,
-        [section]: { ...state.formData[section], ...data },
+        [section]: { ...(state.formData[section] || {}), ...data },
       },
     }));
   },
@@ -586,10 +723,10 @@ export const settingsActions = {
     try {
       const currentState = get(settingsStore);
       await settingsAPI.save(currentState.formData);
-      
+
       // Reload settings after save to get the actual saved values
       await settingsActions.loadSettings();
-      
+
       settingsStore.update(state => ({
         ...state,
         isSaving: false,
