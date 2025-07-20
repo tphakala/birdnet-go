@@ -56,18 +56,30 @@ npm run typecheck     # TypeScript/Svelte validation
 
 ## Development Tools
 
-Debug scripts in `tools/` require dev server at `http://192.168.4.152:8080`:
+### UI Screenshots & Testing
+
+Use Playwright for automated screenshots and browser testing:
 
 ```bash
-node tools/test-all-pages.js
+cd tools/
+node screenshot.js http://192.168.4.152:8080/ui/dashboard
+node screenshot.js http://192.168.4.152:8080/ui/analytics -o analytics.png
+node screenshot.js http://192.168.4.152:8080/ui/settings -w 1920 -h 1080
+```
+
+See `tools/CLAUDE.md` for complete usage instructions.
+
+### Legacy Tools
+
+```bash
+node tools/test-all-pages.js     # Puppeteer fallback if Playwright unavailable
 node tools/debug-analytics.js
 ```
 
-add new puppeteer scripts in that folder, create reusable debug tools.
-
 **Viewport Standards:**
 
-- Desktop: 1280x1400px
+- Desktop: 1400x1800px (default)
+- Large Desktop: 1920x1080px
 - Mobile: 390x844px
 - Tablet: 768x1024px
 
