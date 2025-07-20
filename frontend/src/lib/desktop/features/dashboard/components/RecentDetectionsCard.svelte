@@ -6,6 +6,7 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
 
   interface Props {
     data: Detection[];
@@ -39,6 +40,7 @@
     selectedLimit = limit;
   });
 
+  // Updates the number of detections to display and persists the preference
   function handleLimitChange(newLimit: number) {
     selectedLimit = newLimit;
 
@@ -59,12 +61,14 @@
 
   // Modal state for expanded audio player (removed - not currently used)
 
+  // Handles clicking on a detection row to trigger parent callback
   function handleRowClick(detection: Detection) {
     if (onRowClick) {
       onRowClick(detection);
     }
   }
 
+  // Returns appropriate badge configuration based on detection verification and lock status
   function getStatusBadge(verified: string, locked: boolean) {
     if (locked) {
       return { type: 'locked', text: 'Locked', class: 'status-badge locked' };
@@ -80,11 +84,6 @@
     }
   }
 
-  // Helper function to handle image error
-  function handleImageError(e: Event) {
-    const target = e.currentTarget as globalThis.HTMLImageElement;
-    target.src = '/assets/images/bird-placeholder.svg';
-  }
 
   // Modal states
   let showReviewModal = $state(false);
@@ -98,11 +97,13 @@
   });
 
   // Action handlers
+  // Opens the review modal for manual verification of a detection
   function handleReview(detection: Detection) {
     selectedDetection = detection;
     showReviewModal = true;
   }
 
+  // Toggles whether a species should be ignored in future detections
   function handleToggleSpecies(detection: Detection) {
     const isExcluded = false; // TODO: determine if species is excluded
     confirmModalConfig = {
@@ -134,6 +135,7 @@
     showConfirmModal = true;
   }
 
+  // Toggles the lock status of a detection to prevent/allow automatic cleanup
   function handleToggleLock(detection: Detection) {
     confirmModalConfig = {
       title: detection.locked ? 'Unlock Detection' : 'Lock Detection',
@@ -162,6 +164,7 @@
     showConfirmModal = true;
   }
 
+  // Permanently deletes a detection after user confirmation
   function handleDelete(detection: Detection) {
     confirmModalConfig = {
       title: `Delete Detection of ${detection.commonName}`,
@@ -313,7 +316,7 @@
                       src="/api/v2/media/species-image?name={encodeURIComponent(detection.scientificName)}"
                       alt={detection.commonName}
                       class="w-full h-auto rounded-md object-contain"
-                      onerror={handleImageError}
+                      onerror={handleBirdImageError}
                     />
                   </button>
                   <div class="thumbnail-tooltip hidden">
