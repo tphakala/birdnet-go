@@ -30,7 +30,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { DetectionsListData } from '$lib/types/detection.types';
-  import Card from '$lib/desktop/components/ui/Card.svelte';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
@@ -80,14 +79,12 @@
 
   function handlePageChange(page: number) {
     if (onPageChange && data) {
-      // Calculate new offset based on page
-      const newOffset = (page - 1) * data.itemsPerPage;
       onPageChange(page);
     }
   }
 </script>
 
-<Card {className}>
+<div class={cn(className)}>
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex justify-between">
       <!-- Title -->
@@ -176,4 +173,4 @@
       </div>
     </div>
   {/if}
-</Card>
+</div>
