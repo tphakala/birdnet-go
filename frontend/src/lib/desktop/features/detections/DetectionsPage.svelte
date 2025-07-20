@@ -12,7 +12,7 @@
   function getQueryParams(): DetectionQueryParams {
     const params = new URLSearchParams(window.location.search);
     const search = params.get('search');
-    
+
     // Set queryType to 'search' if search parameter is present
     let queryType = params.get('queryType') as DetectionQueryParams['queryType'];
     if (search && !queryType) {
@@ -20,7 +20,7 @@
     } else if (!queryType) {
       queryType = 'all';
     }
-    
+
     return {
       queryType,
       date: params.get('date') || new Date().toISOString().split('T')[0],

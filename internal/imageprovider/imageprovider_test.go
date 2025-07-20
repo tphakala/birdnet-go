@@ -178,6 +178,9 @@ func (m *mockStore) GetAllDetectedSpecies() ([]datastore.Note, error)    { retur
 func (m *mockStore) SearchNotes(query string, asc bool, limit, offset int) ([]datastore.Note, error) {
 	return nil, nil
 }
+func (m *mockStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
+	return nil, 0, nil
+}
 func (m *mockStore) GetNoteClipPath(noteID string) (string, error) { return "", nil }
 func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil }
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
