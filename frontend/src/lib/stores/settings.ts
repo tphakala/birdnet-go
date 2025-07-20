@@ -41,6 +41,7 @@
  */
 import { writable, derived, get } from 'svelte/store';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import { toastActions } from './toast.js';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -736,6 +737,9 @@ export const settingsActions = {
         originalData: JSON.parse(JSON.stringify(state.formData)),
         isSaving: false,
       }));
+
+      // Show success toast
+      toastActions.success('Settings saved successfully');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to save settings';
       settingsStore.update(state => ({
@@ -743,6 +747,10 @@ export const settingsActions = {
         isSaving: false,
         error: errorMessage,
       }));
+      
+      // Show error toast
+      toastActions.error(errorMessage);
+      
       throw error;
     }
   },
