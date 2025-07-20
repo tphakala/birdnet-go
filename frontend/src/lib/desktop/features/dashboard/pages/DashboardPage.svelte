@@ -17,6 +17,7 @@
   let isLoadingDetections = $state(true);
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
+  let showThumbnails = $state(true); // Default to true for backward compatibility
 
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
@@ -77,6 +78,22 @@
       console.error('Error fetching recent detections:', error);
     } finally {
       isLoadingDetections = false;
+    }
+  }
+
+  async function fetchDashboardConfig() {
+    try {
+      const response = await fetch('/api/v2/settings/dashboard');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch dashboard config: ${response.statusText}`);
+      }
+      const config = await response.json();
+      // API returns uppercase field names (e.g., "Summary" not "summary")
+      showThumbnails = config.Thumbnails?.Summary ?? true;
+      console.log('Dashboard config loaded:', { Summary: config.Thumbnails?.Summary, showThumbnails });
+    } catch (error) {
+      console.error('Error fetching dashboard config:', error);
+      // Keep default value (true) on error
     }
   }
 
@@ -291,6 +308,7 @@
   onMount(() => {
     fetchDailySummary();
     fetchRecentDetections();
+    fetchDashboardConfig();
 
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
@@ -552,6 +570,7 @@
     loading={isLoadingSummary}
     error={summaryError}
     {selectedDate}
+    {showThumbnails}
     onRowClick={handleSpeciesClick}
     onDetectionView={handleDetectionView}
     onPreviousDay={previousDay}
