@@ -80,7 +80,9 @@
       const response = await fetch('/api/v2/notifications?limit=20&status=unread');
       if (response.ok) {
         const data = await response.json();
-        notifications = (data.notifications || []).filter((n: Notification) => shouldShowNotification(n));
+        notifications = (data.notifications || []).filter((n: Notification) =>
+          shouldShowNotification(n)
+        );
         updateUnreadCount();
       }
     } catch {
@@ -101,7 +103,7 @@
       // ReconnectingEventSource with configuration
       sseConnection = new ReconnectingEventSource('/api/v2/notifications/stream', {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-        withCredentials: false
+        withCredentials: false,
       });
 
       sseConnection.onopen = () => {
@@ -306,7 +308,6 @@
 
     return date.toLocaleDateString();
   }
-
 
   // Handle notification deleted event
   function handleNotificationDeleted(event: CustomEvent<{ id: string; wasUnread: boolean }>) {

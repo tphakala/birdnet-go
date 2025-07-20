@@ -29,7 +29,7 @@
     limit = 5,
     onLimitChange,
     newDetectionIds = new Set(),
-    detectionArrivalTimes = new Map(), // Reserved for future staggered animations
+    detectionArrivalTimes: _detectionArrivalTimes = new Map() // Reserved for future staggered animations
   }: Props = $props();
 
   // State for number of detections to show
@@ -83,7 +83,6 @@
         return { type: 'unverified', text: 'Unverified', class: 'status-badge unverified' };
     }
   }
-
 
   // Modal states
   let showReviewModal = $state(false);
@@ -184,7 +183,6 @@
     selectedDetection = detection;
     showConfirmModal = true;
   }
-
 </script>
 
 <section class="card col-span-12 bg-base-100 shadow-sm">
@@ -313,7 +311,9 @@
                   >
                     <img
                       loading="lazy"
-                      src="/api/v2/media/species-image?name={encodeURIComponent(detection.scientificName)}"
+                      src="/api/v2/media/species-image?name={encodeURIComponent(
+                        detection.scientificName
+                      )}"
                       alt={detection.commonName}
                       class="w-full h-auto rounded-md object-contain"
                       onerror={handleBirdImageError}

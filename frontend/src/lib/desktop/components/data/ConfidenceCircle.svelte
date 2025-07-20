@@ -39,7 +39,7 @@
 
 <div
   class="confidence-circle {getConfidenceClass(confidence)} {className}"
-  style="--progress: {confidencePercent}%"
+  style:--progress="{confidencePercent}%"
 >
   <div class="confidence-circle-track"></div>
   <div class="confidence-circle-progress"></div>

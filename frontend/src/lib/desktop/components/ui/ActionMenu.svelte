@@ -25,6 +25,7 @@
 
   let isOpen = $state(false);
   let buttonElement: HTMLButtonElement;
+  // svelte-ignore non_reactive_update
   let menuElement: HTMLUListElement;
 
   // Update menu position when opened

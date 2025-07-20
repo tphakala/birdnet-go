@@ -84,7 +84,7 @@
       // ReconnectingEventSource with configuration
       eventSource = new ReconnectingEventSource('/api/v1/audio-level', {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-        withCredentials: false // Set to true if you need CORS credentials
+        withCredentials: false, // Set to true if you need CORS credentials
       });
 
       eventSource.onopen = () => {
