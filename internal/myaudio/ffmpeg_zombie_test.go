@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 // TestFFmpegStream_ZombieCreationOnProcessExit specifically tests zombie process creation
@@ -210,8 +210,11 @@ func TestFFmpegStream_ZombieAccumulationDuringRestarts(t *testing.T) {
 
 // TestFFmpegStream_CleanupGoroutineLeak tests for goroutine leaks during cleanup
 func TestFFmpegStream_CleanupGoroutineLeak(t *testing.T) {
-	initialGoroutines := runtime.NumGoroutine()
-	t.Logf("Initial goroutine count: %d", initialGoroutines)
+	// Use goleak to automatically detect any goroutine leaks at test completion
+	// Ignore expected goroutines from third-party libraries
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
 	
 	audioChan := make(chan UnifiedAudioData, 10)
 	defer close(audioChan)
@@ -247,34 +250,11 @@ func TestFFmpegStream_CleanupGoroutineLeak(t *testing.T) {
 	// Wait for all cleanup operations to complete
 	wg.Wait()
 	
-	// Give a brief moment for any remaining goroutines to finish and be collected
-	// This is much shorter than the arbitrary 1-second sleep but allows for cleanup
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// Poll goroutine count until it stabilizes
-		for range 10 {
-			time.Sleep(50 * time.Millisecond)
-			if runtime.NumGoroutine() <= initialGoroutines+1 { // +1 for this polling goroutine
-				break
-			}
-		}
-	}()
+	// Brief sleep to allow goroutines to finish cleanup
+	time.Sleep(100 * time.Millisecond)
 	
-	select {
-	case <-done:
-		// Goroutines have stabilized
-	case <-time.After(2 * time.Second):
-		t.Log("Timeout waiting for goroutines to stabilize")
-	}
-	
-	currentGoroutines := runtime.NumGoroutine()
-	goroutineDiff := currentGoroutines - initialGoroutines
-	
-	t.Logf("Final goroutine count: %d (diff: %d)", currentGoroutines, goroutineDiff)
-	
-	// Allow for some variance but detect leaks
-	assert.LessOrEqual(t, goroutineDiff, 2, "Potential goroutine leak: %d additional goroutines", goroutineDiff)
+	// goleak.VerifyNone(t) will automatically detect any leaked goroutines
+	// when the function exits via the defer statement above
 }
 
 // Helper function to check if a process is a zombie (returns bool instead of asserting)
