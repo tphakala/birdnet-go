@@ -217,6 +217,8 @@ func TestFFmpegStream_CleanupGoroutineLeak(t *testing.T) {
 	defer close(audioChan)
 	
 	// Create multiple streams with timeout scenarios
+	var wg sync.WaitGroup
+	
 	for i := range 5 {
 		stream := NewFFmpegStream(fmt.Sprintf("test://goroutine-leak-%d", i), "tcp", audioChan)
 		
@@ -231,15 +233,40 @@ func TestFFmpegStream_CleanupGoroutineLeak(t *testing.T) {
 		err := cmd.Start()
 		require.NoError(t, err)
 		
-		// Wait for process to exit
+		// Wait for process to exit naturally (don't call Wait, let cleanup handle it)
 		time.Sleep(150 * time.Millisecond)
 		
-		// Cleanup
-		stream.cleanupProcess()
+		// Cleanup with proper synchronization
+		wg.Add(1)
+		go func(s *FFmpegStream) {
+			defer wg.Done()
+			s.cleanupProcess()
+		}(stream)
 	}
 	
-	// Wait for goroutines to finish
-	time.Sleep(1 * time.Second)
+	// Wait for all cleanup operations to complete
+	wg.Wait()
+	
+	// Give a brief moment for any remaining goroutines to finish and be collected
+	// This is much shorter than the arbitrary 1-second sleep but allows for cleanup
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Poll goroutine count until it stabilizes
+		for range 10 {
+			time.Sleep(50 * time.Millisecond)
+			if runtime.NumGoroutine() <= initialGoroutines+1 { // +1 for this polling goroutine
+				break
+			}
+		}
+	}()
+	
+	select {
+	case <-done:
+		// Goroutines have stabilized
+	case <-time.After(2 * time.Second):
+		t.Log("Timeout waiting for goroutines to stabilize")
+	}
 	
 	currentGoroutines := runtime.NumGoroutine()
 	goroutineDiff := currentGoroutines - initialGoroutines
