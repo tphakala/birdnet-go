@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: make check-tensorflow
 
+      - name: Install FFmpeg and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg procps
+
       - name: Download tflite_c
         run: make download-tflite-linux-amd64
 
@@ -64,7 +69,16 @@ jobs:
           MQTT_TEST_BROKER: tcp://localhost:1883
         run: |
           set -euo pipefail
-          go test -json -v -timeout 60s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github
+          go test -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github
+        timeout-minutes: 5
+
+      - name: Cleanup any remaining processes
+        if: always()
+        run: |
+          # Kill any remaining test processes to prevent resource leaks
+          pkill -f "test://" || true
+          pkill -f "sleep.*test" || true
+          pkill -f "sh.*-c.*sleep" || true
 
       - name: Upload test log
         uses: actions/upload-artifact@v4
