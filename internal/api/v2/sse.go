@@ -37,25 +37,16 @@ type SSEEvent struct {
 	Timestamp time.Time   `json:"timestamp"`
 }
 
-// SSEToastData represents toast message data sent via SSE
-type SSEToastData struct {
-	Message   string    `json:"message"`
-	Type      string    `json:"type"` // "info", "success", "warning", "error"
-	Duration  int       `json:"duration,omitempty"` // Duration in milliseconds
-	EventType string    `json:"eventType"`
-	Timestamp time.Time `json:"timestamp"`
-}
 
 // SSEClient represents a connected SSE client
 type SSEClient struct {
 	ID             string
 	Channel        chan SSEDetectionData
 	SoundLevelChan chan SSESoundLevelData
-	ToastChan      chan SSEToastData
 	Request        *http.Request
 	Response       http.ResponseWriter
 	Done           chan bool
-	StreamType     string // "detections", "soundlevels", "toasts", or "all"
+	StreamType     string // "detections", "soundlevels", or "all"
 }
 
 // SSEManager manages SSE connections and broadcasts
@@ -91,9 +82,6 @@ func (m *SSEManager) RemoveClient(clientID string) {
 		close(client.Channel)
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
-		}
-		if client.ToastChan != nil {
-			close(client.ToastChan)
 		}
 		close(client.Done)
 		delete(m.clients, clientID)
@@ -176,44 +164,6 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 	}
 }
 
-// BroadcastToast sends toast message data to all connected clients
-func (m *SSEManager) BroadcastToast(toast *SSEToastData) {
-	m.mutex.RLock()
-
-	if len(m.clients) == 0 {
-		m.mutex.RUnlock()
-		return // No clients to broadcast to
-	}
-
-	// Collect blocked client IDs to remove them after releasing the lock
-	var blockedClients []string
-
-	for clientID, client := range m.clients {
-		// Only send to clients that want toast data
-		if client.StreamType == "toasts" || client.StreamType == "all" {
-			if client.ToastChan != nil {
-				select {
-				case client.ToastChan <- *toast:
-					// Successfully sent to client
-				case <-time.After(100 * time.Millisecond): // Short timeout for toast messages
-					// Client channel is blocked, collect ID for removal
-					if m.logger != nil {
-						m.logger.Printf("SSE client %s appears blocked on toast channel, will remove", clientID)
-					}
-					blockedClients = append(blockedClients, clientID)
-				}
-			}
-		}
-	}
-
-	// Release the read lock before removing clients
-	m.mutex.RUnlock()
-
-	// Remove blocked clients without holding the lock to avoid deadlock
-	for _, clientID := range blockedClients {
-		go m.RemoveClient(clientID)
-	}
-}
 
 // GetClientCount returns the number of connected clients
 func (m *SSEManager) GetClientCount() int {
@@ -256,8 +206,6 @@ func (c *Controller) initSSERoutes() {
 	// SSE endpoint for sound level stream with rate limiting
 	c.Group.GET("/soundlevels/stream", c.StreamSoundLevels, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
-	// SSE endpoint for toast messages stream with rate limiting
-	c.Group.GET("/toasts/stream", c.StreamToasts, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// SSE status endpoint - shows connected client count
 	c.Group.GET("/sse/status", c.GetSSEStatus)
@@ -456,48 +404,6 @@ func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
 		})
 }
 
-// StreamToasts handles the SSE connection for real-time toast message streaming
-func (c *Controller) StreamToasts(ctx echo.Context) error {
-	return c.handleSSEStream(ctx, "toasts", "Connected to toast stream", "toast",
-		func(client *SSEClient) {
-			client.Channel = make(chan SSEDetectionData, 1) // Small buffer, not used for toasts
-			client.ToastChan = make(chan SSEToastData, 10)  // Buffer for toast messages
-		},
-		func(ctx echo.Context, client *SSEClient, clientID string) error {
-			ticker := time.NewTicker(30 * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case toast := <-client.ToastChan:
-					// Send toast data
-					if err := c.sendSSEMessage(ctx, "toast", toast); err != nil {
-						if c.apiLogger != nil {
-							c.apiLogger.Error("Failed to send SSE toast",
-								"client_id", clientID,
-								"error", err.Error(),
-							)
-						}
-						return err
-					}
-
-				case <-ticker.C:
-					// Send heartbeat
-					if err := c.sendSSEHeartbeat(ctx, clientID, "toasts"); err != nil {
-						return err
-					}
-
-				case <-ctx.Request().Context().Done():
-					// Client disconnected
-					return nil
-
-				case <-client.Done:
-					// Client marked for removal
-					return nil
-				}
-			}
-		})
-}
 
 // sendSSEMessage sends a Server-Sent Event message
 func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data interface{}) error {
@@ -603,20 +509,3 @@ func (c *Controller) BroadcastSoundLevel(soundLevel *myaudio.SoundLevelData) err
 	return nil
 }
 
-// BroadcastToast is a helper method to broadcast toast messages from the controller
-func (c *Controller) BroadcastToast(message, toastType string, duration int) error {
-	if c.sseManager == nil {
-		return fmt.Errorf("SSE manager not initialized")
-	}
-
-	toast := SSEToastData{
-		Message:   message,
-		Type:      toastType,
-		Duration:  duration,
-		EventType: "toast",
-		Timestamp: time.Now(),
-	}
-
-	c.sseManager.BroadcastToast(&toast)
-	return nil
-}

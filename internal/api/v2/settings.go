@@ -927,7 +927,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("BirdNET settings changed, triggering reload")
 		reconfigActions = append(reconfigActions, "reload_birdnet")
 		// Send toast notification
-		_ = c.BroadcastToast("Reloading BirdNET model with new settings...", "info", 5000)
+		_ = c.SendToast("Reloading BirdNET model with new settings...", "info", 5000)
 	}
 
 	// Check range filter settings
@@ -935,7 +935,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Range filter settings changed, triggering rebuild")
 		reconfigActions = append(reconfigActions, "rebuild_range_filter")
 		// Send toast notification
-		_ = c.BroadcastToast("Rebuilding species range filter...", "info", 4000)
+		_ = c.SendToast("Rebuilding species range filter...", "info", 4000)
 	}
 
 	// Check species interval settings
@@ -943,7 +943,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Species interval settings changed, triggering update")
 		reconfigActions = append(reconfigActions, "update_detection_intervals")
 		// Send toast notification
-		_ = c.BroadcastToast("Updating detection intervals...", "info", 3000)
+		_ = c.SendToast("Updating detection intervals...", "info", 3000)
 	}
 
 	// Check MQTT settings
@@ -951,7 +951,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("MQTT settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_mqtt")
 		// Send toast notification
-		_ = c.BroadcastToast("Reconfiguring MQTT connection...", "info", 4000)
+		_ = c.SendToast("Reconfiguring MQTT connection...", "info", 4000)
 	}
 
 	// Check BirdWeather settings
@@ -959,7 +959,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("BirdWeather settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_birdweather")
 		// Send toast notification
-		_ = c.BroadcastToast("Reconfiguring BirdWeather integration...", "info", 4000)
+		_ = c.SendToast("Reconfiguring BirdWeather integration...", "info", 4000)
 	}
 
 	// Check RTSP settings
@@ -967,7 +967,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("RTSP settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_rtsp_sources")
 		// Send toast notification
-		_ = c.BroadcastToast("Reconfiguring RTSP sources...", "info", 4000)
+		_ = c.SendToast("Reconfiguring RTSP sources...", "info", 4000)
 	}
 
 	// Check sound level monitoring settings
@@ -975,7 +975,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
 		// Send toast notification
-		_ = c.BroadcastToast("Reconfiguring sound level monitoring...", "info", 3000)
+		_ = c.SendToast("Reconfiguring sound level monitoring...", "info", 3000)
 	}
 
 	// Check telemetry settings
@@ -983,14 +983,14 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Telemetry settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_telemetry")
 		// Send toast notification
-		_ = c.BroadcastToast("Reconfiguring telemetry settings...", "info", 3000)
+		_ = c.SendToast("Reconfiguring telemetry settings...", "info", 3000)
 	}
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
 		// Send toast notification about restart requirement
-		_ = c.BroadcastToast("Audio device changed. Restart required to apply changes.", "warning", 8000)
+		_ = c.SendToast("Audio device changed. Restart required to apply changes.", "warning", 8000)
 	}
 
 	// Check audio equalizer settings
@@ -999,11 +999,11 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		// Handle audio equalizer changes synchronously as it returns an error
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			// Send error toast
-			_ = c.BroadcastToast("Failed to update audio equalizer settings", "error", 5000)
+			_ = c.SendToast("Failed to update audio equalizer settings", "error", 5000)
 			return fmt.Errorf("failed to update audio equalizer: %w", err)
 		}
 		// Send success toast
-		_ = c.BroadcastToast("Audio equalizer settings updated", "success", 3000)
+		_ = c.SendToast("Audio equalizer settings updated", "success", 3000)
 	}
 
 	// Trigger reconfigurations asynchronously
