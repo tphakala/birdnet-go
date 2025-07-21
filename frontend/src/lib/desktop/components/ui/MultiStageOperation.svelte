@@ -161,6 +161,11 @@
                   {stage.message}
                 </p>
               {/if}
+              {#if stage.error && stage.error !== stage.message}
+                <p class="text-sm mt-1 text-error">
+                  <strong>Error:</strong> {stage.error}
+                </p>
+              {/if}
 
               {#if stage.status === 'in_progress' && stage.progress !== undefined}
                 <div class="mt-2">
@@ -210,6 +215,11 @@
                 )}
               >
                 {stage.message}
+              </div>
+            {/if}
+            {#if stage.error && stage.error !== stage.message}
+              <div class="text-xs mt-0.5 text-error">
+                {stage.error}
               </div>
             {/if}
           </div>

@@ -8,6 +8,7 @@
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
   import SettingsButton from '$lib/desktop/components/ui/SettingsButton.svelte';
   import SettingsNote from '$lib/desktop/components/ui/SettingsNote.svelte';
+  import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import { settingsStore, settingsActions, integrationSettings, realtimeSettings } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
@@ -92,13 +93,13 @@
 
   // Test states for multi-stage operations
   let testStates = $state<{
-    birdweather: { stages: Stage[]; isRunning: boolean };
-    mqtt: { stages: Stage[]; isRunning: boolean };
-    weather: { stages: Stage[]; isRunning: boolean };
+    birdweather: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
+    mqtt: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
+    weather: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
   }>({
-    birdweather: { stages: [], isRunning: false },
-    mqtt: { stages: [], isRunning: false },
-    weather: { stages: [], isRunning: false },
+    birdweather: { stages: [], isRunning: false, showSuccessNote: false },
+    mqtt: { stages: [], isRunning: false, showSuccessNote: false },
+    weather: { stages: [], isRunning: false, showSuccessNote: false },
   });
 
   // Weather provider options
@@ -218,87 +219,395 @@
     });
   }
 
-  function updateWeatherEndpoint(endpoint: string) {
-    settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, endpoint } },
-    });
-  }
-
   function updateWeatherUnits(units: string) {
     settingsActions.updateSection('realtime', {
       weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, units } },
     });
   }
 
-  function updateWeatherLanguage(language: string) {
-    settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, language } },
-    });
-  }
-
   // Test functions with multi-stage operations
   async function testBirdWeather() {
+    console.log('Starting BirdWeather test...');
     testStates.birdweather.isRunning = true;
-    testStates.birdweather.stages = [
-      { id: 'starting', title: 'Starting Test', status: 'in_progress' },
-      { id: 'connectivity', title: 'API Connectivity', status: 'pending' },
-      { id: 'auth', title: 'Authentication', status: 'pending' },
-      { id: 'upload', title: 'Soundscape Upload', status: 'pending' },
-      { id: 'detection', title: 'Detection Post', status: 'pending' },
-    ];
+    testStates.birdweather.stages = [];
 
     try {
-      // Simulate stages
-      for (let i = 0; i < testStates.birdweather.stages.length; i++) {
-        testStates.birdweather.stages[i].status = 'in_progress';
-        await new Promise(resolve => setTimeout(resolve, 800));
-        testStates.birdweather.stages[i].status = 'completed';
-        testStates.birdweather.stages[i].message = 'Success';
+      // Get current form values (unsaved changes) instead of saved settings
+      const currentBirdweather = store.formData?.realtime?.birdweather || settings.birdweather!;
+      console.log('BirdWeather test config:', currentBirdweather);
+      
+      // Prepare test payload
+      const testPayload = {
+        enabled: currentBirdweather.enabled || false,
+        id: currentBirdweather.id || '',
+        threshold: currentBirdweather.threshold || 0.7,
+        locationAccuracy: currentBirdweather.locationAccuracy || 1000,
+        debug: currentBirdweather.debug || false,
+      };
+
+      // Make request to the real API with CSRF token
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+      });
+      
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
       }
-    } catch {
-      const currentStage = testStates.birdweather.stages.find(s => s.status === 'in_progress');
-      if (currentStage) {
-        currentStage.status = 'error';
-        currentStage.error = 'Test failed';
+
+      console.log('Sending BirdWeather test request with payload:', testPayload);
+      
+      const response = await fetch('/api/v2/integrations/birdweather/test', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify(testPayload),
+      });
+
+      console.log('BirdWeather test response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Read the streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Failed to read response stream');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Parse each chunk as JSON
+        const chunk = decoder.decode(value);
+        console.log('Raw BirdWeather chunk received:', chunk);
+        
+        // Split by both newlines and by '}{'  pattern to handle concatenated JSON objects
+        const jsonObjects = [];
+        let remaining = chunk;
+        
+        while (remaining.trim()) {
+          try {
+            // Find the end of the first complete JSON object
+            let braceCount = 0;
+            let jsonEnd = -1;
+            
+            for (let i = 0; i < remaining.length; i++) {
+              if (remaining[i] === '{') braceCount++;
+              if (remaining[i] === '}') braceCount--;
+              if (braceCount === 0) {
+                jsonEnd = i + 1;
+                break;
+              }
+            }
+            
+            if (jsonEnd === -1) break; // No complete JSON object found
+            
+            const jsonStr = remaining.substring(0, jsonEnd).trim();
+            if (jsonStr) {
+              jsonObjects.push(jsonStr);
+            }
+            
+            remaining = remaining.substring(jsonEnd).trim();
+          } catch (e) {
+            console.error('Error splitting JSON objects:', e);
+            break;
+          }
+        }
+
+        for (const jsonStr of jsonObjects) {
+          try {
+            const stageResult = JSON.parse(jsonStr);
+            console.log('BirdWeather test result received:', stageResult);
+            
+            // Handle initial failure responses that don't have a stage
+            if (!stageResult.stage) {
+              // If this is a failed result without stages, show it as an error
+              if (stageResult.success === false && stageResult.message) {
+                console.log('Handling initial error response:', stageResult);
+                testStates.birdweather.stages.push({
+                  id: 'initial-error',
+                  title: 'Configuration Check',
+                  status: 'error',
+                  message: stageResult.message,
+                  error: stageResult.message,
+                });
+              } else {
+                console.log('Skipping result without stage:', stageResult);
+              }
+              continue;
+            }
+            
+            // Convert BirdWeather TestResult to Stage format
+            const stageId = stageResult.stage.toLowerCase().replace(/\\s+/g, '');
+            
+            // Determine status based on the BirdWeather TestResult structure
+            let status: 'pending' | 'in_progress' | 'completed' | 'error' | 'skipped';
+            if (stageResult.isProgress) {
+              status = 'in_progress';
+            } else if (stageResult.success) {
+              status = 'completed';
+            } else {
+              status = 'error';
+            }
+            
+            const stage = {
+              id: stageId,
+              title: stageResult.stage || 'Test Stage',
+              status,
+              message: stageResult.message || '',
+              error: stageResult.error || '',
+            };
+
+            console.log('Adding/updating BirdWeather stage:', stage);
+
+            // Find existing stage or create new one
+            let existingIndex = testStates.birdweather.stages.findIndex(s => s.id === stage.id);
+            if (existingIndex === -1) {
+              // Add new stage
+              testStates.birdweather.stages.push(stage);
+            } else {
+              // Update existing stage
+              testStates.birdweather.stages[existingIndex] = {
+                ...testStates.birdweather.stages[existingIndex],
+                ...stage,
+              };
+            }
+            
+            console.log('Current BirdWeather stages:', testStates.birdweather.stages);
+          } catch (parseError) {
+            console.error('Failed to parse BirdWeather test result:', parseError, jsonStr);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('BirdWeather test failed:', error);
+      
+      // Add error stage if no stages exist
+      if (testStates.birdweather.stages.length === 0) {
+        testStates.birdweather.stages.push({
+          id: 'error',
+          title: 'Connection Error',
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+      } else {
+        // Mark current stage as failed
+        const lastStage = testStates.birdweather.stages[testStates.birdweather.stages.length - 1];
+        if (lastStage.status !== 'completed') {
+          lastStage.status = 'error';
+          lastStage.error = error instanceof Error ? error.message : 'Unknown error occurred';
+        }
       }
     } finally {
       testStates.birdweather.isRunning = false;
+      console.log('BirdWeather test finished, stages:', testStates.birdweather.stages);
+      
+      // Check if all stages completed successfully and there are unsaved changes
+      const allStagesCompleted = testStates.birdweather.stages.length > 0 && 
+        testStates.birdweather.stages.every(stage => stage.status === 'completed');
+      testStates.birdweather.showSuccessNote = allStagesCompleted && birdweatherHasChanges;
+      
+      // Increase timeout to 30 seconds so users can see the results
       setTimeout(() => {
+        console.log('Clearing BirdWeather test results after timeout');
         testStates.birdweather.stages = [];
-      }, 15000);
+        testStates.birdweather.showSuccessNote = false;
+      }, 30000);
     }
   }
 
   async function testMQTT() {
+    console.log('Starting MQTT test...');
     testStates.mqtt.isRunning = true;
-    testStates.mqtt.stages = [
-      { id: 'starting', title: 'Starting Test', status: 'in_progress' },
-      { id: 'service', title: 'Service Check', status: 'pending' },
-      { id: 'start', title: 'Service Start', status: 'pending' },
-      { id: 'dns', title: 'DNS Resolution', status: 'pending' },
-      { id: 'tcp', title: 'TCP Connection', status: 'pending' },
-      { id: 'mqtt', title: 'MQTT Connection', status: 'pending' },
-      { id: 'publish', title: 'Message Publishing', status: 'pending' },
-    ];
+    testStates.mqtt.stages = [];
 
     try {
-      for (let i = 0; i < testStates.mqtt.stages.length; i++) {
-        testStates.mqtt.stages[i].status = 'in_progress';
-        await new Promise(resolve => setTimeout(resolve, 600));
-        testStates.mqtt.stages[i].status = 'completed';
-        testStates.mqtt.stages[i].message = 'Success';
+      // Get current form values (unsaved changes) instead of saved settings
+      const currentMqtt = store.formData?.realtime?.mqtt || settings.mqtt!;
+      console.log('MQTT test config:', currentMqtt);
+      
+      // Prepare test payload matching the MQTT handler's TestConfig structure
+      const testPayload = {
+        enabled: currentMqtt.enabled || false,
+        broker: currentMqtt.broker || '',
+        topic: currentMqtt.topic || 'birdnet',
+        username: currentMqtt.username || '',
+        password: currentMqtt.password || '',
+        retain: (currentMqtt as any).retain || false,
+        tls: {
+          insecureSkipVerify: currentMqtt.tls?.skipVerify || false,
+          caCert: '',
+          clientCert: '',
+          clientKey: '',
+        },
+      };
+
+      // Make request to the real API with CSRF token
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+      });
+      
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
       }
-    } catch {
-      const currentStage = testStates.mqtt.stages.find(s => s.status === 'in_progress');
-      if (currentStage) {
-        currentStage.status = 'error';
-        currentStage.error = 'Test failed';
+
+      console.log('Sending MQTT test request with payload:', testPayload);
+      
+      const response = await fetch('/api/v2/integrations/mqtt/test', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify(testPayload),
+      });
+
+      console.log('MQTT test response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Read the streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Failed to read response stream');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Parse each line as JSON
+        const chunk = decoder.decode(value);
+        console.log('Raw MQTT chunk received:', chunk);
+        
+        // Split by both newlines and by '}{'  pattern to handle concatenated JSON objects
+        const jsonObjects = [];
+        let remaining = chunk;
+        
+        while (remaining.trim()) {
+          try {
+            // Find the end of the first complete JSON object
+            let braceCount = 0;
+            let jsonEnd = -1;
+            
+            for (let i = 0; i < remaining.length; i++) {
+              if (remaining[i] === '{') braceCount++;
+              if (remaining[i] === '}') braceCount--;
+              if (braceCount === 0) {
+                jsonEnd = i + 1;
+                break;
+              }
+            }
+            
+            if (jsonEnd === -1) break; // No complete JSON object found
+            
+            const jsonStr = remaining.substring(0, jsonEnd).trim();
+            if (jsonStr) {
+              jsonObjects.push(jsonStr);
+            }
+            
+            remaining = remaining.substring(jsonEnd).trim();
+          } catch (e) {
+            console.error('Error splitting JSON objects:', e);
+            break;
+          }
+        }
+
+        for (const jsonStr of jsonObjects) {
+          try {
+            const stageResult = JSON.parse(jsonStr);
+            console.log('MQTT test result received:', stageResult);
+            
+            // Skip results that don't have a stage (like elapsed time info)
+            if (!stageResult.stage) {
+              console.log('Skipping result without stage:', stageResult);
+              continue;
+            }
+            
+            // Convert MQTT TestResult to Stage format
+            const stageId = stageResult.stage.toLowerCase().replace(/\\s+/g, '');
+            
+            // Determine status based on the MQTT TestResult structure
+            let status: 'pending' | 'in_progress' | 'completed' | 'error' | 'skipped';
+            if (stageResult.isProgress) {
+              status = 'in_progress';
+            } else if (stageResult.success) {
+              status = 'completed';
+            } else {
+              status = 'error';
+            }
+            
+            const stage = {
+              id: stageId,
+              title: stageResult.stage || 'Test Stage',
+              status,
+              message: stageResult.message || '',
+              error: stageResult.error || '',
+            };
+
+            console.log('Adding/updating MQTT stage:', stage);
+
+            // Find existing stage or create new one
+            let existingIndex = testStates.mqtt.stages.findIndex(s => s.id === stage.id);
+            if (existingIndex === -1) {
+              // Add new stage
+              testStates.mqtt.stages.push(stage);
+            } else {
+              // Update existing stage
+              testStates.mqtt.stages[existingIndex] = {
+                ...testStates.mqtt.stages[existingIndex],
+                ...stage,
+              };
+            }
+            
+            console.log('Current MQTT stages:', testStates.mqtt.stages);
+          } catch (parseError) {
+            console.error('Failed to parse MQTT test result:', parseError, jsonStr);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('MQTT test failed:', error);
+      
+      // Add error stage if no stages exist
+      if (testStates.mqtt.stages.length === 0) {
+        testStates.mqtt.stages.push({
+          id: 'error',
+          title: 'Connection Error',
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+      } else {
+        // Mark current stage as failed
+        const lastStage = testStates.mqtt.stages[testStates.mqtt.stages.length - 1];
+        if (lastStage.status !== 'completed') {
+          lastStage.status = 'error';
+          lastStage.error = error instanceof Error ? error.message : 'Unknown error occurred';
+        }
       }
     } finally {
       testStates.mqtt.isRunning = false;
+      console.log('MQTT test finished, stages:', testStates.mqtt.stages);
+      
+      // Check if all stages completed successfully and there are unsaved changes
+      const allStagesCompleted = testStates.mqtt.stages.length > 0 && 
+        testStates.mqtt.stages.every(stage => stage.status === 'completed');
+      testStates.mqtt.showSuccessNote = allStagesCompleted && mqttHasChanges;
+      
+      // Increase timeout to 30 seconds so users can see the results
       setTimeout(() => {
+        console.log('Clearing MQTT test results after timeout');
         testStates.mqtt.stages = [];
-      }, 15000);
+        testStates.mqtt.showSuccessNote = false;
+      }, 30000);
     }
   }
 
@@ -307,16 +616,19 @@
     testStates.weather.stages = [];
 
     try {
+      // Get current form values (unsaved changes) instead of saved settings
+      const currentWeather = store.formData?.realtime?.weather || settings.weather!;
+      
       // Prepare test payload
       const testPayload = {
-        provider: settings.weather!.provider,
-        pollInterval: settings.weather!.pollInterval || 60,
-        debug: settings.weather!.debug || false,
+        provider: currentWeather.provider || 'none',
+        pollInterval: currentWeather.pollInterval || 60,
+        debug: currentWeather.debug || false,
         openWeather: {
-          apiKey: settings.weather!.openWeather.apiKey || '',
-          endpoint: settings.weather!.openWeather.endpoint || '',
-          units: settings.weather!.openWeather.units || 'metric',
-          language: settings.weather!.openWeather.language || 'en',
+          apiKey: currentWeather.openWeather?.apiKey || '',
+          endpoint: currentWeather.openWeather?.endpoint || '',
+          units: currentWeather.openWeather?.units || 'metric',
+          language: currentWeather.openWeather?.language || 'en',
         },
       };
 
@@ -407,8 +719,15 @@
       }
     } finally {
       testStates.weather.isRunning = false;
+      
+      // Check if all stages completed successfully and there are unsaved changes
+      const allStagesCompleted = testStates.weather.stages.length > 0 && 
+        testStates.weather.stages.every(stage => stage.status === 'completed');
+      testStates.weather.showSuccessNote = allStagesCompleted && weatherHasChanges;
+      
       setTimeout(() => {
         testStates.weather.stages = [];
+        testStates.weather.showSuccessNote = false;
       }, 15000);
     }
   }
@@ -493,16 +812,16 @@
               onclick={testBirdWeather}
               loading={testStates.birdweather.isRunning}
               loadingText="Testing..."
-              disabled={!settings.birdweather?.enabled ||
-                !settings.birdweather?.id ||
+              disabled={!(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled) ||
+                !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
                 testStates.birdweather.isRunning}
             >
               Test BirdWeather Connection
             </SettingsButton>
             <span class="text-sm text-base-content/70">
-              {#if !settings.birdweather?.enabled}
+              {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
                 BirdWeather must be enabled to test
-              {:else if !settings.birdweather?.id}
+              {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
                 BirdWeather token must be specified
               {:else if testStates.birdweather.isRunning}
                 Test in progress...
@@ -519,6 +838,8 @@
               showProgress={false}
             />
           {/if}
+          
+          <TestSuccessNote show={testStates.birdweather.showSuccessNote} />
         </div>
       {/if}
     </div>
@@ -657,16 +978,16 @@
                 onclick={testMQTT}
                 loading={testStates.mqtt.isRunning}
                 loadingText="Testing..."
-                disabled={!settings.mqtt?.enabled ||
-                  !settings.mqtt?.broker ||
+                disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
+                  !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
                   testStates.mqtt.isRunning}
               >
                 Test MQTT Connection
               </SettingsButton>
               <span class="text-sm text-base-content/70">
-                {#if !settings.mqtt?.enabled}
+                {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
                   MQTT must be enabled to test
-                {:else if !settings.mqtt?.broker}
+                {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
                   MQTT broker must be specified
                 {:else if testStates.mqtt.isRunning}
                   Test in progress...
@@ -683,6 +1004,8 @@
                 showProgress={false}
               />
             {/if}
+            
+            <TestSuccessNote show={testStates.mqtt.showSuccessNote} />
           </div>
         </div>
       {/if}
@@ -799,17 +1122,17 @@
               onclick={testWeather}
               loading={testStates.weather.isRunning}
               loadingText="Testing..."
-              disabled={(settings.weather?.provider as any) === 'none' ||
-                ((settings.weather?.provider as any) === 'openweather' &&
-                  !settings.weather?.openWeather?.apiKey) ||
+              disabled={(store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none' ||
+                ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' &&
+                  !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)) ||
                 testStates.weather.isRunning}
             >
               Test Weather Provider
             </SettingsButton>
             <span class="text-sm text-base-content/70">
-              {#if (settings.weather?.provider as any) === 'none'}
+              {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
                 No weather provider selected
-              {:else if (settings.weather?.provider as any) === 'openweather' && !settings.weather?.openWeather?.apiKey}
+              {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
                 OpenWeather API key must be specified
               {:else if testStates.weather.isRunning}
                 Test in progress...
@@ -826,6 +1149,8 @@
               showProgress={false}
             />
           {/if}
+          
+          <TestSuccessNote show={testStates.weather.showSuccessNote} />
         </div>
       {/if}
     </div>

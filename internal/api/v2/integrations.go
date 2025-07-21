@@ -347,19 +347,22 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 
 // TestBirdWeatherConnection handles POST /api/v2/integrations/birdweather/test
 func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
-	// Get BirdWeather configuration from settings
-	bwConfig := c.Settings.Realtime.Birdweather
+	var request BirdWeatherTestRequest
+	if err := ctx.Bind(&request); err != nil {
+		return c.HandleError(ctx, err, "Invalid BirdWeather test request", http.StatusBadRequest)
+	}
 
-	if !bwConfig.Enabled {
+	// Validate BirdWeather configuration from the request
+	if !request.Enabled {
 		return ctx.JSON(http.StatusOK, map[string]interface{}{
 			"success": false,
-			"message": "BirdWeather integration is not enabled in settings",
+			"message": "BirdWeather integration is not enabled",
 			"state":   "failed",
 		})
 	}
 
 	// Validate BirdWeather configuration
-	if bwConfig.ID == "" {
+	if request.ID == "" {
 		return ctx.JSON(http.StatusBadRequest, map[string]interface{}{
 			"success": false,
 			"message": "BirdWeather station ID not configured",
@@ -367,8 +370,23 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 		})
 	}
 
-	// Create test BirdWeather client with the current configuration
-	client, err := birdweather.New(c.Settings)
+	// Create temporary settings for the test
+	testSettings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Birdweather: conf.BirdweatherSettings{
+				Enabled:          request.Enabled,
+				ID:               request.ID,
+				Threshold:        request.Threshold,
+				LocationAccuracy: request.LocationAccuracy,
+				Debug:            request.Debug,
+			},
+		},
+	}
+	// Copy main settings
+	testSettings.Main = c.Settings.Main
+
+	// Create test BirdWeather client with the test configuration
+	client, err := birdweather.New(testSettings)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -478,6 +496,15 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	}
 
 	return nil
+}
+
+// BirdWeatherTestRequest represents a request to test BirdWeather connectivity
+type BirdWeatherTestRequest struct {
+	Enabled          bool    `json:"enabled"`
+	ID               string  `json:"id"`
+	Threshold        float64 `json:"threshold"`
+	LocationAccuracy float64 `json:"locationAccuracy"`
+	Debug            bool    `json:"debug"`
 }
 
 // WeatherTestRequest represents a request to test weather provider connectivity

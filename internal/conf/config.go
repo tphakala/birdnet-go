@@ -66,14 +66,14 @@ type SoundLevelSettings struct {
 }
 
 type AudioSettings struct {
-	Source          string             `json:"source"`          // audio source to use for analysis
-	FfmpegPath      string             `json:"ffmpegPath"`      // path to ffmpeg, runtime value
-	SoxPath         string             `json:"soxPath"`         // path to sox, runtime value
+	Source          string             `yaml:"source" mapstructure:"source" json:"source"`          // audio source to use for analysis
+	FfmpegPath      string             `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"`      // path to ffmpeg, runtime value
+	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`         // path to sox, runtime value
 	SoxAudioTypes   []string           `yaml:"-" json:"-"`     // supported audio types of sox, runtime value
 	StreamTransport string             `json:"streamTransport"` // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings     `json:"export"`          // export settings
 	SoundLevel      SoundLevelSettings `json:"soundLevel"`      // sound level monitoring settings
-	UseAudioCore    bool               `json:"useAudioCore"`    // true to use new audiocore package instead of myaudio
+	UseAudioCore    bool               `yaml:"useaudiocore" mapstructure:"useaudiocore" json:"useAudioCore"`    // true to use new audiocore package instead of myaudio
 
 	Equalizer EqualizerSettings `json:"equalizer"` // equalizer settings
 }
