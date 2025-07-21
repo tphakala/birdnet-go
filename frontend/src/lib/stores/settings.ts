@@ -212,6 +212,7 @@ export interface MQTTSettings {
   username?: string;
   password?: string;
   topic: string;
+  retain?: boolean;
   tls: {
     enabled: boolean;
     skipVerify: boolean;
@@ -543,6 +544,7 @@ function createEmptySettings(): SettingsFormData {
         broker: '',
         port: 1883,
         topic: 'birdnet',
+        retain: false,
         tls: {
           enabled: false,
           skipVerify: false,

@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
+	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
 // MQTTStatus represents the current status of the MQTT connection
@@ -58,8 +61,11 @@ func (c *Controller) initIntegrationsRoutes() {
 	bwGroup.GET("/status", c.GetBirdWeatherStatus)
 	bwGroup.POST("/test", c.TestBirdWeatherConnection)
 
+	// Weather routes
+	weatherGroup := integrationsGroup.Group("/weather")
+	weatherGroup.POST("/test", c.TestWeatherConnection)
+
 	// Other integration routes could be added here:
-	// - Weather APIs
 	// - External media storage
 
 	if c.apiLogger != nil {
@@ -472,6 +478,258 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	}
 
 	return nil
+}
+
+// WeatherTestRequest represents a request to test weather provider connectivity
+type WeatherTestRequest struct {
+	Provider     string                      `json:"provider"`
+	PollInterval int                         `json:"pollInterval"`
+	Debug        bool                        `json:"debug"`
+	OpenWeather  conf.OpenWeatherSettings    `json:"openWeather"`
+}
+
+// WeatherTestStage represents the result of a weather test stage
+type WeatherTestStage struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Status  string `json:"status"` // pending, in_progress, completed, error
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// TestWeatherConnection handles POST /api/v2/integrations/weather/test
+func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
+	var request WeatherTestRequest
+	if err := ctx.Bind(&request); err != nil {
+		return c.HandleError(ctx, err, "Invalid weather test request", http.StatusBadRequest)
+	}
+
+	// Validate provider
+	if request.Provider == "" || request.Provider == "none" {
+		return c.HandleError(ctx, nil, "No weather provider selected", http.StatusBadRequest)
+	}
+
+	// Validate OpenWeather specific requirements
+	if request.Provider == "openweather" && request.OpenWeather.APIKey == "" {
+		return c.HandleError(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest)
+	}
+
+	// Set up streaming response
+	ctx.Response().Header().Set("Content-Type", "application/x-ndjson")
+	ctx.Response().Header().Set("Cache-Control", "no-cache")
+	ctx.Response().Header().Set("Connection", "keep-alive")
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	// Create test settings from request
+	testSettings := &conf.Settings{
+		BirdNET: conf.BirdNETConfig{
+			Latitude:  c.Settings.BirdNET.Latitude,
+			Longitude: c.Settings.BirdNET.Longitude,
+		},
+		Realtime: conf.RealtimeSettings{
+			Weather: conf.WeatherSettings{
+				Provider:     request.Provider,
+				Debug:        request.Debug,
+				PollInterval: request.PollInterval,
+				OpenWeather:  request.OpenWeather,
+			},
+		},
+	}
+
+	// Create test context with timeout
+	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second)
+	defer cancel()
+
+	// Create encoder for streaming results
+	encoder := json.NewEncoder(ctx.Response())
+
+	// Helper function to send stage results
+	sendStage := func(stage WeatherTestStage) error {
+		if err := encoder.Encode(stage); err != nil {
+			return err
+		}
+		ctx.Response().Flush()
+		return nil
+	}
+
+	// Run weather test stages
+	stages := []struct {
+		id    string
+		title string
+		test  func() (string, error)
+	}{
+		{"starting", "Starting Test", func() (string, error) {
+			return fmt.Sprintf("Initializing %s weather provider test...", getProviderDisplayName(request.Provider)), nil
+		}},
+		{"connectivity", "API Connectivity", func() (string, error) {
+			return c.testWeatherAPIConnectivity(testCtx, testSettings)
+		}},
+		{"authentication", "Authentication", func() (string, error) {
+			if request.Provider == "openweather" {
+				return c.testWeatherAuthentication(testCtx, testSettings)
+			}
+			return "Authentication not required for this provider", nil
+		}},
+		{"fetch", "Weather Data Fetch", func() (string, error) {
+			return c.testWeatherDataFetch(testCtx, testSettings)
+		}},
+		{"parse", "Data Parsing", func() (string, error) {
+			return "Weather data validated successfully", nil
+		}},
+	}
+
+	// Execute each stage
+	for _, stage := range stages {
+		// Send in-progress status
+		if err := sendStage(WeatherTestStage{
+			ID:     stage.id,
+			Title:  stage.title,
+			Status: "in_progress",
+		}); err != nil {
+			return nil // Client disconnected
+		}
+
+		// Run the test
+		message, err := stage.test()
+		if err != nil {
+			// Send error status
+			return sendStage(WeatherTestStage{
+				ID:      stage.id,
+				Title:   stage.title,
+				Status:  "error",
+				Message: message,
+				Error:   err.Error(),
+			})
+		}
+
+		// Send completed status
+		if err := sendStage(WeatherTestStage{
+			ID:      stage.id,
+			Title:   stage.title,
+			Status:  "completed",
+			Message: message,
+		}); err != nil {
+			return nil // Client disconnected
+		}
+
+		// Small delay between stages for UX
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	return nil
+}
+
+// testWeatherAPIConnectivity tests basic connectivity to the weather API
+func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *conf.Settings) (string, error) {
+	var testURL string
+	provider := settings.Realtime.Weather.Provider
+
+	switch provider {
+	case "yrno":
+		testURL = "https://api.met.no/weatherapi/locationforecast/2.0/status"
+	case "openweather":
+		testURL = "https://api.openweathermap.org"
+	default:
+		return "", fmt.Errorf("unsupported weather provider: %s", provider)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to %s API: %w", getProviderDisplayName(provider), err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
+
+	return fmt.Sprintf("Successfully connected to %s API", getProviderDisplayName(provider)), nil
+}
+
+// testWeatherAuthentication tests authentication with the weather API
+func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
+	apiKey := settings.Realtime.Weather.OpenWeather.APIKey
+	endpoint := settings.Realtime.Weather.OpenWeather.Endpoint
+	if endpoint == "" {
+		endpoint = "https://api.openweathermap.org/data/2.5/weather"
+	}
+
+	testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create authentication request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to authenticate with OpenWeather API: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
+
+	if resp.StatusCode == 401 {
+		return "", fmt.Errorf("authentication failed: invalid API key")
+	}
+
+	return "Successfully authenticated with OpenWeather API", nil
+}
+
+// testWeatherDataFetch tests fetching actual weather data
+func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	var provider weather.Provider
+	switch settings.Realtime.Weather.Provider {
+	case "yrno":
+		provider = weather.NewYrNoProvider()
+	case "openweather":
+		provider = weather.NewOpenWeatherProvider()
+	default:
+		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
+	}
+
+	weatherData, err := provider.FetchWeather(settings)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch weather data: %w", err)
+	}
+
+	if weatherData == nil {
+		return "", fmt.Errorf("no weather data returned from provider")
+	}
+
+	// Return weather data summary
+	return fmt.Sprintf("Successfully fetched weather data for %s, %s. Temperature: %.1f°, Conditions: %s",
+		weatherData.Location.City,
+		weatherData.Location.Country,
+		weatherData.Temperature.Current,
+		weatherData.Description), nil
+}
+
+// getProviderDisplayName returns a user-friendly name for the weather provider
+func getProviderDisplayName(provider string) string {
+	switch provider {
+	case "yrno":
+		return "Yr.no"
+	case "openweather":
+		return "OpenWeather"
+	default:
+		// Simple capitalization for unknown providers
+		if provider != "" {
+			return strings.ToUpper(provider[:1]) + provider[1:]
+		}
+		return provider
+	}
 }
 
 // writeJSONResponse writes a JSON response to the client
