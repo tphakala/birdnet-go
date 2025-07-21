@@ -747,10 +747,10 @@ export const settingsActions = {
         isSaving: false,
         error: errorMessage,
       }));
-      
+
       // Show error toast
       toastActions.error(errorMessage);
-      
+
       throw error;
     }
   },

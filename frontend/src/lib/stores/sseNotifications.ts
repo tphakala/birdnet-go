@@ -58,10 +58,10 @@ class SSENotificationManager {
   private handleNotification(notification: SSENotification): void {
     // Convert SSE notification to toast
     const toastType = this.mapNotificationType(notification.type);
-    
+
     // Show toast with appropriate duration
     const duration = notification.type === 'error' ? null : 5000; // Errors don't auto-dismiss
-    
+
     toastActions.show(notification.message, toastType, {
       duration,
       showIcon: true,
