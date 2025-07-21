@@ -41,9 +41,16 @@
         },
       },
       weather: {
-        provider: 'yr.no' as 'none' | 'yr.no' | 'openweather',
-        apiKey: '',
-        enabled: false,
+        provider: 'yrno' as 'none' | 'yrno' | 'openweather',
+        pollInterval: 60,
+        debug: false,
+        openWeather: {
+          enabled: false,
+          apiKey: '',
+          endpoint: 'https://api.openweathermap.org/data/2.5/weather',
+          units: 'metric',
+          language: 'en',
+        },
       },
     }
   );
@@ -93,8 +100,15 @@
   // Weather provider options
   const weatherProviderOptions = [
     { value: 'none', label: 'None' },
-    { value: 'yr.no', label: 'Yr.no' },
+    { value: 'yrno', label: 'Yr.no' },
     { value: 'openweather', label: 'OpenWeather' },
+  ];
+
+  // OpenWeather units options
+  const openWeatherUnitsOptions = [
+    { value: 'standard', label: 'Standard' },
+    { value: 'metric', label: 'Metric' },
+    { value: 'imperial', label: 'Imperial' },
   ];
 
   // FFmpeg availability check
@@ -196,7 +210,25 @@
 
   function updateWeatherApiKey(apiKey: string) {
     settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, apiKey },
+      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, apiKey } },
+    });
+  }
+
+  function updateWeatherEndpoint(endpoint: string) {
+    settingsActions.updateSection('realtime', {
+      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, endpoint } },
+    });
+  }
+
+  function updateWeatherUnits(units: string) {
+    settingsActions.updateSection('realtime', {
+      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, units } },
+    });
+  }
+
+  function updateWeatherLanguage(language: string) {
+    settingsActions.updateSection('realtime', {
+      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, language } },
     });
   }
 
@@ -645,37 +677,11 @@
 
       <!-- Provider-specific notes -->
       {#if (settings.weather?.provider as any) === 'none'}
-        <div class="alert alert-info">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+        <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg">
           <span>No weather data will be retrieved.</span>
         </div>
-      {:else if (settings.weather?.provider as any) === 'yr.no'}
-        <div class="alert alert-success">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-            />
-          </svg>
+      {:else if (settings.weather?.provider as any) === 'yrno'}
+        <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg">
           <div>
             <p>
               Weather forecast data is provided by Yr.no, a joint service by the Norwegian
@@ -692,20 +698,7 @@
           </div>
         </div>
       {:else if (settings.weather?.provider as any) === 'openweather'}
-        <div class="alert alert-info">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+        <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg">
           <span
             >Use of OpenWeather requires an API key, sign up for a free API key at <a
               href="https://home.openweathermap.org/users/sign_up"
@@ -716,15 +709,27 @@
           >
         </div>
 
-        <PasswordField
-          label="API Key"
-          value={settings.weather!.apiKey || ''}
-          onUpdate={updateWeatherApiKey}
-          placeholder=""
-          helpText="Your OpenWeather API key. Keep this secret!"
-          disabled={store.isLoading || store.isSaving}
-          allowReveal={true}
-        />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <PasswordField
+            label="API Key"
+            value={settings.weather!.openWeather.apiKey || ''}
+            onUpdate={updateWeatherApiKey}
+            placeholder=""
+            helpText="Your OpenWeather API key. Keep this secret!"
+            disabled={store.isLoading || store.isSaving}
+            allowReveal={true}
+          />
+
+          <SelectField
+            id="weather-units"
+            value={settings.weather!.openWeather.units || 'metric'}
+            label="Units of Measurement"
+            options={openWeatherUnitsOptions}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateWeatherUnits}
+          />
+
+        </div>
       {/if}
 
       {#if (settings.weather?.provider as any) !== 'none'}
@@ -737,7 +742,7 @@
               onclick={testWeather}
               disabled={(settings.weather?.provider as any) === 'none' ||
                 ((settings.weather?.provider as any) === 'openweather' &&
-                  !settings.weather?.apiKey) ||
+                  !settings.weather?.openWeather?.apiKey) ||
                 testStates.weather.isRunning}
             >
               {#if testStates.weather.isRunning}
@@ -750,7 +755,7 @@
             <span class="text-sm text-base-content/70">
               {#if (settings.weather?.provider as any) === 'none'}
                 No weather provider selected
-              {:else if (settings.weather?.provider as any) === 'openweather' && !settings.weather?.apiKey}
+              {:else if (settings.weather?.provider as any) === 'openweather' && !settings.weather?.openWeather?.apiKey}
                 OpenWeather API key must be specified
               {:else if testStates.weather.isRunning}
                 Test in progress...
