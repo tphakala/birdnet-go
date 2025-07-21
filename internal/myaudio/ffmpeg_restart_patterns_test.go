@@ -35,7 +35,7 @@ func TestFFmpegStream_RealWorldRestartPattern(t *testing.T) {
 	// Create a wait group to track all cleanup operations
 	var wg sync.WaitGroup
 	
-	for i := 0; i < numRestarts; i++ {
+	for i := range numRestarts {
 		stream := NewFFmpegStream(fmt.Sprintf("test://rapid-fail-%d", i), "tcp", audioChan)
 		
 		// Create a process that exits quickly (< 5 seconds)
@@ -178,16 +178,26 @@ func TestFFmpegStream_HealthCheckRestartLoop(t *testing.T) {
 	time.Sleep(testDuration)
 	close(done)
 	
+	// Stop the stream IMMEDIATELY in short mode to prevent long backoff waits
+	if testing.Short() {
+		err = manager.StopStream(url)
+		assert.NoError(t, err)
+		manager.Shutdown()
+	}
+	
 	// Check results
 	restartMu.Lock()
 	finalRestartCount := restartCount
 	restartMu.Unlock()
 	
-	t.Logf("Final restart count after 20s: %d", finalRestartCount)
+	duration := testDuration
+	t.Logf("Final restart count after %v: %d", duration, finalRestartCount)
 	
-	// Stop the stream
-	err = manager.StopStream(url)
-	assert.NoError(t, err)
+	if !testing.Short() {
+		// Stop the stream (only if not already stopped in short mode)
+		err = manager.StopStream(url)
+		assert.NoError(t, err)
+	}
 }
 
 // TestFFmpegStream_ConcurrentRestartRequests tests the scenario where multiple restart requests
@@ -265,14 +275,10 @@ func TestFFmpegStream_ExtendedBackoffPattern(t *testing.T) {
 		
 		// Calculate what the backoff would be
 		exponent := count - 1
-		if exponent > maxBackoffExponent {
-			exponent = maxBackoffExponent
-		}
+		exponent = min(exponent, maxBackoffExponent)
 		
 		expectedBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
-		if expectedBackoff > stream.maxBackoff {
-			expectedBackoff = stream.maxBackoff
-		}
+		expectedBackoff = min(expectedBackoff, stream.maxBackoff)
 		
 		t.Logf("Restart count %d: backoff = %v", count, expectedBackoff)
 		

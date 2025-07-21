@@ -114,7 +114,11 @@ func TestFFmpegStream_ZombiePreventionWithWaitTimeout(t *testing.T) {
 	}
 	
 	// Wait for all processes to be cleaned up
-	time.Sleep(6 * time.Second) // Longer than cleanup timeout
+	waitTime := 6 * time.Second // Longer than cleanup timeout
+	if testing.Short() {
+		waitTime = 1 * time.Second
+	}
+	time.Sleep(waitTime)
 	
 	// Check for zombies
 	pidMu.Lock()
