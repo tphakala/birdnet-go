@@ -8,6 +8,7 @@
     settingsActions,
     privacyFilterSettings,
     dogBarkFilterSettings,
+    realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 
@@ -64,12 +65,14 @@
   // Privacy filter update handlers
   function updatePrivacyEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       privacyFilter: { ...(settings.privacy as any), enabled },
     });
   }
 
   function updatePrivacyConfidence(confidence: number) {
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       privacyFilter: { ...(settings.privacy as any), confidence },
     });
   }
@@ -77,18 +80,21 @@
   // Dog bark filter update handlers
   function updateDogBarkEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       dogBarkFilter: { ...(settings.dogBark as any), enabled },
     });
   }
 
   function updateDogBarkConfidence(confidence: number) {
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       dogBarkFilter: { ...(settings.dogBark as any), confidence },
     });
   }
 
   function updateDogBarkRemember(remember: number) {
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       dogBarkFilter: { ...(settings.dogBark as any), remember },
     });
   }
@@ -106,6 +112,7 @@
 
     const updatedSpecies = [...(settings.dogBark as any).species, trimmedSpecies];
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
     });
   }
@@ -115,6 +122,7 @@
       (_: string, i: number) => i !== index
     );
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
     });
   }
@@ -131,6 +139,7 @@
     updatedSpecies[editIndex] = editSpecies.trim();
 
     settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
       dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
     });
 
@@ -153,7 +162,12 @@
   }
 </script>
 
-<div class="space-y-4">
+{#if store.isLoading}
+  <div class="flex items-center justify-center py-12">
+    <div class="loading loading-spinner loading-lg"></div>
+  </div>
+{:else}
+  <div class="space-y-4">
   <!-- Privacy Filter Section -->
   <SettingsSection
     title="Privacy Filtering"
@@ -234,22 +248,6 @@
         <div class="form-control mt-6">
           <div class="label justify-start">
             <span class="label-text">Dog Bark Species List</span>
-            <div class="tooltip" data-tip="List of species to filter out as potential dog barks">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 text-info ml-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
           </div>
 
           <!-- Species List -->
@@ -398,4 +396,5 @@
       {/if}
     </div>
   </SettingsSection>
-</div>
+  </div>
+{/if}
