@@ -6,7 +6,7 @@
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
-  import { settingsStore, settingsActions, integrationSettings } from '$lib/stores/settings';
+  import { settingsStore, settingsActions, integrationSettings, realtimeSettings } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
 
@@ -41,7 +41,7 @@
         },
       },
       weather: {
-        provider: 'none' as 'none' | 'yr.no' | 'openweather',
+        provider: 'yr.no' as 'none' | 'yr.no' | 'openweather',
         apiKey: '',
         enabled: false,
       },
@@ -102,104 +102,101 @@
 
   // BirdWeather update handlers
   function updateBirdWeatherEnabled(enabled: boolean) {
-    settingsActions.updateSection('integration', {
-      birdweather: { ...settings.birdweather, enabled },
+    settingsActions.updateSection('realtime', {
+      birdweather: { ...settings.birdweather!, enabled },
     });
   }
 
   function updateBirdWeatherId(id: string) {
-    settingsActions.updateSection('integration', {
-      birdweather: { ...settings.birdweather, id },
+    settingsActions.updateSection('realtime', {
+      birdweather: { ...settings.birdweather!, id },
     });
   }
 
   function updateBirdWeatherThreshold(threshold: number) {
-    settingsActions.updateSection('integration', {
-      birdweather: { ...settings.birdweather, threshold },
+    settingsActions.updateSection('realtime', {
+      birdweather: { ...settings.birdweather!, threshold },
     });
   }
 
   function updateBirdWeatherDebug(debug: boolean) {
-    settingsActions.updateSection('integration', {
-      birdweather: { ...settings.birdweather, debug },
+    settingsActions.updateSection('realtime', {
+      birdweather: { ...settings.birdweather!, debug },
     });
   }
 
   // MQTT update handlers
   function updateMQTTEnabled(enabled: boolean) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, enabled },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, enabled },
     });
   }
 
   function updateMQTTBroker(broker: string) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, broker },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, broker },
     });
   }
 
   function updateMQTTTopic(topic: string) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, topic },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, topic },
     });
   }
 
   function updateMQTTUsername(username: string) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, username },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, username },
     });
   }
 
   function updateMQTTPassword(password: string) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, password },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, password },
     });
   }
 
   function updateMQTTTLSEnabled(enabled: boolean) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, tls: { ...settings.mqtt.tls, enabled } },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, tls: { ...settings.mqtt!.tls, enabled } },
     });
   }
 
   function updateMQTTTLSSkipVerify(skipVerify: boolean) {
-    settingsActions.updateSection('integration', {
-      mqtt: { ...settings.mqtt, tls: { ...settings.mqtt.tls, skipVerify } },
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...settings.mqtt!, tls: { ...settings.mqtt!.tls, skipVerify } },
     });
   }
 
   // Observability update handlers
   function updateObservabilityEnabled(enabled: boolean) {
-    settingsActions.updateSection('integration', {
-      observability: {
-        ...settings.observability,
-        prometheus: { ...settings.observability.prometheus, enabled },
+    settingsActions.updateSection('realtime', {
+      telemetry: { 
+        enabled,
+        listen: $realtimeSettings?.telemetry?.listen || '0.0.0.0:8090' 
       },
     });
   }
 
   function updateObservabilityListen(listen: string) {
-    // Parse listen address to extract port
-    const parts = listen.split(':');
-    const port = parts.length > 1 ? parseInt(parts[1]) || 9090 : 9090;
-    settingsActions.updateSection('integration', {
-      observability: {
-        ...settings.observability,
-        prometheus: { ...settings.observability.prometheus, port },
+    settingsActions.updateSection('realtime', {
+      telemetry: { 
+        enabled: $realtimeSettings?.telemetry?.enabled || false,
+        listen 
       },
     });
   }
 
   // Weather update handlers
   function updateWeatherProvider(provider: string) {
-    settingsActions.updateSection('integration', {
-      weather: { ...settings.weather, provider: provider as any },
+    settingsActions.updateSection('realtime', {
+      weather: { ...settings.weather!, provider: provider as any },
     });
   }
 
   function updateWeatherApiKey(apiKey: string) {
-    settingsActions.updateSection('integration', {
-      weather: { ...settings.weather, apiKey },
+    settingsActions.updateSection('realtime', {
+      weather: { ...settings.weather!, apiKey },
     });
   }
 
@@ -301,8 +298,13 @@
   }
 </script>
 
-<div class="space-y-4">
-  <!-- BirdWeather Settings -->
+{#if store.isLoading}
+  <div class="flex items-center justify-center py-12">
+    <div class="loading loading-spinner loading-lg"></div>
+  </div>
+{:else}
+  <div class="space-y-4">
+    <!-- BirdWeather Settings -->
   <SettingsSection
     title="BirdWeather"
     description="Upload detections to BirdWeather"
@@ -337,17 +339,17 @@
       {/if}
 
       <Checkbox
-        bind:checked={settings.birdweather.enabled}
+        bind:checked={settings.birdweather!.enabled}
         label="Enable BirdWeather Uploads"
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateBirdWeatherEnabled(settings.birdweather.enabled)}
+        onchange={() => updateBirdWeatherEnabled(settings.birdweather!.enabled)}
       />
 
-      {#if settings.birdweather.enabled}
+      {#if settings.birdweather?.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <PasswordField
             label="BirdWeather token"
-            value={settings.birdweather.id}
+            value={settings.birdweather!.id}
             onUpdate={updateBirdWeatherId}
             placeholder=""
             helpText="Your unique BirdWeather token."
@@ -357,7 +359,7 @@
 
           <NumberField
             label="Upload Threshold"
-            value={settings.birdweather.threshold}
+            value={settings.birdweather!.threshold}
             onUpdate={updateBirdWeatherThreshold}
             min={0}
             max={1}
@@ -369,10 +371,10 @@
         </div>
 
         <Checkbox
-          bind:checked={settings.birdweather.debug}
+          bind:checked={settings.birdweather!.debug}
           label="Enable Debug Mode"
           disabled={store.isLoading || store.isSaving}
-          onchange={() => updateBirdWeatherDebug(settings.birdweather.debug)}
+          onchange={() => updateBirdWeatherDebug(settings.birdweather!.debug)}
         />
 
         <!-- Test Connection -->
@@ -382,8 +384,8 @@
               type="button"
               class="btn btn-outline btn-sm"
               onclick={testBirdWeather}
-              disabled={!settings.birdweather.enabled ||
-                !settings.birdweather.id ||
+              disabled={!settings.birdweather?.enabled ||
+                !settings.birdweather?.id ||
                 testStates.birdweather.isRunning}
             >
               {#if testStates.birdweather.isRunning}
@@ -394,9 +396,9 @@
               {/if}
             </button>
             <span class="text-sm text-base-content/70">
-              {#if !settings.birdweather.enabled}
+              {#if !settings.birdweather?.enabled}
                 BirdWeather must be enabled to test
-              {:else if !settings.birdweather.id}
+              {:else if !settings.birdweather?.id}
                 BirdWeather token must be specified
               {:else if testStates.birdweather.isRunning}
                 Test in progress...
@@ -427,17 +429,17 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.mqtt.enabled}
+        bind:checked={settings.mqtt!.enabled}
         label="Enable MQTT Integration"
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateMQTTEnabled(settings.mqtt.enabled)}
+        onchange={() => updateMQTTEnabled(settings.mqtt!.enabled)}
       />
 
-      {#if settings.mqtt.enabled}
+      {#if settings.mqtt?.enabled}
         <div class="space-y-4">
           <TextInput
             id="mqtt-broker"
-            bind:value={settings.mqtt.broker}
+            bind:value={settings.mqtt!.broker}
             label="MQTT Broker"
             placeholder="mqtt://localhost:1883"
             disabled={store.isLoading || store.isSaving}
@@ -446,7 +448,7 @@
 
           <TextInput
             id="mqtt-topic"
-            bind:value={settings.mqtt.topic}
+            bind:value={settings.mqtt!.topic}
             label="MQTT Topic"
             placeholder="birdnet/detections"
             disabled={store.isLoading || store.isSaving}
@@ -460,7 +462,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <TextInput
                 id="mqtt-username"
-                value={settings.mqtt.username || ''}
+                value={settings.mqtt!.username || ''}
                 label="Username"
                 placeholder=""
                 disabled={store.isLoading || store.isSaving}
@@ -469,7 +471,7 @@
 
               <PasswordField
                 label="Password"
-                value={settings.mqtt.password || ''}
+                value={settings.mqtt!.password || ''}
                 onUpdate={updateMQTTPassword}
                 placeholder=""
                 helpText="The MQTT password."
@@ -511,18 +513,18 @@
             <h3 class="text-sm font-medium mb-3">TLS/SSL Security</h3>
 
             <Checkbox
-              bind:checked={settings.mqtt.tls.enabled}
+              bind:checked={settings.mqtt!.tls.enabled}
               label="Enable TLS/SSL"
               disabled={store.isLoading || store.isSaving}
-              onchange={() => updateMQTTTLSEnabled(settings.mqtt.tls.enabled)}
+              onchange={() => updateMQTTTLSEnabled(settings.mqtt!.tls.enabled)}
             />
 
-            {#if settings.mqtt.tls.enabled}
+            {#if settings.mqtt?.tls.enabled}
               <Checkbox
-                bind:checked={settings.mqtt.tls.skipVerify}
+                bind:checked={settings.mqtt!.tls.skipVerify}
                 label="Skip Certificate Verification"
                 disabled={store.isLoading || store.isSaving}
-                onchange={() => updateMQTTTLSSkipVerify(settings.mqtt.tls.skipVerify)}
+                onchange={() => updateMQTTTLSSkipVerify(settings.mqtt!.tls.skipVerify)}
               />
 
               <div class="alert alert-info">
@@ -557,8 +559,8 @@
                 type="button"
                 class="btn btn-outline btn-sm"
                 onclick={testMQTT}
-                disabled={!settings.mqtt.enabled ||
-                  !settings.mqtt.broker ||
+                disabled={!settings.mqtt?.enabled ||
+                  !settings.mqtt?.broker ||
                   testStates.mqtt.isRunning}
               >
                 {#if testStates.mqtt.isRunning}
@@ -569,9 +571,9 @@
                 {/if}
               </button>
               <span class="text-sm text-base-content/70">
-                {#if !settings.mqtt.enabled}
+                {#if !settings.mqtt?.enabled}
                   MQTT must be enabled to test
-                {:else if !settings.mqtt.broker}
+                {:else if !settings.mqtt?.broker}
                   MQTT broker must be specified
                 {:else if testStates.mqtt.isRunning}
                   Test in progress...
@@ -603,17 +605,17 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.observability.prometheus.enabled}
+        bind:checked={settings.observability!.prometheus.enabled}
         label="Enable Observability Integration"
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateObservabilityEnabled(settings.observability.prometheus.enabled)}
+        onchange={() => updateObservabilityEnabled(settings.observability!.prometheus.enabled)}
       />
 
-      {#if settings.observability.prometheus.enabled}
+      {#if settings.observability?.prometheus.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <TextInput
             id="observability-listen"
-            value={`0.0.0.0:${settings.observability.prometheus.port}`}
+            value={`0.0.0.0:${settings.observability!.prometheus.port}`}
             label="Listen Address"
             placeholder="0.0.0.0:8090"
             disabled={store.isLoading || store.isSaving}
@@ -634,7 +636,7 @@
     <div class="space-y-4">
       <SelectField
         id="weather-provider"
-        bind:value={settings.weather.provider}
+        bind:value={settings.weather!.provider}
         label="Weather Provider"
         options={weatherProviderOptions}
         disabled={store.isLoading || store.isSaving}
@@ -642,7 +644,7 @@
       />
 
       <!-- Provider-specific notes -->
-      {#if (settings.weather.provider as any) === 'none'}
+      {#if (settings.weather?.provider as any) === 'none'}
         <div class="alert alert-info">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -659,7 +661,7 @@
           </svg>
           <span>No weather data will be retrieved.</span>
         </div>
-      {:else if (settings.weather.provider as any) === 'yr.no'}
+      {:else if (settings.weather?.provider as any) === 'yr.no'}
         <div class="alert alert-success">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -689,7 +691,7 @@
             </p>
           </div>
         </div>
-      {:else if (settings.weather.provider as any) === 'openweather'}
+      {:else if (settings.weather?.provider as any) === 'openweather'}
         <div class="alert alert-info">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -716,7 +718,7 @@
 
         <PasswordField
           label="API Key"
-          value={settings.weather.apiKey || ''}
+          value={settings.weather!.apiKey || ''}
           onUpdate={updateWeatherApiKey}
           placeholder=""
           helpText="Your OpenWeather API key. Keep this secret!"
@@ -725,7 +727,7 @@
         />
       {/if}
 
-      {#if (settings.weather.provider as any) !== 'none'}
+      {#if (settings.weather?.provider as any) !== 'none'}
         <!-- Test Weather Provider -->
         <div class="space-y-4">
           <div class="flex items-center gap-3">
@@ -733,9 +735,9 @@
               type="button"
               class="btn btn-outline btn-sm"
               onclick={testWeather}
-              disabled={(settings.weather.provider as any) === 'none' ||
-                ((settings.weather.provider as any) === 'openweather' &&
-                  !settings.weather.apiKey) ||
+              disabled={(settings.weather?.provider as any) === 'none' ||
+                ((settings.weather?.provider as any) === 'openweather' &&
+                  !settings.weather?.apiKey) ||
                 testStates.weather.isRunning}
             >
               {#if testStates.weather.isRunning}
@@ -746,9 +748,9 @@
               {/if}
             </button>
             <span class="text-sm text-base-content/70">
-              {#if (settings.weather.provider as any) === 'none'}
+              {#if (settings.weather?.provider as any) === 'none'}
                 No weather provider selected
-              {:else if (settings.weather.provider as any) === 'openweather' && !settings.weather.apiKey}
+              {:else if (settings.weather?.provider as any) === 'openweather' && !settings.weather?.apiKey}
                 OpenWeather API key must be specified
               {:else if testStates.weather.isRunning}
                 Test in progress...
@@ -769,4 +771,5 @@
       {/if}
     </div>
   </SettingsSection>
-</div>
+  </div>
+{/if}
