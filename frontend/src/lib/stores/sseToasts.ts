@@ -3,11 +3,17 @@ import type { ToastPosition, ToastType } from './toast.js';
 import ReconnectingEventSource from 'reconnecting-eventsource';
 
 interface SSEToastData {
+	id: string;
 	message: string;
 	type: ToastType;
 	duration?: number;
-	eventType: string;
+	component?: string;
 	timestamp: string;
+	action?: {
+		label: string;
+		url?: string;
+		handler?: string;
+	};
 }
 
 // Create SSE listener for toast messages
@@ -18,13 +24,13 @@ export function initSSEToasts() {
 		return;
 	}
 
-	const sseUrl = '/api/v2/toasts/stream';
+	const sseUrl = '/api/v2/notifications/stream';
 
 	try {
 		// Create connection to SSE endpoint
 		eventSource = new ReconnectingEventSource(sseUrl, {
 			max_retry_time: 30000,
-			withCredentials: false,
+			withCredentials: true, // Authentication required for notification stream
 		});
 
 		eventSource.onopen = () => {
@@ -60,12 +66,25 @@ export function initSSEToasts() {
 				const toastData: SSEToastData = JSON.parse(messageEvent.data);
 
 				// Show the toast using the toast store
+				const actions = toastData.action ? [{
+					label: toastData.action.label,
+					onClick: () => {
+						if (toastData.action?.url) {
+							window.location.href = toastData.action.url;
+						} else if (toastData.action?.handler) {
+							// Handle custom actions if needed
+							console.log('Toast action handler:', toastData.action.handler);
+						}
+					}
+				}] : undefined;
+
 				toastActions.show(toastData.message, toastData.type, {
 					duration: toastData.duration ?? 5000,
-					position: 'top-right' as ToastPosition
+					position: 'top-right' as ToastPosition,
+					actions
 				});
-			} catch {
-				// Ignore parsing errors for toast data
+			} catch (error) {
+				console.error('Error processing toast event:', error);
 			}
 		});
 

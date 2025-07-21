@@ -130,7 +130,7 @@ routeInitializers := []struct {
 
 | Method | Route | Handler | Auth | Description |
 |--------|-------|---------|------|-------------|
-| GET | `/notifications/stream` | `StreamNotifications` | ❌⚡ | SSE notification stream |
+| GET | `/notifications/stream` | `StreamNotifications` | ✅⚡ | SSE notification & toast stream (authenticated) |
 | GET | `/notifications` | `GetNotifications` | ❌ | List notifications |
 | GET | `/notifications/:id` | `GetNotification` | ❌ | Get specific notification |
 | PUT | `/notifications/:id/read` | `MarkNotificationRead` | ❌ | Mark notification as read |
@@ -326,6 +326,36 @@ All API errors follow this structure:
 ## Rate Limiting
 
 SSE endpoints are rate limited to prevent abuse:
-- Detection streams: 1 request/second, burst of 5
-- Sound level streams: 1 request/second, burst of 5
-- Notification streams: 1 request/second, burst of 5
+- Detection streams: 10 requests/minute per IP
+- Sound level streams: 10 requests/minute per IP
+- Notification streams: 1 request/second, burst of 5 (authenticated)
+
+## Server-Sent Events (SSE)
+
+### Unified Notification Stream
+
+The `/notifications/stream` endpoint provides both notifications and toast messages:
+
+**Event Types:**
+- `notification` - System notifications (errors, warnings, info)
+- `toast` - Temporary UI messages (success, info, warning, error)
+- `connected` - Connection established
+- `heartbeat` - Keep-alive signal
+
+**Authentication:** Required (uses session or bearer token)
+
+**Toast Event Format:**
+```json
+{
+  "id": "toast-id",
+  "message": "Operation completed successfully",
+  "type": "success",
+  "duration": 5000,
+  "component": "settings",
+  "timestamp": "2024-01-01T12:00:00Z",
+  "action": {
+    "label": "View Details",
+    "url": "/details",
+    "handler": "viewDetails"
+  }
+}

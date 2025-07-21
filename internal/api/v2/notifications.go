@@ -20,6 +20,15 @@ type SSENotificationData struct {
 	EventType string `json:"eventType"`
 }
 
+// UnifiedSSEEvent represents a unified event structure for notifications and toasts
+type UnifiedSSEEvent struct {
+	Type      string           `json:"type"`      // "notification" or "toast"
+	EventName string           `json:"eventName"` // Specific event name
+	Data      any              `json:"data"`      // The actual event data
+	Timestamp time.Time        `json:"timestamp"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
+}
+
 // NotificationClient represents a connected notification SSE client
 type NotificationClient struct {
 	ID           string
@@ -59,8 +68,8 @@ func (c *Controller) SetupNotificationRoutes() {
 		},
 	}
 
-	// SSE endpoint for notification stream
-	c.Group.GET("/notifications/stream", c.StreamNotifications, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	// SSE endpoint for notification stream (authenticated - includes both notifications and toasts)
+	c.Group.GET("/notifications/stream", c.StreamNotifications, c.getEffectiveAuthMiddleware(), middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// REST endpoints for notification management
 	c.Group.GET("/notifications", c.GetNotifications)
@@ -80,12 +89,25 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		})
 	}
 
+	client, service, err := c.setupNotificationSSEClient(ctx)
+	if err != nil {
+		return err
+	}
+	
+	// Ensure cleanup happens regardless of how we exit
+	defer service.Unsubscribe(client.SubscriberCh)
+	
+	// Setup disconnect handler
+	c.setupNotificationDisconnectHandler(ctx, client)
+	
+	// Run the main event loop
+	return c.runNotificationEventLoop(ctx, client)
+}
+
+// setupNotificationSSEClient initializes the SSE client and establishes connection
+func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*NotificationClient, *notification.Service, error) {
 	// Set SSE headers
-	ctx.Response().Header().Set("Content-Type", "text/event-stream")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+	c.setNotificationSSEHeaders(ctx)
 
 	// Generate client ID
 	clientID := uuid.New().String()
@@ -93,11 +115,6 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Subscribe to notifications
 	service := notification.GetService()
 	notificationCh, notificationCtx := service.Subscribe()
-	
-	// Ensure cleanup happens regardless of how we exit (client disconnect, service shutdown, or error)
-	// Note: Unsubscribe is idempotent (safe to call multiple times) and doesn't return an error,
-	// making it ideal for defer. If the channel isn't found, it simply does nothing.
-	defer service.Unsubscribe(notificationCh)
 
 	// Create notification client
 	client := &NotificationClient{
@@ -115,43 +132,36 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		"clientId": clientID,
 		"message":  "Connected to notification stream",
 	}); err != nil {
-		// No need to unsubscribe here - defer will handle it
-		return err
+		service.Unsubscribe(notificationCh)
+		return nil, nil, err
 	}
 
 	// Log the connection
-	if c.apiLogger != nil {
-		if c.Settings != nil && c.Settings.WebServer.Debug {
-			c.apiLogger.Debug("notification SSE client connected",
-				"clientId", clientID,
-				"ip", privacy.AnonymizeIP(ctx.RealIP()),
-				"user_agent", privacy.RedactUserAgent(ctx.Request().UserAgent()))
-		} else {
-			c.apiLogger.Info("notification SSE client connected",
-				"clientId", clientID,
-				"ip", privacy.AnonymizeIP(ctx.RealIP()))
-		}
-	}
+	c.logNotificationConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), true)
 
-	// Handle client disconnect
+	return client, service, nil
+}
+
+// setNotificationSSEHeaders sets the required headers for notification SSE
+func (c *Controller) setNotificationSSEHeaders(ctx echo.Context) {
+	ctx.Response().Header().Set("Content-Type", "text/event-stream")
+	ctx.Response().Header().Set("Cache-Control", "no-cache")
+	ctx.Response().Header().Set("Connection", "keep-alive")
+	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
+	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+}
+
+// setupNotificationDisconnectHandler sets up client disconnect handling
+func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
 	go func() {
 		<-ctx.Request().Context().Done()
 		client.Done <- true
-		// No need to unsubscribe here - defer will handle it
-		if c.apiLogger != nil {
-			if c.Settings != nil && c.Settings.WebServer.Debug {
-				c.apiLogger.Debug("notification SSE client disconnected",
-					"clientId", clientID,
-					"ip", privacy.AnonymizeIP(ctx.RealIP()),
-					"reason", "context_done")
-			} else {
-				c.apiLogger.Info("notification SSE client disconnected",
-					"clientId", clientID,
-					"ip", privacy.AnonymizeIP(ctx.RealIP()))
-			}
-		}
+		c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
 	}()
+}
 
+// runNotificationEventLoop runs the main SSE event loop
+func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *NotificationClient) error {
 	// Send heartbeat every 30 seconds
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -159,41 +169,19 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Main event loop
 	for {
 		select {
-		case notif := <-notificationCh:
+		case notif := <-client.SubscriberCh:
 			if notif == nil {
 				// Channel closed, service is shutting down
 				return nil
 			}
-
-			// Send notification event
-			event := SSENotificationData{
-				Notification: notif,
-				EventType:    "notification",
-			}
-
-			if err := c.sendSSEMessage(ctx, "notification", event); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Error("failed to send notification SSE",
-						"error", err,
-						"clientId", clientID,
-					)
-				}
-				return err
-			}
 			
-			if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
-				c.apiLogger.Debug("notification sent via SSE",
-					"clientId", clientID,
-					"notification_id", notif.ID,
-					"type", notif.Type,
-					"priority", notif.Priority)
+			if err := c.processNotificationEvent(ctx, client.ID, notif); err != nil {
+				return err
 			}
 
 		case <-ticker.C:
 			// Send heartbeat
-			if err := c.sendSSEMessage(ctx, "heartbeat", map[string]string{
-				"timestamp": time.Now().Format(time.RFC3339),
-			}); err != nil {
+			if err := c.sendNotificationHeartbeat(ctx); err != nil {
 				return err
 			}
 
@@ -201,10 +189,135 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 			// Client disconnected
 			return nil
 
-		case <-notificationCtx.Done():
+		case <-client.Context.Done():
 			// Subscription cancelled
 			return nil
 		}
+	}
+}
+
+// processNotificationEvent processes a single notification event
+func (c *Controller) processNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+	// Check if this is a toast notification
+	isToast, _ := notif.Metadata["isToast"].(bool)
+	
+	if isToast {
+		return c.sendToastEvent(ctx, clientID, notif)
+	}
+	
+	return c.sendNotificationEvent(ctx, clientID, notif)
+}
+
+// sendToastEvent sends a toast event via SSE
+func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+	toastEvent := c.createToastEventData(notif)
+	
+	if err := c.sendSSEMessage(ctx, "toast", toastEvent); err != nil {
+		c.logNotificationError("failed to send toast SSE", err, clientID)
+		return err
+	}
+	
+	c.logToastSent(clientID, notif)
+	return nil
+}
+
+// sendNotificationEvent sends a notification event via SSE
+func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
+	event := SSENotificationData{
+		Notification: notif,
+		EventType:    "notification",
+	}
+
+	if err := c.sendSSEMessage(ctx, "notification", event); err != nil {
+		c.logNotificationError("failed to send notification SSE", err, clientID)
+		return err
+	}
+	
+	c.logNotificationSent(clientID, notif)
+	return nil
+}
+
+// createToastEventData creates toast event data from notification
+func (c *Controller) createToastEventData(notif *notification.Notification) map[string]any {
+	toastType, _ := notif.Metadata["toastType"].(string)
+	duration, _ := notif.Metadata["duration"].(int)
+	action, _ := notif.Metadata["action"].(*notification.ToastAction)
+	
+	toastEvent := map[string]any{
+		"id":        notif.Metadata["toastId"],
+		"message":   notif.Message,
+		"type":      toastType,
+		"timestamp": notif.Timestamp,
+		"component": notif.Component,
+	}
+	
+	if duration > 0 {
+		toastEvent["duration"] = duration
+	}
+	if action != nil {
+		toastEvent["action"] = action
+	}
+	
+	return toastEvent
+}
+
+// sendNotificationHeartbeat sends a heartbeat message
+func (c *Controller) sendNotificationHeartbeat(ctx echo.Context) error {
+	return c.sendSSEMessage(ctx, "heartbeat", map[string]string{
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
+// logNotificationConnection logs SSE client connection/disconnection events
+func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, connected bool) {
+	if c.apiLogger == nil {
+		return
+	}
+	
+	action := "connected"
+	if !connected {
+		action = "disconnected"
+	}
+	
+	if c.Settings != nil && c.Settings.WebServer.Debug && connected {
+		c.apiLogger.Debug("notification SSE client "+action,
+			"clientId", clientID,
+			"ip", privacy.AnonymizeIP(ip),
+			"user_agent", privacy.RedactUserAgent(userAgent))
+	} else {
+		c.apiLogger.Info("notification SSE client "+action,
+			"clientId", clientID,
+			"ip", privacy.AnonymizeIP(ip))
+	}
+}
+
+// logNotificationError logs SSE errors
+func (c *Controller) logNotificationError(message string, err error, clientID string) {
+	if c.apiLogger != nil {
+		c.apiLogger.Error(message, "error", err, "clientId", clientID)
+	}
+}
+
+// logToastSent logs successful toast sending
+func (c *Controller) logToastSent(clientID string, notif *notification.Notification) {
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		toastType, _ := notif.Metadata["toastType"].(string)
+		c.apiLogger.Debug("toast sent via SSE",
+			"clientId", clientID,
+			"toast_id", notif.Metadata["toastId"],
+			"type", toastType,
+			"component", notif.Component)
+	}
+}
+
+// logNotificationSent logs successful notification sending
+func (c *Controller) logNotificationSent(clientID string, notif *notification.Notification) {
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("notification sent via SSE",
+			"clientId", clientID,
+			"notification_id", notif.ID,
+			"type", notif.Type,
+			"priority", notif.Priority)
 	}
 }
 
