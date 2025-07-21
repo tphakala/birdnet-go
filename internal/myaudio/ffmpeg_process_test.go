@@ -408,8 +408,7 @@ func TestFFmpegStream_ProcessReapingAfterExit(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	// Test cleanup
 	stream.cleanupProcess()
-	// Error is expected when process exits
-	require.NoError(t, err) // EOF is treated as normal exit
+	// Note: The error from mockCmd.Start() was already checked at line 385
 
 	// Give time for any cleanup
 	time.Sleep(100 * time.Millisecond)

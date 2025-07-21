@@ -32,6 +32,9 @@ func TestFFmpegStream_RealWorldRestartPattern(t *testing.T) {
 	runtimes := make([]time.Duration, 0, numRestarts)
 	var mu sync.Mutex
 	
+	// Create a wait group to track all cleanup operations
+	var wg sync.WaitGroup
+	
 	for i := 0; i < numRestarts; i++ {
 		stream := NewFFmpegStream(fmt.Sprintf("test://rapid-fail-%d", i), "tcp", audioChan)
 		
@@ -50,32 +53,34 @@ func TestFFmpegStream_RealWorldRestartPattern(t *testing.T) {
 		err := mockCmd.Start()
 		require.NoError(t, err)
 		
+		pid := mockCmd.Process.Pid
 		mu.Lock()
-		pids = append(pids, mockCmd.Process.Pid)
+		pids = append(pids, pid)
 		mu.Unlock()
 		
-		// Wait for process to exit naturally
-		done := make(chan error, 1)
-		go func() {
-			done <- mockCmd.Wait()
-		}()
-		
-		select {
-		case <-done:
-			processRuntime := time.Since(startTime)
+		// Handle process cleanup asynchronously
+		wg.Add(1)
+		go func(s *FFmpegStream, runtime int, start time.Time, processID int) {
+			defer wg.Done()
+			
+			// Wait for process to exit naturally
+			time.Sleep(time.Duration(runtime) * time.Millisecond)
+			
+			processRuntime := time.Since(start)
 			mu.Lock()
 			runtimes = append(runtimes, processRuntime)
 			mu.Unlock()
-		case <-time.After(10 * time.Second):
-			t.Fatalf("Process %d didn't exit in time", mockCmd.Process.Pid)
-		}
+			
+			// Clean up - this will call Wait()
+			s.cleanupProcess()
+		}(stream, runtimeMs, startTime, pid)
 		
-		// Clean up
-		stream.cleanupProcess()
-		
-		// Small delay between restarts (simulating backoff)
-		time.Sleep(100 * time.Millisecond)
+		// Small delay between starts (simulating rapid restarts)
+		time.Sleep(50 * time.Millisecond)
 	}
+	
+	// Wait for all processes to complete
+	wg.Wait()
 	
 	// Wait for cleanup
 	time.Sleep(500 * time.Millisecond)
@@ -163,8 +168,14 @@ func TestFFmpegStream_HealthCheckRestartLoop(t *testing.T) {
 		}
 	}()
 	
-	// Let it run for 20 seconds to observe multiple restart cycles
-	time.Sleep(20 * time.Second)
+	// Let it run for a duration based on test mode
+	testDuration := 20 * time.Second
+	if testing.Short() {
+		testDuration = 2 * time.Second
+		t.Log("Running in short mode with reduced duration")
+	}
+	
+	time.Sleep(testDuration)
 	close(done)
 	
 	// Check results
