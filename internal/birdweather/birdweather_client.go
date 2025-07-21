@@ -16,6 +16,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -482,7 +483,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	// Use the validated FFmpeg path from settings.
 	// This path is determined during config validation (ValidateAudioSettings)
 	// and is either an explicit valid path, a path found in PATH, or empty if unavailable.
-	ffmpegPathForExec := b.Settings.Realtime.Audio.FfmpegPath
+	ffmpegPathForExec, _ := exec.LookPath(conf.GetFfmpegBinaryName())
 	ffmpegAvailable := ffmpegPathForExec != ""
 	serviceLogger.Debug("Checking FFmpeg availability", "path", ffmpegPathForExec, "available", ffmpegAvailable)
 
