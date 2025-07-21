@@ -116,6 +116,7 @@ routeInitializers := []struct {
 | POST | `/integrations/mqtt/test` | `TestMQTTConnection` | ✅ | Test MQTT connection |
 | GET | `/integrations/birdweather/status` | `GetBirdWeatherStatus` | ✅ | BirdWeather integration status |
 | POST | `/integrations/birdweather/test` | `TestBirdWeatherConnection` | ✅ | Test BirdWeather connection |
+| POST | `/integrations/weather/test` | `TestWeatherConnection` | ✅ | Test weather provider connection |
 
 ### Media (`media.go`)
 

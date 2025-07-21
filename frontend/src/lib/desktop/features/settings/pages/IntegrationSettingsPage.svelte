@@ -6,9 +6,12 @@
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
+  import SettingsButton from '$lib/desktop/components/ui/SettingsButton.svelte';
+  import SettingsNote from '$lib/desktop/components/ui/SettingsNote.svelte';
   import { settingsStore, settingsActions, integrationSettings, realtimeSettings } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
+  import { getCsrfToken } from '$lib/utils/api.js';
 
   let settings = $derived(
     $integrationSettings || {
@@ -28,6 +31,7 @@
         username: '',
         password: '',
         topic: 'birdnet',
+        retain: false,
         tls: {
           enabled: false,
           skipVerify: false,
@@ -133,12 +137,6 @@
     });
   }
 
-  function updateBirdWeatherDebug(debug: boolean) {
-    settingsActions.updateSection('realtime', {
-      birdweather: { ...settings.birdweather!, debug },
-    });
-  }
-
   // MQTT update handlers
   function updateMQTTEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
@@ -179,6 +177,12 @@
   function updateMQTTTLSSkipVerify(skipVerify: boolean) {
     settingsActions.updateSection('realtime', {
       mqtt: { ...settings.mqtt!, tls: { ...settings.mqtt!.tls, skipVerify } },
+    });
+  }
+
+  function updateMQTTRetain(retain: boolean) {
+    settingsActions.updateSection('realtime', {
+      mqtt: { ...(settings.mqtt as any), retain },
     });
   }
 
@@ -261,7 +265,7 @@
       testStates.birdweather.isRunning = false;
       setTimeout(() => {
         testStates.birdweather.stages = [];
-      }, 5000);
+      }, 15000);
     }
   }
 
@@ -294,38 +298,118 @@
       testStates.mqtt.isRunning = false;
       setTimeout(() => {
         testStates.mqtt.stages = [];
-      }, 5000);
+      }, 15000);
     }
   }
 
   async function testWeather() {
     testStates.weather.isRunning = true;
-    testStates.weather.stages = [
-      { id: 'starting', title: 'Starting Test', status: 'in_progress' },
-      { id: 'connectivity', title: 'API Connectivity', status: 'pending' },
-      { id: 'auth', title: 'Authentication', status: 'pending' },
-      { id: 'fetch', title: 'Weather Data Fetch', status: 'pending' },
-      { id: 'parse', title: 'Data Parsing', status: 'pending' },
-    ];
+    testStates.weather.stages = [];
 
     try {
-      for (let i = 0; i < testStates.weather.stages.length; i++) {
-        testStates.weather.stages[i].status = 'in_progress';
-        await new Promise(resolve => setTimeout(resolve, 700));
-        testStates.weather.stages[i].status = 'completed';
-        testStates.weather.stages[i].message = 'Success';
+      // Prepare test payload
+      const testPayload = {
+        provider: settings.weather!.provider,
+        pollInterval: settings.weather!.pollInterval || 60,
+        debug: settings.weather!.debug || false,
+        openWeather: {
+          apiKey: settings.weather!.openWeather.apiKey || '',
+          endpoint: settings.weather!.openWeather.endpoint || '',
+          units: settings.weather!.openWeather.units || 'metric',
+          language: settings.weather!.openWeather.language || 'en',
+        },
+      };
+
+      // Make request to the real API with CSRF token
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+      });
+      
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
       }
-    } catch {
-      const currentStage = testStates.weather.stages.find(s => s.status === 'in_progress');
-      if (currentStage) {
-        currentStage.status = 'error';
-        currentStage.error = 'Test failed';
+
+      const response = await fetch('/api/v2/integrations/weather/test', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify(testPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Read the streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Failed to read response stream');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Parse each line as JSON
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(line => line.trim());
+
+        for (const line of lines) {
+          try {
+            const stageResult = JSON.parse(line);
+            
+            // Find existing stage or create new one
+            let existingIndex = testStates.weather.stages.findIndex(s => s.id === stageResult.id);
+            if (existingIndex === -1) {
+              // Add new stage
+              testStates.weather.stages.push({
+                id: stageResult.id,
+                title: stageResult.title,
+                status: stageResult.status,
+                message: stageResult.message,
+                error: stageResult.error,
+              });
+            } else {
+              // Update existing stage
+              testStates.weather.stages[existingIndex] = {
+                ...testStates.weather.stages[existingIndex],
+                status: stageResult.status,
+                message: stageResult.message,
+                error: stageResult.error,
+              };
+            }
+          } catch (parseError) {
+            console.error('Failed to parse stage result:', parseError, line);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Weather test failed:', error);
+      
+      // Add error stage if no stages exist
+      if (testStates.weather.stages.length === 0) {
+        testStates.weather.stages.push({
+          id: 'error',
+          title: 'Connection Error',
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+      } else {
+        // Mark current stage as failed
+        const lastStage = testStates.weather.stages[testStates.weather.stages.length - 1];
+        if (lastStage.status === 'in_progress') {
+          lastStage.status = 'error';
+          lastStage.error = error instanceof Error ? error.message : 'Unknown error occurred';
+        }
       }
     } finally {
       testStates.weather.isRunning = false;
       setTimeout(() => {
         testStates.weather.stages = [];
-      }, 5000);
+      }, 15000);
     }
   }
 </script>
@@ -402,31 +486,19 @@
           />
         </div>
 
-        <Checkbox
-          bind:checked={settings.birdweather!.debug}
-          label="Enable Debug Mode"
-          disabled={store.isLoading || store.isSaving}
-          onchange={() => updateBirdWeatherDebug(settings.birdweather!.debug)}
-        />
-
         <!-- Test Connection -->
         <div class="space-y-4">
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
+            <SettingsButton
               onclick={testBirdWeather}
+              loading={testStates.birdweather.isRunning}
+              loadingText="Testing..."
               disabled={!settings.birdweather?.enabled ||
                 !settings.birdweather?.id ||
                 testStates.birdweather.isRunning}
             >
-              {#if testStates.birdweather.isRunning}
-                <div class="loading loading-spinner loading-sm"></div>
-                Testing...
-              {:else}
-                Test BirdWeather Connection
-              {/if}
-            </button>
+              Test BirdWeather Connection
+            </SettingsButton>
             <span class="text-sm text-base-content/70">
               {#if !settings.birdweather?.enabled}
                 BirdWeather must be enabled to test
@@ -517,27 +589,21 @@
           <div class="border-t border-base-300 pt-4 mt-2">
             <h3 class="text-sm font-medium mb-3">Message Settings</h3>
 
+            <Checkbox
+              bind:checked={(settings.mqtt as any).retain}
+              label="Retain Messages"
+              disabled={store.isLoading || store.isSaving}
+              onchange={() => updateMQTTRetain((settings.mqtt as any).retain || false)}
+            />
+
             <!-- Note about MQTT Retain for HomeAssistant -->
-            <div class="alert alert-info">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="stroke-current shrink-0 h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+            <SettingsNote>
               <span
                 ><strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for
                 Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when
                 Home Assistant restarts.</span
               >
-            </div>
+            </SettingsNote>
           </div>
 
           <!-- TLS/SSL Security Section -->
@@ -587,21 +653,16 @@
           <!-- Test Connection -->
           <div class="space-y-4">
             <div class="flex items-center gap-3">
-              <button
-                type="button"
-                class="btn btn-outline btn-sm"
+              <SettingsButton
                 onclick={testMQTT}
+                loading={testStates.mqtt.isRunning}
+                loadingText="Testing..."
                 disabled={!settings.mqtt?.enabled ||
                   !settings.mqtt?.broker ||
                   testStates.mqtt.isRunning}
               >
-                {#if testStates.mqtt.isRunning}
-                  <div class="loading loading-spinner loading-sm"></div>
-                  Testing...
-                {:else}
-                  Test MQTT Connection
-                {/if}
-              </button>
+                Test MQTT Connection
+              </SettingsButton>
               <span class="text-sm text-base-content/70">
                 {#if !settings.mqtt?.enabled}
                   MQTT must be enabled to test
@@ -677,28 +738,26 @@
 
       <!-- Provider-specific notes -->
       {#if (settings.weather?.provider as any) === 'none'}
-        <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg">
+        <SettingsNote>
           <span>No weather data will be retrieved.</span>
-        </div>
+        </SettingsNote>
       {:else if (settings.weather?.provider as any) === 'yrno'}
-        <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg">
-          <div>
-            <p>
-              Weather forecast data is provided by Yr.no, a joint service by the Norwegian
-              Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).
-            </p>
-            <p class="mt-2">
-              Yr is a free weather data service. For more information, visit <a
-                href="https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr"
-                class="link link-primary"
-                target="_blank"
-                rel="noopener noreferrer">Yr.no</a
-              >.
-            </p>
-          </div>
-        </div>
+        <SettingsNote>
+          <p>
+            Weather forecast data is provided by Yr.no, a joint service by the Norwegian
+            Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).
+          </p>
+          <p class="mt-2">
+            Yr is a free weather data service. For more information, visit <a
+              href="https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr"
+              class="link link-primary"
+              target="_blank"
+              rel="noopener noreferrer">Yr.no</a
+            >.
+          </p>
+        </SettingsNote>
       {:else if (settings.weather?.provider as any) === 'openweather'}
-        <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg">
+        <SettingsNote>
           <span
             >Use of OpenWeather requires an API key, sign up for a free API key at <a
               href="https://home.openweathermap.org/users/sign_up"
@@ -707,7 +766,7 @@
               rel="noopener noreferrer">OpenWeather</a
             >.</span
           >
-        </div>
+        </SettingsNote>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <PasswordField
@@ -736,22 +795,17 @@
         <!-- Test Weather Provider -->
         <div class="space-y-4">
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
+            <SettingsButton
               onclick={testWeather}
+              loading={testStates.weather.isRunning}
+              loadingText="Testing..."
               disabled={(settings.weather?.provider as any) === 'none' ||
                 ((settings.weather?.provider as any) === 'openweather' &&
                   !settings.weather?.openWeather?.apiKey) ||
                 testStates.weather.isRunning}
             >
-              {#if testStates.weather.isRunning}
-                <div class="loading loading-spinner loading-sm"></div>
-                Testing...
-              {:else}
-                Test Weather Provider
-              {/if}
-            </button>
+              Test Weather Provider
+            </SettingsButton>
             <span class="text-sm text-base-content/70">
               {#if (settings.weather?.provider as any) === 'none'}
                 No weather provider selected
