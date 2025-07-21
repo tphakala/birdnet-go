@@ -311,7 +311,7 @@ func TestFFmpegStream_CircuitBreakerBehavior(t *testing.T) {
 
 	// Simulate failures to trigger circuit breaker
 	for i := 0; i < 12; i++ { // More than circuitBreakerThreshold (10)
-		stream.recordFailure() // Simulate rapid failures
+		stream.recordFailure(2 * time.Second) // Simulate rapid failures
 	}
 
 	// Circuit should now be open
