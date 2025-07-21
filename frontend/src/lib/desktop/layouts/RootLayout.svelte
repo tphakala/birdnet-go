@@ -8,7 +8,6 @@
   import { csrf as csrfStore } from '$lib/stores/csrf';
   import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
   import { sseNotifications } from '$lib/stores/sseNotifications';
-  import { initSSEToasts } from '$lib/stores/sseToasts';
 
   interface Props {
     title?: string;
@@ -41,8 +40,7 @@
     // Initialize auth state
     authStore.init(securityEnabled, accessAllowed);
 
-    // Initialize SSE toasts for hot reload notifications
-    initSSEToasts();
+    // SSE notifications are auto-initialized when imported
 
     // Set theme from localStorage
     const savedTheme = globalThis.localStorage.getItem('theme');

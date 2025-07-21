@@ -143,8 +143,8 @@ export interface EqualizerFilter {
 }
 
 export interface ExportSettings {
-  format: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus';
-  quality: string;
+  type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus';
+  bitrate: string;
   enabled: boolean;
   debug: boolean;
   path: string;
@@ -233,10 +233,8 @@ export interface WeatherSettings {
 }
 
 export interface SecuritySettings {
-  autoTLS: {
-    enabled: boolean;
-    host: string;
-  };
+  host: string;
+  autoTls: boolean;
   basicAuth: {
     enabled: boolean;
     username: string;
@@ -353,7 +351,7 @@ export interface LogConfig {
 // Telemetry settings
 export interface TelemetrySettings {
   enabled: boolean;
-  endpoint?: string;
+  listen?: string;  // e.g., "0.0.0.0:8090"
 }
 
 // Monitoring settings
@@ -494,8 +492,8 @@ function createEmptySettings(): SettingsFormData {
         soxPath: '',
         streamTransport: 'auto',
         export: {
-          format: 'wav',
-          quality: '96k',
+          type: 'wav',
+          bitrate: '96k',
           enabled: false,
           debug: false,
           path: 'clips/',
@@ -574,10 +572,8 @@ function createEmptySettings(): SettingsFormData {
     },
     webServer: {},
     security: {
-      autoTLS: {
-        enabled: false,
-        host: '',
-      },
+      host: '',
+      autoTls: false,
       basicAuth: {
         enabled: false,
         username: '',
@@ -675,7 +671,14 @@ export const rtspSettings = derived(settingsStore, $store => $store.formData.rea
 export const integrationSettings = derived(settingsStore, $store => ({
   birdweather: $store.formData.realtime?.birdweather,
   mqtt: $store.formData.realtime?.mqtt,
-  observability: $store.formData.realtime?.monitoring, // assuming monitoring maps to observability
+  observability: {
+    prometheus: {
+      enabled: $store.formData.realtime?.telemetry?.enabled || false,
+      port: $store.formData.realtime?.telemetry?.listen ? 
+        parseInt($store.formData.realtime.telemetry.listen.split(':')[1] || '8090') : 8090,
+      path: '/metrics'
+    }
+  },
   weather: $store.formData.realtime?.weather,
 }));
 
