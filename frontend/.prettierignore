@@ -6,3 +6,4 @@ package/
 *.config.js
 *.min.js
 *.min.css
+src/lib/desktop/features/settings/pages/SecuritySettingsPage.svelte
