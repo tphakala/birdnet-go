@@ -2,8 +2,8 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
-  import SubnetInput from '$lib/desktop/components/forms/SubnetInput.svelte';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import SettingsNote from '$lib/desktop/components/ui/SettingsNote.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -35,7 +35,7 @@
     },
     allowSubnetBypass: {
       enabled: false,
-      subnets: [],
+      subnet: '',
     },
   };
 
@@ -203,10 +203,10 @@
     });
   }
 
-  function updateSubnetBypassSubnets(subnets: string[]) {
+  function updateSubnetBypassSubnet(subnet: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      allowSubnetBypass: { ...settings.allowSubnetBypass, subnets },
+      allowSubnetBypass: { ...settings.allowSubnetBypass, subnet },
     });
   }
 </script>
@@ -247,29 +247,14 @@
         />
 
         {#if settings.autoTls}
-          <div class="alert alert-info mt-4">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="stroke-current shrink-0 h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <div>
-              <h4 class="font-bold">AutoTLS Requirements:</h4>
-              <ul class="text-sm list-disc list-inside mt-1">
-                <li>A registered domain name is required</li>
-                <li>Domain must point to this server's public IP</li>
-                <li>Ports 80 and 443 must be accessible from the internet</li>
-              </ul>
-            </div>
-          </div>
+          <SettingsNote>
+            <p><strong>AutoTLS Requirements:</strong></p>
+            <ul class="list-disc list-inside mt-1">
+              <li>A registered domain name is required</li>
+              <li>Domain must point to this server's public IP</li>
+              <li>Ports 80 and 443 must be accessible from the internet</li>
+            </ul>
+          </SettingsNote>
         {/if}
       </div>
     </div>
@@ -512,15 +497,17 @@
 
       {#if settings.allowSubnetBypass?.enabled}
         <div class="ml-7">
-          <SubnetInput
-            label=""
-            subnets={settings.allowSubnetBypass.subnets}
-            onUpdate={updateSubnetBypassSubnets}
+          <TextInput
+            id="allowed-subnet"
+            bind:value={settings.allowSubnetBypass.subnet}
+            label="Allowed Subnets"
             placeholder="Enter a CIDR subnet (e.g. 192.168.1.0/24)"
-            helpText="Allowed network ranges to bypass the login (CIDR notation, comma-separated list)"
             disabled={store.isLoading || store.isSaving}
-            maxItems={5}
+            onchange={() => updateSubnetBypassSubnet(settings.allowSubnetBypass.subnet || '')}
           />
+          <div class="text-sm text-base-content/70 mt-1">
+            Allowed network ranges to bypass the login (CIDR notation, comma-separated list)
+          </div>
         </div>
 
         <div class="alert alert-warning">
