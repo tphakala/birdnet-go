@@ -31,8 +31,8 @@
   // Track changes for each section separately
   let sentryHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.support?.sentry,
-      (store.formData as any)?.support?.sentry
+      (store.originalData as any)?.sentry,
+      (store.formData as any)?.sentry
     )
   );
 
@@ -69,8 +69,9 @@
 
   // Sentry update handlers
   function updateSentryEnabled(enabled: boolean) {
-    settingsActions.updateSection('support', {
-      sentry: { ...settings.sentry, enabled },
+    settingsActions.updateSection('sentry', {
+      ...settings.sentry!, 
+      enabled
     });
   }
 
@@ -166,7 +167,12 @@
   }
 </script>
 
-<div class="space-y-4">
+{#if store.isLoading}
+  <div class="flex items-center justify-center py-12">
+    <div class="loading loading-spinner loading-lg"></div>
+  </div>
+{:else}
+  <div class="space-y-4">
   <!-- Error Tracking & Telemetry Section -->
   <SettingsSection
     title="Error Tracking & Telemetry"
@@ -176,20 +182,7 @@
   >
     <div class="space-y-4">
       <!-- Privacy Notice -->
-      <div class="alert alert-info shadow-sm">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="stroke-current shrink-0 h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
+      <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-sm">
         <div>
           <h3 class="font-bold">Privacy-First Error Tracking</h3>
           <div class="text-sm mt-1">
@@ -209,35 +202,16 @@
 
       <!-- Enable Error Tracking -->
       <Checkbox
-        bind:checked={settings.sentry.enabled}
+        bind:checked={settings.sentry!.enabled}
         label="Enable Error Tracking (Opt-in)"
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateSentryEnabled(settings.sentry.enabled)}
+        onchange={() => updateSentryEnabled(settings.sentry!.enabled)}
       />
 
       <!-- System ID Display -->
       <div class="form-control w-full mt-4">
         <label class="label" for="systemID">
           <span class="label-text">Your System ID</span>
-          <div
-            class="tooltip"
-            data-tip="This unique identifier helps developers track errors from your system. Share this ID when reporting issues on GitHub if you want your telemetry data to be identifiable for debugging."
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 text-info"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
         </label>
         <div class="join">
           <input
@@ -272,37 +246,6 @@
           >
         </div>
       </div>
-
-      <!-- Sentry Configuration (when enabled) -->
-      {#if settings.sentry.enabled}
-        <div class="grid grid-cols-1 gap-4 mt-4">
-          <div class="alert alert-success">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="stroke-current shrink-0 h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <div>
-              <h3 class="font-bold">Error Tracking Enabled</h3>
-              <div class="text-sm mt-1">
-                <p>
-                  BirdNET-Go will now automatically report errors to help developers identify and
-                  fix issues in BirdNET-Go.
-                </p>
-                <p class="mt-2">Your errors will be tagged with your System ID shown above.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
     </div>
   </SettingsSection>
 
@@ -483,7 +426,7 @@
             </div>
 
             <!-- Upload Option (only shown if telemetry is enabled) -->
-            {#if settings.sentry.enabled}
+            {#if settings.sentry!.enabled}
               <div class="mt-4">
                 <Checkbox
                   bind:checked={supportDump.uploadToSentry}
@@ -681,48 +624,7 @@
           </div>
         </div>
       </div>
-
-      <!-- Privacy Notice -->
-      <div class="alert alert-info mt-4">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="stroke-current shrink-0 h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-        <div>
-          <h3 class="font-bold">Privacy & Data Protection</h3>
-          <div class="text-sm mt-1">
-            <p>Support reports are designed to protect your privacy:</p>
-            <ul class="list-disc list-inside mt-2 space-y-1">
-              <li>Passwords, API keys, and tokens are automatically removed</li>
-              <li>No audio recordings or bird detection data is included</li>
-              <li>Only application logs and scrubbed configuration are collected</li>
-              <li>Data is encrypted in transit and at rest</li>
-              <li>Uploaded data is retained for 90 days in Sentry's EU data center</li>
-              <li>You can download the report locally before deciding to upload</li>
-            </ul>
-            <p class="mt-2 text-xs">
-              Learn more about <a
-                href="https://docs.sentry.io/organization/data-storage-location/"
-                target="_blank"
-                class="link link-primary">Sentry's data storage</a
-              >
-              and
-              <a href="https://sentry.io/security/" target="_blank" class="link link-primary"
-                >security practices</a
-              >.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   </SettingsSection>
-</div>
+  </div>
+{/if}

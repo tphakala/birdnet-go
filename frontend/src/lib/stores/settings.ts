@@ -226,10 +226,19 @@ export interface ObservabilitySettings {
   };
 }
 
-export interface WeatherSettings {
-  provider: 'none' | 'yr.no' | 'openweather';
-  apiKey?: string;
+export interface OpenWeatherSettings {
   enabled: boolean;
+  apiKey: string;
+  endpoint: string;
+  units: string;
+  language: string;
+}
+
+export interface WeatherSettings {
+  provider: 'none' | 'yrno' | 'openweather';
+  pollInterval: number;
+  debug: boolean;
+  openWeather: OpenWeatherSettings;
 }
 
 export interface SecuritySettings {
@@ -257,14 +266,8 @@ export interface OAuthSettings {
 }
 
 export interface SpeciesSettings {
-  include: {
-    enabled: boolean;
-    species: string[];
-  };
-  exclude: {
-    enabled: boolean;
-    species: string[];
-  };
+  include: string[];
+  exclude: string[];
   config: Record<string, SpeciesConfig>;
 }
 
@@ -546,19 +549,21 @@ function createEmptySettings(): SettingsFormData {
         },
       },
       species: {
-        include: {
-          enabled: false,
-          species: [],
-        },
-        exclude: {
-          enabled: false,
-          species: [],
-        },
+        include: [],
+        exclude: [],
         config: {},
       },
       weather: {
         provider: 'none',
-        enabled: false,
+        pollInterval: 60,
+        debug: false,
+        openWeather: {
+          enabled: false,
+          apiKey: '',
+          endpoint: 'https://api.openweathermap.org/data/2.5/weather',
+          units: 'metric',
+          language: 'en',
+        },
       },
       dashboard: {
         thumbnails: {
@@ -673,7 +678,7 @@ export const integrationSettings = derived(settingsStore, $store => ({
   mqtt: $store.formData.realtime?.mqtt,
   observability: {
     prometheus: {
-      enabled: $store.formData.realtime?.telemetry?.enabled || false,
+      enabled: $store.formData.realtime?.telemetry?.enabled ?? false,
       port: $store.formData.realtime?.telemetry?.listen ? 
         parseInt($store.formData.realtime.telemetry.listen.split(':')[1] || '8090') : 8090,
       path: '/metrics'
@@ -713,10 +718,8 @@ export const settingsActions = {
   },
 
   updateSection<K extends keyof SettingsFormData>(section: K, data: Partial<SettingsFormData[K]>) {
-    console.log(`Updating section '${section}' with data:`, data);
     settingsStore.update(state => {
       const newSectionData = { ...(state.formData[section] || {}), ...data };
-      console.log(`New ${section} data:`, newSectionData);
       return {
         ...state,
         formData: {
