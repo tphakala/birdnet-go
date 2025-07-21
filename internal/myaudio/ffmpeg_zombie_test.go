@@ -39,7 +39,7 @@ func TestFFmpegStream_ZombieCreationOnProcessExit(t *testing.T) {
 	pid := cmd.Process.Pid
 	t.Logf("Started process PID: %d", pid)
 	
-	// Wait for process to exit naturally
+	// Wait for process to exit naturally (don't call Wait, let cleanup do it)
 	time.Sleep(200 * time.Millisecond)
 	
 	// Check if process became a zombie before cleanup
@@ -47,11 +47,20 @@ func TestFFmpegStream_ZombieCreationOnProcessExit(t *testing.T) {
 		t.Logf("Process %d is already a zombie before cleanup", pid)
 	}
 	
-	// Now cleanup
-	stream.cleanupProcess()
+	// Now cleanup with synchronization
+	cleanupDone := make(chan struct{})
+	go func() {
+		stream.cleanupProcess()
+		close(cleanupDone)
+	}()
 	
-	// Give time for cleanup to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for cleanup to complete
+	select {
+	case <-cleanupDone:
+		// Cleanup completed
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cleanup timeout")
+	}
 	
 	// Verify no zombie
 	assertNoZombieProcess(t, pid)
@@ -65,10 +74,16 @@ func TestFFmpegStream_ZombiePreventionWithWaitTimeout(t *testing.T) {
 	}
 
 	// Track all PIDs we create
-	pids := make([]int, 0, 3)
+	iterations := 3
+	if testing.Short() {
+		iterations = 1
+		t.Log("Running in short mode with reduced iterations")
+	}
+	
+	pids := make([]int, 0, iterations)
 	var pidMu sync.Mutex
 	
-	for i := 0; i < 3; i++ {
+	for i := range iterations {
 		audioChan := make(chan UnifiedAudioData, 10)
 		stream := NewFFmpegStream(fmt.Sprintf("test://zombie-timeout-%d", i), "tcp", audioChan)
 		
@@ -127,12 +142,13 @@ func TestFFmpegStream_ZombieAccumulationDuringRestarts(t *testing.T) {
 	const numRestarts = 10
 	pids := make([]int, 0, numRestarts)
 	pidMu := sync.Mutex{}
+	wg := sync.WaitGroup{}
 	
 	audioChan := make(chan UnifiedAudioData, 10)
 	defer close(audioChan)
 	
 	// Simulate multiple restart cycles
-	for i := 0; i < numRestarts; i++ {
+	for i := range numRestarts {
 		stream := NewFFmpegStream(fmt.Sprintf("test://accumulation-%d", i), "tcp", audioChan)
 		
 		// Create a process that exits quickly
@@ -153,15 +169,19 @@ func TestFFmpegStream_ZombieAccumulationDuringRestarts(t *testing.T) {
 		// Don't wait for process to complete - simulate quick restarts
 		// This mimics the scenario where ffmpeg crashes repeatedly
 		
-		// Minimal cleanup attempt
-		go stream.cleanupProcess()
+		// Minimal cleanup attempt with tracking
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stream.cleanupProcess()
+		}()
 		
 		// Small delay between restarts
 		time.Sleep(50 * time.Millisecond)
 	}
 	
 	// Wait for all cleanups to complete
-	time.Sleep(2 * time.Second)
+	wg.Wait()
 	
 	// Count zombies
 	pidMu.Lock()
@@ -193,7 +213,7 @@ func TestFFmpegStream_CleanupGoroutineLeak(t *testing.T) {
 	defer close(audioChan)
 	
 	// Create multiple streams with timeout scenarios
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		stream := NewFFmpegStream(fmt.Sprintf("test://goroutine-leak-%d", i), "tcp", audioChan)
 		
 		// Create a process
@@ -282,7 +302,7 @@ func TestFFmpegStream_ProcessStateTransitions(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			state := getProcessState(t, pid)
 			if state != "" {
 				states = append(states, state)
