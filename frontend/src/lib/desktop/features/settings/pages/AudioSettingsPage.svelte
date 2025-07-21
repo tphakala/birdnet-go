@@ -29,8 +29,8 @@
         enabled: false,
         debug: false,
         path: 'clips/',
-        format: 'wav' as const,
-        quality: '96k',
+        type: 'wav' as const,
+        bitrate: '96k',
       },
       retention: {
         policy: 'none',
@@ -91,6 +91,31 @@
 
   // Audio source options - map to actual device names
   let audioDevices = $state<Array<{ Index: number; Name: string }>>([]);
+  
+  // Equalizer filter configuration (static from backend)
+  const eqFilterConfig: Record<string, { Parameters: Array<{ Name: string; Label: string; Type: string; Unit?: string; Min: number; Max: number; Default: number }> }> = {
+    lowpass: {
+      Parameters: [
+        { Name: "frequency", Label: "Cutoff Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 15000 },
+        { Name: "q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: 0.707 },
+      ]
+    },
+    highpass: {
+      Parameters: [
+        { Name: "frequency", Label: "Cutoff Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 100 },
+        { Name: "q", Label: "Q Factor", Type: "number", Min: 0.1, Max: 10, Default: 0.707 },
+      ]
+    }
+  };
+  
+  // New filter state for adding filters
+  let newFilter = $state({
+    id: '',
+    type: '' as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop' | '',
+    frequency: 0,
+    q: 0,
+    gain: 0,
+  });
 
   // Fetch audio devices on mount
   $effect(() => {
@@ -133,7 +158,7 @@
   // Update handlers
   function updateAudioSource(source: string) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, source },
+      audio: { ...$audioSettings!, source },
     });
   }
 
@@ -151,32 +176,32 @@
 
   function updateExportEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, export: { ...settings.audio.export, enabled } },
+      audio: { ...$audioSettings!, export: { ...settings.audio.export, enabled } },
     });
   }
 
-  function updateExportFormat(format: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus') {
+  function updateExportFormat(type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus') {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, export: { ...settings.audio.export, format } },
+      audio: { ...$audioSettings!, export: { ...settings.audio.export, type } },
     });
   }
 
-  function updateExportQuality(quality: string) {
+  function updateExportBitrate(bitrate: string) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, export: { ...settings.audio.export, quality } },
+      audio: { ...$audioSettings!, export: { ...settings.audio.export, bitrate } },
     });
   }
 
   // Update retention settings
   function updateRetentionPolicy(policy: string) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, retention: { ...retentionSettings, policy } },
+      audio: { ...$audioSettings!, retention: { ...retentionSettings, policy } },
     });
   }
 
   function updateRetentionMaxAge(maxAge: string) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, retention: { ...retentionSettings, maxAge } },
+      audio: { ...$audioSettings!, retention: { ...retentionSettings, maxAge } },
     });
   }
 
@@ -186,24 +211,96 @@
       maxUsage = maxUsage + '%';
     }
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, retention: { ...retentionSettings, maxUsage } },
+      audio: { ...$audioSettings!, retention: { ...retentionSettings, maxUsage } },
     });
   }
 
   function updateRetentionMinClips(minClips: number) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, retention: { ...retentionSettings, minClips } },
+      audio: { ...$audioSettings!, retention: { ...retentionSettings, minClips } },
     });
   }
 
   function updateRetentionKeepSpectrograms(keepSpectrograms: boolean) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings, retention: { ...retentionSettings, keepSpectrograms } },
+      audio: { ...$audioSettings!, retention: { ...retentionSettings, keepSpectrograms } },
     });
+  }
+
+  // Equalizer functions
+  function getEqFilterParameters(filterType: string) {
+    return eqFilterConfig[filterType]?.Parameters || [];
+  }
+
+  function addNewFilter() {
+    if (!newFilter.type) return;
+    
+    const filterWithId = {
+      ...newFilter,
+      id: `filter-${Date.now()}`,
+      type: newFilter.type as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop'
+    };
+    
+    const filters = [...(settings.audio.equalizer.filters || []), filterWithId];
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...$audioSettings!,
+        equalizer: { ...settings.audio.equalizer, filters }
+      }
+    });
+    
+    // Reset new filter form
+    newFilter = { id: '', type: '', frequency: 0, q: 0, gain: 0 };
+  }
+
+  function removeFilter(index: number) {
+    const filters = settings.audio.equalizer.filters.filter((_, i) => i !== index);
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...$audioSettings!,
+        equalizer: { ...settings.audio.equalizer, filters }
+      }
+    });
+  }
+
+  function updateFilterParameter(index: number, paramName: string, value: any) {
+    const filters = [...settings.audio.equalizer.filters];
+    filters[index] = { ...filters[index], [paramName.toLowerCase()]: value };
+    
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...$audioSettings!,
+        equalizer: { ...settings.audio.equalizer, filters }
+      }
+    });
+  }
+
+  function getFilterDefaults(filterType: string) {
+    if (!filterType) {
+      newFilter = { id: '', type: '', frequency: 0, q: 0, gain: 0 };
+      return;
+    }
+    
+    const parameters = getEqFilterParameters(filterType);
+    const updatedFilter = { id: '', type: filterType as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop', frequency: 0, q: 0, gain: 0 };
+    
+    parameters.forEach((param) => {
+      const paramName = param.Name.toLowerCase() as keyof typeof updatedFilter;
+      if (paramName in updatedFilter && typeof updatedFilter[paramName] === 'number') {
+        (updatedFilter as any)[paramName] = param.Default;
+      }
+    });
+    
+    newFilter = updatedFilter;
   }
 </script>
 
-<div class="space-y-4">
+{#if store.isLoading}
+  <div class="flex items-center justify-center py-12">
+    <div class="loading loading-spinner loading-lg"></div>
+  </div>
+{:else}
+  <div class="space-y-4">
   <!-- Audio Capture Section -->
   <SettingsSection
     title="Audio Capture"
@@ -282,11 +379,167 @@
         onchange={() =>
           settingsActions.updateSection('realtime', {
             audio: {
-              ...$audioSettings,
+              ...$audioSettings!,
               equalizer: { ...settings.audio.equalizer, enabled: settings.audio.equalizer.enabled },
             },
           })}
       />
+
+      {#if settings.audio.equalizer.enabled}
+        <div class="space-y-4">
+          <!-- Existing filters -->
+          {#each settings.audio.equalizer.filters || [] as filter, index}
+            <div class="border border-base-300 rounded-lg p-4 bg-base-200">
+              <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <!-- Filter Type -->
+                <div class="flex flex-col">
+                  <div class="label">
+                    <span class="label-text">Filter Type</span>
+                  </div>
+                  <div class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300">
+                    {filter.type} Filter
+                  </div>
+                </div>
+
+                <!-- Dynamic parameters based on filter type -->
+                {#each getEqFilterParameters(filter.type) as param}
+                  <div class="flex flex-col">
+                    
+                    {#if param.Label === 'Attenuation'}
+                      <!-- Special handling for Attenuation (Passes) -->
+                      <SelectField
+                        id="filter-{index}-{param.Name}"
+                        value={(filter as any)[param.Name.toLowerCase()]}
+                        onchange={(value) => updateFilterParameter(index, param.Name, parseInt(value))}
+                        options={[
+                          { value: '0', label: '0dB' },
+                          { value: '1', label: '12dB' },
+                          { value: '2', label: '24dB' },
+                          { value: '3', label: '36dB' },
+                          { value: '4', label: '48dB' },
+                        ]}
+                        className="select-sm"
+                        disabled={store.isLoading || store.isSaving}
+                        label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                      />
+                    {:else}
+                      <!-- Regular number input -->
+                      <NumberField
+                        value={(filter as any)[param.Name.toLowerCase()] || param.Default}
+                        onUpdate={(value) => updateFilterParameter(index, param.Name, value)}
+                        min={param.Min}
+                        max={param.Max}
+                        step={param.Type === 'float' ? 0.1 : 1}
+                        disabled={store.isLoading || store.isSaving}
+                        label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                      />
+                    {/if}
+                  </div>
+                {/each}
+
+                <!-- Remove button -->
+                <div class="flex flex-col items-end">
+                  <div class="label">
+                    <span class="label-text">&nbsp;</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-error btn-sm w-full md:w-24"
+                    onclick={() => removeFilter(index)}
+                    disabled={store.isLoading || store.isSaving}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          {/each}
+
+          <!-- Add new filter -->
+          <div class="border border-dashed border-base-300 rounded-lg p-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+              <!-- New Filter Type -->
+              <div class="flex flex-col">
+                <SelectField
+                  id="new-filter-type"
+                  value={newFilter.type}
+                  onchange={(value) => {
+                    newFilter.type = value as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop' | '';
+                    getFilterDefaults(value);
+                  }}
+                  options={[]}
+                  placeholder="Select filter type"
+                  className="select-sm"
+                  disabled={store.isLoading || store.isSaving}
+                  label="New Filter Type"
+                >
+                  <option value="">Select filter type</option>
+                  {#each Object.keys(eqFilterConfig) as filterType}
+                    <option value={filterType}>{filterType}</option>
+                  {/each}
+                </SelectField>
+              </div>
+
+              <!-- Dynamic parameters for new filter -->
+              {#if newFilter.type}
+                {#each getEqFilterParameters(newFilter.type) as param}
+                  <div class="flex flex-col">
+                    
+                    {#if param.Label === 'Attenuation'}
+                      <!-- Special handling for Attenuation -->
+                      <SelectField
+                        id="new-filter-{param.Name}"
+                        value={(newFilter as any)[param.Name.toLowerCase()]}
+                        onchange={(value) => {
+                          (newFilter as any)[param.Name.toLowerCase()] = parseInt(value);
+                        }}
+                        options={[
+                          { value: '0', label: '0dB' },
+                          { value: '1', label: '12dB' },
+                          { value: '2', label: '24dB' },
+                          { value: '3', label: '36dB' },
+                          { value: '4', label: '48dB' },
+                        ]}
+                        className="select-sm"
+                        disabled={store.isLoading || store.isSaving}
+                        label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                      />
+                    {:else}
+                      <!-- Regular number input -->
+                      <NumberField
+                        value={(newFilter as any)[param.Name.toLowerCase()]}
+                        onUpdate={(value) => {
+                          (newFilter as any)[param.Name.toLowerCase()] = value;
+                        }}
+                        min={param.Min}
+                        max={param.Max}
+                        step={param.Type === 'float' ? 0.1 : 1}
+                        disabled={store.isLoading || store.isSaving}
+                        label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                      />
+                    {/if}
+                  </div>
+                {/each}
+              {/if}
+
+              <!-- Add button -->
+              <div class="flex flex-col">
+                <div class="label">
+                  <span class="label-text">&nbsp;</span>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm w-24"
+                  onclick={addNewFilter}
+                  disabled={!newFilter.type || store.isLoading || store.isSaving}
+                >
+                  Add Filter
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   </SettingsSection>
 
@@ -305,7 +558,7 @@
         onchange={() =>
           settingsActions.updateSection('realtime', {
             audio: {
-              ...$audioSettings,
+              ...$audioSettings!,
               soundLevel: {
                 ...settings.audio.soundLevel,
                 enabled: settings.audio.soundLevel.enabled,
@@ -322,7 +575,7 @@
             onUpdate={value =>
               settingsActions.updateSection('realtime', {
                 audio: {
-                  ...$audioSettings,
+                  ...$audioSettings!,
                   soundLevel: { ...settings.audio.soundLevel, interval: value },
                 },
               })}
@@ -385,7 +638,7 @@
           onchange={() =>
             settingsActions.updateSection('realtime', {
               audio: {
-                ...$audioSettings,
+                ...$audioSettings!,
                 export: { ...settings.audio.export, debug: settings.audio.export.debug },
               },
             })}
@@ -401,14 +654,14 @@
             disabled={store.isLoading || store.isSaving}
             onchange={value =>
               settingsActions.updateSection('realtime', {
-                audio: { ...$audioSettings, export: { ...settings.audio.export, path: value } },
+                audio: { ...$audioSettings!, export: { ...settings.audio.export, path: value } },
               })}
           />
 
           <!-- Export Type -->
           <SelectField
             id="export-type"
-            bind:value={settings.audio.export.format}
+            bind:value={settings.audio.export.type}
             label="Export Type"
             options={exportFormatOptions}
             disabled={store.isLoading || store.isSaving}
@@ -418,14 +671,14 @@
           <!-- Bitrate -->
           <TextInput
             id="export-bitrate"
-            bind:value={settings.audio.export.quality}
+            bind:value={settings.audio.export.bitrate}
             label="Bitrate"
             placeholder="96k"
             disabled={store.isLoading ||
               store.isSaving ||
               !ffmpegAvailable ||
-              !['aac', 'opus', 'mp3'].includes(settings.audio.export.format)}
-            onchange={updateExportQuality}
+              !['aac', 'opus', 'mp3'].includes(settings.audio.export.type)}
+            onchange={updateExportBitrate}
           />
         </div>
       {/if}
@@ -481,7 +734,7 @@
           <!-- Minimum Clips -->
           <NumberField
             label="Minimum Clips"
-            bind:value={retentionSettings.minClips}
+            value={retentionSettings.minClips}
             onUpdate={updateRetentionMinClips}
             min={0}
             placeholder="10"
@@ -501,4 +754,5 @@
       {/if}
     </div>
   </SettingsSection>
-</div>
+  </div>
+{/if}
