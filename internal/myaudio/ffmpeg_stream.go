@@ -65,6 +65,10 @@ var streamLogger *slog.Logger
 func init() {
 	// Use the shared integration logger for consistency
 	streamLogger = integrationLogger
+	if streamLogger == nil {
+		// Fallback if integration logger not initialized
+		streamLogger = slog.Default().With("component", "ffmpeg-stream")
+	}
 }
 
 // dataRateCalculator tracks data rate over a sliding window
@@ -197,6 +201,15 @@ type FFmpegStream struct {
 	lastDataMu     sync.RWMutex
 	restartCount   int
 	restartCountMu sync.Mutex
+	
+	// Concurrent restart protection
+	restartInProgress bool
+	restartMu         sync.Mutex
+	
+	// Process lifecycle metrics
+	totalProcessCount     int64
+	shortLivedProcesses   int64
+	processMetricsMu      sync.Mutex
 
 	// Data tracking
 	totalBytesReceived int64
@@ -296,7 +309,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 					"component", "ffmpeg-stream",
 					"operation", "start_process")
 				log.Printf("❌ Failed to start FFmpeg for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
-				s.recordFailure()
+				s.recordFailure(0) // No runtime for startup failure
 				s.handleRestartBackoff()
 				continue
 			}
@@ -321,7 +334,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			runtime := time.Since(processStartTime)
 			if err != nil && !errors.Is(err, context.Canceled) {
 				// Record failure for circuit breaker
-				s.recordFailure()
+				s.recordFailure(runtime)
 				// Log process exit with sanitized error message
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeRTSPUrls(errorMsg)
@@ -361,6 +374,16 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				s.resetFailures()
 			}
 
+			// Always cleanup the process before restart
+			if conf.Setting().Debug {
+				streamLogger.Debug("calling cleanup after process exit",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"runtime_seconds", runtime.Seconds(),
+					"had_error", err != nil,
+					"operation", "pre_restart_cleanup")
+			}
+			s.cleanupProcess()
+			
 			// Apply backoff before restart
 			s.handleRestartBackoff()
 		}
@@ -471,6 +494,24 @@ func (s *FFmpegStream) startProcess() error {
 
 	// Record start time for runtime calculation
 	s.processStartTime = time.Now()
+	
+	// Debug log process details
+	if conf.Setting().Debug {
+		streamLogger.Debug("FFmpeg process started with details",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", s.cmd.Process.Pid,
+			"transport", s.transport,
+			"ffmpeg_path", settings.FfmpegPath,
+			"args_count", len(args),
+			"has_user_timeout", hasUserTimeout,
+			"operation", "start_process_debug")
+	}
+
+	// Update process metrics
+	s.processMetricsMu.Lock()
+	s.totalProcessCount++
+	currentTotal := s.totalProcessCount
+	s.processMetricsMu.Unlock()
 
 	// Reset failure count on successful start
 	s.resetFailures()
@@ -479,10 +520,12 @@ func (s *FFmpegStream) startProcess() error {
 		"url", privacy.SanitizeRTSPUrl(s.url),
 		"pid", s.cmd.Process.Pid,
 		"transport", s.transport,
+		"total_process_count", currentTotal,
 		"component", "ffmpeg-stream",
 		"operation", "start_process")
 
-	log.Printf("✅ FFmpeg started for %s (PID: %d)", privacy.SanitizeRTSPUrl(s.url), s.cmd.Process.Pid)
+	log.Printf("✅ FFmpeg started for %s (PID: %d, Process #%d, Restart #%d)", 
+		privacy.SanitizeRTSPUrl(s.url), s.cmd.Process.Pid, currentTotal, s.restartCount)
 	return nil
 }
 
@@ -577,6 +620,12 @@ func (s *FFmpegStream) processAudio() error {
 				"operation", "restart_requested")
 			log.Printf("🔄 Restart requested for %s", privacy.SanitizeRTSPUrl(s.url))
 			s.cleanupProcess()
+			
+			// Clear restart in progress flag
+			s.restartMu.Lock()
+			s.restartInProgress = false
+			s.restartMu.Unlock()
+			
 			return nil
 		case <-s.ctx.Done():
 			s.cleanupProcess()
@@ -665,10 +714,12 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 					"operation", "process_sound_level")
 				log.Printf("⚠️ Sound level processor not registered for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
 			} else if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
-				streamLogger.Debug("failed to process sound level data",
-					"url", privacy.SanitizeRTSPUrl(s.url),
-					"error", err,
-					"operation", "process_sound_level")
+				if conf.Setting().Debug {
+					streamLogger.Debug("failed to process sound level data",
+						"url", privacy.SanitizeRTSPUrl(s.url),
+						"error", err,
+						"operation", "process_sound_level")
+				}
 				log.Printf("⚠️ Error processing sound level for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
 			}
 		} else if soundLevel != nil {
@@ -724,63 +775,168 @@ func (s *FFmpegStream) cleanupProcess() {
 	defer s.cmdMu.Unlock()
 
 	if s.cmd == nil || s.cmd.Process == nil {
+		if conf.Setting().Debug {
+			streamLogger.Debug("cleanup called but no process to clean",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"operation", "cleanup_process_skip")
+		}
 		return
+	}
+	
+	pid := s.cmd.Process.Pid
+	if conf.Setting().Debug {
+		streamLogger.Debug("starting process cleanup",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", pid,
+			"operation", "cleanup_process_start")
 	}
 
 	// Close stdout
 	if s.stdout != nil {
 		if err := s.stdout.Close(); err != nil {
 			// Log but don't fail - process cleanup is more important
-			streamLogger.Debug("failed to close stdout",
-				"url", privacy.SanitizeRTSPUrl(s.url),
-				"error", err,
-				"operation", "cleanup_process")
+			if conf.Setting().Debug {
+				streamLogger.Debug("failed to close stdout",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"error", err,
+					"operation", "cleanup_process")
+			}
 			log.Printf("⚠️ Error closing stdout for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
 		}
 	}
 
 	// Kill process
 	if err := killProcessGroup(s.cmd); err != nil {
+		if conf.Setting().Debug {
+			streamLogger.Debug("killProcessGroup failed, attempting direct kill",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"pid", pid,
+				"error", err,
+				"operation", "cleanup_process_kill")
+		}
+			
 		if killErr := s.cmd.Process.Kill(); killErr != nil {
 			// Only log if kill also fails
+			streamLogger.Warn("failed to kill process directly",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"pid", pid,
+				"error", killErr,
+				"operation", "cleanup_process_kill_direct")
 			log.Printf("⚠️ Error killing process for %s: %v", privacy.SanitizeRTSPUrl(s.url), killErr)
 		}
+	} else if conf.Setting().Debug {
+		streamLogger.Debug("process group killed successfully",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", pid,
+			"operation", "cleanup_process_kill_success")
 	}
 
-	// Wait for process to exit
-	done := make(chan struct{})
+	// Create a channel to signal when Wait() completes
+	waitDone := make(chan error, 1)
+	
+	// Always call Wait() to reap the zombie - this is critical!
+	// We do this in a goroutine that we may abandon if it takes too long,
+	// but the goroutine will continue and eventually reap the process
+	// Capture cmd reference to avoid race condition
+	cmd := s.cmd
+	url := s.url
+	waitStartTime := time.Now()
+	
+	if conf.Setting().Debug {
+		streamLogger.Debug("spawning wait goroutine for process reaping",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", pid,
+			"operation", "cleanup_process_wait_start")
+	}
+	
 	go func() {
-		if err := s.cmd.Wait(); err != nil {
-			// This is expected when we kill the process
-			// Only log if it's not an expected exit status
-			if !strings.Contains(err.Error(), "signal: killed") {
-				streamLogger.Warn("FFmpeg process wait error",
-					"url", privacy.SanitizeRTSPUrl(s.url),
-					"error", err,
-					"component", "ffmpeg-stream",
-					"operation", "process_wait")
-				log.Printf("⚠️ Process wait error for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
+		waitErr := cmd.Wait()
+		waitDuration := time.Since(waitStartTime)
+		
+		// Log completion even if we've already moved on
+		if conf.Setting().Debug {
+			if waitErr != nil && !strings.Contains(waitErr.Error(), "signal: killed") && !strings.Contains(waitErr.Error(), "signal: terminated") {
+				streamLogger.Debug("process wait completed with error",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"error", waitErr,
+					"pid", pid,
+					"wait_duration_ms", waitDuration.Milliseconds(),
+					"operation", "cleanup_process_wait_error")
+			} else {
+				streamLogger.Debug("process wait completed successfully",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"pid", pid,
+					"wait_duration_ms", waitDuration.Milliseconds(),
+					"operation", "cleanup_process_wait_success")
 			}
 		}
-		close(done)
+		
+		// Send result if channel is still open
+		select {
+		case waitDone <- waitErr:
+		default:
+			// Channel might be closed if we timed out
+			if conf.Setting().Debug {
+				streamLogger.Debug("wait result not sent - cleanup already timed out",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"pid", pid,
+					"operation", "cleanup_process_wait_abandoned")
+			}
+		}
 	}()
 
+	// Wait for process cleanup with timeout
 	select {
-	case <-done:
+	case err := <-waitDone:
+		// Process was successfully reaped
+		if err != nil && !strings.Contains(err.Error(), "signal: killed") && !strings.Contains(err.Error(), "signal: terminated") {
+			streamLogger.Warn("FFmpeg process wait error",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"error", err,
+				"pid", pid,
+				"component", "ffmpeg-stream",
+				"operation", "process_wait")
+			log.Printf("⚠️ Process wait error for %s (PID: %d): %v", privacy.SanitizeRTSPUrl(s.url), pid, err)
+		}
 		streamLogger.Info("FFmpeg process stopped",
 			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", pid,
 			"component", "ffmpeg-stream",
 			"operation", "cleanup_process")
-		log.Printf("🛑 FFmpeg process stopped for %s", privacy.SanitizeRTSPUrl(s.url))
+		log.Printf("🛑 FFmpeg process stopped for %s (PID: %d)", privacy.SanitizeRTSPUrl(s.url), pid)
+		
 	case <-time.After(processCleanupTimeout):
-		streamLogger.Warn("FFmpeg process cleanup timeout",
+		// Timeout occurred, but the goroutine will continue and eventually reap the process
+		streamLogger.Warn("FFmpeg process cleanup timeout - process will be reaped asynchronously",
 			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", pid,
+			"timeout_seconds", processCleanupTimeout.Seconds(),
 			"component", "ffmpeg-stream",
-			"operation", "cleanup_process")
-		log.Printf("⚠️ FFmpeg process cleanup timeout for %s", privacy.SanitizeRTSPUrl(s.url))
+			"operation", "cleanup_process_timeout")
+		log.Printf("⚠️ FFmpeg process cleanup timeout for %s (PID: %d) - reaping asynchronously", privacy.SanitizeRTSPUrl(s.url), pid)
+		
+		// Important: We do NOT return here - we continue to clean up our state
+		// The goroutine will eventually call Wait() and reap the zombie
+		// This is a simple and correct approach - we ensure Wait() is always called
+		// even if it takes longer than expected
+		
+		if conf.Setting().Debug {
+			streamLogger.Debug("cleanup timeout - wait goroutine still running",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"pid", pid,
+				"operation", "cleanup_process_timeout_detail")
+		}
 	}
 
+	// Clear the command reference
 	s.cmd = nil
+	
+	if conf.Setting().Debug {
+		streamLogger.Debug("process cleanup completed",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", pid,
+			"operation", "cleanup_process_complete")
+	}
 }
 
 // handleRestartBackoff handles exponential backoff for restarts
@@ -799,13 +955,31 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	if backoff > s.maxBackoff {
 		backoff = s.maxBackoff
 	}
+	
+	// Add rate limiting for very high restart counts to prevent runaway loops
+	if currentRestartCount > 50 {
+		// Additional delay proportional to restart count beyond 50
+		additionalDelay := time.Duration(currentRestartCount-50) * 10 * time.Second
+		if additionalDelay > 5*time.Minute {
+			additionalDelay = 5 * time.Minute // Cap at 5 minutes extra
+		}
+		backoff += additionalDelay
+		streamLogger.Warn("high restart count detected - applying rate limiting",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"restart_count", currentRestartCount,
+			"additional_delay_seconds", additionalDelay.Seconds(),
+			"component", "ffmpeg-stream",
+			"operation", "restart_rate_limit")
+	}
 	s.restartCountMu.Unlock()
 
-	streamLogger.Debug("applying restart backoff",
-		"url", privacy.SanitizeRTSPUrl(s.url),
-		"backoff_ms", backoff.Milliseconds(),
-		"restart_count", currentRestartCount,
-		"operation", "restart_backoff")
+	if conf.Setting().Debug {
+		streamLogger.Debug("applying restart backoff",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"backoff_ms", backoff.Milliseconds(),
+			"restart_count", currentRestartCount,
+			"operation", "restart_backoff")
+	}
 
 	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", backoff, currentRestartCount, privacy.SanitizeRTSPUrl(s.url))
 
@@ -847,6 +1021,22 @@ func (s *FFmpegStream) Stop() {
 // If manual is false, keeps the restart count intact (automatic health-triggered restart).
 // If a restart is already pending, this call is ignored.
 func (s *FFmpegStream) Restart(manual bool) {
+	// Check if restart is already in progress
+	s.restartMu.Lock()
+	if s.restartInProgress {
+		s.restartMu.Unlock()
+		if conf.Setting().Debug {
+			streamLogger.Debug("restart already in progress, ignoring request",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"manual", manual,
+				"component", "ffmpeg-stream",
+				"operation", "restart_ignored")
+		}
+		return
+	}
+	s.restartInProgress = true
+	s.restartMu.Unlock()
+	
 	// Reset restart count only on manual restart
 	if manual {
 		s.restartCountMu.Lock()
@@ -857,15 +1047,39 @@ func (s *FFmpegStream) Restart(manual bool) {
 	// Send restart signal (non-blocking)
 	select {
 	case s.restartChan <- struct{}{}:
-		// Signal sent
+		// Signal sent successfully
+		if conf.Setting().Debug {
+			streamLogger.Debug("restart signal sent",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"manual", manual,
+				"component", "ffmpeg-stream",
+				"operation", "restart_requested")
+		}
 	default:
-		// Channel full, restart already pending
+		// Channel full, reset the in-progress flag
+		s.restartMu.Lock()
+		s.restartInProgress = false
+		s.restartMu.Unlock()
+		if conf.Setting().Debug {
+			streamLogger.Debug("restart channel full, restart already pending",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"manual", manual,
+				"component", "ffmpeg-stream",
+				"operation", "restart_pending")
+		}
 	}
 }
 
 // GetHealth returns the current health status of the stream.
 // It includes information about data reception, restart count, and data rate statistics.
 func (s *FFmpegStream) GetHealth() StreamHealth {
+	// Get current process PID for debugging
+	var currentPID int
+	s.cmdMu.Lock()
+	if s.cmd != nil && s.cmd.Process != nil {
+		currentPID = s.cmd.Process.Pid
+	}
+	s.cmdMu.Unlock()
 	s.lastDataMu.RLock()
 	lastData := s.lastDataTime
 	s.lastDataMu.RUnlock()
@@ -882,10 +1096,12 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	dataRate, err := s.dataRateCalc.getRate()
 	if err != nil {
 		// Log error but don't fail health check
-		streamLogger.Debug("failed to calculate data rate",
-			"url", privacy.SanitizeRTSPUrl(s.url),
-			"error", err,
-			"component", "ffmpeg-stream")
+		if conf.Setting().Debug {
+			streamLogger.Debug("failed to calculate data rate",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"error", err,
+				"component", "ffmpeg-stream")
+		}
 		dataRate = 0
 	}
 
@@ -903,6 +1119,22 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	isHealthy := time.Since(lastData) < healthyDataThreshold
 	// Stream is receiving data if we got data within the threshold
 	isReceivingData := time.Since(lastData) < defaultReceivingDataThreshold
+	
+	// Debug log health check details
+	if conf.Setting().Debug {
+		streamLogger.Debug("health check performed",
+			"url", privacy.SanitizeRTSPUrl(s.url),
+			"pid", currentPID,
+			"is_healthy", isHealthy,
+			"is_receiving_data", isReceivingData,
+			"last_data_seconds_ago", time.Since(lastData).Seconds(),
+			"healthy_threshold_seconds", healthyDataThreshold.Seconds(),
+			"total_bytes", totalBytes,
+			"bytes_per_second", dataRate,
+			"restart_count", restarts,
+			"has_process", currentPID > 0,
+			"operation", "get_health")
+	}
 
 	return StreamHealth{
 		IsHealthy:          isHealthy,
@@ -933,10 +1165,12 @@ func (s *FFmpegStream) logStreamHealth() {
 	dataRate, err := s.dataRateCalc.getRate()
 	if err != nil {
 		// Log error but continue with zero rate for display
-		streamLogger.Debug("failed to calculate data rate for health log",
-			"url", privacy.SanitizeRTSPUrl(s.url),
-			"error", err,
-			"component", "ffmpeg-stream")
+		if conf.Setting().Debug {
+			streamLogger.Debug("failed to calculate data rate for health log",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"error", err,
+				"component", "ffmpeg-stream")
+		}
 		dataRate = 0
 	}
 
@@ -986,29 +1220,74 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 	return false
 }
 
-// recordFailure records a failure for the circuit breaker
-func (s *FFmpegStream) recordFailure() {
+// recordFailure records a failure for the circuit breaker with runtime consideration
+func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
 
 	s.consecutiveFailures++
-	if s.consecutiveFailures == circuitBreakerThreshold {
+	
+	// Track short-lived processes for metrics
+	if runtime < 5*time.Second {
+		s.processMetricsMu.Lock()
+		s.shortLivedProcesses++
+		shortLived := s.shortLivedProcesses
+		total := s.totalProcessCount
+		s.processMetricsMu.Unlock()
+		
+		if conf.Setting().Debug {
+			streamLogger.Debug("short-lived process detected",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"runtime_seconds", runtime.Seconds(),
+				"short_lived_count", shortLived,
+				"total_count", total,
+				"short_lived_percentage", float64(shortLived)/float64(total)*100,
+				"component", "ffmpeg-stream",
+				"operation", "process_metrics")
+		}
+	}
+	
+	// Enhanced circuit breaker logic that considers rapid failures
+	// Open circuit breaker faster if processes are failing very quickly
+	shouldOpenCircuit := false
+	var reason string
+	
+	switch {
+	case runtime < 5*time.Second && s.consecutiveFailures >= 5:
+		// Rapid failures (< 5 seconds) - open circuit after just 5 failures
+		shouldOpenCircuit = true
+		reason = "rapid process failures"
+	case runtime < 30*time.Second && s.consecutiveFailures >= 8:
+		// Quick failures (< 30 seconds) - open circuit after 8 failures
+		shouldOpenCircuit = true
+		reason = "quick process failures"
+	case s.consecutiveFailures >= circuitBreakerThreshold:
+		// Standard threshold reached
+		shouldOpenCircuit = true
+		reason = "consecutive failure threshold"
+	}
+	
+	if shouldOpenCircuit {
 		s.circuitOpenTime = time.Now()
-		streamLogger.Error("circuit breaker opened due to repeated failures",
+		streamLogger.Error("circuit breaker opened",
 			"url", privacy.SanitizeRTSPUrl(s.url),
 			"consecutive_failures", s.consecutiveFailures,
+			"runtime_seconds", runtime.Seconds(),
+			"reason", reason,
 			"component", "ffmpeg-stream")
-		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures",
-			privacy.SanitizeRTSPUrl(s.url), s.consecutiveFailures)
+		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %v)",
+			privacy.SanitizeRTSPUrl(s.url), s.consecutiveFailures, reason, runtime)
 
 		// Report to Sentry with enhanced context
-		errorWithContext := errors.Newf("RTSP stream circuit breaker opened after %d consecutive failures", s.consecutiveFailures).
+		errorWithContext := errors.Newf("RTSP stream circuit breaker opened: %s (runtime: %v)", reason, runtime).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryRTSP).
 			Context("operation", "circuit_breaker_open").
 			Context("url", privacy.SanitizeRTSPUrl(s.url)).
 			Context("transport", s.transport).
 			Context("consecutive_failures", s.consecutiveFailures).
+			Context("runtime_seconds", runtime.Seconds()).
+			Context("reason", reason).
 			Context("cooldown_seconds", circuitBreakerCooldown.Seconds()).
 			Build()
 		// This will be reported via event bus if telemetry is enabled
