@@ -238,18 +238,33 @@ func (m *FFmpegManager) StartMonitoring(interval time.Duration) {
 func (m *FFmpegManager) checkStreamHealth() {
 	health := m.HealthCheck()
 	
+	if conf.Setting().Debug {
+		managerLogger.Debug("performing health check on all streams",
+			"stream_count", len(health),
+			"operation", "check_stream_health")
+	}
+	
 	for url, h := range health {
 		if !h.IsHealthy {
 			managerLogger.Warn("unhealthy stream detected",
 				"url", privacy.SanitizeRTSPUrl(url),
 				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
 				"restart_count", h.RestartCount,
+				"is_receiving_data", h.IsReceivingData,
+				"bytes_per_second", h.BytesPerSecond,
+				"total_bytes", h.TotalBytesReceived,
 				"operation", "health_check")
 			
 			log.Printf("⚠️ Unhealthy stream detected: %s (last data: %v ago)", 
 				privacy.SanitizeRTSPUrl(url), time.Since(h.LastDataReceived))
 			
 			// Restart unhealthy streams
+			if conf.Setting().Debug {
+				managerLogger.Debug("attempting to restart unhealthy stream",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"operation", "health_check_restart_attempt")
+			}
+			
 			if err := m.RestartStream(url); err != nil {
 				managerLogger.Error("failed to restart unhealthy stream",
 					"url", privacy.SanitizeRTSPUrl(url),
@@ -269,7 +284,32 @@ func (m *FFmpegManager) checkStreamHealth() {
 					Build()
 				// This will be reported via event bus if telemetry is enabled
 				_ = errorWithContext
+			} else if conf.Setting().Debug {
+				managerLogger.Debug("successfully initiated restart for unhealthy stream",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"operation", "health_check_restart_success")
 			}
+		} else if conf.Setting().Debug {
+			// Get current PID for the stream
+			var currentPID int
+			m.streamsMu.RLock()
+			if stream, exists := m.streams[url]; exists {
+				stream.cmdMu.Lock()
+				if stream.cmd != nil && stream.cmd.Process != nil {
+					currentPID = stream.cmd.Process.Pid
+				}
+				stream.cmdMu.Unlock()
+			}
+			m.streamsMu.RUnlock()
+			
+			// Log healthy streams at debug level
+			managerLogger.Debug("stream is healthy",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"pid", currentPID,
+				"is_receiving_data", h.IsReceivingData,
+				"bytes_per_second", h.BytesPerSecond,
+				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+				"operation", "health_check_healthy")
 		}
 	}
 }

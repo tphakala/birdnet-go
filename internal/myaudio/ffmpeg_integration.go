@@ -41,6 +41,15 @@ func init() {
 	}
 }
 
+// UpdateFFmpegLogLevel updates the logger level based on configuration
+func UpdateFFmpegLogLevel() {
+	if conf.Setting().Debug {
+		integrationLevelVar.Set(slog.LevelDebug)
+	} else {
+		integrationLevelVar.Set(slog.LevelInfo)
+	}
+}
+
 // registerSoundLevelProcessorIfEnabled registers a sound level processor for the given source
 // if sound level processing is enabled in the configuration. This helper function ensures
 // consistent registration behavior across different stream initialization paths.
@@ -57,7 +66,7 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) {
 			"error", err,
 			"operation", "register_sound_level")
 		log.Printf("⚠️ Error registering sound level processor for %s: %v", displayName, err)
-	} else {
+	} else if conf.Setting().Debug {
 		logger.Debug("registered sound level processor",
 			"url", displayName,
 			"operation", "register_sound_level")
@@ -69,6 +78,9 @@ func getGlobalManager() *FFmpegManager {
 	managerOnce.Do(func() {
 		managerMutex.Lock()
 		defer managerMutex.Unlock()
+		
+		// Update logger level based on current configuration
+		UpdateFFmpegLogLevel()
 		
 		globalManager = NewFFmpegManager()
 		// Start monitoring with configurable interval
@@ -90,6 +102,9 @@ func getGlobalManager() *FFmpegManager {
 // CaptureAudioRTSP provides backward compatibility with the old API
 // This function now delegates to the new simplified FFmpeg manager
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
+	// Update logger level based on current configuration
+	UpdateFFmpegLogLevel()
+	
 	// Initialize sound level processor if enabled
 	registerSoundLevelProcessorIfEnabled(url, integrationLogger)
 	defer UnregisterSoundLevelProcessor(url)
@@ -157,6 +172,9 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 // SyncRTSPStreamsWithConfig synchronizes running RTSP streams with configuration
 // This is called when configuration changes to start/stop streams as needed
 func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
+	// Update logger level based on current configuration
+	UpdateFFmpegLogLevel()
+	
 	manager := getGlobalManager()
 	if manager == nil {
 		return errors.Newf("FFmpeg manager is not available").
