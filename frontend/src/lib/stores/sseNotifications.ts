@@ -1,10 +1,24 @@
 import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
-import type { ToastType } from './toast';
+import type { ToastType, ToastPosition } from './toast';
 
 interface SSENotification {
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
+}
+
+interface SSEToastData {
+  id: string;
+  message: string;
+  type: ToastType;
+  duration?: number;
+  component?: string;
+  timestamp: string;
+  action?: {
+    label: string;
+    url?: string;
+    handler?: string;
+  };
 }
 
 class SSENotificationManager {
@@ -23,7 +37,7 @@ class SSENotificationManager {
       // Create connection to SSE endpoint
       this.eventSource = new ReconnectingEventSource('/api/v2/notifications/stream', {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
-        withCredentials: false,
+        withCredentials: true, // Authentication required for notification stream
       });
 
       this.eventSource.onopen = () => {
@@ -31,12 +45,13 @@ class SSENotificationManager {
         this.isConnected = true;
       };
 
+      // Handle general messages (backwards compatibility)
       this.eventSource.onmessage = event => {
         try {
           const notification: SSENotification = JSON.parse(event.data);
           this.handleNotification(notification);
         } catch (error) {
-          console.error('Failed to parse SSE notification:', error);
+          // Ignore parsing errors for general messages
         }
       };
 
@@ -45,6 +60,37 @@ class SSENotificationManager {
         this.isConnected = false;
         // ReconnectingEventSource handles reconnection automatically
       };
+
+      // Handle connected event
+      this.eventSource.addEventListener('connected', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          JSON.parse(messageEvent.data);
+        } catch {
+          // Ignore parsing errors for connection events
+        }
+      });
+
+      // Handle toast messages
+      this.eventSource.addEventListener('toast', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          const toastData: SSEToastData = JSON.parse(messageEvent.data);
+          this.handleToast(toastData);
+        } catch (error) {
+          console.error('Error processing toast event:', error);
+        }
+      });
+
+      // Handle heartbeat
+      this.eventSource.addEventListener('heartbeat', (event: Event) => {
+        try {
+          const messageEvent = event as MessageEvent;
+          JSON.parse(messageEvent.data);
+        } catch {
+          // Ignore parsing errors for heartbeat
+        }
+      });
     } catch (error) {
       console.error('Failed to create SSE connection:', error);
       // Try again in 5 seconds
@@ -65,6 +111,34 @@ class SSENotificationManager {
     toastActions.show(notification.message, toastType, {
       duration,
       showIcon: true,
+    });
+  }
+
+  /**
+   * Handle incoming SSE toast event
+   */
+  private handleToast(toastData: SSEToastData): void {
+    // Show the toast using the toast store
+    const actions = toastData.action
+      ? [
+          {
+            label: toastData.action.label,
+            onClick: () => {
+              if (toastData.action?.url) {
+                window.location.href = toastData.action.url;
+              } else if (toastData.action?.handler) {
+                // Handle custom actions if needed
+                console.log('Toast action handler:', toastData.action.handler);
+              }
+            },
+          },
+        ]
+      : undefined;
+
+    toastActions.show(toastData.message, toastData.type, {
+      duration: toastData.duration ?? 5000,
+      position: 'top-right' as ToastPosition,
+      actions,
     });
   }
 
@@ -109,6 +183,9 @@ export const sseNotifications = new SSENotificationManager();
 
 // Auto-connect when module is imported
 if (typeof window !== 'undefined') {
-  // Only connect in browser environment
-  sseNotifications.connect();
+  // Initialize after a short delay to ensure the app is ready
+  setTimeout(() => sseNotifications.connect(), 100);
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => sseNotifications.disconnect());
 }
