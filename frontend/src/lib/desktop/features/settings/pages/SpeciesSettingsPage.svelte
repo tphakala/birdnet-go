@@ -4,19 +4,24 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsStore, settingsActions, speciesSettings } from '$lib/stores/settings';
+  import { settingsStore, settingsActions, speciesSettings, realtimeSettings } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
 
   // Derived settings with fallbacks
-  let settings = $derived(
-    $speciesSettings || {
-      include: { enabled: false, species: [] },
-      exclude: { enabled: false, species: [] },
-      config: {} as Record<string, SpeciesConfig>,
+  let settings = $state({
+    include: [] as string[],
+    exclude: [] as string[],
+    config: {} as Record<string, SpeciesConfig>,
+  });
+
+  // Update settings when store changes
+  $effect(() => {
+    if ($speciesSettings) {
+      settings = $speciesSettings;
     }
-  );
+  });
 
   let store = $derived($settingsStore);
 
@@ -60,22 +65,22 @@
   // Change detection
   let includeHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.species?.include,
-      (store.formData as any)?.species?.include
+      (store.originalData as any)?.realtime?.species?.include,
+      (store.formData as any)?.realtime?.species?.include
     )
   );
 
   let excludeHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.species?.exclude,
-      (store.formData as any)?.species?.exclude
+      (store.originalData as any)?.realtime?.species?.exclude,
+      (store.formData as any)?.realtime?.species?.exclude
     )
   );
 
   let configHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.species?.config,
-      (store.formData as any)?.species?.config
+      (store.originalData as any)?.realtime?.species?.config,
+      (store.formData as any)?.realtime?.species?.config
     )
   );
 
@@ -111,7 +116,7 @@
     includePredictions = allSpecies
       .filter(
         species =>
-          species.toLowerCase().includes(inputLower) && !settings.include.species.includes(species)
+          species.toLowerCase().includes(inputLower) && !settings.include.includes(species)
       )
       .slice(0, 10);
   }
@@ -126,7 +131,7 @@
     excludePredictions = filteredSpecies
       .filter(
         species =>
-          species.toLowerCase().includes(inputLower) && !settings.exclude.species.includes(species)
+          species.toLowerCase().includes(inputLower) && !settings.exclude.includes(species)
       )
       .slice(0, 10);
   }
@@ -149,34 +154,50 @@
 
   // Species management functions
   function addIncludeSpecies(species: string) {
-    if (!species.trim() || settings.include.species.includes(species)) return;
+    if (!species.trim() || settings.include.includes(species)) return;
 
-    const updatedSpecies = [...settings.include.species, species];
-    settingsActions.updateSection('species', {
-      include: { ...settings.include, species: updatedSpecies },
+    const updatedSpecies = [...settings.include, species];
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        include: updatedSpecies,
+      },
     });
   }
 
   function removeIncludeSpecies(species: string) {
-    const updatedSpecies = settings.include.species.filter(s => s !== species);
-    settingsActions.updateSection('species', {
-      include: { ...settings.include, species: updatedSpecies },
+    const updatedSpecies = settings.include.filter(s => s !== species);
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        include: updatedSpecies,
+      },
     });
   }
 
   function addExcludeSpecies(species: string) {
-    if (!species.trim() || settings.exclude.species.includes(species)) return;
+    if (!species.trim() || settings.exclude.includes(species)) return;
 
-    const updatedSpecies = [...settings.exclude.species, species];
-    settingsActions.updateSection('species', {
-      exclude: { ...settings.exclude, species: updatedSpecies },
+    const updatedSpecies = [...settings.exclude, species];
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        exclude: updatedSpecies,
+      },
     });
   }
 
   function removeExcludeSpecies(species: string) {
-    const updatedSpecies = settings.exclude.species.filter(s => s !== species);
-    settingsActions.updateSection('species', {
-      exclude: { ...settings.exclude, species: updatedSpecies },
+    const updatedSpecies = settings.exclude.filter(s => s !== species);
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        exclude: updatedSpecies,
+      },
     });
   }
 
@@ -196,8 +217,12 @@
       actions: [],
     };
 
-    settingsActions.updateSection('species', {
-      config: { ...settings.config, [species]: newConfig },
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        config: { ...settings.config, [species]: newConfig },
+      },
     });
 
     // Clear form
@@ -208,8 +233,12 @@
 
   function removeConfig(species: string) {
     const { [species]: _, ...remaining } = settings.config;
-    settingsActions.updateSection('species', {
-      config: remaining,
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        config: remaining,
+      },
     });
     void _; // Explicitly indicate variable is intentionally unused
   }
@@ -248,7 +277,13 @@
       };
     }
 
-    settingsActions.updateSection('species', { config: updatedConfig });
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        config: updatedConfig,
+      },
+    });
     cancelEditConfig();
   }
 
@@ -306,7 +341,13 @@
       },
     };
 
-    settingsActions.updateSection('species', { config: updatedConfig });
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      species: {
+        ...settings,
+        config: updatedConfig,
+      },
+    });
     closeActionsModal();
   }
 
@@ -329,8 +370,13 @@
   }
 </script>
 
-<!-- Include Species Section -->
-<SettingsSection
+{#if store.isLoading}
+  <div class="flex items-center justify-center py-12">
+    <div class="loading loading-spinner loading-lg"></div>
+  </div>
+{:else}
+  <!-- Include Species Section -->
+  <SettingsSection
   title="Always Include Species"
   description="Species in this list will always be included in range of detected species"
   defaultOpen={true}
@@ -339,7 +385,7 @@
   <div class="space-y-4">
     <!-- Species list -->
     <div class="space-y-2">
-      {#each settings.include.species as species}
+      {#each settings.include as species}
         <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
           <span class="text-sm">{species}</span>
           <button
@@ -354,7 +400,7 @@
         </div>
       {/each}
 
-      {#if settings.include.species.length === 0}
+      {#if settings.include.length === 0}
         <div class="text-sm text-base-content/60 italic p-2 text-center">
           No species added to include list
         </div>
@@ -385,7 +431,7 @@
   <div class="space-y-4">
     <!-- Species list -->
     <div class="space-y-2">
-      {#each settings.exclude.species as species}
+      {#each settings.exclude as species}
         <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
           <span class="text-sm">{species}</span>
           <button
@@ -400,7 +446,7 @@
         </div>
       {/each}
 
-      {#if settings.exclude.species.length === 0}
+      {#if settings.exclude.length === 0}
         <div class="text-sm text-base-content/60 italic p-2 text-center">
           No species added to exclude list
         </div>
@@ -607,6 +653,7 @@
     </div>
   </div>
 </SettingsSection>
+{/if}
 
 <!-- Actions Modal -->
 {#if showActionsModal}
