@@ -254,7 +254,7 @@ export interface SecuritySettings {
   githubAuth: OAuthSettings;
   allowSubnetBypass: {
     enabled: boolean;
-    subnets: string[];
+    subnet: string;
   };
 }
 
@@ -600,7 +600,7 @@ function createEmptySettings(): SettingsFormData {
       },
       allowSubnetBypass: {
         enabled: false,
-        subnets: [],
+        subnet: '',
       },
     },
     sentry: {
