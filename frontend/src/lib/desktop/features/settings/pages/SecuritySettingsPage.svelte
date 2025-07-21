@@ -12,36 +12,41 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 
-  let settings = $derived(
-    $securitySettings ||
-      ({
-        autoTLS: {
-          enabled: false,
-          host: '',
-        },
-        basicAuth: {
-          enabled: false,
-          username: '',
-          password: '',
-        },
-        googleAuth: {
-          enabled: false,
-          clientId: '',
-          clientSecret: '',
-          userId: '',
-        },
-        githubAuth: {
-          enabled: false,
-          clientId: '',
-          clientSecret: '',
-          userId: '',
-        },
-        allowSubnetBypass: {
-          enabled: false,
-          subnets: [],
-        },
-      } as SecuritySettings)
-  );
+  // Create default settings
+  const defaultSettings: SecuritySettings = {
+    host: '',
+    autoTls: false,
+    basicAuth: {
+      enabled: false,
+      username: '',
+      password: '',
+    },
+    googleAuth: {
+      enabled: false,
+      clientId: '',
+      clientSecret: '',
+      userId: '',
+    },
+    githubAuth: {
+      enabled: false,
+      clientId: '',
+      clientSecret: '',
+      userId: '',
+    },
+    allowSubnetBypass: {
+      enabled: false,
+      subnets: [],
+    },
+  };
+
+  let settings = $state<SecuritySettings>(defaultSettings);
+
+  // Update settings when store changes
+  $effect(() => {
+    if ($securitySettings) {
+      settings = $securitySettings;
+    }
+  });
 
   let store = $derived($settingsStore);
 
@@ -49,10 +54,12 @@
   let serverConfigHasChanges = $derived(
     hasSettingsChanged(
       {
-        autoTLS: (store.originalData as any)?.security?.autoTLS,
+        host: (store.originalData as any)?.security?.host,
+        autoTls: (store.originalData as any)?.security?.autoTls,
       },
       {
-        autoTLS: (store.formData as any)?.security?.autoTLS,
+        host: (store.formData as any)?.security?.host,
+        autoTls: (store.formData as any)?.security?.autoTls,
       }
     )
   );
@@ -85,39 +92,47 @@
   );
 
   // Generate redirect URIs dynamically
-  let currentHost = $derived(
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : settings.autoTLS.host
-        ? `https://${settings.autoTLS.host}`
-        : 'https://your-domain.com'
-  );
+  let currentHost = $state('https://your-domain.com');
+  let googleRedirectURI = $state('https://your-domain.com/auth/google/callback');
+  let githubRedirectURI = $state('https://your-domain.com/auth/github/callback');
 
-  let googleRedirectURI = $derived(`${currentHost}/auth/google/callback`);
-  let githubRedirectURI = $derived(`${currentHost}/auth/github/callback`);
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      currentHost = window.location.origin;
+    } else if (settings?.host) {
+      currentHost = `https://${settings.host}`;
+    }
+    
+    googleRedirectURI = `${currentHost}/auth/google/callback`;
+    githubRedirectURI = `${currentHost}/auth/github/callback`;
+  });
 
   // Server Configuration update handlers
   function updateAutoTLSEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
-      autoTLS: { ...settings.autoTLS, enabled },
+      ...settings,
+      autoTls: enabled,
     });
   }
 
   function updateAutoTLSHost(host: string) {
     settingsActions.updateSection('security', {
-      autoTLS: { ...settings.autoTLS, host },
+      ...settings,
+      host: host,
     });
   }
 
   // Basic Auth update handlers
   function updateBasicAuthEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
+      ...settings,
       basicAuth: { ...settings.basicAuth, enabled },
     });
   }
 
   function updateBasicAuthPassword(password: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       basicAuth: { ...settings.basicAuth, password },
     });
   }
@@ -125,24 +140,28 @@
   // Google OAuth update handlers
   function updateGoogleAuthEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
+      ...settings,
       googleAuth: { ...settings.googleAuth, enabled },
     });
   }
 
   function updateGoogleClientId(clientId: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       googleAuth: { ...settings.googleAuth, clientId },
     });
   }
 
   function updateGoogleClientSecret(clientSecret: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       googleAuth: { ...settings.googleAuth, clientSecret },
     });
   }
 
   function updateGoogleUserId(userId: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       googleAuth: { ...(settings.googleAuth as any), userId },
     });
   }
@@ -150,24 +169,28 @@
   // GitHub OAuth update handlers
   function updateGithubAuthEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
+      ...settings,
       githubAuth: { ...settings.githubAuth, enabled },
     });
   }
 
   function updateGithubClientId(clientId: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       githubAuth: { ...settings.githubAuth, clientId },
     });
   }
 
   function updateGithubClientSecret(clientSecret: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       githubAuth: { ...settings.githubAuth, clientSecret },
     });
   }
 
   function updateGithubUserId(userId: string) {
     settingsActions.updateSection('security', {
+      ...settings,
       githubAuth: { ...(settings.githubAuth as any), userId },
     });
   }
@@ -175,21 +198,28 @@
   // Subnet Bypass update handlers
   function updateSubnetBypassEnabled(enabled: boolean) {
     settingsActions.updateSection('security', {
+      ...settings,
       allowSubnetBypass: { ...settings.allowSubnetBypass, enabled },
     });
   }
 
   function updateSubnetBypassSubnets(subnets: string[]) {
     settingsActions.updateSection('security', {
+      ...settings,
       allowSubnetBypass: { ...settings.allowSubnetBypass, subnets },
     });
   }
 </script>
 
-<div class="space-y-4">
-  <!-- Server Configuration -->
-  <SettingsSection
-    title="Server Configuration"
+{#if store.isLoading}
+  <div class="flex items-center justify-center py-12">
+    <div class="loading loading-spinner loading-lg"></div>
+  </div>
+{:else}
+  <div class="space-y-4">
+    <!-- Server Configuration -->
+    <SettingsSection
+      title="Server Configuration"
     description="Configure HTTPS and SSL/TLS settings"
     defaultOpen={true}
     hasChanges={serverConfigHasChanges}
@@ -198,11 +228,11 @@
       <!-- Host Address -->
       <TextInput
         id="host-address"
-        bind:value={settings.autoTLS.host}
+        bind:value={settings.host}
         label="Host Address"
         placeholder="For example, localhost:8080 or example.domain.com"
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateAutoTLSHost(settings.autoTLS.host)}
+        onchange={() => updateAutoTLSHost(settings.host)}
       />
 
       <div class="border-t border-base-300 pt-4 mt-4">
@@ -210,13 +240,13 @@
         <p class="text-sm text-base-content/70 mb-4">Secure access with SSL/TLS encryption</p>
 
         <Checkbox
-          bind:checked={settings.autoTLS.enabled}
+          bind:checked={settings.autoTls}
           label="Auto SSL Certificate Management (AutoTLS)"
           disabled={store.isLoading || store.isSaving}
-          onchange={() => updateAutoTLSEnabled(settings.autoTLS.enabled)}
+          onchange={() => updateAutoTLSEnabled(settings.autoTls)}
         />
 
-        {#if settings.autoTLS.enabled}
+        {#if settings.autoTls}
           <div class="alert alert-info mt-4">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -260,7 +290,7 @@
         onchange={() => updateBasicAuthEnabled(settings.basicAuth.enabled)}
       />
 
-      {#if settings.basicAuth.enabled}
+      {#if settings.basicAuth?.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <PasswordField
             label="Password"
@@ -315,7 +345,7 @@
           onchange={() => updateGoogleAuthEnabled(settings.googleAuth.enabled)}
         />
 
-        {#if settings.googleAuth.enabled}
+        {#if settings.googleAuth?.enabled}
           <div class="mt-4 space-y-4">
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
@@ -398,7 +428,7 @@
           onchange={() => updateGithubAuthEnabled(settings.githubAuth.enabled)}
         />
 
-        {#if settings.githubAuth.enabled}
+        {#if settings.githubAuth?.enabled}
           <div class="mt-4 space-y-4">
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
@@ -480,7 +510,7 @@
         onchange={() => updateSubnetBypassEnabled(settings.allowSubnetBypass.enabled)}
       />
 
-      {#if settings.allowSubnetBypass.enabled}
+      {#if settings.allowSubnetBypass?.enabled}
         <div class="ml-7">
           <SubnetInput
             label=""
@@ -515,4 +545,5 @@
       {/if}
     </div>
   </SettingsSection>
-</div>
+  </div>
+{/if}
