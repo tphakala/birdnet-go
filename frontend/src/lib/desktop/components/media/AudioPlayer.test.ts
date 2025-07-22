@@ -1,8 +1,23 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import type { ComponentType } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import AudioPlayer from './AudioPlayer.svelte';
+
+// Type helper for AudioPlayer component testing
+interface AudioPlayerProps {
+  audioUrl: string;
+  detectionId: string;
+  width?: number | string;
+  height?: number | string;
+  showSpectrogram?: boolean;
+  showDownload?: boolean;
+  className?: string;
+  responsive?: boolean;
+}
+
+type SvelteAudioPlayerComponent = ComponentType<AudioPlayerProps>;
 
 describe('AudioPlayer', () => {
   let mockPlay: ReturnType<typeof vi.fn>;
@@ -65,10 +80,10 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with audio URL', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -78,26 +93,26 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with spectrogram', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        showSpectrogram: true,
       },
     });
 
     const img = screen.getByAltText('Audio spectrogram');
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', '/spectrogram/test.png');
+    expect(img).toHaveAttribute('src', '/api/v2/spectrogram/test-123');
   });
 
   it('generates spectrogram URL from detectionId', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: '123',
         width: 600,
+        showSpectrogram: true,
       },
     });
 
@@ -106,11 +121,11 @@ describe('AudioPlayer', () => {
   });
 
   it('shows loading state initially', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        showSpectrogram: true,
       },
     });
 
@@ -119,10 +134,10 @@ describe('AudioPlayer', () => {
   });
 
   it('shows play button when paused', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -132,10 +147,10 @@ describe('AudioPlayer', () => {
   });
 
   it('toggles play/pause on button click', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -152,10 +167,10 @@ describe('AudioPlayer', () => {
       get: vi.fn().mockReturnValue(false),
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -173,10 +188,10 @@ describe('AudioPlayer', () => {
   });
 
   it('formats time correctly', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -203,10 +218,10 @@ describe('AudioPlayer', () => {
       },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -234,10 +249,10 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -280,8 +295,7 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -338,10 +352,10 @@ describe('AudioPlayer', () => {
       },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -376,10 +390,10 @@ describe('AudioPlayer', () => {
   });
 
   it('shows download button by default', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -390,8 +404,7 @@ describe('AudioPlayer', () => {
   });
 
   it('hides download button when disabled', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         showDownload: false,
@@ -402,8 +415,7 @@ describe('AudioPlayer', () => {
   });
 
   it('hides spectrogram when disabled', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -420,8 +432,7 @@ describe('AudioPlayer', () => {
     const onEnded = vi.fn();
     const onTimeUpdate = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         onPlay,
@@ -457,8 +468,7 @@ describe('AudioPlayer', () => {
   });
 
   it('handles audio error', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -480,8 +490,7 @@ describe('AudioPlayer', () => {
   });
 
   it('handles spectrogram error', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -497,8 +506,7 @@ describe('AudioPlayer', () => {
   });
 
   it('autoplays when enabled', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(AudioPlayer as any, {
+    render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         autoPlay: true,
@@ -509,8 +517,7 @@ describe('AudioPlayer', () => {
   });
 
   it('applies custom classes', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -533,10 +540,10 @@ describe('AudioPlayer', () => {
   it('cleans up interval on unmount', async () => {
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container, unmount } = render(AudioPlayer as any, {
+    const { container, unmount } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
       },
     });
 
@@ -561,8 +568,7 @@ describe('AudioPlayer', () => {
       },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(AudioPlayer as any, {
+    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',

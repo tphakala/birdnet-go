@@ -1,3 +1,10 @@
+export interface Comment {
+  id: number;
+  entry: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Detection {
   id: number;
   date: string;
@@ -11,7 +18,7 @@ export interface Detection {
   confidence: number;
   verified: 'correct' | 'false_positive' | 'unverified';
   locked: boolean;
-  comments?: string[];
+  comments?: Comment[];
   clipName?: string;
   weather?: Weather;
   timeOfDay?: string;
