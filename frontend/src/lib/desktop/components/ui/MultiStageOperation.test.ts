@@ -2,6 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import MultiStageOperation from './MultiStageOperation.svelte';
 import type { Stage } from './MultiStageOperation.types';
+import type { ComponentProps } from 'svelte';
+
+// Helper function to render MultiStageOperation with proper typing
+const renderMultiStageOperation = (props: Partial<ComponentProps<MultiStageOperation>>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(MultiStageOperation as any, { props });
+};
 
 describe('MultiStageOperation', () => {
   const mockStages: Stage[] = [
@@ -33,9 +40,7 @@ describe('MultiStageOperation', () => {
   ];
 
   it('renders all stages', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages },
-    } as any);
+    renderMultiStageOperation({ stages: mockStages });
 
     expect(screen.getByText('Preparation')).toBeInTheDocument();
     expect(screen.getByText('Processing')).toBeInTheDocument();
@@ -44,9 +49,7 @@ describe('MultiStageOperation', () => {
   });
 
   it('shows stage descriptions', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages },
-    } as any);
+    renderMultiStageOperation({ stages: mockStages });
 
     expect(screen.getByText('Setting up the environment')).toBeInTheDocument();
     expect(screen.getByText('Processing data')).toBeInTheDocument();
@@ -54,27 +57,21 @@ describe('MultiStageOperation', () => {
   });
 
   it('displays progress for in_progress stage', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages },
-    } as any);
+    renderMultiStageOperation({ stages: mockStages });
 
     expect(screen.getByText('Processing 45 of 100 items')).toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
   });
 
   it('shows overall progress', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages },
-    } as any);
+    renderMultiStageOperation({ stages: mockStages });
 
     expect(screen.getByText('Overall Progress')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument(); // 1 of 4 completed
   });
 
   it('hides overall progress when showProgress is false', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages, showProgress: false },
-    });
+    renderMultiStageOperation({ stages: mockStages, showProgress: false });
 
     expect(screen.queryByText('Overall Progress')).not.toBeInTheDocument();
   });
@@ -90,9 +87,7 @@ describe('MultiStageOperation', () => {
       },
     ];
 
-    render(MultiStageOperation, {
-      props: { stages: stagesWithError },
-    });
+    renderMultiStageOperation({ stages: stagesWithError });
 
     expect(screen.getByText('Validation failed: Invalid data format')).toBeInTheDocument();
   });
@@ -108,9 +103,7 @@ describe('MultiStageOperation', () => {
       },
     ];
 
-    render(MultiStageOperation, {
-      props: { stages: stagesWithSkipped },
-    });
+    renderMultiStageOperation({ stages: stagesWithSkipped });
 
     expect(screen.getByText('Skipped due to configuration')).toBeInTheDocument();
   });
@@ -118,9 +111,7 @@ describe('MultiStageOperation', () => {
   it('handles stage click when callback provided', async () => {
     const onStageClick = vi.fn();
 
-    render(MultiStageOperation, {
-      props: { stages: mockStages, onStageClick },
-    });
+    renderMultiStageOperation({ stages: mockStages, onStageClick });
 
     await fireEvent.click(screen.getByText('Processing'));
 
@@ -128,9 +119,7 @@ describe('MultiStageOperation', () => {
   });
 
   it('does not handle clicks when no callback provided', async () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages },
-    } as any);
+    renderMultiStageOperation({ stages: mockStages });
 
     // Should not throw error
     const processingStage = screen.getByText('Processing');
@@ -141,9 +130,7 @@ describe('MultiStageOperation', () => {
   });
 
   it('renders compact variant', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages, variant: 'compact' },
-    });
+    renderMultiStageOperation({ stages: mockStages, variant: 'compact' });
 
     // Compact variant should not show descriptions
     expect(screen.queryByText('Setting up the environment')).not.toBeInTheDocument();
@@ -152,9 +139,7 @@ describe('MultiStageOperation', () => {
   });
 
   it('renders timeline variant', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages, variant: 'timeline' },
-    });
+    renderMultiStageOperation({ stages: mockStages, variant: 'timeline' });
 
     // Timeline should show all content
     expect(screen.getByText('Preparation')).toBeInTheDocument();
@@ -162,11 +147,9 @@ describe('MultiStageOperation', () => {
   });
 
   it('highlights current stage', () => {
-    render(MultiStageOperation, {
-      props: {
-        stages: mockStages,
-        currentStageId: 'stage2',
-      },
+    renderMultiStageOperation({
+      stages: mockStages,
+      currentStageId: 'stage2',
     });
 
     const processingStage = screen.getByText('Processing').closest('.card');
@@ -174,9 +157,7 @@ describe('MultiStageOperation', () => {
   });
 
   it('shows step numbers in default variant', () => {
-    render(MultiStageOperation, {
-      props: { stages: mockStages },
-    } as any);
+    renderMultiStageOperation({ stages: mockStages });
 
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
     expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
@@ -192,28 +173,22 @@ describe('MultiStageOperation', () => {
       { id: '4', title: 'Stage 4', status: 'pending' },
     ];
 
-    render(MultiStageOperation, {
-      props: { stages: stagesWithSkipped },
-    });
+    renderMultiStageOperation({ stages: stagesWithSkipped });
 
     // 2 completed out of 3 non-skipped = 67%
     expect(screen.getByText('67%')).toBeInTheDocument();
   });
 
   it('handles empty stages array', () => {
-    render(MultiStageOperation, {
-      props: { stages: [] },
-    });
+    renderMultiStageOperation({ stages: [] });
 
     expect(screen.getByText('0%')).toBeInTheDocument();
   });
 
   it('applies custom className', () => {
-    render(MultiStageOperation, {
-      props: {
-        stages: mockStages,
-        className: 'custom-class',
-      },
+    renderMultiStageOperation({
+      stages: mockStages,
+      className: 'custom-class',
     });
 
     expect(document.querySelector('.multi-stage-operation.custom-class')).toBeInTheDocument();

@@ -3,9 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import CollapsibleSection from './CollapsibleSection.svelte';
 import CollapsibleSectionTestWrapper from './CollapsibleSection.test.svelte';
+import type { ComponentProps } from 'svelte';
 
 // Helper function to render CollapsibleSection with proper typing
-const renderCollapsibleSection = (props?: any) => {
+const renderCollapsibleSection = (props?: Partial<ComponentProps<CollapsibleSection>>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(CollapsibleSection as any, props ? { props } : undefined);
 };

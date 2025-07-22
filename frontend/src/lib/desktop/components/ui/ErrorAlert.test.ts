@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
+import type { ComponentProps } from 'svelte';
 
 // Helper function to render ErrorAlert with proper typing
-const renderErrorAlert = (props: any) => {
+const renderErrorAlert = (props: Partial<ComponentProps<ErrorAlert>>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(ErrorAlert as any, { props });
 };

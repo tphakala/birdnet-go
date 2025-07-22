@@ -3,9 +3,10 @@ import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import FormField from './FormField.svelte';
 import { required, email, minLength, range } from '$lib/utils/validators';
+import type { ComponentProps } from 'svelte';
 
 // Helper function to render FormField with proper typing
-const renderFormField = (props: any) => {
+const renderFormField = (props: Partial<ComponentProps<FormField>>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(FormField as any, { props });
 };

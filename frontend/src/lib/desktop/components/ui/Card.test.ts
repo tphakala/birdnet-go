@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import Card from './Card.svelte';
 import CardTestWrapper from './Card.test.svelte';
+import type { ComponentProps } from 'svelte';
 
 // Helper function to render Card with proper typing
-const renderCard = (props?: any) => {
+const renderCard = (props?: Partial<ComponentProps<Card>>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(Card as any, props ? { props } : { props: {} });
 };

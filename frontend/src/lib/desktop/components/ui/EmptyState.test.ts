@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import EmptyState from './EmptyState.svelte';
 import EmptyStateTestWrapper from './EmptyState.test.svelte';
+import type { ComponentProps } from 'svelte';
 
 // Helper function to render EmptyState with proper typing
-const renderEmptyState = (props?: any) => {
+const renderEmptyState = (props?: Partial<ComponentProps<EmptyState>>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(EmptyState as any, props ? { props } : undefined);
 };
