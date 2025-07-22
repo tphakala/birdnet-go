@@ -134,7 +134,7 @@ Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
 
-License: https://github.com/go-viper/mapstructure/blob/v2.2.1/LICENSE
+License: https://github.com/go-viper/mapstructure/blob/v2.3.0/LICENSE
 Source: MIT
 
 ### github.com/google/s2a-go
@@ -387,6 +387,11 @@ Source: Apache-2.0
 License: Unknown
 Source: Unknown
 
+### github.com/tphakala/birdnet-go/frontend
+
+License: Unknown
+Source: Unknown
+
 ### github.com/tphakala/flac
 
 License: https://github.com/tphakala/flac/blob/20d6d98f5ee3/LICENSE
@@ -484,7 +489,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.239.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.240.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
