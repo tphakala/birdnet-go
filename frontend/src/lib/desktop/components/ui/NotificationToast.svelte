@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   type ToastType = 'info' | 'success' | 'warning' | 'error';
   type ToastPosition =
@@ -143,21 +144,7 @@
         onclick={handleClose}
         aria-label="Close notification"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
+        {@html navigationIcons.close}
       </button>
     </div>
   </div>

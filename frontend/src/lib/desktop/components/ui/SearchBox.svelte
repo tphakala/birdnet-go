@@ -9,6 +9,7 @@
     type SearchFilter,
     type ParsedSearch,
   } from '$lib/utils/searchParser';
+  import { navigationIcons, actionIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     className?: string;
@@ -420,19 +421,9 @@
             class="absolute inset-y-0 right-8 sm:right-10 flex items-center pr-2 hover:bg-base-200 rounded-full"
             aria-label="Clear search"
           >
-            <svg
-              class="w-4 h-4 text-base-content/60"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <div class="text-base-content/60">
+              {@html navigationIcons.close}
+            </div>
           </button>
         {/if}
 
@@ -444,20 +435,9 @@
           {#if isSearching}
             <span class="loading loading-spinner loading-sm"></span>
           {:else}
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="1.5"
-              stroke="currentColor"
-              class={sizeClasses().icon}
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-              />
-            </svg>
+            <div class={sizeClasses().icon}>
+              {@html actionIcons.search}
+            </div>
           {/if}
         </div>
 
