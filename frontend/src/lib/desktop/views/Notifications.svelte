@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
 
   let notifications = $state([]);
   let loading = $state(false);
@@ -288,20 +289,7 @@
             class="btn btn-sm btn-ghost"
             aria-label="Refresh notifications"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="1.5"
-              stroke="currentColor"
-              class="w-4 h-4"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-              />
-            </svg>
+            {@html actionIcons.refresh}
             Refresh
           </button>
         </div>
@@ -322,20 +310,9 @@
     {:else if notifications.length === 0}
       <div class="card bg-base-100 shadow-sm">
         <div class="card-body text-center py-12">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="1.5"
-            stroke="currentColor"
-            class="w-16 h-16 mx-auto mb-4 opacity-30"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M9.143 17.082a24.248 24.248 0 003.844.148m-3.844-.148a23.856 23.856 0 01-5.455-1.31 8.964 8.964 0 002.3-5.542m3.155 6.852a3 3 0 005.667 1.97m1.965-2.277L21 21m-4.225-4.225a23.81 23.81 0 003.536-1.003A8.967 8.967 0 0118 9.75V9A6 6 0 006.53 6.53m10.245 10.245L6.53 6.53M3 3l3.53 3.53"
-            />
-          </svg>
+          <span class="opacity-30 mb-4" aria-hidden="true">
+            {@html systemIcons.bellOff}
+          </span>
           <p class="text-lg text-base-content/60">No notifications found</p>
           <p class="text-sm text-base-content/40">Adjust your filters or check back later</p>
         </div>
@@ -353,20 +330,7 @@
               <div class="flex-shrink-0">
                 <div class={getNotificationIconClass(notification)}>
                   {#if notification.type === 'error'}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke-width="2"
-                      stroke="currentColor"
-                      class="w-6 h-6"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-                      />
-                    </svg>
+                    {@html alertIconsSvg.error}
                   {:else if notification.type === 'warning'}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
