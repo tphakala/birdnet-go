@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props extends HTMLAttributes<HTMLElement> {
     currentPage?: number;
@@ -69,9 +70,7 @@
       disabled={disabled || currentPage === 1}
       aria-label="Go to previous page"
     >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
+      {@html navigationIcons.arrowLeft}
     </button>
 
     <!-- Page numbers -->
@@ -119,9 +118,7 @@
       disabled={disabled || currentPage === totalPages}
       aria-label="Go to next page"
     >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-      </svg>
+      {@html navigationIcons.arrowRight}
     </button>
   </div>
 </nav>

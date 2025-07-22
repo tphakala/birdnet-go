@@ -3,6 +3,7 @@
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary, DetectionQueryParams } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -202,20 +203,7 @@
       <div class="flex items-center gap-2">
         <!-- Previous day button -->
         <button onclick={onPreviousDay} class="btn btn-sm btn-ghost" aria-label="Previous day">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
+          {@html navigationIcons.arrowLeft}
         </button>
 
         <!-- Date picker -->
@@ -228,20 +216,7 @@
           disabled={isToday}
           aria-label="Next day"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
+          {@html navigationIcons.arrowRight}
         </button>
 
         {#if !isToday}

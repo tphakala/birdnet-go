@@ -374,9 +374,6 @@
     left: 0;
     right: 0;
     z-index: 51;
-  }
-
-  /* Dropdown positioning handled by .dropdown-menu class above */
     /* Use viewport units to prevent cutoff on small screens */
     max-width: 100vw;
     box-shadow:
