@@ -546,8 +546,16 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		controller.Settings.Realtime.Birdweather.Enabled = true
 		controller.Settings.Realtime.Birdweather.ID = "INVALID_ID"
 
-		// Create a test HTTP request
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", http.NoBody)
+		// Create JSON request body for BirdWeather test
+		requestBody := `{
+			"enabled": true,
+			"id": "INVALID_ID",
+			"threshold": 0.8,
+			"locationAccuracy": 50.0,
+			"debug": false
+		}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", strings.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
@@ -601,8 +609,16 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		// Create a test HTTP request with the cancellable context
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", http.NoBody).WithContext(ctx)
+		// Create JSON request body for BirdWeather test
+		requestBody := `{
+			"enabled": true,
+			"id": "VALID_ID",
+			"threshold": 0.8,
+			"locationAccuracy": 50.0,
+			"debug": false
+		}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", strings.NewReader(requestBody)).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 
