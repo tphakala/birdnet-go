@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
+  import { navigationIcons } from '$lib/utils/icons';
 
   interface Props {
     title: string;
@@ -43,19 +44,13 @@
         </span>
       {/if}
       <!-- Collapse indicator -->
-      <svg
+      <div
         class="ml-auto w-4 h-4 transition-transform duration-200"
         class:rotate-180={isOpen}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
         aria-hidden="true"
       >
-        <path d="M6 9l6 6 6-6" />
-      </svg>
+        {@html navigationIcons.chevronDown}
+      </div>
     </div>
     {#if description}
       <p class="text-sm text-base-content/70 mt-1">{description}</p>

@@ -32,6 +32,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
+  import { iconPaths } from '$lib/utils/icons';
 
   type TrendDirection = 'up' | 'down' | 'neutral';
   type CardVariant =
@@ -128,11 +129,11 @@
   function renderTrendIcon(direction: TrendDirection) {
     switch (direction) {
       case 'up':
-        return 'M5 15l7-7 7 7';
+        return iconPaths.trendUp;
       case 'down':
-        return 'M19 9l-7 7-7-7';
+        return iconPaths.trendDown;
       default:
-        return 'M4 12h16';
+        return iconPaths.trendNeutral;
     }
   }
 </script>
