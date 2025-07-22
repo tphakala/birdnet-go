@@ -8,6 +8,7 @@
     type SupportSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   let settings = $derived(
     $supportSettings ||
@@ -219,20 +220,9 @@
               readonly
             />
             <button type="button" class="btn btn-sm join-item" onclick={copySystemId}>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
+              <div class="h-5 w-5">
+                {@html actionIcons.copy}
+              </div>
               Copy
             </button>
           </div>
@@ -268,19 +258,7 @@
               </p>
 
               <div class="alert alert-warning shadow-sm">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="stroke-current shrink-0 h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                {@html alertIconsSvg.info}
                 <div>
                   <h4 class="font-bold">Important: File a GitHub Issue</h4>
                   <p class="text-sm">
@@ -299,77 +277,33 @@
                 <h4 class="font-semibold text-sm mb-2">What's included in the report:</h4>
                 <ul class="text-xs space-y-1 text-base-content/70">
                   <li class="flex items-start gap-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-4 w-4 text-success mt-0.5 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <div class="h-4 w-4 text-success mt-0.5 flex-shrink-0">
+                      {@html alertIconsSvg.success}
+                    </div>
                     <span
                       ><strong>Application logs</strong> - Recent errors and debug information</span
                     >
                   </li>
                   <li class="flex items-start gap-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-4 w-4 text-success mt-0.5 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <div class="h-4 w-4 text-success mt-0.5 flex-shrink-0">
+                      {@html alertIconsSvg.success}
+                    </div>
                     <span
                       ><strong>Configuration</strong> - Your settings with sensitive data removed</span
                     >
                   </li>
                   <li class="flex items-start gap-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-4 w-4 text-success mt-0.5 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <div class="h-4 w-4 text-success mt-0.5 flex-shrink-0">
+                      {@html alertIconsSvg.success}
+                    </div>
                     <span
                       ><strong>System information</strong> - OS version, memory, and runtime details</span
                     >
                   </li>
                   <li class="flex items-start gap-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-4 w-4 text-error mt-0.5 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <div class="h-4 w-4 text-error mt-0.5 flex-shrink-0">
+                      {@html alertIconsSvg.error}
+                    </div>
                     <span
                       ><strong>NOT included</strong> - Audio files, bird detections, or personal data</span
                     >
