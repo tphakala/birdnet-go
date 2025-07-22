@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { alertIcons, navigationIcons, type AlertIconType } from '$lib/utils/icons';
+  import { alertIconsSvg, navigationIcons, type AlertIconType } from '$lib/utils/icons';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -34,8 +34,8 @@
     success: 'alert-success',
   };
 
-  // Use centralized icon paths from icons utility
-  const iconPaths = alertIcons;
+  // Use centralized complete SVG icons
+  const iconSvgs = alertIconsSvg;
 
   function handleDismiss() {
     isVisible = false;
@@ -49,14 +49,7 @@
 
 {#if isVisible}
   <div class={cn('alert', typeClasses[type], className)} role="alert" {...rest}>
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      class="h-6 w-6 shrink-0 stroke-current"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={iconPaths[type]} />
-    </svg>
+    {@html iconSvgs[type]}
 
     <span>
       {#if children}
