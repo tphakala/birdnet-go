@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { screen, render } from '@testing-library/svelte';
 import LoadingSpinner from './LoadingSpinner.svelte';
+import type { ComponentProps } from 'svelte';
 
 // Helper function to render LoadingSpinner with proper typing
-const renderLoadingSpinner = (props?: any) => {
+const renderLoadingSpinner = (props?: Partial<ComponentProps<LoadingSpinner>>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(LoadingSpinner as any, props ? { props } : undefined);
 };
