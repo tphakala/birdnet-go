@@ -51,10 +51,17 @@
     renderSelected,
   }: Props = $props();
 
-  // Initialize value based on multiple prop
+  // Initialize value based on multiple prop and handle type changes
   $effect(() => {
     if (value === undefined) {
       value = multiple ? [] : '';
+    } else {
+      // Reset value type when multiple prop changes
+      if (multiple && !Array.isArray(value)) {
+        value = [];
+      } else if (!multiple && Array.isArray(value)) {
+        value = '';
+      }
     }
   });
 
@@ -373,6 +380,7 @@
           {#if filteredOptions().length === 0}
             <div class="p-4 text-center text-base-content/60">No options found</div>
           {:else}
+            {@const flatOptions = filteredOptions()}
             {#each Object.entries(groupedOptions()) as [group, groupOptions]}
               {#if group && groupBy}
                 <div class="px-3 py-2 text-xs font-semibold text-base-content/60 uppercase">
@@ -381,13 +389,14 @@
               {/if}
 
               {#each groupOptions as option}
+                {@const flatIndex = flatOptions.findIndex(opt => opt === option)}
                 <button
                   type="button"
                   class={cn(
                     'w-full px-3 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-none flex items-center gap-2',
                     isSelected(option) && 'bg-primary/10 text-primary',
                     option.disabled && 'opacity-50 cursor-not-allowed',
-                    highlightedIndex === filteredOptions().indexOf(option) && 'bg-base-200'
+                    highlightedIndex === flatIndex && 'bg-base-200'
                   )}
                   disabled={option.disabled}
                   onclick={() => selectOption(option)}

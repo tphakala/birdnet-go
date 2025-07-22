@@ -50,6 +50,8 @@
     accept?: string;
     pattern?: string;
     autocomplete?: HTMLInputElement['autocomplete'];
+    // Radio button specific
+    radioValue?: string; // Value for radio button option (distinct from placeholder)
     // Event handlers
     onChange?: (_value: string | number | boolean | string[]) => void;
     onBlur?: () => void;
@@ -87,6 +89,7 @@
     accept,
     pattern,
     autocomplete,
+    radioValue,
     onChange,
     onBlur,
     onFocus,
@@ -318,8 +321,8 @@
           id={fieldId}
           type="radio"
           {name}
-          value={placeholder}
-          checked={value === placeholder}
+          value={radioValue ?? placeholder}
+          checked={value === (radioValue ?? placeholder)}
           {required}
           {disabled}
           {readonly}
