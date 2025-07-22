@@ -104,7 +104,7 @@
       class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
       role="tooltip"
       aria-live="polite"
-      style="left: 0; top: calc(100% + 4px); transform: translateX(0); max-width: min(300px, calc(100vw - 20px));"
+      style:left="0" style:top="calc(100% + 4px)" style:max-width="min(300px, calc(100vw - 20px))" style:transform="translateX(0)"
     >
       {tooltip}
     </div>
