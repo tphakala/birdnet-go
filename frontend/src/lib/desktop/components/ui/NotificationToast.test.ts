@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import type { ComponentType } from 'svelte';
 import NotificationToast from './NotificationToast.svelte';
 import NotificationToastTestWrapper from './NotificationToast.test.svelte';
+
+// Type helper for Svelte component testing
+type SvelteTestComponent<T = Record<string, unknown>> = ComponentType<T>;
 
 describe('NotificationToast', () => {
   beforeEach(() => {
@@ -14,8 +18,7 @@ describe('NotificationToast', () => {
   });
 
   it('renders with message', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Test notification',
       },
@@ -24,29 +27,27 @@ describe('NotificationToast', () => {
     expect(screen.getByText('Test notification')).toBeInTheDocument();
   });
 
-  it('renders with different types', () => {
-    const types = ['info', 'success', 'warning', 'error'] as const;
-
-    types.forEach(type => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { container, unmount } = render(NotificationToast as any, {
-        props: {
-          type,
-          message: `${type} message`,
-        },
-      });
-
-      const alert = container.querySelector('.alert');
-      expect(alert).toHaveClass(`alert-${type}`);
-      unmount();
+  it.each([
+    ['info'],
+    ['success'],
+    ['warning'],
+    ['error'],
+  ] as const)('renders with type %s', (type) => {
+    const { container } = render(NotificationToast as SvelteTestComponent, {
+      props: {
+        type,
+        message: `${type} message`,
+      },
     });
+
+    const alert = container.querySelector('.alert');
+    expect(alert).toHaveClass(`alert-${type}`);
   });
 
   it('auto-dismisses after duration', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Auto dismiss',
         duration: 3000,
@@ -66,8 +67,7 @@ describe('NotificationToast', () => {
   });
 
   it('does not auto-dismiss when duration is null', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Persistent notification',
         duration: null,
@@ -86,8 +86,7 @@ describe('NotificationToast', () => {
   it('closes when close button clicked', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Close me',
         onClose,
@@ -105,8 +104,7 @@ describe('NotificationToast', () => {
     const action1 = vi.fn();
     const action2 = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Action toast',
         actions: [
@@ -137,8 +135,7 @@ describe('NotificationToast', () => {
     ] as const;
 
     positions.forEach(({ position, class: expectedClass }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { container, unmount } = render(NotificationToast as any, {
+      const { container, unmount } = render(NotificationToast as SvelteTestComponent, {
         props: {
           message: 'Test',
           position,
@@ -152,8 +149,7 @@ describe('NotificationToast', () => {
   });
 
   it('shows icon by default', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(NotificationToast as any, {
+    const { container } = render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'With icon',
         type: 'success',
@@ -165,8 +161,7 @@ describe('NotificationToast', () => {
   });
 
   it('hides icon when showIcon is false', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(NotificationToast as any, {
+    const { container } = render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'No icon',
         showIcon: false,
@@ -179,8 +174,7 @@ describe('NotificationToast', () => {
   });
 
   it('renders with custom children content', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToastTestWrapper as any, {
+    render(NotificationToastTestWrapper as SvelteTestComponent, {
       props: {
         showChildren: true,
       },
@@ -191,8 +185,7 @@ describe('NotificationToast', () => {
   });
 
   it('applies custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(NotificationToast as any, {
+    const { container } = render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Custom class',
         className: 'custom-toast',
@@ -204,8 +197,7 @@ describe('NotificationToast', () => {
   });
 
   it('sets proper ARIA attributes', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Info toast',
         type: 'info',
@@ -215,8 +207,7 @@ describe('NotificationToast', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveAttribute('aria-live', 'polite');
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(NotificationToast as any, {
+    const { container } = render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Error toast',
         type: 'error',
@@ -230,8 +221,7 @@ describe('NotificationToast', () => {
   it('clears timeout when closed manually', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(NotificationToast as any, {
+    render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Manual close',
         duration: 5000,
@@ -250,8 +240,7 @@ describe('NotificationToast', () => {
   });
 
   it('cleans up timeout on unmount', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { unmount } = render(NotificationToast as any, {
+    const { unmount } = render(NotificationToast as SvelteTestComponent, {
       props: {
         message: 'Unmount test',
         duration: 5000,

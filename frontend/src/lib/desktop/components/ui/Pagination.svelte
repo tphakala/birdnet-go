@@ -76,14 +76,17 @@
 
     <!-- Page numbers -->
     {#if showPageInfo && totalPages > 1}
-      {#if visiblePages()[0] > 1}
+      {@const pages = visiblePages()}
+      {@const firstPage = pages[0]}
+      {@const lastPage = pages[pages.length - 1]}
+      {#if firstPage > 1}
         <button class="join-item btn btn-sm" onclick={() => goToPage(1)} {disabled}> 1 </button>
-        {#if visiblePages()[0] > 2}
+        {#if firstPage > 2}
           <button class="join-item btn btn-sm btn-disabled" disabled> ... </button>
         {/if}
       {/if}
 
-      {#each visiblePages() as page}
+      {#each pages as page}
         <button
           class={cn('join-item btn btn-sm', { 'btn-active': page === currentPage })}
           onclick={() => goToPage(page)}
@@ -95,8 +98,8 @@
         </button>
       {/each}
 
-      {#if visiblePages()[visiblePages().length - 1] < totalPages}
-        {#if visiblePages()[visiblePages().length - 1] < totalPages - 1}
+      {#if lastPage < totalPages}
+        {#if lastPage < totalPages - 1}
           <button class="join-item btn btn-sm btn-disabled" disabled> ... </button>
         {/if}
         <button class="join-item btn btn-sm" onclick={() => goToPage(totalPages)} {disabled}>

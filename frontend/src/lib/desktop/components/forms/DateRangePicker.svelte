@@ -209,9 +209,10 @@
 
     const { startDate: presetStart, endDate: presetEnd } = preset.getValue();
 
+    // Use getTime() for timezone-safe date comparison
     return (
-      startDateObj.toDateString() === presetStart.toDateString() &&
-      endDateObj.toDateString() === presetEnd.toDateString()
+      startDateObj.getTime() === presetStart.getTime() &&
+      endDateObj.getTime() === presetEnd.getTime()
     );
   }
 </script>
