@@ -12,7 +12,7 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { RTSPUrl } from '$lib/stores/settings';
-  import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   let settings = $derived({

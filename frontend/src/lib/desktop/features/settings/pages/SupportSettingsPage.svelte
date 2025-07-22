@@ -1,6 +1,6 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import {
     settingsStore,
     settingsActions,

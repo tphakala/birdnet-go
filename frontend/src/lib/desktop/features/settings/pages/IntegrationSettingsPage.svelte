@@ -4,10 +4,10 @@
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
-  import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
-  import SettingsButton from '$lib/desktop/components/ui/SettingsButton.svelte';
-  import SettingsNote from '$lib/desktop/components/ui/SettingsNote.svelte';
+  import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import {

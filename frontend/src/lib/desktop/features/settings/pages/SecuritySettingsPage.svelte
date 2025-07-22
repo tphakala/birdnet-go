@@ -2,8 +2,8 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
-  import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
-  import SettingsNote from '$lib/desktop/components/ui/SettingsNote.svelte';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import {
     settingsStore,
     settingsActions,
