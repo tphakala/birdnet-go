@@ -51,7 +51,8 @@ class SSENotificationManager {
           const notification: SSENotification = JSON.parse(event.data);
           this.handleNotification(notification);
         } catch (error) {
-          // Ignore parsing errors for general messages
+          // Log parsing errors for debugging while ignoring them for backwards compatibility
+          console.warn('SSE general message parsing error (ignored):', error, 'Data:', event.data);
         }
       };
 
@@ -65,9 +66,11 @@ class SSENotificationManager {
       this.eventSource.addEventListener('connected', (event: Event) => {
         try {
           const messageEvent = event as MessageEvent;
-          JSON.parse(messageEvent.data);
-        } catch {
-          // Ignore parsing errors for connection events
+          const data = JSON.parse(messageEvent.data);
+          console.log('SSE connected:', data);
+        } catch (error) {
+          // Log parsing errors for debugging while ignoring them for connection events
+          console.warn('SSE connected event parsing error (ignored):', error);
         }
       });
 
@@ -86,9 +89,11 @@ class SSENotificationManager {
       this.eventSource.addEventListener('heartbeat', (event: Event) => {
         try {
           const messageEvent = event as MessageEvent;
-          JSON.parse(messageEvent.data);
-        } catch {
-          // Ignore parsing errors for heartbeat
+          const data = JSON.parse(messageEvent.data);
+          // Heartbeat received successfully - could add connection health tracking here
+        } catch (error) {
+          // Log parsing errors for debugging while ignoring them for heartbeat
+          console.warn('SSE heartbeat parsing error (ignored):', error);
         }
       });
     } catch (error) {

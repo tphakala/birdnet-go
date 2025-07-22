@@ -48,6 +48,10 @@
   let touched = $state(false);
   let inputElement = $state<HTMLInputElement>();
 
+  // Generate unique tooltip ID for accessibility (deterministic for SSR compatibility)
+  let tooltipCounter = 0;
+  let tooltipId = $derived(id ? `${id}-tooltip` : `tooltip-${++tooltipCounter}`);
+
   let isValid = $derived(() => {
     if (!inputElement || !touched) return true;
     return inputElement.validity.valid;
@@ -142,6 +146,7 @@
 
   {#if tooltip && showTooltip}
     <div
+      id={tooltipId}
       class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
       role="tooltip"
     >
