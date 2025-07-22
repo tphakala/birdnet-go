@@ -32,7 +32,7 @@
   import { cn } from '$lib/utils/cn';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Snippet } from 'svelte';
-  import { alertIcons, alertIconsSvg, weatherIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { weatherIcons, alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface WeatherData {
     hourly?: {
@@ -90,13 +90,7 @@
     error = null;
 
     try {
-      const response = await fetchWithCSRF(`/api/v2/weather/detection/${id}`);
-
-      if (!response.ok) {
-        throw new Error('Weather data not available');
-      }
-
-      const data = (await response.json()) as WeatherData;
+      const data = await fetchWithCSRF<WeatherData>(`/api/v2/weather/detection/${id}`);
       weather = data;
       onLoad?.(data);
     } catch (err) {

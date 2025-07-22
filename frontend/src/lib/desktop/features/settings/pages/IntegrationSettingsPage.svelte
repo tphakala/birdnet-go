@@ -916,10 +916,10 @@
               <h3 class="text-sm font-medium mb-3">Message Settings</h3>
 
               <Checkbox
-                bind:checked={(settings.mqtt as MQTTSettings).retain}
+                checked={(settings.mqtt as MQTTSettings).retain || false}
                 label="Retain Messages"
                 disabled={store.isLoading || store.isSaving}
-                onchange={() => updateMQTTRetain((settings.mqtt as MQTTSettings).retain || false)}
+                onchange={(checked) => updateMQTTRetain(checked)}
               />
 
               <!-- Note about MQTT Retain for HomeAssistant -->

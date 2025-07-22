@@ -7,7 +7,6 @@
   import { auth as authStore } from '$lib/stores/auth';
   import { csrf as csrfStore } from '$lib/stores/csrf';
   import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
-  import { sseNotifications } from '$lib/stores/sseNotifications';
 
   interface Props {
     title?: string;

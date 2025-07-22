@@ -16,7 +16,7 @@
   let Detections = $state<Component | null>(null);
   let ErrorPage = $state<Component | null>(null);
   let ServerErrorPage = $state<Component | null>(null);
-  let GenericErrorPage = $state<Component | null>(null);
+  let GenericErrorPage = $state<any>(null);
 
   let currentRoute = $state<string>('');
   let currentPage = $state<string>('');
@@ -307,6 +307,11 @@
   {:else if currentRoute === 'error-500'}
     {@render renderRoute(ServerErrorPage)}
   {:else if currentRoute === 'error-generic'}
-    {@render renderRoute(GenericErrorPage)}
+    {#if GenericErrorPage}
+      {@const ErrorComponent = GenericErrorPage}
+      <ErrorComponent code="500" title="Component Load Error" message="Failed to load the requested component" />
+    {:else if loadingComponent}
+      {@render loadingSpinner()}
+    {/if}
   {/if}
 </RootLayout>
