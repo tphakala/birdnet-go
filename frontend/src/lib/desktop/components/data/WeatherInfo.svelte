@@ -32,7 +32,7 @@
   import { cn } from '$lib/utils/cn';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Snippet } from 'svelte';
-  import { alertIcons, weatherIcons } from '$lib/utils/icons';
+  import { alertIcons, alertIconsSvg, weatherIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface WeatherData {
     hourly?: {
@@ -165,20 +165,9 @@
     <!-- Error state -->
     <div class="py-4" role="alert">
       <div class="text-error flex items-center">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5 mr-2"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d={alertIcons.error}
-          />
-        </svg>
+        <div class="h-5 w-5 mr-2">
+          {@html alertIconsSvg.error}
+        </div>
         <span>{error}</span>
       </div>
     </div>
