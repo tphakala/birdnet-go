@@ -5,7 +5,7 @@ import FormField from './FormField.svelte';
 import { required, email, minLength, range } from '$lib/utils/validators';
 
 // Helper function to render FormField with proper typing
-const renderFormField = (props: Record<string, any>) => {
+const renderFormField = (props: Record<string, unknown>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(FormField as any, { props });
 };

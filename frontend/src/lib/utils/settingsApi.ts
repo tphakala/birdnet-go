@@ -20,8 +20,8 @@ export const settingsAPI = {
   /**
    * Save all settings to the server
    */
-  save: (data: SettingsFormData): Promise<any> => {
-    return api.put<any>('/api/v2/settings', data);
+  save: (data: SettingsFormData): Promise<unknown> => {
+    return api.put<unknown>('/api/v2/settings', data);
   },
 
   /**

@@ -37,8 +37,6 @@ export interface ParsedSearch {
 // Valid time-of-day values
 const TIME_OF_DAY_VALUES = ['dawn', 'day', 'dusk', 'night'];
 
-// Valid boolean values
-const BOOLEAN_VALUES = ['true', 'false', 'yes', 'no', '1', '0'];
 
 // Date shortcuts
 const DATE_SHORTCUTS = ['today', 'yesterday', 'week', 'month'];
@@ -486,7 +484,7 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
 
       case 'daterange':
         params.startDate = filter.value.toString();
-        params.endDate = filter.value2 || '';
+        params.endDate = filter.value2 ?? '';
         break;
 
       case 'verified':
@@ -518,7 +516,7 @@ export function getFilterSuggestions(partialInput: string): string[] {
 
   // Check if user is typing a filter
   if (partialInput.includes(':')) {
-    const [filterType, filterValue] = partialInput.split(':', 2);
+    const [filterType, _filterValue] = partialInput.split(':', 2);
 
     switch (filterType.toLowerCase()) {
       case 'confidence':

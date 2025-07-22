@@ -26,8 +26,8 @@
     className?: string;
     titleClassName?: string;
     gridClassName?: string;
-    onError?: (error: Error) => void;
-    onLoad?: (data: WeatherData) => void;
+    onError?: (_error: Error) => void;
+    onLoad?: (_data: WeatherData) => void;
     useCustomContent?: boolean;
   }
 
