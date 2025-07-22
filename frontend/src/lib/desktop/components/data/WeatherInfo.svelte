@@ -32,6 +32,7 @@
   import { cn } from '$lib/utils/cn';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Snippet } from 'svelte';
+  import { alertIcons, weatherIcons } from '$lib/utils/icons';
 
   interface WeatherData {
     hourly?: {
@@ -167,13 +168,15 @@
         <svg
           xmlns="http://www.w3.org/2000/svg"
           class="h-5 w-5 mr-2"
-          viewBox="0 0 20 20"
-          fill="currentColor"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
         >
           <path
-            fill-rule="evenodd"
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-            clip-rule="evenodd"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d={alertIcons.error}
           />
         </svg>
         <span>{error}</span>
@@ -194,21 +197,7 @@
       >
         <!-- Temperature -->
         <div class="flex items-center">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 mr-2 text-blue-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
-            />
-          </svg>
+          {@html weatherIcons.temperature}
           <div>
             <div class="text-base-content/70">Temperature</div>
             <div class="font-medium">{formatTemperature(weather.hourly?.temperature)}</div>
@@ -217,21 +206,7 @@
 
         <!-- Weather condition -->
         <div class="flex items-center">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 mr-2 text-blue-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-            />
-          </svg>
+          {@html weatherIcons.sun}
           <div>
             <div class="text-base-content/70">Weather</div>
             <div class="font-medium">{weather.hourly?.weatherMain || 'N/A'}</div>
@@ -240,21 +215,7 @@
 
         <!-- Wind speed -->
         <div class="flex items-center">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 mr-2 text-blue-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-            />
-          </svg>
+          {@html weatherIcons.wind}
           <div>
             <div class="text-base-content/70">Wind</div>
             <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed)}</div>
@@ -263,21 +224,7 @@
 
         <!-- Humidity -->
         <div class="flex items-center">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 mr-2 text-blue-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          {@html weatherIcons.humidity}
           <div>
             <div class="text-base-content/70">Humidity</div>
             <div class="font-medium">{formatPercentage(weather.hourly?.humidity)}</div>
@@ -287,21 +234,7 @@
         {#if !compact && weather.hourly?.pressure !== undefined}
           <!-- Pressure (non-compact mode) -->
           <div class="flex items-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5 mr-2 text-blue-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
+            {@html weatherIcons.pressure}
             <div>
               <div class="text-base-content/70">Pressure</div>
               <div class="font-medium">{weather.hourly.pressure} hPa</div>
@@ -312,21 +245,7 @@
         {#if !compact && weather.hourly?.clouds !== undefined}
           <!-- Cloud cover (non-compact mode) -->
           <div class="flex items-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5 mr-2 text-blue-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
-              />
-            </svg>
+            {@html weatherIcons.cloudCover}
             <div>
               <div class="text-base-content/70">Cloud Cover</div>
               <div class="font-medium">{formatPercentage(weather.hourly.clouds)}</div>
