@@ -11,6 +11,7 @@
     type SecuritySettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   // Create default settings
   const defaultSettings: SecuritySettings = {
@@ -345,19 +346,7 @@
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
               >
                 Get your credentials from Google Cloud Console
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 ml-1"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"
-                  />
-                  <path
-                    d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"
-                  />
-                </svg>
+                {@html systemIcons.externalLink}
               </a>
             </div>
 
@@ -428,19 +417,7 @@
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
               >
                 Get your credentials from GitHub Developer Settings
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 ml-1"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"
-                  />
-                  <path
-                    d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"
-                  />
-                </svg>
+                {@html systemIcons.externalLink}
               </a>
             </div>
 
@@ -511,19 +488,7 @@
         </div>
 
         <div class="alert alert-warning">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
+          {@html alertIconsSvg.warning}
           <span>
             <strong>Security Warning:</strong> Devices from these subnets will have unrestricted access.
             Only include trusted internal networks.
