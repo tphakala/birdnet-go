@@ -2,10 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { screen, render } from '@testing-library/svelte';
 import LoadingSpinner from './LoadingSpinner.svelte';
 
+// Helper function to render LoadingSpinner with proper typing
+const renderLoadingSpinner = (props?: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(LoadingSpinner as any, props ? { props } : undefined);
+};
+
 describe('LoadingSpinner', () => {
   it('renders with default props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(LoadingSpinner as any);
+    renderLoadingSpinner();
 
     const spinner = screen.getByRole('status');
     expect(spinner).toBeInTheDocument();
@@ -16,8 +21,7 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with custom size', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(LoadingSpinner as any, { props: { size: 'sm' } });
+    renderLoadingSpinner({ size: 'sm' });
 
     const spinner = screen.getByRole('status');
     const spinnerElement = spinner.querySelector('.loading');
@@ -25,8 +29,7 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with custom color', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(LoadingSpinner as any, { props: { color: 'text-secondary' } });
+    renderLoadingSpinner({ color: 'text-secondary' } });
 
     const spinner = screen.getByRole('status');
     const spinnerElement = spinner.querySelector('.loading');
@@ -34,8 +37,7 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with custom label', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(LoadingSpinner as any, { props: { label: 'Processing...' } });
+    renderLoadingSpinner({ label: 'Processing...' } });
 
     const spinner = screen.getByRole('status');
     expect(spinner).toHaveAttribute('aria-label', 'Processing...');
@@ -43,8 +45,7 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with all custom props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(LoadingSpinner as any, {
+    renderLoadingSpinner(, {
       props: {
         size: 'xl',
         color: 'text-error',

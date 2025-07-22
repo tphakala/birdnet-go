@@ -3,10 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import EmptyState from './EmptyState.svelte';
 import EmptyStateTestWrapper from './EmptyState.test.svelte';
 
+// Helper function to render EmptyState with proper typing
+const renderEmptyState = (props?: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(EmptyState as any, props ? { props } : undefined);
+};
+
 describe('EmptyState', () => {
   it('renders with default props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(EmptyState as any);
+    const { container } = renderEmptyState();
 
     const emptyState = container.querySelector('div');
     expect(emptyState).toBeInTheDocument();
@@ -18,12 +23,9 @@ describe('EmptyState', () => {
   });
 
   it('renders with title and description', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(EmptyState as any, {
-      props: {
+    renderEmptyState({
         title: 'No data found',
         description: 'Try adjusting your search criteria',
-      },
     });
 
     expect(screen.getByText('No data found')).toBeInTheDocument();
@@ -35,7 +37,6 @@ describe('EmptyState', () => {
     render(EmptyStateTestWrapper as any, {
       props: {
         showCustomIcon: true,
-      },
     });
 
     expect(screen.getByTestId('custom-icon')).toBeInTheDocument();
@@ -44,15 +45,12 @@ describe('EmptyState', () => {
   it('renders with action button', async () => {
     const onClick = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(EmptyState as any, {
-      props: {
+    renderEmptyState({
         title: 'No results',
         action: {
           label: 'Try again',
           onClick,
         },
-      },
     });
 
     const button = screen.getByText('Try again');
@@ -68,7 +66,6 @@ describe('EmptyState', () => {
     render(EmptyStateTestWrapper as any, {
       props: {
         showChildren: true,
-      },
     });
 
     expect(screen.getByText('Custom child content')).toBeInTheDocument();
@@ -76,11 +73,9 @@ describe('EmptyState', () => {
   });
 
   it('renders with custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(EmptyState as any, {
+    const { container } = renderEmptyState(, {
       props: {
         className: 'custom-empty-state',
-      },
     });
 
     const emptyState = container.querySelector('div');
@@ -101,7 +96,6 @@ describe('EmptyState', () => {
           label: 'Take action',
           onClick,
         },
-      },
     });
 
     expect(screen.getByTestId('custom-icon')).toBeInTheDocument();
@@ -112,12 +106,10 @@ describe('EmptyState', () => {
   });
 
   it('spreads additional props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(EmptyState as any, {
+    const { container } = renderEmptyState(, {
       props: {
         id: 'test-empty-state',
         'data-testid': 'empty-state',
-      },
     });
 
     const emptyState = container.querySelector('div');
