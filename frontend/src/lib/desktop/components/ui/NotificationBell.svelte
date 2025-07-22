@@ -242,13 +242,51 @@
     }
   }
 
+  let audioReady = false;
+  let preloadedAudio: HTMLAudioElement | null = null;
+
+  // Preload notification sound
+  function preloadNotificationSound() {
+    try {
+      const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
+      audio.volume = 0.5;
+      audio.preload = 'auto';
+      
+      audio.addEventListener('canplaythrough', () => {
+        audioReady = true;
+        preloadedAudio = audio;
+      });
+      
+      audio.addEventListener('error', (e) => {
+        console.warn('Failed to load notification sound:', e);
+        audioReady = false;
+        preloadedAudio = null;
+      });
+      
+      audio.load();
+    } catch (error) {
+      console.warn('Failed to preload notification sound:', error);
+      audioReady = false;
+      preloadedAudio = null;
+    }
+  }
+
   // Play notification sound
   function playNotificationSound() {
-    const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
-    audio.volume = 0.5;
-    audio.play().catch(() => {
-      // Could not play notification sound
-    });
+    if (preloadedAudio && audioReady) {
+      // Use preloaded audio for faster playback
+      preloadedAudio.currentTime = 0;
+      preloadedAudio.play().catch(() => {
+        // Could not play preloaded notification sound
+      });
+    } else {
+      // Fallback to creating new Audio instance
+      const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
+      audio.volume = 0.5;
+      audio.play().catch(() => {
+        // Could not play notification sound
+      });
+    }
   }
 
   // Show browser notification
@@ -348,6 +386,9 @@
   onMount(() => {
     // Load sound preference
     soundEnabled = globalThis.localStorage.getItem('notificationSound') === 'true';
+
+    // Preload notification sound
+    preloadNotificationSound();
 
     // Load notifications
     loadNotifications();

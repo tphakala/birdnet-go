@@ -105,7 +105,7 @@
           {totalPages}
         </button>
       {/if}
-    {:else if showPageInfo}
+    {:else if showPageInfo && totalPages > 0}
       <button class="join-item btn btn-sm btn-disabled" disabled>
         Page {currentPage} of {totalPages}
       </button>

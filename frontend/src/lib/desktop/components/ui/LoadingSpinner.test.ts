@@ -29,7 +29,7 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with custom color', () => {
-    renderLoadingSpinner({ color: 'text-secondary' } });
+    renderLoadingSpinner({ color: 'text-secondary' });
 
     const spinner = screen.getByRole('status');
     const spinnerElement = spinner.querySelector('.loading');
@@ -37,7 +37,7 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with custom label', () => {
-    renderLoadingSpinner({ label: 'Processing...' } });
+    renderLoadingSpinner({ label: 'Processing...' });
 
     const spinner = screen.getByRole('status');
     expect(spinner).toHaveAttribute('aria-label', 'Processing...');
@@ -45,12 +45,10 @@ describe('LoadingSpinner', () => {
   });
 
   it('renders with all custom props', () => {
-    renderLoadingSpinner(, {
-      props: {
-        size: 'xl',
-        color: 'text-error',
-        label: 'Please wait',
-      },
+    renderLoadingSpinner({
+      size: 'xl',
+      color: 'text-error',
+      label: 'Please wait',
     });
 
     const spinner = screen.getByRole('status');
