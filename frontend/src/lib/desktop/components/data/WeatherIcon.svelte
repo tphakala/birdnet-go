@@ -57,7 +57,7 @@
   };
 
   // Extract icon code from weatherIcon string (e.g., "01d" -> "01") with validation
-  const iconCode = $derived(() => {
+  const iconCode = $derived((() => {
     if (!weatherIcon || typeof weatherIcon !== 'string') {
       return '';
     }
@@ -65,7 +65,7 @@
     // Use regex to safely extract two-digit code from the beginning
     const match = weatherIcon.match(/^(\d{2})[dn]?$/);
     return match ? match[1] : '';
-  });
+  })());
   const isNight = $derived(timeOfDay === 'night' || weatherIcon?.endsWith('n'));
 
   const iconData = $derived(

@@ -149,16 +149,16 @@
             >
               {#if column.sortable && onSort}
                 {@const getSortState = () => {
-                  if (sortColumn !== column.key) return 'unsorted';
+                  if (sortColumn !== column.key) return 'none';
                   return sortDirection === 'asc'
                     ? 'ascending'
                     : sortDirection === 'desc'
                       ? 'descending'
-                      : 'unsorted';
+                      : 'none';
                 }}
                 {@const getAriaLabel = () => {
                   const state = getSortState();
-                  return `Sort ${column.header} column ${state === 'unsorted' ? 'ascending' : state === 'ascending' ? 'descending' : 'ascending'}`;
+                  return `Sort ${column.header} column ${state === 'none' ? 'ascending' : state === 'ascending' ? 'descending' : 'ascending'}`;
                 }}
                 <button
                   type="button"

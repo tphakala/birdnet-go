@@ -212,7 +212,7 @@ describe('TimeOfDayIcon', () => {
     const { container } = render(TimeOfDayIcon, {
       props: {
         // Testing invalid timeOfDay
-        timeOfDay: 'unknown' as 'morning' | 'afternoon' | 'evening' | 'night',
+        timeOfDay: 'unknown' as 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk',
       },
     });
 
