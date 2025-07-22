@@ -19,6 +19,53 @@
     accessAllowed?: boolean;
   }
 
+  // HLS.js type definitions
+  interface HLSConfig {
+    debug?: boolean;
+    enableWorker?: boolean;
+    lowLatencyMode?: boolean;
+    backBufferLength?: number;
+    liveSyncDurationCount?: number;
+    liveMaxLatencyDurationCount?: number;
+  }
+
+  interface HLSErrorData {
+    type: string;
+    details: string;
+    fatal: boolean;
+    reason?: string;
+  }
+
+  interface HLSInstance {
+    attachMedia(mediaElement: HTMLMediaElement): void;
+    loadSource(source: string): void;
+    destroy(): void;
+    on(event: string, callback: (event: string, data: any) => void): void;
+  }
+
+  interface HLSConstructor {
+    new (config?: HLSConfig): HLSInstance;
+    isSupported(): boolean;
+    Events: {
+      ERROR: string;
+      MANIFEST_PARSED: string;
+    };
+  }
+
+  // Type guard for HLS global availability
+  function isHLSAvailable(): boolean {
+    return typeof window !== 'undefined' && 
+           'Hls' in window && 
+           typeof (window as any).Hls === 'function' &&
+           typeof (window as any).Hls.isSupported === 'function';
+  }
+
+  // Get HLS constructor with proper typing
+  function getHLSConstructor(): HLSConstructor | null {
+    if (!isHLSAvailable()) return null;
+    return (window as any).Hls as HLSConstructor;
+  }
+
   let { className = '', securityEnabled = false, accessAllowed = true }: Props = $props();
 
   // State
@@ -39,10 +86,9 @@
   // Internal state
   let eventSource: ReconnectingEventSource | null = null;
   let audioElement: HTMLAudioElement | null = null;
-  let hlsInstance: any = null; // HLS.js instance
+  let hlsInstance: HLSInstance | null = null;
   let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
-  let isNavigating = false;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
@@ -75,7 +121,7 @@
 
   // Setup EventSource for audio levels using ReconnectingEventSource
   function setupEventSource() {
-    if (isNavigating || eventSource) return;
+    if (eventSource) return;
 
     cleanupEventSource();
 
@@ -92,11 +138,6 @@
       };
 
       eventSource.onmessage = event => {
-        if (isNavigating) {
-          cleanupEventSource();
-          return;
-        }
-
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'audio-level' && data.levels) {
@@ -285,17 +326,16 @@
     const audio = getAudioElement();
 
     // Check if HLS.js is available and supported
-    if (typeof window !== 'undefined' && (window as any).Hls && (window as any).Hls.isSupported()) {
-      const Hls = (window as any).Hls;
-
+    const HLS = getHLSConstructor();
+    if (HLS && HLS.isSupported()) {
       // Clean up existing instance
       if (hlsInstance) {
         hlsInstance.destroy();
         hlsInstance = null;
       }
 
-      // Create new HLS instance
-      hlsInstance = new Hls({
+      // Create new HLS instance with proper typing
+      hlsInstance = new HLS({
         debug: false,
         enableWorker: true,
         lowLatencyMode: false,
@@ -304,8 +344,8 @@
         liveMaxLatencyDurationCount: 30,
       });
 
-      // Setup error handling
-      hlsInstance.on(Hls.Events.ERROR, (_event: any, data: any) => {
+      // Setup error handling with proper typing
+      hlsInstance.on(HLS.Events.ERROR, (_event: string, data: HLSErrorData) => {
         if (data.fatal) {
           // Handle fatal HLS error
           showStatusMessage('Playback error: ' + data.details);
@@ -314,7 +354,7 @@
       });
 
       // Start playing when manifest is parsed
-      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      hlsInstance.on(HLS.Events.MANIFEST_PARSED, () => {
         audio.play().catch((err: Error) => {
           // Handle playback start error
           if (err.name === 'NotAllowedError') {
@@ -441,7 +481,7 @@
     const handleVisibilityChange = () => {
       if (document.hidden) {
         cleanupEventSource();
-      } else if (!isNavigating) {
+      } else {
         setupEventSource();
       }
     };

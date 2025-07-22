@@ -23,6 +23,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
+  import { mediaIcons } from '$lib/utils/icons.js';
 
   interface Props {
     audioUrl: string;
@@ -347,25 +348,7 @@
     }
   });
 
-  // SVG Icons
-  const playIcon = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-  </svg>`;
-
-  const pauseIcon = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-  </svg>`;
-
-  const downloadIcon = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-  </svg>`;
-
-  const volumeIcon = `<svg width="16" height="16" viewBox="0 0 24 24" style="color: white;" aria-hidden="true">
-    <path d="M12 5v14l-7-7h-3v-4h3l7-7z" fill="currentColor"/>
-    <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
-    <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
-  </svg>`;
+  // Icons imported from centralized icon constants
 </script>
 
 <div
@@ -417,7 +400,7 @@
         aria-label="Volume control"
         title={!audioContextAvailable ? audioContextError || 'Volume control unavailable' : 'Volume control'}
       >
-        {@html volumeIcon}
+        {@html mediaIcons.volume}
         <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
       </button>
 
@@ -540,7 +523,7 @@
             class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
           ></div>
         {:else}
-          {@html isPlaying ? pauseIcon : playIcon}
+          {@html isPlaying ? mediaIcons.pause : mediaIcons.play}
         {/if}
       </button>
 
@@ -580,7 +563,7 @@
           class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
           aria-label="Download audio"
         >
-          {@html downloadIcon}
+          {@html mediaIcons.download}
         </a>
       {/if}
     </div>
