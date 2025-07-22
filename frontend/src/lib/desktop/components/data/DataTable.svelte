@@ -31,6 +31,7 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Column, SortDirection } from './DataTable.types';
+  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
 
   interface Props<T extends Record<string, any>> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
     columns: Column<T>[];
@@ -132,19 +133,7 @@
       {@render renderError({ error })}
     {:else}
       <div class="alert alert-error">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 shrink-0 stroke-current"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
+        {@html alertIconsSvg.errorCircle}
         <span>{error}</span>
       </div>
     {/if}
@@ -182,23 +171,9 @@
                   <span class="inline-block w-4" aria-hidden="true">
                     {#if sortColumn === column.key}
                       {#if sortDirection === 'asc'}
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M5 15l7-7 7 7"
-                          />
-                        </svg>
+                        {@html navigationIcons.sortUp}
                       {:else if sortDirection === 'desc'}
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
+                        {@html navigationIcons.sortDown}
                       {/if}
                     {/if}
                   </span>
