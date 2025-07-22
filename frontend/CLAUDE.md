@@ -147,6 +147,38 @@ eventSource.close();
 - No manual reconnection logic needed
 - Automatic exponential backoff
 
+## Icon Usage
+
+**ALWAYS use centralized icons from `$lib/utils/icons.ts` - NEVER create inline SVGs**
+
+```svelte
+<script>
+  import { navigationIcons, actionIcons, systemIcons } from '$lib/utils/icons';
+</script>
+
+<!-- ✅ Correct: Use centralized icons -->
+{@html navigationIcons.close}
+{@html actionIcons.search}
+{@html systemIcons.clock}
+
+<!-- ❌ Wrong: Never inline SVGs -->
+<svg>...</svg>
+```
+
+**Available Icon Categories:**
+- `navigationIcons`: close, arrows, chevrons, menu
+- `actionIcons`: edit, delete, save, copy, add, search, filter  
+- `systemIcons`: clock, calendar, settings, user, loading, eye
+- `alertIcons`: error, warning, info, success
+- `mediaIcons`: play, pause, download, volume
+- `dataIcons`: chart, document, folder, table
+
+**Adding New Icons:**
+1. Add to appropriate category in `icons.ts`
+2. Use consistent sizing classes (`h-4 w-4`, `h-5 w-5`)
+3. Include proper stroke/fill attributes
+4. Test in multiple contexts
+
 ## Guidelines
 
 - Follow Svelte 5 patterns (runes, snippets)
@@ -157,3 +189,4 @@ eventSource.close();
 - Address accessibility by ARIA roles, semantic markup, keyboard event handlers
 - Write and run Vitest tests
 - Document all components - Include comprehensive HTML comments at the top of each component describing purpose, usage, features, and props
+- **Use centralized icons only** - see Icon Usage section above
