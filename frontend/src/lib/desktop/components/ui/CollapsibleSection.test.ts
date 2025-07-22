@@ -4,13 +4,16 @@ import userEvent from '@testing-library/user-event';
 import CollapsibleSection from './CollapsibleSection.svelte';
 import CollapsibleSectionTestWrapper from './CollapsibleSection.test.svelte';
 
+// Helper function to render CollapsibleSection with proper typing
+const renderCollapsibleSection = (props?: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(CollapsibleSection as any, props ? { props } : undefined);
+};
+
 describe('CollapsibleSection', () => {
   it('renders with title', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(CollapsibleSection as any, {
-      props: {
+    renderCollapsibleSection({
         title: 'Test Section',
-      },
     });
 
     expect(screen.getByText('Test Section')).toBeInTheDocument();
@@ -21,7 +24,6 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
-      },
     });
 
     const button = screen.getByRole('button');
@@ -38,7 +40,6 @@ describe('CollapsibleSection', () => {
       props: {
         defaultOpen: true,
         showContent: true,
-      },
     });
 
     const button = screen.getByRole('button');
@@ -54,7 +55,6 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
-      },
     });
 
     const button = screen.getByRole('button');
@@ -78,7 +78,6 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
-      },
     });
 
     const button = screen.getByRole('button');
@@ -102,7 +101,6 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
-      },
     });
 
     const button = screen.getByRole('button');
@@ -124,7 +122,6 @@ describe('CollapsibleSection', () => {
     const { container } = render(CollapsibleSection as any, {
       props: {
         title: 'Test',
-      },
     });
 
     const svg = container.querySelector('svg');
@@ -146,7 +143,6 @@ describe('CollapsibleSection', () => {
       props: {
         title: 'Test',
         className: 'custom-collapse',
-      },
     });
 
     const collapse = container.querySelector('.collapse');
@@ -154,12 +150,9 @@ describe('CollapsibleSection', () => {
   });
 
   it('applies custom titleClassName', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(CollapsibleSection as any, {
-      props: {
+    renderCollapsibleSection({
         title: 'Test',
         titleClassName: 'custom-title',
-      },
     });
 
     const button = screen.getByRole('button');
@@ -172,7 +165,6 @@ describe('CollapsibleSection', () => {
       props: {
         title: 'Test',
         contentClassName: 'custom-content',
-      },
     });
 
     const content = container.querySelector('.collapse-content');
@@ -185,7 +177,6 @@ describe('CollapsibleSection', () => {
       props: {
         showContent: true,
         defaultOpen: true,
-      },
     });
 
     expect(screen.getByText('Test content')).toBeInTheDocument();
@@ -199,7 +190,6 @@ describe('CollapsibleSection', () => {
         title: 'Test',
         id: 'test-collapse',
         'data-testid': 'collapse-section',
-      },
     });
 
     const collapse = container.querySelector('.collapse');
@@ -212,7 +202,6 @@ describe('CollapsibleSection', () => {
     const { container } = render(CollapsibleSection as any, {
       props: {
         title: 'Test Section',
-      },
     });
 
     const button = screen.getByRole('button');
@@ -227,7 +216,6 @@ describe('CollapsibleSection', () => {
     const { container } = render(CollapsibleSection as any, {
       props: {
         title: 'Test',
-      },
     });
 
     const checkbox = container.querySelector('input[type="checkbox"]');

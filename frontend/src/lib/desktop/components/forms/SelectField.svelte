@@ -77,7 +77,20 @@
           onblur={() => (showTooltip = false)}
           aria-label="Help information"
         >
-          ⓘ
+          <svg
+            class="w-4 h-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9,9h0a3,3,0,0,1,5.12,2.12h0A3,3,0,0,1,16,14"></path>
+            <circle cx="12" cy="17" r=".5"></circle>
+          </svg>
         </button>
       {/if}
     </label>
@@ -114,7 +127,7 @@
 
   {#if tooltip && showTooltip}
     <div
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute top-full left-0 z-tooltip p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
       role="tooltip"
     >
       {tooltip}
