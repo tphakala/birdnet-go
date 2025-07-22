@@ -14,7 +14,8 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
   import { onMount } from 'svelte';
-  import { api } from '$lib/utils/api';
+  import { api, ApiError } from '$lib/utils/api';
+  import { toastActions } from '$lib/stores/toast';
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -109,44 +110,37 @@
   onMount(async () => {
     // Fetch locales
     try {
-      const localesResponse = await fetch('/api/v2/settings/locales');
-      const localesData = await localesResponse.json();
-      locales = Object.entries(localesData).map(([value, label]) => ({
+      const localesData = await api.get<Record<string, string>>('/api/v2/settings/locales');
+      locales = Object.entries(localesData || {}).map(([value, label]) => ({
         value,
         label: label as string,
       }));
     } catch (error) {
-      console.error('Error fetching locales:', error);
+      if (error instanceof ApiError) {
+        toastActions.warning('Unable to load language options. Using defaults.');
+      }
+      // Fallback to basic locales so form still works
+      locales = [{ value: 'en', label: 'English' }];
     }
 
     // Fetch image providers
     try {
-      console.log('Fetching image providers from /api/v2/settings/imageproviders...');
-      const providersResponse = await fetch('/api/v2/settings/imageproviders');
-      console.log('Image providers response status:', providersResponse.status);
-
-      if (!providersResponse.ok) {
-        console.error(
-          'Image providers response not OK:',
-          providersResponse.status,
-          providersResponse.statusText
-        );
-      }
-
-      const providersData = await providersResponse.json();
-      console.log('Raw image providers data:', providersData);
-
+      const providersData = await api.get<{ providers?: Array<{ value: string; display: string }> }>('/api/v2/settings/imageproviders');
+      
       // Map v2 API response format to client format
-      providerOptions = (providersData.providers || []).map((provider: any) => ({
+      providerOptions = (providersData?.providers || []).map((provider: any) => ({
         value: provider.value,
         label: provider.display,
       }));
-
-      console.log('Mapped provider options:', providerOptions);
+      
       multipleProvidersAvailable = providerOptions.length > 1;
-      console.log('Multiple providers available:', multipleProvidersAvailable);
     } catch (error) {
-      console.error('Error fetching image providers:', error);
+      if (error instanceof ApiError) {
+        toastActions.warning('Unable to load image providers. Using defaults.');
+      }
+      // Fallback to basic provider so form still works
+      providerOptions = [{ value: 'wikipedia', label: 'Wikipedia' }];
+      multipleProvidersAvailable = false;
     }
 
     // Load initial range filter count
