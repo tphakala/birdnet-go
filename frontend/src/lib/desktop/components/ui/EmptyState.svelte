@@ -26,7 +26,6 @@
     children,
     ...rest
   }: Props = $props();
-
 </script>
 
 <div

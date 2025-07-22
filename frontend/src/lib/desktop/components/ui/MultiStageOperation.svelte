@@ -163,7 +163,8 @@
               {/if}
               {#if stage.error && stage.error !== stage.message}
                 <p class="text-sm mt-1 text-error">
-                  <strong>Error:</strong> {stage.error}
+                  <strong>Error:</strong>
+                  {stage.error}
                 </p>
               {/if}
 

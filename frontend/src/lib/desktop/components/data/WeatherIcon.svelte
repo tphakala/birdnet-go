@@ -61,7 +61,7 @@
     if (!weatherIcon || typeof weatherIcon !== 'string') {
       return '';
     }
-    
+
     // Use regex to safely extract two-digit code from the beginning
     const match = weatherIcon.match(/^(\d{2})[dn]?$/);
     return match ? match[1] : '';

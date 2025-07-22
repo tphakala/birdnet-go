@@ -38,7 +38,7 @@
     if (Array.isArray(newValue)) {
       return; // Arrays are not valid for number fields
     }
-    
+
     if (typeof newValue === 'boolean') {
       return; // Booleans are not valid for number fields
     }
@@ -64,7 +64,7 @@
       if (max !== undefined && numValue > max) {
         return; // Don't update if above maximum
       }
-      
+
       value = numValue;
       onUpdate(numValue);
     }
@@ -74,7 +74,10 @@
 <div class={className} {...rest}>
   <FormField
     type="number"
-    name={label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '')}
+    name={label
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\-]/g, '')}
     {label}
     bind:value
     {min}

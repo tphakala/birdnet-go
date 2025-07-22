@@ -247,7 +247,7 @@ describe('SelectField', () => {
     const select = screen.getByRole('combobox');
     expect(select).toBeInTheDocument();
     expect(screen.getByText('Select with Both')).toBeInTheDocument();
-    
+
     // Check that options are present
     const options = select.querySelectorAll('option');
     expect(options).toHaveLength(2);

@@ -14,10 +14,10 @@ describe('FormField', () => {
   describe('Text Input', () => {
     it('renders text input with label', () => {
       renderFormField({
-          type: 'text',
-          name: 'username',
-          label: 'Username',
-          placeholder: 'Enter username',
+        type: 'text',
+        name: 'username',
+        label: 'Username',
+        placeholder: 'Enter username',
       });
 
       expect(screen.getByLabelText('Username')).toBeInTheDocument();
@@ -26,10 +26,10 @@ describe('FormField', () => {
 
     it('shows required indicator', () => {
       renderFormField({
-          type: 'text',
-          name: 'username',
-          label: 'Username',
-          required: true,
+        type: 'text',
+        name: 'username',
+        label: 'Username',
+        required: true,
       });
 
       expect(screen.getByText('*')).toBeInTheDocument();
@@ -40,10 +40,10 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'text',
-          name: 'username',
-          value: '',
-          onChange,
+        type: 'text',
+        name: 'username',
+        value: '',
+        onChange,
       });
 
       const input = screen.getByRole('textbox');
@@ -56,10 +56,10 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'text',
-          name: 'username',
-          label: 'Username',
-          validators: [required(), minLength(5)],
+        type: 'text',
+        name: 'username',
+        label: 'Username',
+        validators: [required(), minLength(5)],
       });
 
       const input = screen.getByLabelText('Username');
@@ -74,9 +74,9 @@ describe('FormField', () => {
 
     it('shows help text', () => {
       renderFormField({
-          type: 'text',
-          name: 'username',
-          helpText: 'Choose a unique username',
+        type: 'text',
+        name: 'username',
+        helpText: 'Choose a unique username',
       });
 
       expect(screen.getByText('Choose a unique username')).toBeInTheDocument();
@@ -88,9 +88,9 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'email',
-          name: 'email',
-          validators: [email()],
+        type: 'email',
+        name: 'email',
+        validators: [email()],
       });
 
       const input = screen.getByRole('textbox');
@@ -107,11 +107,11 @@ describe('FormField', () => {
   describe('Number Input', () => {
     it('renders number input with min/max', () => {
       renderFormField({
-          type: 'number',
-          name: 'age',
-          label: 'Age',
-          min: 0,
-          max: 120,
+        type: 'number',
+        name: 'age',
+        label: 'Age',
+        min: 0,
+        max: 120,
       });
 
       const input = screen.getByLabelText('Age') as HTMLInputElement;
@@ -124,9 +124,9 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'number',
-          name: 'age',
-          validators: [range(18, 100)],
+        type: 'number',
+        name: 'age',
+        validators: [range(18, 100)],
       });
 
       const input = screen.getByRole('spinbutton');
@@ -144,10 +144,10 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'number',
-          name: 'quantity',
-          value: 0,
-          onChange,
+        type: 'number',
+        name: 'quantity',
+        value: 0,
+        onChange,
       });
 
       const input = screen.getByRole('spinbutton');
@@ -161,10 +161,10 @@ describe('FormField', () => {
   describe('Textarea', () => {
     it('renders textarea with custom rows', () => {
       renderFormField({
-          type: 'textarea',
-          name: 'description',
-          label: 'Description',
-          rows: 5,
+        type: 'textarea',
+        name: 'description',
+        label: 'Description',
+        rows: 5,
       });
 
       const textarea = screen.getByLabelText('Description') as HTMLTextAreaElement;
@@ -181,10 +181,10 @@ describe('FormField', () => {
 
     it('renders select with options', () => {
       renderFormField({
-          type: 'select',
-          name: 'country',
-          label: 'Country',
-          options,
+        type: 'select',
+        name: 'country',
+        label: 'Country',
+        options,
       });
 
       expect(screen.getByLabelText('Country')).toBeInTheDocument();
@@ -198,11 +198,11 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'select',
-          name: 'country',
-          value: '',
-          options,
-          onChange,
+        type: 'select',
+        name: 'country',
+        value: '',
+        options,
+        onChange,
       });
 
       const select = screen.getByRole('combobox');
@@ -216,12 +216,12 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'select',
-          name: 'countries',
-          value: [],
-          options,
-          multiple: true,
-          onChange,
+        type: 'select',
+        name: 'countries',
+        value: [],
+        options,
+        multiple: true,
+        onChange,
       });
 
       const select = screen.getByRole('listbox');
@@ -234,9 +234,9 @@ describe('FormField', () => {
   describe('Checkbox', () => {
     it('renders checkbox with label', () => {
       renderFormField({
-          type: 'checkbox',
-          name: 'terms',
-          placeholder: 'I agree to the terms',
+        type: 'checkbox',
+        name: 'terms',
+        placeholder: 'I agree to the terms',
       });
 
       expect(screen.getByText('I agree to the terms')).toBeInTheDocument();
@@ -248,10 +248,10 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'checkbox',
-          name: 'terms',
-          value: false,
-          onChange,
+        type: 'checkbox',
+        name: 'terms',
+        value: false,
+        onChange,
       });
 
       const checkbox = screen.getByRole('checkbox');
@@ -264,11 +264,11 @@ describe('FormField', () => {
   describe('Range Input', () => {
     it('renders range with min/max labels', () => {
       renderFormField({
-          type: 'range',
-          name: 'volume',
-          value: 50,
-          min: 0,
-          max: 100,
+        type: 'range',
+        name: 'volume',
+        value: 50,
+        min: 0,
+        max: 100,
       });
 
       expect(screen.getByText('0')).toBeInTheDocument();
@@ -280,9 +280,9 @@ describe('FormField', () => {
   describe('Disabled and Readonly States', () => {
     it('disables input when disabled prop is true', () => {
       renderFormField({
-          type: 'text',
-          name: 'username',
-          disabled: true,
+        type: 'text',
+        name: 'username',
+        disabled: true,
       });
 
       expect(screen.getByRole('textbox')).toBeDisabled();
@@ -290,9 +290,9 @@ describe('FormField', () => {
 
     it('makes input readonly when readonly prop is true', () => {
       renderFormField({
-          type: 'text',
-          name: 'username',
-          readonly: true,
+        type: 'text',
+        name: 'username',
+        readonly: true,
       });
 
       expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
@@ -302,12 +302,12 @@ describe('FormField', () => {
   describe('Custom Classes', () => {
     it('applies custom classes', () => {
       renderFormField({
-          type: 'text',
-          name: 'username',
-          className: 'custom-form-control',
-          inputClassName: 'custom-input',
-          label: 'Username',
-          labelClassName: 'custom-label',
+        type: 'text',
+        name: 'username',
+        className: 'custom-form-control',
+        inputClassName: 'custom-input',
+        label: 'Username',
+        labelClassName: 'custom-label',
       });
 
       expect(document.querySelector('.custom-form-control')).toBeInTheDocument();
@@ -322,9 +322,9 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'text',
-          name: 'username',
-          onBlur,
+        type: 'text',
+        name: 'username',
+        onBlur,
       });
 
       const input = screen.getByRole('textbox');
@@ -339,9 +339,9 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'text',
-          name: 'username',
-          onFocus,
+        type: 'text',
+        name: 'username',
+        onFocus,
       });
 
       const input = screen.getByRole('textbox');
@@ -355,9 +355,9 @@ describe('FormField', () => {
       const user = userEvent.setup();
 
       renderFormField({
-          type: 'text',
-          name: 'username',
-          onInput,
+        type: 'text',
+        name: 'username',
+        onInput,
       });
 
       const input = screen.getByRole('textbox');

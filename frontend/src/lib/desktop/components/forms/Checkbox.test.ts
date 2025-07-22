@@ -135,7 +135,7 @@ describe('Checkbox', () => {
 
   it('renders with children snippet instead of label', () => {
     // Test the conditional rendering logic by testing both paths
-    
+
     // Test 1: Without children, should render label
     const { unmount } = render(Checkbox, {
       props: {
@@ -158,7 +158,7 @@ describe('Checkbox', () => {
 
     // Verify no label text is rendered
     expect(screen.queryByText('Test label')).not.toBeInTheDocument();
-    
+
     // Note: Testing Svelte 5 snippets with testing-library is complex.
     // The component correctly implements the conditional logic:
     // - If children snippet is provided, render children
@@ -191,9 +191,9 @@ describe('Checkbox', () => {
 
     const checkbox = screen.getByRole('checkbox');
     checkbox.focus();
-    
+
     await fireEvent.keyDown(checkbox, { key: ' ', code: 'Space' });
-    
+
     expect(onChangeMock).toHaveBeenCalledWith(true);
   });
 
@@ -209,9 +209,9 @@ describe('Checkbox', () => {
 
     const checkbox = screen.getByRole('checkbox');
     checkbox.focus();
-    
+
     await fireEvent.keyDown(checkbox, { key: 'Enter', code: 'Enter' });
-    
+
     expect(onChangeMock).toHaveBeenCalledWith(true);
   });
 
@@ -227,9 +227,9 @@ describe('Checkbox', () => {
 
     const checkbox = screen.getByRole('checkbox');
     checkbox.focus();
-    
+
     await fireEvent.keyDown(checkbox, { key: ' ', code: 'Space' });
-    
+
     expect(onChangeMock).toHaveBeenCalledWith(false);
   });
 });

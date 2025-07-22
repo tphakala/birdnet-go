@@ -28,7 +28,7 @@
 </script>
 
 <div class={cn('collapse bg-base-100 shadow-xs', { 'collapse-open': isOpen }, className)}>
-  <button 
+  <button
     type="button"
     class="collapse-title px-6 py-4 min-h-0 text-left w-full cursor-pointer hover:bg-base-200/50 transition-colors"
     onclick={toggleOpen}
@@ -54,7 +54,7 @@
         stroke-linejoin="round"
         aria-hidden="true"
       >
-        <path d="M6 9l6 6 6-6"/>
+        <path d="M6 9l6 6 6-6" />
       </svg>
     </div>
     {#if description}
@@ -62,7 +62,7 @@
     {/if}
   </button>
 
-  <div 
+  <div
     class="collapse-content px-6 pb-6"
     id="collapse-content-{title.toLowerCase().replace(/\s+/g, '-')}"
   >
