@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { cn } from '$lib/utils/cn';
+  import { api, ApiError } from '$lib/utils/api';
+  import { toastActions } from '$lib/stores/toast';
 
   interface Notification {
     id: string;
@@ -77,16 +79,20 @@
   async function loadNotifications() {
     loading = true;
     try {
-      const response = await fetch('/api/v2/notifications?limit=20&status=unread');
-      if (response.ok) {
-        const data = await response.json();
-        notifications = (data.notifications || []).filter((n: Notification) =>
-          shouldShowNotification(n)
-        );
-        updateUnreadCount();
-      }
+      const data = await api.get<{ notifications?: Notification[] }>('/api/v2/notifications?limit=20&status=unread');
+      notifications = (data?.notifications || []).filter((n: Notification) =>
+        shouldShowNotification(n)
+      );
+      updateUnreadCount();
     } catch (error) {
-      console.error('Failed to load notifications:', error);
+      // Only show user-facing error for notification loading failures since users expect to see notifications
+      if (error instanceof ApiError) {
+        toastActions.error('Unable to load notifications. Please refresh the page.');
+      }
+      // Log for developers without cluttering console in production
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to load notifications:', error);
+      }
     } finally {
       loading = false;
     }
@@ -198,23 +204,19 @@
   // Mark notification as read
   async function markAsRead(notificationId: string) {
     try {
-      const csrfToken =
-        globalThis.document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-      const response = await fetch(`/api/v2/notifications/${notificationId}/read`, {
-        method: 'PUT',
-        headers: {
-          'X-CSRF-Token': csrfToken,
-        },
-      });
-
-      if (response.ok) {
-        notifications = notifications.map(n =>
-          n.id === notificationId ? { ...n, read: true } : n
-        );
-        updateUnreadCount();
-      }
+      await api.put(`/api/v2/notifications/${notificationId}/read`);
+      notifications = notifications.map(n =>
+        n.id === notificationId ? { ...n, read: true } : n
+      );
+      updateUnreadCount();
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      // Show user feedback for failed mark-as-read since this is a user action
+      if (error instanceof ApiError) {
+        toastActions.error('Failed to mark notification as read.');
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to mark notification as read:', error);
+      }
     }
   }
 

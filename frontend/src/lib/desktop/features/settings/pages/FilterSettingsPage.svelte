@@ -11,6 +11,8 @@
     realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { api, ApiError } from '$lib/utils/api';
+  import { toastActions } from '$lib/stores/toast';
 
   let settings = $derived({
     privacy: $privacyFilterSettings || {
@@ -52,14 +54,24 @@
 
   // Fetch allowed species on mount
   $effect(() => {
-    fetch('/api/v2/range/species/list')
-      .then(response => response.json())
-      .then(data => {
-        if (data.species && Array.isArray(data.species)) {
+    const loadSpeciesList = async () => {
+      try {
+        const data = await api.get<{ species?: Array<{ label: string }> }>('/api/v2/range/species/list');
+        if (data?.species && Array.isArray(data.species)) {
           allowedSpecies = data.species.map((species: any) => species.label);
         }
-      })
-      .catch(error => console.error('Failed to fetch species list:', error));
+      } catch (error) {
+        // Species list loading failure affects form functionality but isn't critical
+        // Show minimal feedback rather than intrusive error
+        if (error instanceof ApiError && process.env.NODE_ENV === 'development') {
+          console.warn('Failed to load species list for filtering:', error.message);
+        }
+        // Set empty array so form still works, just without suggestions
+        allowedSpecies = [];
+      }
+    };
+    
+    loadSpeciesList();
   });
 
   // Privacy filter update handlers
