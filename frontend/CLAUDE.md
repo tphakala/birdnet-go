@@ -48,11 +48,51 @@ task: Available tasks for this project:
 
 ## Code Quality (Run Before Commits)
 
+**CRITICAL: Always run static analysis before committing to prevent IDE warnings/errors**
+
 ```bash
-npm run check:all     # Format + lint + typecheck
-npm run lint:fix      # Auto-fix linting
+npm run check:all     # Format + lint + CSS lint + typecheck
+npm run lint:fix      # Auto-fix JavaScript/TypeScript linting
+npm run lint:css      # CSS/Svelte style validation
+npm run lint:css:fix  # Auto-fix CSS issues  
 npm run typecheck     # TypeScript/Svelte validation
+
+# Code Analysis:
+npm run analyze:all       # Run circular dependency + duplication analysis
+npm run analyze:circular  # Check for circular dependencies (✅ None found)
+npm run analyze:deps      # Show dependency summary and counts
+npm run analyze:orphans   # Find unused/orphaned files (111 orphans detected)
+npm run analyze:duplicates # Find code duplication (4 clones, 0.63% duplication)
+
+# Accessibility Testing:
+npm run test:a11y         # Run accessibility tests using axe-core
+npm run test:a11y:watch   # Watch accessibility tests during development
+
+# Security Analysis (143 warnings found):
+# - Object injection: 136 warnings (mostly false positives in frontend)
+# - Unsafe regex: 5 warnings (potential ReDoS vulnerabilities) 
+# - Non-literal filesystem: 2 warnings (path traversal risks)
 ```
+
+**Static Analysis Checklist:**
+- ✅ **IDE Diagnostics**: Check VS Code Problems panel for TypeScript/ESLint errors
+- ✅ **Type Safety**: Ensure no `any` types without proper eslint-disable comments
+- ✅ **Security Issues**: Review `eslint-plugin-security` warnings (especially regex/filesystem)
+- ✅ **Code Quality**: Run `npm run analyze:all` for dependency and duplication analysis
+- ✅ **CSS/Style Validation**: Run `npm run lint:css` for Tailwind/CSS issues
+- ✅ **Import Validation**: Verify all imports resolve correctly
+- ✅ **Component Props**: Check component type compatibility
+- ✅ **Test Syntax**: Validate test file syntax and imports
+- ✅ **Accessibility**: Run `npm run test:a11y` for comprehensive axe-core validation
+
+**⚠️ NEVER COMMIT CODE WITH:**
+- TypeScript compilation errors
+- ESLint errors (warnings are acceptable)
+- Critical security issues (unsafe regex, path traversal)
+- Major CSS/style violations (use `npm run lint:css:fix`)
+- Missing imports or undefined variables
+- Component type mismatches
+- Accessibility violations
 
 ## Development Tools
 
@@ -185,8 +225,54 @@ eventSource.close();
 - Use TypeScript for all components
 - Well defined reusable components
 - Organize by functionality
+- **MANDATORY: Run static analysis before EVERY commit** - Check IDE diagnostics panel
 - Run `npm run check:all` before commits
 - Address accessibility by ARIA roles, semantic markup, keyboard event handlers
 - Write and run Vitest tests
 - Document all components - Include comprehensive HTML comments at the top of each component describing purpose, usage, features, and props
 - **Use centralized icons only** - see Icon Usage section above
+
+## Accessibility Testing
+
+### axe-core Integration
+
+The project uses axe-core for automated accessibility testing that goes beyond basic ESLint rules.
+
+**Test Files:**
+```typescript
+// Create accessibility tests with "Accessibility" in the describe block name
+describe('Component Accessibility Tests', () => {
+  it('should have no accessibility violations', async () => {
+    document.body.innerHTML = '<button>Click Me</button>';
+    const button = document.querySelector('button')!;
+    
+    await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
+    
+    document.body.innerHTML = '';
+  });
+});
+```
+
+**Available Utilities:**
+- `expectNoA11yViolations()` - Assert no accessibility violations
+- `getA11yReport()` - Generate detailed accessibility report  
+- `runAxeTest()` - Run axe-core analysis with custom options
+
+**Predefined Configurations:**
+- `A11Y_CONFIGS.strict` - WCAG 2.0/2.1 AA compliance
+- `A11Y_CONFIGS.lenient` - Basic accessibility (development)
+- `A11Y_CONFIGS.forms` - Form-specific accessibility rules
+
+**Testing Guidelines:**
+- Test critical user flows for accessibility
+- Focus on form elements, buttons, links, and navigation
+- Include keyboard navigation and screen reader compatibility  
+- Test color contrast and focus management
+
+## Pre-Commit Workflow
+
+**REQUIRED STEPS before every `git commit`:**
+1. **Check IDE Problems Panel** - Resolve ALL TypeScript/ESLint errors
+2. **Run `npm run check:all`** - Ensure all static analysis passes  
+3. **Test affected functionality** - Verify changes work as expected
+4. **Review accessibility** - Check for a11y warnings and violations
