@@ -2,6 +2,7 @@
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { alertIcons } from '$lib/utils/icons';
 
   interface Props {
     isOpen: boolean;
@@ -115,7 +116,7 @@
               stroke-linecap="round"
               stroke-linejoin="round"
               stroke-width="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+              d={alertIcons.error}
             />
           </svg>
           <span>{errorMessage}</span>
@@ -136,7 +137,7 @@
                 stroke="currentColor"
                 class="w-3 h-3"
               >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                <path stroke-linecap="round" stroke-linejoin="round" d={alertIcons.success} />
               </svg>
             {:else if detection.review?.verified === 'false_positive'}
               <svg
@@ -177,7 +178,7 @@
                   stroke-linecap="round"
                   stroke-linejoin="round"
                   stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d={alertIcons.info}
                 ></path>
               </svg>
               <span>No audio recording available for this detection.</span>
@@ -215,13 +216,15 @@
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="inline-block w-4 h-4 mr-1"
-                viewBox="0 0 20 20"
-                fill="currentColor"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
               >
                 <path
-                  fill-rule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clip-rule="evenodd"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d={alertIcons.warning}
                 />
               </svg>
               This detection is locked. You must unlock it first to change its review status.

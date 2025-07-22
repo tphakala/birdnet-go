@@ -1,2 +1,0 @@
-# This file ensures the dist directory exists for Go embed
-# The actual build artifacts will be generated during the build process
