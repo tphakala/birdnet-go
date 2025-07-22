@@ -12,7 +12,7 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
-  import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
 
   // Derived settings with fallbacks
   let settings = $state({

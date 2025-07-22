@@ -37,6 +37,11 @@
           {#if title}
             <h3 class="text-xl font-semibold">{title}</h3>
           {/if}
+          {#if hasChanges}
+            <span class="badge badge-primary badge-sm" role="status" aria-label="Settings changed">
+              changed
+            </span>
+          {/if}
         </div>
         {#if description}
           <p class="text-sm text-base-content/70 mt-1">{description}</p>

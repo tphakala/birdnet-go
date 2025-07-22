@@ -1,5 +1,6 @@
 <script>
   import CollapsibleSection from '$lib/desktop/components/ui/CollapsibleSection.svelte';
+  import Card from '$lib/desktop/components/ui/Card.svelte';
 
   // Settings data (version info)
   let settings = $state({
@@ -48,9 +49,8 @@
   </div>
 
   <!-- Overview Section -->
-  <CollapsibleSection
+  <Card
     title="Overview"
-    defaultOpen={true}
     className="bg-base-100 shadow-sm"
     contentClassName="prose max-w-none"
   >
@@ -59,12 +59,11 @@
       built upon the foundation of the BirdNET project. This application provides a user-friendly
       interface for continuous bird sound monitoring and analysis.
     </p>
-  </CollapsibleSection>
+  </Card>
 
   <!-- BirdNET Project Section -->
-  <CollapsibleSection
+  <Card
     title="BirdNET Project"
-    defaultOpen={true}
     className="bg-base-100 shadow-sm"
     contentClassName="prose max-w-none"
   >
@@ -146,12 +145,11 @@
         Visit BirdNET-Analyzer Project
       </a>
     </div>
-  </CollapsibleSection>
+  </Card>
 
   <!-- Contributors Section -->
-  <CollapsibleSection
+  <Card
     title="Contributors"
-    defaultOpen={true}
     className="bg-base-100 shadow-sm"
     contentClassName="prose max-w-none"
   >
@@ -283,12 +281,11 @@
         </li>
       </ul>
     </div>
-  </CollapsibleSection>
+  </Card>
 
   <!-- Additional Credits Section -->
-  <CollapsibleSection
+  <Card
     title="Additional Credits"
-    defaultOpen={true}
     className="bg-base-100 shadow-sm"
     contentClassName="prose max-w-none"
   >
@@ -331,7 +328,7 @@
         Patrick Levin's GitHub
       </a>
     </div>
-  </CollapsibleSection>
+  </Card>
 
   <!-- Version Information -->
   <div class="card bg-base-100 shadow-sm">

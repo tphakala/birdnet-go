@@ -1,5 +1,5 @@
 <script lang="ts">
-  import CollapsibleCard from './CollapsibleCard.svelte';
+  import SettingsCard from '$lib/desktop/features/settings/components/SettingsCard.svelte';
   import type { Snippet } from 'svelte';
 
   interface Props {
@@ -16,7 +16,6 @@
   let {
     title,
     description,
-    defaultOpen = true,
     className = '',
     originalData,
     currentData,
@@ -36,10 +35,9 @@
   });
 </script>
 
-<CollapsibleCard
+<SettingsCard
   {title}
   {description}
-  {defaultOpen}
   {className}
   hasChanges={sectionHasChanges()}
   {...rest}
@@ -47,4 +45,4 @@
   {#if children}
     {@render children()}
   {/if}
-</CollapsibleCard>
+</SettingsCard>

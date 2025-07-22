@@ -12,7 +12,8 @@
     dashboardSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
@@ -666,10 +667,9 @@
       />
 
       {#if settings.database.type === 'sqlite'}
-        <div class="alert alert-info">
-          {@html alertIconsSvg.info}
+        <SettingsNote>
           <span>SQLite is recommended database type for most users.</span>
-        </div>
+        </SettingsNote>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <TextInput
