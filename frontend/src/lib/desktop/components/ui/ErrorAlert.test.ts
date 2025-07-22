@@ -25,8 +25,8 @@ describe('ErrorAlert', () => {
 
     types.forEach(type => {
       const { unmount } = renderErrorAlert({
-          message: `${type} message`,
-          type,
+        message: `${type} message`,
+        type,
       });
 
       const alert = screen.getByRole('alert');

@@ -54,7 +54,7 @@ task: Available tasks for this project:
 npm run check:all     # Format + lint + CSS lint + typecheck
 npm run lint:fix      # Auto-fix JavaScript/TypeScript linting
 npm run lint:css      # CSS/Svelte style validation
-npm run lint:css:fix  # Auto-fix CSS issues  
+npm run lint:css:fix  # Auto-fix CSS issues
 npm run typecheck     # TypeScript/Svelte validation
 
 # Code Analysis:
@@ -70,11 +70,12 @@ npm run test:a11y:watch   # Watch accessibility tests during development
 
 # Security Analysis (143 warnings found):
 # - Object injection: 136 warnings (mostly false positives in frontend)
-# - Unsafe regex: 5 warnings (potential ReDoS vulnerabilities) 
+# - Unsafe regex: 5 warnings (potential ReDoS vulnerabilities)
 # - Non-literal filesystem: 2 warnings (path traversal risks)
 ```
 
 **Static Analysis Checklist:**
+
 - ✅ **IDE Diagnostics**: Check VS Code Problems panel for TypeScript/ESLint errors
 - ✅ **Type Safety**: Ensure no `any` types without proper eslint-disable comments
 - ✅ **Security Issues**: Review `eslint-plugin-security` warnings (especially regex/filesystem)
@@ -86,6 +87,7 @@ npm run test:a11y:watch   # Watch accessibility tests during development
 - ✅ **Accessibility**: Run `npm run test:a11y` for comprehensive axe-core validation
 
 **⚠️ NEVER COMMIT CODE WITH:**
+
 - TypeScript compilation errors
 - ESLint errors (warnings are acceptable)
 - Critical security issues (unsafe regex, path traversal)
@@ -206,14 +208,16 @@ eventSource.close();
 ```
 
 **Available Icon Categories:**
+
 - `navigationIcons`: close, arrows, chevrons, menu
-- `actionIcons`: edit, delete, save, copy, add, search, filter  
+- `actionIcons`: edit, delete, save, copy, add, search, filter
 - `systemIcons`: clock, calendar, settings, user, loading, eye
 - `alertIcons`: error, warning, info, success
 - `mediaIcons`: play, pause, download, volume
 - `dataIcons`: chart, document, folder, table
 
 **Adding New Icons:**
+
 1. Add to appropriate category in `icons.ts`
 2. Use consistent sizing classes (`h-4 w-4`, `h-5 w-5`)
 3. Include proper stroke/fill attributes
@@ -239,40 +243,45 @@ eventSource.close();
 The project uses axe-core for automated accessibility testing that goes beyond basic ESLint rules.
 
 **Test Files:**
+
 ```typescript
 // Create accessibility tests with "Accessibility" in the describe block name
 describe('Component Accessibility Tests', () => {
   it('should have no accessibility violations', async () => {
     document.body.innerHTML = '<button>Click Me</button>';
     const button = document.querySelector('button')!;
-    
+
     await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
-    
+
     document.body.innerHTML = '';
   });
 });
 ```
 
 **Available Utilities:**
+
 - `expectNoA11yViolations()` - Assert no accessibility violations
-- `getA11yReport()` - Generate detailed accessibility report  
+- `getA11yReport()` - Generate detailed accessibility report
 - `runAxeTest()` - Run axe-core analysis with custom options
 
 **Predefined Configurations:**
+
 - `A11Y_CONFIGS.strict` - WCAG 2.0/2.1 AA compliance
 - `A11Y_CONFIGS.lenient` - Basic accessibility (development)
 - `A11Y_CONFIGS.forms` - Form-specific accessibility rules
 
 **Testing Guidelines:**
+
 - Test critical user flows for accessibility
 - Focus on form elements, buttons, links, and navigation
-- Include keyboard navigation and screen reader compatibility  
+- Include keyboard navigation and screen reader compatibility
 - Test color contrast and focus management
 
 ## Pre-Commit Workflow
 
 **REQUIRED STEPS before every `git commit`:**
+
 1. **Check IDE Problems Panel** - Resolve ALL TypeScript/ESLint errors
-2. **Run `npm run check:all`** - Ensure all static analysis passes  
+2. **Run `npm run check:all`** - Ensure all static analysis passes
 3. **Test affected functionality** - Verify changes work as expected
 4. **Review accessibility** - Check for a11y warnings and violations

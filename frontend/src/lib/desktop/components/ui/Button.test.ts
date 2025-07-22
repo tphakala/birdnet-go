@@ -12,11 +12,11 @@ describe('Button Accessibility Tests', () => {
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
 
-    // Test with strict accessibility rules  
+    // Test with strict accessibility rules
     if (button) {
       await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
     }
-    
+
     // Cleanup
     document.body.innerHTML = '';
   });
@@ -29,11 +29,11 @@ describe('Button Accessibility Tests', () => {
 
     // This should throw due to missing button label
     if (button) {
-      await expect(
-        expectNoA11yViolations(button, A11Y_CONFIGS.strict)
-      ).rejects.toThrow(/button-name/);
+      await expect(expectNoA11yViolations(button, A11Y_CONFIGS.strict)).rejects.toThrow(
+        /button-name/
+      );
     }
-    
+
     // Cleanup
     document.body.innerHTML = '';
   });
@@ -45,11 +45,11 @@ describe('Button Accessibility Tests', () => {
     expect(button).toBeTruthy();
 
     const report = button ? await getA11yReport(button, A11Y_CONFIGS.lenient) : '';
-    
+
     expect(report).toContain('Accessibility Test Results');
     expect(report).toContain('Rules Passed:');
     expect(report).toContain('Violations:');
-    
+
     // Cleanup
     document.body.innerHTML = '';
   });
@@ -63,7 +63,7 @@ describe('Button Accessibility Tests', () => {
     if (button) {
       await expectNoA11yViolations(button, A11Y_CONFIGS.forms);
     }
-    
+
     // Cleanup
     document.body.innerHTML = '';
   });
@@ -77,7 +77,7 @@ describe('Button Accessibility Tests', () => {
     if (button) {
       await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
     }
-    
+
     // Cleanup
     document.body.innerHTML = '';
   });

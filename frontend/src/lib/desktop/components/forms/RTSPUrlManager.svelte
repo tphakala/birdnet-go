@@ -3,7 +3,7 @@
   import FormField from './FormField.svelte';
   import ToggleField from './ToggleField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIcons, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { actionIcons, alertIcons, alertIconsSvg, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface RTSPUrl {
     id: string;
@@ -132,9 +132,7 @@
   }
 
   function updateUrl(id: string, field: keyof RTSPUrl, value: RTSPUrl[keyof RTSPUrl]) {
-    const updated = urls.map(url => 
-      url.id === id ? { ...url, [field]: value } : url
-    );
+    const updated = urls.map(url => (url.id === id ? { ...url, [field]: value } : url));
     onUpdate(updated);
   }
 
@@ -375,19 +373,7 @@
   <!-- Max items warning -->
   {#if urls.length >= maxItems}
     <div class="alert alert-warning mt-3">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="stroke-current shrink-0 h-6 w-6"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d={alertIcons.warning}
-        />
-      </svg>
+      {@html alertIconsSvg.warning}
       <span>Maximum number of RTSP streams ({maxItems}) reached.</span>
     </div>
   {/if}

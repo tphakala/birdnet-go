@@ -27,22 +27,20 @@ describe('NotificationToast', () => {
     expect(screen.getByText('Test notification')).toBeInTheDocument();
   });
 
-  it.each([
-    ['info'],
-    ['success'],
-    ['warning'],
-    ['error'],
-  ] as const)('renders with type %s', (type) => {
-    const { container } = render(NotificationToast as SvelteTestComponent, {
-      props: {
-        type,
-        message: `${type} message`,
-      },
-    });
+  it.each([['info'], ['success'], ['warning'], ['error']] as const)(
+    'renders with type %s',
+    type => {
+      const { container } = render(NotificationToast as SvelteTestComponent, {
+        props: {
+          type,
+          message: `${type} message`,
+        },
+      });
 
-    const alert = container.querySelector('.alert');
-    expect(alert).toHaveClass(`alert-${type}`);
-  });
+      const alert = container.querySelector('.alert');
+      expect(alert).toHaveClass(`alert-${type}`);
+    }
+  );
 
   it('auto-dismisses after duration', async () => {
     const onClose = vi.fn();

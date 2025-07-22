@@ -12,7 +12,7 @@ All SVG icons are centralized to avoid duplication and ensure consistency.
 </script>
 
 {@html navigationIcons.close}
-{@html actionIcons.search} 
+{@html actionIcons.search}
 {@html systemIcons.clock}
 ```
 
@@ -28,7 +28,7 @@ All SVG icons are centralized to avoid duplication and ensure consistency.
 ## Adding New Icons
 
 1. Add to appropriate category in `icons.ts`
-2. Use consistent sizing (`h-4 w-4` or `h-5 w-5`)  
+2. Use consistent sizing (`h-4 w-4` or `h-5 w-5`)
 3. Include proper stroke/fill attributes
 4. Use `stroke="currentColor"` for theming
 

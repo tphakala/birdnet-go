@@ -13,9 +13,9 @@ async function initAxe() {
   if (typeof window === 'undefined') {
     throw new Error('axe-core can only be used in browser environment');
   }
-  
+
   axeCore ??= await import('axe-core');
-  
+
   return axeCore;
 }
 
@@ -30,7 +30,7 @@ export async function runAxeTest(
   options: RunOptions = {}
 ): Promise<AxeResults> {
   const axe = await initAxe();
-  
+
   const defaultOptions = {
     // Focus on high-impact rules by default
     tags: ['wcag2a', 'wcag2aa', 'best-practice'],
@@ -51,7 +51,7 @@ export async function expectNoA11yViolations(
   options: RunOptions = {}
 ): Promise<void> {
   const results = await runAxeTest(element, options);
-  
+
   if (results.violations.length > 0) {
     const violationSummary = results.violations
       .map(violation => {
@@ -59,7 +59,7 @@ export async function expectNoA11yViolations(
         return `- ${violation.id}: ${violation.description}\n  Impact: ${violation.impact}\n  Targets: ${targets}`;
       })
       .join('\n\n');
-    
+
     throw new Error(
       `Found ${results.violations.length} accessibility violation(s):\n\n${violationSummary}`
     );
@@ -77,7 +77,7 @@ export async function getA11yReport(
   options: RunOptions = {}
 ): Promise<string> {
   const results = await runAxeTest(element, options);
-  
+
   const report = [
     `🔍 Accessibility Test Results`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
@@ -87,7 +87,7 @@ export async function getA11yReport(
     `🚫 Inapplicable: ${results.inapplicable.length}`,
     '',
   ];
-  
+
   if (results.violations.length > 0) {
     report.push('🚨 VIOLATIONS:');
     results.violations.forEach(violation => {
@@ -97,19 +97,21 @@ export async function getA11yReport(
       violation.nodes.forEach(node => {
         report.push(`  Target: ${node.target.join(' ')}`);
         if (node.html) {
-          report.push(`  HTML: ${node.html.substring(0, 100)}${node.html.length > 100 ? '...' : ''}`);
+          report.push(
+            `  HTML: ${node.html.substring(0, 100)}${node.html.length > 100 ? '...' : ''}`
+          );
         }
       });
     });
   }
-  
+
   if (results.incomplete.length > 0) {
     report.push('\n⚠️  INCOMPLETE CHECKS:');
     results.incomplete.forEach(item => {
       report.push(`- ${item.id}: ${item.description}`);
     });
   }
-  
+
   return report.join('\n');
 }
 
@@ -123,32 +125,32 @@ export const A11Y_CONFIGS = {
     rules: {
       'color-contrast': { enabled: true },
       'aria-valid-attr': { enabled: true },
-      'label': { enabled: true },
+      label: { enabled: true },
       'button-name': { enabled: true },
       'link-name': { enabled: true },
       'heading-order': { enabled: true },
       'landmark-unique': { enabled: true },
-    }
+    },
   } as RunOptions,
-  
-  // Lenient configuration for development  
+
+  // Lenient configuration for development
   lenient: {
     tags: ['wcag2a'],
     rules: {
       'color-contrast': { enabled: false }, // Often fails in dev
       'aria-valid-attr': { enabled: true },
-      'label': { enabled: true },
-    }
+      label: { enabled: true },
+    },
   } as RunOptions,
-  
+
   // Form-specific accessibility tests
   forms: {
     tags: ['wcag2a', 'wcag2aa'],
     rules: {
-      'label': { enabled: true },
+      label: { enabled: true },
       'aria-valid-attr': { enabled: true },
       'aria-required-attr': { enabled: true },
       'form-field-multiple-labels': { enabled: true },
-    }
+    },
   } as RunOptions,
 } as const;

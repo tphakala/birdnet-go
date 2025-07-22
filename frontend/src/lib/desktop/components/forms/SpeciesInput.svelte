@@ -166,7 +166,7 @@
     onPredictionSelect?.(prediction);
     showPredictions = false;
 
-    // Defer handleAdd to next event loop to ensure state updates (showPredictions = false) 
+    // Defer handleAdd to next event loop to ensure state updates (showPredictions = false)
     // have propagated before triggering add operation
     setTimeout(() => {
       handleAdd();
@@ -355,7 +355,7 @@
     position: relative;
     z-index: 50; /* Reasonable z-index instead of 9999 */
   }
-  
+
   .species-input-container .dropdown-menu {
     position: absolute;
     top: 100%;
