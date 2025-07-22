@@ -89,9 +89,7 @@
     error = null;
 
     try {
-      const response = (await fetchWithCSRF(
-        `/api/v2/weather/detection/${id}`
-      )) as globalThis.Response;
+      const response = await fetchWithCSRF(`/api/v2/weather/detection/${id}`);
 
       if (!response.ok) {
         throw new Error('Weather data not available');
@@ -128,12 +126,9 @@
     return `${speed} km/h`;
   }
 
-  let previousDetectionId = $state<string | undefined>(undefined);
-
   // Fetch when detectionId changes
   $effect(() => {
-    if (detectionId && autoFetch && detectionId !== previousDetectionId) {
-      previousDetectionId = detectionId;
+    if (detectionId && autoFetch) {
       fetchWeatherInfo(detectionId);
     }
   });

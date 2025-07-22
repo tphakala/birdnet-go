@@ -355,7 +355,7 @@ export interface LogConfig {
 // Telemetry settings
 export interface TelemetrySettings {
   enabled: boolean;
-  listen?: string;  // e.g., "0.0.0.0:8090"
+  listen?: string; // e.g., "0.0.0.0:8090"
 }
 
 // Monitoring settings
@@ -681,10 +681,11 @@ export const integrationSettings = derived(settingsStore, $store => ({
   observability: {
     prometheus: {
       enabled: $store.formData.realtime?.telemetry?.enabled ?? false,
-      port: $store.formData.realtime?.telemetry?.listen ? 
-        parseInt($store.formData.realtime.telemetry.listen.split(':')[1] || '8090') : 8090,
-      path: '/metrics'
-    }
+      port: $store.formData.realtime?.telemetry?.listen
+        ? parseInt($store.formData.realtime.telemetry.listen.split(':')[1] || '8090')
+        : 8090,
+      path: '/metrics',
+    },
   },
   weather: $store.formData.realtime?.weather,
 }));

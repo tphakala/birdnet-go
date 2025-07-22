@@ -4,7 +4,12 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsStore, settingsActions, speciesSettings, realtimeSettings } from '$lib/stores/settings';
+  import {
+    settingsStore,
+    settingsActions,
+    speciesSettings,
+    realtimeSettings,
+  } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
@@ -115,8 +120,7 @@
     const inputLower = input.toLowerCase();
     includePredictions = allSpecies
       .filter(
-        species =>
-          species.toLowerCase().includes(inputLower) && !settings.include.includes(species)
+        species => species.toLowerCase().includes(inputLower) && !settings.include.includes(species)
       )
       .slice(0, 10);
   }
@@ -130,8 +134,7 @@
     const inputLower = input.toLowerCase();
     excludePredictions = filteredSpecies
       .filter(
-        species =>
-          species.toLowerCase().includes(inputLower) && !settings.exclude.includes(species)
+        species => species.toLowerCase().includes(inputLower) && !settings.exclude.includes(species)
       )
       .slice(0, 10);
   }
@@ -377,282 +380,290 @@
 {:else}
   <!-- Include Species Section -->
   <SettingsSection
-  title="Always Include Species"
-  description="Species in this list will always be included in range of detected species"
-  defaultOpen={true}
-  hasChanges={includeHasChanges}
->
-  <div class="space-y-4">
-    <!-- Species list -->
-    <div class="space-y-2">
-      {#each settings.include as species}
-        <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
-          <span class="text-sm">{species}</span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            onclick={() => removeIncludeSpecies(species)}
-            disabled={store.isLoading || store.isSaving}
-            aria-label="Remove {species}"
-          >
-            ✕
-          </button>
-        </div>
-      {/each}
-
-      {#if settings.include.length === 0}
-        <div class="text-sm text-base-content/60 italic p-2 text-center">
-          No species added to include list
-        </div>
-      {/if}
-    </div>
-
-    <!-- Add species input -->
-    <SpeciesInput
-      bind:value={includeInputValue}
-      label="Add New Species to Include"
-      placeholder="Add species to include"
-      predictions={includePredictions}
-      size="sm"
-      onInput={updateIncludePredictions}
-      onAdd={addIncludeSpecies}
-      disabled={store.isLoading || store.isSaving}
-    />
-  </div>
-</SettingsSection>
-
-<!-- Exclude Species Section -->
-<SettingsSection
-  title="Always Exclude Species"
-  description="Species in this list will always be excluded from detection"
-  defaultOpen={true}
-  hasChanges={excludeHasChanges}
->
-  <div class="space-y-4">
-    <!-- Species list -->
-    <div class="space-y-2">
-      {#each settings.exclude as species}
-        <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
-          <span class="text-sm">{species}</span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            onclick={() => removeExcludeSpecies(species)}
-            disabled={store.isLoading || store.isSaving}
-            aria-label="Remove {species}"
-          >
-            ✕
-          </button>
-        </div>
-      {/each}
-
-      {#if settings.exclude.length === 0}
-        <div class="text-sm text-base-content/60 italic p-2 text-center">
-          No species added to exclude list
-        </div>
-      {/if}
-    </div>
-
-    <!-- Add species input -->
-    <SpeciesInput
-      bind:value={excludeInputValue}
-      label="Add New Species to Exclude"
-      placeholder="Add species to exclude"
-      predictions={excludePredictions}
-      size="sm"
-      onInput={updateExcludePredictions}
-      onAdd={addExcludeSpecies}
-      disabled={store.isLoading || store.isSaving}
-    />
-  </div>
-</SettingsSection>
-
-<!-- Custom Configuration Section -->
-<SettingsSection
-  title="Custom Species Configuration"
-  description="Species specific threshold values, detection intervals, and actions"
-  defaultOpen={true}
-  hasChanges={configHasChanges}
->
-  <div class="space-y-4">
-    <!-- Help text -->
-    <div class="text-sm text-base-content mb-4">
-      <p>Configure species-specific settings:</p>
-      <ul class="list-disc list-inside pl-4 text-xs">
-        <li><b>Threshold</b>: Minimum confidence score (0-1) required for detection</li>
-        <li>
-          <b>Interval</b>: Minimum time in seconds between detections of the same species (0 = use
-          global default)
-        </li>
-        <li><b>Actions</b>: Custom commands to execute when this species is detected</li>
-      </ul>
-    </div>
-
-    <!-- Configuration list -->
-    <div class="space-y-2">
-      <!-- Column headers -->
-      {#if Object.keys(settings.config).length > 0}
-        <div class="grid grid-cols-12 gap-2 mb-1 text-xs font-medium text-base-content/70">
-          <div class="col-span-5 px-2">Species</div>
-          <div class="col-span-6 px-2">Settings</div>
-          <div class="col-span-1 px-2 text-right">Actions</div>
-        </div>
-      {/if}
-
-      <!-- Edit mode -->
-      {#if editingConfig}
-        <div class="flex items-center justify-between p-2 rounded-md bg-base-300">
-          <div class="flex-grow grid grid-cols-12 gap-2">
-            <div class="col-span-6">
-              <TextInput bind:value={editConfigNewName} placeholder="Species name" size="xs" />
-            </div>
-            <div class="col-span-2">
-              <NumberField
-                label="Threshold"
-                value={editConfigThreshold}
-                onUpdate={value => (editConfigThreshold = value)}
-                min={0}
-                max={1}
-                step={0.01}
-                placeholder="0.5"
-              />
-            </div>
-            <div class="col-span-2">
-              <NumberField
-                label="Interval"
-                value={editConfigInterval}
-                onUpdate={value => (editConfigInterval = value)}
-                min={0}
-                max={3600}
-                step={1}
-                placeholder="0"
-              />
-            </div>
-            <div class="col-span-2 flex space-x-1">
-              <button type="button" class="btn btn-primary btn-xs flex-1" onclick={saveEditConfig}>
-                Save
-              </button>
-              <button type="button" class="btn btn-ghost btn-xs flex-1" onclick={cancelEditConfig}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- List items -->
-      {#each Object.entries(settings.config) as [species, config]}
-        {#if editingConfig !== species}
+    title="Always Include Species"
+    description="Species in this list will always be included in range of detected species"
+    defaultOpen={true}
+    hasChanges={includeHasChanges}
+  >
+    <div class="space-y-4">
+      <!-- Species list -->
+      <div class="space-y-2">
+        {#each settings.include as species}
           <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
-            <div class="flex-grow grid grid-cols-12 gap-2 items-center">
-              <!-- Species name -->
-              <div class="col-span-5 text-sm pl-2">{species}</div>
+            <span class="text-sm">{species}</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onclick={() => removeIncludeSpecies(species)}
+              disabled={store.isLoading || store.isSaving}
+              aria-label="Remove {species}"
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
 
-              <!-- Settings badges -->
-              <div class="col-span-6 flex flex-wrap gap-1">
-                <span class="badge badge-sm badge-neutral">
-                  Threshold: {config.threshold.toFixed(2)}
-                </span>
-                {#if config.interval > 0}
-                  <span class="badge badge-sm badge-secondary">
-                    Interval: {config.interval}s
-                  </span>
-                {/if}
-                {#if config.actions?.length > 0}
-                  <span class="badge badge-sm badge-accent">Custom Action</span>
-                {/if}
-                {#if config.actions?.[0]?.executeDefaults}
-                  <span class="badge badge-sm badge-info">+Defaults</span>
-                {/if}
+        {#if settings.include.length === 0}
+          <div class="text-sm text-base-content/60 italic p-2 text-center">
+            No species added to include list
+          </div>
+        {/if}
+      </div>
+
+      <!-- Add species input -->
+      <SpeciesInput
+        bind:value={includeInputValue}
+        label="Add New Species to Include"
+        placeholder="Add species to include"
+        predictions={includePredictions}
+        size="sm"
+        onInput={updateIncludePredictions}
+        onAdd={addIncludeSpecies}
+        disabled={store.isLoading || store.isSaving}
+      />
+    </div>
+  </SettingsSection>
+
+  <!-- Exclude Species Section -->
+  <SettingsSection
+    title="Always Exclude Species"
+    description="Species in this list will always be excluded from detection"
+    defaultOpen={true}
+    hasChanges={excludeHasChanges}
+  >
+    <div class="space-y-4">
+      <!-- Species list -->
+      <div class="space-y-2">
+        {#each settings.exclude as species}
+          <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
+            <span class="text-sm">{species}</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onclick={() => removeExcludeSpecies(species)}
+              disabled={store.isLoading || store.isSaving}
+              aria-label="Remove {species}"
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+
+        {#if settings.exclude.length === 0}
+          <div class="text-sm text-base-content/60 italic p-2 text-center">
+            No species added to exclude list
+          </div>
+        {/if}
+      </div>
+
+      <!-- Add species input -->
+      <SpeciesInput
+        bind:value={excludeInputValue}
+        label="Add New Species to Exclude"
+        placeholder="Add species to exclude"
+        predictions={excludePredictions}
+        size="sm"
+        onInput={updateExcludePredictions}
+        onAdd={addExcludeSpecies}
+        disabled={store.isLoading || store.isSaving}
+      />
+    </div>
+  </SettingsSection>
+
+  <!-- Custom Configuration Section -->
+  <SettingsSection
+    title="Custom Species Configuration"
+    description="Species specific threshold values, detection intervals, and actions"
+    defaultOpen={true}
+    hasChanges={configHasChanges}
+  >
+    <div class="space-y-4">
+      <!-- Help text -->
+      <div class="text-sm text-base-content mb-4">
+        <p>Configure species-specific settings:</p>
+        <ul class="list-disc list-inside pl-4 text-xs">
+          <li><b>Threshold</b>: Minimum confidence score (0-1) required for detection</li>
+          <li>
+            <b>Interval</b>: Minimum time in seconds between detections of the same species (0 = use
+            global default)
+          </li>
+          <li><b>Actions</b>: Custom commands to execute when this species is detected</li>
+        </ul>
+      </div>
+
+      <!-- Configuration list -->
+      <div class="space-y-2">
+        <!-- Column headers -->
+        {#if Object.keys(settings.config).length > 0}
+          <div class="grid grid-cols-12 gap-2 mb-1 text-xs font-medium text-base-content/70">
+            <div class="col-span-5 px-2">Species</div>
+            <div class="col-span-6 px-2">Settings</div>
+            <div class="col-span-1 px-2 text-right">Actions</div>
+          </div>
+        {/if}
+
+        <!-- Edit mode -->
+        {#if editingConfig}
+          <div class="flex items-center justify-between p-2 rounded-md bg-base-300">
+            <div class="flex-grow grid grid-cols-12 gap-2">
+              <div class="col-span-6">
+                <TextInput bind:value={editConfigNewName} placeholder="Species name" size="xs" />
               </div>
-
-              <!-- Actions dropdown -->
-              <div class="col-span-1 text-right">
-                <div class="dropdown dropdown-end">
-                  <div tabindex="0" role="button" class="btn btn-ghost btn-xs">⋮</div>
-                  <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
-                    <li>
-                      <button onclick={() => startEditConfig(species)}>Edit Config</button>
-                    </li>
-                    <li>
-                      <button onclick={() => openActionsModal(species)}>Add Action</button>
-                    </li>
-                    <li>
-                      <button onclick={() => removeConfig(species)} class="text-error">
-                        Remove
-                      </button>
-                    </li>
-                  </ul>
-                </div>
+              <div class="col-span-2">
+                <NumberField
+                  label="Threshold"
+                  value={editConfigThreshold}
+                  onUpdate={value => (editConfigThreshold = value)}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  placeholder="0.5"
+                />
+              </div>
+              <div class="col-span-2">
+                <NumberField
+                  label="Interval"
+                  value={editConfigInterval}
+                  onUpdate={value => (editConfigInterval = value)}
+                  min={0}
+                  max={3600}
+                  step={1}
+                  placeholder="0"
+                />
+              </div>
+              <div class="col-span-2 flex space-x-1">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-xs flex-1"
+                  onclick={saveEditConfig}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs flex-1"
+                  onclick={cancelEditConfig}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
         {/if}
-      {/each}
 
-      {#if Object.keys(settings.config).length === 0}
-        <div class="text-sm text-base-content/60 italic p-2 text-center">
-          No custom species configurations added
-        </div>
-      {/if}
-    </div>
+        <!-- List items -->
+        {#each Object.entries(settings.config) as [species, config]}
+          {#if editingConfig !== species}
+            <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
+              <div class="flex-grow grid grid-cols-12 gap-2 items-center">
+                <!-- Species name -->
+                <div class="col-span-5 text-sm pl-2">{species}</div>
 
-    <!-- Add configuration form -->
-    <div class="mt-4 space-y-4">
-      <!-- Input fields -->
-      <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-6">
-          <SpeciesInput
-            bind:value={configInputValue}
-            placeholder="Species name"
-            predictions={configPredictions}
-            size="sm"
-            onInput={updateConfigPredictions}
-            onAdd={() => {}}
-            buttonText=""
-            buttonIcon={false}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
+                <!-- Settings badges -->
+                <div class="col-span-6 flex flex-wrap gap-1">
+                  <span class="badge badge-sm badge-neutral">
+                    Threshold: {config.threshold.toFixed(2)}
+                  </span>
+                  {#if config.interval > 0}
+                    <span class="badge badge-sm badge-secondary">
+                      Interval: {config.interval}s
+                    </span>
+                  {/if}
+                  {#if config.actions?.length > 0}
+                    <span class="badge badge-sm badge-accent">Custom Action</span>
+                  {/if}
+                  {#if config.actions?.[0]?.executeDefaults}
+                    <span class="badge badge-sm badge-info">+Defaults</span>
+                  {/if}
+                </div>
 
-        <div class="col-span-2">
-          <NumberField
-            label="Threshold"
-            value={newThreshold}
-            onUpdate={value => (newThreshold = value)}
-            min={0}
-            max={1}
-            step={0.01}
-            placeholder="0.5"
-          />
-        </div>
+                <!-- Actions dropdown -->
+                <div class="col-span-1 text-right">
+                  <div class="dropdown dropdown-end">
+                    <div tabindex="0" role="button" class="btn btn-ghost btn-xs">⋮</div>
+                    <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
+                      <li>
+                        <button onclick={() => startEditConfig(species)}>Edit Config</button>
+                      </li>
+                      <li>
+                        <button onclick={() => openActionsModal(species)}>Add Action</button>
+                      </li>
+                      <li>
+                        <button onclick={() => removeConfig(species)} class="text-error">
+                          Remove
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {/if}
+        {/each}
 
-        <div class="col-span-2">
-          <NumberField
-            label="Interval (sec)"
-            value={newInterval}
-            onUpdate={value => (newInterval = value)}
-            min={0}
-            max={3600}
-            step={1}
-            placeholder="0"
-          />
-        </div>
+        {#if Object.keys(settings.config).length === 0}
+          <div class="text-sm text-base-content/60 italic p-2 text-center">
+            No custom species configurations added
+          </div>
+        {/if}
+      </div>
 
-        <div class="col-span-2">
-          <button
-            type="button"
-            class="btn btn-primary btn-sm w-full"
-            onclick={addConfig}
-            disabled={!configInputValue.trim() || newThreshold < 0 || newThreshold > 1}
-          >
-            Add
-          </button>
+      <!-- Add configuration form -->
+      <div class="mt-4 space-y-4">
+        <!-- Input fields -->
+        <div class="grid grid-cols-12 gap-4">
+          <div class="col-span-6">
+            <SpeciesInput
+              bind:value={configInputValue}
+              placeholder="Species name"
+              predictions={configPredictions}
+              size="sm"
+              onInput={updateConfigPredictions}
+              onAdd={() => {}}
+              buttonText=""
+              buttonIcon={false}
+              disabled={store.isLoading || store.isSaving}
+            />
+          </div>
+
+          <div class="col-span-2">
+            <NumberField
+              label="Threshold"
+              value={newThreshold}
+              onUpdate={value => (newThreshold = value)}
+              min={0}
+              max={1}
+              step={0.01}
+              placeholder="0.5"
+            />
+          </div>
+
+          <div class="col-span-2">
+            <NumberField
+              label="Interval (sec)"
+              value={newInterval}
+              onUpdate={value => (newInterval = value)}
+              min={0}
+              max={3600}
+              step={1}
+              placeholder="0"
+            />
+          </div>
+
+          <div class="col-span-2">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm w-full"
+              onclick={addConfig}
+              disabled={!configInputValue.trim() || newThreshold < 0 || newThreshold > 1}
+            >
+              Add
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-</SettingsSection>
+  </SettingsSection>
 {/if}
 
 <!-- Actions Modal -->

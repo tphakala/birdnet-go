@@ -37,13 +37,13 @@
   let { detection, className = '' }: Props = $props();
 
   const statusBadgeClassMap: Record<string, string> = {
-    'correct': 'status-badge correct',
-    'false_positive': 'status-badge false',
+    correct: 'status-badge correct',
+    false_positive: 'status-badge false',
   };
 
   const statusTextMap: Record<string, string> = {
-    'correct': 'correct',
-    'false_positive': 'false',
+    correct: 'correct',
+    false_positive: 'false',
   };
 
   function getStatusBadgeClass(verified: string): string {

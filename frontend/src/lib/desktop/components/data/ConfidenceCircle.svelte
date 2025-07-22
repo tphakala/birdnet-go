@@ -33,10 +33,10 @@
     // Determine if it's decimal (0-1) or percentage (0-100) format
     const isDecimal = confidence <= 1;
     const percent = isDecimal ? confidence * 100 : confidence;
-    
+
     // Clamp to valid range (0-100)
     const clampedPercent = Math.max(0, Math.min(100, percent));
-    
+
     return Math.round(clampedPercent);
   });
   const isMaxConfidence = $derived(confidencePercent === 100);
@@ -50,7 +50,7 @@
     // Determine if it's decimal (0-1) or percentage (0-100) format
     const isDecimal = confidence <= 1;
     const percent = isDecimal ? confidence * 100 : confidence;
-    
+
     // Clamp to valid range (0-100)
     const clampedPercent = Math.max(0, Math.min(100, percent));
 

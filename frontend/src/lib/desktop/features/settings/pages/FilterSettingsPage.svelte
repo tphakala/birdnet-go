@@ -168,233 +168,233 @@
   </div>
 {:else}
   <div class="space-y-4">
-  <!-- Privacy Filter Section -->
-  <SettingsSection
-    title="Privacy Filtering"
-    description="Privacy filtering avoids saving audio clips when human vocals are detected"
-    defaultOpen={true}
-    hasChanges={privacyFilterHasChanges}
-  >
-    <div class="space-y-4">
-      <!-- Enable Privacy Filtering -->
-      <Checkbox
-        bind:checked={settings.privacy.enabled}
-        label="Enable Privacy Filtering"
-        disabled={store.isLoading || store.isSaving}
-        onchange={() => updatePrivacyEnabled(settings.privacy.enabled)}
-      />
+    <!-- Privacy Filter Section -->
+    <SettingsSection
+      title="Privacy Filtering"
+      description="Privacy filtering avoids saving audio clips when human vocals are detected"
+      defaultOpen={true}
+      hasChanges={privacyFilterHasChanges}
+    >
+      <div class="space-y-4">
+        <!-- Enable Privacy Filtering -->
+        <Checkbox
+          bind:checked={settings.privacy.enabled}
+          label="Enable Privacy Filtering"
+          disabled={store.isLoading || store.isSaving}
+          onchange={() => updatePrivacyEnabled(settings.privacy.enabled)}
+        />
 
-      {#if settings.privacy.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <!-- Confidence Threshold -->
-          <NumberField
-            label="Confidence Threshold for Human Detection"
-            value={(settings.privacy as any).confidence}
-            onUpdate={updatePrivacyConfidence}
-            min={0}
-            max={1}
-            step={0.01}
-            disabled={store.isLoading || store.isSaving}
-            helpText="Set the confidence level for human voice detection, lower value makes filter more sensitive"
-          />
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
+        {#if settings.privacy.enabled}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <!-- Confidence Threshold -->
+            <NumberField
+              label="Confidence Threshold for Human Detection"
+              value={(settings.privacy as any).confidence}
+              onUpdate={updatePrivacyConfidence}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={store.isLoading || store.isSaving}
+              helpText="Set the confidence level for human voice detection, lower value makes filter more sensitive"
+            />
+          </div>
+        {/if}
+      </div>
+    </SettingsSection>
 
-  <!-- Dog Bark Filter Section -->
-  <SettingsSection
-    title="False Positive Prevention"
-    description="Configure false detection filters"
-    defaultOpen={true}
-    hasChanges={dogBarkFilterHasChanges}
-  >
-    <div class="space-y-4">
-      <!-- Enable Dog Bark Filter -->
-      <Checkbox
-        bind:checked={settings.dogBark.enabled}
-        label="Enable Dog Bark Filter"
-        disabled={store.isLoading || store.isSaving}
-        onchange={() => updateDogBarkEnabled(settings.dogBark.enabled)}
-      />
+    <!-- Dog Bark Filter Section -->
+    <SettingsSection
+      title="False Positive Prevention"
+      description="Configure false detection filters"
+      defaultOpen={true}
+      hasChanges={dogBarkFilterHasChanges}
+    >
+      <div class="space-y-4">
+        <!-- Enable Dog Bark Filter -->
+        <Checkbox
+          bind:checked={settings.dogBark.enabled}
+          label="Enable Dog Bark Filter"
+          disabled={store.isLoading || store.isSaving}
+          onchange={() => updateDogBarkEnabled(settings.dogBark.enabled)}
+        />
 
-      {#if settings.dogBark.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <!-- Confidence Threshold -->
-          <NumberField
-            label="Confidence Threshold"
-            value={(settings.dogBark as any).confidence}
-            onUpdate={updateDogBarkConfidence}
-            min={0}
-            max={1}
-            step={0.01}
-            disabled={store.isLoading || store.isSaving}
-            helpText="Set the confidence level for dog bark detection, lower value makes filter more sensitive"
-          />
+        {#if settings.dogBark.enabled}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <!-- Confidence Threshold -->
+            <NumberField
+              label="Confidence Threshold"
+              value={(settings.dogBark as any).confidence}
+              onUpdate={updateDogBarkConfidence}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={store.isLoading || store.isSaving}
+              helpText="Set the confidence level for dog bark detection, lower value makes filter more sensitive"
+            />
 
-          <!-- Dog Bark Expire Time -->
-          <NumberField
-            label="Dog Bark Expire Time (Minutes)"
-            value={(settings.dogBark as any).remember}
-            onUpdate={updateDogBarkRemember}
-            min={0}
-            step={1}
-            disabled={store.isLoading || store.isSaving}
-            helpText="Set how long to remember a detected dog bark"
-          />
-        </div>
-
-        <!-- Dog Bark Species List -->
-        <div class="form-control mt-6">
-          <div class="label justify-start">
-            <span class="label-text">Dog Bark Species List</span>
+            <!-- Dog Bark Expire Time -->
+            <NumberField
+              label="Dog Bark Expire Time (Minutes)"
+              value={(settings.dogBark as any).remember}
+              onUpdate={updateDogBarkRemember}
+              min={0}
+              step={1}
+              disabled={store.isLoading || store.isSaving}
+              helpText="Set how long to remember a detected dog bark"
+            />
           </div>
 
-          <!-- Species List -->
-          {#if (settings.dogBark as any).species.length > 0}
-            <div class="space-y-2 mb-4">
-              {#each (settings.dogBark as any).species as species, index}
-                <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
-                  {#if editIndex === index}
-                    <input
-                      type="text"
-                      bind:value={editSpecies}
-                      class="input input-sm input-bordered flex-1"
-                      onkeydown={handleEditKeydown}
-                      placeholder="Species name"
-                    />
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-success"
-                      onclick={saveEdit}
-                      aria-label="Save changes"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-ghost"
-                      onclick={cancelEdit}
-                      aria-label="Cancel edit"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  {:else}
-                    <span class="flex-1 text-sm">{species}</span>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-ghost"
-                      onclick={() => startEdit(index)}
-                      disabled={store.isLoading || store.isSaving}
-                      aria-label="Edit species"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-error"
-                      onclick={() => removeSpecies(index)}
-                      disabled={store.isLoading || store.isSaving}
-                      aria-label="Remove species"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
-                  {/if}
-                </div>
-              {/each}
+          <!-- Dog Bark Species List -->
+          <div class="form-control mt-6">
+            <div class="label justify-start">
+              <span class="label-text">Dog Bark Species List</span>
             </div>
-          {/if}
 
-          <!-- Add New Species -->
-          <SpeciesInput
-            bind:value={newSpecies}
-            label="Add Dog Bark Species"
-            placeholder="Type species name..."
-            helpText="Search and add species that might be confused with dog barks"
-            disabled={store.isLoading || store.isSaving}
-            predictions={allowedSpecies}
-            size="sm"
-            buttonText="Add"
-            buttonIcon={true}
-            onInput={handleSpeciesInput}
-            onAdd={addSpecies}
-          />
+            <!-- Species List -->
+            {#if (settings.dogBark as any).species.length > 0}
+              <div class="space-y-2 mb-4">
+                {#each (settings.dogBark as any).species as species, index}
+                  <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
+                    {#if editIndex === index}
+                      <input
+                        type="text"
+                        bind:value={editSpecies}
+                        class="input input-sm input-bordered flex-1"
+                        onkeydown={handleEditKeydown}
+                        placeholder="Species name"
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-success"
+                        onclick={saveEdit}
+                        aria-label="Save changes"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-ghost"
+                        onclick={cancelEdit}
+                        aria-label="Cancel edit"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    {:else}
+                      <span class="flex-1 text-sm">{species}</span>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-ghost"
+                        onclick={() => startEdit(index)}
+                        disabled={store.isLoading || store.isSaving}
+                        aria-label="Edit species"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-error"
+                        onclick={() => removeSpecies(index)}
+                        disabled={store.isLoading || store.isSaving}
+                        aria-label="Remove species"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
 
-          <!-- Unsaved Changes Indicator -->
-          {#if dogBarkFilterHasChanges}
-            <div class="mt-2 text-xs text-info flex items-center gap-1">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span>Unsaved changes</span>
-            </div>
-          {/if}
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
+            <!-- Add New Species -->
+            <SpeciesInput
+              bind:value={newSpecies}
+              label="Add Dog Bark Species"
+              placeholder="Type species name..."
+              helpText="Search and add species that might be confused with dog barks"
+              disabled={store.isLoading || store.isSaving}
+              predictions={allowedSpecies}
+              size="sm"
+              buttonText="Add"
+              buttonIcon={true}
+              onInput={handleSpeciesInput}
+              onAdd={addSpecies}
+            />
+
+            <!-- Unsaved Changes Indicator -->
+            {#if dogBarkFilterHasChanges}
+              <div class="mt-2 text-xs text-info flex items-center gap-1">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>Unsaved changes</span>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </SettingsSection>
   </div>
 {/if}

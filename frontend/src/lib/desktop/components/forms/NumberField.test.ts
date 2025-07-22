@@ -95,7 +95,7 @@ describe('NumberField', () => {
 
   it('enforces minimum constraint during input', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -106,17 +106,17 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Try to input a value below minimum
     await fireEvent.input(input, { target: { value: '-5' } });
-    
+
     // Should not call onUpdate for values below minimum
     expect(onUpdate).not.toHaveBeenCalledWith(-5);
   });
 
   it('enforces maximum constraint during input', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -127,17 +127,17 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Try to input a value above maximum
     await fireEvent.input(input, { target: { value: '15' } });
-    
+
     // Should not call onUpdate for values above maximum
     expect(onUpdate).not.toHaveBeenCalledWith(15);
   });
 
   it('allows valid values within min/max range', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -149,10 +149,10 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Input a valid value within range
     await fireEvent.input(input, { target: { value: '7' } });
-    
+
     // Should call onUpdate for valid values
     expect(onUpdate).toHaveBeenCalledWith(7);
   });
@@ -286,7 +286,7 @@ describe('NumberField', () => {
 
   it('handles very large numbers', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -296,16 +296,16 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Test very large number
     await fireEvent.input(input, { target: { value: '9007199254740991' } });
-    
+
     expect(onUpdate).toHaveBeenCalledWith(9007199254740991);
   });
 
   it('handles scientific notation', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -315,16 +315,16 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Test scientific notation
     await fireEvent.input(input, { target: { value: '1e6' } });
-    
+
     expect(onUpdate).toHaveBeenCalledWith(1000000);
   });
 
   it('handles negative scientific notation', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -334,16 +334,16 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Test negative scientific notation
     await fireEvent.input(input, { target: { value: '-1e-6' } });
-    
+
     expect(onUpdate).toHaveBeenCalledWith(-0.000001);
   });
 
   it('handles precision limits correctly', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -353,16 +353,16 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Test high precision decimal
     await fireEvent.input(input, { target: { value: '0.123456789012345' } });
-    
+
     expect(onUpdate).toHaveBeenCalledWith(0.123456789012345);
   });
 
   it('rejects infinite values', async () => {
     const onUpdate = vi.fn();
-    
+
     render(NumberField, {
       props: {
         label: 'Test Number',
@@ -372,10 +372,10 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    
+
     // Test infinity - should not call onUpdate
     await fireEvent.input(input, { target: { value: 'Infinity' } });
-    
+
     expect(onUpdate).not.toHaveBeenCalledWith(Infinity);
   });
 });

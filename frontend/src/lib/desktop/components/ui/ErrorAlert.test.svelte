@@ -1,7 +1,13 @@
 <script>
   import ErrorAlert from './ErrorAlert.svelte';
 
-  let { type = 'error', dismissible = false, onDismiss = () => {}, showChildren = false, ...rest } = $props();
+  let {
+    type = 'error',
+    dismissible = false,
+    onDismiss = () => {},
+    showChildren = false,
+    ...rest
+  } = $props();
 </script>
 
 <ErrorAlert {type} {dismissible} {onDismiss} {...rest}>

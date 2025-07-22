@@ -26,13 +26,13 @@
   - emptyMessage?: string - Message when no data
   - Various styling options (striped, hoverable, compact, fullWidth)
 -->
-<script lang="ts" generics="T">
+<script lang="ts" generics="T extends Record<string, any>">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Column, SortDirection } from './DataTable.types';
 
-  interface Props<T> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
+  interface Props<T extends Record<string, any>> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
     columns: Column<T>[];
     data: T[];
     loading?: boolean;
@@ -92,8 +92,8 @@
     if (column.renderHtml) {
       return column.renderHtml(item, index);
     }
-    // @ts-expect-error - Dynamic property access
-    return item[column.key] ?? '';
+    // Safe property access with proper generic constraint
+    return item[column.key as keyof T] ?? '';
   }
 
   function getAlignClass(align?: string): string {
@@ -159,13 +159,27 @@
               style:width={column.width}
             >
               {#if column.sortable && onSort}
+                {@const getSortState = () => {
+                  if (sortColumn !== column.key) return 'unsorted';
+                  return sortDirection === 'asc'
+                    ? 'ascending'
+                    : sortDirection === 'desc'
+                      ? 'descending'
+                      : 'unsorted';
+                }}
+                {@const getAriaLabel = () => {
+                  const state = getSortState();
+                  return `Sort ${column.header} column ${state === 'unsorted' ? 'ascending' : state === 'ascending' ? 'descending' : 'ascending'}`;
+                }}
                 <button
                   type="button"
                   class="inline-flex items-center gap-1 hover:text-primary transition-colors"
                   onclick={() => handleSort(column)}
+                  aria-label={getAriaLabel()}
+                  aria-sort={getSortState()}
                 >
                   {column.header}
-                  <span class="inline-block w-4">
+                  <span class="inline-block w-4" aria-hidden="true">
                     {#if sortColumn === column.key}
                       {#if sortDirection === 'asc'}
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

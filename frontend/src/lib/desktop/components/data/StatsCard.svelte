@@ -137,157 +137,65 @@
   }
 </script>
 
-{#if href}
-  <a {href} class={cardClasses} {id} data-testid={dataTestId}>
-    {#snippet content()}
-      <div class="card-body">
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
-            {#if loading}
-              <div class="space-y-2">
-                <div class="skeleton h-8 w-24"></div>
-                <div class="skeleton h-4 w-32"></div>
-                {#if subLabel}
-                  <div class="skeleton h-3 w-28"></div>
-                {/if}
-              </div>
-            {:else}
-              <div class="text-3xl font-bold">{value}</div>
-              <div class="text-sm font-medium opacity-90">{label}</div>
-              {#if subLabel}
-                <div class="text-xs opacity-70 mt-1">{subLabel}</div>
-              {/if}
-              {#if trend}
-                <div class="flex items-center gap-1 mt-2">
-                  <svg
-                    class={cn('w-4 h-4', trendClasses[trend.direction])}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d={renderTrendIcon(trend.direction)}
-                    />
-                  </svg>
-                  <span class={cn('text-sm font-medium', trendClasses[trend.direction])}>
-                    {trend.value}{trend.label ? ` ${trend.label}` : ''}
-                  </span>
-                </div>
-              {/if}
+{#snippet cardBody()}
+  <div class="card-body">
+    <div class="flex items-start justify-between">
+      <div class="flex-1">
+        {#if loading}
+          <div class="space-y-2">
+            <div class="skeleton h-8 w-24"></div>
+            <div class="skeleton h-4 w-32"></div>
+            {#if subLabel}
+              <div class="skeleton h-3 w-28"></div>
             {/if}
           </div>
-          {#if icon && !loading}
-            <div class={cn('p-3 rounded-lg', iconVariantClasses[variant])}>
-              {@render icon()}
+        {:else}
+          <div class="text-3xl font-bold">{value}</div>
+          <div class="text-sm font-medium opacity-90">{label}</div>
+          {#if subLabel}
+            <div class="text-xs opacity-70 mt-1">{subLabel}</div>
+          {/if}
+          {#if trend}
+            <div class="flex items-center gap-1 mt-2">
+              <svg
+                class={cn('w-4 h-4', trendClasses[trend.direction])}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d={renderTrendIcon(trend.direction)}
+                />
+              </svg>
+              <span class={cn('text-sm font-medium', trendClasses[trend.direction])}>
+                {trend.value}{trend.label ? ` ${trend.label}` : ''}
+              </span>
             </div>
           {/if}
-        </div>
+        {/if}
       </div>
-    {/snippet}
-    {@render content()}
+      {#if icon && !loading}
+        <div class={cn('p-3 rounded-lg', iconVariantClasses[variant])}>
+          {@render icon()}
+        </div>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+{#if href}
+  <a {href} class={cardClasses} {id} data-testid={dataTestId}>
+    {@render cardBody()}
   </a>
 {:else if isInteractive}
   <button type="button" class={cardClasses} onclick={handleClick} {id} data-testid={dataTestId}>
-    {#snippet content()}
-      <div class="card-body">
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
-            {#if loading}
-              <div class="space-y-2">
-                <div class="skeleton h-8 w-24"></div>
-                <div class="skeleton h-4 w-32"></div>
-                {#if subLabel}
-                  <div class="skeleton h-3 w-28"></div>
-                {/if}
-              </div>
-            {:else}
-              <div class="text-3xl font-bold">{value}</div>
-              <div class="text-sm font-medium opacity-90">{label}</div>
-              {#if subLabel}
-                <div class="text-xs opacity-70 mt-1">{subLabel}</div>
-              {/if}
-              {#if trend}
-                <div class="flex items-center gap-1 mt-2">
-                  <svg
-                    class={cn('w-4 h-4', trendClasses[trend.direction])}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d={renderTrendIcon(trend.direction)}
-                    />
-                  </svg>
-                  <span class={cn('text-sm font-medium', trendClasses[trend.direction])}>
-                    {trend.value}{trend.label ? ` ${trend.label}` : ''}
-                  </span>
-                </div>
-              {/if}
-            {/if}
-          </div>
-          {#if icon && !loading}
-            <div class={cn('p-3 rounded-lg', iconVariantClasses[variant])}>
-              {@render icon()}
-            </div>
-          {/if}
-        </div>
-      </div>
-    {/snippet}
-    {@render content()}
+    {@render cardBody()}
   </button>
 {:else}
   <div class={cardClasses} {id} data-testid={dataTestId}>
-    <div class="card-body">
-      <div class="flex items-start justify-between">
-        <div class="flex-1">
-          {#if loading}
-            <div class="space-y-2">
-              <div class="skeleton h-8 w-24"></div>
-              <div class="skeleton h-4 w-32"></div>
-              {#if subLabel}
-                <div class="skeleton h-3 w-28"></div>
-              {/if}
-            </div>
-          {:else}
-            <div class="text-3xl font-bold">{value}</div>
-            <div class="text-sm font-medium opacity-90">{label}</div>
-            {#if subLabel}
-              <div class="text-xs opacity-70 mt-1">{subLabel}</div>
-            {/if}
-            {#if trend}
-              <div class="flex items-center gap-1 mt-2">
-                <svg
-                  class={cn('w-4 h-4', trendClasses[trend.direction])}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d={renderTrendIcon(trend.direction)}
-                  />
-                </svg>
-                <span class={cn('text-sm font-medium', trendClasses[trend.direction])}>
-                  {trend.value}{trend.label ? ` ${trend.label}` : ''}
-                </span>
-              </div>
-            {/if}
-          {/if}
-        </div>
-        {#if icon && !loading}
-          <div class={cn('p-3 rounded-lg', iconVariantClasses[variant])}>
-            {@render icon()}
-          </div>
-        {/if}
-      </div>
-    </div>
+    {@render cardBody()}
   </div>
 {/if}

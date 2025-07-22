@@ -30,11 +30,7 @@
     children: import('svelte').Snippet;
   }
 
-  let {
-    className = "",
-    icon,
-    children
-  }: Props = $props();
+  let { className = '', icon, children }: Props = $props();
 </script>
 
 <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg {className}">
