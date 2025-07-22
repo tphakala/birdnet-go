@@ -16,7 +16,7 @@
   import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -625,14 +625,7 @@
 
               {#if rangeFilterError}
                 <div class="alert alert-error mt-2">
-                  <svg class="stroke-current shrink-0 w-6 h-6" fill="none" viewBox="0 0 24 24">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    ></path>
-                  </svg>
+                  {@html alertIconsSvg.error}
                   <span>{rangeFilterError}</span>
                   <button
                     type="button"
@@ -674,19 +667,7 @@
 
       {#if settings.database.type === 'sqlite'}
         <div class="alert alert-info">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="stroke-current shrink-0 w-6 h-6"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
+          {@html alertIconsSvg.info}
           <span>SQLite is recommended database type for most users.</span>
         </div>
 
@@ -881,14 +862,7 @@
 
       {#if rangeFilterError}
         <div class="alert alert-error mb-4">
-          <svg class="stroke-current shrink-0 w-6 h-6" fill="none" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
+          {@html alertIconsSvg.error}
           <span>{rangeFilterError}</span>
           <button
             type="button"
