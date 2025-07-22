@@ -55,7 +55,7 @@
 
     // More comprehensive URL validation
     try {
-      const urlObj = new globalThis.URL(trimmed);
+      const urlObj = new URL(trimmed);
       if (urlObj.protocol !== 'rtsp:') {
         return 'Protocol must be rtsp://';
       }
@@ -288,7 +288,7 @@
           Configured RTSP Streams ({urls.length}/{maxItems}):
         </div>
         {#if urls.length > 1}
-          <div class="text-xs text-base-content/50">Drag to reorder</div>
+          <!-- TODO: Add drag and drop functionality for reordering -->
         {/if}
       </div>
 
