@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { SelectOption } from './SelectDropdown.types';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     options: SelectOption[];
@@ -322,14 +323,7 @@
             }}
             aria-label="Clear selection"
           >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            {@html navigationIcons.close}
           </div>
         {/if}
 

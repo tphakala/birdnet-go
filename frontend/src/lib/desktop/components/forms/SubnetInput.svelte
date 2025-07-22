@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -222,20 +223,7 @@
             {disabled}
             aria-label="Remove subnet"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            {@html navigationIcons.close}
           </button>
         </div>
 

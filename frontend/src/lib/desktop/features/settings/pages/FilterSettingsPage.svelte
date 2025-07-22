@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   let settings = $derived({
     privacy: $privacyFilterSettings || {
@@ -302,20 +303,7 @@
                         onclick={cancelEdit}
                         aria-label="Cancel edit"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
+                        {@html navigationIcons.close}
                       </button>
                     {:else}
                       <span class="flex-1 text-sm">{species}</span>
