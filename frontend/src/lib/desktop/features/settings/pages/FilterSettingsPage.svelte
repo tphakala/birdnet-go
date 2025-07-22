@@ -57,7 +57,9 @@
   $effect(() => {
     const loadSpeciesList = async () => {
       try {
-        const data = await api.get<{ species?: Array<{ label: string }> }>('/api/v2/range/species/list');
+        const data = await api.get<{ species?: Array<{ label: string }> }>(
+          '/api/v2/range/species/list'
+        );
         if (data?.species && Array.isArray(data.species)) {
           allowedSpecies = data.species.map((species: any) => species.label);
         }
@@ -71,7 +73,7 @@
         allowedSpecies = [];
       }
     };
-    
+
     loadSpeciesList();
   });
 

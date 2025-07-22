@@ -127,14 +127,16 @@
 
     // Fetch image providers
     try {
-      const providersData = await api.get<{ providers?: Array<{ value: string; display: string }> }>('/api/v2/settings/imageproviders');
-      
+      const providersData = await api.get<{
+        providers?: Array<{ value: string; display: string }>;
+      }>('/api/v2/settings/imageproviders');
+
       // Map v2 API response format to client format
       providerOptions = (providersData?.providers || []).map((provider: any) => ({
         value: provider.value,
         label: provider.display,
       }));
-      
+
       multipleProvidersAvailable = providerOptions.length > 1;
     } catch (error) {
       if (error instanceof ApiError) {

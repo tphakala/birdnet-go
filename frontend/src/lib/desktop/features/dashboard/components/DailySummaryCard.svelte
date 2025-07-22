@@ -3,7 +3,7 @@
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary, DetectionQueryParams } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { alertIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -232,19 +232,7 @@
       </div>
     {:else if error}
       <div class="alert alert-error">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="stroke-current shrink-0 h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d={alertIcons.error}
-          />
-        </svg>
+        {@html alertIconsSvg.error}
         <span>{error}</span>
       </div>
     {:else}

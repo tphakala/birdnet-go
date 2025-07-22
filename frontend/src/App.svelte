@@ -309,7 +309,11 @@
   {:else if currentRoute === 'error-generic'}
     {#if GenericErrorPage}
       {@const ErrorComponent = GenericErrorPage}
-      <ErrorComponent code="500" title="Component Load Error" message="Failed to load the requested component" />
+      <ErrorComponent
+        code="500"
+        title="Component Load Error"
+        message="Failed to load the requested component"
+      />
     {:else if loadingComponent}
       {@render loadingSpinner()}
     {/if}

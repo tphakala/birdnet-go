@@ -287,7 +287,7 @@
     if (blurTimeout) {
       clearTimeout(blurTimeout);
     }
-    
+
     // Delay hiding dropdown to allow for clicks
     blurTimeout = setTimeout(() => {
       showDropdown = false;

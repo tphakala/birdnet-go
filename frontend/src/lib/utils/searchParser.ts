@@ -37,7 +37,6 @@ export interface ParsedSearch {
 // Valid time-of-day values
 const TIME_OF_DAY_VALUES = ['dawn', 'day', 'dusk', 'night'];
 
-
 // Date shortcuts
 const DATE_SHORTCUTS = ['today', 'yesterday', 'week', 'month'];
 

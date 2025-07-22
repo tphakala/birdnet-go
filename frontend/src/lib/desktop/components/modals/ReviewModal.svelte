@@ -64,7 +64,8 @@
       onClose();
     } catch (error) {
       console.error('Error saving review:', error);
-      errorMessage = error instanceof Error ? error.message : 'Failed to save review. Please try again.';
+      errorMessage =
+        error instanceof Error ? error.message : 'Failed to save review. Please try again.';
     } finally {
       isLoading = false;
     }
