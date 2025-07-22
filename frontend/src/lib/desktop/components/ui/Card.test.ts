@@ -26,16 +26,14 @@ describe('Card', () => {
   });
 
   it('renders with custom className', () => {
-    const { container } = renderCard({ className: 'custom-class' },
-    });
+    const { container } = renderCard({ className: 'custom-class' });
 
     const card = container.querySelector('.card');
     expect(card).toHaveClass('custom-class');
   });
 
   it('renders without padding when padding is false', () => {
-    const { container } = renderCard({ padding: false },
-    });
+    const { container } = renderCard({ padding: false });
 
     const cardBody = container.querySelector('.card-body');
     expect(cardBody).toHaveClass('p-0');
@@ -48,6 +46,7 @@ describe('Card', () => {
         title: 'Card Title',
         showHeader: true,
         showFooter: true,
+      },
     });
 
     expect(screen.getByText('Custom Header')).toBeInTheDocument();
@@ -62,6 +61,7 @@ describe('Card', () => {
         title: 'Title Prop',
         showHeader: true,
         showFooter: false,
+      },
     });
 
     expect(screen.getByText('Custom Header')).toBeInTheDocument();

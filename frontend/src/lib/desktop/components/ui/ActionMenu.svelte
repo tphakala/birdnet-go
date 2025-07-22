@@ -61,7 +61,7 @@
     requestAnimationFrame(updateMenuPosition);
   }
 
-  function handleAction(action: () => void | undefined) {
+  function handleAction(action: (() => void) | undefined) {
     isOpen = false;
     if (action) {
       action();
@@ -93,9 +93,21 @@
     document.addEventListener('click', handleClickOutside);
     document.addEventListener('keydown', handleKeydown);
 
+    // Update menu position on window resize and scroll
+    function handleResize() {
+      if (isOpen) {
+        updateMenuPosition();
+      }
+    }
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleResize, true);
+
     return () => {
       document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleResize, true);
     };
   });
 </script>

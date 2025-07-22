@@ -24,6 +24,7 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
+      },
     });
 
     const button = screen.getByRole('button');
@@ -40,6 +41,7 @@ describe('CollapsibleSection', () => {
       props: {
         defaultOpen: true,
         showContent: true,
+      },
     });
 
     const button = screen.getByRole('button');
@@ -55,6 +57,7 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
+      },
     });
 
     const button = screen.getByRole('button');
@@ -78,6 +81,7 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
+      },
     });
 
     const button = screen.getByRole('button');
@@ -101,6 +105,7 @@ describe('CollapsibleSection', () => {
     render(CollapsibleSectionTestWrapper as any, {
       props: {
         showContent: true,
+      },
     });
 
     const button = screen.getByRole('button');
@@ -122,6 +127,7 @@ describe('CollapsibleSection', () => {
     const { container } = render(CollapsibleSection as any, {
       props: {
         title: 'Test',
+      },
     });
 
     const svg = container.querySelector('svg');
@@ -143,6 +149,7 @@ describe('CollapsibleSection', () => {
       props: {
         title: 'Test',
         className: 'custom-collapse',
+      },
     });
 
     const collapse = container.querySelector('.collapse');
@@ -165,6 +172,7 @@ describe('CollapsibleSection', () => {
       props: {
         title: 'Test',
         contentClassName: 'custom-content',
+      },
     });
 
     const content = container.querySelector('.collapse-content');
@@ -177,6 +185,7 @@ describe('CollapsibleSection', () => {
       props: {
         showContent: true,
         defaultOpen: true,
+      },
     });
 
     expect(screen.getByText('Test content')).toBeInTheDocument();
@@ -190,6 +199,7 @@ describe('CollapsibleSection', () => {
         title: 'Test',
         id: 'test-collapse',
         'data-testid': 'collapse-section',
+      },
     });
 
     const collapse = container.querySelector('.collapse');
@@ -202,6 +212,7 @@ describe('CollapsibleSection', () => {
     const { container } = render(CollapsibleSection as any, {
       props: {
         title: 'Test Section',
+      },
     });
 
     const button = screen.getByRole('button');
@@ -216,6 +227,7 @@ describe('CollapsibleSection', () => {
     const { container } = render(CollapsibleSection as any, {
       props: {
         title: 'Test',
+      },
     });
 
     const checkbox = container.querySelector('input[type="checkbox"]');
