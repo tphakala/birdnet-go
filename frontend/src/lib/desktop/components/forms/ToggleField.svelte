@@ -2,6 +2,9 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
 
+  // Counter for unique ID generation across all ToggleField instances
+  let toggleFieldCounter = 0;
+
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
     description?: string;
@@ -25,12 +28,13 @@
     ...rest
   }: Props = $props();
 
-  let fieldId = `toggle-${Math.random().toString(36).substring(2, 11)}`;
+  // Generate unique ID using counter-based approach
+  const fieldId = `toggle-field-${++toggleFieldCounter}`;
 
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;
     const newValue = target.checked;
-    value = newValue;
+    // Only notify parent via onUpdate, let bindable value handle internal state
     onUpdate(newValue);
   }
 </script>

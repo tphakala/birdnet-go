@@ -37,7 +37,6 @@
 </script>
 
 <div class={cn('collapse bg-base-100 shadow-sm', className)} {...rest}>
-  <input type="checkbox" bind:checked={isOpen} class="sr-only" aria-hidden="true" />
   <button
     type="button"
     class={cn('collapse-title text-xl font-medium w-full text-left', titleClassName)}
