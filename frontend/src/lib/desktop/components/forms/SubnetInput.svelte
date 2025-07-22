@@ -12,6 +12,7 @@
     className?: string;
     placeholder?: string;
     maxItems?: number;
+    emptyStateMessage?: string;
   }
 
   let {
@@ -24,6 +25,7 @@
     className = '',
     placeholder = '192.168.1.0/24',
     maxItems = 10,
+    emptyStateMessage = 'Add subnet ranges to configure network access',
     ...rest
   }: Props = $props();
 
@@ -245,7 +247,7 @@
   {:else}
     <div class="text-center py-4 text-base-content/50 bg-base-200 rounded-lg mt-2">
       <div class="text-sm">No subnets configured</div>
-      <div class="text-xs">Add subnet ranges to allow bypass authentication</div>
+      <div class="text-xs">{emptyStateMessage}</div>
     </div>
   {/if}
 

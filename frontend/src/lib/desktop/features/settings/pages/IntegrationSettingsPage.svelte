@@ -921,7 +921,7 @@
               <h3 class="text-sm font-medium mb-3">Message Settings</h3>
 
               <Checkbox
-                bind:checked={settings.mqtt as any).retain}
+                bind:checked={(settings.mqtt as any).retain}
                 label="Retain Messages"
                 disabled={store.isLoading || store.isSaving}
                 onchange={() => updateMQTTRetain((settings.mqtt as any).retain || false)}
