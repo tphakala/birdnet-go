@@ -919,7 +919,7 @@
                 checked={(settings.mqtt as MQTTSettings).retain || false}
                 label="Retain Messages"
                 disabled={store.isLoading || store.isSaving}
-                onchange={(checked) => updateMQTTRetain(checked)}
+                onchange={checked => updateMQTTRetain(checked)}
               />
 
               <!-- Note about MQTT Retain for HomeAssistant -->

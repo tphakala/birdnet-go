@@ -80,7 +80,9 @@
   async function loadNotifications() {
     loading = true;
     try {
-      const data = await api.get<{ notifications?: Notification[] }>('/api/v2/notifications?limit=20&status=unread');
+      const data = await api.get<{ notifications?: Notification[] }>(
+        '/api/v2/notifications?limit=20&status=unread'
+      );
       notifications = (data?.notifications || []).filter((n: Notification) =>
         shouldShowNotification(n)
       );
@@ -206,9 +208,7 @@
   async function markAsRead(notificationId: string) {
     try {
       await api.put(`/api/v2/notifications/${notificationId}/read`);
-      notifications = notifications.map(n =>
-        n.id === notificationId ? { ...n, read: true } : n
-      );
+      notifications = notifications.map(n => (n.id === notificationId ? { ...n, read: true } : n));
       updateUnreadCount();
     } catch (error) {
       // Show user feedback for failed mark-as-read since this is a user action
@@ -251,18 +251,18 @@
       const audio = new globalThis.Audio('/assets/sounds/notification.mp3');
       audio.volume = 0.5;
       audio.preload = 'auto';
-      
+
       audio.addEventListener('canplaythrough', () => {
         audioReady = true;
         preloadedAudio = audio;
       });
-      
-      audio.addEventListener('error', (e) => {
+
+      audio.addEventListener('error', e => {
         console.warn('Failed to load notification sound:', e);
         audioReady = false;
         preloadedAudio = null;
       });
-      
+
       audio.load();
     } catch (error) {
       console.warn('Failed to preload notification sound:', error);

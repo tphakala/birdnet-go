@@ -132,9 +132,7 @@
   }
 
   function updateUrl(id: string, field: keyof RTSPUrl, value: RTSPUrl[keyof RTSPUrl]) {
-    const updated = urls.map(url => 
-      url.id === id ? { ...url, [field]: value } : url
-    );
+    const updated = urls.map(url => (url.id === id ? { ...url, [field]: value } : url));
     onUpdate(updated);
   }
 

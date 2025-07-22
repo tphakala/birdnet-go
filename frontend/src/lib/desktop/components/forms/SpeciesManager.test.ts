@@ -46,7 +46,7 @@ describe('SpeciesManager', () => {
 
   it('displays existing species', () => {
     renderSpeciesManager({
-        species: ['Robin', 'Blue Jay', 'Cardinal'],
+      species: ['Robin', 'Blue Jay', 'Cardinal'],
     });
 
     expect(screen.getByText('Robin')).toBeInTheDocument();
@@ -59,8 +59,8 @@ describe('SpeciesManager', () => {
     const user = userEvent.setup();
 
     renderSpeciesManager({
-        species: ['Robin'],
-        onChange,
+      species: ['Robin'],
+      onChange,
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -76,8 +76,8 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
 
     renderSpeciesManager({
-        species: ['Robin', 'Blue Jay'],
-        onChange,
+      species: ['Robin', 'Blue Jay'],
+      onChange,
     });
 
     const removeButtons = screen.getAllByLabelText('Remove species');
@@ -91,8 +91,8 @@ describe('SpeciesManager', () => {
     const user = userEvent.setup();
 
     renderSpeciesManager({
-        species: ['Robin'],
-        onChange,
+      species: ['Robin'],
+      onChange,
     });
 
     const editButton = screen.getByLabelText('Edit species');
@@ -111,8 +111,8 @@ describe('SpeciesManager', () => {
     const user = userEvent.setup();
 
     renderSpeciesManager({
-        species: ['Robin'],
-        onChange,
+      species: ['Robin'],
+      onChange,
     });
 
     const editButton = screen.getByLabelText('Edit species');
@@ -131,9 +131,9 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
 
     renderSpeciesManager({
-        species: ['Robin', 'Blue Jay'],
-        maxItems: 2,
-        onChange,
+      species: ['Robin', 'Blue Jay'],
+      maxItems: 2,
+      onChange,
     });
 
     expect(screen.queryByPlaceholderText('Enter species name...')).not.toBeInTheDocument();
@@ -146,9 +146,9 @@ describe('SpeciesManager', () => {
     const user = userEvent.setup();
 
     renderSpeciesManager({
-        allowedSpecies: ['Robin', 'Blue Jay'],
-        onValidate,
-        onChange,
+      allowedSpecies: ['Robin', 'Blue Jay'],
+      onValidate,
+      onChange,
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -164,7 +164,7 @@ describe('SpeciesManager', () => {
     const user = userEvent.setup();
 
     renderSpeciesManager({
-        allowedSpecies: ['Robin', 'Blue Jay', 'Cardinal', 'Crow'],
+      allowedSpecies: ['Robin', 'Blue Jay', 'Cardinal', 'Crow'],
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -182,8 +182,8 @@ describe('SpeciesManager', () => {
     const user = userEvent.setup();
 
     renderSpeciesManager({
-        allowedSpecies: ['Robin', 'Blue Jay'],
-        onChange,
+      allowedSpecies: ['Robin', 'Blue Jay'],
+      onChange,
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -200,8 +200,8 @@ describe('SpeciesManager', () => {
 
   it('sorts species when sortable is true', () => {
     renderSpeciesManager({
-        species: ['Cardinal', 'Blue Jay', 'Robin'],
-        sortable: true,
+      species: ['Cardinal', 'Blue Jay', 'Robin'],
+      sortable: true,
     });
 
     const speciesElements = screen.getAllByText(/Blue Jay|Cardinal|Robin/);
@@ -212,8 +212,8 @@ describe('SpeciesManager', () => {
 
   it('disables editing when editable is false', () => {
     renderSpeciesManager({
-        species: ['Robin'],
-        editable: false,
+      species: ['Robin'],
+      editable: false,
     });
 
     expect(screen.queryByPlaceholderText('Enter species name...')).not.toBeInTheDocument();
@@ -223,8 +223,8 @@ describe('SpeciesManager', () => {
 
   it('shows empty state when not editable and no species', () => {
     renderSpeciesManager({
-        species: [],
-        editable: false,
+      species: [],
+      editable: false,
     });
 
     expect(screen.getByText('No species added')).toBeInTheDocument();

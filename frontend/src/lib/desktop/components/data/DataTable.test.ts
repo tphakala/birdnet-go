@@ -59,9 +59,9 @@ describe('DataTable', () => {
 
   it('renders custom empty message', () => {
     renderDataTable({
-        columns,
-        data: [],
-        emptyMessage: 'No records found',
+      columns,
+      data: [],
+      emptyMessage: 'No records found',
     });
 
     expect(screen.getByText('No records found')).toBeInTheDocument();
@@ -69,9 +69,9 @@ describe('DataTable', () => {
 
   it('renders loading state', () => {
     renderDataTable({
-        columns,
-        data: [],
-        loading: true,
+      columns,
+      data: [],
+      loading: true,
     });
 
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -82,9 +82,9 @@ describe('DataTable', () => {
   it('renders error state', () => {
     const errorMessage = 'Failed to load data';
     renderDataTable({
-        columns,
-        data: [],
-        error: errorMessage,
+      columns,
+      data: [],
+      error: errorMessage,
     });
 
     expect(screen.getByText(errorMessage)).toBeInTheDocument();
@@ -95,9 +95,9 @@ describe('DataTable', () => {
     const onSort = vi.fn();
 
     renderDataTable({
-        columns,
-        data: mockData,
-        onSort,
+      columns,
+      data: mockData,
+      onSort,
     });
 
     const nameHeader = screen.getByRole('button', { name: /Name/i });
@@ -155,8 +155,8 @@ describe('DataTable', () => {
     ];
 
     renderDataTable({
-        columns: customColumns,
-        data: mockData,
+      columns: customColumns,
+      data: mockData,
     });
 
     expect(screen.getByText('JOHN DOE')).toBeInTheDocument();
@@ -225,11 +225,11 @@ describe('DataTable', () => {
 
   it('displays sort indicators', () => {
     renderDataTable({
-        columns,
-        data: mockData,
-        onSort: vi.fn(),
-        sortColumn: 'name',
-        sortDirection: 'asc',
+      columns,
+      data: mockData,
+      onSort: vi.fn(),
+      sortColumn: 'name',
+      sortDirection: 'asc',
     });
 
     const nameHeader = screen.getByRole('button', { name: /Name/i });
@@ -245,9 +245,9 @@ describe('DataTable', () => {
     ];
 
     renderDataTable({
-        columns: nonSortableColumns,
-        data: mockData,
-        onSort: vi.fn(),
+      columns: nonSortableColumns,
+      data: mockData,
+      onSort: vi.fn(),
     });
 
     expect(screen.queryByRole('button', { name: /ID/i })).not.toBeInTheDocument();

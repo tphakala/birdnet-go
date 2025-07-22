@@ -7,7 +7,7 @@
   "reporters": ["console"],
   "ignore": [
     "**/*.test.ts",
-    "**/*.test.js", 
+    "**/*.test.js",
     "**/*.spec.ts",
     "**/*.spec.js",
     "**/*.svelte",
