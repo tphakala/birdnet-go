@@ -4,6 +4,7 @@
   import AudioLevelIndicator from '$lib/desktop/components/ui/AudioLevelIndicator.svelte';
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
   import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
+  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     title?: string;
@@ -84,21 +85,7 @@
         class="btn btn-ghost btn-sm p-0 sm:p-1 lg:hidden"
         aria-label="Toggle sidebar menu"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="1.5"
-          stroke="currentColor"
-          class="w-6 h-6"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-          />
-        </svg>
+        {@html navigationIcons.menu}
       </button>
     {/if}
 
