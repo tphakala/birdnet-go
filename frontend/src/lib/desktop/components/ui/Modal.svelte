@@ -73,6 +73,12 @@
     isConfirming = true;
     try {
       await onConfirm();
+    } catch (error) {
+      // Log error for debugging and reset confirming state
+      console.error('Modal onConfirm callback threw an error:', error);
+      isConfirming = false;
+      // Rethrow error so parent component can handle it
+      throw error;
     } finally {
       isConfirming = false;
     }
