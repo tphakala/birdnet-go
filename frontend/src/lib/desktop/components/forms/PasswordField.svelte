@@ -2,7 +2,7 @@
   import FormField from './FormField.svelte';
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { alertIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;

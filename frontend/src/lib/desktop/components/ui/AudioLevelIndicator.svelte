@@ -57,9 +57,7 @@
   function isHLSAvailable(): boolean {
     return (
       typeof window !== 'undefined' &&
-      'Hls' in window &&
-      typeof (window as any).Hls === 'function' &&
-      typeof (window as any).Hls.isSupported === 'function'
+      typeof (window as any).Hls?.isSupported === 'function'
     );
   }
 

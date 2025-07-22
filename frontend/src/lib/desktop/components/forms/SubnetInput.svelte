@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
