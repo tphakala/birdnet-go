@@ -35,7 +35,7 @@ describe('MultiStageOperation', () => {
   it('renders all stages', () => {
     render(MultiStageOperation, {
       props: { stages: mockStages },
-    });
+    } as any);
 
     expect(screen.getByText('Preparation')).toBeInTheDocument();
     expect(screen.getByText('Processing')).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('MultiStageOperation', () => {
   it('shows stage descriptions', () => {
     render(MultiStageOperation, {
       props: { stages: mockStages },
-    });
+    } as any);
 
     expect(screen.getByText('Setting up the environment')).toBeInTheDocument();
     expect(screen.getByText('Processing data')).toBeInTheDocument();
@@ -56,7 +56,7 @@ describe('MultiStageOperation', () => {
   it('displays progress for in_progress stage', () => {
     render(MultiStageOperation, {
       props: { stages: mockStages },
-    });
+    } as any);
 
     expect(screen.getByText('Processing 45 of 100 items')).toBeInTheDocument();
     expect(screen.getByText('45%')).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe('MultiStageOperation', () => {
   it('shows overall progress', () => {
     render(MultiStageOperation, {
       props: { stages: mockStages },
-    });
+    } as any);
 
     expect(screen.getByText('Overall Progress')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument(); // 1 of 4 completed
@@ -130,7 +130,7 @@ describe('MultiStageOperation', () => {
   it('does not handle clicks when no callback provided', async () => {
     render(MultiStageOperation, {
       props: { stages: mockStages },
-    });
+    } as any);
 
     // Should not throw error
     const processingStage = screen.getByText('Processing');
@@ -176,7 +176,7 @@ describe('MultiStageOperation', () => {
   it('shows step numbers in default variant', () => {
     render(MultiStageOperation, {
       props: { stages: mockStages },
-    });
+    } as any);
 
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
     expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();

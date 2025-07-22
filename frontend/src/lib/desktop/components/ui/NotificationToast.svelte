@@ -51,7 +51,10 @@
     error: 'alert-error',
   };
 
-  // Position classes are handled by ToastContainer, not individual toasts
+  // Position classes are intentionally left empty because all positioning styles
+  // are applied by the ToastContainer component, which handles the absolute positioning,
+  // z-index stacking, and responsive placement of all toast notifications.
+  // Individual toasts only handle their own content styling and animations.
   const positionClasses: Record<ToastPosition, string> = {
     'top-left': '',
     'top-center': '',

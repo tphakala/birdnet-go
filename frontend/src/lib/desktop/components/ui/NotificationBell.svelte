@@ -85,8 +85,8 @@
         );
         updateUnreadCount();
       }
-    } catch {
-      // Failed to load notifications
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
     } finally {
       loading = false;
     }
@@ -213,8 +213,8 @@
         );
         updateUnreadCount();
       }
-    } catch {
-      // Failed to mark notification as read
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
     }
   }
 

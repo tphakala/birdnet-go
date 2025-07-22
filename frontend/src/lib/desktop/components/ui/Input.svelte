@@ -11,8 +11,14 @@
       | 'datetime-local'
       | 'time'
       | 'url'
-      | 'tel';
-    value?: string | number;
+      | 'tel'
+      | 'checkbox'
+      | 'radio'
+      | 'file'
+      | 'search'
+      | 'color'
+      | 'range';
+    value?: string;
     id?: string;
     name?: string;
     placeholder?: string;

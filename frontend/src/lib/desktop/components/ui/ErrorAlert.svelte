@@ -39,7 +39,11 @@
 
   function handleDismiss() {
     isVisible = false;
-    onDismiss();
+    try {
+      onDismiss();
+    } catch (error) {
+      console.error('Error occurred in ErrorAlert onDismiss callback:', error);
+    }
   }
 </script>
 
