@@ -327,19 +327,9 @@
           </div>
         {/if}
 
-        <svg
-          class={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        <div class={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}>
+          {@html navigationIcons.chevronDown}
+        </div>
       </div>
     </button>
 
