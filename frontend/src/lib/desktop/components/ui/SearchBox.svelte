@@ -9,7 +9,7 @@
     type SearchFilter,
     type ParsedSearch,
   } from '$lib/utils/searchParser';
-  import { navigationIcons, actionIcons, alertIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { navigationIcons, actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     className?: string;
@@ -470,14 +470,7 @@
               <div class="space-y-1 mb-2">
                 {#each parsedSearch.errors as error}
                   <div class="alert alert-error alert-sm">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d={alertIcons.warning}
-                      />
-                    </svg>
+                    {@html alertIconsSvg.warningSmall}
                     <span class="text-xs">{error}</span>
                   </div>
                 {/each}
@@ -515,34 +508,14 @@
                   <!-- Icon - Filter or History -->
                   {#if showSyntaxHelp}
                     <!-- Filter icon for syntax suggestions -->
-                    <svg
-                      class="w-4 h-4 text-primary/80 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                      />
-                    </svg>
+                    <div class="w-4 h-4 text-primary/80 flex-shrink-0">
+                      {@html actionIcons.filter}
+                    </div>
                   {:else}
                     <!-- History icon for search history -->
-                    <svg
-                      class="w-4 h-4 text-base-content/60 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <div class="w-4 h-4 text-base-content/60 flex-shrink-0">
+                      {@html systemIcons.clock}
+                    </div>
                   {/if}
                   <span class="flex-grow text-sm">{suggestion}</span>
                 </button>
