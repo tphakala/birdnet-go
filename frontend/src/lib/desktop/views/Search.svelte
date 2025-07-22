@@ -795,7 +795,6 @@
                             <h3 class="text-lg font-semibold mb-2">Audio Player</h3>
                             <AudioPlayer
                               audioUrl="/api/v2/audio/{result.id}"
-                              spectrogramUrl="/api/v2/spectrogram/{result.id}?width=400"
                               detectionId={result.id}
                               width={400}
                               height={200}
@@ -925,6 +924,7 @@
       opacity: 0;
       transform: translateY(-10px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
