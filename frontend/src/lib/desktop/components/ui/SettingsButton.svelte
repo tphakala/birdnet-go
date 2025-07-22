@@ -42,7 +42,7 @@
 <button
   type="button"
   class="settings-input-group-button flex-shrink-0 h-8 min-h-8 ml-2 mr-2 px-3 text-sm leading-5 font-semibold border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap {className}"
-  style="border-radius: var(--rounded-btn, 0.5rem); background-color: var(--fallback-p, oklch(var(--p)/1)); color: var(--fallback-pc, oklch(var(--pc)/1));"
+  style:border-radius="var(--rounded-btn, 0.5rem)" style:background-color="var(--fallback-p, oklch(var(--p)/1))" style:color="var(--fallback-pc, oklch(var(--pc)/1))"
   onmouseenter={e =>
     !disabled &&
     !loading &&
