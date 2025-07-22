@@ -9,7 +9,7 @@
     type SearchFilter,
     type ParsedSearch,
   } from '$lib/utils/searchParser';
-  import { navigationIcons, actionIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { navigationIcons, actionIcons, alertIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     className?: string;
@@ -458,14 +458,7 @@
                       class="btn btn-ghost btn-xs btn-circle"
                       aria-label="Remove filter"
                     >
-                      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
+                      {@html navigationIcons.close}
                     </button>
                   </div>
                 {/each}
@@ -482,7 +475,7 @@
                         stroke-linecap="round"
                         stroke-linejoin="round"
                         stroke-width="2"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z"
+                        d={alertIcons.warning}
                       />
                     </svg>
                     <span class="text-xs">{error}</span>
@@ -565,14 +558,7 @@
                     class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded"
                     aria-label="Remove from history"
                   >
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
+                    {@html navigationIcons.close}
                   </button>
                 {/if}
               </div>
