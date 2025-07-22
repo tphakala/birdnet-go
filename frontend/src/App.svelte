@@ -249,7 +249,7 @@
   {#if loadingComponent}
     {@render loadingSpinner()}
   {:else if component}
-    <svelte:component this={component} />
+    {component()}
   {/if}
 {/snippet}
 
