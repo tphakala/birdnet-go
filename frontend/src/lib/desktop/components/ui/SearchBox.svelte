@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import {
     parseSearchQuery,
@@ -38,6 +39,9 @@
   let selectedIndex = $state(-1);
   let searchHistory = $state<string[]>([]);
   let suggestions = $state<string[]>([]);
+
+  // Memory leak prevention
+  let blurTimeout: ReturnType<typeof setTimeout> | undefined;
 
   // Advanced search parsing
   let parsedSearch = $state<ParsedSearch>({ textQuery: '', filters: [], errors: [] });
@@ -277,11 +281,17 @@
     }
   }
 
-  function handleBlur(event: FocusEvent) {
+  function handleBlur(_event: FocusEvent) {
+    // Clear any existing timeout to prevent duplicate executions
+    if (blurTimeout) {
+      clearTimeout(blurTimeout);
+    }
+    
     // Delay hiding dropdown to allow for clicks
-    setTimeout(() => {
+    blurTimeout = setTimeout(() => {
       showDropdown = false;
       selectedIndex = -1;
+      blurTimeout = undefined;
     }, 150);
   }
 
@@ -362,6 +372,14 @@
       return () => {
         globalThis.window.removeEventListener('keydown', handleGlobalKeyDown);
       };
+    }
+  });
+
+  // Memory leak prevention - cleanup timeout on component destroy
+  onDestroy(() => {
+    if (blurTimeout) {
+      clearTimeout(blurTimeout);
+      blurTimeout = undefined;
     }
   });
 </script>
