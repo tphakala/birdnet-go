@@ -3,7 +3,7 @@
   import FormField from './FormField.svelte';
   import ToggleField from './ToggleField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIcons, alertIconsSvg, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { actionIcons, alertIconsSvg, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface RTSPUrl {
     id: string;

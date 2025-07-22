@@ -13,7 +13,7 @@ describe('DateRangePicker', () => {
   beforeEach(() => {
     // Set a fixed date for consistent testing
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2024-01-15'));
+    vi.setSystemTime(new Date('2024-01-15Z'));
   });
 
   afterEach(() => {
@@ -39,8 +39,8 @@ describe('DateRangePicker', () => {
 
   it('displays initial dates', () => {
     renderDateRangePicker({
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2024-01-31'),
+      startDate: new Date('2024-01-01Z'),
+      endDate: new Date('2024-01-31Z'),
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -62,15 +62,15 @@ describe('DateRangePicker', () => {
     await user.type(startInput, '2024-01-10');
 
     expect(onChange).toHaveBeenCalledWith({
-      startDate: new Date('2024-01-10'),
+      startDate: new Date('2024-01-10Z'),
       endDate: null,
     });
 
     await user.type(endInput, '2024-01-20');
 
     expect(onChange).toHaveBeenCalledWith({
-      startDate: new Date('2024-01-10'),
-      endDate: new Date('2024-01-20'),
+      startDate: new Date('2024-01-10Z'),
+      endDate: new Date('2024-01-20Z'),
     });
   });
 
@@ -78,7 +78,7 @@ describe('DateRangePicker', () => {
     const user = userEvent.setup({ delay: null });
 
     renderDateRangePicker({
-      startDate: new Date('2024-01-10'),
+      startDate: new Date('2024-01-10Z'),
     });
 
     const endInput = screen.getByLabelText('End Date');
@@ -94,8 +94,8 @@ describe('DateRangePicker', () => {
 
   it('enforces min and max dates', () => {
     renderDateRangePicker({
-      minDate: new Date('2024-01-01'),
-      maxDate: new Date('2024-12-31'),
+      minDate: new Date('2024-01-01Z'),
+      maxDate: new Date('2024-12-31Z'),
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -164,8 +164,8 @@ describe('DateRangePicker', () => {
         {
           label: 'Last Week',
           getValue: () => ({
-            startDate: new Date('2024-01-08'),
-            endDate: new Date('2024-01-14'),
+            startDate: new Date('2024-01-08Z'),
+            endDate: new Date('2024-01-14Z'),
           }),
         },
       ];
@@ -190,8 +190,8 @@ describe('DateRangePicker', () => {
 
   it('shows clear button when dates are selected', async () => {
     renderDateRangePicker({
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2024-01-31'),
+      startDate: new Date('2024-01-01Z'),
+      endDate: new Date('2024-01-31Z'),
     });
 
     expect(screen.getByText('Clear')).toBeInTheDocument();
@@ -201,8 +201,8 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn();
 
     renderDateRangePicker({
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2024-01-31'),
+      startDate: new Date('2024-01-01Z'),
+      endDate: new Date('2024-01-31Z'),
       onChange,
     });
 
@@ -216,8 +216,8 @@ describe('DateRangePicker', () => {
 
   it('displays selected date range summary', () => {
     renderDateRangePicker({
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2024-01-31'),
+      startDate: new Date('2024-01-01Z'),
+      endDate: new Date('2024-01-31Z'),
     });
 
     expect(screen.getByText(/Selected:/)).toBeInTheDocument();
@@ -252,10 +252,10 @@ describe('DateRangePicker', () => {
     const endInput = screen.getByLabelText('End Date');
 
     await user.type(startInput, '2024-01-10');
-    expect(onStartChange).toHaveBeenCalledWith(new Date('2024-01-10'));
+    expect(onStartChange).toHaveBeenCalledWith(new Date('2024-01-10Z'));
 
     await user.type(endInput, '2024-01-20');
-    expect(onEndChange).toHaveBeenCalledWith(new Date('2024-01-20'));
+    expect(onEndChange).toHaveBeenCalledWith(new Date('2024-01-20Z'));
   });
 
   it('applies custom className', () => {

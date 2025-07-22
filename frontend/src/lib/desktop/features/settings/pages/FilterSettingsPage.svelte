@@ -13,6 +13,11 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+
+  // API response interfaces
+  interface SpeciesListResponse {
+    species?: Array<{ label: string }>;
+  }
   import { navigationIcons, actionIcons, alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   let settings = $derived({
@@ -57,7 +62,7 @@
   $effect(() => {
     const loadSpeciesList = async () => {
       try {
-        const data = await api.get<{ species?: Array<{ label: string }> }>(
+        const data = await api.get<SpeciesListResponse>(
           '/api/v2/range/species/list'
         );
         if (data?.species && Array.isArray(data.species)) {
