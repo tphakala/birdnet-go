@@ -81,13 +81,6 @@ func TestTLSFileExistenceChecks(t *testing.T) {
 			}
 
 			settings := &conf.Settings{
-				Main: struct {
-					Name      string
-					TimeAs24h bool
-					Log       conf.LogConfig
-				}{
-					Name: "TestNode-FileCheck",
-				},
 				Realtime: conf.RealtimeSettings{
 					MQTT: conf.MQTTSettings{
 						Enabled: true,

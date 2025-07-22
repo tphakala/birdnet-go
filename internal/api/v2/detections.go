@@ -123,18 +123,32 @@ type detectionQueryParams struct {
 	NumResults   int
 	Offset       int
 	QueryType    string
+	// Advanced filter parameters
+	Confidence   string
+	TimeOfDay    string
+	HourRange    string
+	Verified     string
+	Location     string
+	Locked       string
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
 func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryParams, error) {
 	params := &detectionQueryParams{
-		Date:      ctx.QueryParam("date"),
-		Hour:      ctx.QueryParam("hour"),
-		Species:   ctx.QueryParam("species"),
-		Search:    ctx.QueryParam("search"),
-		StartDate: ctx.QueryParam("start_date"),
-		EndDate:   ctx.QueryParam("end_date"),
-		QueryType: ctx.QueryParam("queryType"),
+		Date:       ctx.QueryParam("date"),
+		Hour:       ctx.QueryParam("hour"),
+		Species:    ctx.QueryParam("species"),
+		Search:     ctx.QueryParam("search"),
+		StartDate:  ctx.QueryParam("start_date"),
+		EndDate:    ctx.QueryParam("end_date"),
+		QueryType:  ctx.QueryParam("queryType"),
+		// Advanced filter parameters
+		Confidence: ctx.QueryParam("confidence"),
+		TimeOfDay:  ctx.QueryParam("timeOfDay"),
+		HourRange:  ctx.QueryParam("hourRange"),
+		Verified:   ctx.QueryParam("verified"),
+		Location:   ctx.QueryParam("location"),
+		Locked:     ctx.QueryParam("locked"),
 	}
 
 	// Parse duration
@@ -388,14 +402,27 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+	// Check if advanced filters are present
+	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" || 
+		params.HourRange != "" || params.Verified != "" || 
+		params.Location != "" || params.Locked != ""
+
 	switch params.QueryType {
 	case "hourly":
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case "species":
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case "search":
+		// Use advanced search if filters are present
+		if hasAdvancedFilters {
+			return c.getSearchDetectionsAdvanced(params)
+		}
 		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
 	default: // "all" or any other value
+		// Check if there are filters even without explicit search text
+		if hasAdvancedFilters {
+			return c.getSearchDetectionsAdvanced(params)
+		}
 		return c.getAllDetections(params.NumResults, params.Offset)
 	}
 }
@@ -592,6 +619,149 @@ func (c *Controller) getSpeciesDetections(species, date, hour string, duration, 
 			"total", totalCount,
 		)
 	}
+
+	return notes, totalCount, nil
+}
+
+// getSearchDetectionsAdvanced handles advanced search with filters
+func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]datastore.Note, int64, error) {
+	// Parse advanced filters from query parameters
+	filters := datastore.AdvancedSearchFilters{
+		TextQuery:     params.Search,
+		Limit:         params.NumResults,
+		Offset:        params.Offset,
+		SortAscending: false, // Default to descending
+	}
+
+	// Parse confidence filter
+	if confidenceParam := params.Confidence; confidenceParam != "" {
+		// Parse operator and value (e.g., ">85", ">=90")
+		var operator string
+		var value string
+		
+		switch {
+		case strings.HasPrefix(confidenceParam, ">="):
+			operator = ">="
+			value = confidenceParam[2:]
+		case strings.HasPrefix(confidenceParam, "<="):
+			operator = "<="
+			value = confidenceParam[2:]
+		case strings.HasPrefix(confidenceParam, ">"):
+			operator = ">"
+			value = confidenceParam[1:]
+		case strings.HasPrefix(confidenceParam, "<"):
+			operator = "<"
+			value = confidenceParam[1:]
+		default:
+			operator = "="
+			value = confidenceParam
+		}
+		
+		if confValue, err := strconv.ParseFloat(value, 64); err == nil {
+			filters.Confidence = &datastore.ConfidenceFilter{
+				Operator: operator,
+				Value:    confValue / 100.0, // Convert percentage to decimal
+			}
+		}
+	}
+
+	// Parse time of day filter
+	if timeOfDay := params.TimeOfDay; timeOfDay != "" {
+		filters.TimeOfDay = []string{timeOfDay}
+	}
+
+	// Parse hour filter (from hourRange parameter or hour parameter)
+	hourParam := params.HourRange
+	if hourParam == "" {
+		hourParam = params.Hour
+	}
+	
+	if hourParam != "" {
+		if strings.Contains(hourParam, "-") {
+			// Range format: "6-9"
+			parts := strings.Split(hourParam, "-")
+			if len(parts) == 2 {
+				if start, err := strconv.Atoi(parts[0]); err == nil {
+					if end, err := strconv.Atoi(parts[1]); err == nil {
+						filters.Hour = &datastore.HourFilter{
+							Start: start,
+							End:   end,
+						}
+					}
+				}
+			}
+		} else {
+			// Single hour
+			if hourVal, err := strconv.Atoi(hourParam); err == nil {
+				filters.Hour = &datastore.HourFilter{
+					Start: hourVal,
+					End:   hourVal,
+				}
+			}
+		}
+	}
+
+	// Parse date range
+	if params.Date != "" {
+		// Handle date shortcuts
+		if date, err := datastore.ParseDateShortcut(params.Date); err == nil {
+			filters.DateRange = &datastore.DateRange{
+				Start: date,
+				End:   date.AddDate(0, 0, 1).Add(-time.Second), // End of day
+			}
+		}
+	} else if params.StartDate != "" && params.EndDate != "" {
+		// Explicit date range
+		if start, err := time.Parse("2006-01-02", params.StartDate); err == nil {
+			if end, err := time.Parse("2006-01-02", params.EndDate); err == nil {
+				filters.DateRange = &datastore.DateRange{
+					Start: start,
+					End:   end.AddDate(0, 0, 1).Add(-time.Second), // End of day
+				}
+			}
+		}
+	}
+
+	// Parse species filter
+	if params.Species != "" {
+		filters.Species = []string{params.Species}
+	}
+
+	// Parse verified filter
+	if params.Verified != "" {
+		verified := params.Verified == "true" || params.Verified == "human"
+		filters.Verified = &verified
+	}
+
+	// Parse locked filter
+	if params.Locked != "" {
+		locked := params.Locked == "true"
+		filters.Locked = &locked
+	}
+
+	// Parse location filter
+	if params.Location != "" {
+		filters.Location = []string{params.Location}
+	}
+
+	// Use the advanced search method
+	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to perform advanced search",
+				"filters", fmt.Sprintf("%+v", filters),
+				"error", err.Error(),
+			)
+		}
+		return nil, 0, err
+	}
+
+	// Cache the results
+	cacheKey := fmt.Sprintf("adv_search:%s:%d:%d", params.Search, params.NumResults, params.Offset)
+	c.detectionCache.Set(cacheKey, struct {
+		Notes []datastore.Note
+		Total int64
+	}{notes, totalCount}, cache.DefaultExpiration)
 
 	return notes, totalCount, nil
 }

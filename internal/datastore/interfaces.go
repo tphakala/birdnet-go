@@ -48,6 +48,7 @@ type Interface interface {
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
 	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
+	SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error)
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
 	GetNoteReview(noteID string) (*NoteReview, error)

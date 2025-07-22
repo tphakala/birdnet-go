@@ -53,13 +53,6 @@ func TestSecureMQTTConnections(t *testing.T) {
 // testMosquittoTLSConnection tests secure connection to Mosquitto test broker //nolint:misspell // Mosquitto is the correct name of the MQTT broker
 func testMosquittoTLSConnection(t *testing.T) {
 	settings := &conf.Settings{
-		Main: struct {
-			Name      string
-			TimeAs24h bool
-			Log       conf.LogConfig
-		}{
-			Name: "TestNode-TLS-Mosquitto", //nolint:misspell // Mosquitto is the correct name of the MQTT broker
-		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
 				Enabled: true,
@@ -111,13 +104,6 @@ func testMosquittoTLSConnection(t *testing.T) {
 // testHiveMQTLSConnection tests secure connection to HiveMQ public broker
 func testHiveMQTLSConnection(t *testing.T) {
 	settings := &conf.Settings{
-		Main: struct {
-			Name      string
-			TimeAs24h bool
-			Log       conf.LogConfig
-		}{
-			Name: "TestNode-TLS-HiveMQ",
-		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
 				Enabled: true,
@@ -174,13 +160,6 @@ func testHiveMQTLSConnection(t *testing.T) {
 func testSelfSignedCertificate(t *testing.T) {
 	// Use Mosquitto's expired certificate port as a test for InsecureSkipVerify
 	settings := &conf.Settings{
-		Main: struct {
-			Name      string
-			TimeAs24h bool
-			Log       conf.LogConfig
-		}{
-			Name: "TestNode-TLS-SelfSigned",
-		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
 				Enabled: true,
@@ -261,13 +240,6 @@ func testTLSAutoDetection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &conf.Settings{
-				Main: struct {
-					Name      string
-					TimeAs24h bool
-					Log       conf.LogConfig
-				}{
-					Name: "TestNode-AutoDetect",
-				},
 				Realtime: conf.RealtimeSettings{
 					MQTT: conf.MQTTSettings{
 						Broker: tc.broker,
@@ -299,13 +271,6 @@ func testTLSAutoDetection(t *testing.T) {
 // testTLSConnectionTest verifies the multi-stage connection test works with TLS
 func testTLSConnectionTest(t *testing.T) {
 	settings := &conf.Settings{
-		Main: struct {
-			Name      string
-			TimeAs24h bool
-			Log       conf.LogConfig
-		}{
-			Name: "TestNode-TLS-ConnTest",
-		},
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
 				Enabled: true,
@@ -408,13 +373,6 @@ func TestTLSConfigValidation(t *testing.T) {
 	t.Run("Invalid CA Certificate Path", func(t *testing.T) {
 		t.Parallel()
 		settings := &conf.Settings{
-			Main: struct {
-				Name      string
-				TimeAs24h bool
-				Log       conf.LogConfig
-			}{
-				Name: "TestNode-InvalidCA",
-			},
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
 					Enabled: true,
@@ -455,13 +413,6 @@ func TestTLSConfigValidation(t *testing.T) {
 	t.Run("Invalid Client Certificate Path", func(t *testing.T) {
 		t.Parallel()
 		settings := &conf.Settings{
-			Main: struct {
-				Name      string
-				TimeAs24h bool
-				Log       conf.LogConfig
-			}{
-				Name: "TestNode-InvalidClientCert",
-			},
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
 					Enabled: true,
@@ -528,13 +479,6 @@ func BenchmarkTLSConnection(b *testing.B) {
 
 	b.Run("TLS_Connection", func(b *testing.B) {
 		settings := &conf.Settings{
-			Main: struct {
-				Name      string
-				TimeAs24h bool
-				Log       conf.LogConfig
-			}{
-				Name: "BenchNode-TLS",
-			},
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
 					Enabled: true,
@@ -573,13 +517,6 @@ func BenchmarkTLSConnection(b *testing.B) {
 		}
 
 		settings := &conf.Settings{
-			Main: struct {
-				Name      string
-				TimeAs24h bool
-				Log       conf.LogConfig
-			}{
-				Name: "BenchNode-TCP",
-			},
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
 					Enabled: true,

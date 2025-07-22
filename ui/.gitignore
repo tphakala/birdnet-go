@@ -1,0 +1,4 @@
+# Keep the dist directory in git for embedding
+# but ignore its contents during development
+dist/*
+!dist/.gitkeep
