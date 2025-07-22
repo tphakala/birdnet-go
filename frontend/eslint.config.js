@@ -4,6 +4,7 @@ import svelteParser from 'svelte-eslint-parser';
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import vitest from '@vitest/eslint-plugin';
+import security from 'eslint-plugin-security';
 
 // Shared browser globals to avoid duplication
 const browserGlobals = {
@@ -67,6 +68,7 @@ export default [
     },
     plugins: {
       svelte,
+      security,
     },
     rules: {
       ...svelte.configs.recommended.rules,
@@ -78,6 +80,8 @@ export default [
       'svelte/no-useless-mustaches': 'error',
       'svelte/prefer-class-directive': 'error',
       'svelte/prefer-style-directive': 'error',
+      // Security rules
+      ...security.configs.recommended.rules,
       // Allow console for now
       'no-console': 'warn',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
@@ -98,10 +102,13 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
+      security,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
       ...tsPlugin.configs.strict.rules,
+      // Security rules
+      ...security.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-unused-vars': 'off', // Use TypeScript version instead
       'no-console': 'warn',
@@ -124,7 +131,12 @@ export default [
       sourceType: 'module',
       globals: browserGlobals,
     },
+    plugins: {
+      security,
+    },
     rules: {
+      // Security rules
+      ...security.configs.recommended.rules,
       // General rules
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-console': 'warn',
