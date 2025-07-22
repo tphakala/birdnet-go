@@ -81,6 +81,15 @@
     filters: { highPass: BiquadFilterNode };
   } | null = null;
 
+  // Cleanup tracking for memory leak prevention
+  let resizeObserver: ResizeObserver | null = null;
+  let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
+  let eventListeners: Array<{
+    element: HTMLElement | Document | Window;
+    event: string;
+    handler: EventListener;
+  }> = [];
+
   // Control state
   let gainValue = $state(0); // dB
   let filterFreq = $state(20); // Hz
@@ -108,6 +117,32 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Memory leak prevention helpers
+  const addTrackedEventListener = (
+    element: HTMLElement | Document | Window,
+    event: string,
+    handler: EventListener,
+    options?: boolean | AddEventListenerOptions
+  ) => {
+    element.addEventListener(event, handler, options);
+    eventListeners.push({ element, event, handler });
+  };
+
+  const clearSliderTimeout = () => {
+    if (sliderTimeout) {
+      clearTimeout(sliderTimeout);
+      sliderTimeout = undefined;
+    }
+  };
+
+  const resetSliderTimeout = () => {
+    clearSliderTimeout();
+    sliderTimeout = setTimeout(() => {
+      showVolumeSlider = false;
+      showFilterSlider = false;
+    }, 5000);
   };
 
   // Audio context setup
@@ -281,31 +316,36 @@
       };
       checkWidth();
 
-      const resizeObserver = new ResizeObserver(checkWidth);
+      // Create and track ResizeObserver properly
+      resizeObserver = new ResizeObserver(checkWidth);
       resizeObserver.observe(playerContainer);
-
-      onDestroy(() => resizeObserver.disconnect());
     }
 
     if (audioElement) {
-      audioElement.addEventListener('play', () => {
+      // Add all audio event listeners with proper tracking
+      addTrackedEventListener(audioElement, 'play', () => {
         isPlaying = true;
         startInterval();
       });
-      audioElement.addEventListener('pause', () => {
+      
+      addTrackedEventListener(audioElement, 'pause', () => {
         isPlaying = false;
         stopInterval();
       });
-      audioElement.addEventListener('ended', () => {
+      
+      addTrackedEventListener(audioElement, 'ended', () => {
         isPlaying = false;
         stopInterval();
       });
-      audioElement.addEventListener('timeupdate', handleTimeUpdate);
-      audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
-      audioElement.addEventListener('loadstart', () => {
+      
+      addTrackedEventListener(audioElement, 'timeupdate', handleTimeUpdate);
+      addTrackedEventListener(audioElement, 'loadedmetadata', handleLoadedMetadata);
+      
+      addTrackedEventListener(audioElement, 'loadstart', () => {
         isLoading = true;
       });
-      audioElement.addEventListener('error', () => {
+      
+      addTrackedEventListener(audioElement, 'error', () => {
         error = 'Failed to load audio';
         isLoading = false;
       });
@@ -315,36 +355,62 @@
         startInterval();
       }
     }
+  });
 
-    // Auto-hide sliders after 5 seconds
-    let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
-
-    const resetSliderTimeout = () => {
-      if (sliderTimeout) clearTimeout(sliderTimeout);
-      sliderTimeout = setTimeout(() => {
-        showVolumeSlider = false;
-        showFilterSlider = false;
-      }, 5000);
+  // Watch for slider visibility changes with proper cleanup
+  $effect(() => {
+    if (showVolumeSlider || showFilterSlider) {
+      resetSliderTimeout();
+    }
+    
+    // Cleanup function for the effect
+    return () => {
+      clearSliderTimeout();
     };
-
-    // Watch for slider visibility changes
-    $effect(() => {
-      if (showVolumeSlider || showFilterSlider) {
-        resetSliderTimeout();
-      }
-    });
   });
 
   onDestroy(() => {
+    // Stop any running intervals
     stopInterval();
-    if (audioNodes) {
-      audioNodes.source.disconnect();
-      audioNodes.gain.disconnect();
-      audioNodes.compressor.disconnect();
-      audioNodes.filters.highPass.disconnect();
+    
+    // Clear any pending timeouts
+    clearSliderTimeout();
+    
+    // Remove all tracked event listeners
+    eventListeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler);
+    });
+    eventListeners = [];
+    
+    // Disconnect ResizeObserver
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
     }
+    
+    // Clean up Web Audio API resources
+    if (audioNodes) {
+      try {
+        audioNodes.source.disconnect();
+        audioNodes.gain.disconnect();
+        audioNodes.compressor.disconnect();
+        audioNodes.filters.highPass.disconnect();
+      } catch (_e) {
+        // Nodes may already be disconnected, ignore errors
+        console.warn('Error disconnecting audio nodes during cleanup');
+      }
+      audioNodes = null;
+    }
+    
+    // Close audio context
     if (audioContext) {
-      audioContext.close();
+      try {
+        audioContext.close();
+      } catch (_e) {
+        // Context may already be closed, ignore errors
+        console.warn('Error closing audio context during cleanup');
+      }
+      audioContext = null;
     }
   });
 
