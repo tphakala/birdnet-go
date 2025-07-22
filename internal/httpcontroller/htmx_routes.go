@@ -76,6 +76,25 @@ func (s *Server) initRoutes() {
 		"/search":            {Path: "/search", TemplateName: "search", Title: "Search Detections"},
 		"/about":             {Path: "/about", TemplateName: "about", Title: "About BirdNET-Go"},
 		"/notifications":     {Path: "/notifications", TemplateName: "notifications", Title: "Notifications"},
+		// Svelte UI routes (new frontend)
+		"/ui":                    {Path: "/ui", TemplateName: "svelte-standalone", Title: "Dashboard"},
+		"/ui/":                   {Path: "/ui/", TemplateName: "svelte-standalone", Title: "Dashboard"},
+		"/ui/dashboard":          {Path: "/ui/dashboard", TemplateName: "svelte-standalone", Title: "Dashboard"},
+		"/ui/detections":         {Path: "/ui/detections", TemplateName: "svelte-standalone", Title: "Detections"},
+		"/ui/notifications":      {Path: "/ui/notifications", TemplateName: "svelte-standalone", Title: "Notifications"},
+		"/ui/analytics":          {Path: "/ui/analytics", TemplateName: "svelte-standalone", Title: "Analytics"},
+		"/ui/analytics/species":  {Path: "/ui/analytics/species", TemplateName: "svelte-standalone", Title: "Species"},
+		"/ui/search":             {Path: "/ui/search", TemplateName: "svelte-standalone", Title: "Search Detections"},
+		"/ui/about":              {Path: "/ui/about", TemplateName: "svelte-standalone", Title: "About BirdNET-Go"},
+		"/ui/system":             {Path: "/ui/system", TemplateName: "svelte-standalone", Title: "System Dashboard", Authorized: true},
+		"/ui/settings":           {Path: "/ui/settings", TemplateName: "svelte-standalone", Title: "Settings", Authorized: true},
+		"/ui/settings/main":      {Path: "/ui/settings/main", TemplateName: "svelte-standalone", Title: "Main Settings", Authorized: true},
+		"/ui/settings/audio":     {Path: "/ui/settings/audio", TemplateName: "svelte-standalone", Title: "Audio Settings", Authorized: true},
+		"/ui/settings/detectionfilters": {Path: "/ui/settings/detectionfilters", TemplateName: "svelte-standalone", Title: "Detection Filters", Authorized: true},
+		"/ui/settings/integrations": {Path: "/ui/settings/integrations", TemplateName: "svelte-standalone", Title: "Integration Settings", Authorized: true},
+		"/ui/settings/security":  {Path: "/ui/settings/security", TemplateName: "svelte-standalone", Title: "Security Settings", Authorized: true},
+		"/ui/settings/species":   {Path: "/ui/settings/species", TemplateName: "svelte-standalone", Title: "Species Settings", Authorized: true},
+		"/ui/settings/support":   {Path: "/ui/settings/support", TemplateName: "svelte-standalone", Title: "Support", Authorized: true},
 		// System route is protected by auth middleware
 		"/system": {Path: "/system", TemplateName: "system", Title: "System Dashboard", Authorized: true},
 		// Settings Routes are managed by settingsBase template
@@ -271,6 +290,9 @@ func (s *Server) initRoutes() {
 
 	// Set up static file serving
 	s.setupStaticFileServing()
+	
+	// Set up Svelte routes
+	s.SetupSvelteRoutes()
 }
 
 // handleHLSStreamRequest handles requests for HLS stream endpoints
@@ -346,7 +368,13 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		data.PreloadFragment = fragmentPath
 	}
 
-	return c.Render(http.StatusOK, "index", data)
+	// Use the appropriate template based on the route configuration
+	templateName := "index"
+	if pageRoute.TemplateName == "svelte-standalone" {
+		templateName = "svelte-standalone"
+	}
+	
+	return c.Render(http.StatusOK, templateName, data)
 }
 
 // setupStaticFileServing configures static file serving for the server.

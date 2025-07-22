@@ -131,6 +131,10 @@ func (m *MockDataStore) SearchNotes(query string, sortAscending bool, limit, off
 	args := m.Called(query, sortAscending, limit, offset)
 	return safeSlice[datastore.Note](args, 0), args.Error(1)
 }
+func (m *MockDataStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
+	args := m.Called(filters)
+	return safeSlice[datastore.Note](args, 0), args.Get(1).(int64), args.Error(2)
+}
 
 func (m *MockDataStore) GetNoteClipPath(noteID string) (string, error) {
 	args := m.Called(noteID)
@@ -437,6 +441,10 @@ func (m *MockDataStoreV2) GetAllDetectedSpecies() ([]datastore.Note, error) {
 func (m *MockDataStoreV2) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	args := m.Called(query, sortAscending, limit, offset)
 	return safeSlice[datastore.Note](args, 0), args.Error(1)
+}
+func (m *MockDataStoreV2) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
+	args := m.Called(filters)
+	return safeSlice[datastore.Note](args, 0), args.Get(1).(int64), args.Error(2)
 }
 func (m *MockDataStoreV2) GetNoteClipPath(noteID string) (string, error) {
 	args := m.Called(noteID)

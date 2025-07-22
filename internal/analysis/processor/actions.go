@@ -97,6 +97,8 @@ type SSEAction struct {
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
 	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error
+	// Datastore interface for querying the database to get the assigned ID
+	Ds datastore.Interface
 }
 
 // GetDescription returns a human-readable description of the LogAction
@@ -442,6 +444,24 @@ func (a *SSEAction) Execute(data interface{}) error {
 		return nil
 	}
 
+	// Wait for audio file to be available if this detection has an audio clip assigned
+	// This properly handles per-species audio settings and avoids false positives
+	if a.Note.ClipName != "" {
+		if err := a.waitForAudioFile(); err != nil {
+			// Log warning but don't fail the SSE broadcast
+			log.Printf("⚠️ Audio file not ready for %s, broadcasting without waiting: %v", a.Note.CommonName, err)
+		}
+	}
+
+	// Wait for database ID to be assigned if Note.ID is 0 (new detection)
+	// This ensures the frontend can properly load audio/spectrogram via API endpoints
+	if a.Note.ID == 0 {
+		if err := a.waitForDatabaseID(); err != nil {
+			// Log warning but don't fail the SSE broadcast
+			log.Printf("⚠️ Database ID not ready for %s, broadcasting with ID=0: %v", a.Note.CommonName, err)
+		}
+	}
+
 	// Get bird image of detected bird
 	birdImage := imageprovider.BirdImage{} // Default to empty image
 	// Add nil check for BirdImageCache before calling Get
@@ -481,4 +501,96 @@ func (a *SSEAction) Execute(data interface{}) error {
 	}
 
 	return nil
+}
+
+// waitForAudioFile waits for the audio file to be written to disk with a timeout
+func (a *SSEAction) waitForAudioFile() error {
+	if a.Note.ClipName == "" {
+		return nil // No audio file expected
+	}
+
+	// Build the full path to the audio file using the configured export path
+	audioPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.Note.ClipName)
+	
+	// Wait up to 5 seconds for file to be written
+	timeout := 5 * time.Second
+	deadline := time.Now().Add(timeout)
+	checkInterval := 100 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		// Check if file exists and has content
+		if info, err := os.Stat(audioPath); err == nil {
+			// File exists, check if it has reasonable size (audio files should be > 1KB)
+			if info.Size() > 1024 {
+				if a.Settings.Debug {
+					log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
+				}
+				return nil
+			}
+			// File exists but might still be writing, wait a bit more
+		}
+		
+		time.Sleep(checkInterval)
+	}
+
+	// Timeout reached
+	return fmt.Errorf("audio file %s not ready after %v timeout", a.Note.ClipName, timeout)
+}
+
+// waitForDatabaseID waits for the Note to be saved to database and ID assigned
+func (a *SSEAction) waitForDatabaseID() error {
+	// We need to query the database to find this note by unique characteristics
+	// Since we don't have the ID yet, we'll search by time, species, and confidence
+	timeout := 10 * time.Second
+	deadline := time.Now().Add(timeout)
+	checkInterval := 200 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		// Query database for a note matching our characteristics
+		// Use a small time window around the detection time to find the record
+		if updatedNote, err := a.findNoteInDatabase(); err == nil && updatedNote.ID > 0 {
+			// Found the note with an ID, update our copy
+			a.Note.ID = updatedNote.ID
+			if a.Settings.Debug {
+				log.Printf("🔍 Found database ID %d for SSE broadcast: %s", updatedNote.ID, a.Note.CommonName)
+			}
+			return nil
+		}
+		
+		time.Sleep(checkInterval)
+	}
+
+	// Timeout reached
+	return fmt.Errorf("database ID not assigned for %s after %v timeout", a.Note.CommonName, timeout)
+}
+
+// findNoteInDatabase searches for the note in database by unique characteristics
+func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
+	if a.Ds == nil {
+		return nil, fmt.Errorf("datastore not available")
+	}
+
+	// Search for notes with matching characteristics
+	// The SearchNotes method expects a search query string that will match against
+	// common_name or scientific_name fields
+	query := a.Note.ScientificName
+	
+	// Search for notes, sorted by ID descending to get the most recent
+	notes, err := a.Ds.SearchNotes(query, false, 10, 0) // false = sort descending, limit 10, offset 0
+	if err != nil {
+		return nil, fmt.Errorf("failed to search for note: %w", err)
+	}
+
+	// Filter results to find the exact match based on date and time
+	for i := range notes {
+		note := &notes[i]
+		// Check if this note matches our expected characteristics
+		if note.Date == a.Note.Date && 
+		   note.ScientificName == a.Note.ScientificName &&
+		   note.Time == a.Note.Time { // Exact time match
+			return note, nil
+		}
+	}
+
+	return nil, fmt.Errorf("note not found in database")
 }

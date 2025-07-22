@@ -1,0 +1,18 @@
+{
+  "threshold": 10,
+  "minLines": 5,
+  "minTokens": 50,
+  "format": ["javascript", "typescript"],
+  "mode": "mild",
+  "reporters": ["console"],
+  "ignore": [
+    "**/*.test.ts",
+    "**/*.test.js", 
+    "**/*.spec.ts",
+    "**/*.spec.js",
+    "**/*.svelte",
+    "node_modules/**",
+    "dist/**",
+    "coverage/**"
+  ]
+}

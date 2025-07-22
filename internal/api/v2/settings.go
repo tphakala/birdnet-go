@@ -8,12 +8,16 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -35,6 +39,12 @@ func (c *Controller) initSettingsRoutes() {
 	// Routes for settings
 	// GET /api/v2/settings - Retrieves all application settings
 	settingsGroup.GET("", c.GetAllSettings)
+	// GET /api/v2/settings/locales - Retrieves available locales for BirdNET (must be before /:section)
+	settingsGroup.GET("/locales", c.GetLocales)
+	// GET /api/v2/settings/imageproviders - Retrieves available image providers (must be before /:section)
+	settingsGroup.GET("/imageproviders", c.GetImageProviders)
+	// GET /api/v2/settings/systemid - Retrieves the system ID for support tracking (must be before /:section)
+	settingsGroup.GET("/systemid", c.GetSystemID)
 	// GET /api/v2/settings/:section - Retrieves settings for a specific section (e.g., birdnet, webserver)
 	settingsGroup.GET("/:section", c.GetSectionSettings)
 	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
@@ -233,7 +243,7 @@ func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]strin
 	err := updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(current).Elem(),
 		reflect.ValueOf(updated).Elem(),
-		getAllowedFieldMap(),
+		getBlockedFieldMap(), // Using blacklist instead of whitelist
 		&skippedFields,
 		"",
 	)
@@ -241,9 +251,10 @@ func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]strin
 }
 
 // updateAllowedFieldsRecursivelyWithTracking handles recursive field updates and tracks skipped fields
+// Using BLACKLIST approach - fields are allowed by default unless blocked or marked with yaml:"-"
 func updateAllowedFieldsRecursivelyWithTracking(
 	currentValue, updatedValue reflect.Value,
-	allowedFields map[string]interface{},
+	blockedFields map[string]interface{},
 	skippedFields *[]string,
 	prefix string,
 ) error {
@@ -252,8 +263,21 @@ func updateAllowedFieldsRecursivelyWithTracking(
 	}
 
 	for i := 0; i < currentValue.NumField(); i++ {
-		fieldName := currentValue.Type().Field(i).Name
+		fieldInfo := currentValue.Type().Field(i)
+		fieldName := fieldInfo.Name
 		currentField := currentValue.Field(i)
+
+		// Skip fields marked with yaml:"-" (runtime-only fields)
+		yamlTag := fieldInfo.Tag.Get("yaml")
+		if yamlTag == "-" {
+			fieldPath := prefix
+			if fieldPath != "" {
+				fieldPath += "."
+			}
+			fieldPath += fieldName
+			*skippedFields = append(*skippedFields, fieldPath + " (runtime-only)")
+			continue
+		}
 
 		// Get updated field and skip if not valid
 		updatedField := updatedValue.FieldByName(fieldName)
@@ -266,7 +290,7 @@ func updateAllowedFieldsRecursivelyWithTracking(
 
 		// Process the field based on permissions and type
 		if err := processField(currentField, updatedField, fieldName, fieldPath, jsonTag,
-			allowedFields, skippedFields); err != nil {
+			blockedFields, skippedFields); err != nil {
 			return err
 		}
 	}
@@ -300,39 +324,41 @@ func getFieldInfo(valueType reflect.Value, fieldIndex int, fieldName, prefix str
 func processField(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	allowedFields map[string]interface{},
+	blockedFields map[string]interface{},
 	skippedFields *[]string,
 ) error {
-	// Check field permissions
-	allowedSubfields, isAllowedAsMap := allowedFields[fieldName].(map[string]interface{})
+	// Check field permissions using blacklist approach
+	blockedSubfields, isBlockedAsMap := blockedFields[fieldName].(map[string]interface{})
 
-	if !isAllowedAsMap {
-		// Handle field based on permission (if it's a simple boolean permission)
+	if !isBlockedAsMap {
+		// Handle field based on permission (if it's a simple boolean permission or not in blocklist)
 		return handleFieldPermission(currentField, updatedField, fieldName, fieldPath, jsonTag,
-			allowedFields, skippedFields)
+			blockedFields, skippedFields)
 	}
 
 	// Handle field based on its type (struct, pointer, or primitive)
 	return handleFieldByType(currentField, updatedField, fieldName, fieldPath, jsonTag,
-		allowedSubfields, skippedFields)
+		blockedSubfields, skippedFields)
 }
 
 // handleFieldPermission processes a field based on its permission settings
 func handleFieldPermission(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	allowedFields map[string]interface{},
+	blockedFields map[string]interface{},
 	skippedFields *[]string,
 ) error {
-	// If it's a bool in the map, it means the whole field is allowed (if true)
-	isAllowedBool, isBool := allowedFields[fieldName].(bool)
-	if !isBool || !isAllowedBool {
-		// Field is explicitly not allowed to be updated
-		*skippedFields = append(*skippedFields, fieldPath)
-		return nil // Skip this field
+	// INVERTED LOGIC: Default is to ALLOW unless explicitly blocked
+	// Check if field is in the blocklist
+	if blocked, exists := blockedFields[fieldName]; exists {
+		if blockedBool, isBool := blocked.(bool); isBool && blockedBool {
+			// Field is explicitly blocked
+			*skippedFields = append(*skippedFields, fieldPath)
+			return nil // Skip this field
+		}
 	}
 
-	// The entire field is allowed to be updated
+	// By default, the field is allowed to be updated
 	if currentField.CanSet() {
 		// Check if we need to validate this field
 		validationErr := validateField(fieldName, updatedField.Interface())
@@ -349,17 +375,17 @@ func handleFieldPermission(
 func handleFieldByType(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	allowedSubfields map[string]interface{},
+	blockedSubfields map[string]interface{},
 	skippedFields *[]string,
 ) error {
 	// For struct fields
 	if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
-		return handleStructField(currentField, updatedField, fieldPath, allowedSubfields, skippedFields)
+		return handleStructField(currentField, updatedField, fieldPath, blockedSubfields, skippedFields)
 	}
 
 	// For fields that are pointers to structs
 	if currentField.Kind() == reflect.Ptr && updatedField.Kind() == reflect.Ptr {
-		return handlePointerField(currentField, updatedField, fieldPath, allowedSubfields, skippedFields)
+		return handlePointerField(currentField, updatedField, fieldPath, blockedSubfields, skippedFields)
 	}
 
 	// For primitive fields or other types
@@ -370,13 +396,13 @@ func handleFieldByType(
 func handleStructField(
 	currentField, updatedField reflect.Value,
 	fieldPath string,
-	allowedSubfields map[string]interface{},
+	blockedSubfields map[string]interface{},
 	skippedFields *[]string,
 ) error {
 	return updateAllowedFieldsRecursivelyWithTracking(
 		currentField,
 		updatedField,
-		allowedSubfields,
+		blockedSubfields,
 		skippedFields,
 		fieldPath,
 	)
@@ -386,7 +412,7 @@ func handleStructField(
 func handlePointerField(
 	currentField, updatedField reflect.Value,
 	fieldPath string,
-	allowedSubfields map[string]interface{},
+	blockedSubfields map[string]interface{},
 	skippedFields *[]string,
 ) error {
 	// Create a new struct if current is nil but updated is not
@@ -401,7 +427,7 @@ func handlePointerField(
 			return updateAllowedFieldsRecursivelyWithTracking(
 				currentField.Elem(),
 				updatedField.Elem(),
-				allowedSubfields,
+				blockedSubfields,
 				skippedFields,
 				fieldPath,
 			)
@@ -542,15 +568,15 @@ func handleBirdnetSection(settings *conf.Settings, data json.RawMessage, skipped
 		return err
 	}
 
-	// Get the allowed fields for this section
-	allowedFieldsMap := getAllowedFieldMap()
-	birdnetAllowedFields, _ := allowedFieldsMap["BirdNET"].(map[string]interface{})
+	// Get the blocked fields for this section (blacklist approach)
+	blockedFieldsMap := getBlockedFieldMap()
+	birdnetBlockedFields, _ := blockedFieldsMap["BirdNET"].(map[string]interface{})
 
-	// Apply the allowed fields filter using reflection
+	// Apply the blocked fields filter using reflection
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.BirdNET).Elem(),
 		reflect.ValueOf(&tempSettings).Elem(),
-		birdnetAllowedFields,
+		birdnetBlockedFields,
 		skippedFields,
 		"BirdNET",
 	)
@@ -566,13 +592,13 @@ func handleWebServerSection(settings *conf.Settings, data json.RawMessage, skipp
 		return err
 	}
 
-	allowedFieldsMap := getAllowedFieldMap()
-	webserverAllowedFields, _ := allowedFieldsMap["WebServer"].(map[string]interface{})
+	blockedFieldsMap := getBlockedFieldMap()
+	webserverBlockedFields, _ := blockedFieldsMap["WebServer"].(map[string]interface{})
 
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.WebServer).Elem(),
 		reflect.ValueOf(&webServerSettings).Elem(),
-		webserverAllowedFields,
+		webserverBlockedFields,
 		skippedFields,
 		"WebServer",
 	)
@@ -612,14 +638,14 @@ func handleAudioSection(settings *conf.Settings, data json.RawMessage, skippedFi
 		return err
 	}
 
-	allowedFieldsMap := getAllowedFieldMap()
-	realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
-	audioAllowedFields, _ := realtimeAllowedFields["Audio"].(map[string]interface{})
+	blockedFieldsMap := getBlockedFieldMap()
+	realtimeBlockedFields, _ := blockedFieldsMap["Realtime"].(map[string]interface{})
+	audioBlockedFields, _ := realtimeBlockedFields["Audio"].(map[string]interface{})
 
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.Realtime.Audio).Elem(),
 		reflect.ValueOf(&audioSettings).Elem(),
-		audioAllowedFields,
+		audioBlockedFields,
 		skippedFields,
 		"Realtime.Audio",
 	)
@@ -719,14 +745,14 @@ func handleSpeciesSection(settings *conf.Settings, data json.RawMessage, skipped
 		return err
 	}
 
-	allowedFieldsMap := getAllowedFieldMap()
-	realtimeAllowedFields, _ := allowedFieldsMap["Realtime"].(map[string]interface{})
-	speciesAllowedFields, _ := realtimeAllowedFields["Species"].(map[string]interface{})
+	blockedFieldsMap := getBlockedFieldMap()
+	realtimeBlockedFields, _ := blockedFieldsMap["Realtime"].(map[string]interface{})
+	speciesBlockedFields, _ := realtimeBlockedFields["Species"].(map[string]interface{})
 
 	return updateAllowedFieldsRecursivelyWithTracking(
 		reflect.ValueOf(&settings.Realtime.Species).Elem(),
 		reflect.ValueOf(&speciesSettings).Elem(),
-		speciesAllowedFields,
+		speciesBlockedFields,
 		skippedFields,
 		"Realtime.Species",
 	)
@@ -854,53 +880,40 @@ func validateField(fieldName string, value interface{}) error {
 	return nil
 }
 
-// getAllowedFieldMap returns a map of fields that are allowed to be updated
-// The structure uses nested maps to represent the structure of the settings
-// true means the whole field is allowed, a nested map means only specific subfields are allowed
+// getBlockedFieldMap returns a map of fields that are BLOCKED from being updated
+// Using BLACKLIST approach - all fields are allowed by default except:
+// 1. Fields marked with yaml:"-" tag (automatically skipped)
+// 2. Fields explicitly listed here for security reasons
 //
-// IMPORTANT: This is a critical security mechanism for preventing sensitive or runtime-only
-// fields from being modified via the API. When adding new fields to the Settings struct:
-//  1. Fields NOT in this map will be automatically protected (default deny)
-//  2. Add new user-configurable fields explicitly to this map
-//  3. NEVER add sensitive data fields (credentials, tokens, etc.) or runtime-state fields here
-//     unless they are explicitly designed to be configured via the API
-//  4. For nested structures, use nested maps to allow only specific subfields
-func getAllowedFieldMap() map[string]interface{} {
+// IMPORTANT: Only add fields here if they pose a security risk
+// Most runtime-only fields should use yaml:"-" tag instead
+func getBlockedFieldMap() map[string]interface{} {
 	return map[string]interface{}{
+		// Block these top-level runtime fields
+		"Version":            true, // Runtime version info
+		"BuildDate":          true, // Build time info
+		"SystemID":           true, // Unique system identifier
+		"ValidationWarnings": true, // Runtime validation state
+		"Input":              true, // File/directory analysis mode config
+		
+		// BirdNET section - block runtime fields
 		"BirdNET": map[string]interface{}{
-			"Locale":     true,
-			"Threads":    true,
-			"ModelPath":  true,
-			"LabelPath":  true,
-			"UseXNNPACK": true,
-			"Latitude":   true,
-			"Longitude":  true,
+			"Labels": true, // Runtime list populated from label file
+			// Block RangeFilter runtime fields
+			"RangeFilter": map[string]interface{}{
+				"Species":     true, // Runtime species list populated by range filter
+				"LastUpdated": true, // Runtime timestamp of last filter update
+			},
 		},
-		"WebServer": map[string]interface{}{
-			"Port":  true,
-			"Debug": true,
-		},
+		
+		// Realtime section - block runtime fields
 		"Realtime": map[string]interface{}{
-			"Interval":       true,
-			"ProcessingTime": true,
 			"Audio": map[string]interface{}{
-				"Source": true,
-				"Export": map[string]interface{}{
-					"Enabled": true,
-					"Path":    true,
-					"Type":    true,
-					"Bitrate": true,
-				},
-				"Equalizer": true,
-			},
-			"MQTT": true, // Allow complete update of MQTT settings
-			"RTSP": true, // Allow complete update of RTSP settings
-			"Species": map[string]interface{}{
-				"Include": true,
-				"Exclude": true,
-				"Config":  true,
+				"SoxAudioTypes": true, // Runtime list of supported audio types
 			},
 		},
+		
+		// All other fields are allowed by default
 	}
 }
 
@@ -913,30 +926,84 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	if birdnetSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("BirdNET settings changed, triggering reload")
 		reconfigActions = append(reconfigActions, "reload_birdnet")
+		// Send toast notification
+		_ = c.SendToast("Reloading BirdNET model with new settings...", "info", 5000)
 	}
 
 	// Check range filter settings
 	if rangeFilterSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Range filter settings changed, triggering rebuild")
 		reconfigActions = append(reconfigActions, "rebuild_range_filter")
+		// Send toast notification
+		_ = c.SendToast("Rebuilding species range filter...", "info", 4000)
+	}
+
+	// Check species interval settings
+	if speciesIntervalSettingsChanged(oldSettings, currentSettings) || oldSettings.Realtime.Interval != currentSettings.Realtime.Interval {
+		c.Debug("Species interval settings changed, triggering update")
+		reconfigActions = append(reconfigActions, "update_detection_intervals")
+		// Send toast notification
+		_ = c.SendToast("Updating detection intervals...", "info", 3000)
 	}
 
 	// Check MQTT settings
 	if mqttSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("MQTT settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_mqtt")
+		// Send toast notification
+		_ = c.SendToast("Reconfiguring MQTT connection...", "info", 4000)
+	}
+
+	// Check BirdWeather settings
+	if birdWeatherSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("BirdWeather settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_birdweather")
+		// Send toast notification
+		_ = c.SendToast("Reconfiguring BirdWeather integration...", "info", 4000)
 	}
 
 	// Check RTSP settings
 	if rtspSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("RTSP settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_rtsp_sources")
+		// Send toast notification
+		_ = c.SendToast("Reconfiguring RTSP sources...", "info", 4000)
+	}
+
+	// Check sound level monitoring settings
+	if soundLevelSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
+		// Send toast notification
+		_ = c.SendToast("Reconfiguring sound level monitoring...", "info", 3000)
+	}
+
+	// Check telemetry settings
+	if telemetrySettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Telemetry settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_telemetry")
+		// Send toast notification
+		_ = c.SendToast("Reconfiguring telemetry settings...", "info", 3000)
 	}
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
-		// No action here as restart is manual
+		// Send toast notification about restart requirement
+		_ = c.SendToast("Audio device changed. Restart required to apply changes.", "warning", 8000)
+	}
+
+	// Check audio equalizer settings
+	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
+		c.Debug("Audio equalizer settings changed, updating filter chain")
+		// Handle audio equalizer changes synchronously as it returns an error
+		if err := c.handleEqualizerChange(currentSettings); err != nil {
+			// Send error toast
+			_ = c.SendToast("Failed to update audio equalizer settings", "error", 5000)
+			return fmt.Errorf("failed to update audio equalizer: %w", err)
+		}
+		// Send success toast
+		_ = c.SendToast("Audio equalizer settings updated", "success", 3000)
 	}
 
 	// Trigger reconfigurations asynchronously
@@ -986,13 +1053,21 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 
 // rangeFilterSettingsChanged checks if range filter settings have changed
 func rangeFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
-	// Check for changes in BirdNET latitude
-	if oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude {
+	// Check for changes in species include/exclude lists
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Include, currentSettings.Realtime.Species.Include) {
+		return true
+	}
+	if !reflect.DeepEqual(oldSettings.Realtime.Species.Exclude, currentSettings.Realtime.Species.Exclude) {
 		return true
 	}
 
-	// Check for changes in BirdNET longitude
-	if oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude {
+	// Check for changes in BirdNET range filter settings
+	if !reflect.DeepEqual(oldSettings.BirdNET.RangeFilter, currentSettings.BirdNET.RangeFilter) {
+		return true
+	}
+
+	// Check for changes in BirdNET latitude and longitude
+	if oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude || oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude {
 		return true
 	}
 
@@ -1009,7 +1084,12 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		oldMQTT.Broker != newMQTT.Broker ||
 		oldMQTT.Topic != newMQTT.Topic ||
 		oldMQTT.Username != newMQTT.Username ||
-		oldMQTT.Password != newMQTT.Password
+		oldMQTT.Password != newMQTT.Password ||
+		oldMQTT.Retain != newMQTT.Retain ||
+		oldMQTT.TLS.InsecureSkipVerify != newMQTT.TLS.InsecureSkipVerify ||
+		oldMQTT.TLS.CACert != newMQTT.TLS.CACert ||
+		oldMQTT.TLS.ClientCert != newMQTT.TLS.ClientCert ||
+		oldMQTT.TLS.ClientKey != newMQTT.TLS.ClientKey
 }
 
 // rtspSettingsChanged checks if RTSP settings have changed
@@ -1039,4 +1119,216 @@ func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // audioDeviceSettingChanged checks if audio device settings have changed
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.Realtime.Audio.Source != currentSettings.Realtime.Audio.Source
+}
+
+// speciesIntervalSettingsChanged checks if any species-specific interval settings have changed
+func speciesIntervalSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Get the old and new species configs
+	oldSpeciesConfigs := oldSettings.Realtime.Species.Config
+	newSpeciesConfigs := currentSettings.Realtime.Species.Config
+
+	// Create a set of all species keys from both old and new configs for efficient iteration
+	allSpecies := make(map[string]bool)
+	for species := range oldSpeciesConfigs {
+		allSpecies[species] = true
+	}
+	for species := range newSpeciesConfigs {
+		allSpecies[species] = true
+	}
+
+	// Single loop to check all species in both old and new configs
+	for species := range allSpecies {
+		oldConfig, existedInOld := oldSpeciesConfigs[species]
+		newConfig, existsInNew := newSpeciesConfigs[species]
+
+		// Case 1: Species exists in both configs but interval changed
+		if existedInOld && existsInNew && oldConfig.Interval != newConfig.Interval {
+			return true
+		}
+
+		// Case 2: Species was removed and had a custom interval
+		if existedInOld && !existsInNew && oldConfig.Interval > 0 {
+			return true
+		}
+
+		// Case 3: New species was added with a custom interval
+		if !existedInOld && existsInNew && newConfig.Interval > 0 {
+			return true
+		}
+	}
+
+	// No relevant changes detected
+	return false
+}
+
+// birdWeatherSettingsChanged checks if BirdWeather integration settings have changed
+func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in BirdWeather enabled state
+	if oldSettings.Realtime.Birdweather.Enabled != currentSettings.Realtime.Birdweather.Enabled {
+		return true
+	}
+
+	// Check for changes in BirdWeather credentials and configuration
+	if oldSettings.Realtime.Birdweather.ID != currentSettings.Realtime.Birdweather.ID ||
+		oldSettings.Realtime.Birdweather.Threshold != currentSettings.Realtime.Birdweather.Threshold ||
+		oldSettings.Realtime.Birdweather.LocationAccuracy != currentSettings.Realtime.Birdweather.LocationAccuracy {
+		return true
+	}
+
+	// Check for debug mode changes
+	if oldSettings.Realtime.Birdweather.Debug != currentSettings.Realtime.Birdweather.Debug {
+		return true
+	}
+
+	return false
+}
+
+// soundLevelSettingsChanged checks if sound level monitoring settings have changed
+func soundLevelSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in enabled state
+	if oldSettings.Realtime.Audio.SoundLevel.Enabled != currentSettings.Realtime.Audio.SoundLevel.Enabled {
+		return true
+	}
+
+	// Check for changes in interval (only if enabled)
+	if currentSettings.Realtime.Audio.SoundLevel.Enabled &&
+		oldSettings.Realtime.Audio.SoundLevel.Interval != currentSettings.Realtime.Audio.SoundLevel.Interval {
+		return true
+	}
+
+	return false
+}
+
+// telemetrySettingsChanged checks if telemetry/observability settings have changed
+func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	// Check for changes in enabled state
+	if oldSettings.Realtime.Telemetry.Enabled != currentSettings.Realtime.Telemetry.Enabled {
+		return true
+	}
+
+	// Check for changes in listen address (only if enabled)
+	if currentSettings.Realtime.Telemetry.Enabled &&
+		oldSettings.Realtime.Telemetry.Listen != currentSettings.Realtime.Telemetry.Listen {
+		return true
+	}
+
+	return false
+}
+
+// equalizerSettingsChanged checks if audio equalizer settings have changed
+func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) bool {
+	return !reflect.DeepEqual(oldSettings, newSettings)
+}
+
+// handleEqualizerChange updates the audio filter chain when equalizer settings change
+func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
+	if err := myaudio.UpdateFilterChain(settings); err != nil {
+		return fmt.Errorf("failed to update audio filter chain: %w", err)
+	}
+	return nil
+}
+
+// LocaleData represents a locale with its code and full name
+type LocaleData struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// ImageProviderOption represents an image provider option
+type ImageProviderOption struct {
+	Value   string `json:"value"`
+	Display string `json:"display"`
+}
+
+// GetLocales handles GET /api/v2/settings/locales
+func (c *Controller) GetLocales(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting available locales")
+
+	// Return locales in the same format as v1 for compatibility
+	// This matches the client-side expectation of key-value pairs
+	locales := make(map[string]string)
+	for code, name := range conf.LocaleCodes {
+		locales[code] = name
+	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved locales successfully", "count", len(locales))
+
+	return ctx.JSON(http.StatusOK, locales)
+}
+
+// GetImageProviders handles GET /api/v2/settings/imageproviders
+func (c *Controller) GetImageProviders(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting available image providers")
+
+	// Prepare image provider options
+	providerOptionList := []ImageProviderOption{
+		{Value: "auto", Display: "Auto (Default)"}, // Always add auto first
+	}
+
+	providerCount := 0
+	if c.BirdImageCache != nil {
+		c.logAPIRequest(ctx, slog.LevelDebug, "BirdImageCache is available, checking for registry")
+		if registry := c.BirdImageCache.GetRegistry(); registry != nil {
+			c.logAPIRequest(ctx, slog.LevelDebug, "Registry found, ranging over providers")
+			registry.RangeProviders(func(name string, cache *imageprovider.BirdImageCache) bool {
+				c.logAPIRequest(ctx, slog.LevelDebug, "Found provider", "name", name)
+				// Simple capitalization for display name (Rune-aware)
+				var displayName string
+				if name != "" {
+					r, size := utf8.DecodeRuneInString(name)
+					displayName = strings.ToUpper(string(r)) + name[size:]
+				} else {
+					displayName = "(unknown)"
+				}
+				providerOptionList = append(providerOptionList, ImageProviderOption{Value: name, Display: displayName})
+				providerCount++
+				return true // Continue ranging
+			})
+
+			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
+			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
+				sub := providerOptionList[1:] // Create a sub-slice for sorting
+				sort.Slice(sub, func(i, j int) bool {
+					return sub[i].Display < sub[j].Display // Compare elements within the sub-slice
+				})
+			}
+		} else {
+			c.logAPIRequest(ctx, slog.LevelWarn, "ImageProviderRegistry is nil, cannot get provider names")
+		}
+	} else {
+		c.logAPIRequest(ctx, slog.LevelWarn, "BirdImageCache is nil, cannot get provider names")
+	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved image providers successfully", "count", len(providerOptionList), "provider_count", providerCount)
+
+	// Return in format expected by client: { providers: [...] }
+	response := map[string]any{
+		"providers": providerOptionList,
+	}
+
+	return ctx.JSON(http.StatusOK, response)
+}
+
+// GetSystemID handles GET /api/v2/settings/systemid
+func (c *Controller) GetSystemID(ctx echo.Context) error {
+	c.logAPIRequest(ctx, slog.LevelInfo, "Getting system ID")
+
+	// Acquire read lock to ensure settings aren't being modified during read
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
+	settings := conf.Setting()
+	if settings == nil {
+		c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get system ID")
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+	}
+
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", settings.SystemID)
+
+	// Return system ID in the format expected by the frontend
+	response := map[string]string{
+		"systemID": settings.SystemID,
+	}
+
+	return ctx.JSON(http.StatusOK, response)
 }

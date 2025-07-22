@@ -1,0 +1,9 @@
+dist/
+node_modules/
+.svelte-kit/
+build/
+package/
+*.config.js
+*.min.js
+*.min.css
+src/lib/desktop/features/settings/pages/SecuritySettingsPage.svelte
