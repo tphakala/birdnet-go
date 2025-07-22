@@ -44,6 +44,8 @@ const browserGlobals = {
   URL: 'readonly',
   Blob: 'readonly',
   getComputedStyle: 'readonly',
+  TouchEvent: 'readonly',
+  crypto: 'readonly',
 };
 
 export default [
