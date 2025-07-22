@@ -118,6 +118,7 @@ describe('ToggleField', () => {
 
   it('does not call onUpdate when disabled', async () => {
     const onUpdate = vi.fn();
+    const user = userEvent.setup();
 
     render(ToggleField, {
       props: {
@@ -129,9 +130,17 @@ describe('ToggleField', () => {
     });
 
     const toggle = screen.getByRole('checkbox');
-
-    // Disabled checkboxes don't trigger click events properly
     expect(toggle).toBeDisabled();
+
+    // Attempt to click the disabled toggle
+    try {
+      await user.click(toggle);
+    } catch {
+      // Click may fail on disabled elements, which is expected
+    }
+
+    // Verify onUpdate was never called
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 
   it('shows error message when provided', () => {

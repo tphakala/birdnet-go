@@ -27,8 +27,8 @@
   let calendarRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
-  // Get the selected date as a Date object
-  const selectedDate = $derived(value ? new Date(value + 'T00:00:00') : null);
+  // Get the selected date as a Date object (use noon to avoid timezone shifts)
+  const selectedDate = $derived(value ? new Date(value + 'T12:00:00') : null);
 
   // Format the display text
   const displayText = $derived(() => {
@@ -160,7 +160,7 @@
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 </script>
 
-<div class="relative">
+<div class="relative datepicker-wrapper">
   <!-- Date Input Button -->
   <button
     bind:this={buttonRef}
@@ -312,8 +312,8 @@
 </div>
 
 <style>
-  /* Ensure dropdown doesn't get cut off */
-  :global(.overflow-x-auto) {
-    overflow: visible !important;
+  /* Ensure dropdown doesn't get cut off - scoped to this component */
+  .datepicker-wrapper :global(.overflow-x-auto) {
+    overflow: visible;
   }
 </style>

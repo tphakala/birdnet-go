@@ -25,24 +25,24 @@
 
 <div class={cn('card bg-base-100 shadow-sm', className)} {...rest}>
   {#if title || header}
-    <div class="card-header">
+    <header class="card-header">
       {#if header}
         {@render header()}
       {:else if title}
         <h2 class="card-title">{title}</h2>
       {/if}
-    </div>
+    </header>
   {/if}
 
-  <div class={cn('card-body', { 'p-0': !padding })}>
+  <main class={cn('card-body', { 'p-0': !padding })}>
     {#if children}
       {@render children()}
     {/if}
-  </div>
+  </main>
 
   {#if footer}
-    <div class="card-footer">
+    <footer class="card-footer">
       {@render footer()}
-    </div>
+    </footer>
   {/if}
 </div>
