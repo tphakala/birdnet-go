@@ -33,6 +33,10 @@
 
   let showTooltip = $state(false);
 
+  // Generate unique IDs for accessibility
+  const helpTextId = `checkbox-help-${Math.random().toString(36).substr(2, 9)}`;
+  const tooltipId = `checkbox-tooltip-${Math.random().toString(36).substr(2, 9)}`;
+
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     checked = target.checked;
@@ -63,6 +67,7 @@
       {disabled}
       class={cn('checkbox mr-2', sizeClasses[size], variantClasses[variant])}
       onchange={handleChange}
+      aria-describedby={helpText ? helpTextId : undefined}
     />
 
     {#if children}
@@ -80,6 +85,7 @@
         onfocus={() => (showTooltip = true)}
         onblur={() => (showTooltip = false)}
         aria-label="Help information"
+        aria-describedby={tooltipId}
       >
         ⓘ
       </button>
@@ -88,14 +94,17 @@
 
   {#if helpText}
     <div class="label">
-      <span class="label-text-alt text-base-content/70">{helpText}</span>
+      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
     </div>
   {/if}
 
   {#if tooltip && showTooltip}
     <div
+      id={tooltipId}
       class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
       role="tooltip"
+      aria-live="polite"
+      style="left: 0; top: calc(100% + 4px); transform: translateX(0); max-width: min(300px, calc(100vw - 20px));"
     >
       {tooltip}
     </div>

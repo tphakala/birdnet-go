@@ -101,6 +101,7 @@
           onfocus={() => (showTooltip = true)}
           onblur={() => (showTooltip = false)}
           aria-label="Help information"
+          aria-describedby={tooltipId}
         >
           ⓘ
         </button>

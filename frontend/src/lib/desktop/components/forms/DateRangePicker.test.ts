@@ -3,6 +3,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import DateRangePicker from './DateRangePicker.svelte';
 
+// Test helper to avoid TypeScript casting repetition
+function renderDateRangePicker(props: Record<string, any> = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(DateRangePicker as any, { props });
+}
+
 describe('DateRangePicker', () => {
   beforeEach(() => {
     // Set a fixed date for consistent testing
@@ -15,20 +21,16 @@ describe('DateRangePicker', () => {
   });
 
   it('renders with default labels', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any);
+    renderDateRangePicker();
 
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
     expect(screen.getByLabelText('End Date')).toBeInTheDocument();
   });
 
   it('renders with custom labels', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
-        startLabel: 'From',
-        endLabel: 'To',
-      },
+    renderDateRangePicker({
+      startLabel: 'From',
+      endLabel: 'To',
     });
 
     expect(screen.getByLabelText('From')).toBeInTheDocument();
@@ -36,12 +38,9 @@ describe('DateRangePicker', () => {
   });
 
   it('displays initial dates', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-01-31'),
-      },
+    renderDateRangePicker({
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-01-31'),
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -55,10 +54,7 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn();
     const user = userEvent.setup({ delay: null });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: { onChange },
-    });
+    renderDateRangePicker({ onChange });
 
     const startInput = screen.getByLabelText('Start Date');
     const endInput = screen.getByLabelText('End Date');
@@ -82,8 +78,7 @@ describe('DateRangePicker', () => {
     const user = userEvent.setup({ delay: null });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
+    renderDateRangePicker({
         startDate: new Date('2024-01-10'),
       },
     });
@@ -101,8 +96,7 @@ describe('DateRangePicker', () => {
 
   it('enforces min and max dates', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
+    renderDateRangePicker({
         minDate: new Date('2024-01-01'),
         maxDate: new Date('2024-12-31'),
       },
@@ -121,7 +115,7 @@ describe('DateRangePicker', () => {
     const user = userEvent.setup({ delay: null });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any);
+    renderDateRangePicker();
 
     const startInput = screen.getByLabelText('Start Date');
     const endInput = screen.getByLabelText('End Date') as HTMLInputElement;
@@ -134,7 +128,7 @@ describe('DateRangePicker', () => {
   describe('Presets', () => {
     it('renders default presets', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(DateRangePicker as any);
+      renderDateRangePicker();
 
       expect(screen.getByText('Today')).toBeInTheDocument();
       expect(screen.getByText('Yesterday')).toBeInTheDocument();
@@ -149,8 +143,8 @@ describe('DateRangePicker', () => {
       const onChange = vi.fn();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(DateRangePicker as any, {
-        props: { onChange },
+      renderDateRangePicker(, {
+        onChange,
       });
 
       await fireEvent.click(screen.getByText('Today'));
@@ -165,7 +159,7 @@ describe('DateRangePicker', () => {
 
     it('highlights active preset', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(DateRangePicker as any);
+      renderDateRangePicker();
 
       await fireEvent.click(screen.getByText('Today'));
 
@@ -185,8 +179,8 @@ describe('DateRangePicker', () => {
       ];
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(DateRangePicker as any, {
-        props: { presets: customPresets },
+      renderDateRangePicker(, {
+        presets: customPresets,
       });
 
       expect(screen.getByText('Last Week')).toBeInTheDocument();
@@ -195,8 +189,8 @@ describe('DateRangePicker', () => {
 
     it('hides presets when showPresets is false', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(DateRangePicker as any, {
-        props: { showPresets: false },
+      renderDateRangePicker(, {
+        showPresets: false,
       });
 
       expect(screen.queryByText('Quick Select')).not.toBeInTheDocument();
@@ -206,8 +200,7 @@ describe('DateRangePicker', () => {
 
   it('shows clear button when dates are selected', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
+    renderDateRangePicker({
         startDate: new Date('2024-01-01'),
         endDate: new Date('2024-01-31'),
       },
@@ -220,8 +213,7 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
+    renderDateRangePicker({
         startDate: new Date('2024-01-01'),
         endDate: new Date('2024-01-31'),
         onChange,
@@ -238,8 +230,7 @@ describe('DateRangePicker', () => {
 
   it('displays selected date range summary', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: {
+    renderDateRangePicker({
         startDate: new Date('2024-01-01'),
         endDate: new Date('2024-01-31'),
       },
@@ -250,8 +241,7 @@ describe('DateRangePicker', () => {
 
   it('disables inputs when disabled prop is true', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: { disabled: true },
+    renderDateRangePicker({ disabled: true },
     });
 
     expect(screen.getByLabelText('Start Date')).toBeDisabled();
@@ -261,8 +251,7 @@ describe('DateRangePicker', () => {
 
   it('marks fields as required when required prop is true', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: { required: true },
+    renderDateRangePicker({ required: true },
     });
 
     const startInput = screen.getByLabelText('Start Date *');
@@ -278,8 +267,7 @@ describe('DateRangePicker', () => {
     const user = userEvent.setup({ delay: null });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: { onStartChange, onEndChange },
+    renderDateRangePicker({ onStartChange, onEndChange },
     });
 
     const startInput = screen.getByLabelText('Start Date');
@@ -294,8 +282,7 @@ describe('DateRangePicker', () => {
 
   it('applies custom className', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(DateRangePicker as any, {
-      props: { className: 'custom-date-picker' },
+    renderDateRangePicker({ className: 'custom-date-picker' },
     });
 
     expect(document.querySelector('.date-range-picker.custom-date-picker')).toBeInTheDocument();

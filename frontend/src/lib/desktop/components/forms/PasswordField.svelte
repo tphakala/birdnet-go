@@ -35,8 +35,6 @@
   }: Props = $props();
 
   let showPassword = $state(false);
-  // Generate unique field ID
-  Math.random().toString(36).substring(2, 11);
 
   // Password strength calculation
   let passwordStrength = $derived.by(() => {
@@ -130,7 +128,6 @@
         onclick={togglePasswordVisibility}
         {disabled}
         aria-label={showPassword ? 'Hide password' : 'Show password'}
-        tabindex="-1"
       >
         {#if showPassword}
           <!-- Eye slash icon -->

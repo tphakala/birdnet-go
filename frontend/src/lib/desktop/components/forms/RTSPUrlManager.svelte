@@ -130,42 +130,45 @@
     errors = newErrors;
   }
 
-  function updateUrl(id: string, field: keyof RTSPUrl, value: string | boolean) {
-    const updated = urls.map(item => {
-      if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
+  // Reactive validation for URLs - runs when urls change due to two-way binding
+  $effect(() => {
+    const newErrors = { ...errors };
+    let hasChanges = false;
 
-        // Validate URL changes
-        if (field === 'url') {
-          const validation = validateRTSPUrl(String(value));
-          if (validation) {
-            errors[id] = validation;
-          } else {
-            const newErrors = { ...errors };
-            delete newErrors[id];
-            errors = newErrors;
-          }
+    urls.forEach(url => {
+      // Validate URL
+      const urlValidation = validateRTSPUrl(url.url);
+      if (urlValidation) {
+        if (newErrors[url.id] !== urlValidation) {
+          newErrors[url.id] = urlValidation;
+          hasChanges = true;
         }
-
-        // Validate name changes
-        if (field === 'name') {
-          const validation = validateName(String(value));
-          if (validation) {
-            errors[`${id}-name`] = validation;
-          } else {
-            const newErrors = { ...errors };
-            delete newErrors[`${id}-name`];
-            errors = newErrors;
-          }
-        }
-
-        return updatedItem;
+      } else if (newErrors[url.id]) {
+        delete newErrors[url.id];
+        hasChanges = true;
       }
-      return item;
+
+      // Validate name
+      const nameValidation = validateName(url.name);
+      const nameKey = `${url.id}-name`;
+      if (nameValidation) {
+        if (newErrors[nameKey] !== nameValidation) {
+          newErrors[nameKey] = nameValidation;
+          hasChanges = true;
+        }
+      } else if (newErrors[nameKey]) {
+        delete newErrors[nameKey];
+        hasChanges = true;
+      }
     });
 
-    onUpdate(updated);
-  }
+    if (hasChanges) {
+      errors = newErrors;
+    }
+
+    // Update parent with current URLs
+    onUpdate(urls);
+  });
 
   function handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -334,9 +337,8 @@
                   type="text"
                   name="stream-name-{rtspUrl.id}"
                   label="Stream Name"
-                  value={rtspUrl.name}
+                  bind:value={rtspUrl.name}
                   {disabled}
-                  onChange={value => updateUrl(rtspUrl.id, 'name', String(value))}
                   inputClassName={errors[`${rtspUrl.id}-name`] ? 'input-error' : ''}
                 />
                 {#if errors[`${rtspUrl.id}-name`]}
@@ -350,9 +352,8 @@
                   type="text"
                   name="stream-url-{rtspUrl.id}"
                   label="RTSP URL"
-                  value={rtspUrl.url}
+                  bind:value={rtspUrl.url}
                   {disabled}
-                  onChange={value => updateUrl(rtspUrl.id, 'url', String(value))}
                   inputClassName={errors[rtspUrl.id] ? 'input-error' : ''}
                 />
                 {#if errors[rtspUrl.id]}

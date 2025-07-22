@@ -175,9 +175,10 @@ describe('SpeciesInput', () => {
     await fireEvent.click(prediction);
 
     expect(onPredictionSelect).toHaveBeenCalledWith('American Robin');
-    // onAdd should be called after a timeout
-    await new Promise(resolve => setTimeout(resolve, 1));
-    expect(onAdd).toHaveBeenCalledWith('American Robin');
+    // onAdd should be called after component updates
+    await waitFor(() => {
+      expect(onAdd).toHaveBeenCalledWith('American Robin');
+    });
   });
 
   it('calls onInput when input value changes', async () => {
