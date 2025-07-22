@@ -4,17 +4,20 @@ import userEvent from '@testing-library/user-event';
 import FormField from './FormField.svelte';
 import { required, email, minLength, range } from '$lib/utils/validators';
 
+// Helper function to render FormField with proper typing
+const renderFormField = (props: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(FormField as any, { props });
+};
+
 describe('FormField', () => {
   describe('Text Input', () => {
     it('renders text input with label', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           label: 'Username',
           placeholder: 'Enter username',
-        },
       });
 
       expect(screen.getByLabelText('Username')).toBeInTheDocument();
@@ -22,14 +25,11 @@ describe('FormField', () => {
     });
 
     it('shows required indicator', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           label: 'Username',
           required: true,
-        },
       });
 
       expect(screen.getByText('*')).toBeInTheDocument();
@@ -39,14 +39,11 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           value: '',
           onChange,
-        },
       });
 
       const input = screen.getByRole('textbox');
@@ -58,14 +55,11 @@ describe('FormField', () => {
     it('shows validation errors after blur', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           label: 'Username',
           validators: [required(), minLength(5)],
-        },
       });
 
       const input = screen.getByLabelText('Username');
@@ -79,13 +73,10 @@ describe('FormField', () => {
     });
 
     it('shows help text', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           helpText: 'Choose a unique username',
-        },
       });
 
       expect(screen.getByText('Choose a unique username')).toBeInTheDocument();
@@ -96,13 +87,10 @@ describe('FormField', () => {
     it('validates email format', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'email',
           name: 'email',
           validators: [email()],
-        },
       });
 
       const input = screen.getByRole('textbox');
@@ -118,15 +106,12 @@ describe('FormField', () => {
 
   describe('Number Input', () => {
     it('renders number input with min/max', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'number',
           name: 'age',
           label: 'Age',
           min: 0,
           max: 120,
-        },
       });
 
       const input = screen.getByLabelText('Age') as HTMLInputElement;
@@ -138,13 +123,10 @@ describe('FormField', () => {
     it('validates number range', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'number',
           name: 'age',
           validators: [range(18, 100)],
-        },
       });
 
       const input = screen.getByRole('spinbutton');
@@ -161,14 +143,11 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'number',
           name: 'quantity',
           value: 0,
           onChange,
-        },
       });
 
       const input = screen.getByRole('spinbutton');
@@ -181,14 +160,11 @@ describe('FormField', () => {
 
   describe('Textarea', () => {
     it('renders textarea with custom rows', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'textarea',
           name: 'description',
           label: 'Description',
           rows: 5,
-        },
       });
 
       const textarea = screen.getByLabelText('Description') as HTMLTextAreaElement;
@@ -204,14 +180,11 @@ describe('FormField', () => {
     ];
 
     it('renders select with options', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'select',
           name: 'country',
           label: 'Country',
           options,
-        },
       });
 
       expect(screen.getByLabelText('Country')).toBeInTheDocument();
@@ -224,15 +197,12 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'select',
           name: 'country',
           value: '',
           options,
           onChange,
-        },
       });
 
       const select = screen.getByRole('combobox');
@@ -245,16 +215,13 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'select',
           name: 'countries',
           value: [],
           options,
           multiple: true,
           onChange,
-        },
       });
 
       const select = screen.getByRole('listbox');
@@ -266,13 +233,10 @@ describe('FormField', () => {
 
   describe('Checkbox', () => {
     it('renders checkbox with label', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'checkbox',
           name: 'terms',
           placeholder: 'I agree to the terms',
-        },
       });
 
       expect(screen.getByText('I agree to the terms')).toBeInTheDocument();
@@ -283,14 +247,11 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'checkbox',
           name: 'terms',
           value: false,
           onChange,
-        },
       });
 
       const checkbox = screen.getByRole('checkbox');
@@ -302,15 +263,12 @@ describe('FormField', () => {
 
   describe('Range Input', () => {
     it('renders range with min/max labels', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'range',
           name: 'volume',
           value: 50,
           min: 0,
           max: 100,
-        },
       });
 
       expect(screen.getByText('0')).toBeInTheDocument();
@@ -321,26 +279,20 @@ describe('FormField', () => {
 
   describe('Disabled and Readonly States', () => {
     it('disables input when disabled prop is true', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           disabled: true,
-        },
       });
 
       expect(screen.getByRole('textbox')).toBeDisabled();
     });
 
     it('makes input readonly when readonly prop is true', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           readonly: true,
-        },
       });
 
       expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
@@ -349,16 +301,13 @@ describe('FormField', () => {
 
   describe('Custom Classes', () => {
     it('applies custom classes', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           className: 'custom-form-control',
           inputClassName: 'custom-input',
           label: 'Username',
           labelClassName: 'custom-label',
-        },
       });
 
       expect(document.querySelector('.custom-form-control')).toBeInTheDocument();
@@ -372,13 +321,10 @@ describe('FormField', () => {
       const onBlur = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           onBlur,
-        },
       });
 
       const input = screen.getByRole('textbox');
@@ -392,13 +338,10 @@ describe('FormField', () => {
       const onFocus = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           onFocus,
-        },
       });
 
       const input = screen.getByRole('textbox');
@@ -411,13 +354,10 @@ describe('FormField', () => {
       const onInput = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(FormField as any, {
-        props: {
+      renderFormField({
           type: 'text',
           name: 'username',
           onInput,
-        },
       });
 
       const input = screen.getByRole('textbox');
