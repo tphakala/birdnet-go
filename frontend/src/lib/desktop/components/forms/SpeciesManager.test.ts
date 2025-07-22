@@ -3,28 +3,28 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import SpeciesManager from './SpeciesManager.svelte';
 
+// Helper function to render SpeciesManager with proper typing
+const renderSpeciesManager = (props?: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(SpeciesManager as any, props ? { props } : undefined);
+};
+
 describe('SpeciesManager', () => {
   it('renders with default props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any);
+    renderSpeciesManager();
 
     const input = screen.getByPlaceholderText('Enter species name...');
     expect(input).toBeInTheDocument();
   });
 
   it('renders with label', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: { label: 'Select Species' },
-    });
+    renderSpeciesManager({ label: 'Select Species' });
 
     expect(screen.getByText('Select Species')).toBeInTheDocument();
   });
 
   it('renders with help text', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: { helpText: 'Choose from available species' },
+    renderSpeciesManager({ helpText: 'Choose from available species' },
     });
 
     expect(screen.getByText('Choose from available species')).toBeInTheDocument();
@@ -34,9 +34,7 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: { onChange },
+    renderSpeciesManager({ onChange },
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -49,11 +47,8 @@ describe('SpeciesManager', () => {
   });
 
   it('displays existing species', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin', 'Blue Jay', 'Cardinal'],
-      },
     });
 
     expect(screen.getByText('Robin')).toBeInTheDocument();
@@ -65,12 +60,9 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin'],
         onChange,
-      },
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -85,12 +77,9 @@ describe('SpeciesManager', () => {
   it('removes species', async () => {
     const onChange = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin', 'Blue Jay'],
         onChange,
-      },
     });
 
     const removeButtons = screen.getAllByLabelText('Remove species');
@@ -103,12 +92,9 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin'],
         onChange,
-      },
     });
 
     const editButton = screen.getByLabelText('Edit species');
@@ -126,12 +112,9 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin'],
         onChange,
-      },
     });
 
     const editButton = screen.getByLabelText('Edit species');
@@ -149,13 +132,10 @@ describe('SpeciesManager', () => {
   it('respects maxItems limit', async () => {
     const onChange = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin', 'Blue Jay'],
         maxItems: 2,
         onChange,
-      },
     });
 
     expect(screen.queryByPlaceholderText('Enter species name...')).not.toBeInTheDocument();
@@ -167,13 +147,10 @@ describe('SpeciesManager', () => {
     const onValidate = vi.fn().mockReturnValue(false);
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         allowedSpecies: ['Robin', 'Blue Jay'],
         onValidate,
         onChange,
-      },
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -188,11 +165,8 @@ describe('SpeciesManager', () => {
   it('shows predictions based on allowed species', async () => {
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         allowedSpecies: ['Robin', 'Blue Jay', 'Cardinal', 'Crow'],
-      },
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -209,12 +183,9 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         allowedSpecies: ['Robin', 'Blue Jay'],
         onChange,
-      },
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
@@ -230,12 +201,9 @@ describe('SpeciesManager', () => {
   });
 
   it('sorts species when sortable is true', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Cardinal', 'Blue Jay', 'Robin'],
         sortable: true,
-      },
     });
 
     const speciesElements = screen.getAllByText(/Blue Jay|Cardinal|Robin/);
@@ -245,12 +213,9 @@ describe('SpeciesManager', () => {
   });
 
   it('disables editing when editable is false', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: ['Robin'],
         editable: false,
-      },
     });
 
     expect(screen.queryByPlaceholderText('Enter species name...')).not.toBeInTheDocument();
@@ -259,12 +224,9 @@ describe('SpeciesManager', () => {
   });
 
   it('shows empty state when not editable and no species', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SpeciesManager as any, {
-      props: {
+    renderSpeciesManager({
         species: [],
         editable: false,
-      },
     });
 
     expect(screen.getByText('No species added')).toBeInTheDocument();

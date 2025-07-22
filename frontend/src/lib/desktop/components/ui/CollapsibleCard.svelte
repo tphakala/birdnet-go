@@ -21,12 +21,20 @@
   }: Props = $props();
 
   let isOpen = $state(defaultOpen);
+
+  function toggleOpen() {
+    isOpen = !isOpen;
+  }
 </script>
 
-<div class={cn('collapse collapse-open bg-base-100 shadow-xs', className)}>
-  <input type="checkbox" bind:checked={isOpen} class="min-h-0" />
-
-  <div class="collapse-title px-6 py-4 min-h-0">
+<div class={cn('collapse bg-base-100 shadow-xs', { 'collapse-open': isOpen }, className)}>
+  <button 
+    type="button"
+    class="collapse-title px-6 py-4 min-h-0 text-left w-full cursor-pointer hover:bg-base-200/50 transition-colors"
+    onclick={toggleOpen}
+    aria-expanded={isOpen}
+    aria-controls="collapse-content-{title.toLowerCase().replace(/\s+/g, '-')}"
+  >
     <div class="flex items-center gap-2">
       <h3 class="text-xl font-semibold">{title}</h3>
       {#if hasChanges}
@@ -34,13 +42,30 @@
           changed
         </span>
       {/if}
+      <!-- Collapse indicator -->
+      <svg
+        class="ml-auto w-4 h-4 transition-transform duration-200"
+        class:rotate-180={isOpen}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
     </div>
     {#if description}
       <p class="text-sm text-base-content/70 mt-1">{description}</p>
     {/if}
-  </div>
+  </button>
 
-  <div class="collapse-content px-6 pb-6">
+  <div 
+    class="collapse-content px-6 pb-6"
+    id="collapse-content-{title.toLowerCase().replace(/\s+/g, '-')}"
+  >
     {#if children}
       {@render children()}
     {/if}

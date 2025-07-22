@@ -3,12 +3,15 @@ import { render, screen } from '@testing-library/svelte';
 import Card from './Card.svelte';
 import CardTestWrapper from './Card.test.svelte';
 
+// Helper function to render Card with proper typing
+const renderCard = (props?: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(Card as any, props ? { props } : { props: {} });
+};
+
 describe('Card', () => {
   it('renders with default props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(Card as any, {
-      props: {},
-    });
+    const { container } = renderCard();
 
     const card = container.querySelector('.card');
     expect(card).toBeInTheDocument();
@@ -16,19 +19,14 @@ describe('Card', () => {
   });
 
   it('renders with title', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Card as any, {
-      props: { title: 'Test Card' },
-    });
+    renderCard({ title: 'Test Card' });
 
     expect(screen.getByText('Test Card')).toBeInTheDocument();
     expect(screen.getByText('Test Card')).toHaveClass('card-title');
   });
 
   it('renders with custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(Card as any, {
-      props: { className: 'custom-class' },
+    const { container } = renderCard({ className: 'custom-class' },
     });
 
     const card = container.querySelector('.card');
@@ -36,9 +34,7 @@ describe('Card', () => {
   });
 
   it('renders without padding when padding is false', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(Card as any, {
-      props: { padding: false },
+    const { container } = renderCard({ padding: false },
     });
 
     const cardBody = container.querySelector('.card-body');
@@ -52,7 +48,6 @@ describe('Card', () => {
         title: 'Card Title',
         showHeader: true,
         showFooter: true,
-      },
     });
 
     expect(screen.getByText('Custom Header')).toBeInTheDocument();
@@ -67,7 +62,6 @@ describe('Card', () => {
         title: 'Title Prop',
         showHeader: true,
         showFooter: false,
-      },
     });
 
     expect(screen.getByText('Custom Header')).toBeInTheDocument();
