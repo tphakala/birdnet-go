@@ -15,6 +15,8 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import { alertIcons } from '$lib/utils/icons';
+
   interface Props {
     confidence: number;
     size?: 'sm' | 'md' | 'lg';
@@ -69,8 +71,7 @@
   <div class="confidence-circle-text">
     {#if isMaxConfidence}
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"
-        ></path>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d={alertIcons.check}></path>
       </svg>
     {:else}
       {confidencePercent()}%
