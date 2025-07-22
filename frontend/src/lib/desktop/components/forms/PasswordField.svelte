@@ -2,7 +2,7 @@
   import FormField from './FormField.svelte';
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { alertIcons, systemIcons } from '$lib/utils/icons';
+  import { alertIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -172,14 +172,7 @@
             {#each passwordStrength.feedback as suggestion}
               <li class="flex items-center gap-1">
                 <div class="h-3 w-3 flex-shrink-0">
-                  <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d={alertIcons.warning}
-                    />
-                  </svg>
+                  {@html alertIconsSvg.warningSmall}
                 </div>
                 {suggestion}
               </li>
