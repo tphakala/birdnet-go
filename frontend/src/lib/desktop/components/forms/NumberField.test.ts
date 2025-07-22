@@ -376,6 +376,6 @@ describe('NumberField', () => {
     // Test infinity - should not call onUpdate
     await fireEvent.input(input, { target: { value: 'Infinity' } });
 
-    expect(onUpdate).not.toHaveBeenCalledWith(Infinity);
+    expect(onUpdate).not.toHaveBeenCalledWith(Number.POSITIVE_INFINITY);
   });
 });

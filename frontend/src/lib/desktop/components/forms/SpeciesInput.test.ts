@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import SpeciesInput from './SpeciesInput.svelte';
 
 const defaultPredictions = ['American Robin', 'Blue Jay', 'Northern Cardinal', 'House Sparrow'];

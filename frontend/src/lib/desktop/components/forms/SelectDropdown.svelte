@@ -52,6 +52,9 @@
     renderSelected,
   }: Props = $props();
 
+  // Generate unique field ID
+  let fieldId = `select-dropdown-${Math.random().toString(36).substring(2, 11)}`;
+
   // Initialize value based on multiple prop and handle type changes
   $effect(() => {
     if (value === undefined) {
@@ -271,7 +274,7 @@
 
 <div class={cn('select-dropdown', className)}>
   {#if label}
-    <label class="label">
+    <label class="label" for={fieldId}>
       <span class="label-text">
         {label}
         {#if required}
@@ -284,6 +287,7 @@
   <div class="relative">
     <button
       bind:this={buttonElement}
+      id={fieldId}
       type="button"
       class={cn(
         'btn btn-block justify-between',
@@ -365,6 +369,7 @@
             <div class="p-4 text-center text-base-content/60">No options found</div>
           {:else}
             {@const flatOptions = filteredOptions()}
+            {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
             {#each Object.entries(groupedOptions()) as [group, groupOptions]}
               {#if group && groupBy}
                 <div class="px-3 py-2 text-xs font-semibold text-base-content/60 uppercase">
@@ -373,7 +378,7 @@
               {/if}
 
               {#each groupOptions as option}
-                {@const flatIndex = flatOptions.findIndex(opt => opt === option)}
+                {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"
                   class={cn(

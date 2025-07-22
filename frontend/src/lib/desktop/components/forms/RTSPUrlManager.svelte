@@ -131,6 +131,13 @@
     errors = newErrors;
   }
 
+  function updateUrl(id: string, field: keyof RTSPUrl, value: RTSPUrl[keyof RTSPUrl]) {
+    const updated = urls.map(url => 
+      url.id === id ? { ...url, [field]: value } : url
+    );
+    onUpdate(updated);
+  }
+
   // Reactive validation for URLs - runs when urls change due to two-way binding
   $effect(() => {
     const newErrors = { ...errors };

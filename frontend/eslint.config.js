@@ -160,18 +160,10 @@ export default [
     files: ['src/test/**/*.js', '*.config.js', 'test-*.js', 'debug-*.js'],
     languageOptions: {
       globals: {
-        // Node.js globals
+        // Include browser globals and add Node.js specific globals
+        ...browserGlobals,
         global: 'readonly',
         process: 'readonly',
-        setTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearTimeout: 'readonly',
-        clearInterval: 'readonly',
-        localStorage: 'readonly',
-        sessionStorage: 'readonly',
-        URL: 'readonly',
-        Blob: 'readonly',
-        getComputedStyle: 'readonly',
         performance: 'readonly',
         Buffer: 'readonly',
         __dirname: 'readonly',
