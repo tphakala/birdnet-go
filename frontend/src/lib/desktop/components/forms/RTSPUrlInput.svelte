@@ -11,11 +11,21 @@
 
   let newUrl = $state('');
 
+  function isValidRtspUrl(url: string): boolean {
+    // RTSP URL validation regex pattern
+    const rtspPattern = /^rtsp:\/\/(?:(?:[a-zA-Z0-9-._~!$&'()*+,;=:]|%[0-9A-Fa-f]{2})*@)?(?:\[(?:[0-9a-fA-F:.]+)\]|(?:[0-9]{1,3}\.){3}[0-9]{1,3}|(?:[a-zA-Z0-9-._~!$&'()*+,;=]|%[0-9A-Fa-f]{2})+)(?::[0-9]+)?(?:\/(?:[a-zA-Z0-9-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[a-zA-Z0-9-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(?:#(?:[a-zA-Z0-9-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?$/i;
+    return rtspPattern.test(url);
+  }
+
   function addUrl() {
-    if (newUrl.trim()) {
-      const updatedUrls = [...urls, { url: newUrl.trim(), enabled: true }];
+    const trimmedUrl = newUrl.trim();
+    if (trimmedUrl && isValidRtspUrl(trimmedUrl)) {
+      const updatedUrls = [...urls, { url: trimmedUrl, enabled: true }];
       onUpdate(updatedUrls);
       newUrl = '';
+    } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
+      // URL is not empty but invalid - could add user feedback here
+      console.warn('Invalid RTSP URL format:', trimmedUrl);
     }
   }
 
@@ -53,6 +63,7 @@
         type="button"
         onclick={() => removeUrl(index)}
         class="btn btn-error btn-xs"
+        aria-label="Remove URL {index + 1}"
         {disabled}
       >
         Remove

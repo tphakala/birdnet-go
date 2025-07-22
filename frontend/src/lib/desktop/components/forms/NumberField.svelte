@@ -34,8 +34,37 @@
   }: Props = $props();
 
   function handleChange(newValue: string | number | boolean | string[]) {
-    const numValue = typeof newValue === 'number' ? newValue : parseFloat(String(newValue));
-    if (!isNaN(numValue)) {
+    // Explicitly handle different input types
+    if (Array.isArray(newValue)) {
+      return; // Arrays are not valid for number fields
+    }
+    
+    if (typeof newValue === 'boolean') {
+      return; // Booleans are not valid for number fields
+    }
+
+    // Convert to number with robust validation
+    let numValue: number;
+    if (typeof newValue === 'number') {
+      numValue = newValue;
+    } else {
+      const stringValue = String(newValue).trim();
+      if (stringValue === '' || stringValue === null || stringValue === undefined) {
+        return; // Empty values should not update state
+      }
+      numValue = parseFloat(stringValue);
+    }
+
+    // Validate the parsed number and ensure it's within bounds if specified
+    if (!isNaN(numValue) && isFinite(numValue)) {
+      // Check min/max constraints if specified
+      if (min !== undefined && numValue < min) {
+        return; // Don't update if below minimum
+      }
+      if (max !== undefined && numValue > max) {
+        return; // Don't update if above maximum
+      }
+      
       value = numValue;
       onUpdate(numValue);
     }
@@ -45,7 +74,7 @@
 <div class={className} {...rest}>
   <FormField
     type="number"
-    name={label.toLowerCase().replace(/\s+/g, '-')}
+    name={label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '')}
     {label}
     bind:value
     {min}

@@ -78,7 +78,7 @@ describe('RTSPUrlInput', () => {
     const input = screen.getByPlaceholderText(/Enter RTSP URL/);
 
     await fireEvent.input(input, { target: { value: 'rtsp://new.example.com/stream' } });
-    await fireEvent.keyPress(input, { key: 'Enter', code: 'Enter' });
+    await fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
     expect(onUpdate).toHaveBeenCalledWith([
       { url: 'rtsp://new.example.com/stream', enabled: true },
@@ -212,7 +212,7 @@ describe('RTSPUrlInput', () => {
     render(RTSPUrlInput, {
       props: {
         urls: [],
-        onUpdate: vi.fn(),
+        onUpdate,
       },
     });
 
