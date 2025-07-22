@@ -14,6 +14,11 @@
     settingsActions,
     integrationSettings,
     realtimeSettings,
+    type SettingsFormData,
+    type BirdWeatherSettings,
+    type MQTTSettings,
+    type WeatherSettings,
+    type ObservabilitySettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
@@ -67,32 +72,33 @@
 
   let store = $derived($settingsStore);
 
-  // Track changes for each section separately
+  // Track changes for each section separately using proper typing
   let birdweatherHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.integration?.birdweather,
-      (store.formData as any)?.integration?.birdweather
+      (store.originalData as SettingsFormData)?.realtime?.birdweather,
+      (store.formData as SettingsFormData)?.realtime?.birdweather
     )
   );
 
   let mqttHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.integration?.mqtt,
-      (store.formData as any)?.integration?.mqtt
+      (store.originalData as SettingsFormData)?.realtime?.mqtt,
+      (store.formData as SettingsFormData)?.realtime?.mqtt
     )
   );
 
   let observabilityHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.integration?.observability,
-      (store.formData as any)?.integration?.observability
+      // Observability is actually derived from telemetry in the store
+      (store.originalData as SettingsFormData)?.realtime?.telemetry,
+      (store.formData as SettingsFormData)?.realtime?.telemetry
     )
   );
 
   let weatherHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.integration?.weather,
-      (store.formData as any)?.integration?.weather
+      (store.originalData as SettingsFormData)?.realtime?.weather,
+      (store.formData as SettingsFormData)?.realtime?.weather
     )
   );
 
@@ -188,7 +194,7 @@
 
   function updateMQTTRetain(retain: boolean) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...(settings.mqtt as any), retain },
+      mqtt: { ...(settings.mqtt as MQTTSettings), retain },
     });
   }
 
@@ -214,7 +220,7 @@
   // Weather update handlers
   function updateWeatherProvider(provider: string) {
     settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, provider: provider as any },
+      weather: { ...settings.weather!, provider: provider as 'none' | 'yrno' | 'openweather' },
     });
   }
 
@@ -444,7 +450,7 @@
         topic: currentMqtt.topic || 'birdnet',
         username: currentMqtt.username || '',
         password: currentMqtt.password || '',
-        retain: (currentMqtt as any).retain || false,
+        retain: (currentMqtt as MQTTSettings).retain || false,
         tls: {
           insecureSkipVerify: currentMqtt.tls?.skipVerify || false,
           caCert: '',
@@ -921,10 +927,10 @@
               <h3 class="text-sm font-medium mb-3">Message Settings</h3>
 
               <Checkbox
-                bind:checked={(settings.mqtt as any).retain}
+                bind:checked={(settings.mqtt as MQTTSettings).retain}
                 label="Retain Messages"
                 disabled={store.isLoading || store.isSaving}
-                onchange={() => updateMQTTRetain((settings.mqtt as any).retain || false)}
+                onchange={() => updateMQTTRetain((settings.mqtt as MQTTSettings).retain || false)}
               />
 
               <!-- Note about MQTT Retain for HomeAssistant -->
@@ -1070,11 +1076,11 @@
         />
 
         <!-- Provider-specific notes -->
-        {#if (settings.weather?.provider as any) === 'none'}
+        {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
           <SettingsNote>
             <span>No weather data will be retrieved.</span>
           </SettingsNote>
-        {:else if (settings.weather?.provider as any) === 'yrno'}
+        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
           <SettingsNote>
             <p>
               Weather forecast data is provided by Yr.no, a joint service by the Norwegian
@@ -1089,7 +1095,7 @@
               >.
             </p>
           </SettingsNote>
-        {:else if (settings.weather?.provider as any) === 'openweather'}
+        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
           <SettingsNote>
             <span
               >Use of OpenWeather requires an API key, sign up for a free API key at <a
@@ -1123,7 +1129,7 @@
           </div>
         {/if}
 
-        {#if (settings.weather?.provider as any) !== 'none'}
+        {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
           <!-- Test Weather Provider -->
           <div class="space-y-4">
             <div class="flex items-center gap-3">
