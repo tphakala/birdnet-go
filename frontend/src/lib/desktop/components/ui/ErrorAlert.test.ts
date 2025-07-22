@@ -3,12 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 
+// Helper function to render ErrorAlert with proper typing
+const renderErrorAlert = (props: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return render(ErrorAlert as any, { props });
+};
+
 describe('ErrorAlert', () => {
   it('renders with default props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ErrorAlert as any, {
-      props: { message: 'An error occurred' },
-    });
+    renderErrorAlert({ message: 'An error occurred' });
 
     const alert = screen.getByRole('alert');
     expect(alert).toBeInTheDocument();
@@ -20,12 +23,9 @@ describe('ErrorAlert', () => {
     const types = ['error', 'warning', 'info', 'success'] as const;
 
     types.forEach(type => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { unmount } = render(ErrorAlert as any, {
-        props: {
+      const { unmount } = renderErrorAlert({
           message: `${type} message`,
           type,
-        },
       });
 
       const alert = screen.getByRole('alert');
@@ -48,9 +48,7 @@ describe('ErrorAlert', () => {
   });
 
   it('shows dismiss button when dismissible', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ErrorAlert as any, {
-      props: {
+    renderErrorAlert( {
         message: 'Dismissible alert',
         dismissible: true,
       },
@@ -63,9 +61,7 @@ describe('ErrorAlert', () => {
   it('calls onDismiss and hides alert when dismissed', async () => {
     const onDismiss = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ErrorAlert as any, {
-      props: {
+    renderErrorAlert( {
         message: 'Dismissible alert',
         dismissible: true,
         onDismiss,
@@ -80,9 +76,7 @@ describe('ErrorAlert', () => {
   });
 
   it('renders with custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ErrorAlert as any, {
-      props: {
+    renderErrorAlert( {
         message: 'Custom class alert',
         className: 'custom-alert-class',
       },
@@ -93,9 +87,7 @@ describe('ErrorAlert', () => {
   });
 
   it('spreads additional props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ErrorAlert as any, {
-      props: {
+    renderErrorAlert( {
         message: 'Alert with id',
         id: 'test-alert',
         'data-testid': 'error-alert',

@@ -218,14 +218,44 @@ describe('SelectField', () => {
   });
 
   it('renders with children snippet instead of options', () => {
-    const { component } = render(SelectField, {
+    // Test 1: Only children, no options
+    const { unmount } = render(SelectField, {
       props: {
         value: '',
+        label: 'Test Select',
       },
     });
 
-    // For now, just test that it doesn't throw with children
-    expect(component).toBeTruthy();
+    // Verify basic rendering without options
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.getByText('Test Select')).toBeInTheDocument();
+    unmount();
+
+    // Test 2: Both options and children provided - options should take precedence
+    render(SelectField, {
+      props: {
+        value: 'option1',
+        options: [
+          { value: 'option1', label: 'Option 1' },
+          { value: 'option2', label: 'Option 2' },
+        ],
+        label: 'Select with Both',
+      },
+    });
+
+    // Verify options are rendered correctly
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+    expect(screen.getByText('Select with Both')).toBeInTheDocument();
+    
+    // Check that options are present
+    const options = select.querySelectorAll('option');
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveTextContent('Option 1');
+    expect(options[1]).toHaveTextContent('Option 2');
+
+    // Verify selected value
+    expect(select).toHaveValue('option1');
   });
 
   it('handles empty options array', () => {
