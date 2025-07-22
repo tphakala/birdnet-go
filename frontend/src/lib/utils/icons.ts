@@ -41,6 +41,10 @@ export const mediaIcons = {
     <path d="M16 8a4 4 0 0 1 0 8" stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round"/>
     <path d="M19 5a8 8 0 0 1 0 14" stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round"/>
   </svg>`,
+  
+  videoCamera: `<svg class="h-12 w-12 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+  </svg>`,
 };
 
 /**
@@ -77,6 +81,10 @@ export const navigationIcons = {
 
   menu: `<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+  </svg>`,
+  
+  dragHandle: `<svg class="w-5 h-5 text-base-content/50 cursor-move" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
   </svg>`,
 };
 
@@ -185,6 +193,8 @@ export const dataIcons = {
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
   </svg>`,
   
+  skip: 'M8 7h8m-8 5h4m1 8l-5-5-5 5V5a2 2 0 012-2h11a2 2 0 012 2v15z',
+  
   folder: `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
   </svg>`,
@@ -192,6 +202,21 @@ export const dataIcons = {
   table: `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0V6a2 2 0 012-2h14a2 2 0 012 2v16a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
   </svg>`,
+  
+  inbox: `<svg class="h-16 w-16 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+  </svg>`,
+};
+
+/**
+ * Path-only icon definitions for components that render their own SVG wrappers
+ */
+export const iconPaths = {
+  completed: 'M5 13l4 4L19 7',
+  error: 'M6 18L18 6M6 6l12 12', 
+  inProgress: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  skipped: 'M8 7h8m-8 5h4m1 8l-5-5-5 5V5a2 2 0 012-2h11a2 2 0 012 2v15z',
+  info: 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 };
 
 /**

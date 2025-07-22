@@ -7,7 +7,7 @@
     formatSpeciesName,
     sortSpecies,
   } from '$lib/utils/speciesUtils';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { actionIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   interface Props {
     species?: string[];
@@ -279,19 +279,7 @@
           tabindex={editable && sortable ? 0 : undefined}
         >
           {#if editable && sortable}
-            <svg
-              class="w-5 h-5 text-base-content/50 cursor-move"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 8h16M4 16h16"
-              />
-            </svg>
+            {@html navigationIcons.dragHandle}
           {/if}
 
           <div class="flex-1">
@@ -318,14 +306,7 @@
                   class="btn btn-ghost btn-xs"
                   aria-label="Edit species"
                 >
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                  </svg>
+                  {@html actionIcons.edit}
                 </button>
               {/if}
 
