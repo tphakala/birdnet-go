@@ -1,12 +1,12 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { tick } from 'svelte';
   import {
     filterSpeciesForAutocomplete,
     validateSpecies,
     formatSpeciesName,
     sortSpecies,
   } from '$lib/utils/speciesUtils';
-  // import type { Snippet } from 'svelte'; // Not used in this component
 
   interface Props {
     species?: string[];
@@ -43,8 +43,9 @@
   let editingValue = $state('');
   let draggedIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
-  let inputId = `species-input-${Math.random().toString(36).substr(2, 9)}`;
-  let listId = `species-list-${Math.random().toString(36).substr(2, 9)}`;
+  // Generate unique IDs for accessibility - use crypto.randomUUID() with fallback
+  let inputId = `species-input-${crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)}`;
+  let listId = `species-list-${crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)}`;
 
   // Derived
   let canAddMore = $derived(!maxItems || species.length < maxItems);
@@ -113,13 +114,13 @@
   // Focus edit input when editing starts
   $effect(() => {
     if (editingIndex !== null) {
-      // Use nextTick to ensure DOM is updated
-      setTimeout(() => {
+      // Use tick() to ensure DOM is updated before focusing
+      tick().then(() => {
         const editInput = document.querySelector(
           `[data-edit-index="${editingIndex}"]`
         ) as HTMLInputElement;
         editInput?.focus();
-      }, 0);
+      });
     }
   });
 
@@ -318,9 +319,9 @@
                 >
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
                       d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                     />
                   </svg>
@@ -335,9 +336,9 @@
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
                     d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>

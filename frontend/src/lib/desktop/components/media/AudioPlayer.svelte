@@ -49,14 +49,11 @@
   // Audio and UI elements
   let audioElement: HTMLAudioElement;
   let playerContainer: HTMLDivElement;
-  // @ts-ignore - Used with bind:this
   let playPauseButton: HTMLButtonElement;
   let progressBar: HTMLDivElement;
   // svelte-ignore non_reactive_update
-  // @ts-ignore - Used with bind:this
   let volumeControl: HTMLDivElement;
   // svelte-ignore non_reactive_update
-  // @ts-ignore - Used with bind:this
   let filterControl: HTMLDivElement;
   // svelte-ignore non_reactive_update
   let volumeSlider: HTMLDivElement;
@@ -67,6 +64,8 @@
   let isPlaying = $state(false);
   let currentTime = $state(0);
   let duration = $state(0);
+  let audioContextAvailable = $state(true);
+  let audioContextError = $state<string | null>(null);
   let progress = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -119,9 +118,13 @@
         await audioContext.resume();
       }
 
+      audioContextAvailable = true;
+      audioContextError = null;
       return audioContext;
     } catch (e) {
       console.warn('Web Audio API is not supported in this browser');
+      audioContextAvailable = false;
+      audioContextError = 'Advanced audio features (volume control, filtering) are not available in this browser.';
       return null;
     }
   };
@@ -402,11 +405,17 @@
     >
       <button
         class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+        class:cursor-not-allowed={!audioContextAvailable}
+        class:opacity-50={!audioContextAvailable}
+        disabled={!audioContextAvailable}
         onclick={() => {
-          showVolumeSlider = !showVolumeSlider;
-          if (showVolumeSlider) showFilterSlider = false;
+          if (audioContextAvailable) {
+            showVolumeSlider = !showVolumeSlider;
+            if (showVolumeSlider) showFilterSlider = false;
+          }
         }}
         aria-label="Volume control"
+        title={!audioContextAvailable ? audioContextError || 'Volume control unavailable' : 'Volume control'}
       >
         {@html volumeIcon}
         <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
@@ -453,11 +462,17 @@
     >
       <button
         class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+        class:cursor-not-allowed={!audioContextAvailable}
+        class:opacity-50={!audioContextAvailable}
+        disabled={!audioContextAvailable}
         onclick={() => {
-          showFilterSlider = !showFilterSlider;
-          if (showFilterSlider) showVolumeSlider = false;
+          if (audioContextAvailable) {
+            showFilterSlider = !showFilterSlider;
+            if (showFilterSlider) showVolumeSlider = false;
+          }
         }}
         aria-label="Filter control"
+        title={!audioContextAvailable ? audioContextError || 'Filter control unavailable' : 'Filter control'}
       >
         <span class="text-xs text-white">HP: {Math.round(filterFreq)} Hz</span>
       </button>

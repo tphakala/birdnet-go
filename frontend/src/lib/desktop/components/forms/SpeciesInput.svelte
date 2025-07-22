@@ -165,7 +165,8 @@
     onPredictionSelect?.(prediction);
     showPredictions = false;
 
-    // Trigger add immediately after selection
+    // Defer handleAdd to next event loop to ensure state updates (showPredictions = false) 
+    // have propagated before triggering add operation
     setTimeout(() => {
       handleAdd();
     }, 0);
@@ -198,24 +199,26 @@
     }
   }
 
-  // Close predictions when clicking outside
-  function handleDocumentClick(event: MouseEvent) {
+  // Close predictions when clicking/touching outside
+  function handleDocumentClick(event: MouseEvent | TouchEvent) {
     const target = event.target as globalThis.Element;
     if (!target.closest('.form-control')) {
       showPredictions = false;
     }
   }
 
-  // Add document click listener
+  // Add document click and touch listeners for mobile support
   $effect(() => {
     document.addEventListener('click', handleDocumentClick);
+    document.addEventListener('touchstart', handleDocumentClick);
     return () => {
       document.removeEventListener('click', handleDocumentClick);
+      document.removeEventListener('touchstart', handleDocumentClick);
     };
   });
 </script>
 
-<div class={cn('form-control relative', className)} {...rest}>
+<div class={cn('form-control relative species-input-container', className)} {...rest}>
   {#if label}
     <label class="label justify-start" for={id}>
       <span class="label-text capitalize">
@@ -304,7 +307,7 @@
     {#if showPredictions && filteredPredictions.length > 0}
       <div
         id="species-predictions-list"
-        class="absolute top-full left-0 right-0 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto min-w-0"
+        class="dropdown-menu bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto min-w-0"
         style:min-width="100%"
         role="listbox"
         aria-label="Species suggestions"
@@ -359,27 +362,21 @@
     outline-offset: -2px;
   }
 
-  /* Ensure the dropdown doesn't get cut off by parent containers */
-  :global(.form-control) {
-    overflow: visible !important;
+  /* Ensure the dropdown doesn't get cut off - use specific class instead of global overrides */
+  .species-input-container {
+    position: relative;
+    z-index: 50; /* Reasonable z-index instead of 9999 */
+  }
+  
+  .species-input-container .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 51;
   }
 
-  /* Force overflow visible on common parent containers */
-  :global(.collapse-content) {
-    overflow: visible !important;
-  }
-
-  :global(.collapse) {
-    overflow: visible !important;
-  }
-
-  :global(.card-body) {
-    overflow: visible !important;
-  }
-
-  /* Ensure dropdown appears above other content */
-  #species-predictions-list {
-    z-index: 9999;
+  /* Dropdown positioning handled by .dropdown-menu class above */
     /* Use viewport units to prevent cutoff on small screens */
     max-width: 100vw;
     box-shadow:
