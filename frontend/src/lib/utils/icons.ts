@@ -4,7 +4,7 @@
  * maintainability and reusability.
  */
 
-export type AlertIconType = 'error' | 'warning' | 'info' | 'success';
+export type AlertIconType = 'error' | 'warning' | 'info' | 'success' | 'check';
 
 /**
  * SVG path definitions for alert/notification icons.

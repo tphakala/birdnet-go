@@ -25,7 +25,7 @@ describe('DataTable', () => {
   ];
 
   // Helper function to render DataTable with necessary type casting
-  const renderDataTable = (props: any) => {
+  const renderDataTable = (props: Record<string, unknown>) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return render(DataTable as any, { props });
   };
@@ -117,6 +117,7 @@ describe('DataTable', () => {
         onSort,
         sortColumn: 'name',
         sortDirection: 'asc',
+      },
     });
 
     const nameHeader = screen.getByRole('button', { name: /Name/i });
@@ -175,6 +176,7 @@ describe('DataTable', () => {
       props: {
         columns: alignColumns,
         data: mockData,
+      },
     });
 
     const headers = container.querySelectorAll('th');
@@ -194,6 +196,7 @@ describe('DataTable', () => {
       props: {
         columns: columnsWithWidth,
         data: mockData,
+      },
     });
 
     const headers = container.querySelectorAll('th');
@@ -212,6 +215,7 @@ describe('DataTable', () => {
         compact: true,
         fullWidth: false,
         className: 'custom-table',
+      },
     });
 
     const table = container.querySelector('table');

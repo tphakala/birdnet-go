@@ -51,7 +51,7 @@
     pattern?: string;
     autocomplete?: HTMLInputElement['autocomplete'];
     // Radio button specific
-    radioValue?: string; // Value for radio button option (distinct from placeholder)
+    radioValue?: string; // Value for radio button option (required when type is radio)
     // Event handlers
     onChange?: (_value: string | number | boolean | string[]) => void;
     onBlur?: () => void;
@@ -316,24 +316,28 @@
       </label>
     {:else if type === 'radio'}
       <!-- Radio buttons would typically be used in a group, so this is a single radio option -->
-      <label class="label cursor-pointer justify-start gap-2">
-        <input
-          id={fieldId}
-          type="radio"
-          {name}
-          value={radioValue ?? placeholder}
-          checked={value === (radioValue ?? placeholder)}
-          {required}
-          {disabled}
-          {readonly}
-          class={cn('radio', error && 'radio-error', inputClassName)}
-          onchange={handleChange}
-          onblur={handleBlur}
-          onfocus={handleFocus}
-          {onkeydown}
-        />
-        <span class="label-text">{placeholder}</span>
-      </label>
+      {#if !radioValue}
+        <div class="text-error text-sm">radioValue prop is required for radio inputs</div>
+      {:else}
+        <label class="label cursor-pointer justify-start gap-2">
+          <input
+            id={fieldId}
+            type="radio"
+            {name}
+            value={radioValue}
+            checked={value === radioValue}
+            {required}
+            {disabled}
+            {readonly}
+            class={cn('radio', error && 'radio-error', inputClassName)}
+            onchange={handleChange}
+            onblur={handleBlur}
+            onfocus={handleFocus}
+            {onkeydown}
+          />
+          <span class="label-text">{label || placeholder}</span>
+        </label>
+      {/if}
     {:else if type === 'range'}
       <div class="w-full">
         <input

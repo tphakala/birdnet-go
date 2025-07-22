@@ -3,6 +3,7 @@
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
+  import type { BirdnetConfig } from './app.d.ts';
 
   // Dynamic imports for heavy pages - properly typed component references
   let Analytics = $state<Component | null>(null);
@@ -23,7 +24,7 @@
   let loadingComponent = $state<boolean>(false);
 
   // Get configuration from server
-  let config = $state<any>(null);
+  let config = $state<BirdnetConfig | null>(null);
   let securityEnabled = $state<boolean>(false);
   let accessAllowed = $state<boolean>(true);
   let version = $state<string>('Development Build');
@@ -142,44 +143,72 @@
           }
           break;
       }
+    } catch (error) {
+      console.error(`Failed to load component for route "${route}":`, error);
+      // Fall back to generic error page on component load failure
+      currentRoute = 'error-generic';
+      currentPage = 'error-generic';
+      pageTitle = 'Component Load Error';
+      // Try to load the generic error component if it hasn't been loaded yet
+      if (!GenericErrorPage) {
+        try {
+          const module = await import('./lib/desktop/views/GenericErrorPage.svelte');
+          GenericErrorPage = module.default;
+        } catch (fallbackError) {
+          console.error('Failed to load fallback error component:', fallbackError);
+        }
+      }
     } finally {
       loadingComponent = false;
     }
   }
 
+  // Helper function to safely find route configs
+  function findRouteConfig(route: string): RouteConfig | undefined {
+    return routeConfigs.find(r => r.route === route);
+  }
+
   // Route path to config mapping
-  const pathToRouteMap: Record<string, RouteConfig> = {
-    '/ui/': routeConfigs.find(r => r.route === 'dashboard')!,
-    '/ui': routeConfigs.find(r => r.route === 'dashboard')!,
-    '/ui/dashboard': routeConfigs.find(r => r.route === 'dashboard')!,
-    '/ui/notifications': routeConfigs.find(r => r.route === 'notifications')!,
-    '/ui/analytics/species': routeConfigs.find(r => r.route === 'species')!,
-    '/ui/analytics': routeConfigs.find(r => r.route === 'analytics')!,
-    '/ui/search': routeConfigs.find(r => r.route === 'search')!,
-    '/ui/detections': routeConfigs.find(r => r.route === 'detections')!,
-    '/ui/about': routeConfigs.find(r => r.route === 'about')!,
-    '/ui/system': routeConfigs.find(r => r.route === 'system')!,
-    '/ui/settings': routeConfigs.find(r => r.route === 'settings')!,
+  const pathToRouteMap: Record<string, RouteConfig | undefined> = {
+    '/ui/': findRouteConfig('dashboard'),
+    '/ui': findRouteConfig('dashboard'),
+    '/ui/dashboard': findRouteConfig('dashboard'),
+    '/ui/notifications': findRouteConfig('notifications'),
+    '/ui/analytics/species': findRouteConfig('species'),
+    '/ui/analytics': findRouteConfig('analytics'),
+    '/ui/search': findRouteConfig('search'),
+    '/ui/detections': findRouteConfig('detections'),
+    '/ui/about': findRouteConfig('about'),
+    '/ui/system': findRouteConfig('system'),
+    '/ui/settings': findRouteConfig('settings'),
   };
 
   function handleRouting(path: string): void {
     // Special handling for settings subpages
     if (path.startsWith('/ui/settings/')) {
-      const settingsConfig = routeConfigs.find(r => r.route === 'settings')!;
-      currentRoute = settingsConfig.route;
-      currentPage = settingsConfig.page;
-      pageTitle = settingsConfig.title;
+      const settingsConfig = findRouteConfig('settings');
+      if (settingsConfig) {
+        currentRoute = settingsConfig.route;
+        currentPage = settingsConfig.page;
+        pageTitle = settingsConfig.title;
 
-      // Update title based on specific settings page
-      for (const [subpath, title] of Object.entries(settingsSubpages)) {
-        if (path.includes(subpath)) {
-          pageTitle = title;
-          break;
+        // Update title based on specific settings page
+        for (const [subpath, title] of Object.entries(settingsSubpages)) {
+          if (path.includes(subpath)) {
+            pageTitle = title;
+            break;
+          }
         }
-      }
 
-      if (settingsConfig.component) {
-        loadComponent(settingsConfig.component);
+        if (settingsConfig.component) {
+          loadComponent(settingsConfig.component);
+        }
+      } else {
+        // Settings config not found, redirect to error page
+        currentRoute = 'error-404';
+        currentPage = 'error-404';
+        pageTitle = 'Settings Not Available';
+        loadComponent('error-404');
       }
       return;
     }
@@ -228,10 +257,10 @@
 
   onMount(() => {
     // Get server configuration
-    config = window.BIRDNET_CONFIG || {};
-    securityEnabled = config.security?.enabled || false;
-    accessAllowed = config.security?.accessAllowed || true;
-    version = config.version || 'Development Build';
+    config = window.BIRDNET_CONFIG || null;
+    securityEnabled = config?.security?.enabled || false;
+    accessAllowed = config?.security?.accessAllowed !== false; // Default to true unless explicitly false
+    version = config?.version || 'Development Build';
 
     // Determine current route from URL path
     const path = window.location.pathname;
@@ -249,7 +278,8 @@
   {#if loadingComponent}
     {@render loadingSpinner()}
   {:else if component}
-    {component()}
+    {@const Component = component}
+    <Component />
   {/if}
 {/snippet}
 

@@ -105,7 +105,7 @@
     onchange={handleChange}
   >
     {#if placeholder}
-      <option value="" disabled>{placeholder}</option>
+      <option value="" selected hidden>{placeholder}</option>
     {/if}
 
     {#if children}

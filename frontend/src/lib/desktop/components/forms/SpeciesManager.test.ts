@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import SpeciesManager from './SpeciesManager.svelte';
 
 // Helper function to render SpeciesManager with proper typing
-const renderSpeciesManager = (props?: any) => {
+const renderSpeciesManager = (props?: Record<string, unknown>) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(SpeciesManager as any, props ? { props } : undefined);
 };
@@ -24,8 +24,7 @@ describe('SpeciesManager', () => {
   });
 
   it('renders with help text', () => {
-    renderSpeciesManager({ helpText: 'Choose from available species' },
-    });
+    renderSpeciesManager({ helpText: 'Choose from available species' });
 
     expect(screen.getByText('Choose from available species')).toBeInTheDocument();
   });
@@ -34,8 +33,7 @@ describe('SpeciesManager', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
-    renderSpeciesManager({ onChange },
-    });
+    renderSpeciesManager({ onChange });
 
     const input = screen.getByPlaceholderText('Enter species name...');
 

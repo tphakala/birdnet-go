@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import DateRangePicker from './DateRangePicker.svelte';
 
 // Test helper to avoid TypeScript casting repetition
-function renderDateRangePicker(props: Record<string, any> = {}) {
+function renderDateRangePicker(props: Record<string, unknown> = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(DateRangePicker as any, { props });
 }
@@ -80,7 +80,6 @@ describe('DateRangePicker', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderDateRangePicker({
         startDate: new Date('2024-01-10'),
-      },
     });
 
     const endInput = screen.getByLabelText('End Date');
@@ -99,7 +98,6 @@ describe('DateRangePicker', () => {
     renderDateRangePicker({
         minDate: new Date('2024-01-01'),
         maxDate: new Date('2024-12-31'),
-      },
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -143,7 +141,7 @@ describe('DateRangePicker', () => {
       const onChange = vi.fn();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      renderDateRangePicker(, {
+      renderDateRangePicker({
         onChange,
       });
 
@@ -179,7 +177,7 @@ describe('DateRangePicker', () => {
       ];
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      renderDateRangePicker(, {
+      renderDateRangePicker({
         presets: customPresets,
       });
 
@@ -189,7 +187,7 @@ describe('DateRangePicker', () => {
 
     it('hides presets when showPresets is false', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      renderDateRangePicker(, {
+      renderDateRangePicker({
         showPresets: false,
       });
 
@@ -203,7 +201,6 @@ describe('DateRangePicker', () => {
     renderDateRangePicker({
         startDate: new Date('2024-01-01'),
         endDate: new Date('2024-01-31'),
-      },
     });
 
     expect(screen.getByText('Clear')).toBeInTheDocument();
@@ -217,7 +214,6 @@ describe('DateRangePicker', () => {
         startDate: new Date('2024-01-01'),
         endDate: new Date('2024-01-31'),
         onChange,
-      },
     });
 
     await fireEvent.click(screen.getByText('Clear'));
@@ -233,7 +229,6 @@ describe('DateRangePicker', () => {
     renderDateRangePicker({
         startDate: new Date('2024-01-01'),
         endDate: new Date('2024-01-31'),
-      },
     });
 
     expect(screen.getByText(/Selected:/)).toBeInTheDocument();
@@ -241,8 +236,7 @@ describe('DateRangePicker', () => {
 
   it('disables inputs when disabled prop is true', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    renderDateRangePicker({ disabled: true },
-    });
+    renderDateRangePicker({ disabled: true });
 
     expect(screen.getByLabelText('Start Date')).toBeDisabled();
     expect(screen.getByLabelText('End Date')).toBeDisabled();
@@ -251,8 +245,7 @@ describe('DateRangePicker', () => {
 
   it('marks fields as required when required prop is true', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    renderDateRangePicker({ required: true },
-    });
+    renderDateRangePicker({ required: true });
 
     const startInput = screen.getByLabelText('Start Date *');
     const endInput = screen.getByLabelText('End Date *');
@@ -267,8 +260,7 @@ describe('DateRangePicker', () => {
     const user = userEvent.setup({ delay: null });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    renderDateRangePicker({ onStartChange, onEndChange },
-    });
+    renderDateRangePicker({ onStartChange, onEndChange });
 
     const startInput = screen.getByLabelText('Start Date');
     const endInput = screen.getByLabelText('End Date');
@@ -282,8 +274,7 @@ describe('DateRangePicker', () => {
 
   it('applies custom className', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    renderDateRangePicker({ className: 'custom-date-picker' },
-    });
+    renderDateRangePicker({ className: 'custom-date-picker' });
 
     expect(document.querySelector('.date-range-picker.custom-date-picker')).toBeInTheDocument();
   });
