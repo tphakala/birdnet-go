@@ -2,7 +2,7 @@
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { alertIcons } from '$lib/utils/icons';
+  import { alertIcons, navigationIcons } from '$lib/utils/icons';
 
   interface Props {
     isOpen: boolean;
@@ -140,16 +140,9 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d={alertIcons.success} />
               </svg>
             {:else if detection.review?.verified === 'false_positive'}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                class="w-3 h-3"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <div class="w-3 h-3">
+                {@html navigationIcons.close}
+              </div>
             {/if}
             {getStatusText(detection.review?.verified)}
           </span>
