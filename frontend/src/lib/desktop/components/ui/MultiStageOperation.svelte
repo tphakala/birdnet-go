@@ -1,11 +1,9 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Stage } from './MultiStageOperation.types';
-  // import type { Snippet } from 'svelte';
 
   interface Props {
     stages: Stage[];
-    currentStageId?: string | null;
     className?: string;
     showProgress?: boolean;
     variant?: 'default' | 'compact' | 'timeline';
@@ -14,8 +12,6 @@
 
   let {
     stages = [],
-    // eslint-disable-next-line no-unused-vars
-    currentStageId: _currentStageId = null,
     className = '',
     showProgress = true,
     variant = 'default',
@@ -23,11 +19,7 @@
   }: Props = $props();
 
   // Derived state
-  // let currentStageIndex = $derived(
-  //   currentStageId ? stages.findIndex(s => s.id === currentStageId) : -1
-  // );
-
-  let overallProgress = $derived(() => {
+  let overallProgress = $derived.by(() => {
     const completed = stages.filter(s => s.status === 'completed').length;
     const total = stages.filter(s => s.status !== 'skipped').length;
     return total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -88,12 +80,12 @@
     <div class="mb-6">
       <div class="flex justify-between text-sm mb-2">
         <span class="font-medium">Overall Progress</span>
-        <span class="text-base-content/70">{overallProgress()}%</span>
+        <span class="text-base-content/70">{overallProgress}%</span>
       </div>
       <div class="w-full bg-base-300 rounded-full h-2 overflow-hidden">
         <div
           class="bg-primary h-full transition-all duration-300 ease-out"
-          style:width="{overallProgress()}%"
+          style:width="{overallProgress}%"
         ></div>
       </div>
     </div>
