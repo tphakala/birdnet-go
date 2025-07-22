@@ -3,6 +3,9 @@
   import type { Validator, ValidationResult } from '$lib/utils/validators';
   import type { Snippet } from 'svelte';
 
+  // Module-level counter for consistent SSR-safe IDs
+  let fieldCounter = 0;
+
   type FieldType =
     | 'text'
     | 'email'
@@ -98,7 +101,7 @@
   // State
   let touched = $state(false);
   let error = $state<string | null>(externalError || null);
-  let fieldId = id || `field-${name || 'field'}-${Math.random().toString(36).substring(2, 11)}`;
+  let fieldId = id || `field-${name || 'field'}-${++fieldCounter}`;
 
   // Update error when external error changes
   $effect(() => {
@@ -173,9 +176,8 @@
     }
 
     // The value is already updated by bind:value
-    // Just call the callbacks
+    // Only call onInput callback, onChange is handled by bind:value
     onInput?.(newValue);
-    onChange?.(newValue);
   }
 
   function handleBlur() {
