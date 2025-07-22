@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/components/ui/SettingsSection.svelte';
+  import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
   let settings = $derived({
     audio: $audioSettings || {
@@ -631,18 +632,7 @@
           </div>
 
           <div class="alert alert-info mt-4">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              class="stroke-current shrink-0 w-6 h-6"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              ></path></svg
-            >
+            {@html alertIconsSvg.info}
             <div>
               <p class="font-semibold">Sound Level Data Output</p>
               <p class="text-sm">When enabled, sound level measurements are published via:</p>
