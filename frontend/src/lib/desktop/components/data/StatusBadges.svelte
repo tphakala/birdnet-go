@@ -36,26 +36,22 @@
 
   let { detection, className = '' }: Props = $props();
 
+  const statusBadgeClassMap: Record<string, string> = {
+    'correct': 'status-badge correct',
+    'false_positive': 'status-badge false',
+  };
+
+  const statusTextMap: Record<string, string> = {
+    'correct': 'correct',
+    'false_positive': 'false',
+  };
+
   function getStatusBadgeClass(verified: string): string {
-    switch (verified) {
-      case 'correct':
-        return 'status-badge correct';
-      case 'false_positive':
-        return 'status-badge false';
-      default:
-        return 'status-badge unverified';
-    }
+    return statusBadgeClassMap[verified] || 'status-badge unverified';
   }
 
   function getStatusText(verified: string): string {
-    switch (verified) {
-      case 'correct':
-        return 'correct';
-      case 'false_positive':
-        return 'false';
-      default:
-        return 'unverified';
-    }
+    return statusTextMap[verified] || 'unverified';
   }
 </script>
 

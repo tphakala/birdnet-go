@@ -1,9 +1,25 @@
 <script lang="ts">
   import WeatherInfo from './WeatherInfo.svelte';
 
+  interface WeatherData {
+    hourly?: {
+      temperature?: number;
+      weatherMain?: string;
+      windSpeed?: number;
+      humidity?: number;
+      pressure?: number;
+      clouds?: number;
+    };
+    daily?: {
+      temperatureMin?: number;
+      temperatureMax?: number;
+      weatherMain?: string;
+    };
+  }
+
   interface Props {
     detectionId?: string;
-    weatherData?: any;
+    weatherData?: WeatherData;
     compact?: boolean;
     showTitle?: boolean;
     autoFetch?: boolean;
@@ -11,7 +27,7 @@
     titleClassName?: string;
     gridClassName?: string;
     onError?: (error: Error) => void;
-    onLoad?: (data: any) => void;
+    onLoad?: (data: WeatherData) => void;
     useCustomContent?: boolean;
   }
 

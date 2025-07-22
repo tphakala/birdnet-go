@@ -23,16 +23,39 @@
 
   let { confidence, className = '' }: Props = $props();
 
-  // Handle both decimal (0-1) and percentage (0-100) formats
-  const confidencePercent = $derived(
-    confidence <= 1 ? Math.round(confidence * 100) : Math.round(confidence)
-  );
+  // Handle both decimal (0-1) and percentage (0-100) formats with validation
+  const confidencePercent = $derived(() => {
+    // Validate input is a number
+    if (typeof confidence !== 'number' || isNaN(confidence)) {
+      return 0;
+    }
+
+    // Determine if it's decimal (0-1) or percentage (0-100) format
+    const isDecimal = confidence <= 1;
+    const percent = isDecimal ? confidence * 100 : confidence;
+    
+    // Clamp to valid range (0-100)
+    const clampedPercent = Math.max(0, Math.min(100, percent));
+    
+    return Math.round(clampedPercent);
+  });
   const isMaxConfidence = $derived(confidencePercent === 100);
 
   function getConfidenceClass(confidence: number): string {
-    const percent = confidence <= 1 ? confidence * 100 : confidence;
-    if (percent >= 70) return 'confidence-high';
-    if (percent >= 40) return 'confidence-medium';
+    // Validate input is a number
+    if (typeof confidence !== 'number' || isNaN(confidence)) {
+      return 'confidence-low';
+    }
+
+    // Determine if it's decimal (0-1) or percentage (0-100) format
+    const isDecimal = confidence <= 1;
+    const percent = isDecimal ? confidence * 100 : confidence;
+    
+    // Clamp to valid range (0-100)
+    const clampedPercent = Math.max(0, Math.min(100, percent));
+
+    if (clampedPercent >= 70) return 'confidence-high';
+    if (clampedPercent >= 40) return 'confidence-medium';
     return 'confidence-low';
   }
 </script>
