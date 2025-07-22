@@ -39,7 +39,7 @@
 
     return Math.round(clampedPercent);
   });
-  const isMaxConfidence = $derived(confidencePercent === 100);
+  const isMaxConfidence = $derived(confidencePercent() === 100);
 
   function getConfidenceClass(confidence: number): string {
     // Validate input is a number
@@ -62,7 +62,7 @@
 
 <div
   class="confidence-circle {getConfidenceClass(confidence)} {className}"
-  style:--progress="{confidencePercent}%"
+  style:--progress="{confidencePercent()}%"
 >
   <div class="confidence-circle-track"></div>
   <div class="confidence-circle-progress"></div>
@@ -73,7 +73,7 @@
         ></path>
       </svg>
     {:else}
-      {confidencePercent}%
+      {confidencePercent()}%
     {/if}
   </div>
 </div>
