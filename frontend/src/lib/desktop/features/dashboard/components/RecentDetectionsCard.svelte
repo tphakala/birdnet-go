@@ -468,10 +468,12 @@
       background-color: hsl(var(--p) / 0.2);
       border-left: 4px solid hsl(var(--p));
     }
+
     50% {
       background-color: hsl(var(--p) / 0.15);
       border-left: 4px solid hsl(var(--p));
     }
+
     100% {
       transform: translateY(0);
       opacity: 1;

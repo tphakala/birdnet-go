@@ -234,6 +234,7 @@
           12 12,
         crosshair;
     }
+
     /* Custom binoculars cursor - white outline for dark theme */
     [data-theme='dark'] .cursor-binoculars {
       cursor:
@@ -241,11 +242,13 @@
           12 12,
         crosshair;
     }
+
     /* Touch device support */
     @media (hover: none) {
       .cursor-binoculars {
         cursor: default;
       }
+
       .game-bird::before {
         content: '👁';
         position: absolute;
@@ -261,38 +264,47 @@
       0% {
         transform: translate(0, 0) rotate(0deg);
       }
+
       25% {
         transform: translate(10px, -10px) rotate(5deg);
       }
+
       50% {
         transform: translate(0, -15px) rotate(0deg);
       }
+
       75% {
         transform: translate(-10px, -10px) rotate(-5deg);
       }
+
       100% {
         transform: translate(0, 0) rotate(0deg);
       }
     }
+
     @keyframes gentle-pulse {
       0%,
       100% {
         opacity: 1;
       }
+
       50% {
         opacity: 0.7;
       }
     }
+
     @keyframes feather-fall {
       0% {
         transform: translate(-50%, 0) rotate(0deg);
         opacity: 1;
       }
+
       100% {
         transform: translate(calc(-50% + 30px), 100px) rotate(45deg);
         opacity: 0;
       }
     }
+
     .bird {
       cursor: pointer;
       user-select: none;
@@ -300,11 +312,13 @@
       position: relative;
       display: inline-block;
     }
+
     .bird:hover {
       transform: scale(1.1);
       filter: brightness(1.2);
       animation: gentle-bounce 1s infinite;
     }
+
     .bird::after {
       content: '👀';
       position: absolute;
@@ -317,33 +331,40 @@
       pointer-events: none;
       white-space: nowrap;
     }
+
     .bird:hover::after {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
     @keyframes gentle-bounce {
       0%,
       100% {
         transform: translateY(0) scale(1.1);
       }
+
       50% {
         transform: translateY(-3px) scale(1.1);
       }
     }
+
     .bird.flying {
       animation: gentle-pulse 2s infinite;
       transform: scale(1.1);
     }
+
     .bird.caught {
       transform: scale(1.2);
       filter: brightness(1.2);
     }
+
     #game-container {
       position: fixed;
       inset: 0;
       pointer-events: none;
       z-index: 50;
     }
+
     .game-bird {
       position: absolute;
       font-size: 2rem;
@@ -353,10 +374,12 @@
       animation: fly 1s infinite;
       touch-action: manipulation;
     }
+
     .game-bird.spotted {
       animation: none;
       filter: brightness(1.2) sepia(0.3);
     }
+
     .score-display {
       position: fixed;
       top: 1rem;
@@ -372,48 +395,57 @@
       min-width: 200px;
       text-align: right;
     }
+
     .score-display.visible {
       opacity: 1;
     }
+
     .high-score {
       font-size: 0.875rem;
       opacity: 0.8;
     }
+
     .timer {
       font-size: 0.875rem;
       color: var(--fallback-p, oklch(var(--p) / 1));
     }
+
     /* Spotting effect */
     .spotting-ring {
       position: absolute;
-      border: 2px solid currentColor;
+      border: 2px solid currentcolor;
       border-radius: 50%;
       pointer-events: none;
       opacity: 0;
       transform: translate(-50%, -50%) scale(0.5);
       animation: spotting-ring 0.5s ease-out forwards;
     }
+
     @keyframes spotting-ring {
       0% {
         opacity: 1;
         width: 30px;
         height: 30px;
       }
+
       100% {
         opacity: 0;
         width: 60px;
         height: 60px;
       }
     }
+
     @media (hover: none) {
       .bird:hover {
         animation: none;
         transform: none;
       }
+
       .bird::after {
         display: none;
       }
     }
+
     .feather {
       position: absolute;
       left: 50%;
