@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { navigationIcons } from '$lib/utils/icons';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     title: string;
@@ -47,15 +48,9 @@
   >
     <div class="flex items-center justify-between">
       <span>{title}</span>
-      <svg
-        class={cn('h-5 w-5 transition-transform duration-200', isOpen ? 'rotate-180' : '')}
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        aria-hidden="true"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-      </svg>
+      <div class={cn('transition-transform duration-200', isOpen ? 'rotate-180' : '')}>
+        {@html navigationIcons.chevronDown}
+      </div>
     </div>
   </button>
   <div id="{title}-content" class={cn('collapse-content', contentClassName)} aria-hidden={!isOpen}>
