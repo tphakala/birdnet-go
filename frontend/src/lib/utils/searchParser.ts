@@ -515,7 +515,7 @@ export function getFilterSuggestions(partialInput: string): string[] {
 
   // Check if user is typing a filter
   if (partialInput.includes(':')) {
-    const [filterType, _filterValue] = partialInput.split(':', 2);
+    const [filterType] = partialInput.split(':', 2);
 
     switch (filterType.toLowerCase()) {
       case 'confidence':

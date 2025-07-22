@@ -22,6 +22,7 @@
   let currentPage = $state<string>('');
   let pageTitle = $state<string>('Dashboard');
   let loadingComponent = $state<boolean>(false);
+  let dynamicErrorCode = $state<string | null>(null);
 
   // Get configuration from server
   let config = $state<BirdnetConfig | null>(null);
@@ -149,6 +150,7 @@
       currentRoute = 'error-generic';
       currentPage = 'error-generic';
       pageTitle = 'Component Load Error';
+      dynamicErrorCode = '500';
       // Try to load the generic error component if it hasn't been loaded yet
       if (!GenericErrorPage) {
         try {
@@ -245,6 +247,7 @@
       currentRoute = 'error-generic';
       currentPage = 'error-generic';
       pageTitle = errorTitle || 'Error';
+      dynamicErrorCode = errorCode || '500';
       loadComponent('error-generic');
     } else {
       // Unknown route, default to 404
@@ -310,7 +313,7 @@
     {#if GenericErrorPage}
       {@const ErrorComponent = GenericErrorPage}
       <ErrorComponent
-        code="500"
+        code={dynamicErrorCode || "500"}
         title="Component Load Error"
         message="Failed to load the requested component"
       />
