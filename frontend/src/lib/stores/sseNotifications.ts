@@ -89,7 +89,7 @@ class SSENotificationManager {
       this.eventSource.addEventListener('heartbeat', (event: Event) => {
         try {
           const messageEvent = event as MessageEvent;
-          const _data = JSON.parse(messageEvent.data);
+          JSON.parse(messageEvent.data);
           // Heartbeat received successfully - could add connection health tracking here
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for heartbeat
