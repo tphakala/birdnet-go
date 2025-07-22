@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Stage } from './MultiStageOperation.types';
+  import { iconPaths } from '$lib/utils/icons';
 
   interface Props {
     stages: Stage[];
@@ -28,15 +29,15 @@
   function getStageIcon(status: Stage['status']): string {
     switch (status) {
       case 'completed':
-        return 'M5 13l4 4L19 7';
+        return iconPaths.completed;
       case 'error':
-        return 'M6 18L18 6M6 6l12 12';
+        return iconPaths.error;
       case 'in_progress':
-        return 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
+        return iconPaths.inProgress;
       case 'skipped':
-        return 'M8 7h8m-8 5h4m1 8l-5-5-5 5V5a2 2 0 012-2h11a2 2 0 012 2v15z';
+        return iconPaths.skipped;
       default:
-        return 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
+        return iconPaths.info;
     }
   }
 
