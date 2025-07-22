@@ -48,10 +48,9 @@ describe('ErrorAlert', () => {
   });
 
   it('shows dismiss button when dismissible', () => {
-    renderErrorAlert( {
-        message: 'Dismissible alert',
-        dismissible: true,
-      },
+    renderErrorAlert({
+      message: 'Dismissible alert',
+      dismissible: true,
     });
 
     const dismissButton = screen.getByLabelText('Dismiss alert');
@@ -61,11 +60,10 @@ describe('ErrorAlert', () => {
   it('calls onDismiss and hides alert when dismissed', async () => {
     const onDismiss = vi.fn();
 
-    renderErrorAlert( {
-        message: 'Dismissible alert',
-        dismissible: true,
-        onDismiss,
-      },
+    renderErrorAlert({
+      message: 'Dismissible alert',
+      dismissible: true,
+      onDismiss,
     });
 
     const dismissButton = screen.getByLabelText('Dismiss alert');
@@ -76,10 +74,9 @@ describe('ErrorAlert', () => {
   });
 
   it('renders with custom className', () => {
-    renderErrorAlert( {
-        message: 'Custom class alert',
-        className: 'custom-alert-class',
-      },
+    renderErrorAlert({
+      message: 'Custom class alert',
+      className: 'custom-alert-class',
     });
 
     const alert = screen.getByRole('alert');
@@ -87,11 +84,10 @@ describe('ErrorAlert', () => {
   });
 
   it('spreads additional props', () => {
-    renderErrorAlert( {
-        message: 'Alert with id',
-        id: 'test-alert',
-        'data-testid': 'error-alert',
-      },
+    renderErrorAlert({
+      message: 'Alert with id',
+      id: 'test-alert',
+      'data-testid': 'error-alert',
     });
 
     const alert = screen.getByRole('alert');

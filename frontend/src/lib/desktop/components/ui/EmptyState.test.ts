@@ -37,6 +37,7 @@ describe('EmptyState', () => {
     render(EmptyStateTestWrapper as any, {
       props: {
         showCustomIcon: true,
+      },
     });
 
     expect(screen.getByTestId('custom-icon')).toBeInTheDocument();
@@ -66,6 +67,7 @@ describe('EmptyState', () => {
     render(EmptyStateTestWrapper as any, {
       props: {
         showChildren: true,
+      },
     });
 
     expect(screen.getByText('Custom child content')).toBeInTheDocument();
@@ -73,9 +75,8 @@ describe('EmptyState', () => {
   });
 
   it('renders with custom className', () => {
-    const { container } = renderEmptyState(, {
-      props: {
-        className: 'custom-empty-state',
+    const { container } = renderEmptyState({
+      className: 'custom-empty-state',
     });
 
     const emptyState = container.querySelector('div');
@@ -96,6 +97,7 @@ describe('EmptyState', () => {
           label: 'Take action',
           onClick,
         },
+      },
     });
 
     expect(screen.getByTestId('custom-icon')).toBeInTheDocument();
@@ -106,10 +108,9 @@ describe('EmptyState', () => {
   });
 
   it('spreads additional props', () => {
-    const { container } = renderEmptyState(, {
-      props: {
-        id: 'test-empty-state',
-        'data-testid': 'empty-state',
+    const { container } = renderEmptyState({
+      id: 'test-empty-state',
+      'data-testid': 'empty-state',
     });
 
     const emptyState = container.querySelector('div');

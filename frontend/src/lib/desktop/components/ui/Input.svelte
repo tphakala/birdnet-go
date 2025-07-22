@@ -29,6 +29,8 @@
     min?: string | number;
     max?: string | number;
     step?: string | number;
+    pattern?: string;
+    maxlength?: number;
   }
 
   let {
@@ -44,6 +46,8 @@
     min,
     max,
     step,
+    pattern,
+    maxlength,
     ...rest
   }: Props = $props();
 </script>
@@ -60,6 +64,8 @@
   {min}
   {max}
   {step}
+  {pattern}
+  {maxlength}
   class={cn('input input-bordered w-full', className)}
   {...rest}
 />
