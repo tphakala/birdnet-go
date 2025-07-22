@@ -25,8 +25,8 @@ describe('EmptyState', () => {
 
   it('renders with title and description', () => {
     renderEmptyState({
-        title: 'No data found',
-        description: 'Try adjusting your search criteria',
+      title: 'No data found',
+      description: 'Try adjusting your search criteria',
     });
 
     expect(screen.getByText('No data found')).toBeInTheDocument();
@@ -48,11 +48,11 @@ describe('EmptyState', () => {
     const onClick = vi.fn();
 
     renderEmptyState({
-        title: 'No results',
-        action: {
-          label: 'Try again',
-          onClick,
-        },
+      title: 'No results',
+      action: {
+        label: 'Try again',
+        onClick,
+      },
     });
 
     const button = screen.getByText('Try again');

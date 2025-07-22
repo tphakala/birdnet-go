@@ -3,6 +3,7 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import { actionIcons, alertIconsSvg, dataIcons, mediaIcons, systemIcons, navigationIcons } from '$lib/utils/icons';
 
   // Type definitions
   interface DateRange {
@@ -387,19 +388,9 @@
             {#if isLoading}
               <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
             {:else}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5 mr-2"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
-                  clip-rule="evenodd"
-                ></path>
-              </svg>
+              <span class="mr-2" aria-hidden="true">
+                {@html actionIcons.search}
+              </span>
             {/if}
             Search
           </button>
@@ -429,17 +420,7 @@
                 aria-expanded="false"
                 aria-label="Sort results"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 mr-1"
-                  viewBox="0 0 20 20"
-                  aria-hidden="true"
-                  stroke="currentColor"
-                >
-                  <path
-                    d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z"
-                  />
-                </svg>
+                {@html actionIcons.sort}
                 Sort
               </div>
               <ul
@@ -484,21 +465,7 @@
       <!-- Error message -->
       {#if errorMessage}
         <div class="alert alert-error mt-4" role="alert">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-6 w-6 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          {@html alertIconsSvg.error}
           <span>{errorMessage}</span>
         </div>
       {/if}
@@ -509,21 +476,9 @@
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
           aria-labelledby="search-results-heading"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="w-16 h-16 text-base-content/30"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.5"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-            />
-          </svg>
+          <span class="text-base-content/30 text-[4rem]" aria-hidden="true">
+            {@html systemIcons.search}
+          </span>
           <p class="text-base-content/50 text-center mt-4">No search performed yet</p>
           <p class="text-base-content/50 text-center text-sm">
             Use the search filters above to find bird detections
@@ -668,42 +623,14 @@
                         aria-label="Play audio for {result.commonName || 'Unknown species'}"
                         aria-pressed="false"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-                          />
-                        </svg>
+                        {@html mediaIcons.music}
                       </button>
                       <button
                         class="btn btn-xs btn-square"
                         onclick={() => (window.location.href = `/api/v2/detections/${result.id}`)}
                         aria-label="View details for {result.commonName || 'Unknown species'}"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
+                        {@html systemIcons.eye}
                       </button>
                       <button
                         class="btn btn-xs btn-square expand-btn"
@@ -718,22 +645,13 @@
                         aria-expanded={isExpanded(result.id)}
                         aria-controls="expanded-row-{result.id}"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-4 w-4"
+                        <span
+                          class="transition-transform duration-200"
                           class:rotate-180={isExpanded(result.id)}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
                           aria-hidden="true"
                         >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
+                          {@html navigationIcons.chevronDown}
+                        </span>
                       </button>
                     </div>
                   </td>
@@ -818,21 +736,7 @@
         <div
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-10 w-10 text-base-content/30"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.5"
-              d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          {@html dataIcons.sadFace}
           <p class="mt-2 text-base-content/70">No results found</p>
           <p class="text-sm text-base-content/50">Try adjusting your search filters</p>
         </div>

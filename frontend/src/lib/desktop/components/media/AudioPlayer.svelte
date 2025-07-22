@@ -160,7 +160,8 @@
     } catch (e) {
       console.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
-      audioContextError = 'Advanced audio features (volume control, filtering) are not available in this browser.';
+      audioContextError =
+        'Advanced audio features (volume control, filtering) are not available in this browser.';
       return null;
     }
   };
@@ -327,24 +328,24 @@
         isPlaying = true;
         startInterval();
       });
-      
+
       addTrackedEventListener(audioElement, 'pause', () => {
         isPlaying = false;
         stopInterval();
       });
-      
+
       addTrackedEventListener(audioElement, 'ended', () => {
         isPlaying = false;
         stopInterval();
       });
-      
+
       addTrackedEventListener(audioElement, 'timeupdate', handleTimeUpdate);
       addTrackedEventListener(audioElement, 'loadedmetadata', handleLoadedMetadata);
-      
+
       addTrackedEventListener(audioElement, 'loadstart', () => {
         isLoading = true;
       });
-      
+
       addTrackedEventListener(audioElement, 'error', () => {
         error = 'Failed to load audio';
         isLoading = false;
@@ -362,7 +363,7 @@
     if (showVolumeSlider || showFilterSlider) {
       resetSliderTimeout();
     }
-    
+
     // Cleanup function for the effect
     return () => {
       clearSliderTimeout();
@@ -372,22 +373,22 @@
   onDestroy(() => {
     // Stop any running intervals
     stopInterval();
-    
+
     // Clear any pending timeouts
     clearSliderTimeout();
-    
+
     // Remove all tracked event listeners
     eventListeners.forEach(({ element, event, handler }) => {
       element.removeEventListener(event, handler);
     });
     eventListeners = [];
-    
+
     // Disconnect ResizeObserver
     if (resizeObserver) {
       resizeObserver.disconnect();
       resizeObserver = null;
     }
-    
+
     // Clean up Web Audio API resources
     if (audioNodes) {
       try {
@@ -401,7 +402,7 @@
       }
       audioNodes = null;
     }
-    
+
     // Close audio context
     if (audioContext) {
       try {
@@ -464,7 +465,9 @@
           }
         }}
         aria-label="Volume control"
-        title={!audioContextAvailable ? audioContextError || 'Volume control unavailable' : 'Volume control'}
+        title={!audioContextAvailable
+          ? audioContextError || 'Volume control unavailable'
+          : 'Volume control'}
       >
         {@html mediaIcons.volume}
         <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
@@ -521,7 +524,9 @@
           }
         }}
         aria-label="Filter control"
-        title={!audioContextAvailable ? audioContextError || 'Filter control unavailable' : 'Filter control'}
+        title={!audioContextAvailable
+          ? audioContextError || 'Filter control unavailable'
+          : 'Filter control'}
       >
         <span class="text-xs text-white">HP: {Math.round(filterFreq)} Hz</span>
       </button>

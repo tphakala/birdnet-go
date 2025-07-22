@@ -1,5 +1,4 @@
 <script>
-  import CollapsibleSection from '$lib/desktop/components/ui/CollapsibleSection.svelte';
   import Card from '$lib/desktop/components/ui/Card.svelte';
 
   // Settings data (version info)
@@ -49,11 +48,7 @@
   </div>
 
   <!-- Overview Section -->
-  <Card
-    title="Overview"
-    className="bg-base-100 shadow-sm"
-    contentClassName="prose max-w-none"
-  >
+  <Card title="Overview" className="bg-base-100 shadow-sm" contentClassName="prose max-w-none">
     <p>
       BirdNET-Go is a Go-based implementation for real-time bird sound detection and classification,
       built upon the foundation of the BirdNET project. This application provides a user-friendly
@@ -148,11 +143,7 @@
   </Card>
 
   <!-- Contributors Section -->
-  <Card
-    title="Contributors"
-    className="bg-base-100 shadow-sm"
-    contentClassName="prose max-w-none"
-  >
+  <Card title="Contributors" className="bg-base-100 shadow-sm" contentClassName="prose max-w-none">
     <p>
       BirdNET-Go has grown and improved thanks to the collaborative efforts of many individuals.
       Their contributions, ranging from code improvements to feature suggestions, have been

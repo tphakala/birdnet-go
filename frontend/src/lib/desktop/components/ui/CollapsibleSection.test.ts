@@ -14,7 +14,7 @@ const renderCollapsibleSection = (props?: Partial<ComponentProps<CollapsibleSect
 describe('CollapsibleSection', () => {
   it('renders with title', () => {
     renderCollapsibleSection({
-        title: 'Test Section',
+      title: 'Test Section',
     });
 
     expect(screen.getByText('Test Section')).toBeInTheDocument();
@@ -159,8 +159,8 @@ describe('CollapsibleSection', () => {
 
   it('applies custom titleClassName', () => {
     renderCollapsibleSection({
-        title: 'Test',
-        titleClassName: 'custom-title',
+      title: 'Test',
+      titleClassName: 'custom-title',
     });
 
     const button = screen.getByRole('button');

@@ -77,9 +77,8 @@ describe('DateRangePicker', () => {
   it('validates date range', async () => {
     const user = userEvent.setup({ delay: null });
 
-     
     renderDateRangePicker({
-        startDate: new Date('2024-01-10'),
+      startDate: new Date('2024-01-10'),
     });
 
     const endInput = screen.getByLabelText('End Date');
@@ -94,10 +93,9 @@ describe('DateRangePicker', () => {
   });
 
   it('enforces min and max dates', () => {
-     
     renderDateRangePicker({
-        minDate: new Date('2024-01-01'),
-        maxDate: new Date('2024-12-31'),
+      minDate: new Date('2024-01-01'),
+      maxDate: new Date('2024-12-31'),
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -112,7 +110,6 @@ describe('DateRangePicker', () => {
   it('updates end date min based on start date', async () => {
     const user = userEvent.setup({ delay: null });
 
-     
     renderDateRangePicker();
 
     const startInput = screen.getByLabelText('Start Date');
@@ -125,7 +122,6 @@ describe('DateRangePicker', () => {
 
   describe('Presets', () => {
     it('renders default presets', () => {
-       
       renderDateRangePicker();
 
       expect(screen.getByText('Today')).toBeInTheDocument();
@@ -140,7 +136,6 @@ describe('DateRangePicker', () => {
     it('applies preset when clicked', async () => {
       const onChange = vi.fn();
 
-       
       renderDateRangePicker({
         onChange,
       });
@@ -156,7 +151,6 @@ describe('DateRangePicker', () => {
     });
 
     it('highlights active preset', async () => {
-       
       renderDateRangePicker();
 
       await fireEvent.click(screen.getByText('Today'));
@@ -176,7 +170,6 @@ describe('DateRangePicker', () => {
         },
       ];
 
-       
       renderDateRangePicker({
         presets: customPresets,
       });
@@ -186,7 +179,6 @@ describe('DateRangePicker', () => {
     });
 
     it('hides presets when showPresets is false', () => {
-       
       renderDateRangePicker({
         showPresets: false,
       });
@@ -197,10 +189,9 @@ describe('DateRangePicker', () => {
   });
 
   it('shows clear button when dates are selected', async () => {
-     
     renderDateRangePicker({
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-01-31'),
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-01-31'),
     });
 
     expect(screen.getByText('Clear')).toBeInTheDocument();
@@ -209,11 +200,10 @@ describe('DateRangePicker', () => {
   it('clears dates when clear button is clicked', async () => {
     const onChange = vi.fn();
 
-     
     renderDateRangePicker({
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-01-31'),
-        onChange,
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-01-31'),
+      onChange,
     });
 
     await fireEvent.click(screen.getByText('Clear'));
@@ -225,17 +215,15 @@ describe('DateRangePicker', () => {
   });
 
   it('displays selected date range summary', () => {
-     
     renderDateRangePicker({
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-01-31'),
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-01-31'),
     });
 
     expect(screen.getByText(/Selected:/)).toBeInTheDocument();
   });
 
   it('disables inputs when disabled prop is true', () => {
-     
     renderDateRangePicker({ disabled: true });
 
     expect(screen.getByLabelText('Start Date')).toBeDisabled();
@@ -244,7 +232,6 @@ describe('DateRangePicker', () => {
   });
 
   it('marks fields as required when required prop is true', () => {
-     
     renderDateRangePicker({ required: true });
 
     const startInput = screen.getByLabelText('Start Date *');
@@ -259,7 +246,6 @@ describe('DateRangePicker', () => {
     const onEndChange = vi.fn();
     const user = userEvent.setup({ delay: null });
 
-     
     renderDateRangePicker({ onStartChange, onEndChange });
 
     const startInput = screen.getByLabelText('Start Date');
@@ -273,7 +259,6 @@ describe('DateRangePicker', () => {
   });
 
   it('applies custom className', () => {
-     
     renderDateRangePicker({ className: 'custom-date-picker' });
 
     expect(document.querySelector('.date-range-picker.custom-date-picker')).toBeInTheDocument();

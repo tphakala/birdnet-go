@@ -35,13 +35,7 @@
   });
 </script>
 
-<SettingsCard
-  {title}
-  {description}
-  {className}
-  hasChanges={sectionHasChanges()}
-  {...rest}
->
+<SettingsCard {title} {description} {className} hasChanges={sectionHasChanges()} {...rest}>
   {#if children}
     {@render children()}
   {/if}
