@@ -62,7 +62,7 @@
     // Snippet-based approach (for UI compatibility)
     children?: Snippet;
     id?: string;
-    error?: string;
+    error?: string | { key: string; params?: Record<string, unknown> };
   }
 
   let {
@@ -104,7 +104,7 @@
 
   // State
   let touched = $state(false);
-  let error = $state<string | null>(externalError || null);
+  let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(externalError || null);
   let fieldId = id || `field-${name || 'field'}-${++fieldCounter}`;
 
   // Update error when external error changes
@@ -133,13 +133,31 @@
     return null;
   }
   
+  // Helper function to check if a value is a translation key object
+  function isTranslationKey(value: unknown): value is { key: string; params?: Record<string, unknown> } {
+    return typeof value === 'object' && value !== null && 'key' in value && typeof (value as any).key === 'string';
+  }
+
   // Reactive error message that translates on locale change
   let displayError = $derived(() => {
     if (!error) return null;
-    // If error starts with a known translation namespace, translate it
-    if (typeof error === 'string' && error.startsWith('common.')) {
+    
+    // Check if error is a translation key object with optional parameters
+    if (isTranslationKey(error)) {
+      return t(error.key, error.params);
+    }
+    
+    // Legacy support: If error is a string that looks like a translation key
+    // Check for known translation key prefixes to avoid false positives
+    if (typeof error === 'string' && (
+      error.startsWith('common.') || 
+      error.startsWith('settings.') || 
+      error.startsWith('forms.') ||
+      error.startsWith('validation.')
+    )) {
       return t(error);
     }
+    
     // Otherwise return as-is (for custom validation messages)
     return error;
   });
