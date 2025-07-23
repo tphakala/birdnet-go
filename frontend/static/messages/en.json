@@ -801,6 +801,7 @@
     }
   },
   "auth": {
+    "login": "Login",
     "logout": "Logout",
     "openLoginModal": "Open login modal"
   },

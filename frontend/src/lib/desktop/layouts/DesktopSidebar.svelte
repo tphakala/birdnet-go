@@ -267,7 +267,7 @@
               aria-label={t('auth.openLoginModal')}
             >
               {@html systemIcons.login}
-              <span>Login</span>
+              <span>{t('auth.login')}</span>
             </button>
           {/if}
         {/if}
