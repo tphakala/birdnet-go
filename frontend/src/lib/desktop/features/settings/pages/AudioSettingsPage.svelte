@@ -159,20 +159,20 @@
   });
 
   // Export format options
-  const exportFormatOptions = [
-    { value: 'wav', label: 'WAV' },
-    { value: 'flac', label: 'FLAC' },
-    { value: 'aac', label: 'AAC' },
-    { value: 'opus', label: 'Opus' },
-    { value: 'mp3', label: 'MP3' },
-  ];
+  const exportFormatOptions = $derived([
+    { value: 'wav', label: t('settings.audio.formats.wav') },
+    { value: 'flac', label: t('settings.audio.formats.flac') },
+    { value: 'aac', label: t('settings.audio.formats.aac') },
+    { value: 'opus', label: t('settings.audio.formats.opus') },
+    { value: 'mp3', label: t('settings.audio.formats.mp3') },
+  ]);
 
   // Retention policy options
-  const retentionPolicyOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'age', label: 'Age' },
-    { value: 'usage', label: 'Usage' },
-  ];
+  const retentionPolicyOptions = $derived([
+    { value: 'none', label: t('settings.audio.audioClipRetention.policies.none') },
+    { value: 'age', label: t('settings.audio.audioClipRetention.policies.age') },
+    { value: 'usage', label: t('settings.audio.audioClipRetention.policies.usage') },
+  ]);
 
   // Check if ffmpeg is available
   let ffmpegAvailable = $state(true); // Assume true for now
@@ -340,25 +340,25 @@
   <div class="space-y-4">
     <!-- Audio Capture Section -->
     <SettingsSection
-      title="Audio Capture"
-      description="Set audio capture source, sound card or RTSP stream"
+      title={t('settings.audio.audioCapture.title')}
+      description={t('settings.audio.audioCapture.description')}
       defaultOpen={true}
       hasChanges={audioCaptureHasChanges}
     >
       <div class="space-y-6">
         <!-- Sound Card Source -->
         <div>
-          <h4 class="text-lg font-medium pb-2">Sound Card Source</h4>
+          <h4 class="text-lg font-medium pb-2">{t('settings.audio.audioCapture.soundCardSource')}</h4>
           <SelectField
             id="audio-source"
             bind:value={settings.audio.source}
-            label="Audio Source (requires application restart to take effect)"
-            placeholder="No sound card capture"
+            label={t('settings.audio.audioCapture.audioSourceLabel')}
+            placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
             disabled={store.isLoading || store.isSaving}
             onchange={updateAudioSource}
             options={[]}
           >
-            <option value="">No sound card capture</option>
+            <option value="">{t('settings.audio.audioCapture.noSoundCardCapture')}</option>
             {#each audioDevices as device}
               <option value={device.Name}>{device.Name}</option>
             {/each}
@@ -367,17 +367,17 @@
 
         <!-- RTSP Source -->
         <div>
-          <h4 class="text-lg font-medium pt-4 pb-2">RTSP Source</h4>
+          <h4 class="text-lg font-medium pt-4 pb-2">{t('settings.audio.audioCapture.rtspSource')}</h4>
 
           <!-- Transport Protocol -->
           <div class="mb-4">
             <SelectField
               id="rtsp-transport"
               bind:value={settings.rtsp.transport}
-              label="RTSP Transport Protocol"
+              label={t('settings.audio.audioCapture.rtspTransportLabel')}
               options={[
-                { value: 'tcp', label: 'TCP' },
-                { value: 'udp', label: 'UDP' },
+                { value: 'tcp', label: t('settings.audio.transport.tcp') },
+                { value: 'udp', label: t('settings.audio.transport.udp') },
               ]}
               disabled={store.isLoading || store.isSaving}
               onchange={value => updateRTSPTransport(value as 'tcp' | 'udp')}
@@ -387,7 +387,7 @@
           <!-- RTSP URLs -->
           <div class="form-control">
             <label class="label" for="rtsp-urls">
-              <span class="label-text">RTSP Stream URLs</span>
+              <span class="label-text">{t('settings.audio.audioCapture.rtspUrlsLabel')}</span>
             </label>
             <div id="rtsp-urls">
               <RTSPUrlInput
@@ -403,15 +403,15 @@
 
     <!-- Audio Filters Section -->
     <SettingsSection
-      title="Audio Filters"
-      description="Configure audio processing filters"
+      title={t('settings.audio.audioFilters.title')}
+      description={t('settings.audio.audioFilters.description')}
       defaultOpen={false}
       hasChanges={audioFiltersHasChanges}
     >
       <div class="space-y-4">
         <Checkbox
           bind:checked={settings.audio.equalizer.enabled}
-          label="Enable Audio Equalizer"
+          label={t('settings.audio.audioFilters.enableEqualizer')}
           disabled={store.isLoading || store.isSaving}
           onchange={() =>
             settingsActions.updateSection('realtime', {
@@ -434,7 +434,7 @@
                   <!-- Filter Type -->
                   <div class="flex flex-col">
                     <div class="label">
-                      <span class="label-text">Filter Type</span>
+                      <span class="label-text">{t('settings.audio.audioFilters.filterType')}</span>
                     </div>
                     <div class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300">
                       {filter.type} Filter
@@ -488,7 +488,7 @@
                       onclick={() => removeFilter(index)}
                       disabled={store.isLoading || store.isSaving}
                     >
-                      Remove
+                      {t('settings.audio.audioFilters.remove')}
                     </button>
                   </div>
                 </div>
@@ -513,12 +513,12 @@
                       getFilterDefaults(value);
                     }}
                     options={[]}
-                    placeholder="Select filter type"
+                    placeholder={t('settings.audio.audioFilters.selectFilterType')}
                     className="select-sm"
                     disabled={store.isLoading || store.isSaving}
-                    label="New Filter Type"
+                    label={t('settings.audio.audioFilters.newFilterType')}
                   >
-                    <option value="">Select filter type</option>
+                    <option value="">{t('settings.audio.audioFilters.selectFilterType')}</option>
                     {#each Object.keys(eqFilterConfig) as filterType}
                       <option value={filterType}>{filterType}</option>
                     {/each}
@@ -577,7 +577,7 @@
                     onclick={addNewFilter}
                     disabled={!newFilter.type || store.isLoading || store.isSaving}
                   >
-                    Add Filter
+                    {t('settings.audio.audioFilters.addFilter')}
                   </button>
                 </div>
               </div>
@@ -589,15 +589,15 @@
 
     <!-- Sound Level Monitoring Section -->
     <SettingsSection
-      title="Sound Level Monitoring"
-      description="Monitor and report environmental sound levels"
+      title={t('settings.audio.soundLevelMonitoring.title')}
+      description={t('settings.audio.soundLevelMonitoring.description')}
       defaultOpen={false}
       hasChanges={soundLevelHasChanges}
     >
       <div class="space-y-4">
         <Checkbox
           bind:checked={settings.audio.soundLevel.enabled}
-          label="Enable Sound Level Monitoring"
+          label={t('settings.audio.soundLevelMonitoring.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() =>
             settingsActions.updateSection('realtime', {
@@ -614,7 +614,7 @@
         {#if settings.audio.soundLevel.enabled}
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
             <NumberField
-              label="Measurement Interval (seconds)"
+              label={t('settings.audio.soundLevelMonitoring.intervalLabel')}
               value={settings.audio.soundLevel.interval}
               onUpdate={value =>
                 settingsActions.updateSection('realtime', {
@@ -627,7 +627,7 @@
               max={300}
               step={1}
               placeholder="60"
-              helpText="How often to report sound level measurements"
+              helpText={t('settings.audio.soundLevelMonitoring.intervalHelp')}
               disabled={store.isLoading || store.isSaving}
             />
           </div>
@@ -635,12 +635,12 @@
           <div class="alert alert-info mt-4">
             {@html alertIconsSvg.info}
             <div>
-              <p class="font-semibold">Sound Level Data Output</p>
-              <p class="text-sm">When enabled, sound level measurements are published via:</p>
+              <p class="font-semibold">{t('settings.audio.soundLevelMonitoring.dataOutputTitle')}</p>
+              <p class="text-sm">{t('settings.audio.soundLevelMonitoring.dataOutputDescription')}</p>
               <ul class="text-sm list-disc list-inside mt-1">
-                <li>MQTT topic: <code>{'{base_topic}'}/soundlevel</code></li>
-                <li>SSE endpoint: <code>/api/v2/soundlevels/stream</code></li>
-                <li>Prometheus metrics: <code>birdnet_sound_level_db</code></li>
+                <li>{t('settings.audio.soundLevelMonitoring.mqttTopic')} <code>{'{base_topic}'}/soundlevel</code></li>
+                <li>{t('settings.audio.soundLevelMonitoring.sseEndpoint')} <code>/api/v2/soundlevels/stream</code></li>
+                <li>{t('settings.audio.soundLevelMonitoring.prometheusMetrics')} <code>birdnet_sound_level_db</code></li>
               </ul>
             </div>
           </div>
@@ -650,15 +650,15 @@
 
     <!-- Audio Export Section -->
     <SettingsSection
-      title="Audio Export"
-      description="Configure audio clip saving for identified bird calls"
+      title={t('settings.audio.audioExport.title')}
+      description={t('settings.audio.audioExport.description')}
       defaultOpen={true}
       hasChanges={audioExportHasChanges}
     >
       <div class="space-y-4">
         <Checkbox
           bind:checked={settings.audio.export.enabled}
-          label="Enable Audio Export"
+          label={t('settings.audio.audioExport.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateExportEnabled(settings.audio.export.enabled)}
         />
@@ -666,7 +666,7 @@
         {#if settings.audio.export.enabled}
           <Checkbox
             bind:checked={settings.audio.export.debug}
-            label="Enable Debug Mode"
+            label={t('settings.audio.audioExport.enableDebug')}
             disabled={store.isLoading || store.isSaving}
             onchange={() =>
               settingsActions.updateSection('realtime', {
@@ -682,7 +682,7 @@
             <TextInput
               id="export-path"
               bind:value={settings.audio.export.path}
-              label="Export Path"
+              label={t('settings.audio.audioExport.pathLabel')}
               placeholder="clips/"
               disabled={store.isLoading || store.isSaving}
               onchange={value =>
@@ -695,7 +695,7 @@
             <SelectField
               id="export-type"
               bind:value={settings.audio.export.type}
-              label="Export Type"
+              label={t('settings.audio.audioExport.typeLabel')}
               options={exportFormatOptions}
               disabled={store.isLoading || store.isSaving}
               onchange={value =>
@@ -706,7 +706,7 @@
             <TextInput
               id="export-bitrate"
               bind:value={settings.audio.export.bitrate}
-              label="Bitrate"
+              label={t('settings.audio.audioExport.bitrateLabel')}
               placeholder="96k"
               disabled={store.isLoading ||
                 store.isSaving ||
@@ -721,8 +721,8 @@
 
     <!-- Audio Clip Retention Section -->
     <SettingsSection
-      title="Audio Clip Retention"
-      description="Configure audio clip cleanup"
+      title={t('settings.audio.audioClipRetention.title')}
+      description={t('settings.audio.audioClipRetention.description')}
       defaultOpen={true}
       hasChanges={audioRetentionHasChanges}
     >
@@ -732,7 +732,7 @@
           <SelectField
             id="retention-policy"
             bind:value={retentionSettings.policy}
-            label="Retention Policy"
+            label={t('settings.audio.audioClipRetention.policyLabel')}
             options={retentionPolicyOptions}
             disabled={store.isLoading || store.isSaving}
             onchange={updateRetentionPolicy}
@@ -743,7 +743,7 @@
             <TextInput
               id="retention-max-age"
               bind:value={retentionSettings.maxAge}
-              label="Max Age"
+              label={t('settings.audio.audioClipRetention.maxAgeLabel')}
               placeholder="7d"
               disabled={store.isLoading || store.isSaving}
               onchange={updateRetentionMaxAge}
@@ -755,7 +755,7 @@
             <TextInput
               id="retention-max-usage"
               bind:value={retentionSettings.maxUsage}
-              label="Max Usage (Percentage)"
+              label={t('settings.audio.audioClipRetention.maxUsageLabel')}
               placeholder="80%"
               disabled={store.isLoading || store.isSaving}
               oninput={updateRetentionMaxUsage}
@@ -767,7 +767,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Minimum Clips -->
             <NumberField
-              label="Minimum Clips"
+              label={t('settings.audio.audioClipRetention.minClipsLabel')}
               value={retentionSettings.minClips}
               onUpdate={updateRetentionMinClips}
               min={0}
@@ -779,7 +779,7 @@
             <div class="mt-8">
               <Checkbox
                 bind:checked={retentionSettings.keepSpectrograms}
-                label="Keep Spectrogram Images"
+                label={t('settings.audio.audioClipRetention.keepSpectrograms')}
                 disabled={store.isLoading || store.isSaving}
                 onchange={() => updateRetentionKeepSpectrograms(retentionSettings.keepSpectrograms)}
               />

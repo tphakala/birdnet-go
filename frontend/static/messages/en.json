@@ -703,24 +703,71 @@
     },
     "audio": {
       "audioCapture": {
-        "title": "Audio Capture"
+        "title": "Audio Capture",
+        "description": "Set audio capture source, sound card or RTSP stream",
+        "soundCardSource": "Sound Card Source",
+        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
+        "noSoundCardCapture": "No sound card capture",
+        "rtspSource": "RTSP Source",
+        "rtspTransportLabel": "RTSP Transport Protocol",
+        "rtspUrlsLabel": "RTSP Stream URLs"
       },
       "audioFilters": {
-        "title": "Audio Filters"
+        "title": "Audio Filters",
+        "description": "Configure audio processing filters",
+        "enableEqualizer": "Enable Audio Equalizer",
+        "filterType": "Filter Type",
+        "newFilterType": "New Filter Type",
+        "selectFilterType": "Select filter type",
+        "addFilter": "Add Filter",
+        "remove": "Remove"
       },
       "soundLevelMonitoring": {
-        "title": "Sound Level Monitoring"
+        "title": "Sound Level Monitoring",
+        "description": "Monitor and report environmental sound levels",
+        "enable": "Enable Sound Level Monitoring",
+        "intervalLabel": "Measurement Interval (seconds)",
+        "intervalHelp": "How often to report sound level measurements",
+        "dataOutputTitle": "Sound Level Data Output",
+        "dataOutputDescription": "When enabled, sound level measurements are published via:",
+        "mqttTopic": "MQTT topic:",
+        "sseEndpoint": "SSE endpoint:",
+        "prometheusMetrics": "Prometheus metrics:"
       },
       "audioExport": {
-        "title": "Audio Export"
+        "title": "Audio Export",
+        "description": "Configure audio clip saving for identified bird calls",
+        "enable": "Enable Audio Export",
+        "enableDebug": "Enable Debug Mode",
+        "pathLabel": "Export Path",
+        "typeLabel": "Export Type",
+        "bitrateLabel": "Bitrate"
       },
       "audioClipRetention": {
-        "title": "Audio Clip Retention"
+        "title": "Audio Clip Retention",
+        "description": "Configure audio clip cleanup",
+        "policyLabel": "Retention Policy",
+        "maxAgeLabel": "Max Age",
+        "maxUsageLabel": "Max Usage (Percentage)",
+        "minClipsLabel": "Minimum Clips",
+        "keepSpectrograms": "Keep Spectrogram Images",
+        "policies": {
+          "none": "None",
+          "age": "Age",
+          "usage": "Usage"
+        }
       },
-      "noSoundCardCapture": "No sound card capture",
-      "soundCardSource": "Sound Card Source",
-      "rtspSource": "RTSP Source",
-      "soundLevelDataOutput": "Sound Level Data Output"
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      }
     },
     "species": {
       "addSpeciesToInclude": "Add species to include",
