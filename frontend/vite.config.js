@@ -1,11 +1,18 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
+import { i18nAutoDiscovery } from './src/lib/i18n/vite-plugin.js'
+import { copyFileSync, mkdirSync, readdirSync } from 'fs'
+import { join } from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
   base: '/ui/assets/',
+  publicDir: 'static',
   plugins: [
+    i18nAutoDiscovery({
+      messagesDir: './static/messages'
+    }),
     svelte({
       compilerOptions: {
         // HMR is integrated in Svelte 5 core, disabled in production builds
@@ -13,6 +20,25 @@ export default defineConfig({
       },
     }),
     svelteTesting(),
+    // Copy message files to dist during build
+    {
+      name: 'copy-messages',
+      closeBundle() {
+        // Create messages directory in dist
+        const messagesDir = './dist/messages';
+        mkdirSync(messagesDir, { recursive: true });
+        
+        // Copy all message files
+        const sourceDir = './static/messages';
+        const files = readdirSync(sourceDir);
+        files.forEach(file => {
+          if (file.endsWith('.json')) {
+            copyFileSync(join(sourceDir, file), join(messagesDir, file));
+          }
+        });
+        console.log('[copy-messages] Copied message files to dist/messages');
+      }
+    }
   ],
   resolve: {
     alias: {

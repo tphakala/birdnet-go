@@ -1,0 +1,394 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "save": "Save",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "actions": "Actions",
+    "status": "Status",
+    "settings": "Settings",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "apply": "Apply",
+    "clear": "Clear",
+    "goToDashboard": "Go to Dashboard",
+    "reportIssue": "Report Issue",
+    "loginToViewDetails": "Login to View Details",
+    "pageNotFound": "Page Not Found",
+    "internalServerError": "Internal Server Error"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "detections": "Detections",
+    "search": "Search",
+    "analytics": "Analytics",
+    "notifications": "Notifications",
+    "system": "System",
+    "settings": "Settings",
+    "about": "About"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "A modern interface for real-time bird sound detection and classification",
+    "overview": "Overview",
+    "overviewText": "BirdNET-Go is a Go-based implementation for real-time bird sound detection and classification, built upon the foundation of the BirdNET project. This application provides a user-friendly interface for continuous bird sound monitoring and analysis.",
+    "birdnetProject": "BirdNET Project",
+    "birdnetDescription": "BirdNET-Go would not be possible without the groundbreaking work of the BirdNET project. The artificial intelligence model powering BirdNET-Go's detection capabilities is the result of the BirdNET project's innovative research and development.",
+    "developedBy": "Developed by",
+    "developersText": "The K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology:",
+    "visitBirdnetAnalyzer": "Visit BirdNET-Analyzer Project",
+    "contributors": "Contributors",
+    "contributorsText": "BirdNET-Go has grown and improved thanks to the collaborative efforts of many individuals. Their contributions, ranging from code improvements to feature suggestions, have been invaluable in making this project better.",
+    "mainDeveloper": "Main Developer",
+    "githubContributors": "GitHub Contributors",
+    "contributorsNote": "Special thanks to these contributors for their valuable work on improving BirdNET-Go:",
+    "communityAcknowledgment": "Community Acknowledgment",
+    "communityText": "We would also like to extend our gratitude to all users who have contributed through:",
+    "bugReports": "Bug reports and issue tracking",
+    "featureSuggestions": "Feature suggestions and feedback",
+    "testing": "Testing and validation",
+    "documentation": "Documentation improvements",
+    "additionalCredits": "Additional Credits",
+    "birdnetPiProject": "BirdNET-Pi Project",
+    "birdnetPiDescription": "Special thanks to Patrick McGuire for his inspiring work on BirdNET-Pi, which has influenced the development of BirdNET-Go. BirdNET-Pi demonstrates the potential of bird sound detection on embedded devices and has set a high standard for community-driven development.",
+    "visitBirdnetPi": "Visit BirdNET-Pi Project",
+    "labelTranslations": "BirdNET Label Translations",
+    "labelTranslationsBy": "Provided by Patrick Levin for the BirdNET-Pi project by Patrick McGuire",
+    "patrickLevinGithub": "Patrick Levin's GitHub",
+    "versionInformation": "Version Information",
+    "currentVersion": "Current Version",
+    "buildDate": "Build Date",
+    "developmentBuild": "Development Build",
+    "unknown": "Unknown",
+    "licenseInformation": "License Information",
+    "licenseText": "Both the BirdNET AI model and BirdNET-Go are licensed under the",
+    "ccLicense": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License",
+    "licenseDescription": "This license allows others to remix, adapt, and build upon this work non-commercially, as long as appropriate credit is given and new creations are licensed under identical terms.",
+    "dependencyLicenses": "Dependency Licenses"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "View and manage all system notifications",
+    "filters": {
+      "allStatus": "All Status",
+      "unread": "Unread",
+      "read": "Read",
+      "acknowledged": "Acknowledged",
+      "allTypes": "All Types",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "info": "Info",
+      "system": "System",
+      "detections": "Detections",
+      "allPriorities": "All Priorities",
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "actions": {
+      "markAllRead": "Mark All Read",
+      "refresh": "Refresh notifications",
+      "markAsRead": "Mark as read",
+      "acknowledge": "Acknowledge",
+      "delete": "Delete",
+      "confirmDelete": "Confirm Delete",
+      "deleteConfirmation": "Are you sure you want to delete this notification?"
+    },
+    "empty": {
+      "title": "No notifications found",
+      "subtitle": "Adjust your filters or check back later"
+    },
+    "errors": {
+      "loadFailed": "Failed to load notifications. Please try again.",
+      "deleteFailed": "Failed to delete notification. Please try again.",
+      "networkError": "Network error occurred. Please try again."
+    },
+    "timeAgo": {
+      "justNow": "Just now",
+      "minutesAgo": "{minutes}m ago",
+      "hoursAgo": "{hours}h ago",
+      "daysAgo": "{days}d ago"
+    }
+  },
+  "search": {
+    "title": "Search Filters",
+    "results": "Search Results",
+    "resultsCount": "{count} result{plural}",
+    "noSearchPerformed": "No search performed yet",
+    "noSearchPerformedHint": "Use the search filters above to find bird detections",
+    "loadingResults": "Loading results...",
+    "noResultsFound": "No results found",
+    "noResultsHint": "Try adjusting your search filters",
+    "fields": {
+      "species": "Species",
+      "speciesPlaceholder": "Enter species name",
+      "speciesHelp": "Enter full or partial species name (not case sensitive)",
+      "dateRange": "Date Range",
+      "dateRangeHelp": "Filter detections by date range (leave empty for all dates)",
+      "from": "From",
+      "to": "To",
+      "confidenceRange": "Confidence Range (%)",
+      "confidenceMin": "Minimum confidence percentage",
+      "confidenceMax": "Maximum confidence percentage",
+      "verifiedStatus": "Verified Status",
+      "lockedStatus": "Locked Status",
+      "timeOfDay": "Time of Day"
+    },
+    "advancedFilters": "Advanced Filters",
+    "verifiedOptions": {
+      "any": "Any Status",
+      "verified": "Verified Only",
+      "unverified": "Unverified Only"
+    },
+    "lockedOptions": {
+      "any": "Any Status",
+      "locked": "Locked Only",
+      "unlocked": "Unlocked Only"
+    },
+    "timeOfDayOptions": {
+      "any": "Any Time",
+      "day": "Day Only",
+      "night": "Night Only",
+      "sunrise": "Sunrise +/- 30min",
+      "sunset": "Sunset +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Date (Newest First)",
+      "dateAsc": "Date (Oldest First)",
+      "speciesAsc": "Species (A-Z)",
+      "confidenceDesc": "Confidence (High-Low)"
+    },
+    "tableHeaders": {
+      "dateTime": "Date & Time",
+      "timeOfDay": "Time of Day",
+      "species": "Species",
+      "confidence": "Confidence",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "statusBadges": {
+      "verified": "Verified",
+      "false": "False",
+      "unverified": "Unverified",
+      "locked": "Locked",
+      "unlocked": "Unlocked"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Audio Player",
+      "expandDetails": "Expand details for {species}",
+      "collapseDetails": "Collapse details for {species}",
+      "playAudio": "Play audio for {species}",
+      "viewDetails": "View details for {species}",
+      "unknownSpecies": "Unknown species",
+      "clickToCollapse": "Click to collapse"
+    },
+    "errors": {
+      "searchFailed": "Search failed: {error}",
+      "minMaxConfidence": "Minimum confidence cannot be greater than maximum confidence."
+    },
+    "pagination": {
+      "page": "Page {current} of {total}",
+      "goToPrevious": "Go to previous page",
+      "goToNext": "Go to next page"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Page Not Found",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "500": {
+      "code": "500",
+      "title": "Internal Server Error",
+      "defaultMessage": "An internal server error occurred.",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "generic": {
+      "errorDetails": "Error Details",
+      "stackTrace": "Stack Trace",
+      "goToDashboard": "Go to Dashboard",
+      "reportIssue": "Report Issue",
+      "loginToViewDetails": "Login to View Details"
+    }
+  },
+  "settings": {
+    "title": "Settings - BirdNET-Go",
+    "loading": "Loading settings...",
+    "sections": {
+      "node": "Main Settings",
+      "audio": "Audio Settings",
+      "filters": "Detection Filters",
+      "integration": "Integrations",
+      "security": "Security",
+      "species": "Species",
+      "support": "Support"
+    },
+    "notFound": {
+      "title": "Settings Not Found",
+      "message": "The requested settings section \"{section}\" could not be found."
+    }
+  },
+  "system": {
+    "title": "System Dashboard",
+    "refreshData": "Refresh Data",
+    "systemInfo": {
+      "title": "System Information",
+      "os": "Operating System",
+      "hostname": "Hostname",
+      "uptime": "Uptime",
+      "cpus": "CPUs",
+      "model": "System Model",
+      "timezone": "Time Zone",
+      "temperature": "CPU Temperature",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Temperature data unavailable"
+    },
+    "diskUsage": {
+      "title": "Disk Usage",
+      "emptyMessage": "No disk information available"
+    },
+    "memoryUsage": {
+      "title": "Memory Usage",
+      "ramUsage": "RAM Usage"
+    },
+    "processInfo": {
+      "title": "Process Information",
+      "headers": {
+        "pid": "PID",
+        "name": "Name",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "uptime": "Uptime"
+      },
+      "showAll": "Show All Processes",
+      "showBirdnetOnly": "Show BirdNET Only"
+    },
+    "errors": {
+      "systemInfo": "Failed to load system information: {error}",
+      "diskUsage": "Failed to load disk usage: {error}",
+      "memoryUsage": "Failed to load memory usage: {error}",
+      "temperature": "Failed to load temperature: {error}",
+      "processes": "Failed to load process information: {error}"
+    }
+  },
+  "analytics": {
+    "title": "Bird Detection Analytics",
+    "loadingError": "Failed to load some analytics data. Please try again later.",
+    "stats": {
+      "totalDetections": "Total Detections",
+      "uniqueSpecies": "Unique Species",
+      "avgConfidence": "Avg. Confidence",
+      "mostCommon": "Most Common",
+      "none": "None",
+      "detections": "detections",
+      "totalSpecies": "Total Species",
+      "overallAverage": "Overall average"
+    },
+    "periods": {
+      "today": "Today",
+      "lastWeek": "Last 7 days",
+      "lastMonth": "Last 30 days",
+      "last90Days": "Last 90 days",
+      "lastYear": "Last 12 months",
+      "customRange": "Custom range",
+      "allTime": "All time"
+    },
+    "filters": {
+      "title": "Filter Data",
+      "timePeriod": "Time Period",
+      "from": "From",
+      "to": "To",
+      "sortBy": "Sort By",
+      "searchSpecies": "Search Species",
+      "searchPlaceholder": "Search by name...",
+      "reset": "Reset",
+      "applyFilters": "Apply Filters",
+      "exportCsv": "Export CSV",
+      "species": "species",
+      "filtered": "(filtered)"
+    },
+    "timePeriodOptions": {
+      "allTime": "All Time",
+      "today": "Today",
+      "lastWeek": "Last 7 Days",
+      "lastMonth": "Last 30 Days",
+      "last90Days": "Last 90 Days",
+      "lastYear": "Last 12 Months",
+      "customRange": "Custom Range"
+    },
+    "sortOptions": {
+      "mostDetections": "Most Detections",
+      "fewestDetections": "Fewest Detections",
+      "nameAZ": "Name (A-Z)",
+      "nameZA": "Name (Z-A)",
+      "recentlyFirstSeen": "Recently First Seen",
+      "earliestFirstSeen": "Earliest First Seen",
+      "recentlyLastSeen": "Recently Last Seen",
+      "highestConfidence": "Highest Confidence"
+    },
+    "charts": {
+      "top10Species": "Top 10 Species",
+      "detectionsByTimeOfDay": "Detections by Time of Day",
+      "detectionTrends": "Detection Trends",
+      "newSpeciesDetected": "New Species Detected",
+      "noNewSpecies": "No new species detected in this period.",
+      "noDataAvailable": "No data available",
+      "numberOfDetections": "Number of Detections",
+      "detections": "Detections",
+      "timePeriod": "Time Period",
+      "dailyDetections": "Daily Detections",
+      "date": "Date",
+      "firstHeardOn": "First Heard On",
+      "firstHeardDate": "First Heard Date",
+      "firstHeard": "First Heard"
+    },
+    "recentDetections": {
+      "title": "Recent Detections",
+      "headers": {
+        "dateTime": "Date & Time",
+        "species": "Species",
+        "confidence": "Confidence",
+        "timeOfDay": "Time of Day"
+      },
+      "noRecentDetections": "No recent detections found",
+      "unknownSpecies": "Unknown",
+      "unknown": "Unknown"
+    },
+    "species": {
+      "title": "Species",
+      "subtitle": "Comprehensive list of all bird species that have been detected",
+      "speciesList": "Species List",
+      "switchToGrid": "Switch to grid view",
+      "switchToList": "Switch to list view",
+      "noSpeciesFound": "No species found matching your filters.",
+      "headers": {
+        "species": "Species",
+        "detections": "Detections",
+        "avgConfidence": "Avg Confidence",
+        "maxConfidence": "Max Confidence",
+        "firstDetected": "First Detected",
+        "lastDetected": "Last Detected"
+      },
+      "card": {
+        "detections": "Detections:",
+        "confidence": "Confidence:",
+        "first": "First:"
+      }
+    }
+  }
+}

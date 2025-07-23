@@ -3,6 +3,7 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import { t } from '$lib/i18n/store.svelte.js';
   import {
     actionIcons,
     alertIconsSvg,
@@ -64,7 +65,7 @@
   function validateForm() {
     confidenceError = '';
     if (confidenceRange.min > confidenceRange.max) {
-      confidenceError = 'Minimum confidence cannot be greater than maximum confidence.';
+      confidenceError = t('search.errors.minMaxConfidence');
       return false;
     }
     return true;
@@ -116,7 +117,9 @@
       formSubmitted = true;
     } catch (error: unknown) {
       // Handle search error silently
-      errorMessage = `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      errorMessage = t('search.errors.searchFailed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       results = [];
     } finally {
       isLoading = false;
@@ -171,11 +174,11 @@
   }
 </script>
 
-<div class="col-span-12 space-y-4" role="region" aria-label="Bird Detection Search">
+<div class="col-span-12 space-y-4" role="region" aria-label={t('search.title')}>
   <!-- Search Form -->
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body card-padding">
-      <h2 class="card-title" id="search-filters-heading">Search Filters</h2>
+      <h2 class="card-title" id="search-filters-heading">{t('search.title')}</h2>
 
       <form
         id="searchForm"
@@ -191,7 +194,7 @@
           <!-- Species -->
           <div class="form-control">
             <label class="label" for="species">
-              <span class="label-text">Species</span>
+              <span class="label-text">{t('search.fields.species')}</span>
               <span
                 class="help-icon"
                 onmouseenter={() => (showTooltip = 'species')}
@@ -200,7 +203,7 @@
                 onblur={() => (showTooltip = null)}
                 role="button"
                 tabindex="0"
-                aria-label="Help for Species"
+                aria-label={t('search.fields.speciesHelp')}
                 aria-describedby="speciesTooltip">ⓘ</span
               >
             </label>
@@ -208,12 +211,12 @@
               type="text"
               id="species"
               bind:value={speciesSearchTerm}
-              placeholder="Enter species name"
+              placeholder={t('search.fields.speciesPlaceholder')}
               class="input input-bordered w-full"
             />
             {#if showTooltip === 'species'}
               <div class="tooltip" id="speciesTooltip" role="tooltip">
-                Enter full or partial species name (not case sensitive)
+                {t('search.fields.speciesHelp')}
               </div>
             {/if}
           </div>
@@ -221,7 +224,7 @@
           <!-- Date Range -->
           <div class="form-control">
             <label class="label" for="dateRangeStart">
-              <span class="label-text">Date Range</span>
+              <span class="label-text">{t('search.fields.dateRange')}</span>
               <span
                 class="help-icon"
                 onmouseenter={() => (showTooltip = 'dateRange')}
@@ -230,7 +233,7 @@
                 onblur={() => (showTooltip = null)}
                 role="button"
                 tabindex="0"
-                aria-label="Help for Date Range"
+                aria-label={t('search.fields.dateRangeHelp')}
                 aria-describedby="dateRangeTooltip">ⓘ</span
               >
             </label>
@@ -241,7 +244,7 @@
                 bind:value={dateRange.start}
                 placeholder="Start Date"
                 class="input input-bordered w-full"
-                aria-label="From"
+                aria-label={t('search.fields.from')}
               />
               <input
                 type="date"
@@ -249,12 +252,12 @@
                 bind:value={dateRange.end}
                 placeholder="End Date"
                 class="input input-bordered w-full"
-                aria-label="To"
+                aria-label={t('search.fields.to')}
               />
             </div>
             {#if showTooltip === 'dateRange'}
               <div class="tooltip" id="dateRangeTooltip" role="tooltip">
-                Filter detections by date range (leave empty for all dates)
+                {t('search.fields.dateRangeHelp')}
               </div>
             {/if}
           </div>
@@ -262,7 +265,7 @@
 
         <!-- Advanced Filters Section -->
         <CollapsibleSection
-          title="Advanced Filters"
+          title={t('search.advancedFilters')}
           defaultOpen={advancedFilters}
           className="bg-transparent shadow-none p-0"
           contentClassName="space-y-2 pt-2"
@@ -270,7 +273,7 @@
           <!-- Confidence Range -->
           <div class="form-control">
             <label class="label" for="confidenceMin">
-              <span class="label-text">Confidence Range (%)</span>
+              <span class="label-text">{t('search.fields.confidenceRange')}</span>
               <span class="label-text-alt">{confidenceRange.min}% - {confidenceRange.max}%</span>
             </label>
             <div
@@ -286,7 +289,7 @@
                   id="confidenceMin"
                   bind:value={confidenceRange.min}
                   class="range range-xs"
-                  aria-label="Minimum confidence percentage"
+                  aria-label={t('search.fields.confidenceMin')}
                   aria-valuemin="0"
                   aria-valuemax="100"
                   aria-valuenow={confidenceRange.min}
@@ -304,7 +307,7 @@
                   max="100"
                   bind:value={confidenceRange.max}
                   class="range range-xs"
-                  aria-label="Maximum confidence percentage"
+                  aria-label={t('search.fields.confidenceMax')}
                   aria-valuemin="0"
                   aria-valuemax="100"
                   aria-valuenow={confidenceRange.max}
@@ -327,50 +330,50 @@
             <!-- Verified Status -->
             <div class="form-control">
               <label class="label" for="verifiedStatusFilter">
-                <span class="label-text">Verified Status</span>
+                <span class="label-text">{t('search.fields.verifiedStatus')}</span>
               </label>
               <select
                 id="verifiedStatusFilter"
                 bind:value={verifiedStatus}
                 class="select select-bordered w-full"
               >
-                <option value="any">Any Status</option>
-                <option value="verified">Verified Only</option>
-                <option value="unverified">Unverified Only</option>
+                <option value="any">{t('search.verifiedOptions.any')}</option>
+                <option value="verified">{t('search.verifiedOptions.verified')}</option>
+                <option value="unverified">{t('search.verifiedOptions.unverified')}</option>
               </select>
             </div>
 
             <!-- Locked Status -->
             <div class="form-control">
               <label class="label" for="lockedStatusFilter">
-                <span class="label-text">Locked Status</span>
+                <span class="label-text">{t('search.fields.lockedStatus')}</span>
               </label>
               <select
                 id="lockedStatusFilter"
                 bind:value={lockedStatus}
                 class="select select-bordered w-full"
               >
-                <option value="any">Any Status</option>
-                <option value="locked">Locked Only</option>
-                <option value="unlocked">Unlocked Only</option>
+                <option value="any">{t('search.lockedOptions.any')}</option>
+                <option value="locked">{t('search.lockedOptions.locked')}</option>
+                <option value="unlocked">{t('search.lockedOptions.unlocked')}</option>
               </select>
             </div>
 
             <!-- Time of Day -->
             <div class="form-control">
               <label class="label" for="timeOfDayFilter">
-                <span class="label-text">Time of Day</span>
+                <span class="label-text">{t('search.fields.timeOfDay')}</span>
               </label>
               <select
                 id="timeOfDayFilter"
                 bind:value={timeOfDayFilter}
                 class="select select-bordered w-full"
               >
-                <option value="any">Any Time</option>
-                <option value="day">Day Only</option>
-                <option value="night">Night Only</option>
-                <option value="sunrise">Sunrise +/- 30min</option>
-                <option value="sunset">Sunset +/- 30min</option>
+                <option value="any">{t('search.timeOfDayOptions.any')}</option>
+                <option value="day">{t('search.timeOfDayOptions.day')}</option>
+                <option value="night">{t('search.timeOfDayOptions.night')}</option>
+                <option value="sunrise">{t('search.timeOfDayOptions.sunrise')}</option>
+                <option value="sunset">{t('search.timeOfDayOptions.sunset')}</option>
               </select>
             </div>
           </div>
@@ -382,15 +385,15 @@
             type="button"
             class="btn btn-ghost flex-shrink-0"
             onclick={resetForm}
-            aria-label="Reset all search filters"
+            aria-label={t('common.reset')}
           >
-            Reset
+            {t('common.reset')}
           </button>
           <button
             type="submit"
             class="btn btn-primary flex-shrink-0"
             disabled={isLoading}
-            aria-label="Search for bird detections"
+            aria-label={t('common.search')}
           >
             {#if isLoading}
               <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
@@ -399,7 +402,7 @@
                 {@html actionIcons.search}
               </span>
             {/if}
-            Search
+            {t('common.search')}
           </button>
         </div>
       </form>
@@ -410,13 +413,16 @@
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body card-padding">
       <div class="flex items-center justify-between">
-        <h2 class="card-title" id="search-results-heading">Search Results</h2>
+        <h2 class="card-title" id="search-results-heading">{t('search.results')}</h2>
 
         <!-- Results Count & Sorting -->
         {#if formSubmitted}
           <div class="flex items-center gap-4">
             <span class="text-sm text-base-content/70" aria-live="polite"
-              >{totalResults} result{totalResults !== 1 ? 's' : ''}</span
+              >{t('search.resultsCount', {
+                count: totalResults,
+                plural: totalResults !== 1 ? 's' : '',
+              })}</span
             >
             <div class="dropdown dropdown-end">
               <div
@@ -425,10 +431,10 @@
                 class="btn btn-sm btn-outline"
                 aria-haspopup="true"
                 aria-expanded="false"
-                aria-label="Sort results"
+                aria-label={t('common.sort')}
               >
                 {@html actionIcons.sort}
-                Sort
+                {t('common.sort')}
               </div>
               <ul
                 tabindex="0"
@@ -439,28 +445,31 @@
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm justify-start w-full"
-                    onclick={() => changeSort('date_desc')}>Date (Newest First)</button
+                    onclick={() => changeSort('date_desc')}
+                    >{t('search.sortOptions.dateDesc')}</button
                   >
                 </li>
                 <li role="menuitem">
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm justify-start w-full"
-                    onclick={() => changeSort('date_asc')}>Date (Oldest First)</button
+                    onclick={() => changeSort('date_asc')}>{t('search.sortOptions.dateAsc')}</button
                   >
                 </li>
                 <li role="menuitem">
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm justify-start w-full"
-                    onclick={() => changeSort('species_asc')}>Species (A-Z)</button
+                    onclick={() => changeSort('species_asc')}
+                    >{t('search.sortOptions.speciesAsc')}</button
                   >
                 </li>
                 <li role="menuitem">
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm justify-start w-full"
-                    onclick={() => changeSort('confidence_desc')}>Confidence (High-Low)</button
+                    onclick={() => changeSort('confidence_desc')}
+                    >{t('search.sortOptions.confidenceDesc')}</button
                   >
                 </li>
               </ul>
@@ -486,9 +495,9 @@
           <span class="text-base-content/30 text-[4rem]" aria-hidden="true">
             {@html systemIcons.search}
           </span>
-          <p class="text-base-content/50 text-center mt-4">No search performed yet</p>
+          <p class="text-base-content/50 text-center mt-4">{t('search.noSearchPerformed')}</p>
           <p class="text-base-content/50 text-center text-sm">
-            Use the search filters above to find bird detections
+            {t('search.noSearchPerformedHint')}
           </p>
         </div>
       {/if}
@@ -501,7 +510,7 @@
           aria-busy="true"
         >
           <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
-          <p class="text-base-content/50 text-center mt-4">Loading results...</p>
+          <p class="text-base-content/50 text-center mt-4">{t('search.loadingResults')}</p>
         </div>
       {/if}
 
@@ -511,12 +520,12 @@
           <table class="table w-full">
             <thead>
               <tr>
-                <th scope="col">Date & Time</th>
-                <th scope="col">Time of Day</th>
-                <th scope="col">Species</th>
-                <th scope="col">Confidence</th>
-                <th scope="col">Status</th>
-                <th scope="col">Actions</th>
+                <th scope="col">{t('search.tableHeaders.dateTime')}</th>
+                <th scope="col">{t('search.tableHeaders.timeOfDay')}</th>
+                <th scope="col">{t('search.tableHeaders.species')}</th>
+                <th scope="col">{t('search.tableHeaders.confidence')}</th>
+                <th scope="col">{t('search.tableHeaders.status')}</th>
+                <th scope="col">{t('search.tableHeaders.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -528,7 +537,7 @@
                   <td>
                     <div class="flex items-center">
                       <TimeOfDayIcon timeOfDay={result.timeOfDay as any} className="mr-1" />
-                      <span>{result.timeOfDay || 'Unknown'}</span>
+                      <span>{result.timeOfDay || t('search.detailsPanel.unknownSpecies')}</span>
                     </div>
                   </td>
                   <td>
@@ -543,9 +552,13 @@
                             toggleExpand(result.id);
                           }
                         }}
-                        aria-label="{isExpanded(result.id)
-                          ? 'Collapse'
-                          : 'Expand'} details for {result.commonName || 'Unknown species'}"
+                        aria-label={isExpanded(result.id)
+                          ? t('search.detailsPanel.collapseDetails', {
+                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                            })
+                          : t('search.detailsPanel.expandDetails', {
+                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                            })}
                         aria-expanded={isExpanded(result.id)}
                         role="button"
                         tabindex="0"
@@ -554,7 +567,7 @@
                           src="/api/v2/media/species-image?name={encodeURIComponent(
                             result.scientificName
                           )}"
-                          alt={result.commonName || 'Unknown species'}
+                          alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={e => {
                             const target = e.target as any;
@@ -567,7 +580,9 @@
                         />
                       </div>
                       <div>
-                        <div class="font-bold">{result.commonName || 'Unknown'}</div>
+                        <div class="font-bold">
+                          {result.commonName || t('search.detailsPanel.unknownSpecies')}
+                        </div>
                         <div class="text-xs opacity-50">{result.scientificName || ''}</div>
                       </div>
                     </div>
@@ -608,13 +623,15 @@
                             : 'unverified'}"
                       >
                         {result.verified === 'correct'
-                          ? 'Verified'
+                          ? t('search.statusBadges.verified')
                           : result.verified === 'false_positive'
-                            ? 'False'
-                            : 'Unverified'}
+                            ? t('search.statusBadges.false')
+                            : t('search.statusBadges.unverified')}
                       </div>
                       <div class="status-badge {result.locked ? 'locked' : 'unverified'}">
-                        {result.locked ? 'Locked' : 'Unlocked'}
+                        {result.locked
+                          ? t('search.statusBadges.locked')
+                          : t('search.statusBadges.unlocked')}
                       </div>
                     </div>
                   </td>
@@ -627,7 +644,9 @@
                           // TODO: Implement audio playback function
                         }}
                         disabled={!result.hasAudio}
-                        aria-label="Play audio for {result.commonName || 'Unknown species'}"
+                        aria-label={t('search.detailsPanel.playAudio', {
+                          species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                        })}
                         aria-pressed="false"
                       >
                         {@html mediaIcons.music}
@@ -635,7 +654,9 @@
                       <button
                         class="btn btn-xs btn-square"
                         onclick={() => (window.location.href = `/api/v2/detections/${result.id}`)}
-                        aria-label="View details for {result.commonName || 'Unknown species'}"
+                        aria-label={t('search.detailsPanel.viewDetails', {
+                          species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                        })}
                       >
                         {@html systemIcons.eye}
                       </button>
@@ -646,9 +667,13 @@
                           toggleExpand(result.id);
                         }}
                         data-id={result.id}
-                        aria-label="{isExpanded(result.id)
-                          ? 'Collapse'
-                          : 'Expand'} details for {result.commonName || 'Unknown species'}"
+                        aria-label={isExpanded(result.id)
+                          ? t('search.detailsPanel.collapseDetails', {
+                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                            })
+                          : t('search.detailsPanel.expandDetails', {
+                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                            })}
                         aria-expanded={isExpanded(result.id)}
                         aria-controls="expanded-row-{result.id}"
                       >
@@ -691,17 +716,19 @@
                               }}
                               role="button"
                               tabindex="0"
-                              aria-label="Collapse details for {result.commonName ||
-                                'Unknown species'}"
+                              aria-label={t('search.detailsPanel.collapseDetails', {
+                                species:
+                                  result.commonName || t('search.detailsPanel.unknownSpecies'),
+                              })}
                               aria-expanded={isExpanded(result.id)}
                               aria-controls="expanded-row-{result.id}"
-                              title="Click to collapse"
+                              title={t('search.detailsPanel.clickToCollapse')}
                             >
                               <img
                                 src="/api/v2/media/species-image?name={encodeURIComponent(
                                   result.scientificName
                                 )}"
-                                alt={result.commonName || 'Unknown species'}
+                                alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
                                 onerror={e => {
                                   const target = e.target as any;
@@ -717,7 +744,9 @@
 
                           <!-- Audio Player -->
                           <div class="bg-base-200 rounded-box p-4">
-                            <h3 class="text-lg font-semibold mb-2">Audio Player</h3>
+                            <h3 class="text-lg font-semibold mb-2">
+                              {t('search.detailsPanel.audioPlayer')}
+                            </h3>
                             <AudioPlayer
                               audioUrl="/api/v2/audio/{result.id}"
                               detectionId={result.id}
@@ -744,8 +773,8 @@
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
         >
           {@html dataIcons.sadFace}
-          <p class="mt-2 text-base-content/70">No results found</p>
-          <p class="text-sm text-base-content/50">Try adjusting your search filters</p>
+          <p class="mt-2 text-base-content/70">{t('search.noResultsFound')}</p>
+          <p class="text-sm text-base-content/50">{t('search.noResultsHint')}</p>
         </div>
       {/if}
 
@@ -758,7 +787,9 @@
               onclick={() => goToPage(currentPage - 1)}
               disabled={currentPage <= 1}>«</button
             >
-            <button class="join-item btn">Page {currentPage} of {totalPages}</button>
+            <button class="join-item btn"
+              >{t('search.pagination.page', { current: currentPage, total: totalPages })}</button
+            >
             <button
               class="join-item btn"
               onclick={() => goToPage(currentPage + 1)}

@@ -3,6 +3,7 @@
   import StatCard from '../components/ui/StatCard.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
+  import { t } from '$lib/i18n/store.svelte.js';
 
   // Type definitions
   interface SpeciesFilters {
@@ -208,7 +209,7 @@
 
   function getTotalDetectionsText(): string {
     const total = getTotalDetections();
-    return `${formatNumber(total)} total detections`;
+    return `${formatNumber(total)} ${t('analytics.stats.detections')}`;
   }
 
   function getAverageConfidence(): string {
@@ -344,20 +345,20 @@
   }
 </script>
 
-<div class="col-span-12 space-y-4" role="region" aria-label="Species">
+<div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
   <!-- Page Header -->
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body card-padding">
       <div class="flex justify-between items-start">
         <div>
-          <h1 class="card-title text-2xl">Species</h1>
+          <h1 class="card-title text-2xl">{t('analytics.species.title')}</h1>
           <p class="text-base-content/60">
-            Comprehensive list of all bird species that have been detected
+            {t('analytics.species.subtitle')}
           </p>
         </div>
         <div class="flex gap-4">
           <StatCard
-            title="Total Species"
+            title={t('analytics.stats.totalSpecies')}
             value={getTotalSpeciesCount()}
             subtitle={getTotalDetectionsText()}
             iconClassName="bg-primary/20"
@@ -377,9 +378,9 @@
           </StatCard>
 
           <StatCard
-            title="Avg Confidence"
+            title={t('analytics.stats.avgConfidence')}
             value={getAverageConfidence()}
-            subtitle="Overall average"
+            subtitle={t('analytics.stats.overallAverage')}
             iconClassName="bg-secondary/20"
           >
             {#snippet icon()}
@@ -418,13 +419,13 @@
     <div class="card-body card-padding">
       <!-- View Toggle -->
       <div class="flex justify-between items-center mb-4">
-        <h2 class="card-title">Species List</h2>
+        <h2 class="card-title">{t('analytics.species.speciesList')}</h2>
         <div class="btn-group">
           <button
             class="btn btn-sm"
             class:btn-active={viewMode === 'grid'}
             onclick={() => (viewMode = 'grid')}
-            aria-label="Switch to grid view"
+            aria-label={t('analytics.species.switchToGrid')}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -441,7 +442,7 @@
             class="btn btn-sm"
             class:btn-active={viewMode === 'list'}
             onclick={() => (viewMode = 'list')}
-            aria-label="Switch to list view"
+            aria-label={t('analytics.species.switchToList')}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -481,12 +482,12 @@
           <table class="table w-full">
             <thead>
               <tr>
-                <th>Species</th>
-                <th>Detections</th>
-                <th>Avg Confidence</th>
-                <th>Max Confidence</th>
-                <th>First Detected</th>
-                <th>Last Detected</th>
+                <th>{t('analytics.species.headers.species')}</th>
+                <th>{t('analytics.species.headers.detections')}</th>
+                <th>{t('analytics.species.headers.avgConfidence')}</th>
+                <th>{t('analytics.species.headers.maxConfidence')}</th>
+                <th>{t('analytics.species.headers.firstDetected')}</th>
+                <th>{t('analytics.species.headers.lastDetected')}</th>
               </tr>
             </thead>
             <tbody>
@@ -560,7 +561,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          <p>No species found matching your filters.</p>
+          <p>{t('analytics.species.noSpeciesFound')}</p>
         </div>
       {/if}
     </div>

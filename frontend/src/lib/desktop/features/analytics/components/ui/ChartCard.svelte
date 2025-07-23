@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
+  import { t } from '$lib/i18n/store.svelte.js';
 
   interface Props {
     title: string;
@@ -20,7 +21,7 @@
     className = '',
     chartHeight = 'h-80',
     children,
-    emptyMessage = 'No data available',
+    emptyMessage = t('analytics.charts.noDataAvailable'),
     showEmpty = false,
   }: Props = $props();
 </script>

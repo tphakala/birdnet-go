@@ -3,6 +3,7 @@
   import SystemInfoCard from '$lib/desktop/components/ui/SystemInfoCard.svelte';
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
+  import { t } from '$lib/i18n/store.svelte.js';
   import { actionIcons } from '$lib/utils/icons';
 
   // Type definitions
@@ -113,7 +114,7 @@
     memoryUsage.data.total
       ? [
           {
-            label: 'RAM Usage',
+            label: t('system.memoryUsage.ramUsage'),
             used: memoryUsage.data.used,
             total: memoryUsage.data.total,
             usagePercent: memoryUsage.data.usedPercent,
@@ -141,7 +142,9 @@
       systemInfo.data = await response.json();
     } catch (error: unknown) {
       // Handle system info fetch error silently
-      systemInfo.error = `Failed to load system information: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      systemInfo.error = t('system.errors.systemInfo', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       systemInfo.loading = false;
     }
@@ -166,7 +169,9 @@
       diskUsage.data = await response.json();
     } catch (error: unknown) {
       // Handle disk usage fetch error silently
-      diskUsage.error = `Failed to load disk usage: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      diskUsage.error = t('system.errors.diskUsage', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       diskUsage.data = [];
     } finally {
       diskUsage.loading = false;
@@ -200,7 +205,9 @@
       };
     } catch (error: unknown) {
       // Handle memory usage fetch error silently
-      memoryUsage.error = `Failed to load memory usage: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      memoryUsage.error = t('system.errors.memoryUsage', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       memoryUsage.loading = false;
     }
@@ -229,7 +236,9 @@
       systemTemperature.data = await response.json();
     } catch (error: unknown) {
       // Handle temperature fetch error silently
-      systemTemperature.error = `Failed to load temperature: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      systemTemperature.error = t('system.errors.temperature', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       systemTemperature.data = { is_available: false };
     } finally {
       systemTemperature.loading = false;
@@ -258,7 +267,9 @@
       processes.data = await response.json();
     } catch (error: unknown) {
       // Handle processes fetch error silently
-      processes.error = `Failed to load process information: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      processes.error = t('system.errors.processes', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       processes.data = [];
     } finally {
       processes.loading = false;
@@ -286,7 +297,7 @@
   <div class="gap-6 system-cards-grid">
     <!-- System Information Card -->
     <SystemInfoCard
-      title="System Information"
+      title={t('system.systemInfo.title')}
       systemInfo={systemInfo.data}
       temperatureInfo={systemTemperature.data}
       isLoading={systemInfo.loading}
@@ -297,16 +308,16 @@
 
     <!-- Disk Usage Card -->
     <ProgressCard
-      title="Disk Usage"
+      title={t('system.diskUsage.title')}
       items={diskProgressItems}
       isLoading={diskUsage.loading}
       error={diskUsage.error}
-      emptyMessage="No disk information available"
+      emptyMessage={t('system.diskUsage.emptyMessage')}
     />
 
     <!-- Memory Usage Card -->
     <ProgressCard
-      title="Memory Usage"
+      title={t('system.memoryUsage.title')}
       items={memoryProgressItems}
       isLoading={memoryUsage.loading}
       error={memoryUsage.error}
@@ -316,7 +327,7 @@
 
   <!-- Process Information Card -->
   <ProcessTable
-    title="Process Information"
+    title={t('system.processInfo.title')}
     processes={processes.data}
     {showAllProcesses}
     isLoading={processes.loading}
@@ -340,7 +351,7 @@
           {@html actionIcons.refresh}
         </span>
       {/if}
-      Refresh Data
+      {t('system.refreshData')}
     </button>
   </div>
 </div>
