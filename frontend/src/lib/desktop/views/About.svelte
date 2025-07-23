@@ -12,9 +12,9 @@
   async function fetchVersionInfo() {
     try {
       // In a real implementation, this would fetch from an API
-      // For now, we'll use placeholder values
-      settings.version = t('about.developmentBuild');
-      settings.buildDate = t('about.unknown');
+      // For now, we'll leave empty - the template will use fallback translations
+      // settings.version = '1.0.0';
+      // settings.buildDate = '2024-01-01';
     } catch {
       // Silently fail for now - version info is not critical
     }
