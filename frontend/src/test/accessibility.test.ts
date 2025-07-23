@@ -362,12 +362,10 @@ describe('Frontend Accessibility Tests', () => {
       const report = await getA11yReport(container, A11Y_CONFIGS.strict);
 
       // Only log report in development/local environment to keep CI/CD logs clean
-      if (
-        typeof globalThis !== 'undefined' &&
-        typeof globalThis.process !== 'undefined' &&
-        globalThis.process.env?.NODE_ENV === 'development' ||
-        (globalThis.process.env?.NODE_ENV === 'test' && !globalThis.process.env?.CI)
-      ) {
+      const nodeEnv = globalThis?.process?.env?.NODE_ENV;
+      const isCI = globalThis?.process?.env?.CI;
+      
+      if (nodeEnv === 'development' || (nodeEnv === 'test' && !isCI)) {
         // eslint-disable-next-line no-console
         console.log('Dashboard Accessibility Report:\n', report);
       }
