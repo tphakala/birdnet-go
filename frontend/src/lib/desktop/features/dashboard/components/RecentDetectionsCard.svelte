@@ -7,7 +7,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
 
   interface Props {
     data: Detection[];

@@ -593,7 +593,7 @@
                 class={cn(
                   'flex flex-row items-center w-full p-2 text-sm hover:bg-base-200 rounded-md',
                   selectedSource === source && 'bg-base-200',
-                  isInactive(source) ? 'text-base-content/50' : 'text-base-content'
+                  isInactive(source) ? 'text-base-content/60' : 'text-base-content'
                 )}
                 role="menuitem"
               >
@@ -609,7 +609,7 @@
                 >
                   <span class="flex-1 whitespace-nowrap">{getSourceDisplayName(source)}</span>
                   {#if isInactive(source)}
-                    <span class="text-xs text-base-content/50 shrink-0 ml-2" aria-hidden="true">
+                    <span class="text-xs text-base-content/60 shrink-0 ml-2" aria-hidden="true">
                       (silent)
                     </span>
                   {/if}

@@ -33,6 +33,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
+      expect(container.querySelector('form')).toBeTruthy();
     });
 
     it('should pass accessibility test for select dropdown with proper labeling', async () => {
@@ -55,6 +56,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
+      expect(container.querySelector('.select-dropdown')).toBeTruthy();
     });
 
     it('should pass accessibility test for checkbox with proper labeling', async () => {
@@ -68,6 +70,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
+      expect(container.querySelector('.form-control')).toBeTruthy();
     });
   });
 
@@ -82,6 +85,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
 
     it('should pass accessibility test for pagination controls', async () => {
@@ -96,6 +100,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
 
     it('should pass accessibility test for data table with proper headers', async () => {
@@ -119,6 +124,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
   });
 
@@ -145,6 +151,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
 
     it('should pass accessibility test for dropdown menu', async () => {
@@ -173,6 +180,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
   });
 
@@ -192,6 +200,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
 
     it('should pass accessibility test for notification list', async () => {
@@ -231,6 +240,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
   });
 
@@ -258,6 +268,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
+      expect(container.innerHTML).toContain("aria");
     });
   });
 
@@ -313,6 +324,7 @@ describe('Frontend Accessibility Tests', () => {
       // Generate and log report (don't assert violations for complex layouts)
       const report = await getA11yReport(container, A11Y_CONFIGS.strict);
       console.log('Dashboard Accessibility Report:\n', report);
+      expect(report).toContain('Accessibility Test Results');
     });
   });
 });

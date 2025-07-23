@@ -203,6 +203,7 @@ eventSource.close();
 **Solutions**:
 
 1. **Use prettier-ignore comments** (recommended for consistency):
+
 ```svelte
 <!-- prettier-ignore -->
 <Checkbox
@@ -212,15 +213,14 @@ eventSource.close();
 ```
 
 2. **Use optional chaining with non-bind patterns**:
+
 ```svelte
 <!-- Alternative: avoid bind:checked with type assertions -->
-<Checkbox
-  checked={settings.mqtt?.retain ?? false}
-  onchange={(checked) => updateRetain(checked)}
-/>
+<Checkbox checked={settings.mqtt?.retain ?? false} onchange={checked => updateRetain(checked)} />
 ```
 
 3. **Pre-cast to variables**:
+
 ```svelte
 <script>
   let mqttSettings = $derived(settings.mqtt as MQTTSettings);
@@ -230,6 +230,239 @@ eventSource.close();
 ```
 
 **Best Practice**: Use `<!-- prettier-ignore -->` to maintain consistency with existing codebase patterns while avoiding formatter conflicts.
+
+## Accessibility Guidelines
+
+### WCAG 2.1 Level AA Compliance
+
+All components must follow WCAG 2.1 Level AA accessibility standards. The project includes comprehensive accessibility testing using axe-core.
+
+#### Form Accessibility
+
+**Label Association**: All form inputs must have proper labels
+```svelte
+<!-- ✅ Correct: Proper label association -->
+<label for="username" id="username-label">Username</label>
+<input type="text" id="username" aria-labelledby="username-label" required>
+
+<!-- ✅ Correct: Help text association -->
+<input type="email" id="email" aria-describedby="email-help">
+<div id="email-help">We'll never share your email</div>
+```
+
+**Field Validation**: Error states must be accessible
+```svelte
+<input 
+  type="text" 
+  id="field"
+  aria-invalid={hasError}
+  aria-describedby={hasError ? 'field-error' : undefined}
+>
+{#if hasError}
+  <div id="field-error" role="alert">{errorMessage}</div>
+{/if}
+```
+
+#### Interactive Elements
+
+**Button Labels**: All buttons must have accessible names
+```svelte
+<!-- ✅ Correct: Text content provides label -->
+<button>Save Changes</button>
+
+<!-- ✅ Correct: aria-label for icon-only buttons -->
+<button aria-label="Close dialog">
+  {@html navigationIcons.close}
+</button>
+
+<!-- ✅ Correct: aria-labelledby referencing other text -->
+<button aria-labelledby="section-title">Edit</button>
+<h2 id="section-title">User Profile</h2>
+```
+
+**Link Context**: Links must have descriptive text
+```svelte
+<!-- ❌ Wrong: Vague link text -->
+<a href="/detections/123">Click here</a>
+
+<!-- ✅ Correct: Descriptive link text -->
+<a href="/detections/123">View American Robin detection details</a>
+```
+
+#### Data Tables
+
+**Header Association**: Use proper table structure
+```svelte
+<table role="table">
+  <caption class="sr-only">Bird detections with species, confidence, and time</caption>
+  <thead>
+    <tr>
+      <th scope="col" aria-sort="none">Species</th>
+      <th scope="col" aria-sort="none">Confidence</th>
+      <th scope="col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>American Robin</td>
+      <td>95%</td>
+      <td>
+        <button aria-label="Play audio for American Robin detection">
+          {@html mediaIcons.play}
+        </button>
+      </td>
+    </tr>
+  </tbody>
+</table>
+```
+
+#### Modal Dialogs
+
+**Focus Management**: Modals must trap focus and manage focus properly
+```svelte
+<!-- The Modal component handles this automatically -->
+<Modal isOpen={showModal} title="Confirm Action" onClose={handleClose}>
+  <!-- Focus is automatically trapped within modal -->
+  <p>Are you sure you want to delete this item?</p>
+</Modal>
+```
+
+**ARIA Attributes**: Proper modal semantics
+```svelte
+<div 
+  role="dialog" 
+  aria-modal="true" 
+  aria-labelledby="modal-title"
+  aria-describedby="modal-description"
+>
+  <h2 id="modal-title">Delete Confirmation</h2>
+  <p id="modal-description">This action cannot be undone.</p>
+</div>
+```
+
+#### Navigation and Menus
+
+**Dropdown Menus**: Use proper menu semantics
+```svelte
+<button 
+  aria-expanded={isOpen}
+  aria-haspopup="menu"
+  aria-controls="dropdown-menu"
+>
+  Options
+</button>
+
+{#if isOpen}
+  <div role="menu" id="dropdown-menu">
+    <button role="menuitem">Edit</button>
+    <button role="menuitem">Delete</button>
+  </div>
+{/if}
+```
+
+**Pagination**: Descriptive button labels
+```svelte
+<div aria-label="Pagination">
+  <button aria-label="Go to previous page" disabled={currentPage === 1}>
+    «
+  </button>
+  <button aria-label="Current page">Page {currentPage} of {totalPages}</button>
+  <button aria-label="Go to next page" disabled={currentPage === totalPages}>
+    »
+  </button>
+</div>
+```
+
+#### Status and Live Regions
+
+**Status Updates**: Use live regions for dynamic content
+```svelte
+<!-- For important status changes -->
+<div role="status" aria-live="polite">
+  Settings saved successfully
+</div>
+
+<!-- For urgent alerts -->
+<div role="alert" aria-live="assertive">
+  Connection lost - attempting to reconnect
+</div>
+
+<!-- For screen reader only announcements -->
+<div class="sr-only" aria-live="polite">
+  Current audio level: {level} percent
+</div>
+```
+
+#### Icon Usage
+
+**Decorative Icons**: All centralized icons include `aria-hidden="true"` automatically
+```svelte
+<!-- ✅ Correct: Icons are automatically decorative -->
+<button aria-label="Save changes">
+  {@html actionIcons.save}
+</button>
+
+<!-- ❌ Wrong: Never add custom SVG icons -->
+<svg>...</svg> <!-- Use centralized icons instead -->
+```
+
+#### Testing
+
+**Automated Testing**: Run accessibility tests regularly
+```bash
+# Run accessibility test suite
+npm run test:a11y
+
+# Run specific accessibility tests
+npm run test:a11y -- --reporter=verbose
+
+# Run with watch mode during development  
+npm run test:a11y:watch
+```
+
+**Manual Testing Checklist**:
+- [ ] All interactive elements are keyboard accessible
+- [ ] Focus indicators are visible and clear
+- [ ] Screen reader announces all important information
+- [ ] Color is not the only way to convey information
+- [ ] Form errors are announced to screen readers
+- [ ] Modal focus is properly managed
+
+#### Common Patterns
+
+**Loading States**: Announce loading to screen readers
+```svelte
+<div role="status" aria-live="polite">
+  {#if loading}
+    Loading data...
+  {:else}
+    Data loaded successfully
+  {/if}
+</div>
+```
+
+**Error Boundaries**: Accessible error messages
+```svelte
+{#if error}
+  <div role="alert" class="alert alert-error">
+    <span>Error: {error.message}</span>
+  </div>
+{/if}
+```
+
+**Dynamic Content**: Announce changes to screen readers
+```svelte
+<div aria-live="polite" class="sr-only">
+  {filteredResults.length} results found
+</div>
+```
+
+#### Resources
+
+- **WCAG Guidelines**: https://www.w3.org/WAI/WCAG21/quickref/
+- **ARIA Practices**: https://www.w3.org/WAI/ARIA/apg/
+- **axe-core Rules**: https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md
+- **Testing Tools**: Use axe DevTools browser extension for manual testing
 
 ## Icon Usage
 

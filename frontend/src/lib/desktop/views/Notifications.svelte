@@ -404,12 +404,12 @@
     {#if !loading && totalPages > 1}
       <div class="flex justify-center mt-6" aria-label="Pagination">
         <div class="join">
-          <button 
-            onclick={previousPage} 
-            disabled={currentPage === 1} 
+          <button
+            onclick={previousPage}
+            disabled={currentPage === 1}
             class="join-item btn btn-sm"
-            aria-label="Go to previous page"
-          >«</button>
+            aria-label="Go to previous page">«</button
+          >
           <button class="join-item btn btn-sm btn-active" aria-label="Current page">
             Page {currentPage} of {totalPages}
           </button>
@@ -417,8 +417,8 @@
             onclick={nextPage}
             disabled={currentPage === totalPages}
             class="join-item btn btn-sm"
-            aria-label="Go to next page"
-          >»</button>
+            aria-label="Go to next page">»</button
+          >
         </div>
       </div>
     {/if}

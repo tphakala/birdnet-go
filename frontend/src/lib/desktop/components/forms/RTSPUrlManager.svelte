@@ -352,7 +352,7 @@
                 {disabled}
               />
 
-              <div class="text-xs text-base-content/50">
+              <div class="text-xs text-base-content/60">
                 Stream {index + 1} of {urls.length}
               </div>
             </div>
@@ -361,7 +361,7 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-8 text-base-content/50 bg-base-200 rounded-lg">
+    <div class="text-center py-8 text-base-content/60 bg-base-200 rounded-lg">
       <div class="mb-2">
         {@html mediaIcons.videoCamera}
       </div>

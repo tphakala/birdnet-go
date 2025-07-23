@@ -300,8 +300,10 @@
           ondragend={handleDragEnd}
           role={editable && sortable ? 'button' : 'listitem'}
           tabindex={editable && sortable ? 0 : undefined}
-          aria-label={editable && sortable ? `Drag to reorder ${formatSpeciesName(item)}` : undefined}
-          onkeydown={editable && sortable ? (e) => handleItemKeyDown(e, index) : undefined}
+          aria-label={editable && sortable
+            ? `Drag to reorder ${formatSpeciesName(item)}`
+            : undefined}
+          onkeydown={editable && sortable ? e => handleItemKeyDown(e, index) : undefined}
         >
           {#if editable && sortable}
             {@html navigationIcons.dragHandle}

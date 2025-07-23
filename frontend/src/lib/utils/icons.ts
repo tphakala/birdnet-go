@@ -2,12 +2,12 @@
  * Centralized icon definitions for SVG icons used across the application.
  * This module provides a single source of truth for icon paths, improving
  * maintainability and reusability.
- * 
+ *
  * ACCESSIBILITY NOTE:
  * All icons include aria-hidden="true" by default, making them decorative.
  * When using icons in interactive elements (buttons, links), you MUST add
  * proper aria-label attributes to the interactive element itself.
- * 
+ *
  * Example:
  * <button aria-label="Close dialog">{@html navigationIcons.close}</button>
  */
@@ -137,7 +137,7 @@ export const navigationIcons = {
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
   </svg>`,
 
-  dragHandle: `<svg class="w-5 h-5 text-base-content/50 cursor-move" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+  dragHandle: `<svg class="w-5 h-5 text-base-content/60 cursor-move" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
   </svg>`,
 
