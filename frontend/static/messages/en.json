@@ -471,7 +471,7 @@
     }
   },
   "analytics": {
-    "title": "Bird Detection Analytics",
+    "title": "Overview",
     "loadingError": "Failed to load some analytics data. Please try again later.",
     "stats": {
       "totalDetections": "Total Detections",
