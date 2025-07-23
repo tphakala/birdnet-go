@@ -190,7 +190,7 @@
     <!-- Privacy Filter Section -->
     <SettingsSection
       title={t('settings.filters.privacyFiltering.title')}
-      description="Privacy filtering avoids saving audio clips when human vocals are detected"
+      description={t('settings.filters.privacyFiltering.description')}
       defaultOpen={true}
       hasChanges={privacyFilterHasChanges}
     >
@@ -198,7 +198,7 @@
         <!-- Enable Privacy Filtering -->
         <Checkbox
           bind:checked={settings.privacy.enabled}
-          label="Enable Privacy Filtering"
+          label={t('settings.filters.privacyFiltering.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updatePrivacyEnabled(settings.privacy.enabled)}
         />
@@ -207,14 +207,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <!-- Confidence Threshold -->
             <NumberField
-              label="Confidence Threshold for Human Detection"
+              label={t('settings.filters.privacyFiltering.confidenceLabel')}
               value={(settings.privacy as any).confidence}
               onUpdate={updatePrivacyConfidence}
               min={0}
               max={1}
               step={0.01}
               disabled={store.isLoading || store.isSaving}
-              helpText="Set the confidence level for human voice detection, lower value makes filter more sensitive"
+              helpText={t('settings.filters.privacyFiltering.confidenceHelp')}
             />
           </div>
         {/if}
@@ -224,7 +224,7 @@
     <!-- Dog Bark Filter Section -->
     <SettingsSection
       title={t('settings.filters.falsePositivePrevention.title')}
-      description="Configure false detection filters"
+      description={t('settings.filters.falsePositivePrevention.description')}
       defaultOpen={true}
       hasChanges={dogBarkFilterHasChanges}
     >
@@ -232,7 +232,7 @@
         <!-- Enable Dog Bark Filter -->
         <Checkbox
           bind:checked={settings.dogBark.enabled}
-          label="Enable Dog Bark Filter"
+          label={t('settings.filters.falsePositivePrevention.enableDogBark')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateDogBarkEnabled(settings.dogBark.enabled)}
         />
@@ -241,25 +241,25 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <!-- Confidence Threshold -->
             <NumberField
-              label="Confidence Threshold"
+              label={t('settings.filters.falsePositivePrevention.confidenceLabel')}
               value={(settings.dogBark as any).confidence}
               onUpdate={updateDogBarkConfidence}
               min={0}
               max={1}
               step={0.01}
               disabled={store.isLoading || store.isSaving}
-              helpText="Set the confidence level for dog bark detection, lower value makes filter more sensitive"
+              helpText={t('settings.filters.falsePositivePrevention.confidenceHelp')}
             />
 
             <!-- Dog Bark Expire Time -->
             <NumberField
-              label="Dog Bark Expire Time (Minutes)"
+              label={t('settings.filters.falsePositivePrevention.expireTimeLabel')}
               value={(settings.dogBark as any).remember}
               onUpdate={updateDogBarkRemember}
               min={0}
               step={1}
               disabled={store.isLoading || store.isSaving}
-              helpText="Set how long to remember a detected dog bark"
+              helpText={t('settings.filters.falsePositivePrevention.expireTimeHelp')}
             />
           </div>
 
@@ -345,7 +345,7 @@
                 <div class="h-4 w-4">
                   {@html alertIconsSvg.info}
                 </div>
-                <span>Unsaved changes</span>
+                <span>{t('settings.actions.unsavedChanges')}</span>
               </div>
             {/if}
           </div>

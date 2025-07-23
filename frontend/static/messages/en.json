@@ -596,7 +596,8 @@
       "reset": "Reset",
       "resetAriaLabel": "Reset all changes",
       "saveAriaLabel": "Save Changes",
-      "savingAriaLabel": "Saving changes..."
+      "savingAriaLabel": "Saving changes...",
+      "unsavedChanges": "Unsaved changes"
     },
     "card": {
       "changed": "changed",
@@ -681,10 +682,20 @@
     },
     "filters": {
       "privacyFiltering": {
-        "title": "Privacy Filtering"
+        "title": "Privacy Filtering",
+        "description": "Privacy filtering avoids saving audio clips when human vocals are detected",
+        "enable": "Enable Privacy Filtering",
+        "confidenceLabel": "Confidence Threshold for Human Detection",
+        "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive"
       },
       "falsePositivePrevention": {
-        "title": "False Positive Prevention"
+        "title": "False Positive Prevention",
+        "description": "Configure false detection filters",
+        "enableDogBark": "Enable Dog Bark Filter",
+        "confidenceLabel": "Confidence Threshold",
+        "confidenceHelp": "Set the confidence level for dog bark detection, lower value makes filter more sensitive",
+        "expireTimeLabel": "Dog Bark Expire Time (Minutes)",
+        "expireTimeHelp": "Set how long to remember a detected dog bark"
       },
       "speciesNamePlaceholder": "Species name",
       "typeSpeciesName": "Type species name..."
