@@ -720,7 +720,16 @@
       "hostLabel": "Host Address",
       "hostPlaceholder": "For example, localhost:8080 or example.domain.com",
       "allowedUsersPlaceholder": "Enter one or more allowed user emails",
-      "subnetPlaceholder": "Enter a CIDR subnet (e.g. 192.168.1.0/24)"
+      "subnetPlaceholder": "Enter a CIDR subnet (e.g. 192.168.1.0/24)",
+      "allowSubnetBypassLabel": "Allow Access from Subnet to Bypass Authentication",
+      "allowedSubnetsLabel": "Allowed Subnets",
+      "allowedSubnetsHelp": "Allowed network ranges to bypass the login (CIDR notation, comma-separated list)",
+      "securityWarningTitle": "Security Warning:",
+      "subnetWarningText": "Devices from these subnets will have unrestricted access. Only include trusted internal networks.",
+      "httpsSettingsTitle": "HTTPS Settings",
+      "httpsSettingsDescription": "Secure access with SSL/TLS encryption",
+      "basicAuthTitle": "Basic Authentication",
+      "basicAuthDescription": "Secure access with a simple password"
     },
     "database": {
       "sqlitePlaceholder": "Enter SQLite database path",

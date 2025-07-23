@@ -238,8 +238,8 @@
       />
 
       <div class="border-t border-base-300 pt-4 mt-4">
-        <h4 class="text-lg font-medium mb-2">HTTPS Settings</h4>
-        <p class="text-sm text-base-content/70 mb-4">Secure access with SSL/TLS encryption</p>
+        <h4 class="text-lg font-medium mb-2">{t('settings.security.httpsSettingsTitle')}</h4>
+        <p class="text-sm text-base-content/70 mb-4">{t('settings.security.httpsSettingsDescription')}</p>
 
         <Checkbox
           bind:checked={settings.autoTls}
@@ -264,8 +264,8 @@
 
   <!-- Basic Authentication -->
   <SettingsSection
-    title="Basic Authentication"
-    description="Secure access with a simple password"
+    title={t('settings.security.basicAuthTitle')}
+    description={t('settings.security.basicAuthDescription')}
     defaultOpen={false}
     hasChanges={basicAuthHasChanges}
   >
@@ -468,7 +468,7 @@
     <div class="space-y-4">
       <Checkbox
         bind:checked={settings.allowSubnetBypass.enabled}
-        label="Allow Access from Subnet to Bypass Authentication"
+        label={t('settings.security.allowSubnetBypassLabel')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateSubnetBypassEnabled(settings.allowSubnetBypass.enabled)}
       />
@@ -478,21 +478,20 @@
           <TextInput
             id="allowed-subnet"
             bind:value={settings.allowSubnetBypass.subnet}
-            label="Allowed Subnets"
+            label={t('settings.security.allowedSubnetsLabel')}
             placeholder={t('settings.security.subnetPlaceholder')}
             disabled={store.isLoading || store.isSaving}
             onchange={() => updateSubnetBypassSubnet(settings.allowSubnetBypass.subnet || '')}
           />
           <div class="text-sm text-base-content/70 mt-1">
-            Allowed network ranges to bypass the login (CIDR notation, comma-separated list)
+            {t('settings.security.allowedSubnetsHelp')}
           </div>
         </div>
 
         <div class="alert alert-warning">
           {@html alertIconsSvg.warning}
           <span>
-            <strong>Security Warning:</strong> Devices from these subnets will have unrestricted access.
-            Only include trusted internal networks.
+            <strong>{t('settings.security.securityWarningTitle')}</strong> {t('settings.security.subnetWarningText')}
           </span>
         </div>
       {/if}
