@@ -97,7 +97,7 @@
             role="menuitem"
           >
             {@html systemIcons.home}
-            <span>Dashboard</span>
+            <span>{t('navigation.dashboard')}</span>
           </button>
         </li>
 
@@ -105,7 +105,7 @@
           <details bind:open={analyticsOpen}>
             <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
               {@html systemIcons.analytics}
-              <span>Analytics</span>
+              <span>{t('navigation.analytics')}</span>
             </summary>
             <ul role="menu" aria-label={t('navigation.analyticsSubmenu')}>
               <li role="none">
@@ -114,7 +114,7 @@
                   class={cn({ active: isExactRouteActive('/analytics') })}
                   role="menuitem"
                 >
-                  Overview
+                  {t('analytics.title')}
                 </button>
               </li>
               <li role="none">
@@ -123,7 +123,7 @@
                   class={cn({ active: isExactRouteActive('/analytics/species') })}
                   role="menuitem"
                 >
-                  Species
+                  {t('analytics.species.title')}
                 </button>
               </li>
             </ul>
@@ -137,7 +137,7 @@
             role="menuitem"
           >
             {@html systemIcons.search}
-            <span>Search</span>
+            <span>{t('navigation.search')}</span>
           </button>
         </li>
 
@@ -148,7 +148,7 @@
             role="menuitem"
           >
             {@html systemIcons.about}
-            <span>About</span>
+            <span>{t('navigation.about')}</span>
           </button>
         </li>
 
@@ -162,7 +162,7 @@
               aria-current={isRouteActive('/system') ? 'page' : undefined}
             >
               {@html systemIcons.system}
-              <span>System</span>
+              <span>{t('navigation.system')}</span>
             </button>
           </li>
 
@@ -170,7 +170,7 @@
             <details bind:open={settingsOpen}>
               <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
                 {@html systemIcons.settingsGear}
-                <span>Settings</span>
+                <span>{t('navigation.settings')}</span>
               </summary>
               <ul role="menu" aria-label={t('navigation.settingsSubmenu')}>
                 <li role="none">
@@ -179,7 +179,7 @@
                     class={cn({ active: isExactRouteActive('/settings/main') })}
                     role="menuitem"
                   >
-                    Main
+                    {t('settings.sections.node')}
                   </button>
                 </li>
                 <li role="none">
@@ -188,7 +188,7 @@
                     class={cn({ active: isExactRouteActive('/settings/audio') })}
                     role="menuitem"
                   >
-                    Audio Capture
+                    {t('settings.sections.audio')}
                   </button>
                 </li>
                 <li role="none">
@@ -197,7 +197,7 @@
                     class={cn({ active: isRouteActive('/settings/detectionfilters') })}
                     role="menuitem"
                   >
-                    Detection Filters
+                    {t('settings.sections.filters')}
                   </button>
                 </li>
                 <li role="none">
@@ -206,7 +206,7 @@
                     class={cn({ active: isExactRouteActive('/settings/integrations') })}
                     role="menuitem"
                   >
-                    Integrations
+                    {t('settings.sections.integration')}
                   </button>
                 </li>
                 <li role="none">
@@ -215,7 +215,7 @@
                     class={cn({ active: isExactRouteActive('/settings/security') })}
                     role="menuitem"
                   >
-                    Security
+                    {t('settings.sections.security')}
                   </button>
                 </li>
                 <li role="none">
@@ -224,7 +224,7 @@
                     class={cn({ active: isExactRouteActive('/settings/species') })}
                     role="menuitem"
                   >
-                    Species
+                    {t('settings.sections.species')}
                   </button>
                 </li>
                 <li role="none">
@@ -233,7 +233,7 @@
                     class={cn({ active: isExactRouteActive('/settings/support') })}
                     role="menuitem"
                   >
-                    Support
+                    {t('settings.sections.support')}
                   </button>
                 </li>
               </ul>
@@ -256,7 +256,7 @@
                 aria-label={t('auth.logout')}
               >
                 {@html systemIcons.logout}
-                <span>Logout</span>
+                <span>{t('auth.logout')}</span>
               </button>
             </div>
           {:else}
