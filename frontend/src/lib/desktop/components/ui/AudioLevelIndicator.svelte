@@ -578,8 +578,7 @@
     {#if dropdownOpen}
       <div
         bind:this={dropdownRef}
-        role="dialog"
-        aria-modal="true"
+        role="menu"
         aria-label="Audio Source Selection"
         class="absolute p-1 right-0 mt-2 w-auto min-w-[16rem] max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50"
       >
