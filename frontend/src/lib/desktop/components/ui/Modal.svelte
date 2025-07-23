@@ -4,6 +4,10 @@
   import type { HTMLAttributes } from 'svelte/elements';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
+  // CSS selector for focusable elements used in focus management
+  const FOCUSABLE_SELECTOR =
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
   type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
   type ModalType = 'default' | 'confirm' | 'alert';
 
@@ -109,9 +113,7 @@
   function trapFocus(event: KeyboardEvent) {
     if (!modalElement) return;
 
-    const focusableElements = modalElement.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
+    const focusableElements = modalElement.querySelectorAll(FOCUSABLE_SELECTOR);
     const firstFocusable = focusableElements[0] as HTMLElement;
     const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
 
@@ -134,10 +136,8 @@
     if (!modalElement) return;
 
     // Focus the first focusable element, or the modal itself if no focusable elements
-    const focusableElements = modalElement.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    
+    const focusableElements = modalElement.querySelectorAll(FOCUSABLE_SELECTOR);
+
     if (focusableElements.length > 0) {
       (focusableElements[0] as HTMLElement).focus();
     } else {
@@ -155,13 +155,13 @@
     if (isOpen) {
       // Store the currently focused element
       previousActiveElement = document.activeElement;
-      
+
       // Set focus to modal when opened
       setTimeout(() => setInitialFocus(), 0);
-      
+
       // Add event listener for keyboard navigation
       document.addEventListener('keydown', handleKeydown);
-      
+
       return () => {
         document.removeEventListener('keydown', handleKeydown);
         // Restore focus when modal closes

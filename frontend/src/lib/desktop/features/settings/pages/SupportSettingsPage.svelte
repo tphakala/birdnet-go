@@ -1,6 +1,7 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -257,51 +258,45 @@
                 that would be impossible to diagnose otherwise.
               </p>
 
-              <div class="alert alert-warning shadow-sm">
-                {@html alertIconsSvg.info}
-                <div>
-                  <h4 class="font-bold">Important: File a GitHub Issue</h4>
-                  <p class="text-sm">
-                    Please <a
-                      href="https://github.com/tphakala/birdnet-go/issues/new"
-                      target="_blank"
-                      class="link link-primary font-semibold">create a GitHub issue</a
-                    >
-                    describing your problem <strong>before or after</strong> generating this support
-                    report. This allows for proper tracking and communication about your issue.
-                  </p>
-                </div>
-              </div>
+              <p class="text-sm text-base-content/80">
+                Please <a
+                  href="https://github.com/tphakala/birdnet-go/issues/new"
+                  target="_blank"
+                  class="link link-primary font-semibold">create a GitHub issue</a
+                >
+                describing your problem <strong>before or after</strong> generating this support report.
+                This allows for proper tracking and communication about your issue.
+              </p>
 
               <div class="bg-base-100 rounded-lg p-3 border border-base-300">
                 <h4 class="font-semibold text-sm mb-2">What's included in the report:</h4>
                 <ul class="text-xs space-y-1 text-base-content/70">
-                  <li class="flex items-start gap-2">
-                    <div class="h-4 w-4 text-success mt-0.5 flex-shrink-0">
+                  <li class="flex items-center gap-2">
+                    <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
                     <span
                       ><strong>Application logs</strong> - Recent errors and debug information</span
                     >
                   </li>
-                  <li class="flex items-start gap-2">
-                    <div class="h-4 w-4 text-success mt-0.5 flex-shrink-0">
+                  <li class="flex items-center gap-2">
+                    <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
                     <span
                       ><strong>Configuration</strong> - Your settings with sensitive data removed</span
                     >
                   </li>
-                  <li class="flex items-start gap-2">
-                    <div class="h-4 w-4 text-success mt-0.5 flex-shrink-0">
+                  <li class="flex items-center gap-2">
+                    <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
                     <span
                       ><strong>System information</strong> - OS version, memory, and runtime details</span
                     >
                   </li>
-                  <li class="flex items-start gap-2">
-                    <div class="h-4 w-4 text-error mt-0.5 flex-shrink-0">
+                  <li class="flex items-center gap-2">
+                    <div class="h-4 w-4 text-error flex-shrink-0">
                       {@html alertIconsSvg.error}
                     </div>
                     <span

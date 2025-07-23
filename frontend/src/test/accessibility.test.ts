@@ -85,7 +85,13 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+
+      // Verify specific ARIA attributes
+      const button = container.querySelector('button');
+      expect(button?.getAttribute('aria-label')).toBe('Close dialog');
+
+      const svg = container.querySelector('svg');
+      expect(svg?.getAttribute('aria-hidden')).toBe('true');
     });
 
     it('should pass accessibility test for pagination controls', async () => {
@@ -100,7 +106,20 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+
+      // Verify specific ARIA attributes
+      const paginationContainer = container.querySelector('div[aria-label="Pagination"]');
+      expect(paginationContainer?.getAttribute('aria-label')).toBe('Pagination');
+
+      const prevButton = container.querySelector('button[aria-label="Go to previous page"]');
+      expect(prevButton?.getAttribute('aria-label')).toBe('Go to previous page');
+      expect(prevButton?.hasAttribute('disabled')).toBe(true);
+
+      const currentButton = container.querySelector('button[aria-label="Current page"]');
+      expect(currentButton?.getAttribute('aria-label')).toBe('Current page');
+
+      const nextButton = container.querySelector('button[aria-label="Go to next page"]');
+      expect(nextButton?.getAttribute('aria-label')).toBe('Go to next page');
     });
 
     it('should pass accessibility test for data table with proper headers', async () => {
@@ -124,7 +143,25 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+
+      // Verify specific ARIA attributes on table headers
+      const table = container.querySelector('table[role="table"]');
+      expect(table?.getAttribute('role')).toBe('table');
+
+      const headers = container.querySelectorAll('th[aria-sort]');
+      expect(headers).toHaveLength(3);
+
+      const speciesHeader = container.querySelector('th:first-child');
+      expect(speciesHeader?.getAttribute('aria-sort')).toBe('none');
+      expect(speciesHeader?.textContent).toBe('Species');
+
+      const confidenceHeader = container.querySelector('th:nth-child(2)');
+      expect(confidenceHeader?.getAttribute('aria-sort')).toBe('none');
+      expect(confidenceHeader?.textContent).toBe('Confidence');
+
+      const timeHeader = container.querySelector('th:nth-child(3)');
+      expect(timeHeader?.getAttribute('aria-sort')).toBe('none');
+      expect(timeHeader?.textContent).toBe('Time');
     });
   });
 
@@ -151,7 +188,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+      expect(container.innerHTML).toContain('aria');
     });
 
     it('should pass accessibility test for dropdown menu', async () => {
@@ -180,7 +217,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+      expect(container.innerHTML).toContain('aria');
     });
   });
 
@@ -200,7 +237,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+      expect(container.innerHTML).toContain('aria');
     });
 
     it('should pass accessibility test for notification list', async () => {
@@ -240,7 +277,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+      expect(container.innerHTML).toContain('aria');
     });
   });
 
@@ -268,7 +305,7 @@ describe('Frontend Accessibility Tests', () => {
       `;
 
       await expectNoA11yViolations(container, A11Y_CONFIGS.strict);
-      expect(container.innerHTML).toContain("aria");
+      expect(container.innerHTML).toContain('aria');
     });
   });
 
@@ -323,7 +360,15 @@ describe('Frontend Accessibility Tests', () => {
 
       // Generate and log report (don't assert violations for complex layouts)
       const report = await getA11yReport(container, A11Y_CONFIGS.strict);
-      console.log('Dashboard Accessibility Report:\n', report);
+
+      // Only log report in development/local environment to keep CI/CD logs clean
+      if (
+        process.env.NODE_ENV === 'development' ||
+        (process.env.NODE_ENV === 'test' && !process.env.CI)
+      ) {
+        console.log('Dashboard Accessibility Report:\n', report);
+      }
+
       expect(report).toContain('Accessibility Test Results');
     });
   });

@@ -240,24 +240,26 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 #### Form Accessibility
 
 **Label Association**: All form inputs must have proper labels
+
 ```svelte
 <!-- ✅ Correct: Proper label association -->
 <label for="username" id="username-label">Username</label>
-<input type="text" id="username" aria-labelledby="username-label" required>
+<input type="text" id="username" aria-labelledby="username-label" required />
 
 <!-- ✅ Correct: Help text association -->
-<input type="email" id="email" aria-describedby="email-help">
+<input type="email" id="email" aria-describedby="email-help" />
 <div id="email-help">We'll never share your email</div>
 ```
 
 **Field Validation**: Error states must be accessible
+
 ```svelte
-<input 
-  type="text" 
+<input
+  type="text"
   id="field"
   aria-invalid={hasError}
   aria-describedby={hasError ? 'field-error' : undefined}
->
+/>
 {#if hasError}
   <div id="field-error" role="alert">{errorMessage}</div>
 {/if}
@@ -266,6 +268,7 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 #### Interactive Elements
 
 **Button Labels**: All buttons must have accessible names
+
 ```svelte
 <!-- ✅ Correct: Text content provides label -->
 <button>Save Changes</button>
@@ -281,6 +284,7 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 ```
 
 **Link Context**: Links must have descriptive text
+
 ```svelte
 <!-- ❌ Wrong: Vague link text -->
 <a href="/detections/123">Click here</a>
@@ -292,6 +296,7 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 #### Data Tables
 
 **Header Association**: Use proper table structure
+
 ```svelte
 <table role="table">
   <caption class="sr-only">Bird detections with species, confidence, and time</caption>
@@ -319,6 +324,7 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 #### Modal Dialogs
 
 **Focus Management**: Modals must trap focus and manage focus properly
+
 ```svelte
 <!-- The Modal component handles this automatically -->
 <Modal isOpen={showModal} title="Confirm Action" onClose={handleClose}>
@@ -328,10 +334,11 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 ```
 
 **ARIA Attributes**: Proper modal semantics
+
 ```svelte
-<div 
-  role="dialog" 
-  aria-modal="true" 
+<div
+  role="dialog"
+  aria-modal="true"
   aria-labelledby="modal-title"
   aria-describedby="modal-description"
 >
@@ -343,14 +350,9 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 #### Navigation and Menus
 
 **Dropdown Menus**: Use proper menu semantics
+
 ```svelte
-<button 
-  aria-expanded={isOpen}
-  aria-haspopup="menu"
-  aria-controls="dropdown-menu"
->
-  Options
-</button>
+<button aria-expanded={isOpen} aria-haspopup="menu" aria-controls="dropdown-menu"> Options </button>
 
 {#if isOpen}
   <div role="menu" id="dropdown-menu">
@@ -361,31 +363,25 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 ```
 
 **Pagination**: Descriptive button labels
+
 ```svelte
 <div aria-label="Pagination">
-  <button aria-label="Go to previous page" disabled={currentPage === 1}>
-    «
-  </button>
+  <button aria-label="Go to previous page" disabled={currentPage === 1}> « </button>
   <button aria-label="Current page">Page {currentPage} of {totalPages}</button>
-  <button aria-label="Go to next page" disabled={currentPage === totalPages}>
-    »
-  </button>
+  <button aria-label="Go to next page" disabled={currentPage === totalPages}> » </button>
 </div>
 ```
 
 #### Status and Live Regions
 
 **Status Updates**: Use live regions for dynamic content
+
 ```svelte
 <!-- For important status changes -->
-<div role="status" aria-live="polite">
-  Settings saved successfully
-</div>
+<div role="status" aria-live="polite">Settings saved successfully</div>
 
 <!-- For urgent alerts -->
-<div role="alert" aria-live="assertive">
-  Connection lost - attempting to reconnect
-</div>
+<div role="alert" aria-live="assertive">Connection lost - attempting to reconnect</div>
 
 <!-- For screen reader only announcements -->
 <div class="sr-only" aria-live="polite">
@@ -396,6 +392,7 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 #### Icon Usage
 
 **Decorative Icons**: All centralized icons include `aria-hidden="true"` automatically
+
 ```svelte
 <!-- ✅ Correct: Icons are automatically decorative -->
 <button aria-label="Save changes">
@@ -403,12 +400,14 @@ All components must follow WCAG 2.1 Level AA accessibility standards. The projec
 </button>
 
 <!-- ❌ Wrong: Never add custom SVG icons -->
-<svg>...</svg> <!-- Use centralized icons instead -->
+<svg>...</svg>
+<!-- Use centralized icons instead -->
 ```
 
 #### Testing
 
 **Automated Testing**: Run accessibility tests regularly
+
 ```bash
 # Run accessibility test suite
 npm run test:a11y
@@ -416,11 +415,12 @@ npm run test:a11y
 # Run specific accessibility tests
 npm run test:a11y -- --reporter=verbose
 
-# Run with watch mode during development  
+# Run with watch mode during development
 npm run test:a11y:watch
 ```
 
 **Manual Testing Checklist**:
+
 - [ ] All interactive elements are keyboard accessible
 - [ ] Focus indicators are visible and clear
 - [ ] Screen reader announces all important information
@@ -431,6 +431,7 @@ npm run test:a11y:watch
 #### Common Patterns
 
 **Loading States**: Announce loading to screen readers
+
 ```svelte
 <div role="status" aria-live="polite">
   {#if loading}
@@ -442,6 +443,7 @@ npm run test:a11y:watch
 ```
 
 **Error Boundaries**: Accessible error messages
+
 ```svelte
 {#if error}
   <div role="alert" class="alert alert-error">
@@ -451,6 +453,7 @@ npm run test:a11y:watch
 ```
 
 **Dynamic Content**: Announce changes to screen readers
+
 ```svelte
 <div aria-live="polite" class="sr-only">
   {filteredResults.length} results found
