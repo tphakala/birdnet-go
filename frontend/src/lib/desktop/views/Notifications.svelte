@@ -412,7 +412,7 @@
             aria-label={t('dataDisplay.pagination.goToPreviousPage')}>«</button
           >
           <button class="join-item btn btn-sm btn-active" aria-label={t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}>
-            Page {currentPage} of {totalPages}
+            {t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}
           </button>
           <button
             onclick={nextPage}

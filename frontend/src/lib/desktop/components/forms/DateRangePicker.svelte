@@ -37,12 +37,16 @@
     required = false,
     disabled = false,
     className = '',
-    startLabel = t('forms.dateRange.labels.startDate'),
-    endLabel = t('forms.dateRange.labels.endDate'),
+    startLabel,
+    endLabel,
     onChange,
     onStartChange,
     onEndChange,
   }: Props = $props();
+  
+  // Reactive labels with prop override capability
+  let effectiveStartLabel = $derived(startLabel ?? t('forms.dateRange.labels.startDate'));
+  let effectiveEndLabel = $derived(endLabel ?? t('forms.dateRange.labels.endDate'));
 
   // Convert dates to proper Date objects
   let startDateObj = $derived(startDate ? new Date(startDate) : null);
@@ -224,7 +228,7 @@
     <FormField
       type="date"
       name="startDate"
-      label={startLabel}
+      label={effectiveStartLabel}
       value={startDateFormatted}
       min={minDateFormatted}
       max={maxDateFormatted}
@@ -236,7 +240,7 @@
     <FormField
       type="date"
       name="endDate"
-      label={endLabel}
+      label={effectiveEndLabel}
       value={endDateFormatted}
       min={endMinDate}
       max={maxDateFormatted}

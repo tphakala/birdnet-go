@@ -117,10 +117,10 @@
   // Computed value for checkbox
   let checkboxValue = $derived(type === 'checkbox' ? Boolean(value) : false);
 
-  // Validation
+  // Validation - returns a key or null for reactive translation
   function validate(val: unknown): ValidationResult {
     if (required && !val && val !== 0 && val !== false) {
-      return t('common.validation.required');
+      return 'common.validation.required'; // Return key instead of translated text
     }
 
     for (const validator of validators) {
@@ -132,6 +132,17 @@
 
     return null;
   }
+  
+  // Reactive error message that translates on locale change
+  let displayError = $derived(() => {
+    if (!error) return null;
+    // If error starts with a known translation namespace, translate it
+    if (typeof error === 'string' && error.startsWith('common.')) {
+      return t(error);
+    }
+    // Otherwise return as-is (for custom validation messages)
+    return error;
+  });
 
   // Run validation when value changes (only if no external error)
   $effect(() => {
@@ -394,7 +405,7 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span class={cn('label-text-alt text-error', errorClassName)}>{error}</span>
+      <span class={cn('label-text-alt text-error', errorClassName)}>{displayError()}</span>
     </div>
   {:else if helpText}
     <div class="label">

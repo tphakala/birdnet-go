@@ -421,7 +421,6 @@
             <span class="text-sm text-base-content/70" aria-live="polite"
               >{t('search.resultsCount', {
                 count: totalResults,
-                plural: totalResults !== 1 ? 's' : '',
               })}</span
             >
             <div class="dropdown dropdown-end">
