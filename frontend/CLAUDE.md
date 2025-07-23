@@ -189,6 +189,48 @@ eventSource.close();
 - No manual reconnection logic needed
 - Automatic exponential backoff
 
+## TypeScript Type Assertions in Svelte Bindings
+
+**Problem**: Prettier conflicts with TypeScript type assertions in Svelte component bindings.
+
+```svelte
+<!-- ❌ This pattern breaks Prettier -->
+<Checkbox bind:checked={(settings.mqtt as MQTTSettings).retain} />
+```
+
+**Root Cause**: Prettier reformats the type assertion syntax `(obj as Type).prop` which breaks Svelte's binding syntax parser.
+
+**Solutions**:
+
+1. **Use prettier-ignore comments** (recommended for consistency):
+```svelte
+<!-- prettier-ignore -->
+<Checkbox
+  bind:checked={(settings.mqtt as MQTTSettings).retain}
+  onchange={() => updateRetain((settings.mqtt as MQTTSettings).retain)}
+/>
+```
+
+2. **Use optional chaining with non-bind patterns**:
+```svelte
+<!-- Alternative: avoid bind:checked with type assertions -->
+<Checkbox
+  checked={settings.mqtt?.retain ?? false}
+  onchange={(checked) => updateRetain(checked)}
+/>
+```
+
+3. **Pre-cast to variables**:
+```svelte
+<script>
+  let mqttSettings = $derived(settings.mqtt as MQTTSettings);
+</script>
+
+<Checkbox bind:checked={mqttSettings.retain} />
+```
+
+**Best Practice**: Use `<!-- prettier-ignore -->` to maintain consistency with existing codebase patterns while avoiding formatter conflicts.
+
 ## Icon Usage
 
 **ALWAYS use centralized icons from `$lib/utils/icons.ts` - NEVER create inline SVGs**

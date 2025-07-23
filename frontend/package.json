@@ -32,8 +32,8 @@
     "analyze:duplicates": "jscpd src/",
     "analyze:duplicates:html": "jscpd --reporters html,console src/",
     "analyze:all": "npm run analyze:circular && npm run analyze:duplicates",
-    "test:a11y": "vitest run --reporter=verbose src/**/*.test.ts --grep=\"Accessibility\"",
-    "test:a11y:watch": "vitest src/**/*.test.ts --grep=\"Accessibility\""
+    "test:a11y": "vitest run --reporter=verbose -t \"Accessibility\"",
+    "test:a11y:watch": "vitest -t \"Accessibility\""
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

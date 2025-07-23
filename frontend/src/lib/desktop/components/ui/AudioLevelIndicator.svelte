@@ -55,10 +55,7 @@
 
   // Type guard for HLS global availability
   function isHLSAvailable(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      typeof (window as any).Hls?.isSupported === 'function'
-    );
+    return typeof window !== 'undefined' && typeof (window as any).Hls?.isSupported === 'function';
   }
 
   // Get HLS constructor with proper typing
