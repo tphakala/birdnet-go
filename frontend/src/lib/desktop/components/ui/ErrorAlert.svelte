@@ -3,6 +3,7 @@
   import { alertIconsSvg, navigationIcons, type AlertIconType } from '$lib/utils/icons';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { t } from '$lib/i18n/index.js';
 
   type AlertType = AlertIconType;
 
@@ -64,7 +65,7 @@
         type="button"
         class="btn btn-sm btn-ghost"
         onclick={handleDismiss}
-        aria-label="Dismiss alert"
+        aria-label={t('common.aria.dismissAlert')}
       >
         {@html navigationIcons.close}
       </button>

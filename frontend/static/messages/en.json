@@ -12,7 +12,6 @@
     "filter": "Filter",
     "sort": "Sort",
     "actions": "Actions",
-    "status": "Status",
     "settings": "Settings",
     "close": "Close",
     "back": "Back",
@@ -27,7 +26,75 @@
     "reportIssue": "Report Issue",
     "loginToViewDetails": "Login to View Details",
     "pageNotFound": "Page Not Found",
-    "internalServerError": "Internal Server Error"
+    "internalServerError": "Internal Server Error",
+    "buttons": {
+      "save": "Save Changes",
+      "reset": "Reset",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "confirm": "Confirm",
+      "edit": "Edit",
+      "close": "Close",
+      "back": "Back",
+      "next": "Next",
+      "previous": "Previous",
+      "yes": "Yes",
+      "no": "No",
+      "ok": "OK"
+    },
+    "ui": {
+      "loading": "Loading...",
+      "noData": "No data available",
+      "empty": "No items found",
+      "error": "An error occurred",
+      "retry": "Try again",
+      "dismiss": "Dismiss",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "required": "Required",
+      "optional": "Optional"
+    },
+    "status": {
+      "success": "Success",
+      "error": "Error",
+      "warning": "Warning",
+      "info": "Information",
+      "pending": "Pending",
+      "processing": "Processing",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "validation": {
+      "required": "This field is required",
+      "invalid": "Invalid value",
+      "minLength": "Must be at least {min} characters",
+      "maxLength": "Must be no more than {max} characters",
+      "minValue": "Must be at least {min}",
+      "maxValue": "Must be no more than {max}",
+      "email": "Invalid email address",
+      "url": "Invalid URL",
+      "pattern": "Invalid format"
+    },
+    "aria": {
+      "closeModal": "Close modal",
+      "dismissAlert": "Dismiss alert",
+      "closeNotification": "Close notification",
+      "toggleDropdown": "Toggle dropdown",
+      "sortAscending": "Sort ascending",
+      "sortDescending": "Sort descending",
+      "expandSection": "Expand section",
+      "collapseSection": "Collapse section",
+      "playAudio": "Play audio",
+      "pauseAudio": "Pause audio",
+      "loading": "Loading content"
+    },
+    "modal": {
+      "confirmAction": "Confirm Action",
+      "confirmMessage": "Are you sure you want to perform this action?"
+    }
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -321,23 +388,6 @@
       "viewDetails": "View details for {species}"
     }
   },
-  "settings": {
-    "title": "Settings - BirdNET-Go",
-    "loading": "Loading settings...",
-    "sections": {
-      "node": "Main Settings",
-      "audio": "Audio Settings",
-      "filters": "Detection Filters",
-      "integration": "Integrations",
-      "security": "Security",
-      "species": "Species",
-      "support": "Support"
-    },
-    "notFound": {
-      "title": "Settings Not Found",
-      "message": "The requested settings section \"{section}\" could not be found."
-    }
-  },
   "system": {
     "title": "System Dashboard",
     "refreshData": "Refresh Data",
@@ -485,6 +535,219 @@
         "confidence": "Confidence:",
         "first": "First:"
       }
+    }
+  },
+  "settings": {
+    "title": "Settings - BirdNET-Go",
+    "loading": "Loading settings...",
+    "sections": {
+      "node": "Main Settings",
+      "audio": "Audio Settings",
+      "filters": "Detection Filters",
+      "integration": "Integrations",
+      "security": "Security",
+      "species": "Species",
+      "support": "Support"
+    },
+    "notFound": {
+      "title": "Settings Not Found",
+      "message": "The requested settings section \"{section}\" could not be found."
+    },
+    "actions": {
+      "save": "Save Changes",
+      "saving": "Saving...",
+      "reset": "Reset",
+      "resetAriaLabel": "Reset all changes",
+      "saveAriaLabel": "Save Changes",
+      "savingAriaLabel": "Saving changes..."
+    },
+    "card": {
+      "changed": "changed",
+      "changedAriaLabel": "Settings changed"
+    },
+    "main": {
+      "sections": {
+        "main": {
+          "title": "Main Settings",
+          "description": "Configure main application settings"
+        },
+        "birdnet": {
+          "title": "BirdNET Settings",
+          "description": "Configure BirdNET AI model specific settings"
+        },
+        "database": {
+          "title": "Database Settings",
+          "description": "Detections database settings"
+        },
+        "ui": {
+          "title": "User Interface Settings",
+          "description": "Customize user interface"
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Node Name",
+          "placeholder": "Enter node name",
+          "helpText": "Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
+        },
+        "sensitivity": {
+          "label": "Sensitivity",
+          "helpText": "Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
+        },
+        "threshold": {
+          "label": "Threshold", 
+          "helpText": "Minimum confidence threshold. Values in 0.01, 0.99."
+        },
+        "overlap": {
+          "label": "Overlap",
+          "helpText": "Overlap of prediction segments. Values in 0.0, 2.9."
+        },
+        "locale": {
+          "label": "Locale",
+          "helpText": "Locale for translated species common names."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Unable to load language options. Using defaults.",
+        "providersLoadFailed": "Unable to load image providers. Using defaults."
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Error Tracking & Telemetry",
+          "description": "Optional error tracking to help improve BirdNET-Go reliability and performance"
+        },
+        "diagnostics": {
+          "title": "Support & Diagnostics", 
+          "description": "Help developers fix your issues faster by providing essential diagnostic information"
+        }
+      }
+    }
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "No data available",
+      "loading": "Loading data...",
+      "error": "Failed to load data",
+      "sortBy": "Sort by {column}",
+      "rowsPerPage": "Rows per page",
+      "pageInfo": "Showing {from} to {to} of {total} results"
+    },
+    "pagination": {
+      "ariaLabel": "Pagination Navigation",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {current} of {total}",
+      "goToPage": "Go to page {page}",
+      "goToPreviousPage": "Go to previous page",
+      "goToNextPage": "Go to next page",
+      "firstPage": "First page",
+      "lastPage": "Last page"
+    },
+    "stats": {
+      "total": "Total",
+      "average": "Average",
+      "min": "Minimum",
+      "max": "Maximum",
+      "count": "Count"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Enter {field}",
+      "select": "Select {field}",
+      "search": "Search...",
+      "date": "Select date",
+      "dateRange": "Select date range",
+      "number": "Enter number",
+      "password": "Enter password",
+      "url": "Enter URL",
+      "email": "Enter email"
+    },
+    "labels": {
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "copyToClipboard": "Copy to clipboard",
+      "clearSelection": "Clear selection",
+      "selectOption": "Select an option"
+    },
+    "help": {
+      "passwordStrength": "Password strength: {strength}",
+      "charactersRemaining": "{count} characters remaining",
+      "dateFormat": "Format: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Password Strength:",
+        "levels": {
+          "weak": "Weak",
+          "fair": "Fair",
+          "good": "Good",
+          "strong": "Strong"
+        },
+        "suggestions": {
+          "title": "Suggestions:",
+          "minLength": "At least 8 characters",
+          "mixedCase": "Mix of uppercase and lowercase",
+          "number": "At least one number",
+          "special": "At least one special character"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "radioValue prop is required for radio inputs"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Start Date",
+        "endDate": "End Date",
+        "quickSelect": "Quick Select",
+        "selected": "Selected: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "last7Days": "Last 7 days",
+        "last30Days": "Last 30 days",
+        "thisMonth": "This month",
+        "lastMonth": "Last month",
+        "thisYear": "This year"
+      },
+      "errors": {
+        "invalidStartDate": "Invalid start date",
+        "invalidEndDate": "Invalid end date",
+        "startAfterEnd": "Start date cannot be after end date",
+        "endBeforeStart": "End date cannot be before start date"
+      }
+    },
+    "species": {
+      "placeholder": "Enter species name...",
+      "empty": "No species added",
+      "maxReached": "Maximum of {maxItems} species reached",
+      "aria": {
+        "dragToReorder": "Drag to reorder {species}",
+        "edit": "Edit species",
+        "remove": "Remove species"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "play": "Play",
+      "pause": "Pause",
+      "stop": "Stop",
+      "volume": "Volume",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "download": "Download audio",
+      "currentTime": "{current} / {total}",
+      "loading": "Loading audio...",
+      "error": "Failed to load audio",
+      "volumeGain": "Volume gain control: {value} dB",
+      "filterControl": "Filter control",
+      "highPassFilter": "High-pass filter control: {freq} Hz",
+      "seekProgress": "Seek audio progress: {current} / {total} seconds"
     }
   }
 }

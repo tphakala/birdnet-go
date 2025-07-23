@@ -8,6 +8,7 @@
     sortSpecies,
   } from '$lib/utils/speciesUtils';
   import { actionIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   interface Props {
     species?: string[];
@@ -28,7 +29,7 @@
     allowedSpecies = [],
     editable = true,
     maxItems,
-    placeholder = 'Enter species name...',
+    placeholder = t('forms.species.placeholder'),
     label,
     helpText,
     sortable = false,
@@ -301,7 +302,7 @@
           role={editable && sortable ? 'button' : 'listitem'}
           tabindex={editable && sortable ? 0 : undefined}
           aria-label={editable && sortable
-            ? `Drag to reorder ${formatSpeciesName(item)}`
+            ? t('forms.species.aria.dragToReorder', { species: formatSpeciesName(item) })
             : undefined}
           onkeydown={editable && sortable ? e => handleItemKeyDown(e, index) : undefined}
         >
@@ -331,7 +332,7 @@
                   type="button"
                   onclick={() => startEdit(index)}
                   class="btn btn-ghost btn-xs"
-                  aria-label="Edit species"
+                  aria-label={t('forms.species.aria.edit')}
                 >
                   {@html actionIcons.edit}
                 </button>
@@ -341,7 +342,7 @@
                 type="button"
                 onclick={() => removeSpecies(index)}
                 class="btn btn-ghost btn-xs text-error"
-                aria-label="Remove species"
+                aria-label={t('forms.species.aria.remove')}
               >
                 {@html navigationIcons.close}
               </button>
@@ -351,12 +352,12 @@
       {/each}
     </div>
   {:else if !editable}
-    <p class="text-base-content/60 italic">No species added</p>
+    <p class="text-base-content/60 italic">{t('forms.species.empty')}</p>
   {/if}
 
   {#if maxItems && species.length >= maxItems}
     <p class="text-sm text-warning mt-2">
-      Maximum of {maxItems} species reached
+      {t('forms.species.maxReached', { maxItems })}
     </p>
   {/if}
 </div>

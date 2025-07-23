@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Validator, ValidationResult } from '$lib/utils/validators';
   import type { Snippet } from 'svelte';
+  import { t } from '$lib/i18n/index.js';
 
   // Module-level counter for consistent SSR-safe IDs
   let fieldCounter = 0;
@@ -119,7 +120,7 @@
   // Validation
   function validate(val: unknown): ValidationResult {
     if (required && !val && val !== 0 && val !== false) {
-      return 'This field is required';
+      return t('common.validation.required');
     }
 
     for (const validator of validators) {
@@ -285,7 +286,7 @@
           {onkeydown}
         >
           {#if !required}
-            <option value="">Choose...</option>
+            <option value="">{t('forms.labels.selectOption')}</option>
           {/if}
           {#each options as option}
             <option value={option.value} disabled={option.disabled}>
@@ -317,7 +318,7 @@
     {:else if type === 'radio'}
       <!-- Radio buttons would typically be used in a group, so this is a single radio option -->
       {#if !radioValue}
-        <div class="text-error text-sm">radioValue prop is required for radio inputs</div>
+        <div class="text-error text-sm">{t('forms.errors.radioValueRequired')}</div>
       {:else}
         <label class="label cursor-pointer justify-start gap-2">
           <input

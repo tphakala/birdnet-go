@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { HTMLAttributes } from 'svelte/elements';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   interface Props extends HTMLAttributes<HTMLElement> {
     currentPage?: number;
@@ -59,7 +60,7 @@
 
 <nav
   class={cn('flex items-center justify-center gap-2', className)}
-  aria-label="Pagination Navigation"
+  aria-label={t('dataDisplay.pagination.ariaLabel')}
   {...rest}
 >
   <div class="join">
@@ -68,7 +69,7 @@
       class="join-item btn btn-sm"
       onclick={previousPage}
       disabled={disabled || currentPage === 1}
-      aria-label="Go to previous page"
+      aria-label={t('dataDisplay.pagination.goToPreviousPage')}
     >
       {@html navigationIcons.arrowLeft}
     </button>
@@ -90,7 +91,7 @@
           class={cn('join-item btn btn-sm', { 'btn-active': page === currentPage })}
           onclick={() => goToPage(page)}
           {disabled}
-          aria-label={`Go to page ${page}`}
+          aria-label={t('dataDisplay.pagination.goToPage', { page })}
           aria-current={page === currentPage ? 'page' : undefined}
         >
           {page}
@@ -107,7 +108,7 @@
       {/if}
     {:else if showPageInfo && totalPages > 0}
       <button class="join-item btn btn-sm btn-disabled" disabled>
-        Page {currentPage} of {totalPages}
+        {t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}
       </button>
     {/if}
 
@@ -116,7 +117,7 @@
       class="join-item btn btn-sm"
       onclick={nextPage}
       disabled={disabled || currentPage === totalPages}
-      aria-label="Go to next page"
+      aria-label={t('dataDisplay.pagination.goToNextPage')}
     >
       {@html navigationIcons.arrowRight}
     </button>

@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import { navigationIcons, alertIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   type ToastType = 'info' | 'success' | 'warning' | 'error';
   type ToastPosition =
@@ -136,7 +137,7 @@
         type="button"
         class="btn btn-sm btn-circle btn-ghost"
         onclick={handleClose}
-        aria-label="Close notification"
+        aria-label={t('common.aria.closeNotification')}
       >
         {@html navigationIcons.close}
       </button>

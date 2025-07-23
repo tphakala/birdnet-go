@@ -3,6 +3,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n/index.js';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -48,26 +49,26 @@
     if (value.length >= 8) {
       score += 1;
     } else {
-      feedback.push('At least 8 characters');
+      feedback.push(t('forms.password.strength.suggestions.minLength'));
     }
 
     // Character variety checks
     if (/[a-z]/.test(value) && /[A-Z]/.test(value)) {
       score += 1;
     } else {
-      feedback.push('Mix of uppercase and lowercase');
+      feedback.push(t('forms.password.strength.suggestions.mixedCase'));
     }
 
     if (/\d/.test(value)) {
       score += 1;
     } else {
-      feedback.push('At least one number');
+      feedback.push(t('forms.password.strength.suggestions.number'));
     }
 
     if (/[^a-zA-Z0-9]/.test(value)) {
       score += 1;
     } else {
-      feedback.push('At least one special character');
+      feedback.push(t('forms.password.strength.suggestions.special'));
     }
 
     // Determine strength level
@@ -128,7 +129,7 @@
         class="btn btn-ghost btn-sm btn-square"
         onclick={togglePasswordVisibility}
         {disabled}
-        aria-label={showPassword ? 'Hide password' : 'Show password'}
+        aria-label={showPassword ? t('forms.labels.hidePassword') : t('forms.labels.showPassword')}
       >
         {#if showPassword}
           {@html systemIcons.eyeOff}
@@ -143,10 +144,10 @@
   {#if showStrength && passwordStrength && value}
     <div class="mt-2">
       <div class="flex items-center justify-between mb-1">
-        <span class="text-sm font-medium">Password Strength:</span>
+        <span class="text-sm font-medium">{t('forms.password.strength.label')}</span>
         <span class="text-sm font-medium {passwordStrength?.color || ''}">
           {passwordStrength?.level
-            ? passwordStrength.level.charAt(0).toUpperCase() + passwordStrength.level.slice(1)
+            ? t(`forms.password.strength.levels.${passwordStrength.level}`)
             : ''}
         </span>
       </div>
@@ -167,7 +168,7 @@
       <!-- Feedback -->
       {#if passwordStrength?.feedback && passwordStrength.feedback.length > 0}
         <div class="mt-2">
-          <div class="text-xs text-base-content/70 mb-1">Suggestions:</div>
+          <div class="text-xs text-base-content/70 mb-1">{t('forms.password.strength.suggestions.title')}</div>
           <ul class="text-xs text-base-content/70 space-y-1">
             {#each passwordStrength.feedback as suggestion}
               <li class="flex items-center gap-1">

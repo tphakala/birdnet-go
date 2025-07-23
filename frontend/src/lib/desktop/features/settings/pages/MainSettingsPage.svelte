@@ -18,6 +18,7 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -119,7 +120,7 @@
       }));
     } catch (error) {
       if (error instanceof ApiError) {
-        toastActions.warning('Unable to load language options. Using defaults.');
+        toastActions.warning(t('settings.main.errors.localesLoadFailed'));
       }
       // Fallback to basic locales so form still works
       locales = [{ value: 'en', label: 'English' }];
@@ -140,7 +141,7 @@
       multipleProvidersAvailable = providerOptions.length > 1;
     } catch (error) {
       if (error instanceof ApiError) {
-        toastActions.warning('Unable to load image providers. Using defaults.');
+        toastActions.warning(t('settings.main.errors.providersLoadFailed'));
       }
       // Fallback to basic provider so form still works
       providerOptions = [{ value: 'wikipedia', label: 'Wikipedia' }];
@@ -346,8 +347,8 @@
 <div class="space-y-4">
   <!-- Main Settings Section -->
   <SettingsSection
-    title="Main Settings"
-    description="Configure main application settings"
+    title={t('settings.main.sections.main.title')}
+    description={t('settings.main.sections.main.description')}
     defaultOpen={true}
     hasChanges={mainSettingsHasChanges}
   >
@@ -355,9 +356,9 @@
       <TextInput
         id="node-name"
         bind:value={settings.main.name}
-        label="Node Name"
-        placeholder="Enter node name"
-        helpText="Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
+        label={t('settings.main.fields.nodeName.label')}
+        placeholder={t('settings.main.fields.nodeName.placeholder')}
+        helpText={t('settings.main.fields.nodeName.helpText')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateMainName(settings.main.name)}
       />
@@ -366,8 +367,8 @@
 
   <!-- BirdNET Settings Section -->
   <SettingsSection
-    title="BirdNET Settings"
-    description="Configure BirdNET AI model specific settings"
+    title={t('settings.main.sections.birdnet.title')}
+    description={t('settings.main.sections.birdnet.description')}
     defaultOpen={true}
     hasChanges={birdnetSettingsHasChanges}
   >
@@ -375,44 +376,44 @@
       <!-- Basic BirdNET Settings -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
         <NumberField
-          label="Sensitivity"
+          label={t('settings.main.fields.sensitivity.label')}
           value={settings.birdnet.sensitivity}
           onUpdate={value => updateBirdnetSetting('sensitivity', value)}
           min={0.5}
           max={1.5}
           step={0.1}
-          helpText="Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
+          helpText={t('settings.main.fields.sensitivity.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
 
         <NumberField
-          label="Threshold"
+          label={t('settings.main.fields.threshold.label')}
           value={settings.birdnet.threshold}
           onUpdate={value => updateBirdnetSetting('threshold', value)}
           min={0.01}
           max={0.99}
           step={0.01}
-          helpText="Minimum confidence threshold. Values in 0.01, 0.99."
+          helpText={t('settings.main.fields.threshold.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
 
         <NumberField
-          label="Overlap"
+          label={t('settings.main.fields.overlap.label')}
           value={settings.birdnet.overlap}
           onUpdate={value => updateBirdnetSetting('overlap', value)}
           min={0.0}
           max={2.9}
           step={0.1}
-          helpText="Overlap of prediction segments. Values in 0.0, 2.9."
+          helpText={t('settings.main.fields.overlap.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
 
         <SelectField
           id="locale"
           bind:value={settings.birdnet.locale}
-          label="Locale"
+          label={t('settings.main.fields.locale.label')}
           options={locales}
-          helpText="Locale for translated species common names."
+          helpText={t('settings.main.fields.locale.helpText')}
           disabled={store.isLoading || store.isSaving}
           onchange={value => updateBirdnetSetting('locale', value)}
         />
@@ -649,8 +650,8 @@
 
   <!-- Database Settings Section -->
   <SettingsSection
-    title="Database Settings"
-    description="Detections database settings"
+    title={t('settings.main.sections.database.title')}
+    description={t('settings.main.sections.database.description')}
     defaultOpen={true}
     hasChanges={databaseSettingsHasChanges}
   >

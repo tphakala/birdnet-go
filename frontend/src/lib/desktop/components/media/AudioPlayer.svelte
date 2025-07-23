@@ -24,6 +24,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { mediaIcons } from '$lib/utils/icons.js';
+  import { t } from '$lib/i18n/index.js';
 
   interface Props {
     audioUrl: string;
@@ -73,21 +74,21 @@
   let updateInterval: ReturnType<typeof setInterval> | undefined;
 
   // Audio processing state
-  let audioContext: AudioContext | null = null;
+  let audioContext: any | null = null;
   let audioNodes: {
-    source: MediaElementAudioSourceNode;
-    gain: GainNode;
-    compressor: DynamicsCompressorNode;
-    filters: { highPass: BiquadFilterNode };
+    source: any;
+    gain: any;
+    compressor: any;
+    filters: { highPass: any };
   } | null = null;
 
   // Cleanup tracking for memory leak prevention
-  let resizeObserver: ResizeObserver | null = null;
+  let resizeObserver: any | null = null;
   let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
-    element: HTMLElement | Document | Window;
+    element: any;
     event: string;
-    handler: EventListener;
+    handler: any;
   }> = [];
 
   // Control state
@@ -121,10 +122,10 @@
 
   // Memory leak prevention helpers
   const addTrackedEventListener = (
-    element: HTMLElement | Document | Window,
+    element: any,
     event: string,
-    handler: EventListener,
-    options?: boolean | AddEventListenerOptions
+    handler: any,
+    options?: any
   ) => {
     element.addEventListener(event, handler, options);
     eventListeners.push({ element, event, handler });
@@ -148,7 +149,13 @@
   // Audio context setup
   const initializeAudioContext = async () => {
     try {
-      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Check if AudioContext is available
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error('AudioContext not supported');
+      }
+      
+      audioContext = new AudioContextClass();
 
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
@@ -157,7 +164,8 @@
       audioContextAvailable = true;
       audioContextError = null;
       return audioContext;
-    } catch (e) {
+    } catch (_e) {
+      // eslint-disable-next-line no-console
       console.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
       audioContextError =
@@ -167,7 +175,7 @@
   };
 
   // Create audio processing nodes
-  const createAudioNodes = (audioContext: AudioContext, audio: HTMLAudioElement) => {
+  const createAudioNodes = (audioContext: any, audio: HTMLAudioElement) => {
     const audioSource = audioContext.createMediaElementSource(audio);
     const gainNode = audioContext.createGain();
     gainNode.gain.value = 1;
@@ -318,7 +326,7 @@
       checkWidth();
 
       // Create and track ResizeObserver properly
-      resizeObserver = new ResizeObserver(checkWidth);
+      resizeObserver = new (window as any).ResizeObserver(checkWidth);
       resizeObserver.observe(playerContainer);
     }
 
@@ -398,6 +406,7 @@
         audioNodes.filters.highPass.disconnect();
       } catch (_e) {
         // Nodes may already be disconnected, ignore errors
+        // eslint-disable-next-line no-console
         console.warn('Error disconnecting audio nodes during cleanup');
       }
       audioNodes = null;
@@ -409,6 +418,7 @@
         audioContext.close();
       } catch (_e) {
         // Context may already be closed, ignore errors
+        // eslint-disable-next-line no-console
         console.warn('Error closing audio context during cleanup');
       }
       audioContext = null;
@@ -464,7 +474,7 @@
             if (showVolumeSlider) showFilterSlider = false;
           }
         }}
-        aria-label="Volume control"
+        aria-label={t('media.audio.volume')}
         title={!audioContextAvailable
           ? audioContextError || 'Volume control unavailable'
           : 'Volume control'}
@@ -481,7 +491,7 @@
           style:height="{height}px"
           role="button"
           tabindex="0"
-          aria-label="Volume gain control: {gainValue} dB"
+          aria-label={t('media.audio.volumeGain', { value: gainValue })}
           onclick={handleVolumeSlider}
           onkeydown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -523,7 +533,7 @@
             if (showFilterSlider) showVolumeSlider = false;
           }
         }}
-        aria-label="Filter control"
+        aria-label={t('media.audio.filterControl')}
         title={!audioContextAvailable
           ? audioContextError || 'Filter control unavailable'
           : 'Filter control'}
@@ -539,7 +549,7 @@
           style:height="{height}px"
           role="button"
           tabindex="0"
-          aria-label="High-pass filter control: {Math.round(filterFreq)} Hz"
+          aria-label={t('media.audio.highPassFilter', { freq: Math.round(filterFreq) })}
           onclick={handleFilterSlider}
           onkeydown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -587,7 +597,7 @@
         class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0"
         onclick={handlePlayPause}
         disabled={isLoading}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? t('media.audio.pause') : t('media.audio.play')}
       >
         {#if isLoading}
           <div
@@ -605,7 +615,7 @@
         class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
         role="button"
         tabindex="0"
-        aria-label="Seek audio progress: {Math.floor(currentTime)} / {Math.floor(duration)} seconds"
+        aria-label={t('media.audio.seekProgress', { current: Math.floor(currentTime), total: Math.floor(duration) })}
         onclick={handleProgressClick}
         onkeydown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -632,7 +642,7 @@
           href={audioUrl}
           download
           class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
-          aria-label="Download audio"
+          aria-label={t('media.audio.download')}
         >
           {@html mediaIcons.download}
         </a>

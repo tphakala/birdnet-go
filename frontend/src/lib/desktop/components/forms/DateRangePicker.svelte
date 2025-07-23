@@ -3,6 +3,7 @@
   import { formatDateForInput, formatDate } from '$lib/utils/formatters';
   import FormField from './FormField.svelte';
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   interface DatePreset {
     label: string;
@@ -36,8 +37,8 @@
     required = false,
     disabled = false,
     className = '',
-    startLabel = 'Start Date',
-    endLabel = 'End Date',
+    startLabel = t('forms.dateRange.labels.startDate'),
+    endLabel = t('forms.dateRange.labels.endDate'),
     onChange,
     onStartChange,
     onEndChange,
@@ -67,14 +68,14 @@
 
     return [
       {
-        label: 'Today',
+        label: t('forms.dateRange.presets.today'),
         getValue: () => ({
           startDate: today,
           endDate: today,
         }),
       },
       {
-        label: 'Yesterday',
+        label: t('forms.dateRange.presets.yesterday'),
         getValue: () => {
           const yesterday = new Date(today);
           yesterday.setDate(yesterday.getDate() - 1);
@@ -85,7 +86,7 @@
         },
       },
       {
-        label: 'Last 7 days',
+        label: t('forms.dateRange.presets.last7Days'),
         getValue: () => {
           const start = new Date(today);
           start.setDate(start.getDate() - 6);
@@ -96,7 +97,7 @@
         },
       },
       {
-        label: 'Last 30 days',
+        label: t('forms.dateRange.presets.last30Days'),
         getValue: () => {
           const start = new Date(today);
           start.setDate(start.getDate() - 29);
@@ -107,7 +108,7 @@
         },
       },
       {
-        label: 'This month',
+        label: t('forms.dateRange.presets.thisMonth'),
         getValue: () => {
           const start = new Date(now.getFullYear(), now.getMonth(), 1);
           return {
@@ -117,7 +118,7 @@
         },
       },
       {
-        label: 'Last month',
+        label: t('forms.dateRange.presets.lastMonth'),
         getValue: () => {
           const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
           const end = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -128,7 +129,7 @@
         },
       },
       {
-        label: 'This year',
+        label: t('forms.dateRange.presets.thisYear'),
         getValue: () => {
           const start = new Date(now.getFullYear(), 0, 1);
           return {
@@ -145,7 +146,7 @@
     const newDate = dateStr ? new Date(dateStr) : null;
 
     if (newDate && isNaN(newDate.getTime())) {
-      error = 'Invalid start date';
+      error = t('forms.dateRange.errors.invalidStartDate');
       return;
     }
 
@@ -154,7 +155,7 @@
 
     // Validate date range
     if (newDate && endDateObj && newDate > endDateObj) {
-      error = 'Start date cannot be after end date';
+      error = t('forms.dateRange.errors.startAfterEnd');
     }
 
     onStartChange?.(newDate);
@@ -166,7 +167,7 @@
     const newDate = dateStr ? new Date(dateStr) : null;
 
     if (newDate && isNaN(newDate.getTime())) {
-      error = 'Invalid end date';
+      error = t('forms.dateRange.errors.invalidEndDate');
       return;
     }
 
@@ -175,7 +176,7 @@
 
     // Validate date range
     if (newDate && startDateObj && newDate < startDateObj) {
-      error = 'End date cannot be before start date';
+      error = t('forms.dateRange.errors.endBeforeStart');
     }
 
     onEndChange?.(newDate);
@@ -256,7 +257,7 @@
 
   {#if showPresets && presets.length > 0}
     <div class="mt-4">
-      <div class="text-sm font-medium mb-2">Quick Select</div>
+      <div class="text-sm font-medium mb-2">{t('forms.dateRange.labels.quickSelect')}</div>
       <div class="flex flex-wrap gap-2">
         {#each presets as preset}
           <button
@@ -276,7 +277,7 @@
             {disabled}
             onclick={clearDates}
           >
-            Clear
+            {t('common.buttons.clear')}
           </button>
         {/if}
       </div>
@@ -285,7 +286,7 @@
 
   {#if startDateObj && endDateObj}
     <div class="mt-2 text-sm text-base-content/70">
-      Selected: {formatDate(startDateObj)} - {formatDate(endDateObj)}
+      {t('forms.dateRange.labels.selected', { startDate: formatDate(startDateObj), endDate: formatDate(endDateObj) })}
     </div>
   {/if}
 </div>

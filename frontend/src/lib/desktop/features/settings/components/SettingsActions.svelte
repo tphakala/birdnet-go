@@ -2,6 +2,7 @@
   import { settingsStore, settingsActions, hasUnsavedChanges } from '$lib/stores/settings.js';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { actionIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n/index.js';
 
   let store = $derived($settingsStore);
   let unsavedChanges = $derived($hasUnsavedChanges);
@@ -30,10 +31,10 @@
       class="btn btn-ghost btn-sm"
       onclick={handleReset}
       disabled={store.isSaving}
-      aria-label="Reset all changes"
+      aria-label={t('settings.actions.resetAriaLabel')}
     >
       {@html actionIcons.refresh}
-      Reset
+      {t('settings.actions.reset')}
     </button>
   {/if}
 
@@ -44,13 +45,13 @@
     onclick={handleSave}
     disabled={!unsavedChanges || store.isSaving}
     aria-busy={store.isSaving}
-    aria-label={store.isSaving ? 'Saving changes...' : 'Save Changes'}
+    aria-label={store.isSaving ? t('settings.actions.savingAriaLabel') : t('settings.actions.saveAriaLabel')}
   >
     {#if store.isSaving}
       <LoadingSpinner size="sm" />
-      Saving...
+      {t('settings.actions.saving')}
     {:else}
-      Save Changes
+      {t('settings.actions.save')}
     {/if}
   </button>
 </div>

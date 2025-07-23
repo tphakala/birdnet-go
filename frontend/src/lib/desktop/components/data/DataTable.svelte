@@ -32,6 +32,7 @@
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Column, SortDirection } from './DataTable.types';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n/index.js';
 
   interface Props<T extends Record<string, any>> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
     columns: Column<T>[];
@@ -58,7 +59,7 @@
     data = [],
     loading = false,
     error = null,
-    emptyMessage = 'No data available',
+    emptyMessage = t('dataDisplay.table.noData'),
     striped = true,
     hoverable = true,
     compact = false,
@@ -152,8 +153,7 @@
                     : 'none';
               }}
               {@const getAriaLabel = () => {
-                const state = getSortState();
-                return `Sort ${column.header} column ${state === 'none' ? 'ascending' : state === 'ascending' ? 'descending' : 'ascending'}`;
+                return t('dataDisplay.table.sortBy', { column: column.header });
               }}
               <th
                 scope="col"

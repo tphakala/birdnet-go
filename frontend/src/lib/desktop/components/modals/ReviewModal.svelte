@@ -10,10 +10,10 @@
     isExcluded?: boolean;
     onClose: () => void;
     onSave?: (
-      verified: 'correct' | 'false_positive',
-      lockDetection: boolean,
-      ignoreSpecies: boolean,
-      comment: string
+      _verified: 'correct' | 'false_positive',
+      _lockDetection: boolean,
+      _ignoreSpecies: boolean,
+      _comment: string
     ) => Promise<void>;
   }
 

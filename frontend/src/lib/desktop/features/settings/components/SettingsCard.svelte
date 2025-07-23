@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { t } from '$lib/i18n/index.js';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     title?: string;
@@ -38,8 +39,8 @@
             <h3 class="text-xl font-semibold">{title}</h3>
           {/if}
           {#if hasChanges}
-            <span class="badge badge-primary badge-sm" role="status" aria-label="Settings changed">
-              changed
+            <span class="badge badge-primary badge-sm" role="status" aria-label={t('settings.card.changedAriaLabel')}>
+              {t('settings.card.changed')}
             </span>
           {/if}
         </div>

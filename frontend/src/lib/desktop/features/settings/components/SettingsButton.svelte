@@ -20,6 +20,8 @@
   - className: Additional CSS classes
 -->
 <script lang="ts">
+  import { t } from '$lib/i18n/index.js';
+
   interface Props {
     onclick?: () => void;
     disabled?: boolean;
@@ -33,10 +35,13 @@
     onclick,
     disabled = false,
     loading = false,
-    loadingText = 'Loading...',
+    loadingText,
     className = '',
     children,
   }: Props = $props();
+
+  // Default loading text from translation
+  let defaultLoadingText = $derived(loadingText || t('common.loading'));
 </script>
 
 <button
@@ -59,7 +64,7 @@
 >
   {#if loading}
     <div class="loading loading-spinner loading-sm"></div>
-    {loadingText}
+    {defaultLoadingText}
   {:else if children}
     {@render children()}
   {/if}
