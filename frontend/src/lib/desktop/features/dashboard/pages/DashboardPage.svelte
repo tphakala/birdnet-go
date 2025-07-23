@@ -3,6 +3,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
+  import { t } from '$lib/i18n/index.js';
   import type {
     DailySpeciesSummary,
     Detection,
@@ -52,11 +53,11 @@
     try {
       const response = await fetch(`/api/v2/analytics/species/daily?date=${selectedDate}`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch daily summary: ${response.statusText}`);
+        throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
       }
       dailySummary = await response.json();
     } catch (error) {
-      summaryError = error instanceof Error ? error.message : 'Failed to load daily summary';
+      summaryError = error instanceof Error ? error.message : t('dashboard.errors.dailySummaryLoad');
       console.error('Error fetching daily summary:', error);
     } finally {
       isLoadingSummary = false;
@@ -70,11 +71,11 @@
     try {
       const response = await fetch('/api/v2/detections/recent?limit=10');
       if (!response.ok) {
-        throw new Error(`Failed to fetch recent detections: ${response.statusText}`);
+        throw new Error(t('dashboard.errors.recentDetectionsFetch', { status: response.statusText }));
       }
       recentDetections = await response.json();
     } catch (error) {
-      detectionsError = error instanceof Error ? error.message : 'Failed to load recent detections';
+      detectionsError = error instanceof Error ? error.message : t('dashboard.errors.recentDetectionsLoad');
       console.error('Error fetching recent detections:', error);
     } finally {
       isLoadingDetections = false;
@@ -85,7 +86,7 @@
     try {
       const response = await fetch('/api/v2/settings/dashboard');
       if (!response.ok) {
-        throw new Error(`Failed to fetch dashboard config: ${response.statusText}`);
+        throw new Error(t('dashboard.errors.configFetch', { status: response.statusText }));
       }
       const config = await response.json();
       // API returns uppercase field names (e.g., "Summary" not "summary")

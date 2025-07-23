@@ -225,6 +225,102 @@
       "loginToViewDetails": "Login to View Details"
     }
   },
+  "dashboard": {
+    "dailySummary": {
+      "title": "Daily Summary",
+      "columns": {
+        "species": "Species",
+        "detections": "Detections"
+      },
+      "navigation": {
+        "previousDay": "Previous day",
+        "nextDay": "Next day",
+        "today": "Today"
+      },
+      "tooltips": {
+        "viewHourly": "View all detections for {hour}:00",
+        "viewBiHourly": "View all detections for {startHour}:00-{endHour}:00",
+        "viewSixHourly": "View all detections for {startHour}:00-{endHour}:00",
+        "hourlyDetections": "{count} detections at {hour}:00 - Click to view",
+        "biHourlyDetections": "{count} detections from {startHour}:00-{endHour}:00 - Click to view",
+        "sixHourlyDetections": "{count} detections from {startHour}:00-{endHour}:00 - Click to view"
+      },
+      "noSpecies": "No species detected on this date"
+    },
+    "recentDetections": {
+      "title": "Recent Detections",
+      "controls": {
+        "show": "Show:",
+        "refresh": "Refresh detections"
+      },
+      "headers": {
+        "dateTime": "Date & Time",
+        "commonName": "Common Name",
+        "thumbnail": "Thumbnail",
+        "status": "Status",
+        "recording": "Recording",
+        "actions": "Actions"
+      },
+      "status": {
+        "verified": "Verified",
+        "false": "False",
+        "unverified": "Unverified",
+        "locked": "Locked"
+      },
+      "modals": {
+        "showSpecies": "Show Species {species}",
+        "ignoreSpecies": "Ignore Species {species}",
+        "showSpeciesConfirm": "Are you sure you want to show future detections of {species}?",
+        "ignoreSpeciesConfirm": "Are you sure you want to ignore future detections of {species}? This will only affect new detections - existing detections will remain in the database.",
+        "unlockDetection": "Unlock Detection",
+        "lockDetection": "Lock Detection",
+        "unlockDetectionConfirm": "Are you sure you want to unlock this detection of {species}? This will allow it to be deleted during regular cleanup.",
+        "lockDetectionConfirm": "Are you sure you want to lock this detection of {species}? This will prevent it from being deleted during regular cleanup.",
+        "deleteDetection": "Delete Detection of {species}",
+        "deleteDetectionConfirm": "Are you sure you want to delete detection of {species}? This action cannot be undone."
+      },
+      "noDetections": "No recent detections"
+    },
+    "errors": {
+      "dailySummaryFetch": "Failed to fetch daily summary: {status}",
+      "dailySummaryLoad": "Failed to load daily summary",
+      "recentDetectionsFetch": "Failed to fetch recent detections: {status}",
+      "recentDetectionsLoad": "Failed to load recent detections",
+      "configFetch": "Failed to fetch dashboard config: {status}"
+    }
+  },
+  "detections": {
+    "title": "Detections",
+    "titles": {
+      "hourly": "Hourly Results for {hour}:00 on {date}",
+      "hourlyRange": "Hourly Results from {startHour}:00 to {endHour}:00 on {date}",
+      "species": "Results for {species} on {date}",
+      "search": "Search Results for \"{query}\"",
+      "allDetections": "All Detections for {date}"
+    },
+    "headers": {
+      "dateTime": "Date & Time",
+      "weather": "Weather",
+      "species": "Species",
+      "thumbnail": "Thumbnail",
+      "status": "Status",
+      "recording": "Recording",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "No detections found",
+      "description": "Try adjusting your filters or search criteria"
+    },
+    "pagination": {
+      "showing": "Showing {from} to {to} of {total} results"
+    },
+    "weather": {
+      "noData": "No weather data"
+    },
+    "row": {
+      "viewDetails": "View details for {species}"
+    }
+  },
   "settings": {
     "title": "Settings - BirdNET-Go",
     "loading": "Loading settings...",

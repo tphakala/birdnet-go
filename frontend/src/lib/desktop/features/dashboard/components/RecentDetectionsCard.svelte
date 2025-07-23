@@ -8,6 +8,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n/index.js';
 
   interface Props {
     data: Detection[];
@@ -72,16 +73,16 @@
   // Returns appropriate badge configuration based on detection verification and lock status
   function getStatusBadge(verified: string, locked: boolean) {
     if (locked) {
-      return { type: 'locked', text: 'Locked', class: 'status-badge locked' };
+      return { type: 'locked', text: t('dashboard.recentDetections.status.locked'), class: 'status-badge locked' };
     }
 
     switch (verified) {
       case 'correct':
-        return { type: 'correct', text: 'Verified', class: 'status-badge correct' };
+        return { type: 'correct', text: t('dashboard.recentDetections.status.verified'), class: 'status-badge correct' };
       case 'false_positive':
-        return { type: 'false', text: 'False', class: 'status-badge false' };
+        return { type: 'false', text: t('dashboard.recentDetections.status.false'), class: 'status-badge false' };
       default:
-        return { type: 'unverified', text: 'Unverified', class: 'status-badge unverified' };
+        return { type: 'unverified', text: t('dashboard.recentDetections.status.unverified'), class: 'status-badge unverified' };
     }
   }
 
@@ -108,12 +109,12 @@
     const isExcluded = false; // TODO: determine if species is excluded
     confirmModalConfig = {
       title: isExcluded
-        ? `Show Species ${detection.commonName}`
-        : `Ignore Species ${detection.commonName}`,
+        ? t('dashboard.recentDetections.modals.showSpecies', { species: detection.commonName })
+        : t('dashboard.recentDetections.modals.ignoreSpecies', { species: detection.commonName }),
       message: isExcluded
-        ? `Are you sure you want to show future detections of ${detection.commonName}?`
-        : `Are you sure you want to ignore future detections of ${detection.commonName}? This will only affect new detections - existing detections will remain in the database.`,
-      confirmLabel: 'Confirm',
+        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', { species: detection.commonName })
+        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: detection.commonName }),
+      confirmLabel: t('common.buttons.confirm'),
       onConfirm: async () => {
         try {
           await fetchWithCSRF('/api/v2/detections/ignore', {
@@ -138,11 +139,13 @@
   // Toggles the lock status of a detection to prevent/allow automatic cleanup
   function handleToggleLock(detection: Detection) {
     confirmModalConfig = {
-      title: detection.locked ? 'Unlock Detection' : 'Lock Detection',
+      title: detection.locked 
+        ? t('dashboard.recentDetections.modals.unlockDetection') 
+        : t('dashboard.recentDetections.modals.lockDetection'),
       message: detection.locked
-        ? `Are you sure you want to unlock this detection of ${detection.commonName}? This will allow it to be deleted during regular cleanup.`
-        : `Are you sure you want to lock this detection of ${detection.commonName}? This will prevent it from being deleted during regular cleanup.`,
-      confirmLabel: 'Confirm',
+        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', { species: detection.commonName })
+        : t('dashboard.recentDetections.modals.lockDetectionConfirm', { species: detection.commonName }),
+      confirmLabel: t('common.buttons.confirm'),
       onConfirm: async () => {
         try {
           await fetchWithCSRF(`/api/v2/detections/${detection.id}/lock`, {
@@ -167,9 +170,9 @@
   // Permanently deletes a detection after user confirmation
   function handleDelete(detection: Detection) {
     confirmModalConfig = {
-      title: `Delete Detection of ${detection.commonName}`,
-      message: `Are you sure you want to delete detection of ${detection.commonName}? This action cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: t('dashboard.recentDetections.modals.deleteDetection', { species: detection.commonName }),
+      message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', { species: detection.commonName }),
+      confirmLabel: t('common.buttons.delete'),
       onConfirm: async () => {
         try {
           await fetchWithCSRF(`/api/v2/detections/${detection.id}`, {
@@ -191,10 +194,10 @@
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <span class="card-title grow text-base sm:text-xl">Recent Detections</span>
+        <span class="card-title grow text-base sm:text-xl">{t('dashboard.recentDetections.title')}</span>
       </div>
       <div class="flex items-center gap-2">
-        <label for="numDetections" class="label-text text-sm">Show:</label>
+        <label for="numDetections" class="label-text text-sm">{t('dashboard.recentDetections.controls.show')}</label>
         <select
           id="numDetections"
           bind:value={selectedLimit}
@@ -210,7 +213,7 @@
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
           disabled={loading}
-          aria-label="Refresh detections"
+          aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
           <div class="h-4 w-4" class:animate-spin={loading}>
             {@html actionIcons.refresh}
@@ -236,12 +239,12 @@
         <div
           class="grid grid-cols-12 gap-4 text-xs font-medium text-base-content/70 pb-2 border-b border-base-300 px-4"
         >
-          <div class="col-span-2">Date & Time</div>
-          <div class="col-span-2">Common Name</div>
-          <div class="col-span-2">Thumbnail</div>
-          <div class="col-span-2">Status</div>
-          <div class="col-span-3">Recording</div>
-          <div class="col-span-1">Actions</div>
+          <div class="col-span-2">{t('dashboard.recentDetections.headers.dateTime')}</div>
+          <div class="col-span-2">{t('dashboard.recentDetections.headers.commonName')}</div>
+          <div class="col-span-2">{t('dashboard.recentDetections.headers.thumbnail')}</div>
+          <div class="col-span-2">{t('dashboard.recentDetections.headers.status')}</div>
+          <div class="col-span-3">{t('dashboard.recentDetections.headers.recording')}</div>
+          <div class="col-span-1">{t('dashboard.recentDetections.headers.actions')}</div>
         </div>
 
         <!-- Detection Rows -->
@@ -340,7 +343,7 @@
       </div>
 
       {#if data.length === 0}
-        <div class="text-center py-8 text-base-content/60">No recent detections</div>
+        <div class="text-center py-8 text-base-content/60">{t('dashboard.recentDetections.noDetections')}</div>
       {/if}
     {/if}
   </div>

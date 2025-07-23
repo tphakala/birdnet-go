@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
-import { i18nAutoDiscovery } from './src/lib/i18n/vite-plugin.js'
 import { copyFileSync, mkdirSync, readdirSync } from 'fs'
 import { join } from 'path'
 
@@ -10,9 +9,6 @@ export default defineConfig({
   base: '/ui/assets/',
   publicDir: 'static',
   plugins: [
-    i18nAutoDiscovery({
-      messagesDir: './static/messages'
-    }),
     svelte({
       compilerOptions: {
         // HMR is integrated in Svelte 5 core, disabled in production builds

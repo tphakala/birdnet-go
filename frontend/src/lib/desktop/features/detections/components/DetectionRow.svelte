@@ -38,6 +38,7 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { t } from '$lib/i18n/index.js';
 
   interface Props {
     detection: Detection;
@@ -184,7 +185,7 @@
         </span>
       </div>
     {:else}
-      <div class="text-base-content/50 text-xs">No weather data</div>
+      <div class="text-base-content/50 text-xs">{t('detections.weather.noData')}</div>
     {/if}
   </div>
 
@@ -208,7 +209,7 @@
         <button
           onclick={handleDetailsClick}
           class="flex items-center justify-center cursor-pointer"
-          aria-label="View details for {detection.commonName}"
+          aria-label={t('detections.row.viewDetails', { species: detection.commonName })}
         >
           <img
             loading="lazy"
