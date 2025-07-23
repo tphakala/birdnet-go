@@ -327,13 +327,13 @@
             <!-- Add New Species -->
             <SpeciesInput
               bind:value={newSpecies}
-              label="Add Dog Bark Species"
+              label={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
               placeholder={t('settings.filters.typeSpeciesName')}
-              helpText="Search and add species that might be confused with dog barks"
+              helpText={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesHelp')}
               disabled={store.isLoading || store.isSaving}
               predictions={allowedSpecies}
               size="sm"
-              buttonText="Add"
+              buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
               buttonIcon={true}
               onInput={handleSpeciesInput}
               onAdd={addSpecies}

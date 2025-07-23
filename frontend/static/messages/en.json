@@ -696,7 +696,10 @@
         "confidenceLabel": "Confidence Threshold",
         "confidenceHelp": "Set the confidence level for dog bark detection, lower value makes filter more sensitive",
         "expireTimeLabel": "Dog Bark Expire Time (Minutes)",
-        "expireTimeHelp": "Set how long to remember a detected dog bark"
+        "expireTimeHelp": "Set how long to remember a detected dog bark",
+        "addDogBarkSpeciesLabel": "Add Dog Bark Species",
+        "addDogBarkSpeciesHelp": "Search and add species that might be confused with dog barks",
+        "addSpeciesButton": "Add"
       },
       "speciesNamePlaceholder": "Species name",
       "typeSpeciesName": "Type species name..."
