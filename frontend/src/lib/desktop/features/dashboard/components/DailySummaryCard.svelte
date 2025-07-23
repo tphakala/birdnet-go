@@ -34,69 +34,73 @@
     onDetectionView,
   }: Props = $props();
 
-  // Column definitions
-  const columns: Column<DailySpeciesSummary>[] = [
-    {
-      key: 'common_name',
-      header: t('dashboard.dailySummary.columns.species'),
-      sortable: true,
-      className: 'font-medium w-0 whitespace-nowrap',
-    },
-  ];
-
-  // Add total detections column (only visible on XL screens)
-  columns.push({
-    key: 'total_detections',
-    header: t('dashboard.dailySummary.columns.detections'),
-    align: 'center',
-    className: 'hidden 2xl:table-cell px-4 w-100',
-    render: (item: DailySpeciesSummary) => item.count,
-  });
-
-  // Add all 24 hourly columns
-  for (let hour = 0; hour < 24; hour++) {
-    columns.push({
-      key: `hour_${hour}`,
-      header: hour.toString().padStart(2, '0'),
-      align: 'center',
-      className: 'hour-data hourly-count px-0',
-      render: (item: DailySpeciesSummary) => item.hourly_counts[hour] || 0,
-    });
-  }
-
-  // Add bi-hourly columns (every 2 hours)
-  for (let hour = 0; hour < 24; hour += 2) {
-    columns.push({
-      key: `bi_hour_${hour}`,
-      header: hour.toString().padStart(2, '0'),
-      align: 'center',
-      className: 'hour-data bi-hourly-count bi-hourly px-0',
-      render: (item: DailySpeciesSummary) => {
-        // Sum counts for 2-hour period
-        const count1 = item.hourly_counts[hour] || 0;
-        const count2 = item.hourly_counts[hour + 1] || 0;
-        return count1 + count2;
+  // Column definitions - reactive to ensure translations are loaded
+  const columns = $derived.by(() => {
+    const cols: Column<DailySpeciesSummary>[] = [
+      {
+        key: 'common_name',
+        header: t('dashboard.dailySummary.columns.species'),
+        sortable: true,
+        className: 'font-medium w-0 whitespace-nowrap',
       },
-    });
-  }
+    ];
 
-  // Add six-hourly columns (every 6 hours)
-  for (let hour = 0; hour < 24; hour += 6) {
-    columns.push({
-      key: `six_hour_${hour}`,
-      header: hour.toString().padStart(2, '0'),
+    // Add total detections column (only visible on XL screens)
+    cols.push({
+      key: 'total_detections',
+      header: t('dashboard.dailySummary.columns.detections'),
       align: 'center',
-      className: 'hour-data six-hourly-count six-hourly px-0',
-      render: (item: DailySpeciesSummary) => {
-        // Sum counts for 6-hour period
-        let sum = 0;
-        for (let h = hour; h < hour + 6 && h < 24; h++) {
-          sum += item.hourly_counts[h] || 0;
-        }
-        return sum;
-      },
+      className: 'hidden 2xl:table-cell px-4 w-100',
+      render: (item: DailySpeciesSummary) => item.count,
     });
-  }
+
+    // Add all 24 hourly columns
+    for (let hour = 0; hour < 24; hour++) {
+      cols.push({
+        key: `hour_${hour}`,
+        header: hour.toString().padStart(2, '0'),
+        align: 'center',
+        className: 'hour-data hourly-count px-0',
+        render: (item: DailySpeciesSummary) => item.hourly_counts[hour] || 0,
+      });
+    }
+
+    // Add bi-hourly columns (every 2 hours)
+    for (let hour = 0; hour < 24; hour += 2) {
+      cols.push({
+        key: `bi_hour_${hour}`,
+        header: hour.toString().padStart(2, '0'),
+        align: 'center',
+        className: 'hour-data bi-hourly-count bi-hourly px-0',
+        render: (item: DailySpeciesSummary) => {
+          // Sum counts for 2-hour period
+          const count1 = item.hourly_counts[hour] || 0;
+          const count2 = item.hourly_counts[hour + 1] || 0;
+          return count1 + count2;
+        },
+      });
+    }
+
+    // Add six-hourly columns (every 6 hours)
+    for (let hour = 0; hour < 24; hour += 6) {
+      cols.push({
+        key: `six_hour_${hour}`,
+        header: hour.toString().padStart(2, '0'),
+        align: 'center',
+        className: 'hour-data six-hourly-count six-hourly px-0',
+        render: (item: DailySpeciesSummary) => {
+          // Sum counts for 6-hour period
+          let sum = 0;
+          for (let h = hour; h < hour + 6 && h < 24; h++) {
+            sum += item.hourly_counts[h] || 0;
+          }
+          return sum;
+        },
+      });
+    }
+
+    return cols;
+  })
 
   // Navigation handlers for detections
   // Navigates to species-specific detections view for the selected date
