@@ -109,19 +109,18 @@
     }))
   );
 
-  // Transform memory data for ProgressCard
-  let memoryProgressItems = $derived(
-    memoryUsage.data.total
-      ? [
-          {
-            label: t('system.memoryUsage.ramUsage'),
-            used: memoryUsage.data.used,
-            total: memoryUsage.data.total,
-            usagePercent: memoryUsage.data.usedPercent,
-          },
-        ]
-      : []
-  );
+  // Transform memory data for ProgressCard with reactive label
+  let memoryProgressItems = $derived.by(() => {
+    if (!memoryUsage.data.total) return [];
+    return [
+      {
+        label: t('system.memoryUsage.ramUsage'),
+        used: memoryUsage.data.used,
+        total: memoryUsage.data.total,
+        usagePercent: memoryUsage.data.usedPercent,
+      },
+    ];
+  });
 
   // Load system information
   async function loadSystemInfo(): Promise<void> {
@@ -293,7 +292,7 @@
   });
 </script>
 
-<div class="col-span-12 space-y-4" role="region" aria-label="System Dashboard">
+<div class="col-span-12 space-y-4" role="region" aria-label={t('system.aria.dashboard')}>
   <div class="gap-6 system-cards-grid">
     <!-- System Information Card -->
     <SystemInfoCard
