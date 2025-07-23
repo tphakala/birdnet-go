@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Script to generate TypeScript types from the English translation file
  * This ensures compile-time validation of translation keys
@@ -156,7 +157,6 @@ export interface TranslateFunction {
     
   } catch (error) {
     console.error('❌ Error generating types:', error);
-    // eslint-disable-next-line no-undef
     process.exit(1);
   }
 }
