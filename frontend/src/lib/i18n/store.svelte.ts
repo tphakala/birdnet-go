@@ -38,7 +38,12 @@ export function setLocale(locale: Locale): void {
   
   // Persist locale to localStorage
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('birdnet-locale', locale);
+    try {
+      localStorage.setItem('birdnet-locale', locale);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to save locale to localStorage:', error);
+    }
   }
 }
 
@@ -75,8 +80,10 @@ async function loadMessages(locale: Locale): Promise<void> {
       }
     }
     
-    // If all else fails, set empty messages
-    messages = {};
+    // If all else fails, keep existing messages (don't clear them)
+    // This prevents raw translation keys from being displayed
+    // eslint-disable-next-line no-console
+    console.warn('Translation loading failed, keeping existing messages to prevent UI degradation');
   } finally {
     loading = false;
   }
@@ -183,4 +190,12 @@ if (typeof window !== 'undefined') {
  */
 export function isLoading(): boolean {
   return loading;
+}
+
+/**
+ * Check if translations are loaded
+ * @returns True if translations are available, false otherwise
+ */
+export function hasTranslations(): boolean {
+  return Object.keys(messages).length > 0;
 }
