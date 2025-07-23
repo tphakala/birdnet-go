@@ -43,7 +43,7 @@
     onStartChange,
     onEndChange,
   }: Props = $props();
-  
+
   // Reactive labels with prop override capability
   let effectiveStartLabel = $derived(startLabel ?? t('forms.dateRange.labels.startDate'));
   let effectiveEndLabel = $derived(endLabel ?? t('forms.dateRange.labels.endDate'));
@@ -290,7 +290,10 @@
 
   {#if startDateObj && endDateObj}
     <div class="mt-2 text-sm text-base-content/70">
-      {t('forms.dateRange.labels.selected', { startDate: formatDate(startDateObj), endDate: formatDate(endDateObj) })}
+      {t('forms.dateRange.labels.selected', {
+        startDate: formatDate(startDateObj),
+        endDate: formatDate(endDateObj),
+      })}
     </div>
   {/if}
 </div>

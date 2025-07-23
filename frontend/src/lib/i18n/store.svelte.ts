@@ -34,8 +34,10 @@ export function getLocale(): Locale {
  */
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
+  // Clear cache when locale changes
+  clearTranslationCache();
   loadMessages(locale);
-  
+
   // Persist locale to localStorage
   if (typeof localStorage !== 'undefined') {
     try {
@@ -50,6 +52,8 @@ export function setLocale(locale: Locale): void {
 // Message loading with English fallback
 async function loadMessages(locale: Locale): Promise<void> {
   loading = true;
+  // Clear cache when loading new messages
+  clearTranslationCache();
   try {
     // Use fetch to load JSON from the built assets directory
     // In production, these files are copied to dist/messages by Vite
@@ -62,7 +66,7 @@ async function loadMessages(locale: Locale): Promise<void> {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(`Failed to load messages for ${locale}:`, error);
-    
+
     // Fallback to English if the requested locale fails
     if (locale !== DEFAULT_LOCALE) {
       // eslint-disable-next-line no-console
@@ -79,7 +83,7 @@ async function loadMessages(locale: Locale): Promise<void> {
         console.error(`Failed to load fallback messages:`, fallbackError);
       }
     }
-    
+
     // If all else fails, keep existing messages (don't clear them)
     // This prevents raw translation keys from being displayed
     // eslint-disable-next-line no-console
@@ -88,6 +92,9 @@ async function loadMessages(locale: Locale): Promise<void> {
     loading = false;
   }
 }
+
+// Translation cache for memoization
+const translationCache = new Map<string, { locale: string; params?: string; value: string }>();
 
 /**
  * Helper to get nested value from object using dot notation
@@ -108,21 +115,46 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 }
 
 /**
+ * Clear translation cache when locale changes
+ * @internal
+ */
+function clearTranslationCache(): void {
+  translationCache.clear();
+}
+
+/**
  * Translation function with runtime type checking and pluralization support
  * @param key - The translation key
  * @param params - Optional parameters for interpolation
  * @returns The translated string
  */
 export function t(key: string, params?: Record<string, unknown>): string {
+  // Check cache first
+  const paramsKey = params ? JSON.stringify(params) : '';
+  const cacheKey = `${key}:${paramsKey}:${currentLocale}`;
+
+  const cached = translationCache.get(cacheKey);
+  if (cached && cached.locale === currentLocale && cached.params === paramsKey) {
+    return cached.value;
+  }
+
   // Support nested keys with dot notation
   const value = getNestedValue(messages, key);
   const message = typeof value === 'string' ? value : key;
 
-  if (!params) return message;
+  if (!params) {
+    // Cache simple translations
+    translationCache.set(cacheKey, {
+      locale: currentLocale,
+      params: paramsKey,
+      value: message,
+    });
+    return message;
+  }
 
   // Handle ICU MessageFormat plural syntax
   let result = message;
-  
+
   // Pattern: {count, plural, =0 {No results} one {# result} other {# results}}
   result = result.replace(/\{(\w+),\s*plural,([^}]+)\}/g, (match, paramName, pluralPattern) => {
     // eslint-disable-next-line security/detect-object-injection
@@ -167,6 +199,13 @@ export function t(key: string, params?: Record<string, unknown>): string {
     // Safe property access for parameters
     // eslint-disable-next-line security/detect-object-injection
     return params[param]?.toString() ?? `{${param}}`;
+  });
+
+  // Cache the computed result
+  translationCache.set(cacheKey, {
+    locale: currentLocale,
+    params: paramsKey,
+    value: result,
   });
 
   return result;

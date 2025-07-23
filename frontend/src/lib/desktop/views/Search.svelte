@@ -321,7 +321,9 @@
             </div>
             <!-- Confidence error message -->
             {#if hasConfidenceError}
-              <div class="text-error text-sm mt-1" role="alert">{t('search.errors.minMaxConfidence')}</div>
+              <div class="text-error text-sm mt-1" role="alert">
+                {t('search.errors.minMaxConfidence')}
+              </div>
             {/if}
           </div>
 

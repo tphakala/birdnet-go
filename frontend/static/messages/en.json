@@ -634,7 +634,7 @@
           "helpText": "Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
         },
         "threshold": {
-          "label": "Threshold", 
+          "label": "Threshold",
           "helpText": "Minimum confidence threshold. Values in 0.01, 0.99."
         },
         "overlap": {
@@ -658,7 +658,7 @@
           "description": "Optional error tracking to help improve BirdNET-Go reliability and performance"
         },
         "diagnostics": {
-          "title": "Support & Diagnostics", 
+          "title": "Support & Diagnostics",
           "description": "Help developers fix your issues faster by providing essential diagnostic information"
         }
       },

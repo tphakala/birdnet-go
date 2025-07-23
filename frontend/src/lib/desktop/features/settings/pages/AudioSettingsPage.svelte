@@ -348,7 +348,9 @@
       <div class="space-y-6">
         <!-- Sound Card Source -->
         <div>
-          <h4 class="text-lg font-medium pb-2">{t('settings.audio.audioCapture.soundCardSource')}</h4>
+          <h4 class="text-lg font-medium pb-2">
+            {t('settings.audio.audioCapture.soundCardSource')}
+          </h4>
           <SelectField
             id="audio-source"
             bind:value={settings.audio.source}
@@ -367,7 +369,9 @@
 
         <!-- RTSP Source -->
         <div>
-          <h4 class="text-lg font-medium pt-4 pb-2">{t('settings.audio.audioCapture.rtspSource')}</h4>
+          <h4 class="text-lg font-medium pt-4 pb-2">
+            {t('settings.audio.audioCapture.rtspSource')}
+          </h4>
 
           <!-- Transport Protocol -->
           <div class="mb-4">
@@ -635,12 +639,25 @@
           <div class="alert alert-info mt-4">
             {@html alertIconsSvg.info}
             <div>
-              <p class="font-semibold">{t('settings.audio.soundLevelMonitoring.dataOutputTitle')}</p>
-              <p class="text-sm">{t('settings.audio.soundLevelMonitoring.dataOutputDescription')}</p>
+              <p class="font-semibold">
+                {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
+              </p>
+              <p class="text-sm">
+                {t('settings.audio.soundLevelMonitoring.dataOutputDescription')}
+              </p>
               <ul class="text-sm list-disc list-inside mt-1">
-                <li>{t('settings.audio.soundLevelMonitoring.mqttTopic')} <code>{'{base_topic}'}/soundlevel</code></li>
-                <li>{t('settings.audio.soundLevelMonitoring.sseEndpoint')} <code>/api/v2/soundlevels/stream</code></li>
-                <li>{t('settings.audio.soundLevelMonitoring.prometheusMetrics')} <code>birdnet_sound_level_db</code></li>
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.mqttTopic')}
+                  <code>{'{base_topic}'}/soundlevel</code>
+                </li>
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.sseEndpoint')}
+                  <code>/api/v2/soundlevels/stream</code>
+                </li>
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.prometheusMetrics')}
+                  <code>birdnet_sound_level_db</code>
+                </li>
               </ul>
             </div>
           </div>

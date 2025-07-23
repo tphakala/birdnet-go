@@ -73,16 +73,32 @@
   // Returns appropriate badge configuration based on detection verification and lock status
   function getStatusBadge(verified: string, locked: boolean) {
     if (locked) {
-      return { type: 'locked', text: t('dashboard.recentDetections.status.locked'), class: 'status-badge locked' };
+      return {
+        type: 'locked',
+        text: t('dashboard.recentDetections.status.locked'),
+        class: 'status-badge locked',
+      };
     }
 
     switch (verified) {
       case 'correct':
-        return { type: 'correct', text: t('dashboard.recentDetections.status.verified'), class: 'status-badge correct' };
+        return {
+          type: 'correct',
+          text: t('dashboard.recentDetections.status.verified'),
+          class: 'status-badge correct',
+        };
       case 'false_positive':
-        return { type: 'false', text: t('dashboard.recentDetections.status.false'), class: 'status-badge false' };
+        return {
+          type: 'false',
+          text: t('dashboard.recentDetections.status.false'),
+          class: 'status-badge false',
+        };
       default:
-        return { type: 'unverified', text: t('dashboard.recentDetections.status.unverified'), class: 'status-badge unverified' };
+        return {
+          type: 'unverified',
+          text: t('dashboard.recentDetections.status.unverified'),
+          class: 'status-badge unverified',
+        };
     }
   }
 
@@ -112,8 +128,12 @@
         ? t('dashboard.recentDetections.modals.showSpecies', { species: detection.commonName })
         : t('dashboard.recentDetections.modals.ignoreSpecies', { species: detection.commonName }),
       message: isExcluded
-        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', { species: detection.commonName })
-        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', { species: detection.commonName }),
+        ? t('dashboard.recentDetections.modals.showSpeciesConfirm', {
+            species: detection.commonName,
+          })
+        : t('dashboard.recentDetections.modals.ignoreSpeciesConfirm', {
+            species: detection.commonName,
+          }),
       confirmLabel: t('common.buttons.confirm'),
       onConfirm: async () => {
         try {
@@ -139,12 +159,16 @@
   // Toggles the lock status of a detection to prevent/allow automatic cleanup
   function handleToggleLock(detection: Detection) {
     confirmModalConfig = {
-      title: detection.locked 
-        ? t('dashboard.recentDetections.modals.unlockDetection') 
+      title: detection.locked
+        ? t('dashboard.recentDetections.modals.unlockDetection')
         : t('dashboard.recentDetections.modals.lockDetection'),
       message: detection.locked
-        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', { species: detection.commonName })
-        : t('dashboard.recentDetections.modals.lockDetectionConfirm', { species: detection.commonName }),
+        ? t('dashboard.recentDetections.modals.unlockDetectionConfirm', {
+            species: detection.commonName,
+          })
+        : t('dashboard.recentDetections.modals.lockDetectionConfirm', {
+            species: detection.commonName,
+          }),
       confirmLabel: t('common.buttons.confirm'),
       onConfirm: async () => {
         try {
@@ -170,8 +194,12 @@
   // Permanently deletes a detection after user confirmation
   function handleDelete(detection: Detection) {
     confirmModalConfig = {
-      title: t('dashboard.recentDetections.modals.deleteDetection', { species: detection.commonName }),
-      message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', { species: detection.commonName }),
+      title: t('dashboard.recentDetections.modals.deleteDetection', {
+        species: detection.commonName,
+      }),
+      message: t('dashboard.recentDetections.modals.deleteDetectionConfirm', {
+        species: detection.commonName,
+      }),
       confirmLabel: t('common.buttons.delete'),
       onConfirm: async () => {
         try {
@@ -194,10 +222,14 @@
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <span class="card-title grow text-base sm:text-xl">{t('dashboard.recentDetections.title')}</span>
+        <span class="card-title grow text-base sm:text-xl"
+          >{t('dashboard.recentDetections.title')}</span
+        >
       </div>
       <div class="flex items-center gap-2">
-        <label for="numDetections" class="label-text text-sm">{t('dashboard.recentDetections.controls.show')}</label>
+        <label for="numDetections" class="label-text text-sm"
+          >{t('dashboard.recentDetections.controls.show')}</label
+        >
         <select
           id="numDetections"
           bind:value={selectedLimit}
@@ -343,7 +375,9 @@
       </div>
 
       {#if data.length === 0}
-        <div class="text-center py-8 text-base-content/60">{t('dashboard.recentDetections.noDetections')}</div>
+        <div class="text-center py-8 text-base-content/60">
+          {t('dashboard.recentDetections.noDetections')}
+        </div>
       {/if}
     {/if}
   </div>

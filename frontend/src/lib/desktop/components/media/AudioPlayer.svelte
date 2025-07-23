@@ -25,7 +25,7 @@
   import { cn } from '$lib/utils/cn.js';
   import { mediaIcons } from '$lib/utils/icons.js';
   import { t } from '$lib/i18n';
-  
+
   // Web Audio API types - these are built-in browser types
   /* global AudioContext, MediaElementAudioSourceNode, GainNode, DynamicsCompressorNode, BiquadFilterNode, EventListener, ResizeObserver */
 
@@ -157,7 +157,7 @@
       if (!AudioContextClass) {
         throw new Error('AudioContext not supported');
       }
-      
+
       audioContext = new AudioContextClass();
 
       if (audioContext.state === 'suspended') {
@@ -618,7 +618,10 @@
         class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
         role="button"
         tabindex="0"
-        aria-label={t('media.audio.seekProgress', { current: Math.floor(currentTime), total: Math.floor(duration) })}
+        aria-label={t('media.audio.seekProgress', {
+          current: Math.floor(currentTime),
+          total: Math.floor(duration),
+        })}
         onclick={handleProgressClick}
         onkeydown={e => {
           if (e.key === 'Enter' || e.key === ' ') {

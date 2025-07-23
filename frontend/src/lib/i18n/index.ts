@@ -4,4 +4,9 @@ export * from './utils';
 export * from './store.svelte';
 
 // Export generated types for compile-time validation
-export type { TranslationKey, TranslationParams, GetParams, TranslateFunction } from './types.generated';
+export type {
+  TranslationKey,
+  TranslationParams,
+  GetParams,
+  TranslateFunction,
+} from './types.generated';

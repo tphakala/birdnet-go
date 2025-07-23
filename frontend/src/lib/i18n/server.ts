@@ -42,7 +42,7 @@ export async function serverT(
   locale: Locale,
   key: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  params?: Record<string, any>,
+  params?: Record<string, any>
 ): Promise<string> {
   const messages = await loadServerMessages(locale);
   // eslint-disable-next-line security/detect-object-injection

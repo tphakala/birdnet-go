@@ -364,7 +364,7 @@ describe('Frontend Accessibility Tests', () => {
       // Only log report in development/local environment to keep CI/CD logs clean
       const nodeEnv = globalThis?.process?.env?.NODE_ENV;
       const isCI = globalThis?.process?.env?.CI;
-      
+
       if (nodeEnv === 'development' || (nodeEnv === 'test' && !isCI)) {
         // eslint-disable-next-line no-console
         console.log('Dashboard Accessibility Report:\n', report);

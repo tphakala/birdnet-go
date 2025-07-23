@@ -170,7 +170,9 @@
       <!-- Feedback -->
       {#if passwordStrength?.feedback && passwordStrength.feedback.length > 0}
         <div class="mt-2">
-          <div class="text-xs text-base-content/70 mb-1">{t('forms.password.strength.suggestions.title')}</div>
+          <div class="text-xs text-base-content/70 mb-1">
+            {t('forms.password.strength.suggestions.title')}
+          </div>
           <ul class="text-xs text-base-content/70 space-y-1">
             {#each passwordStrength.feedback as suggestion}
               <li class="flex items-center gap-1">

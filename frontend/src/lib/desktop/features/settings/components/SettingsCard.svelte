@@ -39,7 +39,11 @@
             <h3 class="text-xl font-semibold">{title}</h3>
           {/if}
           {#if hasChanges}
-            <span class="badge badge-primary badge-sm" role="status" aria-label={t('settings.card.changedAriaLabel')}>
+            <span
+              class="badge badge-primary badge-sm"
+              role="status"
+              aria-label={t('settings.card.changedAriaLabel')}
+            >
               {t('settings.card.changed')}
             </span>
           {/if}

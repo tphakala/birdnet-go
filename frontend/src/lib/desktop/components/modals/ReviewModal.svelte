@@ -65,8 +65,7 @@
       onClose();
     } catch (error) {
       console.error('Error saving review:', error);
-      errorMessage =
-        error instanceof Error ? error.message : t('common.review.errors.saveFailed');
+      errorMessage = error instanceof Error ? error.message : t('common.review.errors.saveFailed');
     } finally {
       isLoading = false;
     }

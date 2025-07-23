@@ -5,6 +5,7 @@ This directory contains translation files for the BirdNET-Go frontend applicatio
 ## Structure
 
 Translation files are organized by language code:
+
 - `en.json` - English (default)
 - `de.json` - German
 - `es.json` - Spanish
@@ -177,6 +178,7 @@ To maximize reusability and avoid duplication, translations are organized by fun
 ### 5. Feature-Specific Translations
 
 Each major feature has its own namespace:
+
 - `navigation.*` - Navigation menu items
 - `dashboard.*` - Dashboard page and components
 - `detections.*` - Detections page and related features
@@ -189,12 +191,15 @@ Each major feature has its own namespace:
 ## Best Practices
 
 ### 1. DRY (Don't Repeat Yourself)
+
 - Use common translations across components when possible
 - Before adding a new translation, check if it exists in `common.*`
 - Example: Use `common.buttons.save` instead of creating `settings.save`, `profile.save`, etc.
 
 ### 2. Parameterized Translations
+
 Use placeholders for dynamic content:
+
 ```json
 {
   "greeting": "Hello, {name}!",
@@ -203,17 +208,21 @@ Use placeholders for dynamic content:
 ```
 
 ### 3. Contextual Clarity
+
 When the same word has different meanings in different contexts, create specific keys:
+
 ```json
 {
-  "common.buttons.save": "Save",  // Generic save button
-  "settings.save.description": "Save your preferences",  // Specific context
-  "detections.save.recording": "Save recording to disk"  // Different meaning
+  "common.buttons.save": "Save", // Generic save button
+  "settings.save.description": "Save your preferences", // Specific context
+  "detections.save.recording": "Save recording to disk" // Different meaning
 }
 ```
 
 ### 4. Accessibility
+
 Always include translations for aria-labels and screen reader text:
+
 ```json
 {
   "common.aria.closeModal": "Close modal window",
@@ -222,6 +231,7 @@ Always include translations for aria-labels and screen reader text:
 ```
 
 ### 5. Naming Conventions
+
 - Use lowercase with dots for nesting: `section.subsection.key`
 - Use camelCase for multi-word keys: `firstName`, not `first_name`
 - Be descriptive but concise: `settings.audio.device` not `s.a.d`
@@ -233,18 +243,17 @@ Always include translations for aria-labels and screen reader text:
 ```svelte
 <script>
   import { t } from '$lib/i18n/index.js';
-  
+
   // Simple translation
   const label = t('common.buttons.save');
-  
+
   // With parameters
   const greeting = t('dashboard.welcome', { name: userName });
-  
+
   // In template
 </script>
 
-<button>{t('common.buttons.save')}</button>
-<p>{t('forms.validation.minLength', { min: 8 })}</p>
+<button>{t('common.buttons.save')}</button><p>{t('forms.validation.minLength', { min: 8 })}</p>
 ```
 
 ### Priority Components to Update
@@ -283,6 +292,7 @@ Always include translations for aria-labels and screen reader text:
 ## Contributing Translations
 
 When contributing translations:
+
 1. Maintain the exact same key structure as `en.json`
 2. Don't remove keys even if untranslated (leave English as fallback)
 3. Ensure special characters are properly escaped in JSON

@@ -57,7 +57,8 @@
       }
       dailySummary = await response.json();
     } catch (error) {
-      summaryError = error instanceof Error ? error.message : t('dashboard.errors.dailySummaryLoad');
+      summaryError =
+        error instanceof Error ? error.message : t('dashboard.errors.dailySummaryLoad');
       console.error('Error fetching daily summary:', error);
     } finally {
       isLoadingSummary = false;
@@ -71,11 +72,14 @@
     try {
       const response = await fetch('/api/v2/detections/recent?limit=10');
       if (!response.ok) {
-        throw new Error(t('dashboard.errors.recentDetectionsFetch', { status: response.statusText }));
+        throw new Error(
+          t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
+        );
       }
       recentDetections = await response.json();
     } catch (error) {
-      detectionsError = error instanceof Error ? error.message : t('dashboard.errors.recentDetectionsLoad');
+      detectionsError =
+        error instanceof Error ? error.message : t('dashboard.errors.recentDetectionsLoad');
       console.error('Error fetching recent detections:', error);
     } finally {
       isLoadingDetections = false;

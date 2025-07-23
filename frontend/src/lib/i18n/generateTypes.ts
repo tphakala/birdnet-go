@@ -19,10 +19,10 @@ type TranslationObject = Record<string, TranslationValue>;
  */
 function generateTypeFromObject(obj: TranslationObject, prefix = ''): string {
   const lines: string[] = [];
-  
+
   for (const [key, value] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
-    
+
     if (typeof value === 'string') {
       // Extract parameters from the translation string
       const params = extractParameters(value);
@@ -39,7 +39,7 @@ function generateTypeFromObject(obj: TranslationObject, prefix = ''): string {
       lines.push(...filteredLines);
     }
   }
-  
+
   return lines.join('\n');
 }
 
@@ -52,19 +52,19 @@ function extractParameters(str: string): string[] {
   const params: string[] = [];
   let match;
   let lastIndex = -1;
-  
+
   while ((match = regex.exec(str)) !== null) {
     // Safety check: ensure lastIndex advances to prevent infinite loop
     if (regex.lastIndex <= lastIndex) {
       break;
     }
     lastIndex = regex.lastIndex;
-    
+
     if (!params.includes(match[1])) {
       params.push(match[1]);
     }
   }
-  
+
   return params;
 }
 
@@ -73,10 +73,10 @@ function extractParameters(str: string): string[] {
  */
 function generateParamTypes(obj: TranslationObject, prefix = ''): string[] {
   const paramTypes: string[] = [];
-  
+
   for (const [key, value] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
-    
+
     if (typeof value === 'string') {
       const params = extractParameters(value);
       if (params.length > 0) {
@@ -87,7 +87,7 @@ function generateParamTypes(obj: TranslationObject, prefix = ''): string[] {
       paramTypes.push(...generateParamTypes(value as TranslationObject, fullKey));
     }
   }
-  
+
   return paramTypes;
 }
 
@@ -103,13 +103,13 @@ function generateTypes() {
     // Read the English translation file
     const messagesPath = join(__dirname, '../../../static/messages/en.json');
     const enMessages = JSON.parse(readFileSync(messagesPath, 'utf-8'));
-    
+
     // Generate translation key type
     const translationKeys = generateTypeFromObject(enMessages);
-    
+
     // Generate parameter types
     const paramTypes = generateParamTypes(enMessages);
-    
+
     // Create the TypeScript content
     const tsContent = `/**
  * Auto-generated TypeScript types for i18n translation keys
@@ -149,15 +149,14 @@ export interface TranslateFunction {
   ): string;
 }
 `;
-    
+
     // Write the TypeScript file
     const outputPath = join(__dirname, 'types.generated.ts');
     writeFileSync(outputPath, tsContent, 'utf-8');
-    
+
     console.log(`✅ Generated TypeScript types at: ${outputPath}`);
     console.log(`📊 Total translation keys: ${translationKeys.split('\n').length - 1}`);
     console.log(`📊 Keys with parameters: ${paramTypes.length}`);
-    
   } catch (error) {
     console.error('❌ Error generating types:', error);
     process.exit(1);

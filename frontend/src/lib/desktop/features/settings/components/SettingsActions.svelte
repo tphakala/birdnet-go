@@ -45,7 +45,9 @@
     onclick={handleSave}
     disabled={!unsavedChanges || store.isSaving}
     aria-busy={store.isSaving}
-    aria-label={store.isSaving ? t('settings.actions.savingAriaLabel') : t('settings.actions.saveAriaLabel')}
+    aria-label={store.isSaving
+      ? t('settings.actions.savingAriaLabel')
+      : t('settings.actions.saveAriaLabel')}
   >
     {#if store.isSaving}
       <LoadingSpinner size="sm" />

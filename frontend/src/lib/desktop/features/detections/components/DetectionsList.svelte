@@ -64,10 +64,10 @@
     switch (data.queryType) {
       case 'hourly':
         if (data.duration && data.duration > 1) {
-          return t('detections.titles.hourlyRange', { 
-            startHour: data.hour, 
-            endHour: (data.hour || 0) + data.duration, 
-            date: data.date 
+          return t('detections.titles.hourlyRange', {
+            startHour: data.hour,
+            endHour: (data.hour || 0) + data.duration,
+            date: data.date,
           });
         }
         return t('detections.titles.hourly', { hour: data.hour, date: data.date });
@@ -129,10 +129,17 @@
           <div class="col-span-1 min-w-0 break-words">{t('detections.headers.thumbnail')}</div>
         {/if}
         <div class="col-span-2 min-w-0 break-words">{t('detections.headers.status')}</div>
-        <div class={cn(data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3', 'min-w-0 break-words')}>
+        <div
+          class={cn(
+            data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3',
+            'min-w-0 break-words'
+          )}
+        >
           {t('detections.headers.recording')}
         </div>
-        <div class="col-span-1 text-right min-w-0 break-words">{t('detections.headers.actions')}</div>
+        <div class="col-span-1 text-right min-w-0 break-words">
+          {t('detections.headers.actions')}
+        </div>
       </div>
 
       <!-- Detection rows -->
@@ -154,10 +161,10 @@
     <div class="border-t border-base-200">
       <div class="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
         <div class="text-sm text-base-content/70 order-2 sm:order-1">
-          {t('detections.pagination.showing', { 
-            from: data.showingFrom, 
-            to: data.showingTo, 
-            total: data.totalResults 
+          {t('detections.pagination.showing', {
+            from: data.showingFrom,
+            to: data.showingTo,
+            total: data.totalResults,
           })}
         </div>
         <div class="order-1 sm:order-2">

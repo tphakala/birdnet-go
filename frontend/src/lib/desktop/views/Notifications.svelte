@@ -215,9 +215,12 @@
     const diff = now.getTime() - date.getTime();
 
     if (diff < 60000) return t('notifications.timeAgo.justNow');
-    if (diff < 3600000) return t('notifications.timeAgo.minutesAgo', { minutes: Math.floor(diff / 60000) });
-    if (diff < 86400000) return t('notifications.timeAgo.hoursAgo', { hours: Math.floor(diff / 3600000) });
-    if (diff < 604800000) return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / 86400000) });
+    if (diff < 3600000)
+      return t('notifications.timeAgo.minutesAgo', { minutes: Math.floor(diff / 60000) });
+    if (diff < 86400000)
+      return t('notifications.timeAgo.hoursAgo', { hours: Math.floor(diff / 3600000) });
+    if (diff < 604800000)
+      return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / 86400000) });
 
     return date.toLocaleDateString();
   }
@@ -411,7 +414,13 @@
             class="join-item btn btn-sm"
             aria-label={t('dataDisplay.pagination.goToPreviousPage')}>«</button
           >
-          <button class="join-item btn btn-sm btn-active" aria-label={t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}>
+          <button
+            class="join-item btn btn-sm btn-active"
+            aria-label={t('dataDisplay.pagination.page', {
+              current: currentPage,
+              total: totalPages,
+            })}
+          >
             {t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}
           </button>
           <button

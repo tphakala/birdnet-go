@@ -11,7 +11,7 @@
   }
 
   let { size = 'lg', color = 'text-primary', label, ...rest }: Props = $props();
-  
+
   // Reactive label with default
   let effectiveLabel = $derived(label ?? t('common.ui.loading'));
 </script>

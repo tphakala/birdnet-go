@@ -508,7 +508,11 @@
           <div class="flex items-center justify-between p-2 rounded-md bg-base-300">
             <div class="flex-grow grid grid-cols-12 gap-2">
               <div class="col-span-6">
-                <TextInput bind:value={editConfigNewName} placeholder={t('forms.placeholders.speciesName')} size="xs" />
+                <TextInput
+                  bind:value={editConfigNewName}
+                  placeholder={t('forms.placeholders.speciesName')}
+                  size="xs"
+                />
               </div>
               <div class="col-span-2">
                 <NumberField
@@ -584,10 +588,14 @@
                     <div tabindex="0" role="button" class="btn btn-ghost btn-xs">⋮</div>
                     <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
                       <li>
-                        <button onclick={() => startEditConfig(species)}>{t('common.buttons.edit-config')}</button>
+                        <button onclick={() => startEditConfig(species)}
+                          >{t('common.buttons.edit-config')}</button
+                        >
                       </li>
                       <li>
-                        <button onclick={() => openActionsModal(species)}>{t('common.buttons.add-action')}</button>
+                        <button onclick={() => openActionsModal(species)}
+                          >{t('common.buttons.add-action')}</button
+                        >
                       </li>
                       <li>
                         <button onclick={() => removeConfig(species)} class="text-error">
@@ -736,8 +744,12 @@
       </div>
 
       <div class="modal-action mt-6">
-        <button type="button" class="btn btn-primary" onclick={saveAction}> {t('common.buttons.save')} </button>
-        <button type="button" class="btn btn-ghost" onclick={closeActionsModal}> {t('common.buttons.cancel')} </button>
+        <button type="button" class="btn btn-primary" onclick={saveAction}>
+          {t('common.buttons.save')}
+        </button>
+        <button type="button" class="btn btn-ghost" onclick={closeActionsModal}>
+          {t('common.buttons.cancel')}
+        </button>
       </div>
     </div>
     <div
