@@ -220,7 +220,7 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-4 text-base-content/50 bg-base-200 rounded-lg mt-2">
+    <div class="text-center py-4 text-base-content/60 bg-base-200 rounded-lg mt-2">
       <div class="text-sm">No subnets configured</div>
       <div class="text-xs">{emptyStateMessage}</div>
     </div>

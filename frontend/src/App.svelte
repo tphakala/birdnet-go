@@ -313,7 +313,7 @@
     {#if GenericErrorPage}
       {@const ErrorComponent = GenericErrorPage}
       <ErrorComponent
-        code={dynamicErrorCode || "500"}
+        code={dynamicErrorCode || '500'}
         title="Component Load Error"
         message="Failed to load the requested component"
       />

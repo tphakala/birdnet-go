@@ -4,6 +4,10 @@
   import type { HTMLAttributes } from 'svelte/elements';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
+  // CSS selector for focusable elements used in focus management
+  const FOCUSABLE_SELECTOR =
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
   type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
   type ModalType = 'default' | 'confirm' | 'alert';
 
@@ -49,6 +53,8 @@
   }: Props = $props();
 
   let isConfirming = $state(false);
+  let modalElement = $state<HTMLDivElement>();
+  let previousActiveElement: Element | null = null;
 
   const sizeClasses: Record<ModalSize, string> = {
     sm: 'modal-box max-w-sm',
@@ -99,14 +105,67 @@
   function handleKeydown(event: KeyboardEvent) {
     if (closeOnEsc && event.key === 'Escape' && !loading && !isConfirming) {
       handleClose();
+    } else if (event.key === 'Tab') {
+      trapFocus(event);
+    }
+  }
+
+  function trapFocus(event: KeyboardEvent) {
+    if (!modalElement) return;
+
+    const focusableElements = modalElement.querySelectorAll(FOCUSABLE_SELECTOR);
+    const firstFocusable = focusableElements[0] as HTMLElement;
+    const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    if (event.shiftKey) {
+      // Shift + Tab - move focus backwards
+      if (document.activeElement === firstFocusable) {
+        lastFocusable?.focus();
+        event.preventDefault();
+      }
+    } else {
+      // Tab - move focus forwards
+      if (document.activeElement === lastFocusable) {
+        firstFocusable?.focus();
+        event.preventDefault();
+      }
+    }
+  }
+
+  function setInitialFocus() {
+    if (!modalElement) return;
+
+    // Focus the first focusable element, or the modal itself if no focusable elements
+    const focusableElements = modalElement.querySelectorAll(FOCUSABLE_SELECTOR);
+
+    if (focusableElements.length > 0) {
+      (focusableElements[0] as HTMLElement).focus();
+    } else {
+      modalElement.focus();
+    }
+  }
+
+  function restoreFocus() {
+    if (previousActiveElement && 'focus' in previousActiveElement) {
+      (previousActiveElement as HTMLElement).focus();
     }
   }
 
   $effect(() => {
     if (isOpen) {
+      // Store the currently focused element
+      previousActiveElement = document.activeElement;
+
+      // Set focus to modal when opened
+      setTimeout(() => setInitialFocus(), 0);
+
+      // Add event listener for keyboard navigation
       document.addEventListener('keydown', handleKeydown);
+
       return () => {
         document.removeEventListener('keydown', handleKeydown);
+        // Restore focus when modal closes
+        restoreFocus();
       };
     }
   });
@@ -120,7 +179,7 @@
   onclick={handleBackdropClick}
   {...rest}
 >
-  <div class={cn(sizeClasses[size], className)}>
+  <div bind:this={modalElement} class={cn(sizeClasses[size], className)} tabindex="-1">
     {#if showCloseButton && type === 'default'}
       <button
         type="button"

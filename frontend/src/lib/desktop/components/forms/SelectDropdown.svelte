@@ -274,7 +274,7 @@
 
 <div class={cn('select-dropdown', className)}>
   {#if label}
-    <label class="label" for={fieldId}>
+    <label class="label" for={fieldId} id="{fieldId}-label">
       <span class="label-text">
         {label}
         {#if required}
@@ -299,6 +299,8 @@
       onkeydown={handleKeyDown}
       aria-haspopup="listbox"
       aria-expanded={isOpen}
+      aria-labelledby={label ? `${fieldId}-label` : undefined}
+      aria-describedby={helpText ? `${fieldId}-help` : undefined}
     >
       <span class="truncate">
         {#if renderSelected && selectedOptions.length > 0}
@@ -355,6 +357,9 @@
               oninput={handleSearch}
               placeholder="Search..."
               class="input input-sm input-bordered w-full"
+              aria-label="Search options"
+              role="searchbox"
+              aria-controls="{fieldId}-listbox"
             />
           </div>
         {/if}
@@ -364,6 +369,8 @@
           style:max-height="{searchable ? maxHeight - 60 : maxHeight}px"
           role="listbox"
           aria-multiselectable={multiple}
+          id="{fieldId}-listbox"
+          aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
           {#if filteredOptions().length === 0}
             <div class="p-4 text-center text-base-content/60">No options found</div>
@@ -432,7 +439,7 @@
   </div>
 
   {#if helpText}
-    <div class="label">
+    <div class="label" id="{fieldId}-help">
       <span class="label-text-alt">{helpText}</span>
     </div>
   {/if}

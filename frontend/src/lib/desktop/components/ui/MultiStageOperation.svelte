@@ -50,7 +50,7 @@
       case 'in_progress':
         return 'text-info';
       case 'skipped':
-        return 'text-base-content/50';
+        return 'text-base-content/60';
       default:
         return 'text-base-content/30';
     }

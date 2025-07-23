@@ -62,9 +62,7 @@
   $effect(() => {
     const loadSpeciesList = async () => {
       try {
-        const data = await api.get<SpeciesListResponse>(
-          '/api/v2/range/species/list'
-        );
+        const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
         if (data?.species && Array.isArray(data.species)) {
           allowedSpecies = data.species.map((species: any) => species.label);
         }

@@ -43,7 +43,7 @@ module.exports = {
         light: {
           "primary": "#2563eb",          // Blue for primary actions
           "primary-content": "#ffffff",  // Pure white text for primary buttons
-          "secondary": "#4b5563",        // Gray for secondary elements
+          "secondary": "#374151",        // Gray for secondary elements (darker for better contrast)
           "accent": "#0284c7",           // Sky blue for accents
           "neutral": "#1f2937",          // Dark gray for neutral text
           "base-100": "#ffffff",         // White background
@@ -58,10 +58,10 @@ module.exports = {
           "--border-200": "#cbd5e1",      // Secondary border color
           "--hover-overlay": "rgba(0,0,0,0.05)",  // Hover state overlay
 
-          "info": "#0ea5e9",             // Info blue
-          "success": "#22c55e",          // Success green
-          "warning": "#f59e0b",          // Warning yellow
-          "error": "#ef4444",            // Error red
+          "info": "#0369a1",             // Info blue (even darker for better contrast)
+          "success": "#15803d",          // Success green (darker for better contrast)
+          "warning": "#b45309",          // Warning yellow (even darker for better contrast)
+          "error": "#dc2626",            // Error red (darker for better contrast)
           "error-content": "#ffffff",    // White text for error buttons
           
           "--rounded-box": "0.5rem",     // Border radius for cards
@@ -76,9 +76,9 @@ module.exports = {
           "--border-btn": "1px",         // Button border width
         },
         dark: {
-          "primary": "#3b82f6",          // Bright blue for primary actions
+          "primary": "#60a5fa",          // Bright blue for primary actions (lighter for dark background contrast)
           "primary-content": "#020617",  // Pure white text for primary buttons
-          "secondary": "#6b7280",        // Medium gray for secondary elements
+          "secondary": "#9ca3af",        // Medium gray for secondary elements (lighter for better contrast on dark)
           "accent": "#0369a1",           // Darker sky blue for accents
           "neutral": "#d1d5db",          // Light gray for neutral text
           "base-100": "#1f2937",         // Dark background
