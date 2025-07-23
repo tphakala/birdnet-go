@@ -63,6 +63,8 @@ async function loadMessages(locale: Locale): Promise<void> {
     }
     const data = await response.json();
     messages = data;
+    // Clear cache after successfully loading new messages
+    clearTranslationCache();
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(`Failed to load messages for ${locale}:`, error);
@@ -76,6 +78,8 @@ async function loadMessages(locale: Locale): Promise<void> {
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
           messages = fallbackData;
+          // Clear cache after loading fallback messages
+          clearTranslationCache();
           return;
         }
       } catch (fallbackError) {
@@ -138,17 +142,26 @@ export function t(key: string, params?: Record<string, unknown>): string {
     return cached.value;
   }
 
+  // If messages haven't loaded yet, return the key
+  if (Object.keys(messages).length === 0) {
+    return key;
+  }
+
   // Support nested keys with dot notation
   const value = getNestedValue(messages, key);
   const message = typeof value === 'string' ? value : key;
 
-  if (!params) {
+  // Only cache if we found an actual translation (not the key itself)
+  if (!params && value !== undefined) {
     // Cache simple translations
     translationCache.set(cacheKey, {
       locale: currentLocale,
       params: paramsKey,
       value: message,
     });
+  }
+
+  if (!params) {
     return message;
   }
 
@@ -201,12 +214,15 @@ export function t(key: string, params?: Record<string, unknown>): string {
     return params[param]?.toString() ?? `{${param}}`;
   });
 
-  // Cache the computed result
-  translationCache.set(cacheKey, {
-    locale: currentLocale,
-    params: paramsKey,
-    value: result,
-  });
+  // Only cache if we found an actual translation (not the key itself)
+  if (value !== undefined) {
+    // Cache the computed result
+    translationCache.set(cacheKey, {
+      locale: currentLocale,
+      params: paramsKey,
+      value: result,
+    });
+  }
 
   return result;
 }
