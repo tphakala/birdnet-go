@@ -584,10 +584,10 @@
                     <div tabindex="0" role="button" class="btn btn-ghost btn-xs">⋮</div>
                     <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
                       <li>
-                        <button onclick={() => startEditConfig(species)}>{t('common.buttons.editConfig')}</button>
+                        <button onclick={() => startEditConfig(species)}>{t('common.buttons.editconfig')}</button>
                       </li>
                       <li>
-                        <button onclick={() => openActionsModal(species)}>{t('common.buttons.addAction')}</button>
+                        <button onclick={() => openActionsModal(species)}>{t('common.buttons.addaction')}</button>
                       </li>
                       <li>
                         <button onclick={() => removeConfig(species)} class="text-error">
