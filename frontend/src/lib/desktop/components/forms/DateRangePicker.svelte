@@ -6,7 +6,7 @@
   import { t } from '$lib/i18n';
 
   interface DatePreset {
-    label: string;
+    key: string;
     getValue: () => { startDate: Date; endDate: Date };
   }
 
@@ -72,14 +72,14 @@
 
     return [
       {
-        label: t('forms.dateRange.presets.today'),
+        key: 'forms.dateRange.presets.today',
         getValue: () => ({
           startDate: today,
           endDate: today,
         }),
       },
       {
-        label: t('forms.dateRange.presets.yesterday'),
+        key: 'forms.dateRange.presets.yesterday',
         getValue: () => {
           const yesterday = new Date(today);
           yesterday.setDate(yesterday.getDate() - 1);
@@ -90,7 +90,7 @@
         },
       },
       {
-        label: t('forms.dateRange.presets.last7Days'),
+        key: 'forms.dateRange.presets.last7Days',
         getValue: () => {
           const start = new Date(today);
           start.setDate(start.getDate() - 6);
@@ -101,7 +101,7 @@
         },
       },
       {
-        label: t('forms.dateRange.presets.last30Days'),
+        key: 'forms.dateRange.presets.last30Days',
         getValue: () => {
           const start = new Date(today);
           start.setDate(start.getDate() - 29);
@@ -112,7 +112,7 @@
         },
       },
       {
-        label: t('forms.dateRange.presets.thisMonth'),
+        key: 'forms.dateRange.presets.thisMonth',
         getValue: () => {
           const start = new Date(now.getFullYear(), now.getMonth(), 1);
           return {
@@ -122,7 +122,7 @@
         },
       },
       {
-        label: t('forms.dateRange.presets.lastMonth'),
+        key: 'forms.dateRange.presets.lastMonth',
         getValue: () => {
           const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
           const end = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -133,7 +133,7 @@
         },
       },
       {
-        label: t('forms.dateRange.presets.thisYear'),
+        key: 'forms.dateRange.presets.thisYear',
         getValue: () => {
           const start = new Date(now.getFullYear(), 0, 1);
           return {
@@ -270,7 +270,7 @@
             {disabled}
             onclick={() => applyPreset(preset)}
           >
-            {preset.label}
+            {t(preset.key)}
           </button>
         {/each}
 
