@@ -86,6 +86,7 @@
       "closeNotification": "Close notification",
       "toggleDropdown": "Toggle dropdown",
       "sortAscending": "Sort ascending",
+      "selectLanguage": "Select language",
       "sortDescending": "Sort descending",
       "expandSection": "Expand section",
       "collapseSection": "Collapse section",
@@ -101,6 +102,22 @@
     "modal": {
       "confirmAction": "Confirm Action",
       "confirmMessage": "Are you sure you want to perform this action?"
+    },
+    "review": {
+      "modalTitle": "Review Detection: {species}",
+      "status": {
+        "verifiedCorrect": "Verified Correct",
+        "falsePositive": "False Positive",
+        "notReviewed": "Not Reviewed"
+      },
+      "form": {
+        "correctDetection": "Correct Detection",
+        "falsePositiveLabel": "False Positive"
+      },
+      "errors": {
+        "saveFailed": "Failed to save review. Please try again.",
+        "noAudio": "No audio recording available for this detection."
+      }
     }
   },
   "navigation": {
@@ -642,6 +659,24 @@
           "title": "Support & Diagnostics", 
           "description": "Help developers fix your issues faster by providing essential diagnostic information"
         }
+      },
+      "telemetry": {
+        "privacyNotice": "Privacy Notice",
+        "privacyPoints": {
+          "noPersonalData": "No personal data is collected",
+          "anonymousData": "All telemetry data is anonymous",
+          "helpImprove": "Telemetry data helps developers identify and fix issues in BirdNET-Go"
+        },
+        "enableTracking": "Enable Error Tracking (Opt-in)"
+      },
+      "systemId": {
+        "label": "Your System ID",
+        "description": "Use this ID when reporting issues"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Include recent logs",
+        "includeConfiguration": "Include configuration (sensitive data removed)",
+        "includeSystemInfo": "Include system information"
       }
     },
     "filters": {

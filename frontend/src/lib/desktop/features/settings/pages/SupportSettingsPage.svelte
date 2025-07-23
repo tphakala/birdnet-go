@@ -183,17 +183,12 @@
         <!-- Privacy Notice -->
         <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-sm">
           <div>
-            <h3 class="font-bold">Privacy-First Error Tracking</h3>
+            <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
             <div class="text-sm mt-1">
-              <p>
-                Error tracking is <strong>completely optional</strong> and requires your explicit consent.
-                When enabled:
-              </p>
               <ul class="list-disc list-inside mt-2 space-y-1">
-                <li>Only essential error information is collected for debugging</li>
-                <li>No personal data, audio recordings, or bird detection data is sent</li>
-                <li>All data is filtered to remove sensitive information</li>
-                <li>Telemetry data helps developers identify and fix issues in BirdNET-Go</li>
+                <li>{t('settings.support.telemetry.privacyPoints.noPersonalData')}</li>
+                <li>{t('settings.support.telemetry.privacyPoints.anonymousData')}</li>
+                <li>{t('settings.support.telemetry.privacyPoints.helpImprove')}</li>
               </ul>
             </div>
           </div>
@@ -202,7 +197,7 @@
         <!-- Enable Error Tracking -->
         <Checkbox
           bind:checked={settings.sentry!.enabled}
-          label="Enable Error Tracking (Opt-in)"
+          label={t('settings.support.telemetry.enableTracking')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateSentryEnabled(settings.sentry!.enabled)}
         />
@@ -210,7 +205,7 @@
         <!-- System ID Display -->
         <div class="form-control w-full mt-4">
           <label class="label" for="systemID">
-            <span class="label-text">Your System ID</span>
+            <span class="label-text">{t('settings.support.systemId.label')}</span>
           </label>
           <div class="join">
             <input
@@ -229,8 +224,7 @@
           </div>
           <div class="label">
             <span class="label-text-alt text-base-content/60"
-              >Include this ID when reporting issues if you want developers to identify your error
-              reports</span
+              >{t('settings.support.systemId.description')}</span
             >
           </div>
         </div>
@@ -239,8 +233,8 @@
 
     <!-- Support & Diagnostics Section -->
     <SettingsSection
-      title="Support & Diagnostics"
-      description="Help developers fix your issues faster by providing essential diagnostic information"
+      title={t('settings.support.sections.diagnostics.title')}
+      description={t('settings.support.sections.diagnostics.description')}
       defaultOpen={false}
     >
       <div class="space-y-4">
@@ -311,19 +305,19 @@
             <div class="space-y-2">
               <Checkbox
                 bind:checked={supportDump.includeLogs}
-                label="Include recent logs"
+                label={t('settings.support.diagnostics.includeRecentLogs')}
                 disabled={generating}
               />
 
               <Checkbox
                 bind:checked={supportDump.includeConfig}
-                label="Include configuration (sensitive data removed)"
+                label={t('settings.support.diagnostics.includeConfiguration')}
                 disabled={generating}
               />
 
               <Checkbox
                 bind:checked={supportDump.includeSystemInfo}
-                label="Include system information"
+                label={t('settings.support.diagnostics.includeSystemInfo')}
                 disabled={generating}
               />
 

@@ -122,17 +122,17 @@
     {:else}
       <!-- Header -->
       <div class="grid grid-cols-12 gap-4 text-xs px-4 pb-2 border-b border-gray-200">
-        <div class="col-span-2">{t('detections.headers.dateTime')}</div>
-        <div class="col-span-1">{t('detections.headers.weather')}</div>
-        <div class="col-span-3">{t('detections.headers.species')}</div>
+        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.dateTime')}</div>
+        <div class="col-span-1 min-w-0 break-words">{t('detections.headers.weather')}</div>
+        <div class="col-span-3 min-w-0 break-words">{t('detections.headers.species')}</div>
         {#if data.dashboardSettings?.thumbnails?.summary}
-          <div class="col-span-1">{t('detections.headers.thumbnail')}</div>
+          <div class="col-span-1 min-w-0 break-words">{t('detections.headers.thumbnail')}</div>
         {/if}
-        <div class="col-span-2">{t('detections.headers.status')}</div>
-        <div class={data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3'}>
+        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.status')}</div>
+        <div class={data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3'} class="min-w-0 break-words">
           {t('detections.headers.recording')}
         </div>
-        <div class="col-span-1 text-right">{t('detections.headers.actions')}</div>
+        <div class="col-span-1 text-right min-w-0 break-words">{t('detections.headers.actions')}</div>
       </div>
 
       <!-- Detection rows -->

@@ -284,7 +284,7 @@
 
       // Read the streaming response
       const reader = response.body?.getReader();
-      const decoder = new (globalThis as any).TextDecoder();
+      const decoder = new TextDecoder();
 
       if (!reader) {
         throw new Error('Failed to read response stream');
@@ -487,7 +487,7 @@
 
       // Read the streaming response
       const reader = response.body?.getReader();
-      const decoder = new (globalThis as any).TextDecoder();
+      const decoder = new TextDecoder();
 
       if (!reader) {
         throw new Error('Failed to read response stream');
@@ -669,7 +669,7 @@
 
       // Read the streaming response
       const reader = response.body?.getReader();
-      const decoder = new (globalThis as any).TextDecoder();
+      const decoder = new TextDecoder();
 
       if (!reader) {
         throw new Error('Failed to read response stream');

@@ -3,6 +3,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { alertIcons, navigationIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -65,7 +66,7 @@
     } catch (error) {
       console.error('Error saving review:', error);
       errorMessage =
-        error instanceof Error ? error.message : 'Failed to save review. Please try again.';
+        error instanceof Error ? error.message : t('common.review.errors.saveFailed');
     } finally {
       isLoading = false;
     }
@@ -85,18 +86,18 @@
   function getStatusText(verified?: string): string {
     switch (verified) {
       case 'correct':
-        return 'Verified Correct';
+        return t('common.review.status.verifiedCorrect');
       case 'false_positive':
-        return 'False Positive';
+        return t('common.review.status.falsePositive');
       default:
-        return 'Not Reviewed';
+        return t('common.review.status.notReviewed');
     }
   }
 </script>
 
 <Modal
   {isOpen}
-  title={`Review Detection: ${detection?.commonName || ''}`}
+  title={t('common.review.modalTitle', { species: detection?.commonName || '' })}
   size="lg"
   showCloseButton={true}
   {onClose}
@@ -175,7 +176,7 @@
                   d={alertIcons.info}
                 ></path>
               </svg>
-              <span>No audio recording available for this detection.</span>
+              <span>{t('common.review.errors.noAudio')}</span>
             </div>
           {/if}
         </div>
@@ -191,7 +192,7 @@
               class="radio radio-primary radio-xs"
               disabled={detection.locked}
             />
-            <span class="label-text">Correct Detection</span>
+            <span class="label-text">{t('common.review.form.correctDetection')}</span>
           </label>
           <label class="label cursor-pointer justify-start gap-4">
             <input
@@ -202,7 +203,7 @@
               class="radio radio-primary radio-xs"
               disabled={detection.locked}
             />
-            <span class="label-text">False Positive</span>
+            <span class="label-text">{t('common.review.form.falsePositiveLabel')}</span>
           </label>
 
           {#if detection.locked}
