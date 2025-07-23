@@ -232,7 +232,7 @@
         id="host-address"
         bind:value={settings.host}
         label={t('settings.security.hostLabel')}
-        placeholder={t('settings.security.hostPlaceholder')}
+        placeholder={t('settings.security.placeholders.host')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateAutoTLSHost(settings.host)}
       />
@@ -377,7 +377,7 @@
               id="google-user-id"
               bind:value={(settings.googleAuth as any).userId}
               label="User ID"
-              placeholder={t('settings.security.allowedUsersPlaceholder')}
+              placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
               onchange={() => updateGoogleUserId((settings.googleAuth as any).userId || '')}
             />
@@ -448,7 +448,7 @@
               id="github-user-id"
               bind:value={(settings.githubAuth as any).userId}
               label="User ID"
-              placeholder={t('settings.security.allowedUsersPlaceholder')}
+              placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
               onchange={() => updateGithubUserId((settings.githubAuth as any).userId || '')}
             />
@@ -479,7 +479,7 @@
             id="allowed-subnet"
             bind:value={settings.allowSubnetBypass.subnet}
             label={t('settings.security.allowedSubnetsLabel')}
-            placeholder={t('settings.security.subnetPlaceholder')}
+            placeholder={t('settings.security.placeholders.subnet')}
             disabled={store.isLoading || store.isSaving}
             onchange={() => updateSubnetBypassSubnet(settings.allowSubnetBypass.subnet || '')}
           />
