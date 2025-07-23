@@ -42,8 +42,8 @@
       "yes": "Yes",
       "no": "No",
       "ok": "OK",
-      "editconfig": "Edit Config",
-      "addaction": "Add Action"
+      "edit-config": "Edit Config",
+      "add-action": "Add Action"
     },
     "ui": {
       "loading": "Loading...",
