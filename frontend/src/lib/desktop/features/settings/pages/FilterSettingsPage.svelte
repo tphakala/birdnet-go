@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import { t } from '$lib/i18n/index.js';
 
   // API response interfaces
   interface SpeciesListResponse {
@@ -188,7 +189,7 @@
   <div class="space-y-4">
     <!-- Privacy Filter Section -->
     <SettingsSection
-      title="Privacy Filtering"
+      title={t('settings.filters.privacyFiltering.title')}
       description="Privacy filtering avoids saving audio clips when human vocals are detected"
       defaultOpen={true}
       hasChanges={privacyFilterHasChanges}
@@ -222,7 +223,7 @@
 
     <!-- Dog Bark Filter Section -->
     <SettingsSection
-      title="False Positive Prevention"
+      title={t('settings.filters.falsePositivePrevention.title')}
       description="Configure false detection filters"
       defaultOpen={true}
       hasChanges={dogBarkFilterHasChanges}
@@ -279,13 +280,13 @@
                         bind:value={editSpecies}
                         class="input input-sm input-bordered flex-1"
                         onkeydown={handleEditKeydown}
-                        placeholder="Species name"
+                        placeholder={t('settings.filters.speciesNamePlaceholder')}
                       />
                       <button
                         type="button"
                         class="btn btn-sm btn-success"
                         onclick={saveEdit}
-                        aria-label="Save changes"
+                        aria-label={t('common.aria.saveChanges')}
                       >
                         {@html actionIcons.check}
                       </button>
@@ -293,7 +294,7 @@
                         type="button"
                         class="btn btn-sm btn-ghost"
                         onclick={cancelEdit}
-                        aria-label="Cancel edit"
+                        aria-label={t('common.aria.cancelEdit')}
                       >
                         {@html navigationIcons.close}
                       </button>
@@ -304,7 +305,7 @@
                         class="btn btn-sm btn-ghost"
                         onclick={() => startEdit(index)}
                         disabled={store.isLoading || store.isSaving}
-                        aria-label="Edit species"
+                        aria-label={t('common.aria.editSpecies')}
                       >
                         {@html actionIcons.edit}
                       </button>
@@ -313,7 +314,7 @@
                         class="btn btn-sm btn-error"
                         onclick={() => removeSpecies(index)}
                         disabled={store.isLoading || store.isSaving}
-                        aria-label="Remove species"
+                        aria-label={t('common.aria.removeSpecies')}
                       >
                         {@html actionIcons.delete}
                       </button>
@@ -327,7 +328,7 @@
             <SpeciesInput
               bind:value={newSpecies}
               label="Add Dog Bark Species"
-              placeholder="Type species name..."
+              placeholder={t('settings.filters.typeSpeciesName')}
               helpText="Search and add species that might be confused with dog barks"
               disabled={store.isLoading || store.isSaving}
               predictions={allowedSpecies}

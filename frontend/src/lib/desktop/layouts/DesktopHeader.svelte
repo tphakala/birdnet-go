@@ -5,6 +5,7 @@
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
   import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   interface Props {
     title?: string;
@@ -83,7 +84,7 @@
       <button
         onclick={handleSidebarToggle}
         class="btn btn-ghost btn-sm p-0 sm:p-1 lg:hidden"
-        aria-label="Toggle sidebar menu"
+        aria-label={t('navigation.toggleSidebar')}
       >
         {@html navigationIcons.menu}
       </button>

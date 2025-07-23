@@ -3,7 +3,7 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
-  import { t } from '$lib/i18n/store.svelte.js';
+  import { t } from '$lib/i18n/index.js';
   import {
     actionIcons,
     alertIconsSvg,
@@ -242,7 +242,7 @@
                 type="date"
                 id="dateRangeStart"
                 bind:value={dateRange.start}
-                placeholder="Start Date"
+                placeholder={t('search.fields.from')}
                 class="input input-bordered w-full"
                 aria-label={t('search.fields.from')}
               />
@@ -250,7 +250,7 @@
                 type="date"
                 id="endDate"
                 bind:value={dateRange.end}
-                placeholder="End Date"
+                placeholder={t('search.fields.to')}
                 class="input input-bordered w-full"
                 aria-label={t('search.fields.to')}
               />

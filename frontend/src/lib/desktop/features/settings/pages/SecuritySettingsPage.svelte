@@ -12,6 +12,7 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   // Create default settings
   const defaultSettings: SecuritySettings = {
@@ -231,7 +232,7 @@
         id="host-address"
         bind:value={settings.host}
         label="Host Address"
-        placeholder="For example, localhost:8080 or example.domain.com"
+        placeholder={t('settings.security.hostPlaceholder')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateAutoTLSHost(settings.host)}
       />
@@ -376,7 +377,7 @@
               id="google-user-id"
               bind:value={(settings.googleAuth as any).userId}
               label="User ID"
-              placeholder="Enter one or more allowed user emails"
+              placeholder={t('settings.security.allowedUsersPlaceholder')}
               disabled={store.isLoading || store.isSaving}
               onchange={() => updateGoogleUserId((settings.googleAuth as any).userId || '')}
             />
@@ -447,7 +448,7 @@
               id="github-user-id"
               bind:value={(settings.githubAuth as any).userId}
               label="User ID"
-              placeholder="Enter one or more allowed user emails"
+              placeholder={t('settings.security.allowedUsersPlaceholder')}
               disabled={store.isLoading || store.isSaving}
               onchange={() => updateGithubUserId((settings.githubAuth as any).userId || '')}
             />
@@ -478,7 +479,7 @@
             id="allowed-subnet"
             bind:value={settings.allowSubnetBypass.subnet}
             label="Allowed Subnets"
-            placeholder="Enter a CIDR subnet (e.g. 192.168.1.0/24)"
+            placeholder={t('settings.security.subnetPlaceholder')}
             disabled={store.isLoading || store.isSaving}
             onchange={() => updateSubnetBypassSubnet(settings.allowSubnetBypass.subnet || '')}
           />

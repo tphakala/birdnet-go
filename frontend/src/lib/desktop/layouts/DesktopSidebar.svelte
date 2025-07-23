@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
   import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n/index.js';
 
   interface Props {
     securityEnabled?: boolean;
@@ -64,8 +65,8 @@
   }
 </script>
 
-<aside class={cn('drawer-side z-10', className)} aria-label="Main navigation">
-  <label for="my-drawer" class="drawer-overlay" aria-label="Close sidebar"></label>
+<aside class={cn('drawer-side z-10', className)} aria-label={t('navigation.mainNavigation')}>
+  <label for="my-drawer" class="drawer-overlay" aria-label={t('navigation.closeSidebar')}></label>
 
   <nav
     class="flex flex-col h-[100dvh] w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4"
@@ -106,7 +107,7 @@
               {@html systemIcons.analytics}
               <span>Analytics</span>
             </summary>
-            <ul role="menu" aria-label="Analytics submenu">
+            <ul role="menu" aria-label={t('navigation.analyticsSubmenu')}>
               <li role="none">
                 <button
                   onclick={() => navigate('/analytics')}
@@ -171,7 +172,7 @@
                 {@html systemIcons.settingsGear}
                 <span>Settings</span>
               </summary>
-              <ul role="menu" aria-label="Settings submenu">
+              <ul role="menu" aria-label={t('navigation.settingsSubmenu')}>
                 <li role="none">
                   <button
                     onclick={() => navigate('/settings/main')}
@@ -252,7 +253,7 @@
               <button
                 onclick={handleLogout}
                 class="btn btn-sm justify-center w-full"
-                aria-label="Logout"
+                aria-label={t('auth.logout')}
               >
                 {@html systemIcons.logout}
                 <span>Logout</span>
@@ -263,7 +264,7 @@
             <button
               onclick={handleLogin}
               class="btn btn-sm justify-center w-full"
-              aria-label="Open login modal"
+              aria-label={t('auth.openLoginModal')}
             >
               {@html systemIcons.login}
               <span>Login</span>

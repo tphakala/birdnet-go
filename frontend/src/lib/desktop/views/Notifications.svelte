@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n/index.js';
 
   let notifications = $state([]);
   let loading = $state(false);
@@ -243,7 +244,7 @@
             bind:value={filters.status}
             onchange={applyFilters}
             class="select select-sm select-bordered"
-            aria-label="Filter by status"
+            aria-label={t('notifications.aria.filterByStatus')}
           >
             <option value="">All Status</option>
             <option value="unread">Unread</option>
@@ -255,7 +256,7 @@
             bind:value={filters.type}
             onchange={applyFilters}
             class="select select-sm select-bordered"
-            aria-label="Filter by type"
+            aria-label={t('notifications.aria.filterByType')}
           >
             <option value="">All Types</option>
             <option value="error">Errors</option>
@@ -269,7 +270,7 @@
             bind:value={filters.priority}
             onchange={applyFilters}
             class="select select-sm select-bordered"
-            aria-label="Filter by priority"
+            aria-label={t('notifications.aria.filterByPriority')}
           >
             <option value="">All Priorities</option>
             <option value="critical">Critical</option>
@@ -287,7 +288,7 @@
           <button
             onclick={loadNotifications}
             class="btn btn-sm btn-ghost"
-            aria-label="Refresh notifications"
+            aria-label={t('notifications.actions.refresh')}
           >
             {@html actionIcons.refresh}
             Refresh
@@ -370,7 +371,7 @@
                       <button
                         onclick={() => markAsRead(notification.id)}
                         class="btn btn-ghost btn-xs"
-                        aria-label="Mark as read"
+                        aria-label={t('notifications.actions.markAsRead')}
                       >
                         {@html systemIcons.eye}
                       </button>
@@ -379,7 +380,7 @@
                       <button
                         onclick={() => acknowledge(notification.id)}
                         class="btn btn-ghost btn-xs"
-                        aria-label="Acknowledge"
+                        aria-label={t('notifications.actions.acknowledge')}
                       >
                         {@html actionIcons.check}
                       </button>
@@ -387,7 +388,7 @@
                     <button
                       onclick={() => deleteNotification(notification.id)}
                       class="btn btn-ghost btn-xs text-error"
-                      aria-label="Delete"
+                      aria-label={t('notifications.actions.delete')}
                     >
                       {@html actionIcons.delete}
                     </button>
@@ -408,16 +409,16 @@
             onclick={previousPage}
             disabled={currentPage === 1}
             class="join-item btn btn-sm"
-            aria-label="Go to previous page">«</button
+            aria-label={t('dataDisplay.pagination.goToPreviousPage')}>«</button
           >
-          <button class="join-item btn btn-sm btn-active" aria-label="Current page">
+          <button class="join-item btn btn-sm btn-active" aria-label={t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}>
             Page {currentPage} of {totalPages}
           </button>
           <button
             onclick={nextPage}
             disabled={currentPage === totalPages}
             class="join-item btn btn-sm"
-            aria-label="Go to next page">»</button
+            aria-label={t('dataDisplay.pagination.goToNextPage')}>»</button
           >
         </div>
       </div>

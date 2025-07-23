@@ -41,7 +41,9 @@
       "previous": "Previous",
       "yes": "Yes",
       "no": "No",
-      "ok": "OK"
+      "ok": "OK",
+      "editConfig": "Edit Config",
+      "addAction": "Add Action"
     },
     "ui": {
       "loading": "Loading...",
@@ -89,7 +91,12 @@
       "collapseSection": "Collapse section",
       "playAudio": "Play audio",
       "pauseAudio": "Pause audio",
-      "loading": "Loading content"
+      "loading": "Loading content",
+      "saveChanges": "Save changes",
+      "cancelEdit": "Cancel edit",
+      "editSpecies": "Edit species",
+      "removeSpecies": "Remove species",
+      "dismissError": "Dismiss error"
     },
     "modal": {
       "confirmAction": "Confirm Action",
@@ -104,7 +111,12 @@
     "notifications": "Notifications",
     "system": "System",
     "settings": "Settings",
-    "about": "About"
+    "about": "About",
+    "toggleSidebar": "Toggle sidebar menu",
+    "mainNavigation": "Main navigation",
+    "closeSidebar": "Close sidebar",
+    "analyticsSubmenu": "Analytics submenu",
+    "settingsSubmenu": "Settings submenu"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -173,6 +185,11 @@
       "delete": "Delete",
       "confirmDelete": "Confirm Delete",
       "deleteConfirmation": "Are you sure you want to delete this notification?"
+    },
+    "aria": {
+      "filterByStatus": "Filter by status",
+      "filterByType": "Filter by type",
+      "filterByPriority": "Filter by priority"
     },
     "empty": {
       "title": "No notifications found",
@@ -391,6 +408,9 @@
   "system": {
     "title": "System Dashboard",
     "refreshData": "Refresh Data",
+    "aria": {
+      "refreshData": "Refresh system data"
+    },
     "systemInfo": {
       "title": "System Information",
       "os": "Operating System",
@@ -623,7 +643,58 @@
           "description": "Help developers fix your issues faster by providing essential diagnostic information"
         }
       }
+    },
+    "filters": {
+      "privacyFiltering": {
+        "title": "Privacy Filtering"
+      },
+      "falsePositivePrevention": {
+        "title": "False Positive Prevention"
+      },
+      "speciesNamePlaceholder": "Species name",
+      "typeSpeciesName": "Type species name..."
+    },
+    "audio": {
+      "audioCapture": {
+        "title": "Audio Capture"
+      },
+      "audioFilters": {
+        "title": "Audio Filters"
+      },
+      "soundLevelMonitoring": {
+        "title": "Sound Level Monitoring"
+      },
+      "audioExport": {
+        "title": "Audio Export"
+      },
+      "audioClipRetention": {
+        "title": "Audio Clip Retention"
+      },
+      "noSoundCardCapture": "No sound card capture",
+      "soundCardSource": "Sound Card Source",
+      "rtspSource": "RTSP Source",
+      "soundLevelDataOutput": "Sound Level Data Output"
+    },
+    "species": {
+      "addSpeciesToInclude": "Add species to include",
+      "addSpeciesToExclude": "Add species to exclude",
+      "commandPathPlaceholder": "/path/to/your/command",
+      "parametersPlaceholder": "Parameters will appear here"
+    },
+    "security": {
+      "hostPlaceholder": "For example, localhost:8080 or example.domain.com",
+      "allowedUsersPlaceholder": "Enter one or more allowed user emails",
+      "subnetPlaceholder": "Enter a CIDR subnet (e.g. 192.168.1.0/24)"
+    },
+    "database": {
+      "sqlitePlaceholder": "Enter SQLite database path",
+      "mysqlHostPlaceholder": "Enter MySQL host",
+      "mysqlUsernamePlaceholder": "Enter MySQL username"
     }
+  },
+  "auth": {
+    "logout": "Logout",
+    "openLoginModal": "Open login modal"
   },
   "dataDisplay": {
     "table": {
@@ -663,7 +734,9 @@
       "number": "Enter number",
       "password": "Enter password",
       "url": "Enter URL",
-      "email": "Enter email"
+      "email": "Enter email",
+      "selectFilterType": "Select filter type",
+      "speciesName": "Species name"
     },
     "labels": {
       "showPassword": "Show password",
