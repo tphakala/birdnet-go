@@ -129,7 +129,7 @@
           <div class="col-span-1 min-w-0 break-words">{t('detections.headers.thumbnail')}</div>
         {/if}
         <div class="col-span-2 min-w-0 break-words">{t('detections.headers.status')}</div>
-        <div class={data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3'} class="min-w-0 break-words">
+        <div class={cn(data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3', 'min-w-0 break-words')}>
           {t('detections.headers.recording')}
         </div>
         <div class="col-span-1 text-right min-w-0 break-words">{t('detections.headers.actions')}</div>
