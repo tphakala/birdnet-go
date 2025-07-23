@@ -3,7 +3,7 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import {
     actionIcons,
     alertIconsSvg,
@@ -58,14 +58,14 @@
   let sortBy = $state<SortBy>('date_desc');
   let errorMessage = $state('');
   let expanded = $state<Record<string, boolean>>({});
-  let confidenceError = $state('');
+  let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
 
   // Form validation
   function validateForm() {
-    confidenceError = '';
+    hasConfidenceError = false;
     if (confidenceRange.min > confidenceRange.max) {
-      confidenceError = t('search.errors.minMaxConfidence');
+      hasConfidenceError = true;
       return false;
     }
     return true;
@@ -146,7 +146,7 @@
   function formatDate(dateString: string) {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleString();
+    return date.toLocaleString(getLocale());
   }
 
   // Handle pagination
@@ -320,8 +320,8 @@
               </div>
             </div>
             <!-- Confidence error message -->
-            {#if confidenceError}
-              <div class="text-error text-sm mt-1" role="alert">{confidenceError}</div>
+            {#if hasConfidenceError}
+              <div class="text-error text-sm mt-1" role="alert">{t('search.errors.minMaxConfidence')}</div>
             {/if}
           </div>
 

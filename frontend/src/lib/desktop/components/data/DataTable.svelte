@@ -59,7 +59,7 @@
     data = [],
     loading = false,
     error = null,
-    emptyMessage = t('dataDisplay.table.noData'),
+    emptyMessage,
     striped = true,
     hoverable = true,
     compact = false,
@@ -198,7 +198,7 @@
               {#if renderEmpty}
                 {@render renderEmpty()}
               {:else}
-                {emptyMessage}
+                {emptyMessage ?? t('dataDisplay.table.noData')}
               {/if}
             </td>
           </tr>

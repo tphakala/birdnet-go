@@ -7,6 +7,7 @@
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
+    name?: string;
     value: string;
     onUpdate: (_value: string) => void;
     placeholder?: string;
@@ -22,6 +23,7 @@
 
   let {
     label,
+    name,
     value = $bindable(),
     onUpdate,
     placeholder = '',
@@ -106,7 +108,7 @@
 <div class={cn('form-control', className)} {...rest}>
   <FormField
     type={showPassword ? 'text' : 'password'}
-    name={label.toLowerCase().replace(/\s+/g, '-')}
+    name={name || 'password-field'}
     {label}
     bind:value
     {placeholder}

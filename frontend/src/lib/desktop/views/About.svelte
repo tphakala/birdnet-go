@@ -34,7 +34,7 @@
       >
         <img
           src="/assets/images/BirdNET-Go-logo.webp"
-          alt="BirdNET-Go Logo"
+          alt={t('about.logoAlt')}
           class="w-full h-full object-contain rounded-full"
           style:transform="scale(1)"
         />

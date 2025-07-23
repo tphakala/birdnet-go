@@ -138,6 +138,7 @@
   "about": {
     "title": "BirdNET-Go",
     "subtitle": "A modern interface for real-time bird sound detection and classification",
+    "logoAlt": "BirdNET-Go Logo",
     "overview": "Overview",
     "overviewText": "BirdNET-Go is a Go-based implementation for real-time bird sound detection and classification, built upon the foundation of the BirdNET project. This application provides a user-friendly interface for continuous bird sound monitoring and analysis.",
     "birdnetProject": "BirdNET Project",
