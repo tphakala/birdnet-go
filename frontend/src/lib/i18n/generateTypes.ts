@@ -33,7 +33,10 @@ function generateTypeFromObject(obj: TranslationObject, prefix = ''): string {
       }
     } else if (typeof value === 'object') {
       // Recursively process nested objects
-      lines.push(...generateTypeFromObject(value as TranslationObject, fullKey).split('\n').filter(l => l.trim()));
+      const nestedTypes = generateTypeFromObject(value as TranslationObject, fullKey);
+      const nestedLines = nestedTypes.split('\n');
+      const filteredLines = nestedLines.filter(l => l.trim());
+      lines.push(...filteredLines);
     }
   }
   
