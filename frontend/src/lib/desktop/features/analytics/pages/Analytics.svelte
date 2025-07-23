@@ -6,7 +6,7 @@
   import ChartCard from '../components/ui/ChartCard.svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
-  import { t } from '$lib/i18n/store.svelte.js';
+  import { t } from '$lib/i18n';
 
   // Type definitions
   interface Filters {

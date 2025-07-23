@@ -3,7 +3,7 @@
   import { formatDateForInput, formatDate } from '$lib/utils/formatters';
   import FormField from './FormField.svelte';
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface DatePreset {
     label: string;

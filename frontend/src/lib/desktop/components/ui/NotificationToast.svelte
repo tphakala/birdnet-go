@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import { navigationIcons, alertIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   type ToastType = 'info' | 'success' | 'warning' | 'error';
   type ToastPosition =

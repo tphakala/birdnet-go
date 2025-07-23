@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { HTMLAttributes } from 'svelte/elements';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props extends HTMLAttributes<HTMLElement> {
     currentPage?: number;

@@ -3,7 +3,7 @@
   import { alertIconsSvg, navigationIcons, type AlertIconType } from '$lib/utils/icons';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   type AlertType = AlertIconType;
 

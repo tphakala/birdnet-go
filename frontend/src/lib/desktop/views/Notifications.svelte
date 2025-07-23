@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   let notifications = $state([]);
   let loading = $state(false);

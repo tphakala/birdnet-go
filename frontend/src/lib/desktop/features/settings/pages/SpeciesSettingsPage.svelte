@@ -13,7 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   // Derived settings with fallbacks
   let settings = $state({

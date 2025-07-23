@@ -2,7 +2,7 @@
   import FormField from '$lib/desktop/components/forms/FormField.svelte';
   import Select from '$lib/desktop/components/ui/Select.svelte';
   import Input from '$lib/desktop/components/ui/Input.svelte';
-  import { t } from '$lib/i18n/store.svelte.js';
+  import { t } from '$lib/i18n';
 
   interface Filters {
     timePeriod: 'all' | 'today' | 'week' | 'month' | '90days' | 'year' | 'custom';

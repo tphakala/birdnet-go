@@ -3,7 +3,7 @@
   import StatCard from '../components/ui/StatCard.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
-  import { t } from '$lib/i18n/store.svelte.js';
+  import { t } from '$lib/i18n';
 
   // Type definitions
   interface SpeciesFilters {

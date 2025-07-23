@@ -38,7 +38,7 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props {
     detection: Detection;

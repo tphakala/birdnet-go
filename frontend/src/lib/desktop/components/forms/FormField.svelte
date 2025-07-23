@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Validator, ValidationResult } from '$lib/utils/validators';
   import type { Snippet } from 'svelte';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   // Module-level counter for consistent SSR-safe IDs
   let fieldCounter = 0;

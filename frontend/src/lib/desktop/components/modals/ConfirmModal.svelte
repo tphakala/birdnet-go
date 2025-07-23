@@ -1,6 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;

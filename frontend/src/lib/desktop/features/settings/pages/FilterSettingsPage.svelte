@@ -13,7 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   // API response interfaces
   interface SpeciesListResponse {

@@ -3,7 +3,7 @@
   import SystemInfoCard from '$lib/desktop/components/ui/SystemInfoCard.svelte';
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
   import { actionIcons } from '$lib/utils/icons';
 
   // Type definitions

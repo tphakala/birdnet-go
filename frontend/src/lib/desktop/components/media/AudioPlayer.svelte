@@ -24,7 +24,10 @@
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { mediaIcons } from '$lib/utils/icons.js';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
+  
+  // Web Audio API types - these are built-in browser types
+  /* global AudioContext, MediaElementAudioSourceNode, GainNode, DynamicsCompressorNode, BiquadFilterNode, EventListener, ResizeObserver */
 
   interface Props {
     audioUrl: string;
@@ -74,21 +77,21 @@
   let updateInterval: ReturnType<typeof setInterval> | undefined;
 
   // Audio processing state
-  let audioContext: any | null = null;
+  let audioContext: AudioContext | null = null;
   let audioNodes: {
-    source: any;
-    gain: any;
-    compressor: any;
-    filters: { highPass: any };
+    source: MediaElementAudioSourceNode;
+    gain: GainNode;
+    compressor: DynamicsCompressorNode;
+    filters: { highPass: BiquadFilterNode };
   } | null = null;
 
   // Cleanup tracking for memory leak prevention
-  let resizeObserver: any | null = null;
+  let resizeObserver: ResizeObserver | null = null;
   let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
-    element: any;
+    element: HTMLElement | Document | Window;
     event: string;
-    handler: any;
+    handler: EventListener;
   }> = [];
 
   // Control state
@@ -122,10 +125,10 @@
 
   // Memory leak prevention helpers
   const addTrackedEventListener = (
-    element: any,
+    element: HTMLElement | Document | Window,
     event: string,
-    handler: any,
-    options?: any
+    handler: EventListener,
+    options?: boolean | AddEventListenerOptions
   ) => {
     element.addEventListener(event, handler, options);
     eventListeners.push({ element, event, handler });
@@ -175,7 +178,7 @@
   };
 
   // Create audio processing nodes
-  const createAudioNodes = (audioContext: any, audio: HTMLAudioElement) => {
+  const createAudioNodes = (audioContext: AudioContext, audio: HTMLAudioElement) => {
     const audioSource = audioContext.createMediaElementSource(audio);
     const gainNode = audioContext.createGain();
     gainNode.gain.value = 1;
@@ -326,7 +329,7 @@
       checkWidth();
 
       // Create and track ResizeObserver properly
-      resizeObserver = new (window as any).ResizeObserver(checkWidth);
+      resizeObserver = new ResizeObserver(checkWidth);
       resizeObserver.observe(playerContainer);
     }
 

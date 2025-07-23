@@ -3,7 +3,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
   import type {
     DailySpeciesSummary,
     Detection,
@@ -237,8 +237,10 @@
       };
 
       // Handle specific event types
+      // Handle specific event types
       eventSource.addEventListener('connected', (event: Event) => {
         try {
+          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           console.log('Connected event received:', data);
@@ -250,6 +252,7 @@
 
       eventSource.addEventListener('detection', (event: Event) => {
         try {
+          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           connectionStatus = 'connected';
@@ -261,6 +264,7 @@
 
       eventSource.addEventListener('heartbeat', (event: Event) => {
         try {
+          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           console.debug('Heartbeat event received, clients:', data.clients);

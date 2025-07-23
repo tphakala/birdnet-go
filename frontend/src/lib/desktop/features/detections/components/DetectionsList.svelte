@@ -35,7 +35,7 @@
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props {
     data: DetectionsListData | null;

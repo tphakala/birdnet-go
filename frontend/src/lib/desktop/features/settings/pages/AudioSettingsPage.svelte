@@ -14,7 +14,7 @@
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   let settings = $derived({
     audio: $audioSettings || {

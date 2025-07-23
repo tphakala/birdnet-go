@@ -9,7 +9,7 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { actionIcons, alertIconsSvg, systemIcons, mediaIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   let settings = $derived(
     $supportSettings ||

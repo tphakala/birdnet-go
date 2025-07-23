@@ -1,6 +1,6 @@
 <script>
   import Card from '$lib/desktop/components/ui/Card.svelte';
-  import { t } from '$lib/i18n/store.svelte.js';
+  import { t } from '$lib/i18n';
 
   // Settings data (version info)
   let settings = $state({

@@ -18,7 +18,7 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   let settings = $derived({
     main: $mainSettings || { name: '' },

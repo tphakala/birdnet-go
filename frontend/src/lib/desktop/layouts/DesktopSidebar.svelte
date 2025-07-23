@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
   import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props {
     securityEnabled?: boolean;

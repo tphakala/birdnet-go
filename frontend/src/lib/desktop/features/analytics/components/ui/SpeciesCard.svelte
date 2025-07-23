@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { t } from '$lib/i18n/store.svelte.js';
+  import { t } from '$lib/i18n';
 
   interface SpeciesData {
     common_name: string;

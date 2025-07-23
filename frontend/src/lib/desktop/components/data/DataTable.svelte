@@ -32,7 +32,7 @@
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Column, SortDirection } from './DataTable.types';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props<T extends Record<string, any>> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
     columns: Column<T>[];

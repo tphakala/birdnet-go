@@ -3,7 +3,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;

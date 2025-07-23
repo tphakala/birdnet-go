@@ -5,7 +5,7 @@
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
   import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props {
     title?: string;

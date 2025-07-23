@@ -8,7 +8,7 @@
     sortSpecies,
   } from '$lib/utils/speciesUtils';
   import { actionIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t } from '$lib/i18n/index.js';
+  import { t } from '$lib/i18n';
 
   interface Props {
     species?: string[];
