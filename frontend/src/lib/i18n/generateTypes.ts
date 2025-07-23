@@ -47,8 +47,15 @@ function extractParameters(str: string): string[] {
   const regex = /\{(\w+)\}/g;
   const params: string[] = [];
   let match;
+  let lastIndex = -1;
   
   while ((match = regex.exec(str)) !== null) {
+    // Safety check: ensure lastIndex advances to prevent infinite loop
+    if (regex.lastIndex <= lastIndex) {
+      break;
+    }
+    lastIndex = regex.lastIndex;
+    
     if (!params.includes(match[1])) {
       params.push(match[1]);
     }
