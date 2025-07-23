@@ -14,6 +14,4 @@ export const messages = new Proxy({} as Record<MessageKey, () => string>, {
 // Shorter alias (matches current usage: m.hero_title())
 export const m = messages;
 
-// Export individual message functions for compatibility
-// NOTE: These exports reference non-existent translation keys and are left as stubs
-// If these functions are needed in the future, add the corresponding keys to en.json
+// Individual message exports removed - use the messages proxy or t() directly
