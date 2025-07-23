@@ -3,7 +3,14 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
-  import { actionIcons, alertIconsSvg, dataIcons, mediaIcons, systemIcons, navigationIcons } from '$lib/utils/icons';
+  import {
+    actionIcons,
+    alertIconsSvg,
+    dataIcons,
+    mediaIcons,
+    systemIcons,
+    navigationIcons,
+  } from '$lib/utils/icons';
 
   // Type definitions
   interface DateRange {

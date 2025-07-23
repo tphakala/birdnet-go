@@ -55,10 +55,7 @@
 
   // Type guard for HLS global availability
   function isHLSAvailable(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      typeof (window as any).Hls?.isSupported === 'function'
-    );
+    return typeof window !== 'undefined' && typeof (window as any).Hls?.isSupported === 'function';
   }
 
   // Get HLS constructor with proper typing
@@ -581,8 +578,7 @@
     {#if dropdownOpen}
       <div
         bind:this={dropdownRef}
-        role="dialog"
-        aria-modal="true"
+        role="menu"
         aria-label="Audio Source Selection"
         class="absolute p-1 right-0 mt-2 w-auto min-w-[16rem] max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50"
       >
@@ -597,7 +593,7 @@
                 class={cn(
                   'flex flex-row items-center w-full p-2 text-sm hover:bg-base-200 rounded-md',
                   selectedSource === source && 'bg-base-200',
-                  isInactive(source) ? 'text-base-content/50' : 'text-base-content'
+                  isInactive(source) ? 'text-base-content/60' : 'text-base-content'
                 )}
                 role="menuitem"
               >
@@ -613,7 +609,7 @@
                 >
                   <span class="flex-1 whitespace-nowrap">{getSourceDisplayName(source)}</span>
                   {#if isInactive(source)}
-                    <span class="text-xs text-base-content/50 shrink-0 ml-2" aria-hidden="true">
+                    <span class="text-xs text-base-content/60 shrink-0 ml-2" aria-hidden="true">
                       (silent)
                     </span>
                   {/if}

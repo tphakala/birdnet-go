@@ -142,30 +142,30 @@
       <thead>
         <tr>
           {#each columns as column}
-            <th
-              scope="col"
-              class={cn(getAlignClass(column.align), column.className)}
-              style:width={column.width}
-            >
-              {#if column.sortable && onSort}
-                {@const getSortState = () => {
-                  if (sortColumn !== column.key) return 'none';
-                  return sortDirection === 'asc'
-                    ? 'ascending'
-                    : sortDirection === 'desc'
-                      ? 'descending'
-                      : 'none';
-                }}
-                {@const getAriaLabel = () => {
-                  const state = getSortState();
-                  return `Sort ${column.header} column ${state === 'none' ? 'ascending' : state === 'ascending' ? 'descending' : 'ascending'}`;
-                }}
+            {#if column.sortable && onSort}
+              {@const getSortState = () => {
+                if (sortColumn !== column.key) return 'none';
+                return sortDirection === 'asc'
+                  ? 'ascending'
+                  : sortDirection === 'desc'
+                    ? 'descending'
+                    : 'none';
+              }}
+              {@const getAriaLabel = () => {
+                const state = getSortState();
+                return `Sort ${column.header} column ${state === 'none' ? 'ascending' : state === 'ascending' ? 'descending' : 'ascending'}`;
+              }}
+              <th
+                scope="col"
+                class={cn(getAlignClass(column.align), column.className)}
+                style:width={column.width}
+                aria-sort={getSortState()}
+              >
                 <button
                   type="button"
                   class="inline-flex items-center gap-1 hover:text-primary transition-colors"
                   onclick={() => handleSort(column)}
                   aria-label={getAriaLabel()}
-                  aria-sort={getSortState()}
                 >
                   {column.header}
                   <span class="inline-block w-4" aria-hidden="true">
@@ -178,10 +178,16 @@
                     {/if}
                   </span>
                 </button>
-              {:else}
+              </th>
+            {:else}
+              <th
+                scope="col"
+                class={cn(getAlignClass(column.align), column.className)}
+                style:width={column.width}
+              >
                 {column.header}
-              {/if}
-            </th>
+              </th>
+            {/if}
           {/each}
         </tr>
       </thead>

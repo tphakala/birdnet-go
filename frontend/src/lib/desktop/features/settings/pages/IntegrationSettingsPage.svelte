@@ -915,13 +915,12 @@
             <div class="border-t border-base-300 pt-4 mt-2">
               <h3 class="text-sm font-medium mb-3">Message Settings</h3>
 
+              <!-- prettier-ignore -->
               <Checkbox
                 bind:checked={(settings.mqtt as MQTTSettings).retain}
                 label="Retain Messages"
                 disabled={store.isLoading || store.isSaving}
-                onchange={() =>
-                  updateMQTTRetain((settings.mqtt as MQTTSettings).retain)
-                }
+                onchange={() => updateMQTTRetain((settings.mqtt as MQTTSettings).retain)}
               />
 
               <!-- Note about MQTT Retain for HomeAssistant -->

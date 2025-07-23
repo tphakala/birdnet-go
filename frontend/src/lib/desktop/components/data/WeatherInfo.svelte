@@ -239,6 +239,6 @@
     {/if}
   {:else}
     <!-- No data state -->
-    <div class="py-4 text-center text-base-content/50">No weather data available</div>
+    <div class="py-4 text-center text-base-content/60">No weather data available</div>
   {/if}
 </div>

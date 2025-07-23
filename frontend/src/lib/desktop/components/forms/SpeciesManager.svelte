@@ -216,6 +216,28 @@
     predictions = [];
     addSpecies();
   }
+
+  // Keyboard handler for accessible drag and drop
+  function handleItemKeyDown(event: KeyboardEvent, index: number) {
+    if (!editable || !sortable) return;
+
+    // Use arrow keys to reorder items
+    if (event.key === 'ArrowUp' && index > 0) {
+      event.preventDefault();
+      const newSpecies = [...species];
+      const [item] = newSpecies.splice(index, 1);
+      newSpecies.splice(index - 1, 0, item);
+      species = newSpecies;
+      onChange?.(newSpecies);
+    } else if (event.key === 'ArrowDown' && index < species.length - 1) {
+      event.preventDefault();
+      const newSpecies = [...species];
+      const [item] = newSpecies.splice(index, 1);
+      newSpecies.splice(index + 1, 0, item);
+      species = newSpecies;
+      onChange?.(newSpecies);
+    }
+  }
 </script>
 
 <div class={cn('species-manager', className)}>
@@ -266,6 +288,7 @@
   {#if species.length > 0}
     <div class="mt-4 space-y-2">
       {#each displaySpecies as item, index}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={cn(
             'flex items-center gap-2 p-2 bg-base-200 rounded-lg',
@@ -275,8 +298,12 @@
           ondragstart={e => handleDragStart(e, index)}
           ondragover={e => handleDragOver(e, index)}
           ondragend={handleDragEnd}
-          role={editable && sortable ? 'listitem' : undefined}
+          role={editable && sortable ? 'button' : 'listitem'}
           tabindex={editable && sortable ? 0 : undefined}
+          aria-label={editable && sortable
+            ? `Drag to reorder ${formatSpeciesName(item)}`
+            : undefined}
+          onkeydown={editable && sortable ? e => handleItemKeyDown(e, index) : undefined}
         >
           {#if editable && sortable}
             {@html navigationIcons.dragHandle}
