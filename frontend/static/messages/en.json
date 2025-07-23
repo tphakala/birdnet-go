@@ -712,7 +712,9 @@
     },
     "species": {
       "addSpeciesToInclude": "Add species to include",
+      "addSpeciesToIncludeLabel": "Add New Species to Include",
       "addSpeciesToExclude": "Add species to exclude",
+      "addSpeciesToExcludeLabel": "Add New Species to Exclude",
       "commandPathPlaceholder": "/path/to/your/command",
       "parametersPlaceholder": "Parameters will appear here"
     },

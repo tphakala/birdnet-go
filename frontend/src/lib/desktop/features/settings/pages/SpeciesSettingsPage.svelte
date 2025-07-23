@@ -414,7 +414,7 @@
       <!-- Add species input -->
       <SpeciesInput
         bind:value={includeInputValue}
-        label="Add New Species to Include"
+        label={t('settings.species.addSpeciesToIncludeLabel')}
         placeholder={t('settings.species.addSpeciesToInclude')}
         predictions={includePredictions}
         size="sm"
@@ -460,7 +460,7 @@
       <!-- Add species input -->
       <SpeciesInput
         bind:value={excludeInputValue}
-        label="Add New Species to Exclude"
+        label={t('settings.species.addSpeciesToExcludeLabel')}
         placeholder={t('settings.species.addSpeciesToExclude')}
         predictions={excludePredictions}
         size="sm"
