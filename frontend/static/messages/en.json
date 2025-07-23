@@ -717,6 +717,7 @@
       "parametersPlaceholder": "Parameters will appear here"
     },
     "security": {
+      "hostLabel": "Host Address",
       "hostPlaceholder": "For example, localhost:8080 or example.domain.com",
       "allowedUsersPlaceholder": "Enter one or more allowed user emails",
       "subnetPlaceholder": "Enter a CIDR subnet (e.g. 192.168.1.0/24)"

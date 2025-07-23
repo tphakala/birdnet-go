@@ -231,7 +231,7 @@
       <TextInput
         id="host-address"
         bind:value={settings.host}
-        label="Host Address"
+        label={t('settings.security.hostLabel')}
         placeholder={t('settings.security.hostPlaceholder')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateAutoTLSHost(settings.host)}
