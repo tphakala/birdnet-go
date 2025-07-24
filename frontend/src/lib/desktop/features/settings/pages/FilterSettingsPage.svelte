@@ -266,7 +266,7 @@
           <!-- Dog Bark Species List -->
           <div class="form-control mt-6">
             <div class="label justify-start">
-              <span class="label-text">Dog Bark Species List</span>
+              <span class="label-text">{t('settings.filters.dogBarkSpeciesList')}</span>
             </div>
 
             <!-- Species List -->

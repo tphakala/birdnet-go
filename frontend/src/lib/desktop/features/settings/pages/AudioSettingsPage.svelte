@@ -139,6 +139,15 @@
     },
   };
 
+  // Helper function to get translated parameter label
+  function getParameterLabel(paramName: string): string {
+    const labelMap: Record<string, string> = {
+      'frequency': t('settings.audio.audioFilters.cutoffFrequency'),
+      'q': t('settings.audio.audioFilters.qFactor')
+    };
+    return labelMap[paramName.toLowerCase()] || paramName;
+  }
+
   // New filter state for adding filters
   let newFilter = $state({
     id: '',
@@ -441,14 +450,14 @@
                       <span class="label-text">{t('settings.audio.audioFilters.filterType')}</span>
                     </div>
                     <div class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300">
-                      {filter.type} Filter
+                      {t(`settings.audio.filterTypes.${filter.type}`)}
                     </div>
                   </div>
 
                   <!-- Dynamic parameters based on filter type -->
                   {#each getEqFilterParameters(filter.type) as param}
                     <div class="flex flex-col">
-                      {#if param.Label === 'Attenuation'}
+                      {#if param.Name.toLowerCase() === 'attenuation'}
                         <!-- Special handling for Attenuation (Passes) -->
                         <SelectField
                           id="filter-{index}-{param.Name}"
@@ -456,15 +465,15 @@
                           onchange={value =>
                             updateFilterParameter(index, param.Name, parseInt(value))}
                           options={[
-                            { value: '0', label: '0dB' },
-                            { value: '1', label: '12dB' },
-                            { value: '2', label: '24dB' },
-                            { value: '3', label: '36dB' },
-                            { value: '4', label: '48dB' },
+                            { value: '0', label: t('settings.audio.audioFilters.attenuationLevels.0db') },
+                            { value: '1', label: t('settings.audio.audioFilters.attenuationLevels.12db') },
+                            { value: '2', label: t('settings.audio.audioFilters.attenuationLevels.24db') },
+                            { value: '3', label: t('settings.audio.audioFilters.attenuationLevels.36db') },
+                            { value: '4', label: t('settings.audio.audioFilters.attenuationLevels.48db') },
                           ]}
                           className="select-sm"
                           disabled={store.isLoading || store.isSaving}
-                          label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
                         />
                       {:else}
                         <!-- Regular number input -->
@@ -475,7 +484,7 @@
                           max={param.Max}
                           step={param.Type === 'float' ? 0.1 : 1}
                           disabled={store.isLoading || store.isSaving}
-                          label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
                         />
                       {/if}
                     </div>
@@ -524,7 +533,7 @@
                   >
                     <option value="">{t('settings.audio.audioFilters.selectFilterType')}</option>
                     {#each Object.keys(eqFilterConfig) as filterType}
-                      <option value={filterType}>{filterType}</option>
+                      <option value={filterType}>{t(`settings.audio.filterTypes.${filterType}`)}</option>
                     {/each}
                   </SelectField>
                 </div>
@@ -533,7 +542,7 @@
                 {#if newFilter.type}
                   {#each getEqFilterParameters(newFilter.type) as param}
                     <div class="flex flex-col">
-                      {#if param.Label === 'Attenuation'}
+                      {#if param.Name.toLowerCase() === 'attenuation'}
                         <!-- Special handling for Attenuation -->
                         <SelectField
                           id="new-filter-{param.Name}"
@@ -542,15 +551,15 @@
                             (newFilter as any)[param.Name.toLowerCase()] = parseInt(value);
                           }}
                           options={[
-                            { value: '0', label: '0dB' },
-                            { value: '1', label: '12dB' },
-                            { value: '2', label: '24dB' },
-                            { value: '3', label: '36dB' },
-                            { value: '4', label: '48dB' },
+                            { value: '0', label: t('settings.audio.audioFilters.attenuationLevels.0db') },
+                            { value: '1', label: t('settings.audio.audioFilters.attenuationLevels.12db') },
+                            { value: '2', label: t('settings.audio.audioFilters.attenuationLevels.24db') },
+                            { value: '3', label: t('settings.audio.audioFilters.attenuationLevels.36db') },
+                            { value: '4', label: t('settings.audio.audioFilters.attenuationLevels.48db') },
                           ]}
                           className="select-sm"
                           disabled={store.isLoading || store.isSaving}
-                          label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
                         />
                       {:else}
                         <!-- Regular number input -->
@@ -563,7 +572,7 @@
                           max={param.Max}
                           step={param.Type === 'float' ? 0.1 : 1}
                           disabled={store.isLoading || store.isSaving}
-                          label="{param.Label}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
                         />
                       {/if}
                     </div>

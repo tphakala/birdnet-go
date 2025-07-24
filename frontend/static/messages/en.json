@@ -644,11 +644,171 @@
         "locale": {
           "label": "Locale",
           "helpText": "Locale for translated species common names."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU Threads",
+          "helpText": "Number of CPU threads. Set to 0 to use all available threads."
+        }
+      },
+      "sections": {
+        "customClassifier": {
+          "title": "Custom BirdNET Classifier",
+          "modelPath": {
+            "label": "Model Path (Requires restart to apply)",
+            "placeholder": "Path to model file",
+            "helpText": "Path to external BirdNET model file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded model."
+          },
+          "labelPath": {
+            "label": "Label Path (Requires restart to apply)",
+            "placeholder": "Path to labels file",
+            "helpText": "Path to external model labels file, .zip or .txt file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded labels."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Dynamic Threshold",
+          "enable": {
+            "label": "Enable Dynamic Threshold (BirdNET-Go specific feature)",
+            "helpText": "Enables dynamic confidence threshold feature for more adaptive bird call detection."
+          },
+          "trigger": {
+            "label": "Trigger Threshold",
+            "helpText": "The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls."
+          },
+          "minimum": {
+            "label": "Minimum Dynamic Threshold",
+            "helpText": "The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold does not drop below an unwanted level."
+          },
+          "expireTime": {
+            "label": "Dynamic Threshold Expire Time (Hours)",
+            "helpText": "The number of hours during which the dynamic threshold adjustments remain valid. After this period, the dynamic threshold is reset."
+          }
+        },
+        "rangeFilter": {
+          "title": "Range Filter",
+          "stationLocation": {
+            "label": "Station Location",
+            "helpText": "Station location, used to limit bird species to those probable in the region."
+          },
+          "latitude": {
+            "label": "Latitude",
+            "helpText": "Station location latitude, used to limit bird species to those probable in the region."
+          },
+          "longitude": {
+            "label": "Longitude",
+            "helpText": "Station location longitude, used to limit bird species to those probable in the region."
+          },
+          "model": {
+            "label": "Range Filter Model",
+            "helpText": "BirdNET range filter model version: latest or legacy."
+          },
+          "threshold": {
+            "label": "Threshold",
+            "helpText": "Controls which species are included based on their occurrence probability for your location and time of year. Default (0.01) is recommended for most users. Higher values (0.05-0.3) include fewer species with higher occurrence probability. Very high values (0.5+) include only the most common species."
+          },
+          "speciesCount": {
+            "label": "Current Species Count",
+            "helpText": "Number of species included in range filter. Updates automatically when threshold, latitude, or longitude changes.",
+            "loading": "Loading...",
+            "viewSpecies": "View Species"
+          },
+          "modal": {
+            "title": "Range Filter Species",
+            "speciesCount": "Species Count:",
+            "threshold": "Threshold:",
+            "latitude": "Latitude:",
+            "longitude": "Longitude:",
+            "loadingSpecies": "Loading species...",
+            "noSpeciesFound": "No species found with current settings",
+            "close": "Close"
+          }
+        },
+        "database": {
+          "type": {
+            "label": "Select Database Type",
+            "helpText": "Select the database type to use for storing detections."
+          },
+          "sqlite": {
+            "note": "SQLite is recommended database type for most users.",
+            "path": {
+              "label": "SQLite Database Path",
+              "placeholder": "Enter SQLite database path",
+              "helpText": "SQLite database file path relative to the application directory"
+            }
+          },
+          "mysql": {
+            "host": {
+              "label": "MySQL Host",
+              "placeholder": "Enter MySQL host",
+              "helpText": "MySQL database host (IP or hostname)"
+            },
+            "port": {
+              "label": "MySQL Port",
+              "helpText": "MySQL database port (default 3306/TCP)"
+            },
+            "username": {
+              "label": "MySQL Username",
+              "placeholder": "Enter MySQL username",
+              "helpText": "MySQL database username"
+            },
+            "password": {
+              "label": "MySQL Password",
+              "placeholder": "Enter MySQL password",
+              "helpText": "MySQL database password"
+            },
+            "database": {
+              "label": "MySQL Database",
+              "placeholder": "Enter MySQL database name",
+              "helpText": "MySQL database name"
+            }
+          }
+        },
+        "userInterface": {
+          "title": "User Interface Settings",
+          "description": "Customize user interface",
+          "language": {
+            "title": "Language",
+            "locale": {
+              "label": "Interface Language",
+              "helpText": "Select the language for the user interface"
+            }
+          },
+          "dashboard": {
+            "title": "Dashboard",
+            "summaryLimit": {
+              "label": "Max Number of Species on Daily Summary Table",
+              "helpText": "Max number of species shown in the daily summary table (Value between 10 and 1000)"
+            },
+            "thumbnails": {
+              "summary": {
+                "label": "Show Thumbnails on Daily Summary table",
+                "helpText": "Enable to show thumbnails of detected species on the daily summary table"
+              },
+              "recent": {
+                "label": "Show Thumbnails on Recent Detections list",
+                "helpText": "Enable to show thumbnails of detected species on the recent detections list"
+              },
+              "imageProvider": {
+                "label": "Image Provider",
+                "helpText": "Select the preferred image provider for bird thumbnails"
+              },
+              "fallbackPolicy": {
+                "label": "Fallback Policy",
+                "helpText": "Select what happens when preferred provider fails to find an image",
+                "options": {
+                  "all": "Try all providers in sequence",
+                  "none": "Use only selected provider"
+                }
+              }
+            }
+          }
         }
       },
       "errors": {
         "localesLoadFailed": "Unable to load language options. Using defaults.",
-        "providersLoadFailed": "Unable to load image providers. Using defaults."
+        "providersLoadFailed": "Unable to load image providers. Using defaults.",
+        "rangeFilterTestFailed": "Failed to test range filter settings",
+        "rangeFilterLoadFailed": "Failed to load species list",
+        "rangeFilterCountFailed": "Failed to load species count"
       }
     },
     "support": {
@@ -673,12 +833,55 @@
       },
       "systemId": {
         "label": "Your System ID",
-        "description": "Use this ID when reporting issues"
+        "description": "Use this ID when reporting issues",
+        "copyButton": "Copy",
+        "errorLoading": "Error loading system ID"
       },
       "diagnostics": {
         "includeRecentLogs": "Include recent logs",
         "includeConfiguration": "Include configuration (sensitive data removed)",
         "includeSystemInfo": "Include system information"
+      },
+      "supportReport": {
+        "title": "Generate Support Report",
+        "description": {
+          "intro": "Support reports are **essential for troubleshooting** and dramatically improve our ability to resolve issues you're experiencing. They provide developers with crucial context about your system configuration, recent application logs, and error patterns that would be impossible to diagnose otherwise.",
+          "githubIssue": "Please [create a GitHub issue](https://github.com/tphakala/birdnet-go/issues/new) describing your problem **before or after** generating this support report. This allows for proper tracking and communication about your issue."
+        },
+        "whatsIncluded": {
+          "title": "What's included in the report:",
+          "applicationLogs": "**Application logs** - Recent errors and debug information",
+          "configuration": "**Configuration** - Your settings with sensitive data removed",
+          "systemInfo": "**System information** - OS version, memory, and runtime details",
+          "notIncluded": "**NOT included** - Audio files, bird detections, or personal data"
+        },
+        "userMessage": {
+          "label": "Describe the issue",
+          "placeholder": "Please describe the issue and include GitHub issue link if applicable (e.g., #123)",
+          "githubTip": "💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123) and mention your System ID {systemId} in the GitHub issue to help developers link your support data."
+        },
+        "uploadOption": {
+          "label": "Upload to developers (recommended)",
+          "details": {
+            "sentryUpload": "Data is uploaded to [Sentry](https://sentry.io) cloud service",
+            "euDataCenter": "Stored in EU data center (Frankfurt, Germany)",
+            "privacyCompliant": "Privacy-compliant with sensitive data removed",
+            "manualWarning": "Uncheck only if you prefer to handle the support file manually"
+          }
+        },
+        "generateButton": {
+          "upload": "Generate & Upload",
+          "download": "Generate & Download"
+        },
+        "statusMessages": {
+          "preparing": "Preparing support dump...",
+          "uploadSuccess": "Support dump successfully uploaded to developers!",
+          "uploadSuccessWithId": "Support dump successfully uploaded to developers! Reference ID: {dumpId}",
+          "downloadSuccess": "Support dump generated successfully! Downloading...",
+          "generateSuccess": "Support dump generated successfully!",
+          "generateFailed": "Failed to generate support dump: {message}",
+          "error": "Error: {message}"
+        }
       }
     },
     "filters": {
@@ -702,7 +905,128 @@
         "addSpeciesButton": "Add"
       },
       "speciesNamePlaceholder": "Species name",
-      "typeSpeciesName": "Type species name..."
+      "typeSpeciesName": "Type species name...",
+      "dogBarkSpeciesList": "Dog Bark Species List"
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Upload detections to BirdWeather",
+        "ffmpegWarning": {
+          "title": "FFmpeg not detected",
+          "message": "Please install FFmpeg to enable FLAC encoding support, BirdWeather is deprecating WAV uploads in favor of compressed FLAC audio files."
+        },
+        "enable": "Enable BirdWeather Uploads",
+        "token": {
+          "label": "BirdWeather token",
+          "helpText": "Your unique BirdWeather token."
+        },
+        "threshold": {
+          "label": "Upload Threshold",
+          "helpText": "Minimum confidence threshold for uploading predictions to BirdWeather."
+        },
+        "test": {
+          "button": "Test BirdWeather Connection",
+          "loading": "Testing...",
+          "enabledRequired": "BirdWeather must be enabled to test",
+          "tokenRequired": "BirdWeather token must be specified",
+          "inProgress": "Test in progress...",
+          "description": "Test BirdWeather connection"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Configure MQTT broker connection",
+        "enable": "Enable MQTT Integration",
+        "broker": {
+          "label": "MQTT Broker",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "MQTT Topic",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Authentication",
+          "username": {
+            "label": "Username"
+          },
+          "password": {
+            "label": "Password",
+            "helpText": "The MQTT password."
+          }
+        },
+        "messageSettings": {
+          "title": "Message Settings",
+          "retain": {
+            "label": "Retain Messages",
+            "note": "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts."
+          }
+        },
+        "tls": {
+          "title": "TLS/SSL Security",
+          "enable": "Enable TLS/SSL",
+          "skipVerify": "Skip Certificate Verification",
+          "configNote": "<strong>TLS Configuration:</strong><br />• Standard TLS: Leave certificates empty for public brokers<br />• Self-signed certificates: Provide CA Certificate<br />• Mutual TLS (mTLS): Provide all three certificates"
+        },
+        "test": {
+          "button": "Test MQTT Connection",
+          "loading": "Testing...",
+          "enabledRequired": "MQTT must be enabled to test",
+          "brokerRequired": "MQTT broker must be specified",
+          "inProgress": "Test in progress...",
+          "description": "Test MQTT connection"
+        }
+      },
+      "observability": {
+        "title": "Observability",
+        "description": "Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint",
+        "enable": "Enable Observability Integration",
+        "listenAddress": {
+          "label": "Listen Address",
+          "placeholder": "0.0.0.0:8090"
+        }
+      },
+      "weather": {
+        "title": "Weather",
+        "description": "Configure weather data collection",
+        "provider": {
+          "label": "Weather Provider",
+          "options": {
+            "none": "None",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather"
+          }
+        },
+        "notes": {
+          "none": "No weather data will be retrieved.",
+          "yrno": {
+            "description": "Weather forecast data is provided by Yr.no, a joint service by the Norwegian Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).",
+            "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+        },
+        "apiKey": {
+          "label": "API Key",
+          "helpText": "Your OpenWeather API key. Keep this secret!"
+        },
+        "units": {
+          "label": "Units of Measurement",
+          "options": {
+            "standard": "Standard",
+            "metric": "Metric",
+            "imperial": "Imperial"
+          }
+        },
+        "test": {
+          "button": "Test Weather Provider",
+          "loading": "Testing...",
+          "noProvider": "No weather provider selected",
+          "apiKeyRequired": "OpenWeather API key must be specified",
+          "inProgress": "Test in progress...",
+          "description": "Test weather provider connection"
+        }
+      }
     },
     "audio": {
       "audioCapture": {
@@ -723,7 +1047,16 @@
         "newFilterType": "New Filter Type",
         "selectFilterType": "Select filter type",
         "addFilter": "Add Filter",
-        "remove": "Remove"
+        "remove": "Remove",
+        "cutoffFrequency": "Cutoff Frequency",
+        "qFactor": "Q Factor",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Sound Level Monitoring",
@@ -770,6 +1103,12 @@
       "transport": {
         "tcp": "TCP",
         "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Lowpass Filter",
+        "highpass": "Highpass Filter",
+        "bandpass": "Bandpass Filter",
+        "bandstop": "Bandstop Filter"
       }
     },
     "species": {
@@ -791,11 +1130,144 @@
       "httpsSettingsDescription": "Secure access with SSL/TLS encryption",
       "basicAuthTitle": "Basic Authentication",
       "basicAuthDescription": "Secure access with a simple password",
+      "serverConfiguration": {
+        "title": "Server Configuration",
+        "description": "Configure HTTPS and SSL/TLS settings",
+        "autoTlsLabel": "Auto SSL Certificate Management (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "AutoTLS Requirements:",
+          "domainRequired": "A registered domain name is required",
+          "domainPointing": "Domain must point to this server's public IP",
+          "portsAccessible": "Ports 80 and 443 must be accessible from the internet"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Basic Authentication",
+        "description": "Secure access with a simple password",
+        "enableLabel": "Enable Password Authentication",
+        "passwordLabel": "Password",
+        "passwordHelpText": "Limit access to settings with a password."
+      },
+      "oauth": {
+        "title": "OAuth2 Social Authentication",
+        "description": "Single sign-on to log in with your existing account",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "Allow OAuth2 Login via Google",
+          "redirectUriTitle": "Redirect URI for Google Cloud Console:",
+          "getCredentialsLabel": "Get your credentials from Google Cloud Console",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The OAuth 2.0 Client ID obtained from Google Cloud Console when setting up OAuth credentials.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The OAuth 2.0 Client Secret obtained from Google Cloud Console when setting up OAuth credentials.",
+          "userIdLabel": "User ID"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "Allow OAuth2 Login via GitHub",
+          "redirectUriTitle": "Redirect URI for GitHub Developer Settings:",
+          "getCredentialsLabel": "Get your credentials from GitHub Developer Settings",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The OAuth 2.0 Client ID obtained from GitHub Developer Settings when setting up OAuth credentials.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The OAuth 2.0 Client Secret obtained from GitHub Developer Settings when setting up OAuth credentials.",
+          "userIdLabel": "User ID"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Bypass Authentication",
+        "description": "Allow access to settings without authentication"
+      },
       "placeholders": {
         "host": "For example, localhost:8080 or example.domain.com",
         "allowedUsers": "Enter one or more allowed user emails",
         "subnet": "Enter a CIDR subnet (e.g. 192.168.1.0/24)"
       }
+    },
+    "species": {
+      "alwaysInclude": {
+        "title": "Always Include Species",
+        "description": "Species in this list will always be included in range of detected species",
+        "noSpeciesMessage": "No species added to include list"
+      },
+      "alwaysExclude": {
+        "title": "Always Exclude Species",
+        "description": "Species in this list will always be excluded from detection",
+        "noSpeciesMessage": "No species added to exclude list"
+      },
+      "customConfiguration": {
+        "title": "Custom Species Configuration",
+        "description": "Species specific threshold values, detection intervals, and actions",
+        "helpText": {
+          "intro": "Configure species-specific settings:",
+          "threshold": "Threshold: Minimum confidence score (0-1) required for detection",
+          "interval": "Interval: Minimum time in seconds between detections of the same species (0 = use global default)",
+          "actions": "Actions: Custom commands to execute when this species is detected"
+        },
+        "columnHeaders": {
+          "species": "Species",
+          "settings": "Settings",
+          "actions": "Actions"
+        },
+        "badges": {
+          "threshold": "Threshold: {value}",
+          "interval": "Interval: {value}s",
+          "customAction": "Custom Action",
+          "executeDefaults": "+Defaults"
+        },
+        "dropdown": {
+          "editConfig": "Edit Config",
+          "addAction": "Add Action",
+          "remove": "Remove"
+        },
+        "labels": {
+          "threshold": "Threshold",
+          "interval": "Interval",
+          "intervalSeconds": "Interval (sec)",
+          "addButton": "Add"
+        },
+        "noConfigurationsMessage": "No custom species configurations added",
+        "addForm": {
+          "speciesPlaceholder": "Species name",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        }
+      },
+      "actionsModal": {
+        "title": "Actions for {species}",
+        "actionType": {
+          "label": "Action Type",
+          "executeCommand": "Execute Command",
+          "onlySupported": "Currently, only Execute Command actions are supported"
+        },
+        "command": {
+          "label": "Command",
+          "helpText": "Provide the full path to the command or script you want to execute"
+        },
+        "parameters": {
+          "label": "Parameters",
+          "helpText": "These values will be passed to your command in the order listed",
+          "availableTitle": "Available Parameters",
+          "buttons": {
+            "commonName": "CommonName",
+            "scientificName": "ScientificName",
+            "confidence": "Confidence",
+            "time": "Time",
+            "source": "Source",
+            "clearParameters": "Clear Parameters"
+          }
+        },
+        "executeDefaults": {
+          "label": "Also run default actions (database storage, notifications, etc.)",
+          "helpText": "When enabled, both your custom action and the system's default actions will run. When disabled, only your custom action will execute."
+        }
+      },
+      "addSpeciesToInclude": "Add species to include",
+      "addSpeciesToIncludeLabel": "Add New Species to Include",
+      "addSpeciesToExclude": "Add species to exclude",
+      "addSpeciesToExcludeLabel": "Add New Species to Exclude",
+      "commandPathPlaceholder": "/path/to/your/command",
+      "parametersPlaceholder": "Parameters will appear here"
     },
     "database": {
       "sqlitePlaceholder": "Enter SQLite database path",

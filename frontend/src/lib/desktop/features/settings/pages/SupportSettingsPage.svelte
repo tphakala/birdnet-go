@@ -62,7 +62,7 @@
       })
       .catch(error => {
         console.error('Failed to fetch system ID:', error);
-        systemId = 'Error loading system ID';
+        systemId = t('settings.support.systemId.errorLoading');
       });
   });
 
@@ -91,7 +91,7 @@
     statusType = 'info';
     progressPercent = 0;
 
-    updateStatus('Preparing support dump...', 'info', 10);
+    updateStatus(t('settings.support.supportReport.statusMessages.preparing'), 'info', 10);
 
     try {
       const response = await fetch('/api/v2/support/generate', {
@@ -118,17 +118,18 @@
 
       if (data.success) {
         if (supportDump.uploadToSentry && data.uploaded_at) {
-          updateStatus('Support dump successfully uploaded to developers!', 'success', 100);
           if (data.dump_id) {
-            statusMessage += ` Reference ID: ${data.dump_id}`;
+            updateStatus(t('settings.support.supportReport.statusMessages.uploadSuccessWithId', { dumpId: data.dump_id }), 'success', 100);
+          } else {
+            updateStatus(t('settings.support.supportReport.statusMessages.uploadSuccess'), 'success', 100);
           }
         } else if (data.download_url) {
-          updateStatus('Support dump generated successfully! Downloading...', 'success', 100);
+          updateStatus(t('settings.support.supportReport.statusMessages.downloadSuccess'), 'success', 100);
           setTimeout(() => {
             window.location.href = data.download_url;
           }, 500);
         } else {
-          updateStatus('Support dump generated successfully!', 'success', 100);
+          updateStatus(t('settings.support.supportReport.statusMessages.generateSuccess'), 'success', 100);
         }
 
         // Clear status after 10 seconds
@@ -139,14 +140,14 @@
         }, 10000);
       } else {
         updateStatus(
-          'Failed to generate support dump: ' + (data.message || 'Unknown error'),
+          t('settings.support.supportReport.statusMessages.generateFailed', { message: data.message || 'Unknown error' }),
           'error',
           0
         );
       }
     } catch (error) {
       generating = false;
-      updateStatus('Error: ' + (error as Error).message, 'error', 0);
+      updateStatus(t('settings.support.supportReport.statusMessages.error', { message: (error as Error).message }), 'error', 0);
     }
   }
 
@@ -219,7 +220,7 @@
               <div class="h-5 w-5">
                 {@html actionIcons.copy}
               </div>
-              Copy
+              {t('settings.support.systemId.copyButton')}
             </button>
           </div>
           <div class="label">
@@ -241,36 +242,27 @@
         <!-- Support Dump Generation -->
         <div class="card bg-base-200">
           <div class="card-body">
-            <h3 class="card-title text-lg">Generate Support Report</h3>
+            <h3 class="card-title text-lg">{t('settings.support.supportReport.title')}</h3>
 
             <!-- Enhanced Description -->
             <div class="space-y-3 mb-4">
               <p class="text-sm text-base-content/80">
-                Support reports are <strong>essential for troubleshooting</strong> and dramatically improve
-                our ability to resolve issues you're experiencing. They provide developers with crucial
-                context about your system configuration, recent application logs, and error patterns
-                that would be impossible to diagnose otherwise.
+                {@html t('settings.support.supportReport.description.intro')}
               </p>
 
               <p class="text-sm text-base-content/80">
-                Please <a
-                  href="https://github.com/tphakala/birdnet-go/issues/new"
-                  target="_blank"
-                  class="link link-primary font-semibold">create a GitHub issue</a
-                >
-                describing your problem <strong>before or after</strong> generating this support report.
-                This allows for proper tracking and communication about your issue.
+                {@html t('settings.support.supportReport.description.githubIssue')}
               </p>
 
               <div class="bg-base-100 rounded-lg p-3 border border-base-300">
-                <h4 class="font-semibold text-sm mb-2">What's included in the report:</h4>
+                <h4 class="font-semibold text-sm mb-2">{t('settings.support.supportReport.whatsIncluded.title')}</h4>
                 <ul class="text-xs space-y-1 text-base-content/70">
                   <li class="flex items-center gap-2">
                     <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
                     <span
-                      ><strong>Application logs</strong> - Recent errors and debug information</span
+                      >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -278,7 +270,7 @@
                       {@html alertIconsSvg.success}
                     </div>
                     <span
-                      ><strong>Configuration</strong> - Your settings with sensitive data removed</span
+                      >{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -286,7 +278,7 @@
                       {@html alertIconsSvg.success}
                     </div>
                     <span
-                      ><strong>System information</strong> - OS version, memory, and runtime details</span
+                      >{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -294,7 +286,7 @@
                       {@html alertIconsSvg.error}
                     </div>
                     <span
-                      ><strong>NOT included</strong> - Audio files, bird detections, or personal data</span
+                      >{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span
                     >
                   </li>
                 </ul>
@@ -324,13 +316,13 @@
               <!-- User Message -->
               <div class="form-control mt-4">
                 <label class="label" for="userMessage">
-                  <span class="label-text">Describe the issue</span>
+                  <span class="label-text">{t('settings.support.supportReport.userMessage.label')}</span>
                 </label>
                 <textarea
                   id="userMessage"
                   bind:value={supportDump.userMessage}
                   class="textarea textarea-bordered textarea-sm h-24 text-base-content"
-                  placeholder="Please describe the issue and include GitHub issue link if applicable (e.g., #123)"
+                  placeholder={t('settings.support.supportReport.userMessage.placeholder')}
                   rows="4"
                   disabled={generating}
                 ></textarea>
@@ -338,9 +330,7 @@
                 <!-- GitHub Issue Note -->
                 <div class="label">
                   <span class="label-text-alt text-base-content/60">
-                    💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123)
-                    and mention your System ID <span class="font-mono text-xs">{systemId}</span> in the
-                    GitHub issue to help developers link your support data.
+                    {t('settings.support.supportReport.userMessage.githubTip', { systemId })}
                   </span>
                 </div>
               </div>
@@ -350,30 +340,27 @@
                 <div class="mt-4">
                   <Checkbox
                     bind:checked={supportDump.uploadToSentry}
-                    label="Upload to developers (recommended)"
+                    label={t('settings.support.supportReport.uploadOption.label')}
                     disabled={generating}
                   />
                   <div class="pl-6 mt-2 space-y-2">
                     <div class="text-xs text-base-content/60">
                       <p class="flex items-start gap-1">
                         {@html actionIcons.check}
-                        Data is uploaded to
-                        <a href="https://sentry.io" target="_blank" class="link link-primary"
-                          >Sentry</a
-                        > cloud service
+                        {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
                       </p>
                       <p class="flex items-start gap-1">
                         {@html systemIcons.globe}
-                        Stored in EU data center (Frankfurt, Germany)
+                        {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
                       </p>
                       <p class="flex items-start gap-1">
                         {@html systemIcons.shield}
-                        Privacy-compliant with sensitive data removed
+                        {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
                       </p>
                     </div>
                     <div class="text-xs text-warning/80 flex items-center gap-1">
                       {@html systemIcons.infoCircle}
-                      Uncheck only if you prefer to handle the support file manually
+                      {t('settings.support.supportReport.uploadOption.details.manualWarning')}
                     </div>
                   </div>
                 </div>
@@ -432,8 +419,8 @@
                     {@html mediaIcons.download}
                     <span
                       >{supportDump.uploadToSentry
-                        ? 'Generate & Upload'
-                        : 'Generate & Download'}</span
+                        ? t('settings.support.supportReport.generateButton.upload')
+                        : t('settings.support.supportReport.generateButton.download')}</span
                     >
                   </span>
                 {:else}

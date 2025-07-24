@@ -332,6 +332,7 @@ export interface WebServerSettings {
 export interface Dashboard {
   thumbnails: Thumbnails;
   summaryLimit: number;
+  locale?: string; // UI locale setting
 }
 
 export interface Thumbnails {
@@ -739,6 +740,17 @@ export const settingsActions = {
       const currentState = get(settingsStore);
 
       await settingsAPI.save(currentState.formData);
+
+      // Check if UI locale changed and apply it
+      const newLocale = currentState.formData.realtime?.dashboard?.locale;
+      if (newLocale) {
+        // Dynamically import i18n functions to avoid circular dependencies
+        const { getLocale, setLocale } = await import('$lib/i18n/index.js');
+        const currentLocale = getLocale();
+        if (newLocale !== currentLocale) {
+          setLocale(newLocale as any);
+        }
+      }
 
       // Update originalData to match the saved formData (no reload needed)
       settingsStore.update(state => ({

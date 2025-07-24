@@ -644,11 +644,171 @@
         "locale": {
           "label": "Idioma",
           "helpText": "Idioma para nomes comuns de espécies traduzidos."
+        },
+        "tensorflowThreads": {
+          "label": "Threads de CPU do TensorFlow",
+          "helpText": "Número de threads de CPU. Defina como 0 para usar todos os threads disponíveis."
+        }
+      },
+      "sections": {
+        "customClassifier": {
+          "title": "Classificador BirdNET personalizado",
+          "modelPath": {
+            "label": "Caminho do modelo (Requer reinicialização para aplicar)",
+            "placeholder": "Caminho para o arquivo do modelo",
+            "helpText": "Caminho para o arquivo de modelo BirdNET externo. Insira o caminho absoluto ou relativo ao binário birdnet-go. Deixe vazio para usar o modelo incorporado padrão."
+          },
+          "labelPath": {
+            "label": "Caminho dos rótulos (Requer reinicialização para aplicar)",
+            "placeholder": "Caminho para o arquivo de rótulos",
+            "helpText": "Caminho para o arquivo de rótulos do modelo externo, arquivo .zip ou .txt. Insira o caminho absoluto ou relativo ao binário birdnet-go. Deixe vazio para usar os rótulos incorporados padrão."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Limiar dinâmico",
+          "enable": {
+            "label": "Ativar limiar dinâmico (recurso específico do BirdNET-Go)",
+            "helpText": "Ativa o recurso de limiar de confiança dinâmico para detecção de canto de pássaros mais adaptativa."
+          },
+          "trigger": {
+            "label": "Limiar de ativação",
+            "helpText": "O nível de confiança no qual o limiar dinâmico é ativado. Se um canto de pássaro for detectado com confiança acima deste valor, o limiar para correspondências positivas dessa espécie será reduzido para cantos subsequentes."
+          },
+          "minimum": {
+            "label": "Limiar dinâmico mínimo",
+            "helpText": "O valor mínimo para o qual o limiar dinâmico pode ser reduzido. Isso garante que o limiar não caia abaixo de um nível indesejado."
+          },
+          "expireTime": {
+            "label": "Tempo de expiração do limiar dinâmico (horas)",
+            "helpText": "O número de horas durante as quais os ajustes de limiar dinâmico permanecem válidos. Após esse período, o limiar dinâmico é redefinido."
+          }
+        },
+        "rangeFilter": {
+          "title": "Filtro de alcance",
+          "stationLocation": {
+            "label": "Localização da estação",
+            "helpText": "Localização da estação, usada para limitar as espécies de pássaros àquelas prováveis na região."
+          },
+          "latitude": {
+            "label": "Latitude",
+            "helpText": "Latitude da localização da estação, usada para limitar as espécies de pássaros àquelas prováveis na região."
+          },
+          "longitude": {
+            "label": "Longitude",
+            "helpText": "Longitude da localização da estação, usada para limitar as espécies de pássaros àquelas prováveis na região."
+          },
+          "model": {
+            "label": "Modelo de filtro de alcance",
+            "helpText": "Versão do modelo de filtro de alcance BirdNET: latest ou legacy."
+          },
+          "threshold": {
+            "label": "Limiar",
+            "helpText": "Controla quais espécies são incluídas com base em sua probabilidade de ocorrência para sua localização e época do ano. O padrão (0,01) é recomendado para a maioria dos usuários. Valores mais altos (0,05-0,3) incluem menos espécies com maior probabilidade de ocorrência. Valores muito altos (0,5+) incluem apenas as espécies mais comuns."
+          },
+          "speciesCount": {
+            "label": "Contagem atual de espécies",
+            "helpText": "Número de espécies incluídas no filtro de alcance. Atualiza automaticamente quando o limiar, latitude ou longitude muda.",
+            "loading": "Carregando...",
+            "viewSpecies": "Ver espécies"
+          },
+          "modal": {
+            "title": "Espécies do filtro de alcance",
+            "speciesCount": "Contagem de espécies:",
+            "threshold": "Limiar:",
+            "latitude": "Latitude:",
+            "longitude": "Longitude:",
+            "loadingSpecies": "Carregando espécies...",
+            "noSpeciesFound": "Nenhuma espécie encontrada com as configurações atuais",
+            "close": "Fechar"
+          }
+        },
+        "database": {
+          "type": {
+            "label": "Selecionar tipo de banco de dados",
+            "helpText": "Selecione o tipo de banco de dados a ser usado para armazenar detecções."
+          },
+          "sqlite": {
+            "note": "SQLite é o tipo de banco de dados recomendado para a maioria dos usuários.",
+            "path": {
+              "label": "Caminho do banco de dados SQLite",
+              "placeholder": "Digite o caminho do banco de dados SQLite",
+              "helpText": "Caminho do arquivo de banco de dados SQLite relativo ao diretório da aplicação"
+            }
+          },
+          "mysql": {
+            "host": {
+              "label": "Host MySQL",
+              "placeholder": "Digite o host MySQL",
+              "helpText": "Host do banco de dados MySQL (IP ou nome do host)"
+            },
+            "port": {
+              "label": "Porta MySQL",
+              "helpText": "Porta do banco de dados MySQL (padrão 3306/TCP)"
+            },
+            "username": {
+              "label": "Nome de usuário MySQL",
+              "placeholder": "Digite o nome de usuário MySQL",
+              "helpText": "Nome de usuário do banco de dados MySQL"
+            },
+            "password": {
+              "label": "Senha MySQL",
+              "placeholder": "Digite a senha MySQL",
+              "helpText": "Senha do banco de dados MySQL"
+            },
+            "database": {
+              "label": "Banco de dados MySQL",
+              "placeholder": "Digite o nome do banco de dados MySQL",
+              "helpText": "Nome do banco de dados MySQL"
+            }
+          }
+        },
+        "userInterface": {
+          "title": "Configurações da interface do usuário",
+          "description": "Personalizar a interface do usuário",
+          "language": {
+            "title": "Idioma",
+            "locale": {
+              "label": "Idioma da interface",
+              "helpText": "Selecione o idioma para a interface do usuário"
+            }
+          },
+          "dashboard": {
+            "title": "Painel",
+            "summaryLimit": {
+              "label": "Número máximo de espécies na tabela de resumo diário",
+              "helpText": "Número máximo de espécies mostradas na tabela de resumo diário (valor entre 10 e 1000)"
+            },
+            "thumbnails": {
+              "summary": {
+                "label": "Mostrar miniaturas na tabela de resumo diário",
+                "helpText": "Ativar para mostrar miniaturas de espécies detectadas na tabela de resumo diário"
+              },
+              "recent": {
+                "label": "Mostrar miniaturas na lista de detecções recentes",
+                "helpText": "Ativar para mostrar miniaturas de espécies detectadas na lista de detecções recentes"
+              },
+              "imageProvider": {
+                "label": "Provedor de imagens",
+                "helpText": "Selecione o provedor de imagens preferido para miniaturas de pássaros"
+              },
+              "fallbackPolicy": {
+                "label": "Política de fallback",
+                "helpText": "Selecione o que acontece quando o provedor preferido falha ao encontrar uma imagem",
+                "options": {
+                  "all": "Tentar todos os provedores em sequência",
+                  "none": "Usar apenas o provedor selecionado"
+                }
+              }
+            }
+          }
         }
       },
       "errors": {
         "localesLoadFailed": "Não foi possível carregar as opções de idioma. Usando padrões.",
-        "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões."
+        "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões.",
+        "rangeFilterTestFailed": "Falha ao testar configurações do filtro de alcance",
+        "rangeFilterLoadFailed": "Falha ao carregar lista de espécies",
+        "rangeFilterCountFailed": "Falha ao carregar contagem de espécies"
       }
     },
     "support": {
@@ -673,12 +833,55 @@
       },
       "systemId": {
         "label": "Seu ID do sistema",
-        "description": "Use este ID ao relatar problemas"
+        "description": "Use este ID ao relatar problemas",
+        "copyButton": "Copiar",
+        "errorLoading": "Erro ao carregar o ID do sistema"
       },
       "diagnostics": {
         "includeRecentLogs": "Incluir logs recentes",
         "includeConfiguration": "Incluir configuração (dados sensíveis removidos)",
         "includeSystemInfo": "Incluir informações do sistema"
+      },
+      "supportReport": {
+        "title": "Gerar relatório de suporte",
+        "description": {
+          "intro": "Os relatórios de suporte são **essenciais para solução de problemas** e melhoram drasticamente nossa capacidade de resolver os problemas que você está enfrentando. Eles fornecem aos desenvolvedores contexto crucial sobre a configuração do seu sistema, logs recentes da aplicação e padrões de erro que seriam impossíveis de diagnosticar de outra forma.",
+          "githubIssue": "Por favor [crie um issue no GitHub](https://github.com/tphakala/birdnet-go/issues/new) descrevendo seu problema **antes ou depois** de gerar este relatório de suporte. Isso permite rastreamento e comunicação adequados sobre seu problema."
+        },
+        "whatsIncluded": {
+          "title": "O que está incluído no relatório:",
+          "applicationLogs": "**Logs da aplicação** - Erros recentes e informações de depuração",
+          "configuration": "**Configuração** - Suas configurações com dados sensíveis removidos",
+          "systemInfo": "**Informações do sistema** - Versão do SO, memória e detalhes de execução",
+          "notIncluded": "**NÃO incluído** - Arquivos de áudio, detecções de pássaros ou dados pessoais"
+        },
+        "userMessage": {
+          "label": "Descreva o problema",
+          "placeholder": "Por favor descreva o problema e inclua o link do issue do GitHub se aplicável (ex: #123)",
+          "githubTip": "💡 Dica: Se você tem um issue no GitHub, inclua o número do issue (ex: #123) e mencione seu ID do Sistema {systemId} no issue do GitHub para ajudar os desenvolvedores a vincular seus dados de suporte."
+        },
+        "uploadOption": {
+          "label": "Enviar para os desenvolvedores (recomendado)",
+          "details": {
+            "sentryUpload": "Os dados são enviados para o serviço na nuvem [Sentry](https://sentry.io)",
+            "euDataCenter": "Armazenados no centro de dados da UE (Frankfurt, Alemanha)",
+            "privacyCompliant": "Conforme com privacidade com dados sensíveis removidos",
+            "manualWarning": "Desmarque apenas se você preferir gerenciar o arquivo de suporte manualmente"
+          }
+        },
+        "generateButton": {
+          "upload": "Gerar e enviar",
+          "download": "Gerar e baixar"
+        },
+        "statusMessages": {
+          "preparing": "Preparando relatório de suporte...",
+          "uploadSuccess": "Relatório de suporte enviado com sucesso para os desenvolvedores!",
+          "uploadSuccessWithId": "Relatório de suporte enviado com sucesso para os desenvolvedores! ID de referência: {dumpId}",
+          "downloadSuccess": "Relatório de suporte gerado com sucesso! Baixando...",
+          "generateSuccess": "Relatório de suporte gerado com sucesso!",
+          "generateFailed": "Falha ao gerar relatório de suporte: {message}",
+          "error": "Erro: {message}"
+        }
       }
     },
     "filters": {
@@ -702,7 +905,15 @@
         "addSpeciesButton": "Adicionar"
       },
       "speciesNamePlaceholder": "Nome da espécie",
-      "typeSpeciesName": "Digite o nome da espécie..."
+      "typeSpeciesName": "Digite o nome da espécie...",
+      "confidenceRange": {
+        "label": "Faixa de Confiança",
+        "description": "Configurar valores mínimos e máximos de confiança"
+      },
+      "dogBarkSpeciesList": {
+        "label": "Lista de Espécies de Latido de Cão",
+        "description": "Configurar espécies para detecção de latido de cão"
+      }
     },
     "audio": {
       "audioCapture": {
@@ -772,7 +983,157 @@
         "udp": "UDP"
       }
     },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Publicar detecções de aves no BirdWeather",
+        "enabled": {
+          "label": "Ativar publicação BirdWeather"
+        },
+        "debug": {
+          "label": "Ativar depuração BirdWeather"
+        },
+        "stationIdInput": {
+          "idLabel": "ID da estação BirdWeather",
+          "idPlaceholder": "Digite o ID da estação BirdWeather",
+          "idHelpText": "Seu ID exclusivo da estação BirdWeather"
+        },
+        "locationAccuracy": {
+          "label": "Precisão da localização",
+          "helpText": "Adicionar ruído aleatório à localização para privacidade (em metros)"
+        },
+        "thresholdConfidence": {
+          "label": "Limiar de confiança",
+          "helpText": "Confiança mínima para enviar detecções ao BirdWeather (0.0-1.0)",
+          "valueDisplay": "Valor: {value}"
+        },
+        "processingModes": {
+          "label": "Tipo de processamento de detecção",
+          "helpText": "Como processar detecções antes de enviar ao BirdWeather",
+          "liveAnalysis": "Análise ao vivo",
+          "realtimeProcessing": "Processamento em tempo real"
+        },
+        "uploadTiming": {
+          "label": "Tempo de upload",
+          "helpText": "Quando fazer upload de detecções para o BirdWeather",
+          "realtime": "Tempo real",
+          "endOfDay": "Fim do dia"
+        },
+        "excludeSpecies": {
+          "label": "Espécies a excluir",
+          "helpText": "Espécies para excluir dos envios ao BirdWeather"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Publicar eventos em um broker MQTT",
+        "enabled": {
+          "label": "Ativar publicação MQTT"
+        },
+        "brokerInput": {
+          "label": "Broker MQTT",
+          "placeholder": "Digite o endereço do broker MQTT",
+          "helpText": "Endereço do broker MQTT (ex: tcp://192.168.1.10:1883)"
+        },
+        "topicInput": {
+          "label": "Prefixo do tópico",
+          "placeholder": "Digite o prefixo do tópico MQTT",
+          "helpText": "Prefixo do tópico MQTT"
+        },
+        "clientIdInput": {
+          "label": "ID do cliente",
+          "placeholder": "Digite o ID do cliente MQTT",
+          "helpText": "ID do cliente MQTT"
+        },
+        "authentication": {
+          "usernameLabel": "Nome de usuário",
+          "usernamePlaceholder": "Digite o nome de usuário MQTT",
+          "passwordLabel": "Senha",
+          "passwordPlaceholder": "Digite a senha MQTT"
+        }
+      },
+      "observability": {
+        "title": "Observabilidade",
+        "description": "Configurar monitoramento e rastreamento",
+        "metrics": {
+          "title": "Métricas Prometheus",
+          "enabled": {
+            "label": "Ativar métricas Prometheus"
+          },
+          "portInput": {
+            "label": "Porta de métricas",
+            "helpText": "Porta para endpoint de métricas Prometheus"
+          }
+        },
+        "profiling": {
+          "title": "Perfilagem",
+          "enabled": {
+            "label": "Ativar perfilagem",
+            "helpText": "Expor endpoints de perfilagem em /debug/pprof/"
+          }
+        },
+        "tracing": {
+          "title": "Rastreamento",
+          "enabled": {
+            "label": "Ativar rastreamento"
+          },
+          "urlInput": {
+            "label": "URL de rastreamento",
+            "placeholder": "Digite a URL de rastreamento",
+            "helpText": "URL do OpenTelemetry ou rastreamento compatível"
+          }
+        }
+      },
+      "weather": {
+        "title": "Integração meteorológica",
+        "description": "Obter dados meteorológicos para detecções usando a API OpenWeather",
+        "providerSelect": {
+          "label": "Provedor meteorológico",
+          "helpText": "Selecione o provedor de dados meteorológicos"
+        },
+        "apiKeyInput": {
+          "label": "Chave API",
+          "placeholder": "Digite a chave API",
+          "helpText": "Sua chave API do OpenWeather"
+        },
+        "units": {
+          "label": "Unidades de temperatura",
+          "helpText": "Selecione unidades de temperatura para exibição",
+          "metric": "Métrica (°C)",
+          "imperial": "Imperial (°F)",
+          "scientific": "Científica (K)"
+        }
+      }
+    },
     "species": {
+      "alwaysInclude": {
+        "title": "Sempre incluir",
+        "description": "Espécies que são sempre incluídas independentemente das configurações de filtro de alcance"
+      },
+      "alwaysExclude": {
+        "title": "Sempre excluir",
+        "description": "Espécies que nunca são incluídas"
+      },
+      "customConfiguration": {
+        "title": "Configuração personalizada de espécies",
+        "description": "Ativar configuração avançada para comportamentos de espécies personalizados"
+      },
+      "actionsModal": {
+        "title": "Ações de espécies",
+        "description": "Configurar ações personalizadas para detecções de espécies específicas",
+        "editTitle": "Editar ação",
+        "addTitle": "Adicionar nova ação",
+        "form": {
+          "commandLabel": "Comando",
+          "commandPlaceholder": "/caminho/para/seu/comando",
+          "commandHelp": "Caminho completo para o executável do comando",
+          "parametersLabel": "Parâmetros",
+          "parametersPlaceholder": "Os parâmetros aparecerão aqui",
+          "parametersHelp": "Os parâmetros serão passados para o comando com espaços reservados substituídos",
+          "placeholdersTitle": "Espaços reservados disponíveis:",
+          "placeholdersList": "{{species}} - Nome científico da espécie\n{{common_name}} - Nome comum\n{{confidence}} - Pontuação de confiança\n{{date}} - Data da detecção\n{{time}} - Hora da detecção\n{{audio_file}} - Caminho do arquivo de áudio"
+        }
+      },
       "addSpeciesToInclude": "Adicionar espécies para incluir",
       "addSpeciesToIncludeLabel": "Adicionar novas espécies para incluir",
       "addSpeciesToExclude": "Adicionar espécies para excluir",
@@ -781,6 +1142,102 @@
       "parametersPlaceholder": "Os parâmetros aparecerão aqui"
     },
     "security": {
+      "serverConfiguration": {
+        "title": "Configuração do servidor",
+        "description": "Configurar host e opções de TLS",
+        "hostLabel": "Endereço do host",
+        "hostPlaceholder": "Por exemplo, localhost:8080 ou example.domain.com",
+        "hostHelp": "Endereço do host onde a aplicação escutará. Use 'localhost:8080' para acesso local apenas, ou '0.0.0.0:8080' para acesso de qualquer endereço.",
+        "tlsSettings": {
+          "title": "Configurações TLS",
+          "description": "Acesso seguro com criptografia SSL/TLS",
+          "enabled": {
+            "label": "Ativar HTTPS/TLS"
+          },
+          "autoTls": {
+            "label": "Certificado TLS automático",
+            "helpText": "Obter automaticamente certificado SSL/TLS via Let's Encrypt"
+          },
+          "certPaths": {
+            "certFile": {
+              "label": "Arquivo de certificado",
+              "placeholder": "/caminho/para/cert.pem",
+              "helpText": "Caminho para o arquivo de certificado SSL/TLS"
+            },
+            "keyFile": {
+              "label": "Arquivo de chave",
+              "placeholder": "/caminho/para/key.pem",
+              "helpText": "Caminho para o arquivo de chave SSL/TLS"
+            }
+          }
+        }
+      },
+      "basicAuthentication": {
+        "title": "Autenticação básica",
+        "description": "Acesso seguro com uma senha simples",
+        "enabled": {
+          "label": "Ativar autenticação básica"
+        },
+        "username": {
+          "label": "Nome de usuário",
+          "placeholder": "Digite o nome de usuário",
+          "helpText": "Nome de usuário para autenticação básica"
+        },
+        "password": {
+          "label": "Senha",
+          "placeholder": "Digite a senha",
+          "helpText": "Senha para autenticação básica"
+        }
+      },
+      "oauth": {
+        "title": "OAuth",
+        "description": "Acesso seguro via SSO",
+        "enabled": {
+          "label": "Ativar OAuth",
+          "helpText": "Ativar autenticação OAuth via Authentik"
+        },
+        "providerUrl": {
+          "label": "URL do provedor",
+          "placeholder": "Digite a URL do provedor OAuth",
+          "helpText": "URL do provedor OAuth"
+        },
+        "clientId": {
+          "label": "ID do cliente",
+          "placeholder": "Digite o ID do cliente OAuth",
+          "helpText": "ID do cliente OAuth"
+        },
+        "clientSecret": {
+          "label": "Segredo do cliente",
+          "placeholder": "Digite o segredo do cliente OAuth",
+          "helpText": "Segredo do cliente OAuth"
+        },
+        "redirectUrl": {
+          "label": "URL de redirecionamento",
+          "placeholder": "Digite a URL de redirecionamento OAuth",
+          "helpText": "URL de redirecionamento OAuth"
+        },
+        "allowedUsers": {
+          "label": "Usuários permitidos",
+          "placeholder": "Digite um ou mais e-mails de usuários permitidos",
+          "helpText": "Lista de endereços de e-mail de usuários permitidos a fazer login (um por linha)"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Bypass de autenticação",
+        "description": "Permitir acesso sem autenticação de redes confiáveis",
+        "allowSubnetBypass": {
+          "label": "Permitir acesso da sub-rede para contornar autenticação"
+        },
+        "allowedSubnets": {
+          "label": "Sub-redes permitidas",
+          "placeholder": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)",
+          "helpText": "Intervalos de rede permitidos para contornar o login (notação CIDR, lista separada por vírgulas)"
+        },
+        "securityWarning": {
+          "title": "Aviso de segurança:",
+          "text": "Dispositivos dessas sub-redes terão acesso irrestrito. Inclua apenas redes internas confiáveis."
+        }
+      },
       "hostLabel": "Endereço do host",
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
       "allowedSubnetsLabel": "Sub-redes permitidas",

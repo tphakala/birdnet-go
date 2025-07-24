@@ -644,11 +644,171 @@
         "locale": {
           "label": "Sprache",
           "helpText": "Sprache für übersetzte Artnamen."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU-Threads",
+          "helpText": "Anzahl der CPU-Threads. Auf 0 setzen, um alle verfügbaren Threads zu verwenden."
+        }
+      },
+      "sections": {
+        "customClassifier": {
+          "title": "Benutzerdefinierter BirdNET-Klassifikator",
+          "modelPath": {
+            "label": "Modellpfad (Neustart erforderlich)",
+            "placeholder": "Pfad zur Modelldatei",
+            "helpText": "Pfad zur externen BirdNET-Modelldatei. Geben Sie den absoluten oder relativen Pfad zur birdnet-go-Binärdatei ein. Leer lassen, um das standardmäßig eingebettete Modell zu verwenden."
+          },
+          "labelPath": {
+            "label": "Label-Pfad (Neustart erforderlich)",
+            "placeholder": "Pfad zur Labels-Datei",
+            "helpText": "Pfad zur externen Modell-Labels-Datei, .zip- oder .txt-Datei. Geben Sie den absoluten oder relativen Pfad zur birdnet-go-Binärdatei ein. Leer lassen, um die standardmäßig eingebetteten Labels zu verwenden."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Dynamischer Schwellenwert",
+          "enable": {
+            "label": "Dynamischen Schwellenwert aktivieren (BirdNET-Go-spezifische Funktion)",
+            "helpText": "Aktiviert die dynamische Konfidenzschwellenwert-Funktion für adaptivere Vogelruferkennung."
+          },
+          "trigger": {
+            "label": "Auslöseschwellenwert",
+            "helpText": "Das Konfidenzniveau, bei dem der dynamische Schwellenwert aktiviert wird. Wenn ein Vogelruf mit einer Konfidenz über diesem Wert erkannt wird, wird der Schwellenwert für positive Übereinstimmungen dieser Art für nachfolgende Rufe gesenkt."
+          },
+          "minimum": {
+            "label": "Minimaler dynamischer Schwellenwert",
+            "helpText": "Der Mindestwert, auf den der dynamische Schwellenwert gesenkt werden kann. Dies stellt sicher, dass der Schwellenwert nicht unter ein unerwünschtes Niveau fällt."
+          },
+          "expireTime": {
+            "label": "Ablaufzeit des dynamischen Schwellenwerts (Stunden)",
+            "helpText": "Die Anzahl der Stunden, in denen die dynamischen Schwellenwertanpassungen gültig bleiben. Nach diesem Zeitraum wird der dynamische Schwellenwert zurückgesetzt."
+          }
+        },
+        "rangeFilter": {
+          "title": "Reichweitenfilter",
+          "stationLocation": {
+            "label": "Stationsstandort",
+            "helpText": "Stationsstandort, verwendet um Vogelarten auf die in der Region wahrscheinlichen zu begrenzen."
+          },
+          "latitude": {
+            "label": "Breitengrad",
+            "helpText": "Breitengrad des Stationsstandorts, verwendet um Vogelarten auf die in der Region wahrscheinlichen zu begrenzen."
+          },
+          "longitude": {
+            "label": "Längengrad",
+            "helpText": "Längengrad des Stationsstandorts, verwendet um Vogelarten auf die in der Region wahrscheinlichen zu begrenzen."
+          },
+          "model": {
+            "label": "Reichweitenfilter-Modell",
+            "helpText": "BirdNET Reichweitenfilter-Modellversion: latest oder legacy."
+          },
+          "threshold": {
+            "label": "Schwellenwert",
+            "helpText": "Steuert, welche Arten basierend auf ihrer Auftrittswahrscheinlichkeit für Ihren Standort und Jahreszeit einbezogen werden. Standard (0,01) wird für die meisten Benutzer empfohlen. Höhere Werte (0,05-0,3) schließen weniger Arten mit höherer Auftrittswahrscheinlichkeit ein. Sehr hohe Werte (0,5+) schließen nur die häufigsten Arten ein."
+          },
+          "speciesCount": {
+            "label": "Aktuelle Artenanzahl",
+            "helpText": "Anzahl der im Reichweitenfilter enthaltenen Arten. Aktualisiert sich automatisch, wenn sich Schwellenwert, Breitengrad oder Längengrad ändern.",
+            "loading": "Wird geladen...",
+            "viewSpecies": "Arten anzeigen"
+          },
+          "modal": {
+            "title": "Reichweitenfilter-Arten",
+            "speciesCount": "Artenanzahl:",
+            "threshold": "Schwellenwert:",
+            "latitude": "Breitengrad:",
+            "longitude": "Längengrad:",
+            "loadingSpecies": "Arten werden geladen...",
+            "noSpeciesFound": "Keine Arten mit aktuellen Einstellungen gefunden",
+            "close": "Schließen"
+          }
+        },
+        "database": {
+          "type": {
+            "label": "Datenbanktyp auswählen",
+            "helpText": "Wählen Sie den Datenbanktyp zum Speichern von Erkennungen."
+          },
+          "sqlite": {
+            "note": "SQLite ist der empfohlene Datenbanktyp für die meisten Benutzer.",
+            "path": {
+              "label": "SQLite-Datenbankpfad",
+              "placeholder": "SQLite-Datenbankpfad eingeben",
+              "helpText": "SQLite-Datenbankdateipfad relativ zum Anwendungsverzeichnis"
+            }
+          },
+          "mysql": {
+            "host": {
+              "label": "MySQL-Host",
+              "placeholder": "MySQL-Host eingeben",
+              "helpText": "MySQL-Datenbankhost (IP oder Hostname)"
+            },
+            "port": {
+              "label": "MySQL-Port",
+              "helpText": "MySQL-Datenbankport (Standard 3306/TCP)"
+            },
+            "username": {
+              "label": "MySQL-Benutzername",
+              "placeholder": "MySQL-Benutzernamen eingeben",
+              "helpText": "MySQL-Datenbankbenutzername"
+            },
+            "password": {
+              "label": "MySQL-Passwort",
+              "placeholder": "MySQL-Passwort eingeben",
+              "helpText": "MySQL-Datenbankpasswort"
+            },
+            "database": {
+              "label": "MySQL-Datenbank",
+              "placeholder": "MySQL-Datenbanknamen eingeben",
+              "helpText": "MySQL-Datenbankname"
+            }
+          }
+        },
+        "userInterface": {
+          "title": "Benutzeroberflächeneinstellungen",
+          "description": "Benutzeroberfläche anpassen",
+          "language": {
+            "title": "Sprache",
+            "locale": {
+              "label": "Schnittstellensprache",
+              "helpText": "Wählen Sie die Sprache für die Benutzeroberfläche"
+            }
+          },
+          "dashboard": {
+            "title": "Dashboard",
+            "summaryLimit": {
+              "label": "Maximale Anzahl von Arten in der täglichen Übersichtstabelle",
+              "helpText": "Maximale Anzahl der in der täglichen Übersichtstabelle angezeigten Arten (Wert zwischen 10 und 1000)"
+            },
+            "thumbnails": {
+              "summary": {
+                "label": "Miniaturbilder in der täglichen Übersichtstabelle anzeigen",
+                "helpText": "Aktivieren, um Miniaturbilder erkannter Arten in der täglichen Übersichtstabelle anzuzeigen"
+              },
+              "recent": {
+                "label": "Miniaturbilder in der Liste der aktuellen Erkennungen anzeigen",
+                "helpText": "Aktivieren, um Miniaturbilder erkannter Arten in der Liste der aktuellen Erkennungen anzuzeigen"
+              },
+              "imageProvider": {
+                "label": "Bildanbieter",
+                "helpText": "Wählen Sie den bevorzugten Bildanbieter für Vogel-Miniaturbilder"
+              },
+              "fallbackPolicy": {
+                "label": "Fallback-Richtlinie",
+                "helpText": "Wählen Sie, was passiert, wenn der bevorzugte Anbieter kein Bild findet",
+                "options": {
+                  "all": "Alle Anbieter nacheinander versuchen",
+                  "none": "Nur ausgewählten Anbieter verwenden"
+                }
+              }
+            }
+          }
         }
       },
       "errors": {
         "localesLoadFailed": "Sprachoptionen konnten nicht geladen werden. Verwende Standardwerte.",
-        "providersLoadFailed": "Bildanbieter konnten nicht geladen werden. Verwende Standardwerte."
+        "providersLoadFailed": "Bildanbieter konnten nicht geladen werden. Verwende Standardwerte.",
+        "rangeFilterTestFailed": "Fehler beim Testen der Reichweitenfilter-Einstellungen",
+        "rangeFilterLoadFailed": "Fehler beim Laden der Artenliste",
+        "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl"
       }
     },
     "support": {
@@ -673,12 +833,55 @@
       },
       "systemId": {
         "label": "Ihre System-ID",
-        "description": "Verwenden Sie diese ID beim Melden von Problemen"
+        "description": "Verwenden Sie diese ID beim Melden von Problemen",
+        "copyButton": "Kopieren",
+        "errorLoading": "Fehler beim Laden der System-ID"
       },
       "diagnostics": {
         "includeRecentLogs": "Aktuelle Protokolle einschließen",
         "includeConfiguration": "Konfiguration einschließen (sensible Daten entfernt)",
         "includeSystemInfo": "Systeminformationen einschließen"
+      },
+      "supportReport": {
+        "title": "Support-Bericht erstellen",
+        "description": {
+          "intro": "Support-Berichte sind **für die Fehlerbehebung unerlässlich** und verbessern unsere Fähigkeit, Probleme zu lösen, die Sie erleben, erheblich. Sie liefern Entwicklern entscheidenden Kontext über Ihre Systemkonfiguration, aktuelle Anwendungsprotokolle und Fehlermuster, die andernfalls unmöglich zu diagnostizieren wären.",
+          "githubIssue": "Bitte [erstellen Sie ein GitHub-Issue](https://github.com/tphakala/birdnet-go/issues/new), das Ihr Problem beschreibt, **bevor oder nachdem** Sie diesen Support-Bericht erstellen. Dies ermöglicht eine ordnungsgemäße Verfolgung und Kommunikation bezüglich Ihres Problems."
+        },
+        "whatsIncluded": {
+          "title": "Was im Bericht enthalten ist:",
+          "applicationLogs": "**Anwendungsprotokolle** - Aktuelle Fehler und Debug-Informationen",
+          "configuration": "**Konfiguration** - Ihre Einstellungen mit entfernten sensiblen Daten",
+          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher und Laufzeitdetails",
+          "notIncluded": "**NICHT enthalten** - Audiodateien, Vogelerkennungen oder persönliche Daten"
+        },
+        "userMessage": {
+          "label": "Beschreiben Sie das Problem",
+          "placeholder": "Bitte beschreiben Sie das Problem und fügen Sie den GitHub-Issue-Link hinzu, falls zutreffend (z.B. #123)",
+          "githubTip": "💡 Tipp: Wenn Sie ein GitHub-Issue haben, fügen Sie bitte die Issue-Nummer (z.B. #123) ein und erwähnen Sie Ihre System-ID {systemId} im GitHub-Issue, um Entwicklern zu helfen, Ihre Support-Daten zu verknüpfen."
+        },
+        "uploadOption": {
+          "label": "An Entwickler hochladen (empfohlen)",
+          "details": {
+            "sentryUpload": "Daten werden zum [Sentry](https://sentry.io) Cloud-Service hochgeladen",
+            "euDataCenter": "Gespeichert im EU-Rechenzentrum (Frankfurt, Deutschland)",
+            "privacyCompliant": "Datenschutzkonform mit entfernten sensiblen Daten",
+            "manualWarning": "Nur deaktivieren, wenn Sie die Support-Datei manuell verwalten möchten"
+          }
+        },
+        "generateButton": {
+          "upload": "Erstellen & Hochladen",
+          "download": "Erstellen & Herunterladen"
+        },
+        "statusMessages": {
+          "preparing": "Support-Bericht wird vorbereitet...",
+          "uploadSuccess": "Support-Bericht erfolgreich an Entwickler hochgeladen!",
+          "uploadSuccessWithId": "Support-Bericht erfolgreich an Entwickler hochgeladen! Referenz-ID: {dumpId}",
+          "downloadSuccess": "Support-Bericht erfolgreich erstellt! Wird heruntergeladen...",
+          "generateSuccess": "Support-Bericht erfolgreich erstellt!",
+          "generateFailed": "Fehler beim Erstellen des Support-Berichts: {message}",
+          "error": "Fehler: {message}"
+        }
       }
     },
     "filters": {
@@ -702,7 +905,128 @@
         "addSpeciesButton": "Hinzufügen"
       },
       "speciesNamePlaceholder": "Artname",
-      "typeSpeciesName": "Artname eingeben..."
+      "typeSpeciesName": "Artname eingeben...",
+      "dogBarkSpeciesList": "Hundebell-Artenliste"
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Erkennungen zu BirdWeather hochladen",
+        "ffmpegWarning": {
+          "title": "FFmpeg nicht erkannt",
+          "message": "Bitte installieren Sie FFmpeg, um die FLAC-Kodierungsunterstützung zu aktivieren. BirdWeather veraltet WAV-Uploads zugunsten komprimierter FLAC-Audiodateien."
+        },
+        "enable": "BirdWeather-Uploads aktivieren",
+        "token": {
+          "label": "BirdWeather-Token",
+          "helpText": "Ihr einzigartiges BirdWeather-Token."
+        },
+        "threshold": {
+          "label": "Upload-Schwellenwert",
+          "helpText": "Minimaler Konfidenzschwellenwert für das Hochladen von Vorhersagen zu BirdWeather."
+        },
+        "test": {
+          "button": "BirdWeather-Verbindung testen",
+          "loading": "Teste...",
+          "enabledRequired": "BirdWeather muss aktiviert sein, um zu testen",
+          "tokenRequired": "BirdWeather-Token muss angegeben werden",
+          "inProgress": "Test läuft...",
+          "description": "BirdWeather-Verbindung testen"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "MQTT-Broker-Verbindung konfigurieren",
+        "enable": "MQTT-Integration aktivieren",
+        "broker": {
+          "label": "MQTT-Broker",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "MQTT-Topic",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Authentifizierung",
+          "username": {
+            "label": "Benutzername"
+          },
+          "password": {
+            "label": "Passwort",
+            "helpText": "Das MQTT-Passwort."
+          }
+        },
+        "messageSettings": {
+          "title": "Nachrichteneinstellungen",
+          "retain": {
+            "label": "Nachrichten beibehalten",
+            "note": "<strong>Home Assistant-Benutzer:</strong> Es wird empfohlen, das Retain-Flag für die Home Assistant-Integration zu aktivieren. Ohne Retain erscheinen MQTT-Sensoren als 'unbekannt', wenn Home Assistant neu startet."
+          }
+        },
+        "tls": {
+          "title": "TLS/SSL-Sicherheit",
+          "enable": "TLS/SSL aktivieren",
+          "skipVerify": "Zertifikatsüberprüfung überspringen",
+          "configNote": "<strong>TLS-Konfiguration:</strong><br />• Standard-TLS: Zertifikate für öffentliche Broker leer lassen<br />• Selbstsignierte Zertifikate: CA-Zertifikat bereitstellen<br />• Mutual TLS (mTLS): Alle drei Zertifikate bereitstellen"
+        },
+        "test": {
+          "button": "MQTT-Verbindung testen",
+          "loading": "Teste...",
+          "enabledRequired": "MQTT muss aktiviert sein, um zu testen",
+          "brokerRequired": "MQTT-Broker muss angegeben werden",
+          "inProgress": "Test läuft...",
+          "description": "MQTT-Verbindung testen"
+        }
+      },
+      "observability": {
+        "title": "Observability",
+        "description": "BirdNET-Go's Leistung und Vogelerkennungsmetriken über Prometheus-kompatiblen Endpunkt überwachen",
+        "enable": "Observability-Integration aktivieren",
+        "listenAddress": {
+          "label": "Listen-Adresse",
+          "placeholder": "0.0.0.0:8090"
+        }
+      },
+      "weather": {
+        "title": "Wetter",
+        "description": "Wetterdatensammlung konfigurieren",
+        "provider": {
+          "label": "Wetteranbieter",
+          "options": {
+            "none": "Keiner",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather"
+          }
+        },
+        "notes": {
+          "none": "Es werden keine Wetterdaten abgerufen.",
+          "yrno": {
+            "description": "Wettervorhersagedaten werden von Yr.no bereitgestellt, einem gemeinsamen Service des Norwegischen Meteorologischen Instituts (met.no) und der Norwegischen Rundfunkgesellschaft (NRK).",
+            "freeService": "Yr ist ein kostenloser Wetterdatendienst. Für weitere Informationen besuchen Sie <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+        },
+        "apiKey": {
+          "label": "API-Schlüssel",
+          "helpText": "Ihr OpenWeather API-Schlüssel. Halten Sie ihn geheim!"
+        },
+        "units": {
+          "label": "Maßeinheiten",
+          "options": {
+            "standard": "Standard",
+            "metric": "Metrisch",
+            "imperial": "Imperial"
+          }
+        },
+        "test": {
+          "button": "Wetteranbieter testen",
+          "loading": "Teste...",
+          "noProvider": "Kein Wetteranbieter ausgewählt",
+          "apiKeyRequired": "OpenWeather API-Schlüssel muss angegeben werden",
+          "inProgress": "Test läuft...",
+          "description": "Wetteranbieter-Verbindung testen"
+        }
+      }
     },
     "audio": {
       "audioCapture": {
@@ -773,6 +1097,83 @@
       }
     },
     "species": {
+      "alwaysInclude": {
+        "title": "Immer Arten einschließen",
+        "description": "Arten in dieser Liste werden immer im Bereich der erkannten Arten enthalten sein",
+        "noSpeciesMessage": "Keine Arten zur Einschlussliste hinzugefügt"
+      },
+      "alwaysExclude": {
+        "title": "Immer Arten ausschließen",
+        "description": "Arten in dieser Liste werden immer von der Erkennung ausgeschlossen",
+        "noSpeciesMessage": "Keine Arten zur Ausschlussliste hinzugefügt"
+      },
+      "customConfiguration": {
+        "title": "Benutzerdefinierte Artenkonfiguration",
+        "description": "Artenspezifische Schwellenwerte, Erkennungsintervalle und Aktionen",
+        "helpText": {
+          "intro": "Konfigurieren Sie artenspezifische Einstellungen:",
+          "threshold": "Schwellenwert: Minimaler Konfidenzwert (0-1) für die Erkennung erforderlich",
+          "interval": "Intervall: Mindestzeit in Sekunden zwischen Erkennungen derselben Art (0 = globalen Standardwert verwenden)",
+          "actions": "Aktionen: Benutzerdefinierte Befehle, die ausgeführt werden, wenn diese Art erkannt wird"
+        },
+        "columnHeaders": {
+          "species": "Art",
+          "settings": "Einstellungen",
+          "actions": "Aktionen"
+        },
+        "badges": {
+          "threshold": "Schwellenwert: {value}",
+          "interval": "Intervall: {value}s",
+          "customAction": "Benutzerdefinierte Aktion",
+          "executeDefaults": "+Standards"
+        },
+        "dropdown": {
+          "editConfig": "Konfiguration bearbeiten",
+          "addAction": "Aktion hinzufügen",
+          "remove": "Entfernen"
+        },
+        "labels": {
+          "threshold": "Schwellenwert",
+          "interval": "Intervall",
+          "intervalSeconds": "Intervall (Sek.)",
+          "addButton": "Hinzufügen"
+        },
+        "noConfigurationsMessage": "Keine benutzerdefinierten Artenkonfigurationen hinzugefügt",
+        "addForm": {
+          "speciesPlaceholder": "Artname",
+          "thresholdPlaceholder": "0,5",
+          "intervalPlaceholder": "0"
+        }
+      },
+      "actionsModal": {
+        "title": "Aktionen für {species}",
+        "actionType": {
+          "label": "Aktionstyp",
+          "executeCommand": "Befehl ausführen",
+          "onlySupported": "Derzeit werden nur Befehl ausführen-Aktionen unterstützt"
+        },
+        "command": {
+          "label": "Befehl",
+          "helpText": "Geben Sie den vollständigen Pfad zum Befehl oder Skript an, das Sie ausführen möchten"
+        },
+        "parameters": {
+          "label": "Parameter",
+          "helpText": "Diese Werte werden in der aufgeführten Reihenfolge an Ihren Befehl übergeben",
+          "availableTitle": "Verfügbare Parameter",
+          "buttons": {
+            "commonName": "DeutscherName",
+            "scientificName": "WissenschaftlicherName",
+            "confidence": "Konfidenz",
+            "time": "Zeit",
+            "source": "Quelle",
+            "clearParameters": "Parameter löschen"
+          }
+        },
+        "executeDefaults": {
+          "label": "Auch Standardaktionen ausführen (Datenbankspeicherung, Benachrichtigungen usw.)",
+          "helpText": "Wenn aktiviert, werden sowohl Ihre benutzerdefinierte Aktion als auch die Standardaktionen des Systems ausgeführt. Wenn deaktiviert, wird nur Ihre benutzerdefinierte Aktion ausgeführt."
+        }
+      },
       "addSpeciesToInclude": "Arten zum Einschließen hinzufügen",
       "addSpeciesToIncludeLabel": "Neue Arten zum Einschließen hinzufügen",
       "addSpeciesToExclude": "Arten zum Ausschließen hinzufügen",
@@ -791,6 +1192,54 @@
       "httpsSettingsDescription": "Sicherer Zugriff mit SSL/TLS-Verschlüsselung",
       "basicAuthTitle": "Basis-Authentifizierung",
       "basicAuthDescription": "Sicherer Zugriff mit einem einfachen Passwort",
+      "serverConfiguration": {
+        "title": "Server-Konfiguration",
+        "description": "HTTPS- und SSL/TLS-Einstellungen konfigurieren",
+        "autoTlsLabel": "Automatische SSL-Zertifikatsverwaltung (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "AutoTLS-Anforderungen:",
+          "domainRequired": "Ein registrierter Domänenname ist erforderlich",
+          "domainPointing": "Die Domäne muss auf die öffentliche IP dieses Servers zeigen",
+          "portsAccessible": "Die Ports 80 und 443 müssen aus dem Internet erreichbar sein"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Basis-Authentifizierung",
+        "description": "Sicherer Zugriff mit einem einfachen Passwort",
+        "enableLabel": "Passwort-Authentifizierung aktivieren",
+        "passwordLabel": "Passwort",
+        "passwordHelpText": "Zugriff auf Einstellungen mit einem Passwort begrenzen."
+      },
+      "oauth": {
+        "title": "OAuth2 Social Authentication",
+        "description": "Single Sign-On zur Anmeldung mit Ihrem bestehenden Konto",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "OAuth2-Anmeldung über Google erlauben",
+          "redirectUriTitle": "Redirect URI für Google Cloud Console:",
+          "getCredentialsLabel": "Holen Sie sich Ihre Anmeldedaten von der Google Cloud Console",
+          "clientIdLabel": "Client-ID",
+          "clientIdHelpText": "Die OAuth 2.0 Client-ID, die Sie bei der Einrichtung der OAuth-Anmeldedaten von der Google Cloud Console erhalten haben.",
+          "clientSecretLabel": "Client-Geheimnis",
+          "clientSecretHelpText": "Das OAuth 2.0 Client-Geheimnis, das Sie bei der Einrichtung der OAuth-Anmeldedaten von der Google Cloud Console erhalten haben.",
+          "userIdLabel": "Benutzer-ID"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "OAuth2-Anmeldung über GitHub erlauben",
+          "redirectUriTitle": "Redirect URI für GitHub-Entwicklereinstellungen:",
+          "getCredentialsLabel": "Holen Sie sich Ihre Anmeldedaten von den GitHub-Entwicklereinstellungen",
+          "clientIdLabel": "Client-ID",
+          "clientIdHelpText": "Die OAuth 2.0 Client-ID, die Sie bei der Einrichtung der OAuth-Anmeldedaten von den GitHub-Entwicklereinstellungen erhalten haben.",
+          "clientSecretLabel": "Client-Geheimnis",
+          "clientSecretHelpText": "Das OAuth 2.0 Client-Geheimnis, das Sie bei der Einrichtung der OAuth-Anmeldedaten von den GitHub-Entwicklereinstellungen erhalten haben.",
+          "userIdLabel": "Benutzer-ID"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Authentifizierung umgehen",
+        "description": "Zugriff auf Einstellungen ohne Authentifizierung erlauben"
+      },
       "placeholders": {
         "host": "Zum Beispiel localhost:8080 oder example.domain.com",
         "allowedUsers": "Geben Sie eine oder mehrere erlaubte Benutzer-E-Mails ein",

@@ -10,7 +10,6 @@ export const LOCALES = {
   es: { name: 'Español', flag: '🇪🇸' },
   fi: { name: 'Suomi', flag: '🇫🇮' },
   pt: { name: 'Português', flag: '🇵🇹' },
-  ja: { name: '日本語', flag: '🇯🇵' },
 } as const;
 
 export type Locale = keyof typeof LOCALES;

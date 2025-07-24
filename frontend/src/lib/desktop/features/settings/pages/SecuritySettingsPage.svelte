@@ -221,8 +221,8 @@
   <div class="space-y-4">
     <!-- Server Configuration -->
     <SettingsSection
-      title="Server Configuration"
-    description="Configure HTTPS and SSL/TLS settings"
+      title={t('settings.security.serverConfiguration.title')}
+    description={t('settings.security.serverConfiguration.description')}
     defaultOpen={true}
     hasChanges={serverConfigHasChanges}
   >
@@ -243,18 +243,18 @@
 
         <Checkbox
           bind:checked={settings.autoTls}
-          label="Auto SSL Certificate Management (AutoTLS)"
+          label={t('settings.security.serverConfiguration.autoTlsLabel')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateAutoTLSEnabled(settings.autoTls)}
         />
 
         {#if settings.autoTls}
           <SettingsNote>
-            <p><strong>AutoTLS Requirements:</strong></p>
+            <p><strong>{t('settings.security.serverConfiguration.autoTlsRequirements.title')}</strong></p>
             <ul class="list-disc list-inside mt-1">
-              <li>A registered domain name is required</li>
-              <li>Domain must point to this server's public IP</li>
-              <li>Ports 80 and 443 must be accessible from the internet</li>
+              <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainRequired')}</li>
+              <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainPointing')}</li>
+              <li>{t('settings.security.serverConfiguration.autoTlsRequirements.portsAccessible')}</li>
             </ul>
           </SettingsNote>
         {/if}
@@ -264,15 +264,15 @@
 
   <!-- Basic Authentication -->
   <SettingsSection
-    title={t('settings.security.basicAuthTitle')}
-    description={t('settings.security.basicAuthDescription')}
+    title={t('settings.security.basicAuthentication.title')}
+    description={t('settings.security.basicAuthentication.description')}
     defaultOpen={false}
     hasChanges={basicAuthHasChanges}
   >
     <div class="space-y-4">
       <Checkbox
         bind:checked={settings.basicAuth.enabled}
-        label="Enable Password Authentication"
+        label={t('settings.security.basicAuthentication.enableLabel')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateBasicAuthEnabled(settings.basicAuth.enabled)}
       />
@@ -280,11 +280,11 @@
       {#if settings.basicAuth?.enabled}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <PasswordField
-            label="Password"
+            label={t('settings.security.basicAuthentication.passwordLabel')}
             value={settings.basicAuth.password}
             onUpdate={updateBasicAuthPassword}
             placeholder=""
-            helpText="Limit access to settings with a password."
+            helpText={t('settings.security.basicAuthentication.passwordHelpText')}
             disabled={store.isLoading || store.isSaving}
             allowReveal={true}
           />
@@ -295,8 +295,8 @@
 
   <!-- OAuth2 Social Authentication -->
   <SettingsSection
-    title="OAuth2 Social Authentication"
-    description="Single sign-on to log in with your existing account"
+    title={t('settings.security.oauth.title')}
+    description={t('settings.security.oauth.description')}
     defaultOpen={false}
     hasChanges={oauthHasChanges}
   >
@@ -322,12 +322,12 @@
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Google OAuth
+          {t('settings.security.oauth.google.title')}
         </h4>
 
         <Checkbox
           bind:checked={settings.googleAuth.enabled}
-          label="Allow OAuth2 Login via Google"
+          label={t('settings.security.oauth.google.enableLabel')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateGoogleAuthEnabled(settings.googleAuth.enabled)}
         />
@@ -337,7 +337,7 @@
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
-                <p class="font-medium mb-1">Redirect URI for Google Cloud Console:</p>
+                <p class="font-medium mb-1">{t('settings.security.oauth.google.redirectUriTitle')}</p>
                 <code class="text-xs bg-base-300 px-2 py-1 rounded">{googleRedirectURI}</code>
               </div>
               <a
@@ -346,28 +346,28 @@
                 rel="noopener"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
               >
-                Get your credentials from Google Cloud Console
+                {t('settings.security.oauth.google.getCredentialsLabel')}
                 {@html systemIcons.externalLink}
               </a>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <PasswordField
-                label="Client ID"
+                label={t('settings.security.oauth.google.clientIdLabel')}
                 value={settings.googleAuth.clientId}
                 onUpdate={updateGoogleClientId}
                 placeholder=""
-                helpText="The OAuth 2.0 Client ID obtained from Google Cloud Console when setting up OAuth credentials."
+                helpText={t('settings.security.oauth.google.clientIdHelpText')}
                 disabled={store.isLoading || store.isSaving}
                 allowReveal={true}
               />
 
               <PasswordField
-                label="Client Secret"
+                label={t('settings.security.oauth.google.clientSecretLabel')}
                 value={settings.googleAuth.clientSecret}
                 onUpdate={updateGoogleClientSecret}
                 placeholder=""
-                helpText="The OAuth 2.0 Client Secret obtained from Google Cloud Console when setting up OAuth credentials."
+                helpText={t('settings.security.oauth.google.clientSecretHelpText')}
                 disabled={store.isLoading || store.isSaving}
                 allowReveal={true}
               />
@@ -376,7 +376,7 @@
             <TextInput
               id="google-user-id"
               bind:value={(settings.googleAuth as any).userId}
-              label="User ID"
+              label={t('settings.security.oauth.google.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
               onchange={() => updateGoogleUserId((settings.googleAuth as any).userId || '')}
@@ -393,12 +393,12 @@
               d="M12 0C5.374 0 0 5.373 0 12 0 17.302 3.438 21.8 8.207 23.387c.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"
             />
           </svg>
-          GitHub OAuth
+          {t('settings.security.oauth.github.title')}
         </h4>
 
         <Checkbox
           bind:checked={settings.githubAuth.enabled}
-          label="Allow OAuth2 Login via GitHub"
+          label={t('settings.security.oauth.github.enableLabel')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateGithubAuthEnabled(settings.githubAuth.enabled)}
         />
@@ -408,7 +408,7 @@
             <!-- Redirect URI Information -->
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
-                <p class="font-medium mb-1">Redirect URI for GitHub Developer Settings:</p>
+                <p class="font-medium mb-1">{t('settings.security.oauth.github.redirectUriTitle')}</p>
                 <code class="text-xs bg-base-300 px-2 py-1 rounded">{githubRedirectURI}</code>
               </div>
               <a
@@ -417,28 +417,28 @@
                 rel="noopener"
                 class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
               >
-                Get your credentials from GitHub Developer Settings
+                {t('settings.security.oauth.github.getCredentialsLabel')}
                 {@html systemIcons.externalLink}
               </a>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <PasswordField
-                label="Client ID"
+                label={t('settings.security.oauth.github.clientIdLabel')}
                 value={settings.githubAuth.clientId}
                 onUpdate={updateGithubClientId}
                 placeholder=""
-                helpText="The OAuth 2.0 Client ID obtained from GitHub Developer Settings when setting up OAuth credentials."
+                helpText={t('settings.security.oauth.github.clientIdHelpText')}
                 disabled={store.isLoading || store.isSaving}
                 allowReveal={true}
               />
 
               <PasswordField
-                label="Client Secret"
+                label={t('settings.security.oauth.github.clientSecretLabel')}
                 value={settings.githubAuth.clientSecret}
                 onUpdate={updateGithubClientSecret}
                 placeholder=""
-                helpText="The OAuth 2.0 Client Secret obtained from GitHub Developer Settings when setting up OAuth credentials."
+                helpText={t('settings.security.oauth.github.clientSecretHelpText')}
                 disabled={store.isLoading || store.isSaving}
                 allowReveal={true}
               />
@@ -447,7 +447,7 @@
             <TextInput
               id="github-user-id"
               bind:value={(settings.githubAuth as any).userId}
-              label="User ID"
+              label={t('settings.security.oauth.github.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
               onchange={() => updateGithubUserId((settings.githubAuth as any).userId || '')}
@@ -460,8 +460,8 @@
 
   <!-- Bypass Authentication -->
   <SettingsSection
-    title="Bypass Authentication"
-    description="Allow access to settings without authentication"
+    title={t('settings.security.bypassAuthentication.title')}
+    description={t('settings.security.bypassAuthentication.description')}
     defaultOpen={false}
     hasChanges={subnetBypassHasChanges}
   >

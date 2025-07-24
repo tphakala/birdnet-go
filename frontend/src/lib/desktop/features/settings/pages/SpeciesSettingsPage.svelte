@@ -381,8 +381,8 @@
 {:else}
   <!-- Include Species Section -->
   <SettingsSection
-    title="Always Include Species"
-    description="Species in this list will always be included in range of detected species"
+    title={t('settings.species.alwaysInclude.title')}
+    description={t('settings.species.alwaysInclude.description')}
     defaultOpen={true}
     hasChanges={includeHasChanges}
   >
@@ -406,7 +406,7 @@
 
         {#if settings.include.length === 0}
           <div class="text-sm text-base-content/60 italic p-2 text-center">
-            No species added to include list
+            {t('settings.species.alwaysInclude.noSpeciesMessage')}
           </div>
         {/if}
       </div>
@@ -427,8 +427,8 @@
 
   <!-- Exclude Species Section -->
   <SettingsSection
-    title="Always Exclude Species"
-    description="Species in this list will always be excluded from detection"
+    title={t('settings.species.alwaysExclude.title')}
+    description={t('settings.species.alwaysExclude.description')}
     defaultOpen={true}
     hasChanges={excludeHasChanges}
   >
@@ -452,7 +452,7 @@
 
         {#if settings.exclude.length === 0}
           <div class="text-sm text-base-content/60 italic p-2 text-center">
-            No species added to exclude list
+            {t('settings.species.alwaysExclude.noSpeciesMessage')}
           </div>
         {/if}
       </div>
@@ -473,22 +473,21 @@
 
   <!-- Custom Configuration Section -->
   <SettingsSection
-    title="Custom Species Configuration"
-    description="Species specific threshold values, detection intervals, and actions"
+    title={t('settings.species.customConfiguration.title')}
+    description={t('settings.species.customConfiguration.description')}
     defaultOpen={true}
     hasChanges={configHasChanges}
   >
     <div class="space-y-4">
       <!-- Help text -->
       <div class="text-sm text-base-content mb-4">
-        <p>Configure species-specific settings:</p>
+        <p>{t('settings.species.customConfiguration.helpText.intro')}</p>
         <ul class="list-disc list-inside pl-4 text-xs">
-          <li><b>Threshold</b>: Minimum confidence score (0-1) required for detection</li>
+          <li><b>Threshold</b>: {t('settings.species.customConfiguration.helpText.threshold')}</li>
           <li>
-            <b>Interval</b>: Minimum time in seconds between detections of the same species (0 = use
-            global default)
+            <b>Interval</b>: {t('settings.species.customConfiguration.helpText.interval')}
           </li>
-          <li><b>Actions</b>: Custom commands to execute when this species is detected</li>
+          <li><b>Actions</b>: {t('settings.species.customConfiguration.helpText.actions')}</li>
         </ul>
       </div>
 
@@ -497,9 +496,9 @@
         <!-- Column headers -->
         {#if Object.keys(settings.config).length > 0}
           <div class="grid grid-cols-12 gap-2 mb-1 text-xs font-medium text-base-content/70">
-            <div class="col-span-5 px-2">Species</div>
-            <div class="col-span-6 px-2">Settings</div>
-            <div class="col-span-1 px-2 text-right">Actions</div>
+            <div class="col-span-5 px-2">{t('settings.species.customConfiguration.columnHeaders.species')}</div>
+            <div class="col-span-6 px-2">{t('settings.species.customConfiguration.columnHeaders.settings')}</div>
+            <div class="col-span-1 px-2 text-right">{t('settings.species.customConfiguration.columnHeaders.actions')}</div>
           </div>
         {/if}
 
@@ -516,24 +515,24 @@
               </div>
               <div class="col-span-2">
                 <NumberField
-                  label="Threshold"
+                  label={t('settings.species.customConfiguration.labels.threshold')}
                   value={editConfigThreshold}
                   onUpdate={value => (editConfigThreshold = value)}
                   min={0}
                   max={1}
                   step={0.01}
-                  placeholder="0.5"
+                  placeholder={t('settings.species.customConfiguration.addForm.thresholdPlaceholder')}
                 />
               </div>
               <div class="col-span-2">
                 <NumberField
-                  label="Interval"
+                  label={t('settings.species.customConfiguration.labels.interval')}
                   value={editConfigInterval}
                   onUpdate={value => (editConfigInterval = value)}
                   min={0}
                   max={3600}
                   step={1}
-                  placeholder="0"
+                  placeholder={t('settings.species.customConfiguration.addForm.intervalPlaceholder')}
                 />
               </div>
               <div class="col-span-2 flex space-x-1">
@@ -567,18 +566,18 @@
                 <!-- Settings badges -->
                 <div class="col-span-6 flex flex-wrap gap-1">
                   <span class="badge badge-sm badge-neutral">
-                    Threshold: {config.threshold.toFixed(2)}
+                    {t('settings.species.customConfiguration.badges.threshold', { value: config.threshold.toFixed(2) })}
                   </span>
                   {#if config.interval > 0}
                     <span class="badge badge-sm badge-secondary">
-                      Interval: {config.interval}s
+                      {t('settings.species.customConfiguration.badges.interval', { value: config.interval })}
                     </span>
                   {/if}
                   {#if config.actions?.length > 0}
-                    <span class="badge badge-sm badge-accent">Custom Action</span>
+                    <span class="badge badge-sm badge-accent">{t('settings.species.customConfiguration.badges.customAction')}</span>
                   {/if}
                   {#if config.actions?.[0]?.executeDefaults}
-                    <span class="badge badge-sm badge-info">+Defaults</span>
+                    <span class="badge badge-sm badge-info">{t('settings.species.customConfiguration.badges.executeDefaults')}</span>
                   {/if}
                 </div>
 
@@ -589,17 +588,17 @@
                     <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
                       <li>
                         <button onclick={() => startEditConfig(species)}
-                          >{t('common.buttons.edit-config')}</button
+                          >{t('settings.species.customConfiguration.dropdown.editConfig')}</button
                         >
                       </li>
                       <li>
                         <button onclick={() => openActionsModal(species)}
-                          >{t('common.buttons.add-action')}</button
+                          >{t('settings.species.customConfiguration.dropdown.addAction')}</button
                         >
                       </li>
                       <li>
                         <button onclick={() => removeConfig(species)} class="text-error">
-                          Remove
+                          {t('settings.species.customConfiguration.dropdown.remove')}
                         </button>
                       </li>
                     </ul>
@@ -612,7 +611,7 @@
 
         {#if Object.keys(settings.config).length === 0}
           <div class="text-sm text-base-content/60 italic p-2 text-center">
-            No custom species configurations added
+            {t('settings.species.customConfiguration.noConfigurationsMessage')}
           </div>
         {/if}
       </div>
@@ -624,7 +623,7 @@
           <div class="col-span-6">
             <SpeciesInput
               bind:value={configInputValue}
-              placeholder="Species name"
+              placeholder={t('settings.species.customConfiguration.addForm.speciesPlaceholder')}
               predictions={configPredictions}
               size="sm"
               onInput={updateConfigPredictions}
@@ -637,25 +636,25 @@
 
           <div class="col-span-2">
             <NumberField
-              label="Threshold"
+              label={t('settings.species.customConfiguration.labels.threshold')}
               value={newThreshold}
               onUpdate={value => (newThreshold = value)}
               min={0}
               max={1}
               step={0.01}
-              placeholder="0.5"
+              placeholder={t('settings.species.customConfiguration.addForm.thresholdPlaceholder')}
             />
           </div>
 
           <div class="col-span-2">
             <NumberField
-              label="Interval (sec)"
+              label={t('settings.species.customConfiguration.labels.intervalSeconds')}
               value={newInterval}
               onUpdate={value => (newInterval = value)}
               min={0}
               max={3600}
               step={1}
-              placeholder="0"
+              placeholder={t('settings.species.customConfiguration.addForm.intervalPlaceholder')}
             />
           </div>
 
@@ -666,7 +665,7 @@
               onclick={addConfig}
               disabled={!configInputValue.trim() || newThreshold < 0 || newThreshold > 1}
             >
-              Add
+              {t('settings.species.customConfiguration.labels.addButton')}
             </button>
           </div>
         </div>
@@ -679,67 +678,67 @@
 {#if showActionsModal}
   <div class="modal modal-open">
     <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
-      <h3 class="text-lg font-bold mb-4">Actions for {currentSpecies}</h3>
+      <h3 class="text-lg font-bold mb-4">{t('settings.species.actionsModal.title', { species: currentSpecies })}</h3>
 
       <div class="space-y-4">
         <SelectField
-          label="Action Type"
+          label={t('settings.species.actionsModal.actionType.label')}
           bind:value={currentAction.type}
-          options={[{ value: 'ExecuteCommand', label: 'Execute Command' }]}
+          options={[{ value: 'ExecuteCommand', label: t('settings.species.actionsModal.actionType.executeCommand') }]}
           disabled={true}
-          helpText="Currently, only Execute Command actions are supported"
+          helpText={t('settings.species.actionsModal.actionType.onlySupported')}
         />
 
         <TextInput
-          label="Command"
+          label={t('settings.species.actionsModal.command.label')}
           bind:value={currentAction.command}
           placeholder={t('settings.species.commandPathPlaceholder')}
-          helpText="Provide the full path to the command or script you want to execute"
+          helpText={t('settings.species.actionsModal.command.helpText')}
         />
 
         <div class="form-control">
           <label class="label" for="action-parameters">
-            <span class="label-text">Parameters</span>
+            <span class="label-text">{t('settings.species.actionsModal.parameters.label')}</span>
           </label>
           <TextInput
             id="action-parameters"
             bind:value={currentAction.parameters}
             placeholder={t('settings.species.parametersPlaceholder')}
             readonly={true}
-            helpText="These values will be passed to your command in the order listed"
+            helpText={t('settings.species.actionsModal.parameters.helpText')}
           />
         </div>
 
         <div>
-          <div class="font-medium text-sm mb-2">Available Parameters</div>
+          <div class="font-medium text-sm mb-2">{t('settings.species.actionsModal.parameters.availableTitle')}</div>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="btn btn-xs" onclick={() => addParameter('CommonName')}
-              >CommonName</button
+              >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button
             >
             <button type="button" class="btn btn-xs" onclick={() => addParameter('ScientificName')}
-              >ScientificName</button
+              >{t('settings.species.actionsModal.parameters.buttons.scientificName')}</button
             >
             <button type="button" class="btn btn-xs" onclick={() => addParameter('Confidence')}
-              >Confidence</button
+              >{t('settings.species.actionsModal.parameters.buttons.confidence')}</button
             >
             <button type="button" class="btn btn-xs" onclick={() => addParameter('Time')}
-              >Time</button
+              >{t('settings.species.actionsModal.parameters.buttons.time')}</button
             >
             <button type="button" class="btn btn-xs" onclick={() => addParameter('Source')}
-              >Source</button
+              >{t('settings.species.actionsModal.parameters.buttons.source')}</button
             >
           </div>
           <div class="mt-2">
             <button type="button" class="btn btn-xs btn-warning" onclick={clearParameters}
-              >Clear Parameters</button
+              >{t('settings.species.actionsModal.parameters.buttons.clearParameters')}</button
             >
           </div>
         </div>
 
         <Checkbox
           bind:checked={currentAction.executeDefaults}
-          label="Also run default actions (database storage, notifications, etc.)"
-          helpText="When enabled, both your custom action and the system's default actions will run. When disabled, only your custom action will execute."
+          label={t('settings.species.actionsModal.executeDefaults.label')}
+          helpText={t('settings.species.actionsModal.executeDefaults.helpText')}
         />
       </div>
 
