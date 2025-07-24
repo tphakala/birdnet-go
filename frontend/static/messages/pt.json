@@ -1,10 +1,938 @@
 {
-  "common": {},
-  "navigation": {},
-  "about": {},
-  "notifications": {},
-  "search": {},
-  "error": {},
-  "settings": {},
-  "system": {}
+  "common": {
+    "loading": "Carregando...",
+    "error": "Erro",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "reset": "Redefinir",
+    "refresh": "Atualizar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "search": "Pesquisar",
+    "filter": "Filtrar",
+    "sort": "Ordenar",
+    "actions": "Ações",
+    "settings": "Configurações",
+    "close": "Fechar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "previous": "Anterior",
+    "yes": "Sim",
+    "no": "Não",
+    "ok": "OK",
+    "apply": "Aplicar",
+    "clear": "Limpar",
+    "goToDashboard": "Ir para o painel",
+    "reportIssue": "Relatar problema",
+    "loginToViewDetails": "Faça login para ver detalhes",
+    "pageNotFound": "Página não encontrada",
+    "internalServerError": "Erro interno do servidor",
+    "buttons": {
+      "save": "Salvar alterações",
+      "reset": "Redefinir",
+      "delete": "Excluir",
+      "cancel": "Cancelar",
+      "apply": "Aplicar",
+      "confirm": "Confirmar",
+      "edit": "Editar",
+      "close": "Fechar",
+      "back": "Voltar",
+      "next": "Próximo",
+      "previous": "Anterior",
+      "yes": "Sim",
+      "no": "Não",
+      "ok": "OK",
+      "edit-config": "Editar configuração",
+      "add-action": "Adicionar ação"
+    },
+    "ui": {
+      "loading": "Carregando...",
+      "noData": "Sem dados disponíveis",
+      "empty": "Nenhum item encontrado",
+      "error": "Ocorreu um erro",
+      "retry": "Tentar novamente",
+      "dismiss": "Descartar",
+      "showMore": "Mostrar mais",
+      "showLess": "Mostrar menos",
+      "selectAll": "Selecionar tudo",
+      "selectNone": "Desmarcar tudo",
+      "required": "Obrigatório",
+      "optional": "Opcional"
+    },
+    "status": {
+      "success": "Sucesso",
+      "error": "Erro",
+      "warning": "Aviso",
+      "info": "Informação",
+      "pending": "Pendente",
+      "processing": "Processando",
+      "completed": "Concluído",
+      "failed": "Falhou"
+    },
+    "validation": {
+      "required": "Este campo é obrigatório",
+      "invalid": "Valor inválido",
+      "minLength": "Deve ter pelo menos {min} caracteres",
+      "maxLength": "Não deve exceder {max} caracteres",
+      "minValue": "Deve ser pelo menos {min}",
+      "maxValue": "Não deve exceder {max}",
+      "email": "Endereço de e-mail inválido",
+      "url": "URL inválida",
+      "pattern": "Formato inválido"
+    },
+    "aria": {
+      "closeModal": "Fechar janela modal",
+      "dismissAlert": "Descartar alerta",
+      "closeNotification": "Fechar notificação",
+      "toggleDropdown": "Alternar menu suspenso",
+      "sortAscending": "Ordenar crescente",
+      "selectLanguage": "Selecionar idioma",
+      "sortDescending": "Ordenar decrescente",
+      "expandSection": "Expandir seção",
+      "collapseSection": "Recolher seção",
+      "playAudio": "Reproduzir áudio",
+      "pauseAudio": "Pausar áudio",
+      "loading": "Carregando conteúdo",
+      "saveChanges": "Salvar alterações",
+      "cancelEdit": "Cancelar edição",
+      "editSpecies": "Editar espécie",
+      "removeSpecies": "Remover espécie",
+      "dismissError": "Descartar erro"
+    },
+    "modal": {
+      "confirmAction": "Confirmar ação",
+      "confirmMessage": "Tem certeza de que deseja executar esta ação?"
+    },
+    "review": {
+      "modalTitle": "Revisar detecção: {species}",
+      "status": {
+        "verifiedCorrect": "Verificado correto",
+        "falsePositive": "Falso positivo",
+        "notReviewed": "Não revisado"
+      },
+      "form": {
+        "correctDetection": "Detecção correta",
+        "falsePositiveLabel": "Falso positivo"
+      },
+      "errors": {
+        "saveFailed": "Falha ao salvar revisão. Por favor, tente novamente.",
+        "noAudio": "Nenhuma gravação de áudio disponível para esta detecção."
+      }
+    }
+  },
+  "navigation": {
+    "dashboard": "Painel",
+    "detections": "Detecções",
+    "search": "Pesquisar",
+    "analytics": "Análises",
+    "notifications": "Notificações",
+    "system": "Sistema",
+    "settings": "Configurações",
+    "about": "Sobre",
+    "toggleSidebar": "Alternar barra lateral",
+    "mainNavigation": "Navegação principal",
+    "closeSidebar": "Fechar barra lateral",
+    "analyticsSubmenu": "Submenu de análises",
+    "settingsSubmenu": "Submenu de configurações"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "Uma interface moderna para detecção e classificação de sons de pássaros em tempo real",
+    "logoAlt": "Logo BirdNET-Go",
+    "overview": "Visão geral",
+    "overviewText": "BirdNET-Go é uma implementação baseada em Go para detecção e classificação de sons de pássaros em tempo real, construída sobre a base do projeto BirdNET. Esta aplicação fornece uma interface amigável para monitoramento e análise contínuos de sons de pássaros.",
+    "birdnetProject": "Projeto BirdNET",
+    "birdnetDescription": "BirdNET-Go não seria possível sem o trabalho inovador do projeto BirdNET. O modelo de inteligência artificial que alimenta as capacidades de detecção do BirdNET-Go é resultado da pesquisa e desenvolvimento inovadores do projeto BirdNET.",
+    "developedBy": "Desenvolvido por",
+    "developersText": "O K. Lisa Yang Center for Conservation Bioacoustics no Cornell Lab of Ornithology em colaboração com a Universidade Tecnológica de Chemnitz:",
+    "visitBirdnetAnalyzer": "Visitar projeto BirdNET-Analyzer",
+    "contributors": "Colaboradores",
+    "contributorsText": "BirdNET-Go cresceu e melhorou graças aos esforços colaborativos de muitas pessoas. Suas contribuições, desde melhorias no código até sugestões de recursos, foram inestimáveis para melhorar este projeto.",
+    "mainDeveloper": "Desenvolvedor principal",
+    "githubContributors": "Colaboradores do GitHub",
+    "contributorsNote": "Agradecimentos especiais a estes colaboradores por seu valioso trabalho na melhoria do BirdNET-Go:",
+    "communityAcknowledgment": "Reconhecimento da comunidade",
+    "communityText": "Também gostaríamos de estender nossa gratidão a todos os usuários que contribuíram através de:",
+    "bugReports": "Relatórios de bugs e rastreamento de problemas",
+    "featureSuggestions": "Sugestões de recursos e feedback",
+    "testing": "Testes e validação",
+    "documentation": "Melhorias na documentação",
+    "additionalCredits": "Créditos adicionais",
+    "birdnetPiProject": "Projeto BirdNET-Pi",
+    "birdnetPiDescription": "Agradecimentos especiais a Patrick McGuire por seu trabalho inspirador no BirdNET-Pi, que influenciou o desenvolvimento do BirdNET-Go. BirdNET-Pi demonstra o potencial da detecção de sons de pássaros em dispositivos embarcados e estabeleceu um alto padrão para desenvolvimento orientado pela comunidade.",
+    "visitBirdnetPi": "Visitar projeto BirdNET-Pi",
+    "labelTranslations": "Traduções de rótulos BirdNET",
+    "labelTranslationsBy": "Fornecidas por Patrick Levin para o projeto BirdNET-Pi por Patrick McGuire",
+    "patrickLevinGithub": "GitHub de Patrick Levin",
+    "versionInformation": "Informações da versão",
+    "currentVersion": "Versão atual",
+    "buildDate": "Data de compilação",
+    "developmentBuild": "Versão de desenvolvimento",
+    "unknown": "Desconhecida",
+    "licenseInformation": "Informações de licença",
+    "licenseText": "Tanto o modelo de IA BirdNET quanto o BirdNET-Go estão licenciados sob a",
+    "ccLicense": "Licença Creative Commons Atribuição-NãoComercial-CompartilhaIgual 4.0 Internacional",
+    "licenseDescription": "Esta licença permite que outros remixem, adaptem e construam sobre este trabalho de forma não comercial, desde que o crédito apropriado seja dado e as novas criações sejam licenciadas sob termos idênticos.",
+    "dependencyLicenses": "Licenças de dependências"
+  },
+  "notifications": {
+    "title": "Notificações",
+    "subtitle": "Ver e gerenciar todas as notificações do sistema",
+    "filters": {
+      "allStatus": "Todos os status",
+      "unread": "Não lida",
+      "read": "Lida",
+      "acknowledged": "Reconhecida",
+      "allTypes": "Todos os tipos",
+      "errors": "Erros",
+      "warnings": "Avisos",
+      "info": "Informações",
+      "system": "Sistema",
+      "detections": "Detecções",
+      "allPriorities": "Todas as prioridades",
+      "critical": "Crítica",
+      "high": "Alta",
+      "medium": "Média",
+      "low": "Baixa"
+    },
+    "actions": {
+      "markAllRead": "Marcar todas como lidas",
+      "refresh": "Atualizar notificações",
+      "markAsRead": "Marcar como lida",
+      "acknowledge": "Reconhecer",
+      "delete": "Excluir",
+      "confirmDelete": "Confirmar exclusão",
+      "deleteConfirmation": "Tem certeza de que deseja excluir esta notificação?"
+    },
+    "aria": {
+      "filterByStatus": "Filtrar por status",
+      "filterByType": "Filtrar por tipo",
+      "filterByPriority": "Filtrar por prioridade"
+    },
+    "empty": {
+      "title": "Nenhuma notificação encontrada",
+      "subtitle": "Ajuste seus filtros ou verifique novamente mais tarde"
+    },
+    "errors": {
+      "loadFailed": "Falha ao carregar notificações. Por favor, tente novamente.",
+      "deleteFailed": "Falha ao excluir notificação. Por favor, tente novamente.",
+      "networkError": "Erro de rede. Por favor, tente novamente."
+    },
+    "timeAgo": {
+      "justNow": "Agora mesmo",
+      "minutesAgo": "Há {minutes}min",
+      "hoursAgo": "Há {hours}h",
+      "daysAgo": "Há {days}d"
+    }
+  },
+  "search": {
+    "title": "Filtros de pesquisa",
+    "results": "Resultados da pesquisa",
+    "resultsCount": "{count, plural, =0 {Nenhum resultado} one {# resultado} other {# resultados}}",
+    "noSearchPerformed": "Nenhuma pesquisa realizada ainda",
+    "noSearchPerformedHint": "Use os filtros de pesquisa acima para encontrar detecções de pássaros",
+    "loadingResults": "Carregando resultados...",
+    "noResultsFound": "Nenhum resultado encontrado",
+    "noResultsHint": "Tente ajustar seus filtros de pesquisa",
+    "fields": {
+      "species": "Espécie",
+      "speciesPlaceholder": "Digite o nome da espécie",
+      "speciesHelp": "Digite o nome completo ou parcial da espécie (não diferencia maiúsculas/minúsculas)",
+      "dateRange": "Intervalo de datas",
+      "dateRangeHelp": "Filtrar detecções por intervalo de datas (deixe vazio para todas as datas)",
+      "from": "De",
+      "to": "Até",
+      "confidenceRange": "Intervalo de confiança (%)",
+      "confidenceMin": "Porcentagem mínima de confiança",
+      "confidenceMax": "Porcentagem máxima de confiança",
+      "verifiedStatus": "Status verificado",
+      "lockedStatus": "Status bloqueado",
+      "timeOfDay": "Hora do dia"
+    },
+    "advancedFilters": "Filtros avançados",
+    "verifiedOptions": {
+      "any": "Qualquer status",
+      "verified": "Apenas verificados",
+      "unverified": "Apenas não verificados"
+    },
+    "lockedOptions": {
+      "any": "Qualquer status",
+      "locked": "Apenas bloqueados",
+      "unlocked": "Apenas desbloqueados"
+    },
+    "timeOfDayOptions": {
+      "any": "Qualquer hora",
+      "day": "Apenas dia",
+      "night": "Apenas noite",
+      "sunrise": "Nascer do sol +/- 30min",
+      "sunset": "Pôr do sol +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Data (Mais recente primeiro)",
+      "dateAsc": "Data (Mais antigo primeiro)",
+      "speciesAsc": "Espécie (A-Z)",
+      "confidenceDesc": "Confiança (Alta-Baixa)"
+    },
+    "tableHeaders": {
+      "dateTime": "Data e hora",
+      "timeOfDay": "Hora do dia",
+      "species": "Espécie",
+      "confidence": "Confiança",
+      "status": "Status",
+      "actions": "Ações"
+    },
+    "statusBadges": {
+      "verified": "Verificado",
+      "false": "Falso",
+      "unverified": "Não verificado",
+      "locked": "Bloqueado",
+      "unlocked": "Desbloqueado"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Reprodutor de áudio",
+      "expandDetails": "Expandir detalhes para {species}",
+      "collapseDetails": "Recolher detalhes para {species}",
+      "playAudio": "Reproduzir áudio para {species}",
+      "viewDetails": "Ver detalhes para {species}",
+      "unknownSpecies": "Espécie desconhecida",
+      "clickToCollapse": "Clique para recolher"
+    },
+    "errors": {
+      "searchFailed": "Pesquisa falhou: {error}",
+      "minMaxConfidence": "A confiança mínima não pode ser maior que a confiança máxima."
+    },
+    "pagination": {
+      "page": "Página {current} de {total}",
+      "goToPrevious": "Ir para a página anterior",
+      "goToNext": "Ir para a próxima página"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Página não encontrada",
+      "goToDashboard": "Ir para o painel"
+    },
+    "500": {
+      "code": "500",
+      "title": "Erro interno do servidor",
+      "defaultMessage": "Ocorreu um erro interno do servidor.",
+      "goToDashboard": "Ir para o painel"
+    },
+    "generic": {
+      "errorDetails": "Detalhes do erro",
+      "stackTrace": "Rastreamento de pilha",
+      "goToDashboard": "Ir para o painel",
+      "reportIssue": "Relatar problema",
+      "loginToViewDetails": "Faça login para ver detalhes"
+    }
+  },
+  "dashboard": {
+    "dailySummary": {
+      "title": "Resumo diário",
+      "columns": {
+        "species": "Espécie",
+        "detections": "Detecções"
+      },
+      "navigation": {
+        "previousDay": "Dia anterior",
+        "nextDay": "Próximo dia",
+        "today": "Hoje"
+      },
+      "tooltips": {
+        "viewHourly": "Ver todas as detecções às {hour}:00",
+        "viewBiHourly": "Ver todas as detecções de {startHour}:00 a {endHour}:00",
+        "viewSixHourly": "Ver todas as detecções de {startHour}:00 a {endHour}:00",
+        "hourlyDetections": "{count} detecções às {hour}:00 - Clique para ver",
+        "biHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver",
+        "sixHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver"
+      },
+      "noSpecies": "Nenhuma espécie detectada nesta data"
+    },
+    "recentDetections": {
+      "title": "Detecções recentes",
+      "controls": {
+        "show": "Mostrar:",
+        "refresh": "Atualizar detecções"
+      },
+      "headers": {
+        "dateTime": "Data e hora",
+        "commonName": "Nome comum",
+        "thumbnail": "Miniatura",
+        "status": "Status",
+        "recording": "Gravação",
+        "actions": "Ações"
+      },
+      "status": {
+        "verified": "Verificado",
+        "false": "Falso",
+        "unverified": "Não verificado",
+        "locked": "Bloqueado"
+      },
+      "modals": {
+        "showSpecies": "Mostrar espécie {species}",
+        "ignoreSpecies": "Ignorar espécie {species}",
+        "showSpeciesConfirm": "Tem certeza de que deseja mostrar futuras detecções de {species}?",
+        "ignoreSpeciesConfirm": "Tem certeza de que deseja ignorar futuras detecções de {species}? Isso afetará apenas novas detecções - as detecções existentes permanecerão no banco de dados.",
+        "unlockDetection": "Desbloquear detecção",
+        "lockDetection": "Bloquear detecção",
+        "unlockDetectionConfirm": "Tem certeza de que deseja desbloquear esta detecção de {species}? Isso permitirá que seja excluída durante a limpeza regular.",
+        "lockDetectionConfirm": "Tem certeza de que deseja bloquear esta detecção de {species}? Isso impedirá que seja excluída durante a limpeza regular.",
+        "deleteDetection": "Excluir detecção de {species}",
+        "deleteDetectionConfirm": "Tem certeza de que deseja excluir a detecção de {species}? Esta ação não pode ser desfeita."
+      },
+      "noDetections": "Nenhuma detecção recente"
+    },
+    "errors": {
+      "dailySummaryFetch": "Falha ao buscar resumo diário: {status}",
+      "dailySummaryLoad": "Falha ao carregar resumo diário",
+      "recentDetectionsFetch": "Falha ao buscar detecções recentes: {status}",
+      "recentDetectionsLoad": "Falha ao carregar detecções recentes",
+      "configFetch": "Falha ao buscar configuração do painel: {status}"
+    }
+  },
+  "detections": {
+    "title": "Detecções",
+    "titles": {
+      "hourly": "Resultados por hora às {hour}:00 em {date}",
+      "hourlyRange": "Resultados por hora de {startHour}:00 a {endHour}:00 em {date}",
+      "species": "Resultados para {species} em {date}",
+      "search": "Resultados da pesquisa para \"{query}\"",
+      "allDetections": "Todas as detecções em {date}"
+    },
+    "headers": {
+      "dateTime": "Data e hora",
+      "weather": "Clima",
+      "species": "Espécie",
+      "thumbnail": "Miniatura",
+      "status": "Status",
+      "recording": "Gravação",
+      "actions": "Ações"
+    },
+    "empty": {
+      "title": "Nenhuma detecção encontrada",
+      "description": "Tente ajustar seus filtros ou critérios de pesquisa"
+    },
+    "pagination": {
+      "showing": "Mostrando {from} a {to} de {total} resultados"
+    },
+    "weather": {
+      "noData": "Sem dados meteorológicos"
+    },
+    "row": {
+      "viewDetails": "Ver detalhes para {species}"
+    }
+  },
+  "system": {
+    "title": "Painel do sistema",
+    "refreshData": "Atualizar dados",
+    "aria": {
+      "refreshData": "Atualizar dados do sistema"
+    },
+    "systemInfo": {
+      "title": "Informações do sistema",
+      "os": "Sistema operacional",
+      "hostname": "Nome do host",
+      "uptime": "Tempo de atividade",
+      "cpus": "CPUs",
+      "model": "Modelo do sistema",
+      "timezone": "Fuso horário",
+      "temperature": "Temperatura do CPU",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Dados de temperatura não disponíveis"
+    },
+    "diskUsage": {
+      "title": "Uso do disco",
+      "emptyMessage": "Nenhuma informação de disco disponível"
+    },
+    "memoryUsage": {
+      "title": "Uso de memória",
+      "ramUsage": "Uso de RAM"
+    },
+    "processInfo": {
+      "title": "Informações de processos",
+      "headers": {
+        "pid": "PID",
+        "name": "Nome",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Memória",
+        "uptime": "Tempo ativo"
+      },
+      "showAll": "Mostrar todos os processos",
+      "showBirdnetOnly": "Mostrar apenas BirdNET"
+    },
+    "errors": {
+      "systemInfo": "Falha ao carregar informações do sistema: {error}",
+      "diskUsage": "Falha ao carregar uso do disco: {error}",
+      "memoryUsage": "Falha ao carregar uso de memória: {error}",
+      "temperature": "Falha ao carregar temperatura: {error}",
+      "processes": "Falha ao carregar informações de processos: {error}"
+    }
+  },
+  "analytics": {
+    "title": "Visão geral",
+    "loadingError": "Falha ao carregar alguns dados analíticos. Por favor, tente novamente mais tarde.",
+    "stats": {
+      "totalDetections": "Total de detecções",
+      "uniqueSpecies": "Espécies únicas",
+      "avgConfidence": "Confiança média",
+      "mostCommon": "Mais comum",
+      "none": "Nenhuma",
+      "detections": "detecções",
+      "totalSpecies": "Total de espécies",
+      "overallAverage": "Média geral"
+    },
+    "periods": {
+      "today": "Hoje",
+      "lastWeek": "Últimos 7 dias",
+      "lastMonth": "Últimos 30 dias",
+      "last90Days": "Últimos 90 dias",
+      "lastYear": "Últimos 12 meses",
+      "customRange": "Intervalo personalizado",
+      "allTime": "Todo o período"
+    },
+    "filters": {
+      "title": "Filtrar dados",
+      "timePeriod": "Período de tempo",
+      "from": "De",
+      "to": "Até",
+      "sortBy": "Ordenar por",
+      "searchSpecies": "Pesquisar espécie",
+      "searchPlaceholder": "Pesquisar por nome...",
+      "reset": "Redefinir",
+      "applyFilters": "Aplicar filtros",
+      "exportCsv": "Exportar CSV",
+      "species": "espécies",
+      "filtered": "(filtrado)"
+    },
+    "timePeriodOptions": {
+      "allTime": "Todo o período",
+      "today": "Hoje",
+      "lastWeek": "Últimos 7 dias",
+      "lastMonth": "Últimos 30 dias",
+      "last90Days": "Últimos 90 dias",
+      "lastYear": "Últimos 12 meses",
+      "customRange": "Intervalo personalizado"
+    },
+    "sortOptions": {
+      "mostDetections": "Mais detecções",
+      "fewestDetections": "Menos detecções",
+      "nameAZ": "Nome (A-Z)",
+      "nameZA": "Nome (Z-A)",
+      "recentlyFirstSeen": "Visto pela primeira vez recentemente",
+      "earliestFirstSeen": "Visto pela primeira vez mais cedo",
+      "recentlyLastSeen": "Visto pela última vez recentemente",
+      "highestConfidence": "Maior confiança"
+    },
+    "charts": {
+      "top10Species": "Top 10 espécies",
+      "detectionsByTimeOfDay": "Detecções por hora do dia",
+      "detectionTrends": "Tendências de detecção",
+      "newSpeciesDetected": "Novas espécies detectadas",
+      "noNewSpecies": "Nenhuma nova espécie detectada neste período.",
+      "noDataAvailable": "Sem dados disponíveis",
+      "numberOfDetections": "Número de detecções",
+      "detections": "Detecções",
+      "timePeriod": "Período de tempo",
+      "dailyDetections": "Detecções diárias",
+      "date": "Data",
+      "firstHeardOn": "Ouvido pela primeira vez em",
+      "firstHeardDate": "Data da primeira audição",
+      "firstHeard": "Primeira audição"
+    },
+    "recentDetections": {
+      "title": "Detecções recentes",
+      "headers": {
+        "dateTime": "Data e hora",
+        "species": "Espécie",
+        "confidence": "Confiança",
+        "timeOfDay": "Hora do dia"
+      },
+      "noRecentDetections": "Nenhuma detecção recente encontrada",
+      "unknownSpecies": "Desconhecida",
+      "unknown": "Desconhecida"
+    },
+    "species": {
+      "title": "Espécies",
+      "subtitle": "Lista completa de todas as espécies de pássaros que foram detectadas",
+      "speciesList": "Lista de espécies",
+      "switchToGrid": "Mudar para visualização em grade",
+      "switchToList": "Mudar para visualização em lista",
+      "noSpeciesFound": "Nenhuma espécie encontrada que corresponda aos seus filtros.",
+      "headers": {
+        "species": "Espécie",
+        "detections": "Detecções",
+        "avgConfidence": "Confiança média",
+        "maxConfidence": "Confiança máx.",
+        "firstDetected": "Primeira detecção",
+        "lastDetected": "Última detecção"
+      },
+      "card": {
+        "detections": "Detecções:",
+        "confidence": "Confiança:",
+        "first": "Primeira:"
+      }
+    }
+  },
+  "settings": {
+    "title": "Configurações - BirdNET-Go",
+    "loading": "Carregando configurações...",
+    "sections": {
+      "node": "Configurações principais",
+      "audio": "Configurações de áudio",
+      "filters": "Filtros de detecção",
+      "integration": "Integrações",
+      "security": "Segurança",
+      "species": "Espécies",
+      "support": "Suporte"
+    },
+    "notFound": {
+      "title": "Configurações não encontradas",
+      "message": "A seção de configurações solicitada \"{section}\" não pôde ser encontrada."
+    },
+    "actions": {
+      "save": "Salvar alterações",
+      "saving": "Salvando...",
+      "reset": "Redefinir",
+      "resetAriaLabel": "Redefinir todas as alterações",
+      "saveAriaLabel": "Salvar alterações",
+      "savingAriaLabel": "Salvando alterações...",
+      "unsavedChanges": "Alterações não salvas"
+    },
+    "card": {
+      "changed": "alterado",
+      "changedAriaLabel": "Configurações alteradas"
+    },
+    "main": {
+      "sections": {
+        "main": {
+          "title": "Configurações principais",
+          "description": "Configurar as principais configurações da aplicação"
+        },
+        "birdnet": {
+          "title": "Configurações do BirdNET",
+          "description": "Configurar configurações específicas do modelo de IA BirdNET"
+        },
+        "database": {
+          "title": "Configurações do banco de dados",
+          "description": "Configurações do banco de dados de detecções"
+        },
+        "ui": {
+          "title": "Configurações da interface do usuário",
+          "description": "Personalizar a interface do usuário"
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nome do nó",
+          "placeholder": "Digite o nome do nó",
+          "helpText": "O nome do nó é usado para identificar o sistema de origem em configurações multi-nó, também usado como identificador para mensagens MQTT."
+        },
+        "sensitivity": {
+          "label": "Sensibilidade",
+          "helpText": "Sensibilidade de detecção. Valores mais altos resultam em maior sensibilidade. Valores entre 0,5 e 1,5."
+        },
+        "threshold": {
+          "label": "Limiar",
+          "helpText": "Limiar mínimo de confiança. Valores entre 0,01 e 0,99."
+        },
+        "overlap": {
+          "label": "Sobreposição",
+          "helpText": "Sobreposição de segmentos de predição. Valores entre 0,0 e 2,9."
+        },
+        "locale": {
+          "label": "Idioma",
+          "helpText": "Idioma para nomes comuns de espécies traduzidos."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Não foi possível carregar as opções de idioma. Usando padrões.",
+        "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões."
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Rastreamento de erros e telemetria",
+          "description": "Rastreamento opcional de erros para ajudar a melhorar a confiabilidade e o desempenho do BirdNET-Go"
+        },
+        "diagnostics": {
+          "title": "Suporte e diagnósticos",
+          "description": "Ajude os desenvolvedores a resolver seus problemas mais rapidamente fornecendo informações de diagnóstico essenciais"
+        }
+      },
+      "telemetry": {
+        "privacyNotice": "Aviso de privacidade",
+        "privacyPoints": {
+          "noPersonalData": "Nenhum dado pessoal é coletado",
+          "anonymousData": "Todos os dados de telemetria são anônimos",
+          "helpImprove": "Os dados de telemetria ajudam os desenvolvedores a identificar e corrigir problemas no BirdNET-Go"
+        },
+        "enableTracking": "Ativar rastreamento de erros (Opt-in)"
+      },
+      "systemId": {
+        "label": "Seu ID do sistema",
+        "description": "Use este ID ao relatar problemas"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Incluir logs recentes",
+        "includeConfiguration": "Incluir configuração (dados sensíveis removidos)",
+        "includeSystemInfo": "Incluir informações do sistema"
+      }
+    },
+    "filters": {
+      "privacyFiltering": {
+        "title": "Filtragem de privacidade",
+        "description": "A filtragem de privacidade evita salvar clipes de áudio quando vozes humanas são detectadas",
+        "enable": "Ativar filtragem de privacidade",
+        "confidenceLabel": "Limiar de confiança para detecção humana",
+        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível"
+      },
+      "falsePositivePrevention": {
+        "title": "Prevenção de falsos positivos",
+        "description": "Configurar filtros de detecção falsa",
+        "enableDogBark": "Ativar filtro de latido de cachorro",
+        "confidenceLabel": "Limiar de confiança",
+        "confidenceHelp": "Defina o nível de confiança para detecção de latido de cachorro, valores mais baixos tornam o filtro mais sensível",
+        "expireTimeLabel": "Tempo de expiração de latido de cachorro (minutos)",
+        "expireTimeHelp": "Defina por quanto tempo lembrar um latido de cachorro detectado",
+        "addDogBarkSpeciesLabel": "Adicionar espécies de latido de cachorro",
+        "addDogBarkSpeciesHelp": "Pesquise e adicione espécies que podem ser confundidas com latidos de cachorro",
+        "addSpeciesButton": "Adicionar"
+      },
+      "speciesNamePlaceholder": "Nome da espécie",
+      "typeSpeciesName": "Digite o nome da espécie..."
+    },
+    "audio": {
+      "audioCapture": {
+        "title": "Captura de áudio",
+        "description": "Definir fonte de captura de áudio, placa de som ou fluxo RTSP",
+        "soundCardSource": "Fonte da placa de som",
+        "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação)",
+        "noSoundCardCapture": "Sem captura de placa de som",
+        "rtspSource": "Fonte RTSP",
+        "rtspTransportLabel": "Protocolo de transporte RTSP",
+        "rtspUrlsLabel": "URLs de fluxo RTSP"
+      },
+      "audioFilters": {
+        "title": "Filtros de áudio",
+        "description": "Configurar filtros de processamento de áudio",
+        "enableEqualizer": "Ativar equalizador de áudio",
+        "filterType": "Tipo de filtro",
+        "newFilterType": "Novo tipo de filtro",
+        "selectFilterType": "Selecionar tipo de filtro",
+        "addFilter": "Adicionar filtro",
+        "remove": "Remover"
+      },
+      "soundLevelMonitoring": {
+        "title": "Monitoramento do nível sonoro",
+        "description": "Monitorar e relatar níveis sonoros ambientais",
+        "enable": "Ativar monitoramento do nível sonoro",
+        "intervalLabel": "Intervalo de medição (segundos)",
+        "intervalHelp": "Com que frequência relatar medições do nível sonoro",
+        "dataOutputTitle": "Saída de dados do nível sonoro",
+        "dataOutputDescription": "Quando ativado, as medições do nível sonoro são publicadas via:",
+        "mqttTopic": "Tópico MQTT:",
+        "sseEndpoint": "Endpoint SSE:",
+        "prometheusMetrics": "Métricas Prometheus:"
+      },
+      "audioExport": {
+        "title": "Exportação de áudio",
+        "description": "Configurar salvamento de clipes de áudio para chamados de pássaros identificados",
+        "enable": "Ativar exportação de áudio",
+        "enableDebug": "Ativar modo de depuração",
+        "pathLabel": "Caminho de exportação",
+        "typeLabel": "Tipo de exportação",
+        "bitrateLabel": "Taxa de bits"
+      },
+      "audioClipRetention": {
+        "title": "Retenção de clipes de áudio",
+        "description": "Configurar limpeza de clipes de áudio",
+        "policyLabel": "Política de retenção",
+        "maxAgeLabel": "Idade máxima",
+        "maxUsageLabel": "Uso máximo (porcentagem)",
+        "minClipsLabel": "Clipes mínimos",
+        "keepSpectrograms": "Manter imagens de espectrograma",
+        "policies": {
+          "none": "Nenhuma",
+          "age": "Idade",
+          "usage": "Uso"
+        }
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      }
+    },
+    "species": {
+      "addSpeciesToInclude": "Adicionar espécies para incluir",
+      "addSpeciesToIncludeLabel": "Adicionar novas espécies para incluir",
+      "addSpeciesToExclude": "Adicionar espécies para excluir",
+      "addSpeciesToExcludeLabel": "Adicionar novas espécies para excluir",
+      "commandPathPlaceholder": "/caminho/para/seu/comando",
+      "parametersPlaceholder": "Os parâmetros aparecerão aqui"
+    },
+    "security": {
+      "hostLabel": "Endereço do host",
+      "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
+      "allowedSubnetsLabel": "Sub-redes permitidas",
+      "allowedSubnetsHelp": "Intervalos de rede permitidos para contornar o login (notação CIDR, lista separada por vírgulas)",
+      "securityWarningTitle": "Aviso de segurança:",
+      "subnetWarningText": "Dispositivos dessas sub-redes terão acesso irrestrito. Inclua apenas redes internas confiáveis.",
+      "httpsSettingsTitle": "Configurações HTTPS",
+      "httpsSettingsDescription": "Acesso seguro com criptografia SSL/TLS",
+      "basicAuthTitle": "Autenticação básica",
+      "basicAuthDescription": "Acesso seguro com uma senha simples",
+      "placeholders": {
+        "host": "Por exemplo, localhost:8080 ou example.domain.com",
+        "allowedUsers": "Digite um ou mais e-mails de usuários permitidos",
+        "subnet": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)"
+      }
+    },
+    "database": {
+      "sqlitePlaceholder": "Digite o caminho do banco de dados SQLite",
+      "mysqlHostPlaceholder": "Digite o host MySQL",
+      "mysqlUsernamePlaceholder": "Digite o nome de usuário MySQL"
+    }
+  },
+  "auth": {
+    "login": "Entrar",
+    "logout": "Sair",
+    "openLoginModal": "Abrir janela de login"
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "Sem dados disponíveis",
+      "loading": "Carregando dados...",
+      "error": "Falha ao carregar dados",
+      "sortBy": "Ordenar por {column}",
+      "rowsPerPage": "Linhas por página",
+      "pageInfo": "Mostrando {from} a {to} de {total} resultados"
+    },
+    "pagination": {
+      "ariaLabel": "Navegação de paginação",
+      "previous": "Anterior",
+      "next": "Próximo",
+      "page": "Página {current} de {total}",
+      "goToPage": "Ir para a página {page}",
+      "goToPreviousPage": "Ir para a página anterior",
+      "goToNextPage": "Ir para a próxima página",
+      "firstPage": "Primeira página",
+      "lastPage": "Última página"
+    },
+    "stats": {
+      "total": "Total",
+      "average": "Média",
+      "min": "Mínimo",
+      "max": "Máximo",
+      "count": "Quantidade"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Digite {field}",
+      "select": "Selecione {field}",
+      "search": "Pesquisar...",
+      "date": "Selecionar data",
+      "dateRange": "Selecionar intervalo de datas",
+      "number": "Digite um número",
+      "password": "Digite a senha",
+      "url": "Digite a URL",
+      "email": "Digite o e-mail",
+      "selectFilterType": "Selecionar tipo de filtro",
+      "speciesName": "Nome da espécie"
+    },
+    "labels": {
+      "showPassword": "Mostrar senha",
+      "hidePassword": "Ocultar senha",
+      "copyToClipboard": "Copiar para área de transferência",
+      "clearSelection": "Limpar seleção",
+      "selectOption": "Selecione uma opção"
+    },
+    "help": {
+      "passwordStrength": "Força da senha: {strength}",
+      "charactersRemaining": "{count} caracteres restantes",
+      "dateFormat": "Formato: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Força da senha:",
+        "levels": {
+          "weak": "Fraca",
+          "fair": "Regular",
+          "good": "Boa",
+          "strong": "Forte"
+        },
+        "suggestions": {
+          "title": "Sugestões:",
+          "minLength": "Pelo menos 8 caracteres",
+          "mixedCase": "Mistura de maiúsculas e minúsculas",
+          "number": "Pelo menos um número",
+          "special": "Pelo menos um caractere especial"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "A propriedade radioValue é obrigatória para entradas de rádio"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Data de início",
+        "endDate": "Data de término",
+        "quickSelect": "Seleção rápida",
+        "selected": "Selecionado: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Hoje",
+        "yesterday": "Ontem",
+        "last7Days": "Últimos 7 dias",
+        "last30Days": "Últimos 30 dias",
+        "thisMonth": "Este mês",
+        "lastMonth": "Mês passado",
+        "thisYear": "Este ano"
+      },
+      "errors": {
+        "invalidStartDate": "Data de início inválida",
+        "invalidEndDate": "Data de término inválida",
+        "startAfterEnd": "A data de início não pode ser posterior à data de término",
+        "endBeforeStart": "A data de término não pode ser anterior à data de início"
+      }
+    },
+    "species": {
+      "placeholder": "Digite o nome da espécie...",
+      "empty": "Nenhuma espécie adicionada",
+      "maxReached": "Máximo de {maxItems} espécies alcançado",
+      "aria": {
+        "dragToReorder": "Arraste para reordenar {species}",
+        "edit": "Editar espécie",
+        "remove": "Remover espécie"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "play": "Reproduzir",
+      "pause": "Pausar",
+      "stop": "Parar",
+      "volume": "Volume",
+      "mute": "Silenciar",
+      "unmute": "Ativar som",
+      "download": "Baixar áudio",
+      "currentTime": "{current} / {total}",
+      "loading": "Carregando áudio...",
+      "error": "Falha ao carregar áudio",
+      "volumeGain": "Controle de ganho de volume: {value} dB",
+      "filterControl": "Controle de filtro",
+      "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",
+      "seekProgress": "Progresso de busca de áudio: {current} / {total} segundos"
+    }
+  }
 }
