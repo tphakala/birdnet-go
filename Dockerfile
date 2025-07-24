@@ -28,6 +28,8 @@ RUN groupadd --gid 10001 dev-user && \
     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
     mkdir -p /home/dev-user/src && \
     mkdir -p /home/dev-user/lib && \
+    mkdir -p /home/dev-user/.cache && \
+    mkdir -p /home/dev-user/.npm && \
     chown -R dev-user:dev-user /home/dev-user
 
 USER dev-user
@@ -42,6 +44,9 @@ ARG BUILD_VERSION
 ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 
 ARG TARGETPLATFORM
+
+# Skip puppeteer download during build (not needed for production)
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Build assets and compile BirdNET-Go
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
