@@ -59,10 +59,15 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             VERSION=${{ env.VERSION }}
+            BUILDKIT_INLINE_CACHE=1
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache,mode=max
           provenance: false
 
   create-manifest:

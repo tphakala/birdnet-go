@@ -59,8 +59,14 @@ jobs:
             ghcr.io/${{ env.REPO }}:dev
             ghcr.io/${{ env.REPO }}:${{ github.sha }}
           platforms: linux/arm64, linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache,mode=max
           provenance: false
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
   
