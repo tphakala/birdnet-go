@@ -41,6 +41,31 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
 
+  // Helper function to translate weather conditions with fallbacks
+  function translateWeatherCondition(condition: string | undefined): string {
+    if (!condition) return '';
+    
+    // Normalize the condition string
+    const normalized = condition.toLowerCase().replace(/ /g, '_');
+    
+    // Try different key variations
+    const keys = [
+      `detections.weather.conditions.${normalized}`,
+      `detections.weather.conditions.${condition.toLowerCase()}`,
+      'detections.weather.conditions.unknown'
+    ];
+    
+    // Return first successful translation or original
+    for (const key of keys) {
+      const translation = t(key);
+      if (translation !== key) {
+        return translation;
+      }
+    }
+    
+    return condition;
+  }
+
   interface Props {
     detection: Detection;
     showThumbnails?: boolean;
@@ -183,17 +208,7 @@
             size="sm"
           />
           <span class="text-xs text-base-content/70">
-            {#if detection.weather.description}
-              {t(`detections.weather.conditions.${detection.weather.description.toLowerCase().replace(/ /g, '_')}`) ||
-                t(`detections.weather.conditions.${detection.weather.description.toLowerCase()}`) ||
-                detection.weather.description}
-            {:else if detection.weather.weatherMain}
-              {t(`detections.weather.conditions.${detection.weather.weatherMain.toLowerCase().replace(/ /g, '_')}`) ||
-                t(`detections.weather.conditions.${detection.weather.weatherMain.toLowerCase()}`) ||
-                detection.weather.weatherMain}
-            {:else}
-              ''
-            {/if}
+            {translateWeatherCondition(detection.weather.description || detection.weather.weatherMain)}
           </span>
         </div>
         <WeatherMetrics
@@ -247,7 +262,7 @@
   </div>
 
   <!-- Recording/Spectrogram -->
-  <div class={showThumbnails ? 'col-span-2' : 'col-span-2'}>
+  <div class={showThumbnails ? 'col-span-2' : 'col-span-3'}>
     <AudioPlayer
       audioUrl="/api/v2/audio/{detection.id}"
       detectionId={detection.id.toString()}

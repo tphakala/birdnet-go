@@ -35,6 +35,13 @@
 
   let { temperature, windSpeed, size = 'sm', className = '' }: Props = $props();
 
+  // TODO: When user preferences for measurement units are implemented,
+  // convert temperature and wind speed values here based on user's selected system.
+  // For now, the backend provides metric units (°C, m/s) and the UI displays them as-is.
+  // Future enhancement: check user preference and convert if imperial units are selected:
+  // - Temperature: °C to °F conversion
+  // - Wind speed: m/s to mph conversion
+
   // Temperature color calculation
   const tempColor = $derived(() => {
     if (temperature === undefined) return '#94a3b8'; // gray-400

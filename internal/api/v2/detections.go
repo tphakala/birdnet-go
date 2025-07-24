@@ -497,7 +497,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 			if c.SunCalc != nil {
 				sunTimes, err := c.SunCalc.GetSunEventTimes(detectionTime)
 				if err == nil {
-					detection.TimeOfDay = c.calculateTimeOfDay(detectionTime, &sunTimes)
+					detection.TimeOfDay = calculateTimeOfDay(detectionTime, &sunTimes)
 				}
 			}
 			
