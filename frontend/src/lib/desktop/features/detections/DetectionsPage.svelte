@@ -7,6 +7,25 @@
   let detectionsData = $state<DetectionsListData | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Local storage key for user preference
+  const RESULTS_PER_PAGE_KEY = 'birdnet-detections-results-per-page';
+
+  // Get saved preference from localStorage
+  function getSavedResultsPerPage(): number {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(RESULTS_PER_PAGE_KEY);
+      if (saved && !isNaN(parseInt(saved))) {
+        const value = parseInt(saved);
+        // Validate it's one of our allowed values
+        if ([10, 25, 50, 100].includes(value)) {
+          return value;
+        }
+      }
+    }
+    return 25; // Default
+  }
 
   // Extract query parameters from URL
   function getQueryParams(): DetectionQueryParams {
@@ -28,7 +47,7 @@
       duration: params.get('duration') ? parseInt(params.get('duration')!) : undefined,
       species: params.get('species') || undefined,
       search: search || undefined,
-      numResults: parseInt(params.get('numResults') || '25'),
+      numResults: parseInt(params.get('numResults') || String(getSavedResultsPerPage())),
       offset: parseInt(params.get('offset') || '0'),
     };
   }
@@ -92,17 +111,33 @@
     }
   }
 
-  // Handle numResults change
+  // Handle numResults change with debouncing
   function handleNumResultsChange(newNumResults: number) {
-    const params = new URLSearchParams(window.location.search);
-    params.set('numResults', String(newNumResults));
-    params.set('offset', '0'); // Reset to first page
+    // Save user preference to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(RESULTS_PER_PAGE_KEY, String(newNumResults));
+    }
 
-    // Update URL without navigation
-    window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+    // Clear existing timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
 
-    // Fetch new data
-    fetchDetections();
+    // Set loading state immediately for user feedback
+    loading = true;
+
+    // Debounce the actual fetch
+    debounceTimer = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      params.set('numResults', String(newNumResults));
+      params.set('offset', '0'); // Reset to first page
+
+      // Update URL without navigation
+      window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+
+      // Fetch new data
+      fetchDetections();
+    }, 300); // 300ms debounce delay
   }
 
   // Handle details click
@@ -149,6 +184,11 @@
     return () => {
       window.removeEventListener('searchUpdate', handleSearchUpdate);
       window.removeEventListener('popstate', handlePopState);
+
+      // Clear any pending debounce timer
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
     };
   });
 </script>

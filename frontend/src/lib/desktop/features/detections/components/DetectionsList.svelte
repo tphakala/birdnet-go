@@ -133,9 +133,26 @@
     </div>
   </div>
 
-  <!-- Content -->
-  <div class="block w-full overflow-x-auto">
+  <!-- ARIA live region for accessibility -->
+  <div class="sr-only" aria-live="polite">
     {#if loading}
+      Loading {selectedNumResults} results...
+    {:else if data}
+      Showing {data.showingFrom} to {data.showingTo} of {data.totalResults} results
+    {/if}
+  </div>
+
+  <!-- Content -->
+  <div class="block w-full overflow-x-auto relative">
+    {#if loading && data}
+      <!-- Loading overlay when updating existing data -->
+      <div class="absolute inset-0 bg-base-100/50 z-10 flex justify-center items-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    {/if}
+
+    {#if loading && !data}
+      <!-- Initial loading state -->
       <div class="flex justify-center items-center py-8">
         <LoadingSpinner size="lg" />
       </div>
