@@ -1,0 +1,1400 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "save": "Save",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "actions": "Actions",
+    "settings": "Settings",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "apply": "Apply",
+    "clear": "Clear",
+    "goToDashboard": "Go to Dashboard",
+    "reportIssue": "Report Issue",
+    "loginToViewDetails": "Login to View Details",
+    "pageNotFound": "Page Not Found",
+    "internalServerError": "Internal Server Error",
+    "buttons": {
+      "save": "Save Changes",
+      "reset": "Reset",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "confirm": "Confirm",
+      "edit": "Edit",
+      "close": "Close",
+      "back": "Back",
+      "next": "Next",
+      "previous": "Previous",
+      "yes": "Yes",
+      "no": "No",
+      "ok": "OK",
+      "edit-config": "Edit Config",
+      "add-action": "Add Action"
+    },
+    "ui": {
+      "loading": "Loading...",
+      "noData": "No data available",
+      "empty": "No items found",
+      "error": "An error occurred",
+      "retry": "Try again",
+      "dismiss": "Dismiss",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "required": "Required",
+      "optional": "Optional"
+    },
+    "status": {
+      "success": "Success",
+      "error": "Error",
+      "warning": "Warning",
+      "info": "Information",
+      "pending": "Pending",
+      "processing": "Processing",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "validation": {
+      "required": "This field is required",
+      "invalid": "Invalid value",
+      "minLength": "Must be at least {min} characters",
+      "maxLength": "Must be no more than {max} characters",
+      "minValue": "Must be at least {min}",
+      "maxValue": "Must be no more than {max}",
+      "email": "Invalid email address",
+      "url": "Invalid URL",
+      "pattern": "Invalid format"
+    },
+    "aria": {
+      "closeModal": "Close modal",
+      "dismissAlert": "Dismiss alert",
+      "closeNotification": "Close notification",
+      "toggleDropdown": "Toggle dropdown",
+      "sortAscending": "Sort ascending",
+      "selectLanguage": "Select language",
+      "sortDescending": "Sort descending",
+      "expandSection": "Expand section",
+      "collapseSection": "Collapse section",
+      "playAudio": "Play audio",
+      "pauseAudio": "Pause audio",
+      "loading": "Loading content",
+      "saveChanges": "Save changes",
+      "cancelEdit": "Cancel edit",
+      "editSpecies": "Edit species",
+      "removeSpecies": "Remove species",
+      "dismissError": "Dismiss error"
+    },
+    "modal": {
+      "confirmAction": "Confirm Action",
+      "confirmMessage": "Are you sure you want to perform this action?"
+    },
+    "review": {
+      "modalTitle": "Review Detection: {species}",
+      "status": {
+        "verifiedCorrect": "Verified Correct",
+        "falsePositive": "False Positive",
+        "notReviewed": "Not Reviewed"
+      },
+      "form": {
+        "correctDetection": "Correct Detection",
+        "falsePositiveLabel": "False Positive"
+      },
+      "errors": {
+        "saveFailed": "Failed to save review. Please try again.",
+        "noAudio": "No audio recording available for this detection."
+      }
+    }
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "detections": "Detections",
+    "search": "Search",
+    "analytics": "Analytics",
+    "notifications": "Notifications",
+    "system": "System",
+    "settings": "Settings",
+    "about": "About",
+    "toggleSidebar": "Toggle sidebar menu",
+    "mainNavigation": "Main navigation",
+    "closeSidebar": "Close sidebar",
+    "analyticsSubmenu": "Analytics submenu",
+    "settingsSubmenu": "Settings submenu"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "A modern interface for real-time bird sound detection and classification",
+    "logoAlt": "BirdNET-Go Logo",
+    "overview": "Overview",
+    "overviewText": "BirdNET-Go is a Go-based implementation for real-time bird sound detection and classification, built upon the foundation of the BirdNET project. This application provides a user-friendly interface for continuous bird sound monitoring and analysis.",
+    "birdnetProject": "BirdNET Project",
+    "birdnetDescription": "BirdNET-Go would not be possible without the groundbreaking work of the BirdNET project. The artificial intelligence model powering BirdNET-Go's detection capabilities is the result of the BirdNET project's innovative research and development.",
+    "developedBy": "Developed by",
+    "developersText": "The K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology:",
+    "visitBirdnetAnalyzer": "Visit BirdNET-Analyzer Project",
+    "contributors": "Contributors",
+    "contributorsText": "BirdNET-Go has grown and improved thanks to the collaborative efforts of many individuals. Their contributions, ranging from code improvements to feature suggestions, have been invaluable in making this project better.",
+    "mainDeveloper": "Main Developer",
+    "githubContributors": "GitHub Contributors",
+    "contributorsNote": "Special thanks to these contributors for their valuable work on improving BirdNET-Go:",
+    "communityAcknowledgment": "Community Acknowledgment",
+    "communityText": "We would also like to extend our gratitude to all users who have contributed through:",
+    "bugReports": "Bug reports and issue tracking",
+    "featureSuggestions": "Feature suggestions and feedback",
+    "testing": "Testing and validation",
+    "documentation": "Documentation improvements",
+    "additionalCredits": "Additional Credits",
+    "birdnetPiProject": "BirdNET-Pi Project",
+    "birdnetPiDescription": "Special thanks to Patrick McGuire for his inspiring work on BirdNET-Pi, which has influenced the development of BirdNET-Go. BirdNET-Pi demonstrates the potential of bird sound detection on embedded devices and has set a high standard for community-driven development.",
+    "visitBirdnetPi": "Visit BirdNET-Pi Project",
+    "labelTranslations": "BirdNET Label Translations",
+    "labelTranslationsBy": "Provided by Patrick Levin for the BirdNET-Pi project by Patrick McGuire",
+    "patrickLevinGithub": "Patrick Levin's GitHub",
+    "versionInformation": "Version Information",
+    "currentVersion": "Current Version",
+    "buildDate": "Build Date",
+    "developmentBuild": "Development Build",
+    "unknown": "Unknown",
+    "licenseInformation": "License Information",
+    "licenseText": "Both the BirdNET AI model and BirdNET-Go are licensed under the",
+    "ccLicense": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License",
+    "licenseDescription": "This license allows others to remix, adapt, and build upon this work non-commercially, as long as appropriate credit is given and new creations are licensed under identical terms.",
+    "dependencyLicenses": "Dependency Licenses"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "View and manage all system notifications",
+    "filters": {
+      "allStatus": "All Status",
+      "unread": "Unread",
+      "read": "Read",
+      "acknowledged": "Acknowledged",
+      "allTypes": "All Types",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "info": "Info",
+      "system": "System",
+      "detections": "Detections",
+      "allPriorities": "All Priorities",
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "actions": {
+      "markAllRead": "Mark All Read",
+      "refresh": "Refresh notifications",
+      "markAsRead": "Mark as read",
+      "acknowledge": "Acknowledge",
+      "delete": "Delete",
+      "confirmDelete": "Confirm Delete",
+      "deleteConfirmation": "Are you sure you want to delete this notification?"
+    },
+    "aria": {
+      "filterByStatus": "Filter by status",
+      "filterByType": "Filter by type",
+      "filterByPriority": "Filter by priority"
+    },
+    "empty": {
+      "title": "No notifications found",
+      "subtitle": "Adjust your filters or check back later"
+    },
+    "errors": {
+      "loadFailed": "Failed to load notifications. Please try again.",
+      "deleteFailed": "Failed to delete notification. Please try again.",
+      "networkError": "Network error occurred. Please try again."
+    },
+    "timeAgo": {
+      "justNow": "Just now",
+      "minutesAgo": "{minutes}m ago",
+      "hoursAgo": "{hours}h ago",
+      "daysAgo": "{days}d ago"
+    }
+  },
+  "search": {
+    "title": "Search Filters",
+    "results": "Search Results",
+    "resultsCount": "{count, plural, =0 {No results} one {# result} other {# results}}",
+    "noSearchPerformed": "No search performed yet",
+    "noSearchPerformedHint": "Use the search filters above to find bird detections",
+    "loadingResults": "Loading results...",
+    "noResultsFound": "No results found",
+    "noResultsHint": "Try adjusting your search filters",
+    "fields": {
+      "species": "Species",
+      "speciesPlaceholder": "Enter species name",
+      "speciesHelp": "Enter full or partial species name (not case sensitive)",
+      "dateRange": "Date Range",
+      "dateRangeHelp": "Filter detections by date range (leave empty for all dates)",
+      "from": "From",
+      "to": "To",
+      "confidenceRange": "Confidence Range (%)",
+      "confidenceMin": "Minimum confidence percentage",
+      "confidenceMax": "Maximum confidence percentage",
+      "verifiedStatus": "Verified Status",
+      "lockedStatus": "Locked Status",
+      "timeOfDay": "Time of Day"
+    },
+    "advancedFilters": "Advanced Filters",
+    "verifiedOptions": {
+      "any": "Any Status",
+      "verified": "Verified Only",
+      "unverified": "Unverified Only"
+    },
+    "lockedOptions": {
+      "any": "Any Status",
+      "locked": "Locked Only",
+      "unlocked": "Unlocked Only"
+    },
+    "timeOfDayOptions": {
+      "any": "Any Time",
+      "day": "Day Only",
+      "night": "Night Only",
+      "sunrise": "Sunrise +/- 30min",
+      "sunset": "Sunset +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Date (Newest First)",
+      "dateAsc": "Date (Oldest First)",
+      "speciesAsc": "Species (A-Z)",
+      "confidenceDesc": "Confidence (High-Low)"
+    },
+    "tableHeaders": {
+      "dateTime": "Date & Time",
+      "timeOfDay": "Time of Day",
+      "species": "Species",
+      "confidence": "Confidence",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "statusBadges": {
+      "verified": "Verified",
+      "false": "False",
+      "unverified": "Unverified",
+      "locked": "Locked",
+      "unlocked": "Unlocked"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Audio Player",
+      "expandDetails": "Expand details for {species}",
+      "collapseDetails": "Collapse details for {species}",
+      "playAudio": "Play audio for {species}",
+      "viewDetails": "View details for {species}",
+      "unknownSpecies": "Unknown species",
+      "clickToCollapse": "Click to collapse"
+    },
+    "errors": {
+      "searchFailed": "Search failed: {error}",
+      "minMaxConfidence": "Minimum confidence cannot be greater than maximum confidence."
+    },
+    "pagination": {
+      "page": "Page {current} of {total}",
+      "goToPrevious": "Go to previous page",
+      "goToNext": "Go to next page"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Page Not Found",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "500": {
+      "code": "500",
+      "title": "Internal Server Error",
+      "defaultMessage": "An internal server error occurred.",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "generic": {
+      "errorDetails": "Error Details",
+      "stackTrace": "Stack Trace",
+      "goToDashboard": "Go to Dashboard",
+      "reportIssue": "Report Issue",
+      "loginToViewDetails": "Login to View Details"
+    }
+  },
+  "dashboard": {
+    "dailySummary": {
+      "title": "Daily Summary",
+      "columns": {
+        "species": "Species",
+        "detections": "Detections"
+      },
+      "navigation": {
+        "previousDay": "Previous day",
+        "nextDay": "Next day",
+        "today": "Today"
+      },
+      "tooltips": {
+        "viewHourly": "View all detections for {hour}:00",
+        "viewBiHourly": "View all detections for {startHour}:00-{endHour}:00",
+        "viewSixHourly": "View all detections for {startHour}:00-{endHour}:00",
+        "hourlyDetections": "{count} detections at {hour}:00 - Click to view",
+        "biHourlyDetections": "{count} detections from {startHour}:00-{endHour}:00 - Click to view",
+        "sixHourlyDetections": "{count} detections from {startHour}:00-{endHour}:00 - Click to view"
+      },
+      "noSpecies": "No species detected on this date"
+    },
+    "recentDetections": {
+      "title": "Recent Detections",
+      "controls": {
+        "show": "Show:",
+        "refresh": "Refresh detections"
+      },
+      "headers": {
+        "dateTime": "Date & Time",
+        "commonName": "Common Name",
+        "thumbnail": "Thumbnail",
+        "status": "Status",
+        "recording": "Recording",
+        "actions": "Actions"
+      },
+      "status": {
+        "verified": "Verified",
+        "false": "False",
+        "unverified": "Unverified",
+        "locked": "Locked"
+      },
+      "modals": {
+        "showSpecies": "Show Species {species}",
+        "ignoreSpecies": "Ignore Species {species}",
+        "showSpeciesConfirm": "Are you sure you want to show future detections of {species}?",
+        "ignoreSpeciesConfirm": "Are you sure you want to ignore future detections of {species}? This will only affect new detections - existing detections will remain in the database.",
+        "unlockDetection": "Unlock Detection",
+        "lockDetection": "Lock Detection",
+        "unlockDetectionConfirm": "Are you sure you want to unlock this detection of {species}? This will allow it to be deleted during regular cleanup.",
+        "lockDetectionConfirm": "Are you sure you want to lock this detection of {species}? This will prevent it from being deleted during regular cleanup.",
+        "deleteDetection": "Delete Detection of {species}",
+        "deleteDetectionConfirm": "Are you sure you want to delete detection of {species}? This action cannot be undone."
+      },
+      "noDetections": "No recent detections"
+    },
+    "errors": {
+      "dailySummaryFetch": "Failed to fetch daily summary: {status}",
+      "dailySummaryLoad": "Failed to load daily summary",
+      "recentDetectionsFetch": "Failed to fetch recent detections: {status}",
+      "recentDetectionsLoad": "Failed to load recent detections",
+      "configFetch": "Failed to fetch dashboard config: {status}"
+    }
+  },
+  "detections": {
+    "title": "Detections",
+    "titles": {
+      "hourly": "Hourly Results for {hour}:00 on {date}",
+      "hourlyRange": "Hourly Results from {startHour}:00 to {endHour}:00 on {date}",
+      "species": "Results for {species} on {date}",
+      "search": "Search Results for \"{query}\"",
+      "allDetections": "All Detections for {date}"
+    },
+    "headers": {
+      "dateTime": "Date & Time",
+      "weather": "Weather",
+      "species": "Species",
+      "thumbnail": "Thumbnail",
+      "status": "Status",
+      "recording": "Recording",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "No detections found",
+      "description": "Try adjusting your filters or search criteria"
+    },
+    "pagination": {
+      "showing": "Showing {from} to {to} of {total} results"
+    },
+    "weather": {
+      "noData": "No weather data"
+    },
+    "row": {
+      "viewDetails": "View details for {species}"
+    }
+  },
+  "system": {
+    "title": "System Dashboard",
+    "refreshData": "Refresh Data",
+    "aria": {
+      "refreshData": "Refresh system data"
+    },
+    "systemInfo": {
+      "title": "System Information",
+      "os": "Operating System",
+      "hostname": "Hostname",
+      "uptime": "Uptime",
+      "cpus": "CPUs",
+      "model": "System Model",
+      "timezone": "Time Zone",
+      "temperature": "CPU Temperature",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Temperature data unavailable"
+    },
+    "diskUsage": {
+      "title": "Disk Usage",
+      "emptyMessage": "No disk information available"
+    },
+    "memoryUsage": {
+      "title": "Memory Usage",
+      "ramUsage": "RAM Usage"
+    },
+    "processInfo": {
+      "title": "Process Information",
+      "headers": {
+        "pid": "PID",
+        "name": "Name",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "uptime": "Uptime"
+      },
+      "showAll": "Show All Processes",
+      "showBirdnetOnly": "Show BirdNET Only"
+    },
+    "errors": {
+      "systemInfo": "Failed to load system information: {error}",
+      "diskUsage": "Failed to load disk usage: {error}",
+      "memoryUsage": "Failed to load memory usage: {error}",
+      "temperature": "Failed to load temperature: {error}",
+      "processes": "Failed to load process information: {error}"
+    }
+  },
+  "analytics": {
+    "title": "Overview",
+    "loadingError": "Failed to load some analytics data. Please try again later.",
+    "stats": {
+      "totalDetections": "Total Detections",
+      "uniqueSpecies": "Unique Species",
+      "avgConfidence": "Avg. Confidence",
+      "mostCommon": "Most Common",
+      "none": "None",
+      "detections": "detections",
+      "totalSpecies": "Total Species",
+      "overallAverage": "Overall average"
+    },
+    "periods": {
+      "today": "Today",
+      "lastWeek": "Last 7 days",
+      "lastMonth": "Last 30 days",
+      "last90Days": "Last 90 days",
+      "lastYear": "Last 12 months",
+      "customRange": "Custom range",
+      "allTime": "All time"
+    },
+    "filters": {
+      "title": "Filter Data",
+      "timePeriod": "Time Period",
+      "from": "From",
+      "to": "To",
+      "sortBy": "Sort By",
+      "searchSpecies": "Search Species",
+      "searchPlaceholder": "Search by name...",
+      "reset": "Reset",
+      "applyFilters": "Apply Filters",
+      "exportCsv": "Export CSV",
+      "species": "species",
+      "filtered": "(filtered)"
+    },
+    "timePeriodOptions": {
+      "allTime": "All Time",
+      "today": "Today",
+      "lastWeek": "Last 7 Days",
+      "lastMonth": "Last 30 Days",
+      "last90Days": "Last 90 Days",
+      "lastYear": "Last 12 Months",
+      "customRange": "Custom Range"
+    },
+    "sortOptions": {
+      "mostDetections": "Most Detections",
+      "fewestDetections": "Fewest Detections",
+      "nameAZ": "Name (A-Z)",
+      "nameZA": "Name (Z-A)",
+      "recentlyFirstSeen": "Recently First Seen",
+      "earliestFirstSeen": "Earliest First Seen",
+      "recentlyLastSeen": "Recently Last Seen",
+      "highestConfidence": "Highest Confidence"
+    },
+    "charts": {
+      "top10Species": "Top 10 Species",
+      "detectionsByTimeOfDay": "Detections by Time of Day",
+      "detectionTrends": "Detection Trends",
+      "newSpeciesDetected": "New Species Detected",
+      "noNewSpecies": "No new species detected in this period.",
+      "noDataAvailable": "No data available",
+      "numberOfDetections": "Number of Detections",
+      "detections": "Detections",
+      "timePeriod": "Time Period",
+      "dailyDetections": "Daily Detections",
+      "date": "Date",
+      "firstHeardOn": "First Heard On",
+      "firstHeardDate": "First Heard Date",
+      "firstHeard": "First Heard"
+    },
+    "recentDetections": {
+      "title": "Recent Detections",
+      "headers": {
+        "dateTime": "Date & Time",
+        "species": "Species",
+        "confidence": "Confidence",
+        "timeOfDay": "Time of Day"
+      },
+      "noRecentDetections": "No recent detections found",
+      "unknownSpecies": "Unknown",
+      "unknown": "Unknown"
+    },
+    "species": {
+      "title": "Species",
+      "subtitle": "Comprehensive list of all bird species that have been detected",
+      "speciesList": "Species List",
+      "switchToGrid": "Switch to grid view",
+      "switchToList": "Switch to list view",
+      "noSpeciesFound": "No species found matching your filters.",
+      "headers": {
+        "species": "Species",
+        "detections": "Detections",
+        "avgConfidence": "Avg Confidence",
+        "maxConfidence": "Max Confidence",
+        "firstDetected": "First Detected",
+        "lastDetected": "Last Detected"
+      },
+      "card": {
+        "detections": "Detections:",
+        "confidence": "Confidence:",
+        "first": "First:"
+      }
+    }
+  },
+  "settings": {
+    "title": "Settings - BirdNET-Go",
+    "loading": "Loading settings...",
+    "sections": {
+      "node": "Main Settings",
+      "audio": "Audio Settings",
+      "filters": "Detection Filters",
+      "integration": "Integrations",
+      "security": "Security",
+      "species": "Species",
+      "support": "Support"
+    },
+    "notFound": {
+      "title": "Settings Not Found",
+      "message": "The requested settings section \"{section}\" could not be found."
+    },
+    "actions": {
+      "save": "Save Changes",
+      "saving": "Saving...",
+      "reset": "Reset",
+      "resetAriaLabel": "Reset all changes",
+      "saveAriaLabel": "Save Changes",
+      "savingAriaLabel": "Saving changes...",
+      "unsavedChanges": "Unsaved changes"
+    },
+    "card": {
+      "changed": "changed",
+      "changedAriaLabel": "Settings changed"
+    },
+    "main": {
+      "sections": {
+        "main": {
+          "title": "Main Settings",
+          "description": "Configure main application settings"
+        },
+        "birdnet": {
+          "title": "BirdNET Settings",
+          "description": "Configure BirdNET AI model specific settings"
+        },
+        "ui": {
+          "title": "User Interface Settings",
+          "description": "Customize user interface"
+        },
+        "customClassifier": {
+          "title": "Custom BirdNET Classifier",
+          "modelPath": {
+            "label": "Model Path (Requires restart to apply)",
+            "placeholder": "Path to model file",
+            "helpText": "Path to external BirdNET model file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded model."
+          },
+          "labelPath": {
+            "label": "Label Path (Requires restart to apply)",
+            "placeholder": "Path to labels file",
+            "helpText": "Path to external model labels file, .zip or .txt file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded labels."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Dynamic Threshold",
+          "enable": {
+            "label": "Enable Dynamic Threshold (BirdNET-Go specific feature)",
+            "helpText": "Enables dynamic confidence threshold feature for more adaptive bird call detection."
+          },
+          "trigger": {
+            "label": "Trigger Threshold",
+            "helpText": "The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls."
+          },
+          "minimum": {
+            "label": "Minimum Dynamic Threshold",
+            "helpText": "The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold does not drop below an unwanted level."
+          },
+          "expireTime": {
+            "label": "Dynamic Threshold Expire Time (Hours)",
+            "helpText": "The number of hours during which the dynamic threshold adjustments remain valid. After this period, the dynamic threshold is reset."
+          }
+        },
+        "rangeFilter": {
+          "title": "Range Filter",
+          "stationLocation": {
+            "label": "Station Location",
+            "helpText": "Station location, used to limit bird species to those probable in the region."
+          },
+          "latitude": {
+            "label": "Latitude",
+            "helpText": "Station location latitude, used to limit bird species to those probable in the region."
+          },
+          "longitude": {
+            "label": "Longitude",
+            "helpText": "Station location longitude, used to limit bird species to those probable in the region."
+          },
+          "model": {
+            "label": "Range Filter Model",
+            "helpText": "BirdNET range filter model version: latest or legacy."
+          },
+          "threshold": {
+            "label": "Threshold",
+            "helpText": "Controls which species are included based on their occurrence probability for your location and time of year. Default (0.01) is recommended for most users. Higher values (0.05-0.3) include fewer species with higher occurrence probability. Very high values (0.5+) include only the most common species."
+          },
+          "speciesCount": {
+            "label": "Current Species Count",
+            "helpText": "Number of species included in range filter. Updates automatically when threshold, latitude, or longitude changes.",
+            "loading": "Loading...",
+            "viewSpecies": "View Species"
+          },
+          "modal": {
+            "title": "Range Filter Species",
+            "speciesCount": "Species Count:",
+            "threshold": "Threshold:",
+            "latitude": "Latitude:",
+            "longitude": "Longitude:",
+            "loadingSpecies": "Loading species...",
+            "noSpeciesFound": "No species found with current settings",
+            "close": "Close"
+          }
+        },
+        "database": {
+          "title": "Database Settings",
+          "description": "Detections database settings",
+          "type": {
+            "label": "Select Database Type",
+            "helpText": "Select the database type to use for storing detections."
+          },
+          "sqlite": {
+            "note": "SQLite is recommended database type for most users.",
+            "path": {
+              "label": "SQLite Database Path",
+              "placeholder": "Enter SQLite database path",
+              "helpText": "SQLite database file path relative to the application directory"
+            }
+          },
+          "mysql": {
+            "host": {
+              "label": "MySQL Host",
+              "placeholder": "Enter MySQL host",
+              "helpText": "MySQL database host (IP or hostname)"
+            },
+            "port": {
+              "label": "MySQL Port",
+              "helpText": "MySQL database port (default 3306/TCP)"
+            },
+            "username": {
+              "label": "MySQL Username",
+              "placeholder": "Enter MySQL username",
+              "helpText": "MySQL database username"
+            },
+            "password": {
+              "label": "MySQL Password",
+              "placeholder": "Enter MySQL password",
+              "helpText": "MySQL database password"
+            },
+            "database": {
+              "label": "MySQL Database",
+              "placeholder": "Enter MySQL database name",
+              "helpText": "MySQL database name"
+            }
+          }
+        },
+        "userInterface": {
+          "title": "User Interface Settings",
+          "description": "Customize user interface",
+          "language": {
+            "title": "Language",
+            "locale": {
+              "label": "Interface Language",
+              "helpText": "Select the language for the user interface"
+            }
+          },
+          "dashboard": {
+            "title": "Dashboard",
+            "summaryLimit": {
+              "label": "Max Number of Species on Daily Summary Table",
+              "helpText": "Max number of species shown in the daily summary table (Value between 10 and 1000)"
+            },
+            "thumbnails": {
+              "summary": {
+                "label": "Show Thumbnails on Daily Summary table",
+                "helpText": "Enable to show thumbnails of detected species on the daily summary table"
+              },
+              "recent": {
+                "label": "Show Thumbnails on Recent Detections list",
+                "helpText": "Enable to show thumbnails of detected species on the recent detections list"
+              },
+              "imageProvider": {
+                "label": "Image Provider",
+                "helpText": "Select the preferred image provider for bird thumbnails"
+              },
+              "fallbackPolicy": {
+                "label": "Fallback Policy",
+                "helpText": "Select what happens when preferred provider fails to find an image",
+                "options": {
+                  "all": "Try all providers in sequence",
+                  "none": "Use only selected provider"
+                }
+              }
+            }
+          }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Node Name",
+          "placeholder": "Enter node name",
+          "helpText": "Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
+        },
+        "sensitivity": {
+          "label": "Sensitivity",
+          "helpText": "Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
+        },
+        "threshold": {
+          "label": "Threshold",
+          "helpText": "Minimum confidence threshold. Values in 0.01, 0.99."
+        },
+        "overlap": {
+          "label": "Overlap",
+          "helpText": "Overlap of prediction segments. Values in 0.0, 2.9."
+        },
+        "locale": {
+          "label": "Locale",
+          "helpText": "Locale for translated species common names."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU Threads",
+          "helpText": "Number of CPU threads. Set to 0 to use all available threads."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Unable to load language options. Using defaults.",
+        "providersLoadFailed": "Unable to load image providers. Using defaults.",
+        "rangeFilterTestFailed": "Failed to test range filter settings",
+        "rangeFilterLoadFailed": "Failed to load species list",
+        "rangeFilterCountFailed": "Failed to load species count"
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Error Tracking & Telemetry",
+          "description": "Optional error tracking to help improve BirdNET-Go reliability and performance"
+        },
+        "diagnostics": {
+          "title": "Support & Diagnostics",
+          "description": "Help developers fix your issues faster by providing essential diagnostic information"
+        }
+      },
+      "telemetry": {
+        "privacyNotice": "Privacy Notice",
+        "privacyPoints": {
+          "noPersonalData": "No personal data is collected",
+          "anonymousData": "All telemetry data is anonymous",
+          "helpImprove": "Telemetry data helps developers identify and fix issues in BirdNET-Go"
+        },
+        "enableTracking": "Enable Error Tracking (Opt-in)"
+      },
+      "systemId": {
+        "label": "Your System ID",
+        "description": "Use this ID when reporting issues",
+        "copyButton": "Copy",
+        "errorLoading": "Error loading system ID"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Include recent logs",
+        "includeConfiguration": "Include configuration (sensitive data removed)",
+        "includeSystemInfo": "Include system information"
+      },
+      "supportReport": {
+        "title": "Generate Support Report",
+        "description": {
+          "intro": "Support reports are **essential for troubleshooting** and dramatically improve our ability to resolve issues you're experiencing. They provide developers with crucial context about your system configuration, recent application logs, and error patterns that would be impossible to diagnose otherwise.",
+          "githubIssue": "Please [create a GitHub issue](https://github.com/tphakala/birdnet-go/issues/new) describing your problem **before or after** generating this support report. This allows for proper tracking and communication about your issue."
+        },
+        "whatsIncluded": {
+          "title": "What's included in the report:",
+          "applicationLogs": "**Application logs** - Recent errors and debug information",
+          "configuration": "**Configuration** - Your settings with sensitive data removed",
+          "systemInfo": "**System information** - OS version, memory, and runtime details",
+          "notIncluded": "**NOT included** - Audio files, bird detections, or personal data"
+        },
+        "userMessage": {
+          "label": "Describe the issue",
+          "placeholder": "Please describe the issue and include GitHub issue link if applicable (e.g., #123)",
+          "githubTip": "💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123) and mention your System ID {systemId} in the GitHub issue to help developers link your support data."
+        },
+        "uploadOption": {
+          "label": "Upload to developers (recommended)",
+          "details": {
+            "sentryUpload": "Data is uploaded to [Sentry](https://sentry.io) cloud service",
+            "euDataCenter": "Stored in EU data center (Frankfurt, Germany)",
+            "privacyCompliant": "Privacy-compliant with sensitive data removed",
+            "manualWarning": "Uncheck only if you prefer to handle the support file manually"
+          }
+        },
+        "generateButton": {
+          "upload": "Generate & Upload",
+          "download": "Generate & Download"
+        },
+        "statusMessages": {
+          "preparing": "Preparing support dump...",
+          "uploadSuccess": "Support dump successfully uploaded to developers!",
+          "uploadSuccessWithId": "Support dump successfully uploaded to developers! Reference ID: {dumpId}",
+          "downloadSuccess": "Support dump generated successfully! Downloading...",
+          "generateSuccess": "Support dump generated successfully!",
+          "generateFailed": "Failed to generate support dump: {message}",
+          "error": "Error: {message}"
+        }
+      }
+    },
+    "filters": {
+      "privacyFiltering": {
+        "title": "Privacy Filtering",
+        "description": "Privacy filtering avoids saving audio clips when human vocals are detected",
+        "enable": "Enable Privacy Filtering",
+        "confidenceLabel": "Confidence Threshold for Human Detection",
+        "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive"
+      },
+      "falsePositivePrevention": {
+        "title": "False Positive Prevention",
+        "description": "Configure false detection filters",
+        "enableDogBark": "Enable Dog Bark Filter",
+        "confidenceLabel": "Confidence Threshold",
+        "confidenceHelp": "Set the confidence level for dog bark detection, lower value makes filter more sensitive",
+        "expireTimeLabel": "Dog Bark Expire Time (Minutes)",
+        "expireTimeHelp": "Set how long to remember a detected dog bark",
+        "addDogBarkSpeciesLabel": "Add Dog Bark Species",
+        "addDogBarkSpeciesHelp": "Search and add species that might be confused with dog barks",
+        "addSpeciesButton": "Add"
+      },
+      "speciesNamePlaceholder": "Species name",
+      "typeSpeciesName": "Type species name...",
+      "dogBarkSpeciesList": "Dog Bark Species List"
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Upload detections to BirdWeather",
+        "ffmpegWarning": {
+          "title": "FFmpeg not detected",
+          "message": "Please install FFmpeg to enable FLAC encoding support, BirdWeather is deprecating WAV uploads in favor of compressed FLAC audio files."
+        },
+        "enable": "Enable BirdWeather Uploads",
+        "token": {
+          "label": "BirdWeather token",
+          "helpText": "Your unique BirdWeather token."
+        },
+        "threshold": {
+          "label": "Upload Threshold",
+          "helpText": "Minimum confidence threshold for uploading predictions to BirdWeather."
+        },
+        "test": {
+          "button": "Test BirdWeather Connection",
+          "loading": "Testing...",
+          "enabledRequired": "BirdWeather must be enabled to test",
+          "tokenRequired": "BirdWeather token must be specified",
+          "inProgress": "Test in progress...",
+          "description": "Test BirdWeather connection"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Configure MQTT broker connection",
+        "enable": "Enable MQTT Integration",
+        "broker": {
+          "label": "MQTT Broker",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "MQTT Topic",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Authentication",
+          "username": {
+            "label": "Username"
+          },
+          "password": {
+            "label": "Password",
+            "helpText": "The MQTT password."
+          }
+        },
+        "messageSettings": {
+          "title": "Message Settings",
+          "retain": {
+            "label": "Retain Messages",
+            "note": "<strong>Home Assistant Users:</strong> It's recommended to enable the retain flag for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown' when Home Assistant restarts."
+          }
+        },
+        "tls": {
+          "title": "TLS/SSL Security",
+          "enable": "Enable TLS/SSL",
+          "skipVerify": "Skip Certificate Verification",
+          "configNote": "<strong>TLS Configuration:</strong><br />• Standard TLS: Leave certificates empty for public brokers<br />• Self-signed certificates: Provide CA Certificate<br />• Mutual TLS (mTLS): Provide all three certificates"
+        },
+        "test": {
+          "button": "Test MQTT Connection",
+          "loading": "Testing...",
+          "enabledRequired": "MQTT must be enabled to test",
+          "brokerRequired": "MQTT broker must be specified",
+          "inProgress": "Test in progress...",
+          "description": "Test MQTT connection"
+        }
+      },
+      "observability": {
+        "title": "Observability",
+        "description": "Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint",
+        "enable": "Enable Observability Integration",
+        "listenAddress": {
+          "label": "Listen Address",
+          "placeholder": "0.0.0.0:8090"
+        }
+      },
+      "weather": {
+        "title": "Weather",
+        "description": "Configure weather data collection",
+        "provider": {
+          "label": "Weather Provider",
+          "options": {
+            "none": "None",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather"
+          }
+        },
+        "notes": {
+          "none": "No weather data will be retrieved.",
+          "yrno": {
+            "description": "Weather forecast data is provided by Yr.no, a joint service by the Norwegian Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).",
+            "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+        },
+        "apiKey": {
+          "label": "API Key",
+          "helpText": "Your OpenWeather API key. Keep this secret!"
+        },
+        "units": {
+          "label": "Units of Measurement",
+          "options": {
+            "standard": "Standard",
+            "metric": "Metric",
+            "imperial": "Imperial"
+          }
+        },
+        "test": {
+          "button": "Test Weather Provider",
+          "loading": "Testing...",
+          "noProvider": "No weather provider selected",
+          "apiKeyRequired": "OpenWeather API key must be specified",
+          "inProgress": "Test in progress...",
+          "description": "Test weather provider connection"
+        }
+      }
+    },
+    "audio": {
+      "audioCapture": {
+        "title": "Audio Capture",
+        "description": "Set audio capture source, sound card or RTSP stream",
+        "soundCardSource": "Sound Card Source",
+        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
+        "noSoundCardCapture": "No sound card capture",
+        "rtspSource": "RTSP Source",
+        "rtspTransportLabel": "RTSP Transport Protocol",
+        "rtspUrlsLabel": "RTSP Stream URLs"
+      },
+      "audioFilters": {
+        "title": "Audio Filters",
+        "description": "Configure audio processing filters",
+        "enableEqualizer": "Enable Audio Equalizer",
+        "filterType": "Filter Type",
+        "newFilterType": "New Filter Type",
+        "selectFilterType": "Select filter type",
+        "addFilter": "Add Filter",
+        "remove": "Remove",
+        "cutoffFrequency": "Cutoff Frequency",
+        "qFactor": "Q Factor",
+        "gain": "Gain",
+        "attenuation": "Attenuation",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        }
+      },
+      "soundLevelMonitoring": {
+        "title": "Sound Level Monitoring",
+        "description": "Monitor and report environmental sound levels",
+        "enable": "Enable Sound Level Monitoring",
+        "intervalLabel": "Measurement Interval (seconds)",
+        "intervalHelp": "How often to report sound level measurements",
+        "dataOutputTitle": "Sound Level Data Output",
+        "dataOutputDescription": "When enabled, sound level measurements are published via:",
+        "mqttTopic": "MQTT topic:",
+        "sseEndpoint": "SSE endpoint:",
+        "prometheusMetrics": "Prometheus metrics:"
+      },
+      "audioExport": {
+        "title": "Audio Export",
+        "description": "Configure audio clip saving for identified bird calls",
+        "enable": "Enable Audio Export",
+        "enableDebug": "Enable Debug Mode",
+        "pathLabel": "Export Path",
+        "typeLabel": "Export Type",
+        "bitrateLabel": "Bitrate"
+      },
+      "audioClipRetention": {
+        "title": "Audio Clip Retention",
+        "description": "Configure audio clip cleanup",
+        "policyLabel": "Retention Policy",
+        "maxAgeLabel": "Max Age",
+        "maxUsageLabel": "Max Usage (Percentage)",
+        "minClipsLabel": "Minimum Clips",
+        "keepSpectrograms": "Keep Spectrogram Images",
+        "policies": {
+          "none": "None",
+          "age": "Age",
+          "usage": "Usage"
+        }
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Lowpass Filter",
+        "highpass": "Highpass Filter",
+        "bandpass": "Bandpass Filter",
+        "bandstop": "Bandstop Filter"
+      }
+    },
+    "security": {
+      "hostLabel": "Host Address",
+      "allowSubnetBypassLabel": "Allow Access from Subnet to Bypass Authentication",
+      "allowedSubnetsLabel": "Allowed Subnets",
+      "allowedSubnetsHelp": "Allowed network ranges to bypass the login (CIDR notation, comma-separated list)",
+      "securityWarningTitle": "Security Warning:",
+      "subnetWarningText": "Devices from these subnets will have unrestricted access. Only include trusted internal networks.",
+      "httpsSettingsTitle": "HTTPS Settings",
+      "httpsSettingsDescription": "Secure access with SSL/TLS encryption",
+      "basicAuthTitle": "Basic Authentication",
+      "basicAuthDescription": "Secure access with a simple password",
+      "serverConfiguration": {
+        "title": "Server Configuration",
+        "description": "Configure HTTPS and SSL/TLS settings",
+        "autoTlsLabel": "Auto SSL Certificate Management (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "AutoTLS Requirements:",
+          "domainRequired": "A registered domain name is required",
+          "domainPointing": "Domain must point to this server's public IP",
+          "portsAccessible": "Ports 80 and 443 must be accessible from the internet"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Basic Authentication",
+        "description": "Secure access with a simple password",
+        "enableLabel": "Enable Password Authentication",
+        "passwordLabel": "Password",
+        "passwordHelpText": "Limit access to settings with a password."
+      },
+      "oauth": {
+        "title": "OAuth2 Social Authentication",
+        "description": "Single sign-on to log in with your existing account",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "Allow OAuth2 Login via Google",
+          "redirectUriTitle": "Redirect URI for Google Cloud Console:",
+          "getCredentialsLabel": "Get your credentials from Google Cloud Console",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The OAuth 2.0 Client ID obtained from Google Cloud Console when setting up OAuth credentials.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The OAuth 2.0 Client Secret obtained from Google Cloud Console when setting up OAuth credentials.",
+          "userIdLabel": "User ID"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "Allow OAuth2 Login via GitHub",
+          "redirectUriTitle": "Redirect URI for GitHub Developer Settings:",
+          "getCredentialsLabel": "Get your credentials from GitHub Developer Settings",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The OAuth 2.0 Client ID obtained from GitHub Developer Settings when setting up OAuth credentials.",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The OAuth 2.0 Client Secret obtained from GitHub Developer Settings when setting up OAuth credentials.",
+          "userIdLabel": "User ID"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Bypass Authentication",
+        "description": "Allow access to settings without authentication"
+      },
+      "placeholders": {
+        "host": "For example, localhost:8080 or example.domain.com",
+        "allowedUsers": "Enter one or more allowed user emails",
+        "subnet": "Enter a CIDR subnet (e.g. 192.168.1.0/24)"
+      }
+    },
+    "species": {
+      "alwaysInclude": {
+        "title": "Always Include Species",
+        "description": "Species in this list will always be included in range of detected species",
+        "noSpeciesMessage": "No species added to include list"
+      },
+      "alwaysExclude": {
+        "title": "Always Exclude Species",
+        "description": "Species in this list will always be excluded from detection",
+        "noSpeciesMessage": "No species added to exclude list"
+      },
+      "customConfiguration": {
+        "title": "Custom Species Configuration",
+        "description": "Species specific threshold values, detection intervals, and actions",
+        "helpText": {
+          "intro": "Configure species-specific settings:",
+          "threshold": "Threshold: Minimum confidence score (0-1) required for detection",
+          "interval": "Interval: Minimum time in seconds between detections of the same species (0 = use global default)",
+          "actions": "Actions: Custom commands to execute when this species is detected"
+        },
+        "columnHeaders": {
+          "species": "Species",
+          "settings": "Settings",
+          "actions": "Actions"
+        },
+        "badges": {
+          "threshold": "Threshold: {value}",
+          "interval": "Interval: {value}s",
+          "customAction": "Custom Action",
+          "executeDefaults": "+Defaults"
+        },
+        "dropdown": {
+          "editConfig": "Edit Config",
+          "addAction": "Add Action",
+          "remove": "Remove"
+        },
+        "labels": {
+          "threshold": "Threshold",
+          "interval": "Interval",
+          "intervalSeconds": "Interval (sec)",
+          "addButton": "Add"
+        },
+        "noConfigurationsMessage": "No custom species configurations added",
+        "addForm": {
+          "speciesPlaceholder": "Species name",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        }
+      },
+      "actionsModal": {
+        "title": "Actions for {species}",
+        "actionType": {
+          "label": "Action Type",
+          "executeCommand": "Execute Command",
+          "onlySupported": "Currently, only Execute Command actions are supported"
+        },
+        "command": {
+          "label": "Command",
+          "helpText": "Provide the full path to the command or script you want to execute"
+        },
+        "parameters": {
+          "label": "Parameters",
+          "helpText": "These values will be passed to your command in the order listed",
+          "availableTitle": "Available Parameters",
+          "buttons": {
+            "commonName": "CommonName",
+            "scientificName": "ScientificName",
+            "confidence": "Confidence",
+            "time": "Time",
+            "source": "Source",
+            "clearParameters": "Clear Parameters"
+          }
+        },
+        "executeDefaults": {
+          "label": "Also run default actions (database storage, notifications, etc.)",
+          "helpText": "When enabled, both your custom action and the system's default actions will run. When disabled, only your custom action will execute."
+        }
+      },
+      "addSpeciesToInclude": "Add species to include",
+      "addSpeciesToIncludeLabel": "Add New Species to Include",
+      "addSpeciesToExclude": "Add species to exclude",
+      "addSpeciesToExcludeLabel": "Add New Species to Exclude",
+      "commandPathPlaceholder": "/path/to/your/command",
+      "parametersPlaceholder": "Parameters will appear here"
+    },
+    "database": {
+      "sqlitePlaceholder": "Enter SQLite database path",
+      "mysqlHostPlaceholder": "Enter MySQL host",
+      "mysqlUsernamePlaceholder": "Enter MySQL username"
+    }
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "openLoginModal": "Open login modal"
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "No data available",
+      "loading": "Loading data...",
+      "error": "Failed to load data",
+      "sortBy": "Sort by {column}",
+      "rowsPerPage": "Rows per page",
+      "pageInfo": "Showing {from} to {to} of {total} results"
+    },
+    "pagination": {
+      "ariaLabel": "Pagination Navigation",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {current} of {total}",
+      "goToPage": "Go to page {page}",
+      "goToPreviousPage": "Go to previous page",
+      "goToNextPage": "Go to next page",
+      "firstPage": "First page",
+      "lastPage": "Last page"
+    },
+    "stats": {
+      "total": "Total",
+      "average": "Average",
+      "min": "Minimum",
+      "max": "Maximum",
+      "count": "Count"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Enter {field}",
+      "select": "Select {field}",
+      "search": "Search...",
+      "date": "Select date",
+      "dateRange": "Select date range",
+      "number": "Enter number",
+      "password": "Enter password",
+      "url": "Enter URL",
+      "email": "Enter email",
+      "selectFilterType": "Select filter type",
+      "speciesName": "Species name"
+    },
+    "labels": {
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "copyToClipboard": "Copy to clipboard",
+      "clearSelection": "Clear selection",
+      "selectOption": "Select an option"
+    },
+    "help": {
+      "passwordStrength": "Password strength: {strength}",
+      "charactersRemaining": "{count} characters remaining",
+      "dateFormat": "Format: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Password Strength:",
+        "levels": {
+          "weak": "Weak",
+          "fair": "Fair",
+          "good": "Good",
+          "strong": "Strong"
+        },
+        "suggestions": {
+          "title": "Suggestions:",
+          "minLength": "At least 8 characters",
+          "mixedCase": "Mix of uppercase and lowercase",
+          "number": "At least one number",
+          "special": "At least one special character"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "radioValue prop is required for radio inputs"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Start Date",
+        "endDate": "End Date",
+        "quickSelect": "Quick Select",
+        "selected": "Selected: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "last7Days": "Last 7 days",
+        "last30Days": "Last 30 days",
+        "thisMonth": "This month",
+        "lastMonth": "Last month",
+        "thisYear": "This year"
+      },
+      "errors": {
+        "invalidStartDate": "Invalid start date",
+        "invalidEndDate": "Invalid end date",
+        "startAfterEnd": "Start date cannot be after end date",
+        "endBeforeStart": "End date cannot be before start date"
+      }
+    },
+    "species": {
+      "placeholder": "Enter species name...",
+      "empty": "No species added",
+      "maxReached": "Maximum of {maxItems} species reached",
+      "aria": {
+        "dragToReorder": "Drag to reorder {species}",
+        "edit": "Edit species",
+        "remove": "Remove species"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "play": "Play",
+      "pause": "Pause",
+      "stop": "Stop",
+      "volume": "Volume",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "download": "Download audio",
+      "currentTime": "{current} / {total}",
+      "loading": "Loading audio...",
+      "error": "Failed to load audio",
+      "volumeGain": "Volume gain control: {value} dB",
+      "filterControl": "Filter control",
+      "highPassFilter": "High-pass filter control: {freq} Hz",
+      "seekProgress": "Seek audio progress: {current} / {total} seconds"
+    }
+  }
+}

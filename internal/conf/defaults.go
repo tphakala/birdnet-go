@@ -82,6 +82,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "auto")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "all")
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
+	viper.SetDefault("realtime.dashboard.locale", "en") // Default UI locale
 
 	// Retention policy configuration
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)

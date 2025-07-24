@@ -1,5 +1,6 @@
 <script>
   import Card from '$lib/desktop/components/ui/Card.svelte';
+  import { t } from '$lib/i18n';
 
   // Settings data (version info)
   let settings = $state({
@@ -11,9 +12,9 @@
   async function fetchVersionInfo() {
     try {
       // In a real implementation, this would fetch from an API
-      // For now, we'll use placeholder values
-      settings.version = 'Development Build';
-      settings.buildDate = 'Unknown';
+      // For now, we'll leave empty - the template will use fallback translations
+      // settings.version = '1.0.0';
+      // settings.buildDate = '2024-01-01';
     } catch {
       // Silently fail for now - version info is not critical
     }
@@ -33,45 +34,44 @@
       >
         <img
           src="/assets/images/BirdNET-Go-logo.webp"
-          alt="BirdNET-Go Logo"
+          alt={t('about.logoAlt')}
           class="w-full h-full object-contain rounded-full"
           style:transform="scale(1)"
         />
       </div>
       <div class="mt-4">
-        <h1 class="text-4xl font-bold">BirdNET-Go</h1>
+        <h1 class="text-4xl font-bold">{t('about.title')}</h1>
         <p class="text-base-content/70 text-lg mt-2">
-          A modern interface for real-time bird sound detection and classification
+          {t('about.subtitle')}
         </p>
       </div>
     </div>
   </div>
 
   <!-- Overview Section -->
-  <Card title="Overview" className="bg-base-100 shadow-sm" contentClassName="prose max-w-none">
+  <Card
+    title={t('about.overview')}
+    className="bg-base-100 shadow-sm"
+    contentClassName="prose max-w-none"
+  >
     <p>
-      BirdNET-Go is a Go-based implementation for real-time bird sound detection and classification,
-      built upon the foundation of the BirdNET project. This application provides a user-friendly
-      interface for continuous bird sound monitoring and analysis.
+      {t('about.overviewText')}
     </p>
   </Card>
 
   <!-- BirdNET Project Section -->
   <Card
-    title="BirdNET Project"
+    title={t('about.birdnetProject')}
     className="bg-base-100 shadow-sm"
     contentClassName="prose max-w-none"
   >
     <p>
-      BirdNET-Go would not be possible without the groundbreaking work of the BirdNET project. The
-      artificial intelligence model powering BirdNET-Go's detection capabilities is the result of
-      the BirdNET project's innovative research and development.
+      {t('about.birdnetDescription')}
     </p>
 
-    <p class="text-xl font-medium mt-6">Developed by</p>
+    <p class="text-xl font-medium mt-6">{t('about.developedBy')}</p>
     <p>
-      The K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in
-      collaboration with Chemnitz University of Technology:
+      {t('about.developersText')}
     </p>
     <ul class="list-none pl-0 gap-2 mt-4 about-developers-grid">
       <li class="flex items-center gap-2">
@@ -137,20 +137,22 @@
             d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
           />
         </svg>
-        Visit BirdNET-Analyzer Project
+        {t('about.visitBirdnetAnalyzer')}
       </a>
     </div>
   </Card>
 
   <!-- Contributors Section -->
-  <Card title="Contributors" className="bg-base-100 shadow-sm" contentClassName="prose max-w-none">
+  <Card
+    title={t('about.contributors')}
+    className="bg-base-100 shadow-sm"
+    contentClassName="prose max-w-none"
+  >
     <p>
-      BirdNET-Go has grown and improved thanks to the collaborative efforts of many individuals.
-      Their contributions, ranging from code improvements to feature suggestions, have been
-      invaluable in making this project better.
+      {t('about.contributorsText')}
     </p>
 
-    <p class="text-xl font-medium mt-6">Main Developer</p>
+    <p class="text-xl font-medium mt-6">{t('about.mainDeveloper')}</p>
     <p class="flex items-center gap-2 mt-2">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -169,9 +171,9 @@
       >
     </p>
 
-    <p class="text-xl font-medium mt-6">GitHub Contributors</p>
+    <p class="text-xl font-medium mt-6">{t('about.githubContributors')}</p>
     <p class="mt-2 text-base-content/70">
-      Special thanks to these contributors for their valuable work on improving BirdNET-Go:
+      {t('about.contributorsNote')}
     </p>
     <div class="gap-2 mt-4 about-contributors-grid">
       <a href="https://github.com/aav7fl" class="btn btn-ghost btn-sm justify-start normal-case"
@@ -223,9 +225,9 @@
     </div>
 
     <div class="mt-6 bg-base-200 rounded-lg p-4">
-      <p class="text-xl font-medium">Community Acknowledgment</p>
+      <p class="text-xl font-medium">{t('about.communityAcknowledgment')}</p>
       <p class="mt-2">
-        We would also like to extend our gratitude to all users who have contributed through:
+        {t('about.communityText')}
       </p>
       <ul class="mt-2 list-none pl-0 space-y-1">
         <li class="flex items-center gap-2">
@@ -241,7 +243,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          Bug reports and issue tracking
+          {t('about.bugReports')}
         </li>
         <li class="flex items-center gap-2">
           <svg
@@ -256,7 +258,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          Feature suggestions and feedback
+          {t('about.featureSuggestions')}
         </li>
         <li class="flex items-center gap-2">
           <svg
@@ -271,7 +273,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          Testing and validation
+          {t('about.testing')}
         </li>
         <li class="flex items-center gap-2">
           <svg
@@ -286,7 +288,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          Documentation improvements
+          {t('about.documentation')}
         </li>
       </ul>
     </div>
@@ -294,15 +296,13 @@
 
   <!-- Additional Credits Section -->
   <Card
-    title="Additional Credits"
+    title={t('about.additionalCredits')}
     className="bg-base-100 shadow-sm"
     contentClassName="prose max-w-none"
   >
-    <p class="text-xl font-medium">BirdNET-Pi Project</p>
+    <p class="text-xl font-medium">{t('about.birdnetPiProject')}</p>
     <p class="mt-2">
-      Special thanks to Patrick McGuire for his inspiring work on BirdNET-Pi, which has influenced
-      the development of BirdNET-Go. BirdNET-Pi demonstrates the potential of bird sound detection
-      on embedded devices and has set a high standard for community-driven development.
+      {t('about.birdnetPiDescription')}
     </p>
     <div class="flex gap-2 mt-4">
       <a href="https://github.com/mcguirepr89/BirdNET-Pi" class="btn btn-sm btn-outline gap-2">
@@ -316,12 +316,12 @@
             d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
           />
         </svg>
-        Visit BirdNET-Pi Project
+        {t('about.visitBirdnetPi')}
       </a>
     </div>
 
-    <p class="text-xl font-medium mt-6">BirdNET Label Translations</p>
-    <p class="mt-2">Provided by Patrick Levin for the BirdNET-Pi project by Patrick McGuire</p>
+    <p class="text-xl font-medium mt-6">{t('about.labelTranslations')}</p>
+    <p class="mt-2">{t('about.labelTranslationsBy')}</p>
     <div class="flex gap-2 mt-4">
       <a href="https://github.com/patlevin" class="btn btn-sm btn-outline gap-2">
         <svg
@@ -334,7 +334,7 @@
             d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.30.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
           />
         </svg>
-        Patrick Levin's GitHub
+        {t('about.patrickLevinGithub')}
       </a>
     </div>
   </Card>
@@ -342,7 +342,7 @@
   <!-- Version Information -->
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body">
-      <h2 class="card-title">Version Information</h2>
+      <h2 class="card-title">{t('about.versionInformation')}</h2>
       <div class="space-y-4">
         <p class="flex items-center gap-2">
           <svg
@@ -357,7 +357,8 @@
               clip-rule="evenodd"
             />
           </svg>
-          Current Version: <span class="font-mono">{settings.version || 'Development Build'}</span>
+          {t('about.currentVersion')}:
+          <span class="font-mono">{settings.version || t('about.developmentBuild')}</span>
         </p>
         <p class="flex items-center gap-2">
           <svg
@@ -372,7 +373,8 @@
               clip-rule="evenodd"
             />
           </svg>
-          Build Date: <span class="font-mono">{settings.buildDate || 'Unknown'}</span>
+          {t('about.buildDate')}:
+          <span class="font-mono">{settings.buildDate || t('about.unknown')}</span>
         </p>
       </div>
     </div>
@@ -381,15 +383,15 @@
   <!-- License Information -->
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body">
-      <h2 class="card-title">License Information</h2>
+      <h2 class="card-title">{t('about.licenseInformation')}</h2>
       <div class="space-y-4">
         <p>
-          Both the BirdNET AI model and BirdNET-Go are licensed under the <a
+          {t('about.licenseText')}
+          <a
             href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
             class="link link-primary"
             target="_blank"
-            rel="noopener noreferrer"
-            >Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a
+            rel="noopener noreferrer">{t('about.ccLicense')}</a
           >.
         </p>
         <div class="flex items-center gap-2">
@@ -405,11 +407,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          <span
-            >This license allows others to remix, adapt, and build upon this work non-commercially,
-            as long as appropriate credit is given and new creations are licensed under identical
-            terms.</span
-          >
+          <span>{t('about.licenseDescription')}</span>
         </div>
         <div class="flex items-center gap-2">
           <svg
@@ -428,7 +426,7 @@
             href="/assets/LICENSES.md"
             class="link link-primary"
             target="_blank"
-            rel="noopener noreferrer">Dependency Licenses</a
+            rel="noopener noreferrer">{t('about.dependencyLicenses')}</a
           >
         </div>
       </div>

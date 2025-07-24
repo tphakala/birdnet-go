@@ -9,6 +9,7 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { actionIcons, alertIconsSvg, systemIcons, mediaIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n';
 
   let settings = $derived(
     $supportSettings ||
@@ -61,7 +62,7 @@
       })
       .catch(error => {
         console.error('Failed to fetch system ID:', error);
-        systemId = 'Error loading system ID';
+        systemId = t('settings.support.systemId.errorLoading');
       });
   });
 
@@ -90,7 +91,7 @@
     statusType = 'info';
     progressPercent = 0;
 
-    updateStatus('Preparing support dump...', 'info', 10);
+    updateStatus(t('settings.support.supportReport.statusMessages.preparing'), 'info', 10);
 
     try {
       const response = await fetch('/api/v2/support/generate', {
@@ -117,17 +118,36 @@
 
       if (data.success) {
         if (supportDump.uploadToSentry && data.uploaded_at) {
-          updateStatus('Support dump successfully uploaded to developers!', 'success', 100);
           if (data.dump_id) {
-            statusMessage += ` Reference ID: ${data.dump_id}`;
+            updateStatus(
+              t('settings.support.supportReport.statusMessages.uploadSuccessWithId', {
+                dumpId: data.dump_id,
+              }),
+              'success',
+              100
+            );
+          } else {
+            updateStatus(
+              t('settings.support.supportReport.statusMessages.uploadSuccess'),
+              'success',
+              100
+            );
           }
         } else if (data.download_url) {
-          updateStatus('Support dump generated successfully! Downloading...', 'success', 100);
+          updateStatus(
+            t('settings.support.supportReport.statusMessages.downloadSuccess'),
+            'success',
+            100
+          );
           setTimeout(() => {
             window.location.href = data.download_url;
           }, 500);
         } else {
-          updateStatus('Support dump generated successfully!', 'success', 100);
+          updateStatus(
+            t('settings.support.supportReport.statusMessages.generateSuccess'),
+            'success',
+            100
+          );
         }
 
         // Clear status after 10 seconds
@@ -138,14 +158,22 @@
         }, 10000);
       } else {
         updateStatus(
-          'Failed to generate support dump: ' + (data.message || 'Unknown error'),
+          t('settings.support.supportReport.statusMessages.generateFailed', {
+            message: data.message || 'Unknown error',
+          }),
           'error',
           0
         );
       }
     } catch (error) {
       generating = false;
-      updateStatus('Error: ' + (error as Error).message, 'error', 0);
+      updateStatus(
+        t('settings.support.supportReport.statusMessages.error', {
+          message: (error as Error).message,
+        }),
+        'error',
+        0
+      );
     }
   }
 
@@ -173,8 +201,8 @@
   <div class="space-y-4">
     <!-- Error Tracking & Telemetry Section -->
     <SettingsSection
-      title="Error Tracking & Telemetry"
-      description="Optional error tracking to help improve BirdNET-Go reliability and performance"
+      title={t('settings.support.sections.telemetry.title')}
+      description={t('settings.support.sections.telemetry.description')}
       defaultOpen={true}
       hasChanges={sentryHasChanges}
     >
@@ -182,17 +210,12 @@
         <!-- Privacy Notice -->
         <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-sm">
           <div>
-            <h3 class="font-bold">Privacy-First Error Tracking</h3>
+            <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
             <div class="text-sm mt-1">
-              <p>
-                Error tracking is <strong>completely optional</strong> and requires your explicit consent.
-                When enabled:
-              </p>
               <ul class="list-disc list-inside mt-2 space-y-1">
-                <li>Only essential error information is collected for debugging</li>
-                <li>No personal data, audio recordings, or bird detection data is sent</li>
-                <li>All data is filtered to remove sensitive information</li>
-                <li>Telemetry data helps developers identify and fix issues in BirdNET-Go</li>
+                <li>{t('settings.support.telemetry.privacyPoints.noPersonalData')}</li>
+                <li>{t('settings.support.telemetry.privacyPoints.anonymousData')}</li>
+                <li>{t('settings.support.telemetry.privacyPoints.helpImprove')}</li>
               </ul>
             </div>
           </div>
@@ -201,7 +224,7 @@
         <!-- Enable Error Tracking -->
         <Checkbox
           bind:checked={settings.sentry!.enabled}
-          label="Enable Error Tracking (Opt-in)"
+          label={t('settings.support.telemetry.enableTracking')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateSentryEnabled(settings.sentry!.enabled)}
         />
@@ -209,7 +232,7 @@
         <!-- System ID Display -->
         <div class="form-control w-full mt-4">
           <label class="label" for="systemID">
-            <span class="label-text">Your System ID</span>
+            <span class="label-text">{t('settings.support.systemId.label')}</span>
           </label>
           <div class="join">
             <input
@@ -223,13 +246,12 @@
               <div class="h-5 w-5">
                 {@html actionIcons.copy}
               </div>
-              Copy
+              {t('settings.support.systemId.copyButton')}
             </button>
           </div>
           <div class="label">
             <span class="label-text-alt text-base-content/60"
-              >Include this ID when reporting issues if you want developers to identify your error
-              reports</span
+              >{t('settings.support.systemId.description')}</span
             >
           </div>
         </div>
@@ -238,44 +260,39 @@
 
     <!-- Support & Diagnostics Section -->
     <SettingsSection
-      title="Support & Diagnostics"
-      description="Help developers fix your issues faster by providing essential diagnostic information"
+      title={t('settings.support.sections.diagnostics.title')}
+      description={t('settings.support.sections.diagnostics.description')}
       defaultOpen={false}
     >
       <div class="space-y-4">
         <!-- Support Dump Generation -->
         <div class="card bg-base-200">
           <div class="card-body">
-            <h3 class="card-title text-lg">Generate Support Report</h3>
+            <h3 class="card-title text-lg">{t('settings.support.supportReport.title')}</h3>
 
             <!-- Enhanced Description -->
             <div class="space-y-3 mb-4">
               <p class="text-sm text-base-content/80">
-                Support reports are <strong>essential for troubleshooting</strong> and dramatically improve
-                our ability to resolve issues you're experiencing. They provide developers with crucial
-                context about your system configuration, recent application logs, and error patterns
-                that would be impossible to diagnose otherwise.
+                {@html t('settings.support.supportReport.description.intro')}
               </p>
 
               <p class="text-sm text-base-content/80">
-                Please <a
-                  href="https://github.com/tphakala/birdnet-go/issues/new"
-                  target="_blank"
-                  class="link link-primary font-semibold">create a GitHub issue</a
-                >
-                describing your problem <strong>before or after</strong> generating this support report.
-                This allows for proper tracking and communication about your issue.
+                {@html t('settings.support.supportReport.description.githubIssue')}
               </p>
 
               <div class="bg-base-100 rounded-lg p-3 border border-base-300">
-                <h4 class="font-semibold text-sm mb-2">What's included in the report:</h4>
+                <h4 class="font-semibold text-sm mb-2">
+                  {t('settings.support.supportReport.whatsIncluded.title')}
+                </h4>
                 <ul class="text-xs space-y-1 text-base-content/70">
                   <li class="flex items-center gap-2">
                     <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
                     <span
-                      ><strong>Application logs</strong> - Recent errors and debug information</span
+                      >{@html t(
+                        'settings.support.supportReport.whatsIncluded.applicationLogs'
+                      )}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -283,15 +300,14 @@
                       {@html alertIconsSvg.success}
                     </div>
                     <span
-                      ><strong>Configuration</strong> - Your settings with sensitive data removed</span
+                      >{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
                     <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
-                    <span
-                      ><strong>System information</strong> - OS version, memory, and runtime details</span
+                    <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -299,7 +315,7 @@
                       {@html alertIconsSvg.error}
                     </div>
                     <span
-                      ><strong>NOT included</strong> - Audio files, bird detections, or personal data</span
+                      >{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span
                     >
                   </li>
                 </ul>
@@ -310,32 +326,34 @@
             <div class="space-y-2">
               <Checkbox
                 bind:checked={supportDump.includeLogs}
-                label="Include recent logs"
+                label={t('settings.support.diagnostics.includeRecentLogs')}
                 disabled={generating}
               />
 
               <Checkbox
                 bind:checked={supportDump.includeConfig}
-                label="Include configuration (sensitive data removed)"
+                label={t('settings.support.diagnostics.includeConfiguration')}
                 disabled={generating}
               />
 
               <Checkbox
                 bind:checked={supportDump.includeSystemInfo}
-                label="Include system information"
+                label={t('settings.support.diagnostics.includeSystemInfo')}
                 disabled={generating}
               />
 
               <!-- User Message -->
               <div class="form-control mt-4">
                 <label class="label" for="userMessage">
-                  <span class="label-text">Describe the issue</span>
+                  <span class="label-text"
+                    >{t('settings.support.supportReport.userMessage.label')}</span
+                  >
                 </label>
                 <textarea
                   id="userMessage"
                   bind:value={supportDump.userMessage}
                   class="textarea textarea-bordered textarea-sm h-24 text-base-content"
-                  placeholder="Please describe the issue and include GitHub issue link if applicable (e.g., #123)"
+                  placeholder={t('settings.support.supportReport.userMessage.placeholder')}
                   rows="4"
                   disabled={generating}
                 ></textarea>
@@ -343,9 +361,7 @@
                 <!-- GitHub Issue Note -->
                 <div class="label">
                   <span class="label-text-alt text-base-content/60">
-                    💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123)
-                    and mention your System ID <span class="font-mono text-xs">{systemId}</span> in the
-                    GitHub issue to help developers link your support data.
+                    {t('settings.support.supportReport.userMessage.githubTip', { systemId })}
                   </span>
                 </div>
               </div>
@@ -355,30 +371,29 @@
                 <div class="mt-4">
                   <Checkbox
                     bind:checked={supportDump.uploadToSentry}
-                    label="Upload to developers (recommended)"
+                    label={t('settings.support.supportReport.uploadOption.label')}
                     disabled={generating}
                   />
                   <div class="pl-6 mt-2 space-y-2">
                     <div class="text-xs text-base-content/60">
                       <p class="flex items-start gap-1">
                         {@html actionIcons.check}
-                        Data is uploaded to
-                        <a href="https://sentry.io" target="_blank" class="link link-primary"
-                          >Sentry</a
-                        > cloud service
+                        {@html t(
+                          'settings.support.supportReport.uploadOption.details.sentryUpload'
+                        )}
                       </p>
                       <p class="flex items-start gap-1">
                         {@html systemIcons.globe}
-                        Stored in EU data center (Frankfurt, Germany)
+                        {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
                       </p>
                       <p class="flex items-start gap-1">
                         {@html systemIcons.shield}
-                        Privacy-compliant with sensitive data removed
+                        {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
                       </p>
                     </div>
                     <div class="text-xs text-warning/80 flex items-center gap-1">
                       {@html systemIcons.infoCircle}
-                      Uncheck only if you prefer to handle the support file manually
+                      {t('settings.support.supportReport.uploadOption.details.manualWarning')}
                     </div>
                   </div>
                 </div>
@@ -437,8 +452,8 @@
                     {@html mediaIcons.download}
                     <span
                       >{supportDump.uploadToSentry
-                        ? 'Generate & Upload'
-                        : 'Generate & Download'}</span
+                        ? t('settings.support.supportReport.generateButton.upload')
+                        : t('settings.support.supportReport.generateButton.download')}</span
                     >
                   </span>
                 {:else}

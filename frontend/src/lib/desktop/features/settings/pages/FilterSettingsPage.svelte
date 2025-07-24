@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import { t } from '$lib/i18n';
 
   // API response interfaces
   interface SpeciesListResponse {
@@ -188,8 +189,8 @@
   <div class="space-y-4">
     <!-- Privacy Filter Section -->
     <SettingsSection
-      title="Privacy Filtering"
-      description="Privacy filtering avoids saving audio clips when human vocals are detected"
+      title={t('settings.filters.privacyFiltering.title')}
+      description={t('settings.filters.privacyFiltering.description')}
       defaultOpen={true}
       hasChanges={privacyFilterHasChanges}
     >
@@ -197,7 +198,7 @@
         <!-- Enable Privacy Filtering -->
         <Checkbox
           bind:checked={settings.privacy.enabled}
-          label="Enable Privacy Filtering"
+          label={t('settings.filters.privacyFiltering.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updatePrivacyEnabled(settings.privacy.enabled)}
         />
@@ -206,14 +207,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <!-- Confidence Threshold -->
             <NumberField
-              label="Confidence Threshold for Human Detection"
+              label={t('settings.filters.privacyFiltering.confidenceLabel')}
               value={(settings.privacy as any).confidence}
               onUpdate={updatePrivacyConfidence}
               min={0}
               max={1}
               step={0.01}
               disabled={store.isLoading || store.isSaving}
-              helpText="Set the confidence level for human voice detection, lower value makes filter more sensitive"
+              helpText={t('settings.filters.privacyFiltering.confidenceHelp')}
             />
           </div>
         {/if}
@@ -222,8 +223,8 @@
 
     <!-- Dog Bark Filter Section -->
     <SettingsSection
-      title="False Positive Prevention"
-      description="Configure false detection filters"
+      title={t('settings.filters.falsePositivePrevention.title')}
+      description={t('settings.filters.falsePositivePrevention.description')}
       defaultOpen={true}
       hasChanges={dogBarkFilterHasChanges}
     >
@@ -231,7 +232,7 @@
         <!-- Enable Dog Bark Filter -->
         <Checkbox
           bind:checked={settings.dogBark.enabled}
-          label="Enable Dog Bark Filter"
+          label={t('settings.filters.falsePositivePrevention.enableDogBark')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateDogBarkEnabled(settings.dogBark.enabled)}
         />
@@ -240,32 +241,32 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <!-- Confidence Threshold -->
             <NumberField
-              label="Confidence Threshold"
+              label={t('settings.filters.falsePositivePrevention.confidenceLabel')}
               value={(settings.dogBark as any).confidence}
               onUpdate={updateDogBarkConfidence}
               min={0}
               max={1}
               step={0.01}
               disabled={store.isLoading || store.isSaving}
-              helpText="Set the confidence level for dog bark detection, lower value makes filter more sensitive"
+              helpText={t('settings.filters.falsePositivePrevention.confidenceHelp')}
             />
 
             <!-- Dog Bark Expire Time -->
             <NumberField
-              label="Dog Bark Expire Time (Minutes)"
+              label={t('settings.filters.falsePositivePrevention.expireTimeLabel')}
               value={(settings.dogBark as any).remember}
               onUpdate={updateDogBarkRemember}
               min={0}
               step={1}
               disabled={store.isLoading || store.isSaving}
-              helpText="Set how long to remember a detected dog bark"
+              helpText={t('settings.filters.falsePositivePrevention.expireTimeHelp')}
             />
           </div>
 
           <!-- Dog Bark Species List -->
           <div class="form-control mt-6">
             <div class="label justify-start">
-              <span class="label-text">Dog Bark Species List</span>
+              <span class="label-text">{t('settings.filters.dogBarkSpeciesList')}</span>
             </div>
 
             <!-- Species List -->
@@ -279,13 +280,13 @@
                         bind:value={editSpecies}
                         class="input input-sm input-bordered flex-1"
                         onkeydown={handleEditKeydown}
-                        placeholder="Species name"
+                        placeholder={t('settings.filters.speciesNamePlaceholder')}
                       />
                       <button
                         type="button"
                         class="btn btn-sm btn-success"
                         onclick={saveEdit}
-                        aria-label="Save changes"
+                        aria-label={t('common.aria.saveChanges')}
                       >
                         {@html actionIcons.check}
                       </button>
@@ -293,7 +294,7 @@
                         type="button"
                         class="btn btn-sm btn-ghost"
                         onclick={cancelEdit}
-                        aria-label="Cancel edit"
+                        aria-label={t('common.aria.cancelEdit')}
                       >
                         {@html navigationIcons.close}
                       </button>
@@ -304,7 +305,7 @@
                         class="btn btn-sm btn-ghost"
                         onclick={() => startEdit(index)}
                         disabled={store.isLoading || store.isSaving}
-                        aria-label="Edit species"
+                        aria-label={t('common.aria.editSpecies')}
                       >
                         {@html actionIcons.edit}
                       </button>
@@ -313,7 +314,7 @@
                         class="btn btn-sm btn-error"
                         onclick={() => removeSpecies(index)}
                         disabled={store.isLoading || store.isSaving}
-                        aria-label="Remove species"
+                        aria-label={t('common.aria.removeSpecies')}
                       >
                         {@html actionIcons.delete}
                       </button>
@@ -326,13 +327,13 @@
             <!-- Add New Species -->
             <SpeciesInput
               bind:value={newSpecies}
-              label="Add Dog Bark Species"
-              placeholder="Type species name..."
-              helpText="Search and add species that might be confused with dog barks"
+              label={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
+              placeholder={t('settings.filters.typeSpeciesName')}
+              helpText={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesHelp')}
               disabled={store.isLoading || store.isSaving}
               predictions={allowedSpecies}
               size="sm"
-              buttonText="Add"
+              buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
               buttonIcon={true}
               onInput={handleSpeciesInput}
               onAdd={addSpecies}
@@ -344,7 +345,7 @@
                 <div class="h-4 w-4">
                   {@html alertIconsSvg.info}
                 </div>
-                <span>Unsaved changes</span>
+                <span>{t('settings.actions.unsavedChanges')}</span>
               </div>
             {/if}
           </div>

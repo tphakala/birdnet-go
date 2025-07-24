@@ -169,7 +169,7 @@ export default [
   
   // Node.js scripts and config files
   {
-    files: ['src/test/**/*.js', '*.config.js', 'test-*.js', 'debug-*.js'],
+    files: ['src/test/**/*.js', '*.config.js', 'test-*.js', 'debug-*.js', 'src/lib/i18n/generateTypes.ts'],
     languageOptions: {
       globals: {
         // Include browser globals and add Node.js specific globals

@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Validator, ValidationResult } from '$lib/utils/validators';
   import type { Snippet } from 'svelte';
+  import { t } from '$lib/i18n';
 
   // Module-level counter for consistent SSR-safe IDs
   let fieldCounter = 0;
@@ -61,7 +62,7 @@
     // Snippet-based approach (for UI compatibility)
     children?: Snippet;
     id?: string;
-    error?: string;
+    error?: string | { key: string; params?: Record<string, unknown> };
   }
 
   let {
@@ -103,7 +104,9 @@
 
   // State
   let touched = $state(false);
-  let error = $state<string | null>(externalError || null);
+  let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(
+    externalError || null
+  );
   let fieldId = id || `field-${name || 'field'}-${++fieldCounter}`;
 
   // Update error when external error changes
@@ -116,10 +119,10 @@
   // Computed value for checkbox
   let checkboxValue = $derived(type === 'checkbox' ? Boolean(value) : false);
 
-  // Validation
+  // Validation - returns a key or null for reactive translation
   function validate(val: unknown): ValidationResult {
     if (required && !val && val !== 0 && val !== false) {
-      return 'This field is required';
+      return 'common.validation.required'; // Return key instead of translated text
     }
 
     for (const validator of validators) {
@@ -131,6 +134,43 @@
 
     return null;
   }
+
+  // Helper function to check if a value is a translation key object
+  function isTranslationKey(
+    value: unknown
+  ): value is { key: string; params?: Record<string, unknown> } {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      'key' in value &&
+      typeof (value as any).key === 'string'
+    );
+  }
+
+  // Reactive error message that translates on locale change
+  let displayError = $derived(() => {
+    if (!error) return null;
+
+    // Check if error is a translation key object with optional parameters
+    if (isTranslationKey(error)) {
+      return t(error.key, error.params);
+    }
+
+    // Legacy support: If error is a string that looks like a translation key
+    // Check for known translation key prefixes to avoid false positives
+    if (
+      typeof error === 'string' &&
+      (error.startsWith('common.') ||
+        error.startsWith('settings.') ||
+        error.startsWith('forms.') ||
+        error.startsWith('validation.'))
+    ) {
+      return t(error);
+    }
+
+    // Otherwise return as-is (for custom validation messages)
+    return error;
+  });
 
   // Run validation when value changes (only if no external error)
   $effect(() => {
@@ -285,7 +325,7 @@
           {onkeydown}
         >
           {#if !required}
-            <option value="">Choose...</option>
+            <option value="">{t('forms.labels.selectOption')}</option>
           {/if}
           {#each options as option}
             <option value={option.value} disabled={option.disabled}>
@@ -317,7 +357,7 @@
     {:else if type === 'radio'}
       <!-- Radio buttons would typically be used in a group, so this is a single radio option -->
       {#if !radioValue}
-        <div class="text-error text-sm">radioValue prop is required for radio inputs</div>
+        <div class="text-error text-sm">{t('forms.errors.radioValueRequired')}</div>
       {:else}
         <label class="label cursor-pointer justify-start gap-2">
           <input
@@ -393,7 +433,7 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span class={cn('label-text-alt text-error', errorClassName)}>{error}</span>
+      <span class={cn('label-text-alt text-error', errorClassName)}>{displayError()}</span>
     </div>
   {:else if helpText}
     <div class="label">

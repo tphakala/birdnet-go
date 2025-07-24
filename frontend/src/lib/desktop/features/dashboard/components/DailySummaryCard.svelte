@@ -4,6 +4,7 @@
   import type { DailySpeciesSummary, DetectionQueryParams } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { alertIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n';
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -33,69 +34,73 @@
     onDetectionView,
   }: Props = $props();
 
-  // Column definitions
-  const columns: Column<DailySpeciesSummary>[] = [
-    {
-      key: 'common_name',
-      header: 'Species',
-      sortable: true,
-      className: 'font-medium w-0 whitespace-nowrap',
-    },
-  ];
+  // Column definitions - reactive to ensure translations are loaded
+  const columns = $derived.by(() => {
+    const cols: Column<DailySpeciesSummary>[] = [
+      {
+        key: 'common_name',
+        header: t('dashboard.dailySummary.columns.species'),
+        sortable: true,
+        className: 'font-medium w-0 whitespace-nowrap',
+      },
+    ];
 
-  // Add total detections column (only visible on XL screens)
-  columns.push({
-    key: 'total_detections',
-    header: 'Detections',
-    align: 'center',
-    className: 'hidden 2xl:table-cell px-4 w-100',
-    render: (item: DailySpeciesSummary) => item.count,
+    // Add total detections column (only visible on XL screens)
+    cols.push({
+      key: 'total_detections',
+      header: t('dashboard.dailySummary.columns.detections'),
+      align: 'center',
+      className: 'hidden 2xl:table-cell px-4 w-100',
+      render: (item: DailySpeciesSummary) => item.count,
+    });
+
+    // Add all 24 hourly columns
+    for (let hour = 0; hour < 24; hour++) {
+      cols.push({
+        key: `hour_${hour}`,
+        header: hour.toString().padStart(2, '0'),
+        align: 'center',
+        className: 'hour-data hourly-count px-0',
+        render: (item: DailySpeciesSummary) => item.hourly_counts[hour] || 0,
+      });
+    }
+
+    // Add bi-hourly columns (every 2 hours)
+    for (let hour = 0; hour < 24; hour += 2) {
+      cols.push({
+        key: `bi_hour_${hour}`,
+        header: hour.toString().padStart(2, '0'),
+        align: 'center',
+        className: 'hour-data bi-hourly-count bi-hourly px-0',
+        render: (item: DailySpeciesSummary) => {
+          // Sum counts for 2-hour period
+          const count1 = item.hourly_counts[hour] || 0;
+          const count2 = item.hourly_counts[hour + 1] || 0;
+          return count1 + count2;
+        },
+      });
+    }
+
+    // Add six-hourly columns (every 6 hours)
+    for (let hour = 0; hour < 24; hour += 6) {
+      cols.push({
+        key: `six_hour_${hour}`,
+        header: hour.toString().padStart(2, '0'),
+        align: 'center',
+        className: 'hour-data six-hourly-count six-hourly px-0',
+        render: (item: DailySpeciesSummary) => {
+          // Sum counts for 6-hour period
+          let sum = 0;
+          for (let h = hour; h < hour + 6 && h < 24; h++) {
+            sum += item.hourly_counts[h] || 0;
+          }
+          return sum;
+        },
+      });
+    }
+
+    return cols;
   });
-
-  // Add all 24 hourly columns
-  for (let hour = 0; hour < 24; hour++) {
-    columns.push({
-      key: `hour_${hour}`,
-      header: hour.toString().padStart(2, '0'),
-      align: 'center',
-      className: 'hour-data hourly-count px-0',
-      render: (item: DailySpeciesSummary) => item.hourly_counts[hour] || 0,
-    });
-  }
-
-  // Add bi-hourly columns (every 2 hours)
-  for (let hour = 0; hour < 24; hour += 2) {
-    columns.push({
-      key: `bi_hour_${hour}`,
-      header: hour.toString().padStart(2, '0'),
-      align: 'center',
-      className: 'hour-data bi-hourly-count bi-hourly px-0',
-      render: (item: DailySpeciesSummary) => {
-        // Sum counts for 2-hour period
-        const count1 = item.hourly_counts[hour] || 0;
-        const count2 = item.hourly_counts[hour + 1] || 0;
-        return count1 + count2;
-      },
-    });
-  }
-
-  // Add six-hourly columns (every 6 hours)
-  for (let hour = 0; hour < 24; hour += 6) {
-    columns.push({
-      key: `six_hour_${hour}`,
-      header: hour.toString().padStart(2, '0'),
-      align: 'center',
-      className: 'hour-data six-hourly-count six-hourly px-0',
-      render: (item: DailySpeciesSummary) => {
-        // Sum counts for 6-hour period
-        let sum = 0;
-        for (let h = hour; h < hour + 6 && h < 24; h++) {
-          sum += item.hourly_counts[h] || 0;
-        }
-        return sum;
-      },
-    });
-  }
 
   // Navigation handlers for detections
   // Navigates to species-specific detections view for the selected date
@@ -194,7 +199,7 @@
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
       <span class="card-title grow text-base sm:text-xl"
-        >Daily Summary
+        >{t('dashboard.dailySummary.title')}
         {#if sortedData.length > 0}
           <!-- Number of species detected -->
           <span class="species-ball bg-primary text-primary-content ml-2">{sortedData.length}</span>
@@ -202,7 +207,11 @@
       </span>
       <div class="flex items-center gap-2">
         <!-- Previous day button -->
-        <button onclick={onPreviousDay} class="btn btn-sm btn-ghost" aria-label="Previous day">
+        <button
+          onclick={onPreviousDay}
+          class="btn btn-sm btn-ghost"
+          aria-label={t('dashboard.dailySummary.navigation.previousDay')}
+        >
           {@html navigationIcons.arrowLeft}
         </button>
 
@@ -214,13 +223,15 @@
           onclick={onNextDay}
           class="btn btn-sm btn-ghost"
           disabled={isToday}
-          aria-label="Next day"
+          aria-label={t('dashboard.dailySummary.navigation.nextDay')}
         >
           {@html navigationIcons.arrowRight}
         </button>
 
         {#if !isToday}
-          <button onclick={onGoToToday} class="btn btn-sm btn-primary"> Today </button>
+          <button onclick={onGoToToday} class="btn btn-sm btn-primary"
+            >{t('dashboard.dailySummary.navigation.today')}</button
+          >
         {/if}
       </div>
     </div>
@@ -258,7 +269,9 @@
                     <button
                       class="hover:text-primary cursor-pointer"
                       onclick={() => handleHourHeaderClick(hour, 1)}
-                      title="View all detections for {hour.toString().padStart(2, '0')}:00"
+                      title={t('dashboard.dailySummary.tooltips.viewHourly', {
+                        hour: hour.toString().padStart(2, '0'),
+                      })}
                     >
                       {column.header}
                     </button>
@@ -268,11 +281,10 @@
                     <button
                       class="hover:text-primary cursor-pointer"
                       onclick={() => handleHourHeaderClick(hour, 2)}
-                      title="View all detections for {hour.toString().padStart(2, '0')}:00-{(
-                        hour + 2
-                      )
-                        .toString()
-                        .padStart(2, '0')}:00"
+                      title={t('dashboard.dailySummary.tooltips.viewBiHourly', {
+                        startHour: hour.toString().padStart(2, '0'),
+                        endHour: (hour + 2).toString().padStart(2, '0'),
+                      })}
                     >
                       {column.header}
                     </button>
@@ -282,11 +294,10 @@
                     <button
                       class="hover:text-primary cursor-pointer"
                       onclick={() => handleHourHeaderClick(hour, 6)}
-                      title="View all detections for {hour.toString().padStart(2, '0')}:00-{(
-                        hour + 6
-                      )
-                        .toString()
-                        .padStart(2, '0')}:00"
+                      title={t('dashboard.dailySummary.tooltips.viewSixHourly', {
+                        startHour: hour.toString().padStart(2, '0'),
+                        endHour: (hour + 6).toString().padStart(2, '0'),
+                      })}
                     >
                       {column.header}
                     </button>
@@ -421,9 +432,10 @@
                           class="w-full h-full"
                           class:hour-updated={item.hourlyUpdated?.includes(hour) &&
                             !prefersReducedMotion}
-                          title="{count} detections at {hour
-                            .toString()
-                            .padStart(2, '0')}:00 - Click to view"
+                          title={t('dashboard.dailySummary.tooltips.hourlyDetections', {
+                            count,
+                            hour: hour.toString().padStart(2, '0'),
+                          })}
                           onclick={e => {
                             e.stopPropagation();
                             handleHourClick(item, hour, 1);
@@ -443,11 +455,11 @@
                         <button
                           type="button"
                           class="w-full h-full"
-                          title="{count} detections from {hour.toString().padStart(2, '0')}:00-{(
-                            hour + 2
-                          )
-                            .toString()
-                            .padStart(2, '0')}:00 - Click to view"
+                          title={t('dashboard.dailySummary.tooltips.biHourlyDetections', {
+                            count,
+                            startHour: hour.toString().padStart(2, '0'),
+                            endHour: (hour + 2).toString().padStart(2, '0'),
+                          })}
                           onclick={e => {
                             e.stopPropagation();
                             handleHourClick(item, hour, 2);
@@ -467,11 +479,11 @@
                         <button
                           type="button"
                           class="w-full h-full"
-                          title="{count} detections from {hour.toString().padStart(2, '0')}:00-{(
-                            hour + 6
-                          )
-                            .toString()
-                            .padStart(2, '0')}:00 - Click to view"
+                          title={t('dashboard.dailySummary.tooltips.sixHourlyDetections', {
+                            count,
+                            startHour: hour.toString().padStart(2, '0'),
+                            endHour: (hour + 6).toString().padStart(2, '0'),
+                          })}
                           onclick={e => {
                             e.stopPropagation();
                             handleHourClick(item, hour, 6);
@@ -495,7 +507,9 @@
           </tbody>
         </table>
         {#if sortedData.length === 0}
-          <div class="text-center py-8 text-base-content/60">No species detected on this date</div>
+          <div class="text-center py-8 text-base-content/60">
+            {t('dashboard.dailySummary.noSpecies')}
+          </div>
         {/if}
       </div>
     {/if}

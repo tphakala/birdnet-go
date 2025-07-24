@@ -36,7 +36,9 @@ func (s *Server) SetupSvelteRoutes() {
 
 		// Set correct MIME type based on file extension
 		contentType := "application/octet-stream"
-		if len(path) > 4 {
+		if len(path) > 5 && path[len(path)-5:] == ".json" {
+			contentType = "application/json; charset=utf-8"
+		} else if len(path) > 4 {
 			switch path[len(path)-4:] {
 			case ".css":
 				contentType = "text/css; charset=utf-8"

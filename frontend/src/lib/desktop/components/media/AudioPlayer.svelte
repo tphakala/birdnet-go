@@ -24,6 +24,10 @@
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { mediaIcons } from '$lib/utils/icons.js';
+  import { t } from '$lib/i18n';
+
+  // Web Audio API types - these are built-in browser types
+  /* global AudioContext, MediaElementAudioSourceNode, GainNode, DynamicsCompressorNode, BiquadFilterNode, EventListener, ResizeObserver */
 
   interface Props {
     audioUrl: string;
@@ -148,7 +152,13 @@
   // Audio context setup
   const initializeAudioContext = async () => {
     try {
-      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Check if AudioContext is available
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error('AudioContext not supported');
+      }
+
+      audioContext = new AudioContextClass();
 
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
@@ -157,7 +167,8 @@
       audioContextAvailable = true;
       audioContextError = null;
       return audioContext;
-    } catch (e) {
+    } catch (_e) {
+      // eslint-disable-next-line no-console
       console.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
       audioContextError =
@@ -398,6 +409,7 @@
         audioNodes.filters.highPass.disconnect();
       } catch (_e) {
         // Nodes may already be disconnected, ignore errors
+        // eslint-disable-next-line no-console
         console.warn('Error disconnecting audio nodes during cleanup');
       }
       audioNodes = null;
@@ -409,6 +421,7 @@
         audioContext.close();
       } catch (_e) {
         // Context may already be closed, ignore errors
+        // eslint-disable-next-line no-console
         console.warn('Error closing audio context during cleanup');
       }
       audioContext = null;
@@ -464,7 +477,7 @@
             if (showVolumeSlider) showFilterSlider = false;
           }
         }}
-        aria-label="Volume control"
+        aria-label={t('media.audio.volume')}
         title={!audioContextAvailable
           ? audioContextError || 'Volume control unavailable'
           : 'Volume control'}
@@ -481,7 +494,7 @@
           style:height="{height}px"
           role="button"
           tabindex="0"
-          aria-label="Volume gain control: {gainValue} dB"
+          aria-label={t('media.audio.volumeGain', { value: gainValue })}
           onclick={handleVolumeSlider}
           onkeydown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -523,7 +536,7 @@
             if (showFilterSlider) showVolumeSlider = false;
           }
         }}
-        aria-label="Filter control"
+        aria-label={t('media.audio.filterControl')}
         title={!audioContextAvailable
           ? audioContextError || 'Filter control unavailable'
           : 'Filter control'}
@@ -539,7 +552,7 @@
           style:height="{height}px"
           role="button"
           tabindex="0"
-          aria-label="High-pass filter control: {Math.round(filterFreq)} Hz"
+          aria-label={t('media.audio.highPassFilter', { freq: Math.round(filterFreq) })}
           onclick={handleFilterSlider}
           onkeydown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -587,7 +600,7 @@
         class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0"
         onclick={handlePlayPause}
         disabled={isLoading}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? t('media.audio.pause') : t('media.audio.play')}
       >
         {#if isLoading}
           <div
@@ -605,7 +618,10 @@
         class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
         role="button"
         tabindex="0"
-        aria-label="Seek audio progress: {Math.floor(currentTime)} / {Math.floor(duration)} seconds"
+        aria-label={t('media.audio.seekProgress', {
+          current: Math.floor(currentTime),
+          total: Math.floor(duration),
+        })}
         onclick={handleProgressClick}
         onkeydown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -632,7 +648,7 @@
           href={audioUrl}
           download
           class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
-          aria-label="Download audio"
+          aria-label={t('media.audio.download')}
         >
           {@html mediaIcons.download}
         </a>

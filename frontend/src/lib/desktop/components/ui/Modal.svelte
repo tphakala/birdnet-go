@@ -3,6 +3,7 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n';
 
   // CSS selector for focusable elements used in focus management
   const FOCUSABLE_SELECTOR =
@@ -36,8 +37,8 @@
     title,
     size = 'md',
     type = 'default',
-    confirmLabel = 'Confirm',
-    cancelLabel = 'Cancel',
+    confirmLabel = t('common.buttons.confirm'),
+    cancelLabel = t('common.buttons.cancel'),
     confirmVariant = 'primary',
     closeOnBackdrop = true,
     closeOnEsc = true,
@@ -186,7 +187,7 @@
         class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
         onclick={handleClose}
         disabled={loading || isConfirming}
-        aria-label="Close modal"
+        aria-label={t('common.aria.closeModal')}
       >
         {@html navigationIcons.close}
       </button>

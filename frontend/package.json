@@ -33,7 +33,8 @@
     "analyze:duplicates:html": "jscpd --reporters html,console src/",
     "analyze:all": "npm run analyze:circular && npm run analyze:duplicates",
     "test:a11y": "vitest run --reporter=verbose -t \"Accessibility\"",
-    "test:a11y:watch": "vitest -t \"Accessibility\""
+    "test:a11y:watch": "vitest -t \"Accessibility\"",
+    "generate:i18n-types": "npx tsx src/lib/i18n/generateTypes.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
@@ -43,6 +44,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/svelte": "^5.2.8",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.1.0",
     "@types/testing-library__jest-dom": "^5.14.9",
     "@typescript-eslint/eslint-plugin": "^8.36.0",
     "@typescript-eslint/parser": "^8.36.0",
