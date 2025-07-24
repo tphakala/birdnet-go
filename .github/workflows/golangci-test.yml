@@ -41,6 +41,17 @@ jobs:
       - name: Download tflite_c
         run: make download-tflite-linux-amd64
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
       - name: Set environment variables for CGO
         run: |
           echo "CGO_ENABLED=1" >> $GITHUB_ENV
