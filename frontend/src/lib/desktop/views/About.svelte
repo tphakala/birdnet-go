@@ -174,15 +174,20 @@
       Special thanks to these contributors for their valuable work on improving BirdNET-Go:
     </p>
     <div class="gap-2 mt-4 about-contributors-grid">
-      <a
-        href="https://github.com/PeteLawrence"
-        class="btn btn-ghost btn-sm justify-start normal-case">@PeteLawrence</a
+      <a href="https://github.com/aav7fl" class="btn btn-ghost btn-sm justify-start normal-case"
+        >@aav7fl</a
       >
       <a href="https://github.com/farski" class="btn btn-ghost btn-sm justify-start normal-case"
         >@farski</a
       >
       <a href="https://github.com/florisre" class="btn btn-ghost btn-sm justify-start normal-case"
         >@florisre</a
+      >
+      <a href="https://github.com/Fotguedes" class="btn btn-ghost btn-sm justify-start normal-case"
+        >@Fotguedes</a
+      >
+      <a href="https://github.com/geekworldtour" class="btn btn-ghost btn-sm justify-start normal-case"
+        >@geekworldtour</a
       >
       <a href="https://github.com/isZumpo" class="btn btn-ghost btn-sm justify-start normal-case"
         >@isZumpo</a
@@ -193,8 +198,21 @@
       <a href="https://github.com/jkrauska" class="btn btn-ghost btn-sm justify-start normal-case"
         >@jkrauska</a
       >
+      <a href="https://github.com/LeoColman" class="btn btn-ghost btn-sm justify-start normal-case"
+        >@LeoColman</a
+      >
+      <a
+        href="https://github.com/PeteLawrence"
+        class="btn btn-ghost btn-sm justify-start normal-case">@PeteLawrence</a
+      >
       <a href="https://github.com/petterip" class="btn btn-ghost btn-sm justify-start normal-case"
         >@petterip</a
+      >
+      <a href="https://github.com/Phaeton" class="btn btn-ghost btn-sm justify-start normal-case"
+        >@Phaeton</a
+      >
+      <a href="https://github.com/PovilasID" class="btn btn-ghost btn-sm justify-start normal-case"
+        >@PovilasID</a
       >
       <a href="https://github.com/twt--" class="btn btn-ghost btn-sm justify-start normal-case"
         >@twt--</a
