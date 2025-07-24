@@ -496,9 +496,15 @@
         <!-- Column headers -->
         {#if Object.keys(settings.config).length > 0}
           <div class="grid grid-cols-12 gap-2 mb-1 text-xs font-medium text-base-content/70">
-            <div class="col-span-5 px-2">{t('settings.species.customConfiguration.columnHeaders.species')}</div>
-            <div class="col-span-6 px-2">{t('settings.species.customConfiguration.columnHeaders.settings')}</div>
-            <div class="col-span-1 px-2 text-right">{t('settings.species.customConfiguration.columnHeaders.actions')}</div>
+            <div class="col-span-5 px-2">
+              {t('settings.species.customConfiguration.columnHeaders.species')}
+            </div>
+            <div class="col-span-6 px-2">
+              {t('settings.species.customConfiguration.columnHeaders.settings')}
+            </div>
+            <div class="col-span-1 px-2 text-right">
+              {t('settings.species.customConfiguration.columnHeaders.actions')}
+            </div>
           </div>
         {/if}
 
@@ -521,7 +527,9 @@
                   min={0}
                   max={1}
                   step={0.01}
-                  placeholder={t('settings.species.customConfiguration.addForm.thresholdPlaceholder')}
+                  placeholder={t(
+                    'settings.species.customConfiguration.addForm.thresholdPlaceholder'
+                  )}
                 />
               </div>
               <div class="col-span-2">
@@ -532,7 +540,9 @@
                   min={0}
                   max={3600}
                   step={1}
-                  placeholder={t('settings.species.customConfiguration.addForm.intervalPlaceholder')}
+                  placeholder={t(
+                    'settings.species.customConfiguration.addForm.intervalPlaceholder'
+                  )}
                 />
               </div>
               <div class="col-span-2 flex space-x-1">
@@ -566,18 +576,26 @@
                 <!-- Settings badges -->
                 <div class="col-span-6 flex flex-wrap gap-1">
                   <span class="badge badge-sm badge-neutral">
-                    {t('settings.species.customConfiguration.badges.threshold', { value: config.threshold.toFixed(2) })}
+                    {t('settings.species.customConfiguration.badges.threshold', {
+                      value: config.threshold.toFixed(2),
+                    })}
                   </span>
                   {#if config.interval > 0}
                     <span class="badge badge-sm badge-secondary">
-                      {t('settings.species.customConfiguration.badges.interval', { value: config.interval })}
+                      {t('settings.species.customConfiguration.badges.interval', {
+                        value: config.interval,
+                      })}
                     </span>
                   {/if}
                   {#if config.actions?.length > 0}
-                    <span class="badge badge-sm badge-accent">{t('settings.species.customConfiguration.badges.customAction')}</span>
+                    <span class="badge badge-sm badge-accent"
+                      >{t('settings.species.customConfiguration.badges.customAction')}</span
+                    >
                   {/if}
                   {#if config.actions?.[0]?.executeDefaults}
-                    <span class="badge badge-sm badge-info">{t('settings.species.customConfiguration.badges.executeDefaults')}</span>
+                    <span class="badge badge-sm badge-info"
+                      >{t('settings.species.customConfiguration.badges.executeDefaults')}</span
+                    >
                   {/if}
                 </div>
 
@@ -678,13 +696,20 @@
 {#if showActionsModal}
   <div class="modal modal-open">
     <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
-      <h3 class="text-lg font-bold mb-4">{t('settings.species.actionsModal.title', { species: currentSpecies })}</h3>
+      <h3 class="text-lg font-bold mb-4">
+        {t('settings.species.actionsModal.title', { species: currentSpecies })}
+      </h3>
 
       <div class="space-y-4">
         <SelectField
           label={t('settings.species.actionsModal.actionType.label')}
           bind:value={currentAction.type}
-          options={[{ value: 'ExecuteCommand', label: t('settings.species.actionsModal.actionType.executeCommand') }]}
+          options={[
+            {
+              value: 'ExecuteCommand',
+              label: t('settings.species.actionsModal.actionType.executeCommand'),
+            },
+          ]}
           disabled={true}
           helpText={t('settings.species.actionsModal.actionType.onlySupported')}
         />
@@ -710,7 +735,9 @@
         </div>
 
         <div>
-          <div class="font-medium text-sm mb-2">{t('settings.species.actionsModal.parameters.availableTitle')}</div>
+          <div class="font-medium text-sm mb-2">
+            {t('settings.species.actionsModal.parameters.availableTitle')}
+          </div>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="btn btn-xs" onclick={() => addParameter('CommonName')}
               >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button

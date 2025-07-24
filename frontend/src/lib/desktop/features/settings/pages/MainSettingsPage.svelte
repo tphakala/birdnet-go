@@ -55,7 +55,7 @@
       password: '',
     },
     dashboard: {
-      ...$dashboardSettings || {
+      ...($dashboardSettings || {
         thumbnails: {
           summary: true,
           recent: true,
@@ -63,8 +63,8 @@
           fallbackPolicy: 'all',
         },
         summaryLimit: 100,
-      },
-      locale: $dashboardSettings?.locale || getLocale() as string, // Ensure locale is always defined
+      }),
+      locale: $dashboardSettings?.locale || (getLocale() as string), // Ensure locale is always defined
     },
   });
 
@@ -95,7 +95,7 @@
 
   // Locale options for BirdNET
   let birdnetLocales = $state<Array<{ value: string; label: string }>>([]);
-  
+
   // UI locale options
   let uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
     value: code,
@@ -352,7 +352,7 @@
       },
     });
   }
-  
+
   function updateUILocale(locale: string) {
     settingsActions.updateSection('realtime', {
       dashboard: { ...settings.dashboard, locale },
@@ -448,7 +448,9 @@
 
       <!-- Custom BirdNET Classifier -->
       <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">{t('settings.main.sections.customClassifier.title')}</h4>
+        <h4 class="text-lg font-medium mt-6 pb-2">
+          {t('settings.main.sections.customClassifier.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <TextInput
             id="model-path"
@@ -474,7 +476,9 @@
 
       <!-- Dynamic Threshold -->
       <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">{t('settings.main.sections.dynamicThreshold.title')}</h4>
+        <h4 class="text-lg font-medium mt-6 pb-2">
+          {t('settings.main.sections.dynamicThreshold.title')}
+        </h4>
         <Checkbox
           bind:checked={settings.dynamicThreshold.enabled}
           label={t('settings.main.sections.dynamicThreshold.enable.label')}
@@ -523,12 +527,16 @@
 
       <!-- Range Filter -->
       <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">{t('settings.main.sections.rangeFilter.title')}</h4>
+        <h4 class="text-lg font-medium mt-6 pb-2">
+          {t('settings.main.sections.rangeFilter.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <!-- Map container -->
           <div class="col-span-1 md:col-span-2">
             <label class="label justify-start" for="location-map">
-              <span class="label-text">{t('settings.main.sections.rangeFilter.stationLocation.label')}</span>
+              <span class="label-text"
+                >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
+              >
             </label>
             <div class="form-control">
               <div
@@ -608,12 +616,16 @@
             <!-- Range Filter Species Count Display -->
             <div class="form-control">
               <div class="label justify-start">
-                <span class="label-text">{t('settings.main.sections.rangeFilter.speciesCount.label')}</span>
+                <span class="label-text"
+                  >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
+                >
               </div>
               <div class="flex items-center space-x-2">
                 <div class="flex items-center space-x-2">
                   <div class="text-lg font-bold text-primary" class:opacity-60={testingRangeFilter}>
-                    {rangeFilterSpeciesCount !== null ? rangeFilterSpeciesCount : t('settings.main.sections.rangeFilter.speciesCount.loading')}
+                    {rangeFilterSpeciesCount !== null
+                      ? rangeFilterSpeciesCount
+                      : t('settings.main.sections.rangeFilter.speciesCount.loading')}
                   </div>
                   {#if testingRangeFilter}
                     <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
@@ -768,7 +780,9 @@
   >
     <div class="space-y-6">
       <div>
-        <h4 class="text-lg font-medium pb-2">{t('settings.main.sections.userInterface.language.title')}</h4>
+        <h4 class="text-lg font-medium pb-2">
+          {t('settings.main.sections.userInterface.language.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <SelectField
             id="ui-locale"
@@ -781,9 +795,11 @@
           />
         </div>
       </div>
-      
+
       <div>
-        <h4 class="text-lg font-medium pb-2 mt-6">{t('settings.main.sections.userInterface.dashboard.title')}</h4>
+        <h4 class="text-lg font-medium pb-2 mt-6">
+          {t('settings.main.sections.userInterface.dashboard.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
           <NumberField
             label={t('settings.main.sections.userInterface.dashboard.summaryLimit.label')}
@@ -800,7 +816,9 @@
           <Checkbox
             bind:checked={settings.dashboard.thumbnails.summary}
             label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
-            helpText={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
+            )}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateThumbnailSetting('summary', value)}
           />
@@ -808,7 +826,9 @@
           <Checkbox
             bind:checked={settings.dashboard.thumbnails.recent}
             label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
-            helpText={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
+            )}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateThumbnailSetting('recent', value)}
           />
@@ -817,9 +837,13 @@
             <SelectField
               id="image-provider"
               bind:value={settings.dashboard.thumbnails.imageProvider}
-              label={t('settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label')}
+              label={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
+              )}
               options={providerOptions}
-              helpText={t('settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText')}
+              helpText={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
+              )}
               disabled={store.isLoading || store.isSaving || !multipleProvidersAvailable}
               onchange={value => updateThumbnailSetting('imageProvider', value)}
             />
@@ -829,12 +853,26 @@
             <SelectField
               id="fallback-policy"
               bind:value={settings.dashboard.thumbnails.fallbackPolicy}
-              label={t('settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label')}
+              label={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
+              )}
               options={[
-                { value: 'all', label: t('settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all') },
-                { value: 'none', label: t('settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none') },
+                {
+                  value: 'all',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all'
+                  ),
+                },
+                {
+                  value: 'none',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none'
+                  ),
+                },
               ]}
-              helpText={t('settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText')}
+              helpText={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
+              )}
               disabled={store.isLoading || store.isSaving}
               onchange={value => updateThumbnailSetting('fallbackPolicy', value)}
             />
@@ -861,7 +899,9 @@
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
-        <h3 id="modal-title" class="text-lg font-bold">{t('settings.main.sections.rangeFilter.modal.title')}</h3>
+        <h3 id="modal-title" class="text-lg font-bold">
+          {t('settings.main.sections.rangeFilter.modal.title')}
+        </h3>
         <button
           type="button"
           class="btn btn-sm btn-circle btn-ghost"
@@ -875,19 +915,26 @@
       <div class="mb-4 text-sm text-base-content/70">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
+            >
             <span> {rangeFilterSpeciesCount}</span>
           </div>
           <div>
-            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.threshold')}</span>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
+            >
             <span> {settings.birdnet.rangeFilter.threshold}</span>
           </div>
           <div>
-            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.latitude')}</span>
+            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.latitude')}</span
+            >
             <span> {settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.longitude')}</span>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
+            >
             <span> {settings.birdnet.longitude}</span>
           </div>
         </div>

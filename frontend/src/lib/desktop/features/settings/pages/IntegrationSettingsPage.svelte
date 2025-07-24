@@ -115,7 +115,6 @@
     weather: { stages: [], isRunning: false, showSuccessNote: false },
   });
 
-
   // FFmpeg availability check
   let ffmpegAvailable = $state(true);
 
@@ -874,7 +873,9 @@
 
             <!-- Authentication Section -->
             <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.authentication.title')}</h3>
+              <h3 class="text-sm font-medium mb-3">
+                {t('settings.integration.mqtt.authentication.title')}
+              </h3>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextInput
@@ -900,7 +901,9 @@
 
             <!-- Message Settings Section -->
             <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.messageSettings.title')}</h3>
+              <h3 class="text-sm font-medium mb-3">
+                {t('settings.integration.mqtt.messageSettings.title')}
+              </h3>
 
               <!-- prettier-ignore -->
               <Checkbox
@@ -1030,7 +1033,10 @@
           options={[
             { value: 'none', label: t('settings.integration.weather.provider.options.none') },
             { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
-            { value: 'openweather', label: t('settings.integration.weather.provider.options.openweather') },
+            {
+              value: 'openweather',
+              label: t('settings.integration.weather.provider.options.openweather'),
+            },
           ]}
           disabled={store.isLoading || store.isSaving}
           onchange={updateWeatherProvider}
@@ -1071,9 +1077,15 @@
               value={settings.weather!.openWeather.units || 'metric'}
               label={t('settings.integration.weather.units.label')}
               options={[
-                { value: 'standard', label: t('settings.integration.weather.units.options.standard') },
+                {
+                  value: 'standard',
+                  label: t('settings.integration.weather.units.options.standard'),
+                },
                 { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
-                { value: 'imperial', label: t('settings.integration.weather.units.options.imperial') },
+                {
+                  value: 'imperial',
+                  label: t('settings.integration.weather.units.options.imperial'),
+                },
               ]}
               disabled={store.isLoading || store.isSaving}
               onchange={updateWeatherUnits}

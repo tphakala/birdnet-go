@@ -82,3 +82,26 @@ export function getBrowserPreferredLocale(acceptLanguageHeader: string | null): 
 
   return DEFAULT_LOCALE;
 }
+
+/**
+ * Detect preferred locale from browser navigator languages
+ */
+export function detectBrowserLocale(): Locale {
+  if (typeof navigator === 'undefined') {
+    return DEFAULT_LOCALE;
+  }
+
+  // Get browser languages in order of preference
+  const browserLanguages = navigator.languages || [navigator.language];
+
+  // Find first matching supported locale
+  for (const lang of browserLanguages) {
+    // Extract primary language code (e.g., "en-US" -> "en")
+    const primaryCode = lang.toLowerCase().split('-')[0];
+    if (isValidLocale(primaryCode)) {
+      return primaryCode;
+    }
+  }
+
+  return DEFAULT_LOCALE;
+}

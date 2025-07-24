@@ -142,8 +142,8 @@
   // Helper function to get translated parameter label
   function getParameterLabel(paramName: string): string {
     const labelMap: Record<string, string> = {
-      'frequency': t('settings.audio.audioFilters.cutoffFrequency'),
-      'q': t('settings.audio.audioFilters.qFactor')
+      frequency: t('settings.audio.audioFilters.cutoffFrequency'),
+      q: t('settings.audio.audioFilters.qFactor'),
     };
     return labelMap[paramName.toLowerCase()] || paramName;
   }
@@ -465,15 +465,32 @@
                           onchange={value =>
                             updateFilterParameter(index, param.Name, parseInt(value))}
                           options={[
-                            { value: '0', label: t('settings.audio.audioFilters.attenuationLevels.0db') },
-                            { value: '1', label: t('settings.audio.audioFilters.attenuationLevels.12db') },
-                            { value: '2', label: t('settings.audio.audioFilters.attenuationLevels.24db') },
-                            { value: '3', label: t('settings.audio.audioFilters.attenuationLevels.36db') },
-                            { value: '4', label: t('settings.audio.audioFilters.attenuationLevels.48db') },
+                            {
+                              value: '0',
+                              label: t('settings.audio.audioFilters.attenuationLevels.0db'),
+                            },
+                            {
+                              value: '1',
+                              label: t('settings.audio.audioFilters.attenuationLevels.12db'),
+                            },
+                            {
+                              value: '2',
+                              label: t('settings.audio.audioFilters.attenuationLevels.24db'),
+                            },
+                            {
+                              value: '3',
+                              label: t('settings.audio.audioFilters.attenuationLevels.36db'),
+                            },
+                            {
+                              value: '4',
+                              label: t('settings.audio.audioFilters.attenuationLevels.48db'),
+                            },
                           ]}
                           className="select-sm"
                           disabled={store.isLoading || store.isSaving}
-                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit
+                            ? ` (${param.Unit})`
+                            : ''}"
                         />
                       {:else}
                         <!-- Regular number input -->
@@ -484,7 +501,9 @@
                           max={param.Max}
                           step={param.Type === 'float' ? 0.1 : 1}
                           disabled={store.isLoading || store.isSaving}
-                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit
+                            ? ` (${param.Unit})`
+                            : ''}"
                         />
                       {/if}
                     </div>
@@ -533,7 +552,9 @@
                   >
                     <option value="">{t('settings.audio.audioFilters.selectFilterType')}</option>
                     {#each Object.keys(eqFilterConfig) as filterType}
-                      <option value={filterType}>{t(`settings.audio.filterTypes.${filterType}`)}</option>
+                      <option value={filterType}
+                        >{t(`settings.audio.filterTypes.${filterType}`)}</option
+                      >
                     {/each}
                   </SelectField>
                 </div>
@@ -551,15 +572,32 @@
                             (newFilter as any)[param.Name.toLowerCase()] = parseInt(value);
                           }}
                           options={[
-                            { value: '0', label: t('settings.audio.audioFilters.attenuationLevels.0db') },
-                            { value: '1', label: t('settings.audio.audioFilters.attenuationLevels.12db') },
-                            { value: '2', label: t('settings.audio.audioFilters.attenuationLevels.24db') },
-                            { value: '3', label: t('settings.audio.audioFilters.attenuationLevels.36db') },
-                            { value: '4', label: t('settings.audio.audioFilters.attenuationLevels.48db') },
+                            {
+                              value: '0',
+                              label: t('settings.audio.audioFilters.attenuationLevels.0db'),
+                            },
+                            {
+                              value: '1',
+                              label: t('settings.audio.audioFilters.attenuationLevels.12db'),
+                            },
+                            {
+                              value: '2',
+                              label: t('settings.audio.audioFilters.attenuationLevels.24db'),
+                            },
+                            {
+                              value: '3',
+                              label: t('settings.audio.audioFilters.attenuationLevels.36db'),
+                            },
+                            {
+                              value: '4',
+                              label: t('settings.audio.audioFilters.attenuationLevels.48db'),
+                            },
                           ]}
                           className="select-sm"
                           disabled={store.isLoading || store.isSaving}
-                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit
+                            ? ` (${param.Unit})`
+                            : ''}"
                         />
                       {:else}
                         <!-- Regular number input -->
@@ -572,7 +610,9 @@
                           max={param.Max}
                           step={param.Type === 'float' ? 0.1 : 1}
                           disabled={store.isLoading || store.isSaving}
-                          label="{getParameterLabel(param.Name)}{param.Unit ? ` (${param.Unit})` : ''}"
+                          label="{getParameterLabel(param.Name)}{param.Unit
+                            ? ` (${param.Unit})`
+                            : ''}"
                         />
                       {/if}
                     </div>

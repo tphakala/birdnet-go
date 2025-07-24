@@ -13,6 +13,52 @@
       document.documentElement.setAttribute('data-theme', 'light');
       document.documentElement.setAttribute('data-theme-controller', 'light');
     }
+
+    // Detect and set initial locale before content loads
+    (function() {
+      const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'fi', 'pt'];
+      const DEFAULT_LOCALE = 'en';
+
+      function detectBrowserLocale() {
+        if (typeof navigator === 'undefined') {
+          return DEFAULT_LOCALE;
+        }
+
+        // Get browser languages in order of preference
+        const browserLanguages = navigator.languages || [navigator.language];
+
+        // Find first matching supported locale
+        for (const lang of browserLanguages) {
+          if (lang) {
+            // Extract primary language code (e.g., "en-US" -> "en")
+            const primaryCode = lang.toLowerCase().split('-')[0];
+            if (SUPPORTED_LOCALES.includes(primaryCode)) {
+              return primaryCode;
+            }
+          }
+        }
+
+        return DEFAULT_LOCALE;
+      }
+
+      // Check for stored locale preference first, then detect from browser
+      let initialLocale = DEFAULT_LOCALE;
+      const stored = localStorage.getItem('birdnet-locale');
+      if (stored && SUPPORTED_LOCALES.includes(stored)) {
+        initialLocale = stored;
+      } else {
+        initialLocale = detectBrowserLocale();
+        // Pre-cache the detected locale to localStorage for consistency
+        try {
+          localStorage.setItem('birdnet-locale', initialLocale);
+        } catch (e) {
+          // Ignore storage errors
+        }
+      }
+
+      // Set HTML lang attribute for accessibility and SEO
+      document.documentElement.setAttribute('lang', initialLocale);
+    })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">

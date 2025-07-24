@@ -119,17 +119,35 @@
       if (data.success) {
         if (supportDump.uploadToSentry && data.uploaded_at) {
           if (data.dump_id) {
-            updateStatus(t('settings.support.supportReport.statusMessages.uploadSuccessWithId', { dumpId: data.dump_id }), 'success', 100);
+            updateStatus(
+              t('settings.support.supportReport.statusMessages.uploadSuccessWithId', {
+                dumpId: data.dump_id,
+              }),
+              'success',
+              100
+            );
           } else {
-            updateStatus(t('settings.support.supportReport.statusMessages.uploadSuccess'), 'success', 100);
+            updateStatus(
+              t('settings.support.supportReport.statusMessages.uploadSuccess'),
+              'success',
+              100
+            );
           }
         } else if (data.download_url) {
-          updateStatus(t('settings.support.supportReport.statusMessages.downloadSuccess'), 'success', 100);
+          updateStatus(
+            t('settings.support.supportReport.statusMessages.downloadSuccess'),
+            'success',
+            100
+          );
           setTimeout(() => {
             window.location.href = data.download_url;
           }, 500);
         } else {
-          updateStatus(t('settings.support.supportReport.statusMessages.generateSuccess'), 'success', 100);
+          updateStatus(
+            t('settings.support.supportReport.statusMessages.generateSuccess'),
+            'success',
+            100
+          );
         }
 
         // Clear status after 10 seconds
@@ -140,14 +158,22 @@
         }, 10000);
       } else {
         updateStatus(
-          t('settings.support.supportReport.statusMessages.generateFailed', { message: data.message || 'Unknown error' }),
+          t('settings.support.supportReport.statusMessages.generateFailed', {
+            message: data.message || 'Unknown error',
+          }),
           'error',
           0
         );
       }
     } catch (error) {
       generating = false;
-      updateStatus(t('settings.support.supportReport.statusMessages.error', { message: (error as Error).message }), 'error', 0);
+      updateStatus(
+        t('settings.support.supportReport.statusMessages.error', {
+          message: (error as Error).message,
+        }),
+        'error',
+        0
+      );
     }
   }
 
@@ -255,14 +281,18 @@
               </p>
 
               <div class="bg-base-100 rounded-lg p-3 border border-base-300">
-                <h4 class="font-semibold text-sm mb-2">{t('settings.support.supportReport.whatsIncluded.title')}</h4>
+                <h4 class="font-semibold text-sm mb-2">
+                  {t('settings.support.supportReport.whatsIncluded.title')}
+                </h4>
                 <ul class="text-xs space-y-1 text-base-content/70">
                   <li class="flex items-center gap-2">
                     <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
                     <span
-                      >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
+                      >{@html t(
+                        'settings.support.supportReport.whatsIncluded.applicationLogs'
+                      )}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -277,8 +307,7 @@
                     <div class="h-4 w-4 text-success flex-shrink-0">
                       {@html alertIconsSvg.success}
                     </div>
-                    <span
-                      >{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span
+                    <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span
                     >
                   </li>
                   <li class="flex items-center gap-2">
@@ -316,7 +345,9 @@
               <!-- User Message -->
               <div class="form-control mt-4">
                 <label class="label" for="userMessage">
-                  <span class="label-text">{t('settings.support.supportReport.userMessage.label')}</span>
+                  <span class="label-text"
+                    >{t('settings.support.supportReport.userMessage.label')}</span
+                  >
                 </label>
                 <textarea
                   id="userMessage"
@@ -347,7 +378,9 @@
                     <div class="text-xs text-base-content/60">
                       <p class="flex items-start gap-1">
                         {@html actionIcons.check}
-                        {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
+                        {@html t(
+                          'settings.support.supportReport.uploadOption.details.sentryUpload'
+                        )}
                       </p>
                       <p class="flex items-start gap-1">
                         {@html systemIcons.globe}

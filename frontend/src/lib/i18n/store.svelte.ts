@@ -1,9 +1,10 @@
 /* eslint-disable no-undef */
 import { DEFAULT_LOCALE, type Locale, isValidLocale } from './config.js';
+import { detectBrowserLocale } from './utils.js';
 // Note: Type imports will be used when type-safe translation is implemented
 // import type { TranslationKey, GetParams } from './types.generated.js';
 
-// Initialize locale from localStorage or use default
+// Initialize locale from localStorage, browser preferences, or use default
 function getInitialLocale(): Locale {
   if (typeof localStorage !== 'undefined') {
     const stored = localStorage.getItem('birdnet-locale');
@@ -11,7 +12,9 @@ function getInitialLocale(): Locale {
       return stored;
     }
   }
-  return DEFAULT_LOCALE;
+
+  // If no stored preference, use browser locale detection
+  return detectBrowserLocale();
 }
 
 // State management with Svelte 5 runes
