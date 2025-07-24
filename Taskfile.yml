@@ -303,13 +303,26 @@ tasks:
           echo "TensorFlow Lite C library not found. Downloading..."
           wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}" -P ./
           
-          mkdir -p "{{.TFLITE_LIB_DIR}}"
+          if [ -w "{{.TFLITE_LIB_DIR}}" ]; then
+            mkdir -p "{{.TFLITE_LIB_DIR}}"
+          else
+            sudo mkdir -p "{{.TFLITE_LIB_DIR}}"
+          fi
+          
           if [[ "{{.TFLITE_LIB_ARCH}}" == *.zip ]]; then
             unzip -o "tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
-            mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            if [ -w "{{.TFLITE_LIB_DIR}}" ]; then
+              mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            else
+              sudo mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            fi
           else
             tar -xzf "tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
-            mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            if [ -w "{{.TFLITE_LIB_DIR}}" ]; then
+              mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            else
+              sudo mv "{{.LIB_FILENAME}}" "{{.TFLITE_LIB_DIR}}/"
+            fi
           fi
           
           rm -f "tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
@@ -320,14 +333,29 @@ tasks:
   ensure-tflite-symlinks:
     internal: true
     cmds:
-      - mkdir -p "{{.LIB_DIR}}"
+      - |
+        if [ -w "{{.LIB_DIR}}" ]; then
+          mkdir -p "{{.LIB_DIR}}"
+        else
+          sudo mkdir -p "{{.LIB_DIR}}"
+        fi
       - |
         if [[ "{{.LIB_FILENAME}}" == *.dll ]] && [ ! -f "{{.LIB_DIR}}/tensorflowlite_c.dll" ]; then
-          ln -sf "{{.LIB_DIR}}/{{.LIB_FILENAME}}" "{{.LIB_DIR}}/tensorflowlite_c.dll"
+          if [ -w "{{.LIB_DIR}}" ]; then
+            ln -sf "{{.LIB_DIR}}/{{.LIB_FILENAME}}" "{{.LIB_DIR}}/tensorflowlite_c.dll"
+          else
+            sudo ln -sf "{{.LIB_DIR}}/{{.LIB_FILENAME}}" "{{.LIB_DIR}}/tensorflowlite_c.dll"
+          fi
         elif [ "{{.UNAME_S}}" = "Linux" ] && [ ! -f "{{.LIB_DIR}}/libtensorflowlite_c.so" ]; then
-          cd {{.LIB_DIR}} && \
-          ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.so.2 && \
-          ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so
+          if [ -w "{{.LIB_DIR}}" ]; then
+            cd {{.LIB_DIR}} && \
+            ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.so.2 && \
+            ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so
+          else
+            cd {{.LIB_DIR}} && \
+            sudo ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.so.2 && \
+            sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so
+          fi
         elif [ "{{.UNAME_S}}" = "Darwin" ] && [ ! -f "{{.LIB_DIR}}/libtensorflowlite_c.dylib" ]; then
           cd {{.LIB_DIR}} && \
           ln -sf {{.LIB_FILENAME}} libtensorflowlite_c.dylib
