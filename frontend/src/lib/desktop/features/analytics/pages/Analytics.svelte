@@ -6,6 +6,7 @@
   import ChartCard from '../components/ui/ChartCard.svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
+  import { t } from '$lib/i18n';
 
   // Type definitions
   interface Filters {
@@ -136,19 +137,19 @@
   function getPeriodLabel(): string {
     switch (filters.timePeriod) {
       case 'today':
-        return 'Today';
+        return t('analytics.periods.today');
       case 'week':
-        return 'Last 7 days';
+        return t('analytics.periods.lastWeek');
       case 'month':
-        return 'Last 30 days';
+        return t('analytics.periods.lastMonth');
       case '90days':
-        return 'Last 90 days';
+        return t('analytics.periods.last90Days');
       case 'year':
-        return 'Last 12 months';
+        return t('analytics.periods.lastYear');
       case 'custom':
-        return 'Custom range';
+        return t('analytics.periods.customRange');
       default:
-        return 'All time';
+        return t('analytics.periods.allTime');
     }
   }
 
@@ -321,7 +322,7 @@
       ]);
     } catch (err) {
       console.error('General error fetching analytics data:', err);
-      error = 'Failed to load some analytics data. Please try again later.';
+      error = t('analytics.loadingError');
     }
 
     // Set loading to false and wait for DOM update before finishing
@@ -362,7 +363,7 @@
 
         if (count > mostCommonCount) {
           mostCommonCount = count;
-          mostCommonSpecies = species.common_name || 'Unknown';
+          mostCommonSpecies = species.common_name || t('analytics.recentDetections.unknown');
         }
       });
 
@@ -524,7 +525,7 @@
         labels: labels,
         datasets: [
           {
-            label: 'Number of Detections',
+            label: t('analytics.charts.numberOfDetections'),
             data: counts,
             backgroundColor: backgroundColors,
             borderWidth: 1,
@@ -551,7 +552,7 @@
             beginAtZero: true,
             title: {
               display: true,
-              text: 'Number of Detections',
+              text: t('analytics.charts.numberOfDetections'),
               color: theme.color.text,
             },
             ticks: {
@@ -628,7 +629,7 @@
         labels: periods,
         datasets: [
           {
-            label: 'Detections',
+            label: t('analytics.charts.detections'),
             data: periodCounts,
             backgroundColor: backgroundColors,
             borderWidth: 1,
@@ -654,7 +655,7 @@
             beginAtZero: true,
             title: {
               display: true,
-              text: 'Number of Detections',
+              text: t('analytics.charts.numberOfDetections'),
               color: theme.color.text,
             },
             ticks: {
@@ -667,7 +668,7 @@
           x: {
             title: {
               display: true,
-              text: 'Time Period',
+              text: t('analytics.charts.timePeriod'),
               color: theme.color.text,
             },
             ticks: {
@@ -720,7 +721,7 @@
         labels: labels,
         datasets: [
           {
-            label: 'Daily Detections',
+            label: t('analytics.charts.dailyDetections'),
             data: counts,
             fill: false,
             borderColor: primaryColor,
@@ -752,7 +753,7 @@
             beginAtZero: true,
             title: {
               display: true,
-              text: 'Number of Detections',
+              text: t('analytics.charts.numberOfDetections'),
               color: theme.color.text,
             },
             ticks: {
@@ -765,7 +766,7 @@
           x: {
             title: {
               display: true,
-              text: 'Date',
+              text: t('analytics.charts.date'),
               color: theme.color.text,
             },
             ticks: {
@@ -859,7 +860,7 @@
         labels: labels,
         datasets: [
           {
-            label: 'First Heard On',
+            label: t('analytics.charts.firstHeardOn'),
             data: chartValues,
             backgroundColor: colors,
             borderWidth: 1,
@@ -881,7 +882,7 @@
               label: context => {
                 const dataPoint = context.dataset.data[context.dataIndex] as [number, number];
                 const startDate = new Date(dataPoint[0]).toISOString().split('T')[0];
-                return `First Heard: ${startDate}`;
+                return `${t('analytics.charts.firstHeard')}: ${startDate}`;
               },
             },
           },
@@ -900,7 +901,7 @@
             max: maxDate,
             title: {
               display: true,
-              text: 'First Heard Date',
+              text: t('analytics.charts.firstHeardDate'),
               color: theme.color.text,
             },
             ticks: { color: theme.color.text },
@@ -951,7 +952,7 @@
   });
 </script>
 
-<div class="col-span-12 space-y-4" role="region" aria-label="Bird Detection Analytics">
+<div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.title')}>
   {#if error}
     <div class="alert alert-error">
       {@html alertIconsSvg.error}
@@ -963,7 +964,7 @@
   <div class="grid gap-4 summary-cards-grid">
     <!-- Total Detections Card -->
     <StatCard
-      title="Total Detections"
+      title={t('analytics.stats.totalDetections')}
       value={formatNumber(summary.totalDetections)}
       subtitle={getPeriodLabel()}
       iconClassName="bg-primary/20"
@@ -1001,7 +1002,7 @@
 
     <!-- Unique Species Card -->
     <StatCard
-      title="Unique Species"
+      title={t('analytics.stats.uniqueSpecies')}
       value={formatNumber(summary.uniqueSpecies)}
       subtitle={getPeriodLabel()}
       iconClassName="bg-secondary/20"
@@ -1024,7 +1025,7 @@
 
     <!-- Average Confidence Card -->
     <StatCard
-      title="Avg. Confidence"
+      title={t('analytics.stats.avgConfidence')}
       value={formatPercentage(summary.avgConfidence)}
       subtitle={getPeriodLabel()}
       iconClassName="bg-accent/20"
@@ -1049,10 +1050,10 @@
 
     <!-- Most Common Species Card -->
     <StatCard
-      title="Most Common"
-      value={summary.mostCommonSpecies || 'None'}
+      title={t('analytics.stats.mostCommon')}
+      value={summary.mostCommonSpecies || t('analytics.stats.none')}
       subtitle={summary.mostCommonCount > 0
-        ? formatNumber(summary.mostCommonCount) + ' detections'
+        ? formatNumber(summary.mostCommonCount) + ' ' + t('analytics.stats.detections')
         : ''}
       iconClassName="bg-success/20"
       valueClassName="text-lg truncate max-w-[150px]"
@@ -1082,29 +1083,33 @@
   <!-- Charts Section -->
   <div class="grid gap-4 charts-grid">
     <!-- Species Distribution Chart -->
-    <ChartCard title="Top 10 Species" chartId="speciesChart" {isLoading} />
+    <ChartCard title={t('analytics.charts.top10Species')} chartId="speciesChart" {isLoading} />
 
     <!-- Time of Day Chart -->
-    <ChartCard title="Detections by Time of Day" chartId="timeOfDayChart" {isLoading} />
+    <ChartCard
+      title={t('analytics.charts.detectionsByTimeOfDay')}
+      chartId="timeOfDayChart"
+      {isLoading}
+    />
   </div>
 
   <!-- Trend Charts -->
-  <ChartCard title="Detection Trends" chartId="trendChart" {isLoading} />
+  <ChartCard title={t('analytics.charts.detectionTrends')} chartId="trendChart" {isLoading} />
 
   <!-- New Species Chart -->
   <ChartCard
-    title="New Species Detected"
+    title={t('analytics.charts.newSpeciesDetected')}
     chartId="newSpeciesChart"
     {isLoading}
     showEmpty={!isLoading && newSpeciesData.length === 0}
-    emptyMessage="No new species detected in this period."
+    emptyMessage={t('analytics.charts.noNewSpecies')}
     chartHeight="h-auto"
   />
 
   <!-- Data Table for Recent Detections -->
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body card-padding">
-      <h2 class="card-title">Recent Detections</h2>
+      <h2 class="card-title">{t('analytics.recentDetections.title')}</h2>
       {#if isLoading}
         <div class="flex justify-center items-center p-8">
           <span class="loading loading-spinner loading-lg text-primary"></span>
@@ -1114,10 +1119,10 @@
           <table class="table w-full">
             <thead>
               <tr>
-                <th>Date & Time</th>
-                <th>Species</th>
-                <th>Confidence</th>
-                <th>Time of Day</th>
+                <th>{t('analytics.recentDetections.headers.dateTime')}</th>
+                <th>{t('analytics.recentDetections.headers.species')}</th>
+                <th>{t('analytics.recentDetections.headers.confidence')}</th>
+                <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1140,7 +1145,9 @@
                         />
                       </div>
                       <div>
-                        <div class="font-medium">{detection.commonName || 'Unknown'}</div>
+                        <div class="font-medium">
+                          {detection.commonName || t('analytics.recentDetections.unknownSpecies')}
+                        </div>
                         <div class="text-xs opacity-50">{detection.scientificName || ''}</div>
                       </div>
                     </div>
@@ -1160,12 +1167,12 @@
                       <span class="text-sm">{formatPercentage(detection.confidence)}</span>
                     </div>
                   </td>
-                  <td>{detection.timeOfDay || 'Unknown'}</td>
+                  <td>{detection.timeOfDay || t('analytics.recentDetections.unknown')}</td>
                 </tr>
               {:else}
                 <tr>
                   <td colspan="4" class="text-center py-4 text-base-content/50"
-                    >No recent detections found</td
+                    >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
                 </tr>
               {/each}

@@ -35,6 +35,7 @@
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import DetectionRow from './DetectionRow.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
+  import { t } from '$lib/i18n';
 
   interface Props {
     data: DetectionsListData | null;
@@ -58,23 +59,27 @@
 
   // Generate title based on query type
   const title = $derived(() => {
-    if (!data) return 'Detections';
+    if (!data) return t('detections.title');
 
     switch (data.queryType) {
       case 'hourly':
         if (data.duration && data.duration > 1) {
-          return `Hourly Results from ${data.hour}:00 to ${(data.hour || 0) + data.duration}:00 on ${data.date}`;
+          return t('detections.titles.hourlyRange', {
+            startHour: data.hour,
+            endHour: (data.hour || 0) + data.duration,
+            date: data.date,
+          });
         }
-        return `Hourly Results for ${data.hour}:00 on ${data.date}`;
+        return t('detections.titles.hourly', { hour: data.hour, date: data.date });
 
       case 'species':
-        return `Results for ${data.species} on ${data.date}`;
+        return t('detections.titles.species', { species: data.species, date: data.date });
 
       case 'search':
-        return `Search Results for "${data.search}"`;
+        return t('detections.titles.search', { query: data.search });
 
       default:
-        return `All Detections for ${data.date}`;
+        return t('detections.titles.allDetections', { date: data.date });
     }
   });
 
@@ -110,24 +115,31 @@
       </div>
     {:else if !data || data.notes.length === 0}
       <EmptyState
-        title="No detections found"
-        description="Try adjusting your filters or search criteria"
+        title={t('detections.empty.title')}
+        description={t('detections.empty.description')}
         className="py-8"
       />
     {:else}
       <!-- Header -->
       <div class="grid grid-cols-12 gap-4 text-xs px-4 pb-2 border-b border-gray-200">
-        <div class="col-span-2">Date & Time</div>
-        <div class="col-span-1">Weather</div>
-        <div class="col-span-3">Species</div>
+        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.dateTime')}</div>
+        <div class="col-span-1 min-w-0 break-words">{t('detections.headers.weather')}</div>
+        <div class="col-span-3 min-w-0 break-words">{t('detections.headers.species')}</div>
         {#if data.dashboardSettings?.thumbnails?.summary}
-          <div class="col-span-1">Thumbnail</div>
+          <div class="col-span-1 min-w-0 break-words">{t('detections.headers.thumbnail')}</div>
         {/if}
-        <div class="col-span-2">Status</div>
-        <div class={data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3'}>
-          Recording
+        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.status')}</div>
+        <div
+          class={cn(
+            data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3',
+            'min-w-0 break-words'
+          )}
+        >
+          {t('detections.headers.recording')}
         </div>
-        <div class="col-span-1 text-right">Actions</div>
+        <div class="col-span-1 text-right min-w-0 break-words">
+          {t('detections.headers.actions')}
+        </div>
       </div>
 
       <!-- Detection rows -->
@@ -149,7 +161,11 @@
     <div class="border-t border-base-200">
       <div class="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
         <div class="text-sm text-base-content/70 order-2 sm:order-1">
-          Showing {data.showingFrom} to {data.showingTo} of {data.totalResults} results
+          {t('detections.pagination.showing', {
+            from: data.showingFrom,
+            to: data.showingTo,
+            total: data.totalResults,
+          })}
         </div>
         <div class="order-1 sm:order-2">
           <Pagination

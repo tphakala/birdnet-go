@@ -471,6 +471,23 @@ func validateDashboardSettings(settings *Dashboard) error {
 			Build()
 	}
 
+	// Validate UI locale if provided
+	if settings.Locale != "" {
+		validLocales := []string{"en", "de", "fr", "es", "fi", "pt"}
+		isValid := false
+		for _, validLocale := range validLocales {
+			if settings.Locale == validLocale {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			// Log warning but don't fail - fallback to default
+			log.Printf("WARNING: Invalid UI locale '%s', will use default 'en'", settings.Locale)
+			settings.Locale = "en"
+		}
+	}
+
 	return nil
 }
 

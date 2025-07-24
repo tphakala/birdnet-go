@@ -18,6 +18,8 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t, getLocale, setLocale } from '$lib/i18n';
+  import { LOCALES, type Locale } from '$lib/i18n/config';
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -52,14 +54,17 @@
       username: '',
       password: '',
     },
-    dashboard: $dashboardSettings || {
-      thumbnails: {
-        summary: true,
-        recent: true,
-        imageProvider: 'wikimedia',
-        fallbackPolicy: 'all',
-      },
-      summaryLimit: 100,
+    dashboard: {
+      ...($dashboardSettings || {
+        thumbnails: {
+          summary: true,
+          recent: true,
+          imageProvider: 'wikimedia',
+          fallbackPolicy: 'all',
+        },
+        summaryLimit: 100,
+      }),
+      locale: $dashboardSettings?.locale || (getLocale() as string), // Ensure locale is always defined
     },
   });
 
@@ -88,8 +93,14 @@
     )
   );
 
-  // Locale options
-  let locales = $state<Array<{ value: string; label: string }>>([]);
+  // Locale options for BirdNET
+  let birdnetLocales = $state<Array<{ value: string; label: string }>>([]);
+
+  // UI locale options
+  let uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
+    value: code,
+    label: `${info.flag} ${info.name}`,
+  }));
 
   // Image provider options
   let providerOptions = $state<Array<{ value: string; label: string }>>([]);
@@ -110,19 +121,19 @@
 
   // Fetch initial data
   onMount(async () => {
-    // Fetch locales
+    // Fetch BirdNET locales
     try {
       const localesData = await api.get<Record<string, string>>('/api/v2/settings/locales');
-      locales = Object.entries(localesData || {}).map(([value, label]) => ({
+      birdnetLocales = Object.entries(localesData || {}).map(([value, label]) => ({
         value,
         label: label as string,
       }));
     } catch (error) {
       if (error instanceof ApiError) {
-        toastActions.warning('Unable to load language options. Using defaults.');
+        toastActions.warning(t('settings.main.errors.localesLoadFailed'));
       }
       // Fallback to basic locales so form still works
-      locales = [{ value: 'en', label: 'English' }];
+      birdnetLocales = [{ value: 'en', label: 'English' }];
     }
 
     // Fetch image providers
@@ -140,7 +151,7 @@
       multipleProvidersAvailable = providerOptions.length > 1;
     } catch (error) {
       if (error instanceof ApiError) {
-        toastActions.warning('Unable to load image providers. Using defaults.');
+        toastActions.warning(t('settings.main.errors.providersLoadFailed'));
       }
       // Fallback to basic provider so form still works
       providerOptions = [{ value: 'wikipedia', label: 'Wikipedia' }];
@@ -230,7 +241,7 @@
       rangeFilterSpeciesCount = data.count;
     } catch (error) {
       console.error('Failed to load range filter count:', error);
-      rangeFilterError = 'Failed to load species count';
+      rangeFilterError = t('settings.main.errors.rangeFilterCountFailed');
     }
   }
 
@@ -257,7 +268,7 @@
       }
     } catch (error) {
       console.error('Failed to test range filter:', error);
-      rangeFilterError = 'Failed to test range filter settings';
+      rangeFilterError = t('settings.main.errors.rangeFilterTestFailed');
     } finally {
       testingRangeFilter = false;
     }
@@ -283,7 +294,7 @@
       rangeFilterSpeciesCount = data.count;
     } catch (error) {
       console.error('Failed to load species list:', error);
-      rangeFilterError = 'Failed to load species list';
+      rangeFilterError = t('settings.main.errors.rangeFilterLoadFailed');
     } finally {
       loadingRangeFilter = false;
     }
@@ -341,13 +352,19 @@
       },
     });
   }
+
+  function updateUILocale(locale: string) {
+    settingsActions.updateSection('realtime', {
+      dashboard: { ...settings.dashboard, locale },
+    });
+  }
 </script>
 
 <div class="space-y-4">
   <!-- Main Settings Section -->
   <SettingsSection
-    title="Main Settings"
-    description="Configure main application settings"
+    title={t('settings.main.sections.main.title')}
+    description={t('settings.main.sections.main.description')}
     defaultOpen={true}
     hasChanges={mainSettingsHasChanges}
   >
@@ -355,9 +372,9 @@
       <TextInput
         id="node-name"
         bind:value={settings.main.name}
-        label="Node Name"
-        placeholder="Enter node name"
-        helpText="Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
+        label={t('settings.main.fields.nodeName.label')}
+        placeholder={t('settings.main.fields.nodeName.placeholder')}
+        helpText={t('settings.main.fields.nodeName.helpText')}
         disabled={store.isLoading || store.isSaving}
         onchange={() => updateMainName(settings.main.name)}
       />
@@ -366,8 +383,8 @@
 
   <!-- BirdNET Settings Section -->
   <SettingsSection
-    title="BirdNET Settings"
-    description="Configure BirdNET AI model specific settings"
+    title={t('settings.main.sections.birdnet.title')}
+    description={t('settings.main.sections.birdnet.description')}
     defaultOpen={true}
     hasChanges={birdnetSettingsHasChanges}
   >
@@ -375,70 +392,72 @@
       <!-- Basic BirdNET Settings -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
         <NumberField
-          label="Sensitivity"
+          label={t('settings.main.fields.sensitivity.label')}
           value={settings.birdnet.sensitivity}
           onUpdate={value => updateBirdnetSetting('sensitivity', value)}
           min={0.5}
           max={1.5}
           step={0.1}
-          helpText="Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
+          helpText={t('settings.main.fields.sensitivity.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
 
         <NumberField
-          label="Threshold"
+          label={t('settings.main.fields.threshold.label')}
           value={settings.birdnet.threshold}
           onUpdate={value => updateBirdnetSetting('threshold', value)}
           min={0.01}
           max={0.99}
           step={0.01}
-          helpText="Minimum confidence threshold. Values in 0.01, 0.99."
+          helpText={t('settings.main.fields.threshold.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
 
         <NumberField
-          label="Overlap"
+          label={t('settings.main.fields.overlap.label')}
           value={settings.birdnet.overlap}
           onUpdate={value => updateBirdnetSetting('overlap', value)}
           min={0.0}
           max={2.9}
           step={0.1}
-          helpText="Overlap of prediction segments. Values in 0.0, 2.9."
+          helpText={t('settings.main.fields.overlap.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
 
         <SelectField
           id="locale"
           bind:value={settings.birdnet.locale}
-          label="Locale"
-          options={locales}
-          helpText="Locale for translated species common names."
+          label={t('settings.main.fields.locale.label')}
+          options={birdnetLocales}
+          helpText={t('settings.main.fields.locale.helpText')}
           disabled={store.isLoading || store.isSaving}
           onchange={value => updateBirdnetSetting('locale', value)}
         />
 
         <NumberField
-          label="TensorFlow CPU Threads"
+          label={t('settings.main.fields.tensorflowThreads.label')}
           value={settings.birdnet.threads}
           onUpdate={value => updateBirdnetSetting('threads', value)}
           min={0}
           max={32}
           step={1}
-          helpText="Number of CPU threads. Set to 0 to use all available threads."
+          helpText={t('settings.main.fields.tensorflowThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
       </div>
 
       <!-- Custom BirdNET Classifier -->
       <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">Custom BirdNET Classifier</h4>
+        <h4 class="text-lg font-medium mt-6 pb-2">
+          {t('settings.main.sections.customClassifier.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <TextInput
             id="model-path"
             bind:value={settings.birdnet.modelPath}
-            label="Model Path (Requires restart to apply)"
-            placeholder="Path to model file"
-            helpText="Path to external BirdNET model file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded model."
+            label={t('settings.main.sections.customClassifier.modelPath.label')}
+            placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
+            helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateBirdnetSetting('modelPath', value)}
           />
@@ -446,9 +465,9 @@
           <TextInput
             id="label-path"
             bind:value={settings.birdnet.labelPath}
-            label="Label Path (Requires restart to apply)"
-            placeholder="Path to labels file"
-            helpText="Path to external model labels file, .zip or .txt file. Enter absolute or relative path to birdnet-go binary. Leave empty to use the default embedded labels."
+            label={t('settings.main.sections.customClassifier.labelPath.label')}
+            placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
+            helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateBirdnetSetting('labelPath', value)}
           />
@@ -457,11 +476,13 @@
 
       <!-- Dynamic Threshold -->
       <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">Dynamic Threshold</h4>
+        <h4 class="text-lg font-medium mt-6 pb-2">
+          {t('settings.main.sections.dynamicThreshold.title')}
+        </h4>
         <Checkbox
           bind:checked={settings.dynamicThreshold.enabled}
-          label="Enable Dynamic Threshold (BirdNET-Go specific feature)"
-          helpText="Enables dynamic confidence threshold feature for more adaptive bird call detection."
+          label={t('settings.main.sections.dynamicThreshold.enable.label')}
+          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
           disabled={store.isLoading || store.isSaving}
           onchange={value => updateDynamicThreshold('enabled', value)}
         />
@@ -469,35 +490,35 @@
         {#if settings.dynamicThreshold.enabled}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 mt-4">
             <NumberField
-              label="Trigger Threshold"
+              label={t('settings.main.sections.dynamicThreshold.trigger.label')}
               value={settings.dynamicThreshold.trigger}
               onUpdate={value => updateDynamicThreshold('trigger', value)}
               min={0.0}
               max={1.0}
               step={0.01}
-              helpText="The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls."
+              helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
 
             <NumberField
-              label="Minimum Dynamic Threshold"
+              label={t('settings.main.sections.dynamicThreshold.minimum.label')}
               value={settings.dynamicThreshold.min}
               onUpdate={value => updateDynamicThreshold('min', value)}
               min={0.0}
               max={0.99}
               step={0.01}
-              helpText="The minimum value to which the dynamic threshold can be lowered. This ensures that the threshold does not drop below an unwanted level."
+              helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
 
             <NumberField
-              label="Dynamic Threshold Expire Time (Hours)"
+              label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
               value={settings.dynamicThreshold.validHours}
               onUpdate={value => updateDynamicThreshold('validHours', value)}
               min={0}
               max={1000}
               step={1}
-              helpText="The number of hours during which the dynamic threshold adjustments remain valid. After this period, the dynamic threshold is reset."
+              helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
           </div>
@@ -506,12 +527,16 @@
 
       <!-- Range Filter -->
       <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">Range Filter</h4>
+        <h4 class="text-lg font-medium mt-6 pb-2">
+          {t('settings.main.sections.rangeFilter.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <!-- Map container -->
           <div class="col-span-1 md:col-span-2">
             <label class="label justify-start" for="location-map">
-              <span class="label-text">Station Location</span>
+              <span class="label-text"
+                >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
+              >
             </label>
             <div class="form-control">
               <div
@@ -525,7 +550,7 @@
               </div>
               <div class="label">
                 <span class="label-text-alt"
-                  >Station location, used to limit bird species to those probable in the region.</span
+                  >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
                 >
               </div>
             </div>
@@ -534,36 +559,36 @@
           <!-- Range Filter Settings -->
           <div class="col-span-1 flex flex-col justify-start gap-x-6">
             <NumberField
-              label="Latitude"
+              label={t('settings.main.sections.rangeFilter.latitude.label')}
               value={settings.birdnet.latitude}
               onUpdate={value => updateBirdnetSetting('latitude', value)}
               min={-90.0}
               max={90.0}
               step={0.001}
-              helpText="Station location latitude, used to limit bird species to those probable in the region."
+              helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
 
             <NumberField
-              label="Longitude"
+              label={t('settings.main.sections.rangeFilter.longitude.label')}
               value={settings.birdnet.longitude}
               onUpdate={value => updateBirdnetSetting('longitude', value)}
               min={-180.0}
               max={180.0}
               step={0.001}
-              helpText="Station location longitude, used to limit bird species to those probable in the region."
+              helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
 
             <SelectField
               id="range-filter-model"
               bind:value={settings.birdnet.rangeFilter.model}
-              label="Range Filter Model"
+              label={t('settings.main.sections.rangeFilter.model.label')}
               options={[
                 { value: 'legacy', label: 'legacy' },
                 { value: 'latest', label: 'latest' },
               ]}
-              helpText="BirdNET range filter model version: latest or legacy."
+              helpText={t('settings.main.sections.rangeFilter.model.helpText')}
               disabled={store.isLoading || store.isSaving}
               onchange={value =>
                 settingsActions.updateSection('birdnet', {
@@ -575,7 +600,7 @@
             />
 
             <NumberField
-              label="Threshold"
+              label={t('settings.main.sections.rangeFilter.threshold.label')}
               value={settings.birdnet.rangeFilter.threshold}
               onUpdate={value =>
                 settingsActions.updateSection('birdnet', {
@@ -584,19 +609,23 @@
               min={0.0}
               max={0.99}
               step={0.01}
-              helpText="Controls which species are included based on their occurrence probability for your location and time of year. Default (0.01) is recommended for most users. Higher values (0.05-0.3) include fewer species with higher occurrence probability. Very high values (0.5+) include only the most common species."
+              helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
 
             <!-- Range Filter Species Count Display -->
             <div class="form-control">
               <div class="label justify-start">
-                <span class="label-text">Current Species Count</span>
+                <span class="label-text"
+                  >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
+                >
               </div>
               <div class="flex items-center space-x-2">
                 <div class="flex items-center space-x-2">
                   <div class="text-lg font-bold text-primary" class:opacity-60={testingRangeFilter}>
-                    {rangeFilterSpeciesCount !== null ? rangeFilterSpeciesCount : 'Loading...'}
+                    {rangeFilterSpeciesCount !== null
+                      ? rangeFilterSpeciesCount
+                      : t('settings.main.sections.rangeFilter.speciesCount.loading')}
                   </div>
                   {#if testingRangeFilter}
                     <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
@@ -613,16 +642,15 @@
                 >
                   {#if loadingRangeFilter}
                     <span class="loading loading-spinner loading-xs mr-1"></span>
-                    Loading...
+                    {t('settings.main.sections.rangeFilter.speciesCount.loading')}
                   {:else}
-                    View Species
+                    {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
                   {/if}
                 </button>
               </div>
               <div class="label">
                 <span class="label-text-alt"
-                  >Number of species included in range filter. Updates automatically when threshold,
-                  latitude, or longitude changes.</span
+                  >{t('settings.main.sections.rangeFilter.speciesCount.helpText')}</span
                 >
               </div>
 
@@ -649,8 +677,8 @@
 
   <!-- Database Settings Section -->
   <SettingsSection
-    title="Database Settings"
-    description="Detections database settings"
+    title={t('settings.main.sections.database.title')}
+    description={t('settings.main.sections.database.description')}
     defaultOpen={true}
     hasChanges={databaseSettingsHasChanges}
   >
@@ -658,28 +686,28 @@
       <SelectField
         id="database-type"
         bind:value={settings.database.type}
-        label="Select Database Type"
+        label={t('settings.main.sections.database.type.label')}
         options={[
           { value: 'sqlite', label: 'SQLite' },
           { value: 'mysql', label: 'MySQL' },
         ]}
-        helpText="Select the database type to use for storing detections."
+        helpText={t('settings.main.sections.database.type.helpText')}
         disabled={store.isLoading || store.isSaving}
         onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
       />
 
       {#if settings.database.type === 'sqlite'}
         <SettingsNote>
-          <span>SQLite is recommended database type for most users.</span>
+          <span>{t('settings.main.sections.database.sqlite.note')}</span>
         </SettingsNote>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <TextInput
             id="sqlite-path"
             bind:value={settings.database.path}
-            label="SQLite Database Path"
-            placeholder="Enter SQLite database path"
-            helpText="SQLite database file path relative to the application directory"
+            label={t('settings.main.sections.database.sqlite.path.label')}
+            placeholder={t('settings.main.sections.database.sqlite.path.placeholder')}
+            helpText={t('settings.main.sections.database.sqlite.path.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={updateSQLitePath}
           />
@@ -691,30 +719,30 @@
           <TextInput
             id="mysql-host"
             bind:value={settings.database.host}
-            label="MySQL Host"
-            placeholder="Enter MySQL host"
-            helpText="MySQL database host (IP or hostname)"
+            label={t('settings.main.sections.database.mysql.host.label')}
+            placeholder={t('settings.main.sections.database.mysql.host.placeholder')}
+            helpText={t('settings.main.sections.database.mysql.host.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateMySQLSetting('host', value)}
           />
 
           <NumberField
-            label="MySQL Port"
+            label={t('settings.main.sections.database.mysql.port.label')}
             value={settings.database.port}
             onUpdate={value => updateMySQLSetting('port', value)}
             min={1}
             max={65535}
             placeholder="3306"
-            helpText="MySQL database port (default 3306/TCP)"
+            helpText={t('settings.main.sections.database.mysql.port.helpText')}
             disabled={store.isLoading || store.isSaving}
           />
 
           <TextInput
             id="mysql-username"
             bind:value={settings.database.username}
-            label="MySQL Username"
-            placeholder="Enter MySQL username"
-            helpText="MySQL database username"
+            label={t('settings.main.sections.database.mysql.username.label')}
+            placeholder={t('settings.main.sections.database.mysql.username.placeholder')}
+            helpText={t('settings.main.sections.database.mysql.username.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateMySQLSetting('username', value)}
           />
@@ -722,9 +750,9 @@
           <PasswordField
             id="mysql-password"
             value={settings.database.password}
-            label="MySQL Password"
-            placeholder="Enter MySQL password"
-            helpText="MySQL database password"
+            label={t('settings.main.sections.database.mysql.password.label')}
+            placeholder={t('settings.main.sections.database.mysql.password.placeholder')}
+            helpText={t('settings.main.sections.database.mysql.password.helpText')}
             disabled={store.isLoading || store.isSaving}
             onUpdate={value => updateMySQLSetting('password', value)}
           />
@@ -732,9 +760,9 @@
           <TextInput
             id="mysql-database"
             bind:value={settings.database.name}
-            label="MySQL Database"
-            placeholder="Enter MySQL database name"
-            helpText="MySQL database name"
+            label={t('settings.main.sections.database.mysql.database.label')}
+            placeholder={t('settings.main.sections.database.mysql.database.placeholder')}
+            helpText={t('settings.main.sections.database.mysql.database.helpText')}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateMySQLSetting('name', value)}
           />
@@ -745,22 +773,41 @@
 
   <!-- User Interface Settings Section -->
   <SettingsSection
-    title="User Interface Settings"
-    description="Customize user interface"
+    title={t('settings.main.sections.userInterface.title')}
+    description={t('settings.main.sections.userInterface.description')}
     defaultOpen={true}
     hasChanges={dashboardSettingsHasChanges}
   >
     <div class="space-y-6">
       <div>
-        <h4 class="text-lg font-medium pb-2">Dashboard</h4>
+        <h4 class="text-lg font-medium pb-2">
+          {t('settings.main.sections.userInterface.language.title')}
+        </h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+          <SelectField
+            id="ui-locale"
+            bind:value={settings.dashboard.locale}
+            label={t('settings.main.sections.userInterface.language.locale.label')}
+            options={uiLocales}
+            helpText={t('settings.main.sections.userInterface.language.locale.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateUILocale(value)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <h4 class="text-lg font-medium pb-2 mt-6">
+          {t('settings.main.sections.userInterface.dashboard.title')}
+        </h4>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
           <NumberField
-            label="Max Number of Species on Daily Summary Table"
+            label={t('settings.main.sections.userInterface.dashboard.summaryLimit.label')}
             value={settings.dashboard.summaryLimit}
             onUpdate={value => updateDashboardSetting('summaryLimit', value)}
             min={10}
             max={1000}
-            helpText="Max number of species shown in the daily summary table (Value between 10 and 1000)"
+            helpText={t('settings.main.sections.userInterface.dashboard.summaryLimit.helpText')}
             disabled={store.isLoading || store.isSaving}
           />
         </div>
@@ -768,16 +815,20 @@
         <div class="mt-4">
           <Checkbox
             bind:checked={settings.dashboard.thumbnails.summary}
-            label="Show Thumbnails on Daily Summary table"
-            helpText="Enable to show thumbnails of detected species on the daily summary table"
+            label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
+            )}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateThumbnailSetting('summary', value)}
           />
 
           <Checkbox
             bind:checked={settings.dashboard.thumbnails.recent}
-            label="Show Thumbnails on Recent Detections list"
-            helpText="Enable to show thumbnails of detected species on the recent detections list"
+            label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
+            )}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateThumbnailSetting('recent', value)}
           />
@@ -786,9 +837,13 @@
             <SelectField
               id="image-provider"
               bind:value={settings.dashboard.thumbnails.imageProvider}
-              label="Image Provider"
+              label={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
+              )}
               options={providerOptions}
-              helpText="Select the preferred image provider for bird thumbnails"
+              helpText={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
+              )}
               disabled={store.isLoading || store.isSaving || !multipleProvidersAvailable}
               onchange={value => updateThumbnailSetting('imageProvider', value)}
             />
@@ -798,12 +853,26 @@
             <SelectField
               id="fallback-policy"
               bind:value={settings.dashboard.thumbnails.fallbackPolicy}
-              label="Fallback Policy"
+              label={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
+              )}
               options={[
-                { value: 'all', label: 'Try all providers in sequence' },
-                { value: 'none', label: 'Use only selected provider' },
+                {
+                  value: 'all',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all'
+                  ),
+                },
+                {
+                  value: 'none',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none'
+                  ),
+                },
               ]}
-              helpText="Select what happens when preferred provider fails to find an image"
+              helpText={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
+              )}
               disabled={store.isLoading || store.isSaving}
               onchange={value => updateThumbnailSetting('fallbackPolicy', value)}
             />
@@ -830,7 +899,9 @@
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
-        <h3 id="modal-title" class="text-lg font-bold">Range Filter Species</h3>
+        <h3 id="modal-title" class="text-lg font-bold">
+          {t('settings.main.sections.rangeFilter.modal.title')}
+        </h3>
         <button
           type="button"
           class="btn btn-sm btn-circle btn-ghost"
@@ -844,19 +915,26 @@
       <div class="mb-4 text-sm text-base-content/70">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <span class="font-medium">Species Count:</span>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
+            >
             <span> {rangeFilterSpeciesCount}</span>
           </div>
           <div>
-            <span class="font-medium">Threshold:</span>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
+            >
             <span> {settings.birdnet.rangeFilter.threshold}</span>
           </div>
           <div>
-            <span class="font-medium">Latitude:</span>
+            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.latitude')}</span
+            >
             <span> {settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="font-medium">Longitude:</span>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
+            >
             <span> {settings.birdnet.longitude}</span>
           </div>
         </div>
@@ -881,7 +959,7 @@
         {#if loadingRangeFilter}
           <div class="text-center py-8">
             <div class="loading loading-spinner loading-lg"></div>
-            <p class="mt-2">Loading species...</p>
+            <p class="mt-2">{t('settings.main.sections.rangeFilter.modal.loadingSpecies')}</p>
           </div>
         {:else if rangeFilterSpecies.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -894,7 +972,7 @@
           </div>
         {:else}
           <div class="text-center py-8 text-base-content/60">
-            No species found with current settings
+            {t('settings.main.sections.rangeFilter.modal.noSpeciesFound')}
           </div>
         {/if}
       </div>
@@ -905,7 +983,7 @@
           class="btn btn-outline"
           onclick={() => (showRangeFilterModal = false)}
         >
-          Close
+          {t('settings.main.sections.rangeFilter.modal.close')}
         </button>
       </div>
     </div>

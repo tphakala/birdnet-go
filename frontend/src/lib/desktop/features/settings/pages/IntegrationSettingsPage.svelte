@@ -24,6 +24,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import { getCsrfToken } from '$lib/utils/api.js';
+  import { t } from '$lib/i18n';
 
   let settings = $derived(
     $integrationSettings || {
@@ -113,20 +114,6 @@
     mqtt: { stages: [], isRunning: false, showSuccessNote: false },
     weather: { stages: [], isRunning: false, showSuccessNote: false },
   });
-
-  // Weather provider options
-  const weatherProviderOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'yrno', label: 'Yr.no' },
-    { value: 'openweather', label: 'OpenWeather' },
-  ];
-
-  // OpenWeather units options
-  const openWeatherUnitsOptions = [
-    { value: 'standard', label: 'Standard' },
-    { value: 'metric', label: 'Metric' },
-    { value: 'imperial', label: 'Imperial' },
-  ];
 
   // FFmpeg availability check
   let ffmpegAvailable = $state(true);
@@ -756,8 +743,8 @@
   <div class="space-y-4">
     <!-- BirdWeather Settings -->
     <SettingsSection
-      title="BirdWeather"
-      description="Upload detections to BirdWeather"
+      title={t('settings.integration.birdweather.title')}
+      description={t('settings.integration.birdweather.description')}
       defaultOpen={true}
       hasChanges={birdweatherHasChanges}
     >
@@ -767,10 +754,9 @@
           <div class="alert alert-warning" role="alert">
             {@html alertIconsSvg.warning}
             <div>
-              <h3 class="font-bold">FFmpeg not detected</h3>
+              <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
               <p class="text-sm">
-                Please install FFmpeg to enable FLAC encoding support, BirdWeather is deprecating
-                WAV uploads in favor of compressed FLAC audio files.
+                {t('settings.integration.birdweather.ffmpegWarning.message')}
               </p>
             </div>
           </div>
@@ -778,7 +764,7 @@
 
         <Checkbox
           bind:checked={settings.birdweather!.enabled}
-          label="Enable BirdWeather Uploads"
+          label={t('settings.integration.birdweather.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateBirdWeatherEnabled(settings.birdweather!.enabled)}
         />
@@ -786,24 +772,24 @@
         {#if settings.birdweather?.enabled}
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <PasswordField
-              label="BirdWeather token"
+              label={t('settings.integration.birdweather.token.label')}
               value={settings.birdweather!.id}
               onUpdate={updateBirdWeatherId}
               placeholder=""
-              helpText="Your unique BirdWeather token."
+              helpText={t('settings.integration.birdweather.token.helpText')}
               disabled={store.isLoading || store.isSaving}
               allowReveal={true}
             />
 
             <NumberField
-              label="Upload Threshold"
+              label={t('settings.integration.birdweather.threshold.label')}
               value={settings.birdweather!.threshold}
               onUpdate={updateBirdWeatherThreshold}
               min={0}
               max={1}
               step={0.01}
               placeholder="0.7"
-              helpText="Minimum confidence threshold for uploading predictions to BirdWeather."
+              helpText={t('settings.integration.birdweather.threshold.helpText')}
               disabled={store.isLoading || store.isSaving}
             />
           </div>
@@ -814,24 +800,24 @@
               <SettingsButton
                 onclick={testBirdWeather}
                 loading={testStates.birdweather.isRunning}
-                loadingText="Testing..."
+                loadingText={t('settings.integration.birdweather.test.loading')}
                 disabled={!(
                   store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled
                 ) ||
                   !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
                   testStates.birdweather.isRunning}
               >
-                Test BirdWeather Connection
+                {t('settings.integration.birdweather.test.button')}
               </SettingsButton>
               <span class="text-sm text-base-content/70">
                 {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
-                  BirdWeather must be enabled to test
+                  {t('settings.integration.birdweather.test.enabledRequired')}
                 {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
-                  BirdWeather token must be specified
+                  {t('settings.integration.birdweather.test.tokenRequired')}
                 {:else if testStates.birdweather.isRunning}
-                  Test in progress...
+                  {t('settings.integration.birdweather.test.inProgress')}
                 {:else}
-                  Test BirdWeather connection
+                  {t('settings.integration.birdweather.test.description')}
                 {/if}
               </span>
             </div>
@@ -852,15 +838,15 @@
 
     <!-- MQTT Settings -->
     <SettingsSection
-      title="MQTT"
-      description="Configure MQTT broker connection"
+      title={t('settings.integration.mqtt.title')}
+      description={t('settings.integration.mqtt.description')}
       defaultOpen={false}
       hasChanges={mqttHasChanges}
     >
       <div class="space-y-4">
         <Checkbox
           bind:checked={settings.mqtt!.enabled}
-          label="Enable MQTT Integration"
+          label={t('settings.integration.mqtt.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateMQTTEnabled(settings.mqtt!.enabled)}
         />
@@ -870,8 +856,8 @@
             <TextInput
               id="mqtt-broker"
               bind:value={settings.mqtt!.broker}
-              label="MQTT Broker"
-              placeholder="mqtt://localhost:1883"
+              label={t('settings.integration.mqtt.broker.label')}
+              placeholder={t('settings.integration.mqtt.broker.placeholder')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateMQTTBroker}
             />
@@ -879,32 +865,34 @@
             <TextInput
               id="mqtt-topic"
               bind:value={settings.mqtt!.topic}
-              label="MQTT Topic"
-              placeholder="birdnet/detections"
+              label={t('settings.integration.mqtt.topic.label')}
+              placeholder={t('settings.integration.mqtt.topic.placeholder')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateMQTTTopic}
             />
 
             <!-- Authentication Section -->
             <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">Authentication</h3>
+              <h3 class="text-sm font-medium mb-3">
+                {t('settings.integration.mqtt.authentication.title')}
+              </h3>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextInput
                   id="mqtt-username"
                   value={settings.mqtt!.username || ''}
-                  label="Username"
+                  label={t('settings.integration.mqtt.authentication.username.label')}
                   placeholder=""
                   disabled={store.isLoading || store.isSaving}
                   onchange={value => updateMQTTUsername(value)}
                 />
 
                 <PasswordField
-                  label="Password"
+                  label={t('settings.integration.mqtt.authentication.password.label')}
                   value={settings.mqtt!.password || ''}
                   onUpdate={updateMQTTPassword}
                   placeholder=""
-                  helpText="The MQTT password."
+                  helpText={t('settings.integration.mqtt.authentication.password.helpText')}
                   disabled={store.isLoading || store.isSaving}
                   allowReveal={true}
                 />
@@ -913,33 +901,31 @@
 
             <!-- Message Settings Section -->
             <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">Message Settings</h3>
+              <h3 class="text-sm font-medium mb-3">
+                {t('settings.integration.mqtt.messageSettings.title')}
+              </h3>
 
               <!-- prettier-ignore -->
               <Checkbox
                 bind:checked={(settings.mqtt as MQTTSettings).retain}
-                label="Retain Messages"
+                label={t('settings.integration.mqtt.messageSettings.retain.label')}
                 disabled={store.isLoading || store.isSaving}
                 onchange={() => updateMQTTRetain((settings.mqtt as MQTTSettings).retain)}
               />
 
               <!-- Note about MQTT Retain for HomeAssistant -->
               <SettingsNote>
-                <span
-                  ><strong>Home Assistant Users:</strong> It's recommended to enable the retain flag
-                  for Home Assistant integration. Without retain, MQTT sensors will appear as 'unknown'
-                  when Home Assistant restarts.</span
-                >
+                <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
               </SettingsNote>
             </div>
 
             <!-- TLS/SSL Security Section -->
             <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">TLS/SSL Security</h3>
+              <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
 
               <Checkbox
                 bind:checked={settings.mqtt!.tls.enabled}
-                label="Enable TLS/SSL"
+                label={t('settings.integration.mqtt.tls.enable')}
                 disabled={store.isLoading || store.isSaving}
                 onchange={() => updateMQTTTLSEnabled(settings.mqtt!.tls.enabled)}
               />
@@ -947,7 +933,7 @@
               {#if settings.mqtt?.tls.enabled}
                 <Checkbox
                   bind:checked={settings.mqtt!.tls.skipVerify}
-                  label="Skip Certificate Verification"
+                  label={t('settings.integration.mqtt.tls.skipVerify')}
                   disabled={store.isLoading || store.isSaving}
                   onchange={() => updateMQTTTLSSkipVerify(settings.mqtt!.tls.skipVerify)}
                 />
@@ -955,11 +941,7 @@
                 <div class="alert alert-info">
                   {@html alertIconsSvg.info}
                   <div>
-                    <span
-                      ><strong>TLS Configuration:</strong><br />• Standard TLS: Leave certificates
-                      empty for public brokers<br />• Self-signed certificates: Provide CA
-                      Certificate<br />• Mutual TLS (mTLS): Provide all three certificates</span
-                    >
+                    <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
                   </div>
                 </div>
               {/if}
@@ -971,22 +953,22 @@
                 <SettingsButton
                   onclick={testMQTT}
                   loading={testStates.mqtt.isRunning}
-                  loadingText="Testing..."
+                  loadingText={t('settings.integration.mqtt.test.loading')}
                   disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
                     !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
                     testStates.mqtt.isRunning}
                 >
-                  Test MQTT Connection
+                  {t('settings.integration.mqtt.test.button')}
                 </SettingsButton>
                 <span class="text-sm text-base-content/70">
                   {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
-                    MQTT must be enabled to test
+                    {t('settings.integration.mqtt.test.enabledRequired')}
                   {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
-                    MQTT broker must be specified
+                    {t('settings.integration.mqtt.test.brokerRequired')}
                   {:else if testStates.mqtt.isRunning}
-                    Test in progress...
+                    {t('settings.integration.mqtt.test.inProgress')}
                   {:else}
-                    Test MQTT connection
+                    {t('settings.integration.mqtt.test.description')}
                   {/if}
                 </span>
               </div>
@@ -1008,15 +990,15 @@
 
     <!-- Observability Settings -->
     <SettingsSection
-      title="Observability"
-      description="Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint"
+      title={t('settings.integration.observability.title')}
+      description={t('settings.integration.observability.description')}
       defaultOpen={false}
       hasChanges={observabilityHasChanges}
     >
       <div class="space-y-4">
         <Checkbox
           bind:checked={settings.observability!.prometheus.enabled}
-          label="Enable Observability Integration"
+          label={t('settings.integration.observability.enable')}
           disabled={store.isLoading || store.isSaving}
           onchange={() => updateObservabilityEnabled(settings.observability!.prometheus.enabled)}
         />
@@ -1026,8 +1008,8 @@
             <TextInput
               id="observability-listen"
               value={`0.0.0.0:${settings.observability!.prometheus.port}`}
-              label="Listen Address"
-              placeholder="0.0.0.0:8090"
+              label={t('settings.integration.observability.listenAddress.label')}
+              placeholder={t('settings.integration.observability.listenAddress.placeholder')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateObservabilityListen}
             />
@@ -1038,8 +1020,8 @@
 
     <!-- Weather Settings -->
     <SettingsSection
-      title="Weather"
-      description="Configure weather data collection"
+      title={t('settings.integration.weather.title')}
+      description={t('settings.integration.weather.description')}
       defaultOpen={false}
       hasChanges={weatherHasChanges}
     >
@@ -1047,8 +1029,15 @@
         <SelectField
           id="weather-provider"
           bind:value={settings.weather!.provider}
-          label="Weather Provider"
-          options={weatherProviderOptions}
+          label={t('settings.integration.weather.provider.label')}
+          options={[
+            { value: 'none', label: t('settings.integration.weather.provider.options.none') },
+            { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
+            {
+              value: 'openweather',
+              label: t('settings.integration.weather.provider.options.openweather'),
+            },
+          ]}
           disabled={store.isLoading || store.isSaving}
           onchange={updateWeatherProvider}
         />
@@ -1056,42 +1045,29 @@
         <!-- Provider-specific notes -->
         {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
           <SettingsNote>
-            <span>No weather data will be retrieved.</span>
+            <span>{t('settings.integration.weather.notes.none')}</span>
           </SettingsNote>
         {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
           <SettingsNote>
             <p>
-              Weather forecast data is provided by Yr.no, a joint service by the Norwegian
-              Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).
+              {t('settings.integration.weather.notes.yrno.description')}
             </p>
             <p class="mt-2">
-              Yr is a free weather data service. For more information, visit <a
-                href="https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr"
-                class="link link-primary"
-                target="_blank"
-                rel="noopener noreferrer">Yr.no</a
-              >.
+              {@html t('settings.integration.weather.notes.yrno.freeService')}
             </p>
           </SettingsNote>
         {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
           <SettingsNote>
-            <span
-              >Use of OpenWeather requires an API key, sign up for a free API key at <a
-                href="https://home.openweathermap.org/users/sign_up"
-                class="link link-primary"
-                target="_blank"
-                rel="noopener noreferrer">OpenWeather</a
-              >.</span
-            >
+            <span>{@html t('settings.integration.weather.notes.openweather')}</span>
           </SettingsNote>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <PasswordField
-              label="API Key"
+              label={t('settings.integration.weather.apiKey.label')}
               value={settings.weather!.openWeather.apiKey || ''}
               onUpdate={updateWeatherApiKey}
               placeholder=""
-              helpText="Your OpenWeather API key. Keep this secret!"
+              helpText={t('settings.integration.weather.apiKey.helpText')}
               disabled={store.isLoading || store.isSaving}
               allowReveal={true}
             />
@@ -1099,8 +1075,18 @@
             <SelectField
               id="weather-units"
               value={settings.weather!.openWeather.units || 'metric'}
-              label="Units of Measurement"
-              options={openWeatherUnitsOptions}
+              label={t('settings.integration.weather.units.label')}
+              options={[
+                {
+                  value: 'standard',
+                  label: t('settings.integration.weather.units.options.standard'),
+                },
+                { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
+                {
+                  value: 'imperial',
+                  label: t('settings.integration.weather.units.options.imperial'),
+                },
+              ]}
               disabled={store.isLoading || store.isSaving}
               onchange={updateWeatherUnits}
             />
@@ -1114,7 +1100,7 @@
               <SettingsButton
                 onclick={testWeather}
                 loading={testStates.weather.isRunning}
-                loadingText="Testing..."
+                loadingText={t('settings.integration.weather.test.loading')}
                 disabled={(store.formData?.realtime?.weather?.provider ??
                   settings.weather?.provider) === 'none' ||
                   ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
@@ -1125,17 +1111,17 @@
                     )) ||
                   testStates.weather.isRunning}
               >
-                Test Weather Provider
+                {t('settings.integration.weather.test.button')}
               </SettingsButton>
               <span class="text-sm text-base-content/70">
                 {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
-                  No weather provider selected
+                  {t('settings.integration.weather.test.noProvider')}
                 {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
-                  OpenWeather API key must be specified
+                  {t('settings.integration.weather.test.apiKeyRequired')}
                 {:else if testStates.weather.isRunning}
-                  Test in progress...
+                  {t('settings.integration.weather.test.inProgress')}
                 {:else}
-                  Test weather provider connection
+                  {t('settings.integration.weather.test.description')}
                 {/if}
               </span>
             </div>

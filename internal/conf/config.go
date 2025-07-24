@@ -87,8 +87,9 @@ type Thumbnails struct {
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails   Thumbnails `json:"thumbnails"`   // thumbnails settings
-	SummaryLimit int        `json:"summaryLimit"` // limit for the number of species shown in the summary table
+	Thumbnails   Thumbnails `json:"thumbnails"`       // thumbnails settings
+	SummaryLimit int        `json:"summaryLimit"`     // limit for the number of species shown in the summary table
+	Locale       string     `json:"locale,omitempty"` // UI locale setting
 }
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.

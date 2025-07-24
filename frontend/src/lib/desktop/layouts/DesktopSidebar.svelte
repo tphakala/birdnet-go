@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
   import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { t } from '$lib/i18n';
 
   interface Props {
     securityEnabled?: boolean;
@@ -64,8 +65,8 @@
   }
 </script>
 
-<aside class={cn('drawer-side z-10', className)} aria-label="Main navigation">
-  <label for="my-drawer" class="drawer-overlay" aria-label="Close sidebar"></label>
+<aside class={cn('drawer-side z-10', className)} aria-label={t('navigation.mainNavigation')}>
+  <label for="my-drawer" class="drawer-overlay" aria-label={t('navigation.closeSidebar')}></label>
 
   <nav
     class="flex flex-col h-[100dvh] w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4"
@@ -96,7 +97,7 @@
             role="menuitem"
           >
             {@html systemIcons.home}
-            <span>Dashboard</span>
+            <span>{t('navigation.dashboard')}</span>
           </button>
         </li>
 
@@ -104,16 +105,16 @@
           <details bind:open={analyticsOpen}>
             <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
               {@html systemIcons.analytics}
-              <span>Analytics</span>
+              <span>{t('navigation.analytics')}</span>
             </summary>
-            <ul role="menu" aria-label="Analytics submenu">
+            <ul role="menu" aria-label={t('navigation.analyticsSubmenu')}>
               <li role="none">
                 <button
                   onclick={() => navigate('/analytics')}
                   class={cn({ active: isExactRouteActive('/analytics') })}
                   role="menuitem"
                 >
-                  Overview
+                  {t('analytics.title')}
                 </button>
               </li>
               <li role="none">
@@ -122,7 +123,7 @@
                   class={cn({ active: isExactRouteActive('/analytics/species') })}
                   role="menuitem"
                 >
-                  Species
+                  {t('analytics.species.title')}
                 </button>
               </li>
             </ul>
@@ -136,7 +137,7 @@
             role="menuitem"
           >
             {@html systemIcons.search}
-            <span>Search</span>
+            <span>{t('navigation.search')}</span>
           </button>
         </li>
 
@@ -147,7 +148,7 @@
             role="menuitem"
           >
             {@html systemIcons.about}
-            <span>About</span>
+            <span>{t('navigation.about')}</span>
           </button>
         </li>
 
@@ -161,7 +162,7 @@
               aria-current={isRouteActive('/system') ? 'page' : undefined}
             >
               {@html systemIcons.system}
-              <span>System</span>
+              <span>{t('navigation.system')}</span>
             </button>
           </li>
 
@@ -169,16 +170,16 @@
             <details bind:open={settingsOpen}>
               <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
                 {@html systemIcons.settingsGear}
-                <span>Settings</span>
+                <span>{t('navigation.settings')}</span>
               </summary>
-              <ul role="menu" aria-label="Settings submenu">
+              <ul role="menu" aria-label={t('navigation.settingsSubmenu')}>
                 <li role="none">
                   <button
                     onclick={() => navigate('/settings/main')}
                     class={cn({ active: isExactRouteActive('/settings/main') })}
                     role="menuitem"
                   >
-                    Main
+                    {t('settings.sections.node')}
                   </button>
                 </li>
                 <li role="none">
@@ -187,7 +188,7 @@
                     class={cn({ active: isExactRouteActive('/settings/audio') })}
                     role="menuitem"
                   >
-                    Audio Capture
+                    {t('settings.sections.audio')}
                   </button>
                 </li>
                 <li role="none">
@@ -196,7 +197,7 @@
                     class={cn({ active: isRouteActive('/settings/detectionfilters') })}
                     role="menuitem"
                   >
-                    Detection Filters
+                    {t('settings.sections.filters')}
                   </button>
                 </li>
                 <li role="none">
@@ -205,7 +206,7 @@
                     class={cn({ active: isExactRouteActive('/settings/integrations') })}
                     role="menuitem"
                   >
-                    Integrations
+                    {t('settings.sections.integration')}
                   </button>
                 </li>
                 <li role="none">
@@ -214,7 +215,7 @@
                     class={cn({ active: isExactRouteActive('/settings/security') })}
                     role="menuitem"
                   >
-                    Security
+                    {t('settings.sections.security')}
                   </button>
                 </li>
                 <li role="none">
@@ -223,7 +224,7 @@
                     class={cn({ active: isExactRouteActive('/settings/species') })}
                     role="menuitem"
                   >
-                    Species
+                    {t('settings.sections.species')}
                   </button>
                 </li>
                 <li role="none">
@@ -232,7 +233,7 @@
                     class={cn({ active: isExactRouteActive('/settings/support') })}
                     role="menuitem"
                   >
-                    Support
+                    {t('settings.sections.support')}
                   </button>
                 </li>
               </ul>
@@ -252,10 +253,10 @@
               <button
                 onclick={handleLogout}
                 class="btn btn-sm justify-center w-full"
-                aria-label="Logout"
+                aria-label={t('auth.logout')}
               >
                 {@html systemIcons.logout}
-                <span>Logout</span>
+                <span>{t('auth.logout')}</span>
               </button>
             </div>
           {:else}
@@ -263,10 +264,10 @@
             <button
               onclick={handleLogin}
               class="btn btn-sm justify-center w-full"
-              aria-label="Open login modal"
+              aria-label={t('auth.openLoginModal')}
             >
               {@html systemIcons.login}
-              <span>Login</span>
+              <span>{t('auth.login')}</span>
             </button>
           {/if}
         {/if}

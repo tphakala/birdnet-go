@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -14,10 +15,10 @@
 
   let {
     isOpen = false,
-    title = 'Confirm Action',
-    message = 'Are you sure you want to perform this action?',
-    confirmLabel = 'Confirm',
-    cancelLabel = 'Cancel',
+    title = t('common.modal.confirmAction'),
+    message = t('common.modal.confirmMessage'),
+    confirmLabel = t('common.buttons.confirm'),
+    cancelLabel = t('common.buttons.cancel'),
     confirmVariant = 'error',
     onClose,
     onConfirm,
