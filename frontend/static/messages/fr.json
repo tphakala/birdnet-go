@@ -94,7 +94,7 @@
       "pauseAudio": "Mettre l'audio en pause",
       "loading": "Chargement du contenu",
       "saveChanges": "Enregistrer les modifications",
-      "cancelEdit": "Annuler la modification",
+      "cancelEdit": "Annuler les modifications",
       "editSpecies": "Modifier l'espèce",
       "removeSpecies": "Supprimer l'espèce",
       "dismissError": "Ignorer l'erreur"
@@ -171,7 +171,7 @@
     "unknown": "Inconnue",
     "licenseInformation": "Informations sur la licence",
     "licenseText": "Le modèle IA BirdNET et BirdNET-Go sont sous licence",
-    "ccLicense": "Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International",
+    "ccLicense": "Creative Commons CC BY-NC-SA 4.0 (Attribution - Utilisation non commerciale - Partage dans les mêmes conditions 4.0 International)",
     "licenseDescription": "Cette licence permet à d'autres de remixer, adapter et développer ce travail à des fins non commerciales, tant qu'un crédit approprié est donné et que les nouvelles créations sont sous licence selon des termes identiques.",
     "dependencyLicenses": "Licences des dépendances"
   },
@@ -186,7 +186,7 @@
       "allTypes": "Tous les types",
       "errors": "Erreurs",
       "warnings": "Avertissements",
-      "info": "Info",
+      "info": "Infos",
       "system": "Système",
       "detections": "Détections",
       "allPriorities": "Toutes les priorités",
@@ -216,13 +216,13 @@
     "errors": {
       "loadFailed": "Échec du chargement des notifications. Veuillez réessayer.",
       "deleteFailed": "Échec de la suppression de la notification. Veuillez réessayer.",
-      "networkError": "Erreur réseau. Veuillez réessayer."
+      "networkError": "Une erreur réseau est survenue. Veuillez réessayer."
     },
     "timeAgo": {
       "justNow": "À l'instant",
-      "minutesAgo": "Il y a {minutes}min",
-      "hoursAgo": "Il y a {hours}h",
-      "daysAgo": "Il y a {days}j"
+      "minutesAgo": "Il y a {minutes} minute(s)",
+      "hoursAgo": "Il y a {hours} heure(s)",
+      "daysAgo": "Il y a {days} jour(s)"
     }
   },
   "search": {
@@ -240,14 +240,14 @@
       "speciesHelp": "Entrez le nom complet ou partiel de l'espèce (insensible à la casse)",
       "dateRange": "Plage de dates",
       "dateRangeHelp": "Filtrer les détections par plage de dates (laisser vide pour toutes les dates)",
-      "from": "De",
-      "to": "À",
+      "from": "Du",
+      "to": "Àu",
       "confidenceRange": "Plage de confiance (%)",
       "confidenceMin": "Pourcentage de confiance minimum",
       "confidenceMax": "Pourcentage de confiance maximum",
       "verifiedStatus": "Statut vérifié",
       "lockedStatus": "Statut verrouillé",
-      "timeOfDay": "Heure de la journée"
+      "timeOfDay": "Moment de la journée"
     },
     "advancedFilters": "Filtres avancés",
     "verifiedOptions": {
@@ -262,7 +262,7 @@
     },
     "timeOfDayOptions": {
       "any": "Toute heure",
-      "day": "Jour uniquement",
+      "day": "Journée uniquement",
       "night": "Nuit uniquement",
       "sunrise": "Lever du soleil +/- 30min",
       "sunset": "Coucher du soleil +/- 30min"
@@ -275,7 +275,7 @@
     },
     "tableHeaders": {
       "dateTime": "Date et heure",
-      "timeOfDay": "Heure de la journée",
+      "timeOfDay": "Moment de la journée",
       "species": "Espèce",
       "confidence": "Confiance",
       "status": "Statut",
@@ -299,7 +299,7 @@
     },
     "errors": {
       "searchFailed": "Échec de la recherche : {error}",
-      "minMaxConfidence": "La confiance minimale ne peut pas être supérieure à la confiance maximale."
+      "minMaxConfidence": "Le taux minimal de confiance ne peut pas être supérieure au taux maximal."
     },
     "pagination": {
       "page": "Page {current} sur {total}",
@@ -331,7 +331,7 @@
     "dailySummary": {
       "title": "Résumé quotidien",
       "columns": {
-        "species": "Espèce",
+        "species": "Espèces",
         "detections": "Détections"
       },
       "navigation": {
@@ -379,7 +379,7 @@
         "unlockDetectionConfirm": "Êtes-vous sûr de vouloir déverrouiller cette détection de {species} ? Cela permettra sa suppression lors du nettoyage régulier.",
         "lockDetectionConfirm": "Êtes-vous sûr de vouloir verrouiller cette détection de {species} ? Cela empêchera sa suppression lors du nettoyage régulier.",
         "deleteDetection": "Supprimer la détection de {species}",
-        "deleteDetectionConfirm": "Êtes-vous sûr de vouloir supprimer la détection de {species} ? Cette action ne peut pas être annulée."
+        "deleteDetectionConfirm": "Êtes-vous sûr de vouloir supprimer la détection de {species} ? Cette action est irréversible."
       },
       "noDetections": "Aucune détection récente"
     },
@@ -476,8 +476,8 @@
     "stats": {
       "totalDetections": "Total des détections",
       "uniqueSpecies": "Espèces uniques",
-      "avgConfidence": "Confiance moy.",
-      "mostCommon": "Plus commune",
+      "avgConfidence": "Confiance moyenne",
+      "mostCommon": "Plus commun",
       "none": "Aucune",
       "detections": "détections",
       "totalSpecies": "Total des espèces",
@@ -490,24 +490,24 @@
       "last90Days": "90 derniers jours",
       "lastYear": "12 derniers mois",
       "customRange": "Plage personnalisée",
-      "allTime": "Tout le temps"
+      "allTime": "Depuis toujours"
     },
     "filters": {
       "title": "Filtrer les données",
       "timePeriod": "Période",
-      "from": "De",
-      "to": "À",
+      "from": "Du",
+      "to": "Àu",
       "sortBy": "Trier par",
       "searchSpecies": "Rechercher une espèce",
       "searchPlaceholder": "Rechercher par nom...",
       "reset": "Réinitialiser",
       "applyFilters": "Appliquer les filtres",
-      "exportCsv": "Exporter CSV",
+      "exportCsv": "Exporter en format CSV",
       "species": "espèces",
       "filtered": "(filtré)"
     },
     "timePeriodOptions": {
-      "allTime": "Tout le temps",
+      "allTime": "Depuis toujours",
       "today": "Aujourd'hui",
       "lastWeek": "7 derniers jours",
       "lastMonth": "30 derniers jours",
@@ -516,21 +516,21 @@
       "customRange": "Plage personnalisée"
     },
     "sortOptions": {
-      "mostDetections": "Plus de détections",
-      "fewestDetections": "Moins de détections",
+      "mostDetections": "Détections (décroissant)",
+      "fewestDetections": "Détections (croissant)",
       "nameAZ": "Nom (A-Z)",
       "nameZA": "Nom (Z-A)",
-      "recentlyFirstSeen": "Récemment vu pour la première fois",
-      "earliestFirstSeen": "Vu en premier le plus tôt",
-      "recentlyLastSeen": "Récemment vu pour la dernière fois",
-      "highestConfidence": "Confiance la plus élevée"
+      "recentlyFirstSeen": "Première détection (plus récent d'abord)",
+      "earliestFirstSeen": "Première détection (plus ancien d'abord)",
+      "recentlyLastSeen": "Dernière détection (plus récent d'abord)",
+      "highestConfidence": "Confiance (décroissant)"
     },
     "charts": {
       "top10Species": "Top 10 des espèces",
-      "detectionsByTimeOfDay": "Détections par heure de la journée",
+      "detectionsByTimeOfDay": "Détections par moment de la journée",
       "detectionTrends": "Tendances des détections",
       "newSpeciesDetected": "Nouvelles espèces détectées",
-      "noNewSpecies": "Aucune nouvelle espèce détectée dans cette période.",
+      "noNewSpecies": "Aucune nouvelle espèce détectée durant cette période.",
       "noDataAvailable": "Aucune donnée disponible",
       "numberOfDetections": "Nombre de détections",
       "detections": "Détections",
@@ -547,18 +547,18 @@
         "dateTime": "Date et heure",
         "species": "Espèce",
         "confidence": "Confiance",
-        "timeOfDay": "Heure de la journée"
+        "timeOfDay": "Moment de la journée"
       },
       "noRecentDetections": "Aucune détection récente trouvée",
-      "unknownSpecies": "Inconnue",
+      "unknownSpecies": "Espèce inconnue",
       "unknown": "Inconnue"
     },
     "species": {
       "title": "Espèces",
       "subtitle": "Liste complète de toutes les espèces d'oiseaux qui ont été détectées",
       "speciesList": "Liste des espèces",
-      "switchToGrid": "Passer à la vue grille",
-      "switchToList": "Passer à la vue liste",
+      "switchToGrid": "Passer à la vue en grille",
+      "switchToList": "Passer à la vue en liste",
       "noSpeciesFound": "Aucune espèce trouvée correspondant à vos filtres.",
       "headers": {
         "species": "Espèce",
@@ -589,7 +589,7 @@
     },
     "notFound": {
       "title": "Paramètres non trouvés",
-      "message": "La section de paramètres demandée \"{section}\" n'a pas pu être trouvée."
+      "message": "Les paramètres de la section \"{section}\" n'ont pas pu être trouvés."
     },
     "actions": {
       "save": "Enregistrer les modifications",
@@ -811,7 +811,7 @@
       "sections": {
         "telemetry": {
           "title": "Suivi des erreurs et télémétrie",
-          "description": "Suivi des erreurs optionnel pour aider à améliorer la fiabilité et les performances de BirdNET-Go"
+          "description": "Suivi optionnel des erreurs pour aider à améliorer la fiabilité et les performances de BirdNET-Go"
         },
         "diagnostics": {
           "title": "Support et diagnostics",
@@ -895,8 +895,8 @@
         "confidenceLabel": "Seuil de confiance",
         "confidenceHelp": "Définir le niveau de confiance pour la détection d'aboiement de chien, une valeur plus faible rend le filtre plus sensible",
         "expireTimeLabel": "Temps d'expiration des aboiements de chien (minutes)",
-        "expireTimeHelp": "Définir combien de temps se souvenir d'un aboiement de chien détecté",
-        "addDogBarkSpeciesLabel": "Ajouter des espèces d'aboiement de chien",
+        "expireTimeHelp": "Définissez pendant combien de temps garder en mémoire la détection d'aboiement de chien",
+        "addDogBarkSpeciesLabel": "Ajouter une espèce similaire à un aboiement de chien",
         "addDogBarkSpeciesHelp": "Rechercher et ajouter des espèces qui pourraient être confondues avec des aboiements de chien",
         "addSpeciesButton": "Ajouter"
       },
@@ -1028,9 +1028,9 @@
       "audioCapture": {
         "title": "Capture audio",
         "description": "Définir la source de capture audio, carte son ou flux RTSP",
-        "soundCardSource": "Source de carte son",
+        "soundCardSource": "Source audio",
         "audioSourceLabel": "Source audio (nécessite un redémarrage de l'application)",
-        "noSoundCardCapture": "Aucune capture de carte son",
+        "noSoundCardCapture": "Aucune carte son disponible pour la capture",
         "rtspSource": "Source RTSP",
         "rtspTransportLabel": "Protocole de transport RTSP",
         "rtspUrlsLabel": "URLs de flux RTSP"
@@ -1075,7 +1075,7 @@
         "enableDebug": "Activer le mode débogage",
         "pathLabel": "Chemin d'export",
         "typeLabel": "Type d'export",
-        "bitrateLabel": "Débit binaire"
+        "bitrateLabel": "Débit (bitrate)"
       },
       "audioClipRetention": {
         "title": "Rétention des clips audio",
@@ -1083,7 +1083,7 @@
         "policyLabel": "Politique de rétention",
         "maxAgeLabel": "Âge maximum",
         "maxUsageLabel": "Utilisation maximale (pourcentage)",
-        "minClipsLabel": "Clips minimum",
+        "minClipsLabel": "Nombre minimum de clips",
         "keepSpectrograms": "Conserver les images de spectrogramme",
         "policies": {
           "none": "Aucune",
@@ -1190,7 +1190,7 @@
     },
     "security": {
       "hostLabel": "Adresse de l'hôte",
-      "allowSubnetBypassLabel": "Autoriser l'accès depuis le sous-réseau pour contourner l'authentification",
+      "allowSubnetBypassLabel": "Autoriser les accès depuis le sous-réseau à contourner l'authentification",
       "allowedSubnetsLabel": "Sous-réseaux autorisés",
       "allowedSubnetsHelp": "Plages de réseau autorisées à contourner la connexion (notation CIDR, liste séparée par des virgules)",
       "securityWarningTitle": "Avertissement de sécurité :",
@@ -1219,7 +1219,7 @@
       },
       "oauth": {
         "title": "Authentification sociale OAuth2",
-        "description": "Connexion unique pour vous connecter avec votre compte existant",
+        "description": "Authentification unique pour vous connecter avec votre compte existant",
         "google": {
           "title": "OAuth Google",
           "enableLabel": "Autoriser la connexion OAuth2 via Google",
@@ -1294,8 +1294,8 @@
   },
   "forms": {
     "placeholders": {
-      "text": "Entrez {field}",
-      "select": "Sélectionnez {field}",
+      "text": "Saisir {field}",
+      "select": "Sélectionner {field}",
       "search": "Rechercher...",
       "date": "Sélectionner une date",
       "dateRange": "Sélectionner une plage de dates",
@@ -1311,7 +1311,7 @@
       "hidePassword": "Masquer le mot de passe",
       "copyToClipboard": "Copier dans le presse-papiers",
       "clearSelection": "Effacer la sélection",
-      "selectOption": "Sélectionnez une option"
+      "selectOption": "Sélectionner une option"
     },
     "help": {
       "passwordStrength": "Force du mot de passe : {strength}",
@@ -1337,7 +1337,7 @@
       }
     },
     "errors": {
-      "radioValueRequired": "La propriété radioValue est requise pour les entrées radio"
+      "radioValueRequired": "Une sélection est requise pour les entrées radio"
     },
     "dateRange": {
       "labels": {
