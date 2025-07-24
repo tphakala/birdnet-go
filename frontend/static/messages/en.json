@@ -621,36 +621,7 @@
         "ui": {
           "title": "User Interface Settings",
           "description": "Customize user interface"
-        }
-      },
-      "fields": {
-        "nodeName": {
-          "label": "Node Name",
-          "placeholder": "Enter node name",
-          "helpText": "Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
         },
-        "sensitivity": {
-          "label": "Sensitivity",
-          "helpText": "Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
-        },
-        "threshold": {
-          "label": "Threshold",
-          "helpText": "Minimum confidence threshold. Values in 0.01, 0.99."
-        },
-        "overlap": {
-          "label": "Overlap",
-          "helpText": "Overlap of prediction segments. Values in 0.0, 2.9."
-        },
-        "locale": {
-          "label": "Locale",
-          "helpText": "Locale for translated species common names."
-        },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU Threads",
-          "helpText": "Number of CPU threads. Set to 0 to use all available threads."
-        }
-      },
-      "sections": {
         "customClassifier": {
           "title": "Custom BirdNET Classifier",
           "modelPath": {
@@ -801,6 +772,33 @@
               }
             }
           }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Node Name",
+          "placeholder": "Enter node name",
+          "helpText": "Node name is used to identify source system in multi node setup, also used as identifier for MQTT messages."
+        },
+        "sensitivity": {
+          "label": "Sensitivity",
+          "helpText": "Detection sensitivity. Higher values result in higher sensitivity. Values in 0.5, 1.5."
+        },
+        "threshold": {
+          "label": "Threshold",
+          "helpText": "Minimum confidence threshold. Values in 0.01, 0.99."
+        },
+        "overlap": {
+          "label": "Overlap",
+          "helpText": "Overlap of prediction segments. Values in 0.0, 2.9."
+        },
+        "locale": {
+          "label": "Locale",
+          "helpText": "Locale for translated species common names."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU Threads",
+          "helpText": "Number of CPU threads. Set to 0 to use all available threads."
         }
       },
       "errors": {
@@ -1110,14 +1108,6 @@
         "bandpass": "Bandpass Filter",
         "bandstop": "Bandstop Filter"
       }
-    },
-    "species": {
-      "addSpeciesToInclude": "Add species to include",
-      "addSpeciesToIncludeLabel": "Add New Species to Include",
-      "addSpeciesToExclude": "Add species to exclude",
-      "addSpeciesToExcludeLabel": "Add New Species to Exclude",
-      "commandPathPlaceholder": "/path/to/your/command",
-      "parametersPlaceholder": "Parameters will appear here"
     },
     "security": {
       "hostLabel": "Host Address",

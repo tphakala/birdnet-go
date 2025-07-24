@@ -621,36 +621,7 @@
         "ui": {
           "title": "Configurações da interface do usuário",
           "description": "Personalizar a interface do usuário"
-        }
-      },
-      "fields": {
-        "nodeName": {
-          "label": "Nome do nó",
-          "placeholder": "Digite o nome do nó",
-          "helpText": "O nome do nó é usado para identificar o sistema de origem em configurações multi-nó, também usado como identificador para mensagens MQTT."
         },
-        "sensitivity": {
-          "label": "Sensibilidade",
-          "helpText": "Sensibilidade de detecção. Valores mais altos resultam em maior sensibilidade. Valores entre 0,5 e 1,5."
-        },
-        "threshold": {
-          "label": "Limiar",
-          "helpText": "Limiar mínimo de confiança. Valores entre 0,01 e 0,99."
-        },
-        "overlap": {
-          "label": "Sobreposição",
-          "helpText": "Sobreposição de segmentos de predição. Valores entre 0,0 e 2,9."
-        },
-        "locale": {
-          "label": "Idioma",
-          "helpText": "Idioma para nomes comuns de espécies traduzidos."
-        },
-        "tensorflowThreads": {
-          "label": "Threads de CPU do TensorFlow",
-          "helpText": "Número de threads de CPU. Defina como 0 para usar todos os threads disponíveis."
-        }
-      },
-      "sections": {
         "customClassifier": {
           "title": "Classificador BirdNET personalizado",
           "modelPath": {
@@ -801,6 +772,33 @@
               }
             }
           }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nome do nó",
+          "placeholder": "Digite o nome do nó",
+          "helpText": "O nome do nó é usado para identificar o sistema de origem em configurações multi-nó, também usado como identificador para mensagens MQTT."
+        },
+        "sensitivity": {
+          "label": "Sensibilidade",
+          "helpText": "Sensibilidade de detecção. Valores mais altos resultam em maior sensibilidade. Valores entre 0,5 e 1,5."
+        },
+        "threshold": {
+          "label": "Limiar",
+          "helpText": "Limiar mínimo de confiança. Valores entre 0,01 e 0,99."
+        },
+        "overlap": {
+          "label": "Sobreposição",
+          "helpText": "Sobreposição de segmentos de predição. Valores entre 0,0 e 2,9."
+        },
+        "locale": {
+          "label": "Idioma",
+          "helpText": "Idioma para nomes comuns de espécies traduzidos."
+        },
+        "tensorflowThreads": {
+          "label": "Threads de CPU do TensorFlow",
+          "helpText": "Número de threads de CPU. Defina como 0 para usar todos os threads disponíveis."
         }
       },
       "errors": {

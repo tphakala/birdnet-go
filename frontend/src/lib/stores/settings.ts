@@ -745,10 +745,10 @@ export const settingsActions = {
       const newLocale = currentState.formData.realtime?.dashboard?.locale;
       if (newLocale) {
         // Dynamically import i18n functions to avoid circular dependencies
-        const { getLocale, setLocale } = await import('$lib/i18n/index.js');
+        const { getLocale, setLocale, isValidLocale } = await import('$lib/i18n/index.js');
         const currentLocale = getLocale();
-        if (newLocale !== currentLocale) {
-          setLocale(newLocale as any);
+        if (newLocale !== currentLocale && isValidLocale(newLocale)) {
+          setLocale(newLocale);
         }
       }
 

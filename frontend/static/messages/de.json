@@ -621,36 +621,7 @@
         "ui": {
           "title": "Benutzeroberflächeneinstellungen",
           "description": "Benutzeroberfläche anpassen"
-        }
-      },
-      "fields": {
-        "nodeName": {
-          "label": "Knotenname",
-          "placeholder": "Knotennamen eingeben",
-          "helpText": "Der Knotenname wird zur Identifizierung des Quellsystems in Multi-Knoten-Setups verwendet, auch als Kennung für MQTT-Nachrichten."
         },
-        "sensitivity": {
-          "label": "Empfindlichkeit",
-          "helpText": "Erkennungsempfindlichkeit. Höhere Werte führen zu höherer Empfindlichkeit. Werte zwischen 0,5 und 1,5."
-        },
-        "threshold": {
-          "label": "Schwellenwert",
-          "helpText": "Minimaler Konfidenzschwellenwert. Werte zwischen 0,01 und 0,99."
-        },
-        "overlap": {
-          "label": "Überlappung",
-          "helpText": "Überlappung der Vorhersagesegmente. Werte zwischen 0,0 und 2,9."
-        },
-        "locale": {
-          "label": "Sprache",
-          "helpText": "Sprache für übersetzte Artnamen."
-        },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-Threads",
-          "helpText": "Anzahl der CPU-Threads. Auf 0 setzen, um alle verfügbaren Threads zu verwenden."
-        }
-      },
-      "sections": {
         "customClassifier": {
           "title": "Benutzerdefinierter BirdNET-Klassifikator",
           "modelPath": {
@@ -801,6 +772,33 @@
               }
             }
           }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Knotenname",
+          "placeholder": "Knotennamen eingeben",
+          "helpText": "Der Knotenname wird zur Identifizierung des Quellsystems in Multi-Knoten-Setups verwendet, auch als Kennung für MQTT-Nachrichten."
+        },
+        "sensitivity": {
+          "label": "Empfindlichkeit",
+          "helpText": "Erkennungsempfindlichkeit. Höhere Werte führen zu höherer Empfindlichkeit. Werte zwischen 0,5 und 1,5."
+        },
+        "threshold": {
+          "label": "Schwellenwert",
+          "helpText": "Minimaler Konfidenzschwellenwert. Werte zwischen 0,01 und 0,99."
+        },
+        "overlap": {
+          "label": "Überlappung",
+          "helpText": "Überlappung der Vorhersagesegmente. Werte zwischen 0,0 und 2,9."
+        },
+        "locale": {
+          "label": "Sprache",
+          "helpText": "Sprache für übersetzte Artnamen."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU-Threads",
+          "helpText": "Anzahl der CPU-Threads. Auf 0 setzen, um alle verfügbaren Threads zu verwenden."
         }
       },
       "errors": {

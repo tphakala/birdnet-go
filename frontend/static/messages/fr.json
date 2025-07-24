@@ -621,36 +621,7 @@
         "ui": {
           "title": "Paramètres de l'interface utilisateur",
           "description": "Personnaliser l'interface utilisateur"
-        }
-      },
-      "fields": {
-        "nodeName": {
-          "label": "Nom du nœud",
-          "placeholder": "Entrez le nom du nœud",
-          "helpText": "Le nom du nœud est utilisé pour identifier le système source dans une configuration multi-nœuds, également utilisé comme identifiant pour les messages MQTT."
         },
-        "sensitivity": {
-          "label": "Sensibilité",
-          "helpText": "Sensibilité de détection. Des valeurs plus élevées entraînent une sensibilité plus élevée. Valeurs entre 0,5 et 1,5."
-        },
-        "threshold": {
-          "label": "Seuil",
-          "helpText": "Seuil de confiance minimum. Valeurs entre 0,01 et 0,99."
-        },
-        "overlap": {
-          "label": "Chevauchement",
-          "helpText": "Chevauchement des segments de prédiction. Valeurs entre 0,0 et 2,9."
-        },
-        "locale": {
-          "label": "Langue",
-          "helpText": "Langue pour les noms communs d'espèces traduits."
-        },
-        "tensorflowThreads": {
-          "label": "Threads CPU TensorFlow",
-          "helpText": "Nombre de threads CPU. Mettre à 0 pour utiliser tous les threads disponibles."
-        }
-      },
-      "sections": {
         "customClassifier": {
           "title": "Classificateur BirdNET personnalisé",
           "modelPath": {
@@ -801,6 +772,33 @@
               }
             }
           }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nom du nœud",
+          "placeholder": "Entrez le nom du nœud",
+          "helpText": "Le nom du nœud est utilisé pour identifier le système source dans une configuration multi-nœuds, également utilisé comme identifiant pour les messages MQTT."
+        },
+        "sensitivity": {
+          "label": "Sensibilité",
+          "helpText": "Sensibilité de détection. Des valeurs plus élevées entraînent une sensibilité plus élevée. Valeurs entre 0,5 et 1,5."
+        },
+        "threshold": {
+          "label": "Seuil",
+          "helpText": "Seuil de confiance minimum. Valeurs entre 0,01 et 0,99."
+        },
+        "overlap": {
+          "label": "Chevauchement",
+          "helpText": "Chevauchement des segments de prédiction. Valeurs entre 0,0 et 2,9."
+        },
+        "locale": {
+          "label": "Langue",
+          "helpText": "Langue pour les noms communs d'espèces traduits."
+        },
+        "tensorflowThreads": {
+          "label": "Threads CPU TensorFlow",
+          "helpText": "Nombre de threads CPU. Mettre à 0 pour utiliser tous les threads disponibles."
         }
       },
       "errors": {

@@ -621,36 +621,7 @@
         "ui": {
           "title": "Käyttöliittymäasetukset",
           "description": "Mukauta käyttöliittymää"
-        }
-      },
-      "fields": {
-        "nodeName": {
-          "label": "Solmun nimi",
-          "placeholder": "Syötä solmun nimi",
-          "helpText": "Solmun nimeä käytetään lähdejärjestelmän tunnistamiseen monisolmuasetuksissa, myös MQTT-viestien tunnisteena."
         },
-        "sensitivity": {
-          "label": "Herkkyys",
-          "helpText": "Tunnistuksen herkkyys. Korkeammat arvot johtavat suurempaan herkkyyteen. Arvot välillä 0,5-1,5."
-        },
-        "threshold": {
-          "label": "Kynnysarvo",
-          "helpText": "Vähimmäisluottamuskynnys. Arvot välillä 0,01-0,99."
-        },
-        "overlap": {
-          "label": "Päällekkäisyys",
-          "helpText": "Ennustesegmenttien päällekkäisyys. Arvot välillä 0,0-2,9."
-        },
-        "locale": {
-          "label": "Kieli",
-          "helpText": "Kieli käännetyille lajien nimille."
-        },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-säikeet",
-          "helpText": "CPU-säikeiden määrä. Aseta 0 käyttääksesi kaikkia saatavilla olevia säikeitä."
-        }
-      },
-      "sections": {
         "customClassifier": {
           "title": "Mukautettu BirdNET-luokittelija",
           "modelPath": {
@@ -801,6 +772,33 @@
               }
             }
           }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Solmun nimi",
+          "placeholder": "Syötä solmun nimi",
+          "helpText": "Solmun nimeä käytetään lähdejärjestelmän tunnistamiseen monisolmuasetuksissa, myös MQTT-viestien tunnisteena."
+        },
+        "sensitivity": {
+          "label": "Herkkyys",
+          "helpText": "Tunnistuksen herkkyys. Korkeammat arvot johtavat suurempaan herkkyyteen. Arvot välillä 0,5-1,5."
+        },
+        "threshold": {
+          "label": "Kynnysarvo",
+          "helpText": "Vähimmäisluottamuskynnys. Arvot välillä 0,01-0,99."
+        },
+        "overlap": {
+          "label": "Päällekkäisyys",
+          "helpText": "Ennustesegmenttien päällekkäisyys. Arvot välillä 0,0-2,9."
+        },
+        "locale": {
+          "label": "Kieli",
+          "helpText": "Kieli käännetyille lajien nimille."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU-säikeet",
+          "helpText": "CPU-säikeiden määrä. Aseta 0 käyttääksesi kaikkia saatavilla olevia säikeitä."
         }
       },
       "errors": {

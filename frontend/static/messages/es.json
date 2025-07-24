@@ -621,36 +621,7 @@
         "ui": {
           "title": "Configuración de interfaz de usuario",
           "description": "Personalizar la interfaz de usuario"
-        }
-      },
-      "fields": {
-        "nodeName": {
-          "label": "Nombre del nodo",
-          "placeholder": "Ingresa el nombre del nodo",
-          "helpText": "El nombre del nodo se usa para identificar el sistema fuente en una configuración multi-nodo, también se usa como identificador para mensajes MQTT."
         },
-        "sensitivity": {
-          "label": "Sensibilidad",
-          "helpText": "Sensibilidad de detección. Valores más altos resultan en mayor sensibilidad. Valores entre 0.5 y 1.5."
-        },
-        "threshold": {
-          "label": "Umbral",
-          "helpText": "Umbral mínimo de confianza. Valores entre 0.01 y 0.99."
-        },
-        "overlap": {
-          "label": "Superposición",
-          "helpText": "Superposición de segmentos de predicción. Valores entre 0.0 y 2.9."
-        },
-        "locale": {
-          "label": "Idioma",
-          "helpText": "Idioma para nombres comunes de especies traducidos."
-        },
-        "tensorflowThreads": {
-          "label": "Hilos de CPU TensorFlow",
-          "helpText": "Número de hilos de CPU. Establezca en 0 para usar todos los hilos disponibles."
-        }
-      },
-      "sections": {
         "customClassifier": {
           "title": "Clasificador BirdNET personalizado",
           "modelPath": {
@@ -801,6 +772,33 @@
               }
             }
           }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nombre del nodo",
+          "placeholder": "Ingresa el nombre del nodo",
+          "helpText": "El nombre del nodo se usa para identificar el sistema fuente en una configuración multi-nodo, también se usa como identificador para mensajes MQTT."
+        },
+        "sensitivity": {
+          "label": "Sensibilidad",
+          "helpText": "Sensibilidad de detección. Valores más altos resultan en mayor sensibilidad. Valores entre 0.5 y 1.5."
+        },
+        "threshold": {
+          "label": "Umbral",
+          "helpText": "Umbral mínimo de confianza. Valores entre 0.01 y 0.99."
+        },
+        "overlap": {
+          "label": "Superposición",
+          "helpText": "Superposición de segmentos de predicción. Valores entre 0.0 y 2.9."
+        },
+        "locale": {
+          "label": "Idioma",
+          "helpText": "Idioma para nombres comunes de especies traducidos."
+        },
+        "tensorflowThreads": {
+          "label": "Hilos de CPU TensorFlow",
+          "helpText": "Número de hilos de CPU. Establezca en 0 para usar todos los hilos disponibles."
         }
       },
       "errors": {

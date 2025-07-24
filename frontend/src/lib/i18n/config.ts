@@ -4,7 +4,7 @@
  */
 
 export const LOCALES = {
-  en: { name: 'English', flag: '🇬🇧' },
+  en: { name: 'English', flag: '🇺🇸' },
   de: { name: 'Deutsch', flag: '🇩🇪' },
   fr: { name: 'Français', flag: '🇫🇷' },
   es: { name: 'Español', flag: '🇪🇸' },
