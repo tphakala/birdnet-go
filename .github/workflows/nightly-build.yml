@@ -49,14 +49,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
 
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Build Version
+        id: get_build_version
+        run: |
+          # Get version with commit count for nightly builds
+          VERSION=$(git describe --tags --always)
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          DATE=$(date +'%Y%m%d')
+          BUILD_VERSION="nightly-${DATE}-${COMMIT_COUNT}-g${VERSION##*-g}"
+          echo "BUILD_VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
+          echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
+
       - name: Build BirdNET-Go
         run: |
           # Build the application
-          make ${{ matrix.goos }}_${{ matrix.goarch }}
+          task ${{ matrix.goos }}_${{ matrix.goarch }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
+          BUILD_VERSION: ${{ env.BUILD_VERSION }}
 
       - name: Create Release Artifacts
         run: |

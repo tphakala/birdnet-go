@@ -32,8 +32,14 @@ jobs:
           go-version-file: 'go.mod'
       - run: go version
 
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
-        run: make check-tensorflow
+        run: task check-tensorflow
       
       - name: Set environment variables for CGO
         run: |
