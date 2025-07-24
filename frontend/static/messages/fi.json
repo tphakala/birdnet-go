@@ -614,10 +614,6 @@
           "title": "BirdNET-asetukset",
           "description": "Määritä BirdNET AI-mallin erityisasetukset"
         },
-        "database": {
-          "title": "Tietokanta-asetukset",
-          "description": "Havaintotietokannan asetukset"
-        },
         "ui": {
           "title": "Käyttöliittymäasetukset",
           "description": "Mukauta käyttöliittymää"
@@ -694,6 +690,8 @@
           }
         },
         "database": {
+          "title": "Tietokanta-asetukset",
+          "description": "Havaintotietokannan asetukset",
           "type": {
             "label": "Valitse tietokantatyyppi",
             "helpText": "Valitse havaintojen tallentamiseen käytettävä tietokantatyyppi."
@@ -925,7 +923,18 @@
         "newFilterType": "Uusi suodatintyyppi",
         "selectFilterType": "Valitse suodatintyyppi",
         "addFilter": "Lisää suodatin",
-        "remove": "Poista"
+        "remove": "Poista",
+        "cutoffFrequency": "Rajataajuus",
+        "qFactor": "Q-kerroin",
+        "gain": "Vahvistus",
+        "attenuation": "Vaimennus",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Äänitason seuranta",

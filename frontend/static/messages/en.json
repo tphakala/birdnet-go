@@ -614,10 +614,6 @@
           "title": "BirdNET Settings",
           "description": "Configure BirdNET AI model specific settings"
         },
-        "database": {
-          "title": "Database Settings",
-          "description": "Detections database settings"
-        },
         "ui": {
           "title": "User Interface Settings",
           "description": "Customize user interface"
@@ -694,6 +690,8 @@
           }
         },
         "database": {
+          "title": "Database Settings",
+          "description": "Detections database settings",
           "type": {
             "label": "Select Database Type",
             "helpText": "Select the database type to use for storing detections."
@@ -1048,6 +1046,8 @@
         "remove": "Remove",
         "cutoffFrequency": "Cutoff Frequency",
         "qFactor": "Q Factor",
+        "gain": "Gain",
+        "attenuation": "Attenuation",
         "attenuationLevels": {
           "0db": "0dB",
           "12db": "12dB",

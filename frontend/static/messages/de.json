@@ -614,10 +614,6 @@
           "title": "BirdNET-Einstellungen",
           "description": "BirdNET KI-Modell-spezifische Einstellungen konfigurieren"
         },
-        "database": {
-          "title": "Datenbankeinstellungen",
-          "description": "Einstellungen der Erkennungsdatenbank"
-        },
         "ui": {
           "title": "Benutzeroberflächeneinstellungen",
           "description": "Benutzeroberfläche anpassen"
@@ -694,6 +690,8 @@
           }
         },
         "database": {
+          "title": "Datenbankeinstellungen",
+          "description": "Einstellungen der Erkennungsdatenbank",
           "type": {
             "label": "Datenbanktyp auswählen",
             "helpText": "Wählen Sie den Datenbanktyp zum Speichern von Erkennungen."
@@ -1045,7 +1043,18 @@
         "newFilterType": "Neuer Filtertyp",
         "selectFilterType": "Filtertyp auswählen",
         "addFilter": "Filter hinzufügen",
-        "remove": "Entfernen"
+        "remove": "Entfernen",
+        "cutoffFrequency": "Grenzfrequenz",
+        "qFactor": "Q-Faktor",
+        "gain": "Verstärkung",
+        "attenuation": "Dämpfung",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Schallpegelüberwachung",

@@ -614,10 +614,6 @@
           "title": "Paramètres BirdNET",
           "description": "Configurer les paramètres spécifiques au modèle IA BirdNET"
         },
-        "database": {
-          "title": "Paramètres de base de données",
-          "description": "Paramètres de la base de données des détections"
-        },
         "ui": {
           "title": "Paramètres de l'interface utilisateur",
           "description": "Personnaliser l'interface utilisateur"
@@ -694,6 +690,8 @@
           }
         },
         "database": {
+          "title": "Paramètres de base de données",
+          "description": "Paramètres de la base de données des détections",
           "type": {
             "label": "Sélectionner le type de base de données",
             "helpText": "Sélectionnez le type de base de données à utiliser pour stocker les détections."
@@ -1045,7 +1043,18 @@
         "newFilterType": "Nouveau type de filtre",
         "selectFilterType": "Sélectionner le type de filtre",
         "addFilter": "Ajouter un filtre",
-        "remove": "Supprimer"
+        "remove": "Supprimer",
+        "cutoffFrequency": "Fréquence de coupure",
+        "qFactor": "Facteur Q",
+        "gain": "Gain",
+        "attenuation": "Atténuation",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        }
       },
       "soundLevelMonitoring": {
         "title": "Surveillance du niveau sonore",

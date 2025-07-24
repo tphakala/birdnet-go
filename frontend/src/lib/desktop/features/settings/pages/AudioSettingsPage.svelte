@@ -16,6 +16,32 @@
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
 
+  // Localized option arrays - memoized to prevent unnecessary recomputations
+  // These will only recompute when the locale changes, not on every reactive update
+  import { getLocale } from '$lib/i18n';
+
+  const exportFormatOptions = $derived.by(() => {
+    // By accessing getLocale(), this will only recompute when locale changes
+    getLocale();
+    return [
+      { value: 'wav', label: t('settings.audio.formats.wav') },
+      { value: 'flac', label: t('settings.audio.formats.flac') },
+      { value: 'aac', label: t('settings.audio.formats.aac') },
+      { value: 'opus', label: t('settings.audio.formats.opus') },
+      { value: 'mp3', label: t('settings.audio.formats.mp3') },
+    ];
+  });
+
+  const retentionPolicyOptions = $derived.by(() => {
+    // By accessing getLocale(), this will only recompute when locale changes
+    getLocale();
+    return [
+      { value: 'none', label: t('settings.audio.audioClipRetention.policies.none') },
+      { value: 'age', label: t('settings.audio.audioClipRetention.policies.age') },
+      { value: 'usage', label: t('settings.audio.audioClipRetention.policies.usage') },
+    ];
+  });
+
   let settings = $derived({
     audio: $audioSettings || {
       source: '',
@@ -144,6 +170,8 @@
     const labelMap: Record<string, string> = {
       frequency: t('settings.audio.audioFilters.cutoffFrequency'),
       q: t('settings.audio.audioFilters.qFactor'),
+      gain: t('settings.audio.audioFilters.gain'),
+      attenuation: t('settings.audio.audioFilters.attenuation'),
     };
     return labelMap[paramName.toLowerCase()] || paramName;
   }
@@ -166,22 +194,6 @@
       })
       .catch(error => console.error('Error fetching audio devices:', error));
   });
-
-  // Export format options
-  const exportFormatOptions = $derived([
-    { value: 'wav', label: t('settings.audio.formats.wav') },
-    { value: 'flac', label: t('settings.audio.formats.flac') },
-    { value: 'aac', label: t('settings.audio.formats.aac') },
-    { value: 'opus', label: t('settings.audio.formats.opus') },
-    { value: 'mp3', label: t('settings.audio.formats.mp3') },
-  ]);
-
-  // Retention policy options
-  const retentionPolicyOptions = $derived([
-    { value: 'none', label: t('settings.audio.audioClipRetention.policies.none') },
-    { value: 'age', label: t('settings.audio.audioClipRetention.policies.age') },
-    { value: 'usage', label: t('settings.audio.audioClipRetention.policies.usage') },
-  ]);
 
   // Check if ffmpeg is available
   let ffmpegAvailable = $state(true); // Assume true for now

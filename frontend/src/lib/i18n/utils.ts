@@ -65,12 +65,38 @@ export function getBrowserPreferredLocale(acceptLanguageHeader: string | null): 
   const languages = acceptLanguageHeader
     .split(',')
     .map(lang => {
-      const [code, qValue] = lang.trim().split(';q=');
-      const quality = qValue ? parseFloat(qValue) : 1.0;
+      const trimmed = lang.trim();
+      if (!trimmed) return null;
+
+      // Split on first semicolon to separate language from parameters
+      const semicolonIndex = trimmed.indexOf(';');
+      let code: string;
+      let quality = 1.0;
+
+      if (semicolonIndex === -1) {
+        // No parameters, just the language code
+        code = trimmed;
+      } else {
+        // Extract language code and parse parameters
+        code = trimmed.substring(0, semicolonIndex).trim();
+        const params = trimmed.substring(semicolonIndex + 1);
+
+        // Look for quality parameter (q=value)
+        const qMatch = params.match(/(?:^|[;&\s])q\s*=\s*([0-9]*\.?[0-9]+)/i);
+        if (qMatch) {
+          const parsedQ = parseFloat(qMatch[1]);
+          // Ensure quality is within valid range [0, 1]
+          quality = !isNaN(parsedQ) && parsedQ >= 0 && parsedQ <= 1 ? parsedQ : 1.0;
+        }
+      }
+
       // Extract primary language code (e.g., "en-US" -> "en")
-      const primaryCode = code.toLowerCase().split('-')[0];
-      return { code: primaryCode, quality };
+      const primaryCode = code.toLowerCase().split('-')[0].trim();
+
+      // Validate that we have a non-empty language code
+      return primaryCode ? { code: primaryCode, quality } : null;
     })
+    .filter(Boolean) // Remove null entries from malformed language tags
     .sort((a, b) => b.quality - a.quality); // Sort by quality (preference)
 
   // Find first matching supported locale

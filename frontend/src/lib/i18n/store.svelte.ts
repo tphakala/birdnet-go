@@ -53,13 +53,20 @@ export function setLocale(locale: Locale): void {
   }
 }
 
-// Message loading with English fallback
+// Sequence counter to track the latest loadMessages request
+let loadSequence = 0;
+
+// Message loading with English fallback and race condition protection
 async function loadMessages(locale: Locale): Promise<void> {
+  // Increment sequence for this request
+  const currentSequence = ++loadSequence;
+
   loading = true;
   // Store current messages as previous before loading new ones
   if (Object.keys(messages).length > 0) {
     previousMessages = { ...messages };
   }
+
   try {
     // Use fetch to load JSON from the built assets directory
     // In production, these files are copied to dist/messages by Vite
@@ -68,6 +75,13 @@ async function loadMessages(locale: Locale): Promise<void> {
       throw new Error(`Failed to fetch: ${response.status}`);
     }
     const data = await response.json();
+
+    // Check if this response is still the latest request
+    if (currentSequence !== loadSequence) {
+      // This request has been superseded, discard the result
+      return;
+    }
+
     messages = data;
     // Clear previous messages after successful load
     previousMessages = {};
@@ -80,6 +94,12 @@ async function loadMessages(locale: Locale): Promise<void> {
       // Ignore storage errors
     }
   } catch (error) {
+    // Check if this response is still the latest request before handling errors
+    if (currentSequence !== loadSequence) {
+      // This request has been superseded, discard the result
+      return;
+    }
+
     // eslint-disable-next-line no-console
     console.error(`Failed to load messages for ${locale}:`, error);
 
@@ -91,6 +111,12 @@ async function loadMessages(locale: Locale): Promise<void> {
         const fallbackResponse = await fetch(`/ui/assets/messages/${DEFAULT_LOCALE}.json`);
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
+
+          // Check again if this is still the latest request
+          if (currentSequence !== loadSequence) {
+            return;
+          }
+
           messages = fallbackData;
           // Clear previous messages after successful fallback load
           previousMessages = {};
@@ -121,7 +147,10 @@ async function loadMessages(locale: Locale): Promise<void> {
       'Translation loading failed, restored previous messages to prevent UI degradation'
     );
   } finally {
-    loading = false;
+    // Only set loading to false if this is still the latest request
+    if (currentSequence === loadSequence) {
+      loading = false;
+    }
   }
 }
 
