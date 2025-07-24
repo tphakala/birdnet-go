@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,8 +36,18 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Control
 			// Configure settings
 			tc.setupSettings(controller)
 
-			// Create request
-			req := httptest.NewRequest(http.MethodPost, endpoint, http.NoBody)
+			// Create request with appropriate body
+			var req *http.Request
+			if strings.Contains(endpoint, "birdweather") {
+				// BirdWeather endpoint expects JSON body matching the controller settings
+				bwSettings := controller.Settings.Realtime.Birdweather
+				bodyJSON := fmt.Sprintf(`{"enabled":%t,"id":%q,"threshold":%f,"locationAccuracy":%f}`,
+					bwSettings.Enabled, bwSettings.ID, bwSettings.Threshold, bwSettings.LocationAccuracy)
+				req = httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(bodyJSON))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(http.MethodPost, endpoint, http.NoBody)
+			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
@@ -397,7 +408,7 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 				controller.Settings.Realtime.Birdweather.ID = "ABC123"
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody:   `{"success":false,"message":"BirdWeather integration is not enabled in settings","state":"failed"}`,
+			expectedBody:   `{"success":false,"message":"BirdWeather integration is not enabled","state":"failed"}`,
 		},
 		{
 			name: "Station ID Not Configured",
