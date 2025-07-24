@@ -151,7 +151,7 @@ jobs:
             Bash(go build *)
             Bash(go mod *)
             Bash(golangci-lint run *)
-            Bash(make *)
+            Bash(task *)
             Bash(git *)
             Read(*_test.go)
             Edit(*_test.go)

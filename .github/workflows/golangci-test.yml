@@ -30,8 +30,14 @@ jobs:
           go-version-file: 'go.mod'
       - run: go version
 
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
-        run: make check-tensorflow
+        run: task check-tensorflow
 
       - name: Install FFmpeg and test dependencies
         run: |
@@ -39,7 +45,7 @@ jobs:
           sudo apt-get install -y ffmpeg procps
 
       - name: Download tflite_c
-        run: make download-tflite-linux-amd64
+        run: task download-tflite-linux-amd64
 
       - name: Set environment variables for CGO
         run: |
