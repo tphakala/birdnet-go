@@ -220,9 +220,9 @@
     },
     "timeAgo": {
       "justNow": "À l'instant",
-      "minutesAgo": "Il y a {minutes} minute(s)",
-      "hoursAgo": "Il y a {hours} heure(s)",
-      "daysAgo": "Il y a {days} jour(s)"
+      "minutesAgo": "{minutes, plural, one {Il y a # minute} other {Il y a # minutes}}", 
+      "hoursAgo": "{hours,   plural, one {Il y a # heure}  other {Il y a # heures}}",
+      "daysAgo": "{days,    plural, one {Il y a # jour}   other {Il y a # jours}}"
     }
   },
   "search": {
@@ -241,7 +241,7 @@
       "dateRange": "Plage de dates",
       "dateRangeHelp": "Filtrer les détections par plage de dates (laisser vide pour toutes les dates)",
       "from": "Du",
-      "to": "Àu",
+      "to": "Au",
       "confidenceRange": "Plage de confiance (%)",
       "confidenceMin": "Pourcentage de confiance minimum",
       "confidenceMax": "Pourcentage de confiance maximum",
@@ -301,7 +301,7 @@
     },
     "errors": {
       "searchFailed": "Échec de la recherche : {error}",
-      "minMaxConfidence": "Le taux minimal de confiance ne peut pas être supérieure au taux maximal."
+      "minMaxConfidence": "Le taux minimal de confiance ne peut pas être supérieur au taux maximal."
     },
     "pagination": {
       "page": "Page {current} sur {total}",
@@ -498,13 +498,13 @@
       "title": "Filtrer les données",
       "timePeriod": "Période",
       "from": "Du",
-      "to": "Àu",
+      "to": "Au",
       "sortBy": "Trier par",
       "searchSpecies": "Rechercher une espèce",
       "searchPlaceholder": "Rechercher par nom...",
       "reset": "Réinitialiser",
       "applyFilters": "Appliquer les filtres",
-      "exportCsv": "Exporter en format CSV",
+      "exportCsv": "Exporter au format CSV",
       "species": "espèces",
       "filtered": "(filtré)"
     },
