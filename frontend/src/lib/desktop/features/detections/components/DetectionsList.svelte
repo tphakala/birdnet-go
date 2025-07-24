@@ -44,6 +44,7 @@
     onPageChange?: (page: number) => void;
     onDetailsClick?: (id: number) => void;
     onRefresh?: () => void;
+    onNumResultsChange?: (numResults: number) => void;
     className?: string;
   }
 
@@ -54,6 +55,7 @@
     onPageChange,
     onDetailsClick,
     onRefresh,
+    onNumResultsChange,
     className = '',
   }: Props = $props();
 
@@ -88,21 +90,77 @@
       onPageChange(page);
     }
   }
+
+  function handleNumResultsChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const numResults = parseInt(target.value);
+
+    // Validate the parsed value
+    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) {
+      // Reset to current valid value if invalid
+      target.value = selectedNumResults;
+      return;
+    }
+
+    if (onNumResultsChange) {
+      onNumResultsChange(numResults);
+    }
+  }
+
+  let selectedNumResults = $state(String(data?.numResults || 25));
+
+  // Keep selectedNumResults in sync with data changes
+  $effect(() => {
+    selectedNumResults = String(data?.numResults || 25);
+  });
 </script>
 
 <div class={cn(className)}>
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-    <div class="flex justify-between">
+    <div class="flex justify-between items-center">
       <!-- Title -->
       <span class="card-title grow text-base sm:text-xl">
         {title()}
       </span>
+
+      <!-- Number of results selector -->
+      <div class="flex items-center gap-2">
+        <label for="num-results" class="text-sm font-medium">Results:</label>
+        <select
+          id="num-results"
+          class="select select-bordered select-sm w-20"
+          bind:value={selectedNumResults}
+          onchange={handleNumResultsChange}
+        >
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
     </div>
   </div>
 
-  <!-- Content -->
-  <div class="block w-full overflow-x-auto">
+  <!-- ARIA live region for accessibility -->
+  <div class="sr-only" aria-live="polite">
     {#if loading}
+      Loading {selectedNumResults} results...
+    {:else if data}
+      Showing {data.showingFrom} to {data.showingTo} of {data.totalResults} results
+    {/if}
+  </div>
+
+  <!-- Content -->
+  <div class="block w-full overflow-x-auto relative">
+    {#if loading && data}
+      <!-- Loading overlay when updating existing data -->
+      <div class="absolute inset-0 bg-base-100/50 z-10 flex justify-center items-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    {/if}
+
+    {#if loading && !data}
+      <!-- Initial loading state -->
       <div class="flex justify-center items-center py-8">
         <LoadingSpinner size="lg" />
       </div>
