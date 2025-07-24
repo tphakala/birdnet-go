@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version: '1.24.5'
           cache: true
       - run: go version
 
@@ -45,6 +45,13 @@ jobs:
 
       - name: Install dependencies
         run: task check-tensorflow
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-ffmpeg-procps-${{ hashFiles('.github/workflows/golangci-test.yml') }}
 
       - name: Install FFmpeg and test dependencies
         run: |
@@ -72,8 +79,17 @@ jobs:
           echo "CGO_ENABLED=1" >> $GITHUB_ENV
           echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
 
+      - name: Cache Go tools
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-gotestfmt-v2
+
       - name: Set up gotestfmt
-        run: go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+        run: |
+          if ! command -v gotestfmt &> /dev/null; then
+            go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+          fi
 
       - name: Wait for Mosquitto
         run: |
