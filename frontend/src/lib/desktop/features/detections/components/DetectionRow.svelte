@@ -184,10 +184,12 @@
           />
           <span class="text-xs text-base-content/70">
             {#if detection.weather.description}
-              {t(`detections.weather.conditions.${detection.weather.description}`) ||
+              {t(`detections.weather.conditions.${detection.weather.description.toLowerCase().replace(/ /g, '_')}`) ||
+                t(`detections.weather.conditions.${detection.weather.description.toLowerCase()}`) ||
                 detection.weather.description}
             {:else if detection.weather.weatherMain}
-              {t(`detections.weather.conditions.${detection.weather.weatherMain}`) ||
+              {t(`detections.weather.conditions.${detection.weather.weatherMain.toLowerCase().replace(/ /g, '_')}`) ||
+                t(`detections.weather.conditions.${detection.weather.weatherMain.toLowerCase()}`) ||
                 detection.weather.weatherMain}
             {:else}
               ''

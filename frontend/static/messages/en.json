@@ -439,17 +439,7 @@
         "thunder": "Thunderstorm",
         "sleet": "Sleet",
         "snow": "Snow",
-        "fog": "Fog",
-        "Clear Sky": "Clear Sky",
-        "Fair": "Fair",
-        "Partly Cloudy": "Partly Cloudy",
-        "Cloudy": "Cloudy",
-        "Rain Showers": "Rain Showers",
-        "Rain": "Rain",
-        "Thunderstorm": "Thunderstorm",
-        "Sleet": "Sleet",
-        "Snow": "Snow",
-        "Fog": "Fog"
+        "fog": "Fog"
       }
     },
     "row": {

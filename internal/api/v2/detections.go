@@ -951,18 +951,24 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 }
 
 // GetRecentDetections returns the most recent detections
+// Query parameters:
+// - limit: number of detections to return (default: 10)
+// - includeWeather: whether to include weather data (default: false)
 func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 	limit, _ := strconv.Atoi(ctx.QueryParam("limit"))
 	if limit <= 0 {
 		limit = 10
 	}
 
+	// Check if weather data should be included
+	includeWeather := ctx.QueryParam("includeWeather") == "true"
+
 	notes, err := c.DS.GetLastDetections(limit)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
-	detections := c.convertNotesToDetectionResponses(notes, false)
+	detections := c.convertNotesToDetectionResponses(notes, includeWeather)
 	return ctx.JSON(http.StatusOK, detections)
 }
 
