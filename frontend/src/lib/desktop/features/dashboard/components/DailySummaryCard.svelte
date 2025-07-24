@@ -1,7 +1,7 @@
 <script lang="ts">
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
-  import type { DailySpeciesSummary, DetectionQueryParams } from '$lib/types/detection.types';
+  import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { alertIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
@@ -12,12 +12,10 @@
     error?: string | null;
     selectedDate: string;
     showThumbnails?: boolean;
-    onRowClick?: (_species: DailySpeciesSummary) => void;
     onPreviousDay: () => void;
     onNextDay: () => void;
     onGoToToday: () => void;
     onDateChange: (_date: string) => void;
-    onDetectionView?: (_params: DetectionQueryParams) => void;
   }
 
   let {
@@ -26,12 +24,10 @@
     error = null,
     selectedDate,
     showThumbnails = true,
-    onRowClick,
     onPreviousDay,
     onNextDay,
     onGoToToday,
     onDateChange,
-    onDetectionView,
   }: Props = $props();
 
   // Column definitions - reactive to ensure translations are loaded
@@ -41,7 +37,7 @@
         key: 'common_name',
         header: t('dashboard.dailySummary.columns.species'),
         sortable: true,
-        className: 'font-medium w-0 whitespace-nowrap',
+        className: 'font-medium min-w-0',
       },
     ];
 
@@ -102,47 +98,48 @@
     return cols;
   });
 
-  // Navigation handlers for detections
-  // Navigates to species-specific detections view for the selected date
-  function handleSpeciesClick(species: DailySpeciesSummary) {
-    if (onDetectionView) {
-      onDetectionView({
-        queryType: 'species',
-        species: species.common_name,
-        date: selectedDate,
-        numResults: 100,
-        offset: 0,
-      });
-    }
+  // URL builders for detections navigation
+  // Builds URL for species-specific detections view for the selected date
+  function buildSpeciesUrl(species: DailySpeciesSummary): string {
+    const params = new URLSearchParams({
+      queryType: 'species',
+      species: species.common_name,
+      date: selectedDate,
+      numResults: '25',
+      offset: '0',
+    });
+    return `/ui/detections?${params.toString()}`;
   }
 
-  // Navigates to detections for a specific species within a time period (1, 2, or 6 hours)
-  function handleHourClick(species: DailySpeciesSummary, hour: number, duration: number = 1) {
-    if (onDetectionView) {
-      onDetectionView({
-        queryType: 'species',
-        species: species.common_name,
-        date: selectedDate,
-        hour: hour.toString(),
-        duration: duration,
-        numResults: 100,
-        offset: 0,
-      });
-    }
+  // Builds URL for detections of a specific species within a time period (1, 2, or 6 hours)
+  function buildSpeciesHourUrl(
+    species: DailySpeciesSummary,
+    hour: number,
+    duration: number = 1
+  ): string {
+    const params = new URLSearchParams({
+      queryType: 'species',
+      species: species.common_name,
+      date: selectedDate,
+      hour: hour.toString(),
+      duration: duration.toString(),
+      numResults: '25',
+      offset: '0',
+    });
+    return `/ui/detections?${params.toString()}`;
   }
 
-  // Navigates to all detections across all species for a specific time period
-  function handleHourHeaderClick(hour: number, duration: number = 1) {
-    if (onDetectionView) {
-      onDetectionView({
-        queryType: 'hourly',
-        date: selectedDate,
-        hour: hour.toString(),
-        duration: duration,
-        numResults: 100,
-        offset: 0,
-      });
-    }
+  // Builds URL for all detections across all species for a specific time period
+  function buildHourlyUrl(hour: number, duration: number = 1): string {
+    const params = new URLSearchParams({
+      queryType: 'hourly',
+      date: selectedDate,
+      hour: hour.toString(),
+      duration: duration.toString(),
+      numResults: '25',
+      offset: '0',
+    });
+    return `/ui/detections?${params.toString()}`;
   }
 
   const isToday = $derived(selectedDate === new Date().toISOString().split('T')[0]);
@@ -266,41 +263,41 @@
                   {#if column.key?.startsWith('hour_')}
                     <!-- Hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[1])}
-                    <button
+                    <a
+                      href={buildHourlyUrl(hour, 1)}
                       class="hover:text-primary cursor-pointer"
-                      onclick={() => handleHourHeaderClick(hour, 1)}
                       title={t('dashboard.dailySummary.tooltips.viewHourly', {
                         hour: hour.toString().padStart(2, '0'),
                       })}
                     >
                       {column.header}
-                    </button>
+                    </a>
                   {:else if column.key?.startsWith('bi_hour_')}
                     <!-- Bi-hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[2])}
-                    <button
+                    <a
+                      href={buildHourlyUrl(hour, 2)}
                       class="hover:text-primary cursor-pointer"
-                      onclick={() => handleHourHeaderClick(hour, 2)}
                       title={t('dashboard.dailySummary.tooltips.viewBiHourly', {
                         startHour: hour.toString().padStart(2, '0'),
                         endHour: (hour + 2).toString().padStart(2, '0'),
                       })}
                     >
                       {column.header}
-                    </button>
+                    </a>
                   {:else if column.key?.startsWith('six_hour_')}
                     <!-- Six-hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[2])}
-                    <button
+                    <a
+                      href={buildHourlyUrl(hour, 6)}
                       class="hover:text-primary cursor-pointer"
-                      onclick={() => handleHourHeaderClick(hour, 6)}
                       title={t('dashboard.dailySummary.tooltips.viewSixHourly', {
                         startHour: hour.toString().padStart(2, '0'),
                         endHour: (hour + 6).toString().padStart(2, '0'),
                       })}
                     >
                       {column.header}
-                    </button>
+                    </a>
                   {:else}
                     {column.header}
                   {/if}
@@ -310,18 +307,7 @@
           </thead>
           <tbody>
             {#each sortedData as item}
-              <tr
-                class="hover"
-                class:cursor-pointer={onRowClick || onDetectionView}
-                class:new-species={item.isNew && !prefersReducedMotion}
-                onclick={() => {
-                  if (onRowClick) {
-                    onRowClick(item);
-                  } else if (onDetectionView) {
-                    handleSpeciesClick(item);
-                  }
-                }}
-              >
+              <tr class="hover" class:new-species={item.isNew && !prefersReducedMotion}>
                 {#each columns as column}
                   <td
                     class="py-0 px-0 {column.className || ''} {(() => {
@@ -382,16 +368,23 @@
                       <!-- Species thumbnail and name -->
                       <div class="flex items-center gap-2">
                         {#if showThumbnails}
-                          <img
-                            src={item.thumbnail_url ||
-                              `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
-                            alt={item.common_name}
-                            class="w-8 h-8 rounded object-cover"
-                            onerror={handleBirdImageError}
-                          />
+                          <a href={buildSpeciesUrl(item)}>
+                            <img
+                              src={item.thumbnail_url ||
+                                `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
+                              alt={item.common_name}
+                              class="w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                              onerror={handleBirdImageError}
+                            />
+                          </a>
                         {/if}
                         <!-- Species name -->
-                        <span class="text-sm">{item.common_name}</span>
+                        <a
+                          href={buildSpeciesUrl(item)}
+                          class="text-sm hover:text-primary cursor-pointer font-medium flex-1 min-w-0 leading-tight"
+                        >
+                          {item.common_name}
+                        </a>
                       </div>
                     {:else if column.key === 'total_detections'}
                       <!-- Total detections bar -->
@@ -427,22 +420,18 @@
                       {@const hour = parseInt(column.key.split('_')[1])}
                       {@const count = item.hourly_counts[hour]}
                       {#if count > 0}
-                        <button
-                          type="button"
-                          class="w-full h-full"
+                        <a
+                          href={buildSpeciesHourUrl(item, hour, 1)}
+                          class="w-full h-full block text-center cursor-pointer hover:text-primary"
                           class:hour-updated={item.hourlyUpdated?.includes(hour) &&
                             !prefersReducedMotion}
                           title={t('dashboard.dailySummary.tooltips.hourlyDetections', {
                             count,
                             hour: hour.toString().padStart(2, '0'),
                           })}
-                          onclick={e => {
-                            e.stopPropagation();
-                            handleHourClick(item, hour, 1);
-                          }}
                         >
                           {count}
-                        </button>
+                        </a>
                       {:else}
                         -
                       {/if}
@@ -451,22 +440,18 @@
                       {@const hour = parseInt(column.key.split('_')[2])}
                       {@const count = column.render ? Number(column.render(item, 0)) : 0}
                       {#if count > 0}
-                        <!-- Bi-hourly detections count button -->
-                        <button
-                          type="button"
-                          class="w-full h-full"
+                        <!-- Bi-hourly detections count link -->
+                        <a
+                          href={buildSpeciesHourUrl(item, hour, 2)}
+                          class="w-full h-full block text-center cursor-pointer hover:text-primary"
                           title={t('dashboard.dailySummary.tooltips.biHourlyDetections', {
                             count,
                             startHour: hour.toString().padStart(2, '0'),
                             endHour: (hour + 2).toString().padStart(2, '0'),
                           })}
-                          onclick={e => {
-                            e.stopPropagation();
-                            handleHourClick(item, hour, 2);
-                          }}
                         >
                           {count}
-                        </button>
+                        </a>
                       {:else}
                         -
                       {/if}
@@ -475,22 +460,18 @@
                       {@const hour = parseInt(column.key.split('_')[2])}
                       {@const count = column.render ? Number(column.render(item, 0)) : 0}
                       {#if count > 0}
-                        <!-- Six-hourly detections count button -->
-                        <button
-                          type="button"
-                          class="w-full h-full"
+                        <!-- Six-hourly detections count link -->
+                        <a
+                          href={buildSpeciesHourUrl(item, hour, 6)}
+                          class="w-full h-full block text-center cursor-pointer hover:text-primary"
                           title={t('dashboard.dailySummary.tooltips.sixHourlyDetections', {
                             count,
                             startHour: hour.toString().padStart(2, '0'),
                             endHour: (hour + 6).toString().padStart(2, '0'),
                           })}
-                          onclick={e => {
-                            e.stopPropagation();
-                            handleHourClick(item, hour, 6);
-                          }}
                         >
                           {count}
-                        </button>
+                        </a>
                       {:else}
                         -
                       {/if}
@@ -590,8 +571,8 @@
 
   /* All responsive display and heatmap styles are handled by custom.css */
 
-  /* Button styling to match the original .hour-data a styles */
-  .hour-data button {
+  /* Link styling to match the original .hour-data a styles */
+  .hour-data a {
     height: 2rem;
     min-height: 2rem;
     max-height: 2rem;
@@ -605,5 +586,10 @@
     color: inherit;
     font-size: inherit;
     font-family: inherit;
+    text-decoration: none;
+  }
+
+  .hour-data a:hover {
+    text-decoration: none;
   }
 </style>
