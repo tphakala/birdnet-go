@@ -76,6 +76,9 @@
         }
       });
 
+      // Always include weather data for the detections page
+      queryString.append('includeWeather', 'true');
+
       const data = (await fetchWithCSRF(`/api/v2/detections?${queryString.toString()}`)) as any;
 
       // Validate numResults before using

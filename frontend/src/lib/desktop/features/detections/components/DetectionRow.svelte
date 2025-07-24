@@ -33,6 +33,7 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherIcon from '$lib/desktop/components/data/WeatherIcon.svelte';
+  import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -172,17 +173,33 @@
   </div>
 
   <!-- Weather Column -->
-  <div class="col-span-1 text-sm">
+  <div class="col-span-2 text-sm">
     {#if detection.weather}
-      <div class="flex items-center gap-2">
-        <WeatherIcon
-          weatherIcon={detection.weather.weatherIcon}
-          timeOfDay={detection.timeOfDay}
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center gap-2">
+          <WeatherIcon
+            weatherIcon={detection.weather.weatherIcon}
+            timeOfDay={detection.timeOfDay}
+            size="sm"
+          />
+          <span class="text-xs text-base-content/70">
+            {#if detection.weather.description}
+              {t(`detections.weather.conditions.${detection.weather.description}`) ||
+                detection.weather.description}
+            {:else if detection.weather.weatherMain}
+              {t(`detections.weather.conditions.${detection.weather.weatherMain}`) ||
+                detection.weather.weatherMain}
+            {:else}
+              ''
+            {/if}
+          </span>
+        </div>
+        <WeatherMetrics
+          temperature={detection.weather.temperature}
+          windSpeed={detection.weather.windSpeed}
           size="sm"
+          className="ml-1"
         />
-        <span class="text-xs text-base-content/70">
-          {detection.weather.weatherMain || detection.weather.description || ''}
-        </span>
       </div>
     {:else}
       <div class="text-base-content/50 text-xs">{t('detections.weather.noData')}</div>
@@ -223,12 +240,12 @@
   {/if}
 
   <!-- Status -->
-  <div class="col-span-2">
+  <div class="col-span-1">
     <StatusBadges {detection} />
   </div>
 
   <!-- Recording/Spectrogram -->
-  <div class={showThumbnails ? 'col-span-2' : 'col-span-3'}>
+  <div class={showThumbnails ? 'col-span-2' : 'col-span-2'}>
     <AudioPlayer
       audioUrl="/api/v2/audio/{detection.id}"
       detectionId={detection.id.toString()}
