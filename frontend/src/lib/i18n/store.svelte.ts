@@ -18,6 +18,8 @@ function getInitialLocale(): Locale {
 let currentLocale = $state<Locale>(getInitialLocale());
 let messages = $state<Record<string, string>>({});
 let loading = $state(false);
+// Keep previous messages while loading new ones
+let previousMessages = $state<Record<string, string>>({});
 /* eslint-enable no-undef */
 
 /**
@@ -34,8 +36,7 @@ export function getLocale(): Locale {
  */
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
-  // Clear cache when locale changes
-  clearTranslationCache();
+  // Don't clear cache here - keep old translations while loading new ones
   loadMessages(locale);
 
   // Persist locale to localStorage
@@ -52,8 +53,10 @@ export function setLocale(locale: Locale): void {
 // Message loading with English fallback
 async function loadMessages(locale: Locale): Promise<void> {
   loading = true;
-  // Clear cache when loading new messages
-  clearTranslationCache();
+  // Store current messages as previous before loading new ones
+  if (Object.keys(messages).length > 0) {
+    previousMessages = { ...messages };
+  }
   try {
     // Use fetch to load JSON from the built assets directory
     // In production, these files are copied to dist/messages by Vite
@@ -63,8 +66,16 @@ async function loadMessages(locale: Locale): Promise<void> {
     }
     const data = await response.json();
     messages = data;
-    // Clear cache after successfully loading new messages
+    // Clear previous messages after successful load
+    previousMessages = {};
+    // Clear cache only after successfully loading new messages
     clearTranslationCache();
+    // Update localStorage cache
+    try {
+      localStorage.setItem(`birdnet-messages-${locale}`, JSON.stringify(messages));
+    } catch {
+      // Ignore storage errors
+    }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(`Failed to load messages for ${locale}:`, error);
@@ -78,8 +89,16 @@ async function loadMessages(locale: Locale): Promise<void> {
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
           messages = fallbackData;
+          // Clear previous messages after successful fallback load
+          previousMessages = {};
           // Clear cache after loading fallback messages
           clearTranslationCache();
+          // Update localStorage cache for fallback
+          try {
+            localStorage.setItem(`birdnet-messages-${DEFAULT_LOCALE}`, JSON.stringify(messages));
+          } catch {
+            // Ignore storage errors
+          }
           return;
         }
       } catch (fallbackError) {
@@ -88,10 +107,16 @@ async function loadMessages(locale: Locale): Promise<void> {
       }
     }
 
-    // If all else fails, keep existing messages (don't clear them)
+    // If all else fails, restore previous messages
     // This prevents raw translation keys from being displayed
+    if (Object.keys(previousMessages).length > 0) {
+      messages = previousMessages;
+      previousMessages = {};
+    }
     // eslint-disable-next-line no-console
-    console.warn('Translation loading failed, keeping existing messages to prevent UI degradation');
+    console.warn(
+      'Translation loading failed, restored previous messages to prevent UI degradation'
+    );
   } finally {
     loading = false;
   }
@@ -142,8 +167,32 @@ export function t(key: string, params?: Record<string, unknown>): string {
     return cached.value;
   }
 
-  // If messages haven't loaded yet, return the key
+  // If messages haven't loaded yet, check previousMessages first
   if (Object.keys(messages).length === 0) {
+    // Check if we have the key in previousMessages
+    if (Object.keys(previousMessages).length > 0) {
+      const prevValue = getNestedValue(previousMessages, key);
+      if (typeof prevValue === 'string') {
+        // Process the message with params if needed
+        if (!params) {
+          return prevValue;
+        }
+        // Apply parameter interpolation to previous message
+        let result = prevValue;
+        result = result.replace(/\{(\w+)\}/g, (_, param) => {
+          // eslint-disable-next-line security/detect-object-injection
+          return params[param]?.toString() ?? `{${param}}`;
+        });
+        return result;
+      }
+    }
+
+    // Try to find any cached translation for this key to prevent flickering
+    for (const [cachedKey, cachedValue] of translationCache.entries()) {
+      if (cachedKey.startsWith(`${key}:${paramsKey}:`)) {
+        return cachedValue.value;
+      }
+    }
     return key;
   }
 
@@ -236,7 +285,32 @@ export function t(key: string, params?: Record<string, unknown>): string {
 
 // Initialize on module load
 if (typeof window !== 'undefined') {
-  loadMessages(getLocale());
+  // Load messages immediately and synchronously if possible
+  const locale = getLocale();
+  loading = true;
+
+  // Try to load messages synchronously from cache if available
+  const cachedMessages = localStorage.getItem(`birdnet-messages-${locale}`);
+  if (cachedMessages) {
+    try {
+      messages = JSON.parse(cachedMessages);
+      loading = false;
+    } catch {
+      // Continue with async load
+    }
+  }
+
+  // Always load fresh messages asynchronously
+  loadMessages(locale).then(() => {
+    // Cache messages for next time
+    if (Object.keys(messages).length > 0) {
+      try {
+        localStorage.setItem(`birdnet-messages-${locale}`, JSON.stringify(messages));
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  });
 }
 
 /**
