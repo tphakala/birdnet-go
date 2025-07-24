@@ -40,6 +40,15 @@
       queryType = 'all';
     }
 
+    // Parse and validate numResults
+    const numResultsParam = params.get('numResults');
+    let numResults = numResultsParam ? parseInt(numResultsParam) : getSavedResultsPerPage();
+
+    // Validate numResults is one of allowed values
+    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) {
+      numResults = getSavedResultsPerPage();
+    }
+
     return {
       queryType,
       date: params.get('date') || new Date().toISOString().split('T')[0],
@@ -47,7 +56,7 @@
       duration: params.get('duration') ? parseInt(params.get('duration')!) : undefined,
       species: params.get('species') || undefined,
       search: search || undefined,
-      numResults: parseInt(params.get('numResults') || String(getSavedResultsPerPage())),
+      numResults,
       offset: parseInt(params.get('offset') || '0'),
     };
   }
@@ -69,6 +78,11 @@
 
       const data = (await fetchWithCSRF(`/api/v2/detections?${queryString.toString()}`)) as any;
 
+      // Validate numResults before using
+      const validatedNumResults = [10, 25, 50, 100].includes(queryParams.numResults)
+        ? queryParams.numResults
+        : getSavedResultsPerPage();
+
       // Transform API response to match our expected format
       detectionsData = {
         notes: data.data || [],
@@ -78,10 +92,10 @@
         duration: queryParams.duration,
         species: queryParams.species,
         search: queryParams.search,
-        numResults: queryParams.numResults!,
+        numResults: validatedNumResults,
         offset: queryParams.offset!,
         totalResults: data.total || 0,
-        itemsPerPage: data.limit || queryParams.numResults || 25,
+        itemsPerPage: data.limit || validatedNumResults,
         currentPage: data.current_page || 1,
         totalPages: data.total_pages || 1,
         showingFrom: (queryParams.offset || 0) + 1,

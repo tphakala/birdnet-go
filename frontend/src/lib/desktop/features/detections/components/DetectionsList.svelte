@@ -94,6 +94,14 @@
   function handleNumResultsChange(event: Event) {
     const target = event.target as HTMLSelectElement;
     const numResults = parseInt(target.value);
+
+    // Validate the parsed value
+    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) {
+      // Reset to current valid value if invalid
+      target.value = selectedNumResults;
+      return;
+    }
+
     if (onNumResultsChange) {
       onNumResultsChange(numResults);
     }
