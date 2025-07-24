@@ -28,7 +28,7 @@
       duration: params.get('duration') ? parseInt(params.get('duration')!) : undefined,
       species: params.get('species') || undefined,
       search: search || undefined,
-      numResults: parseInt(params.get('numResults') || '50'),
+      numResults: parseInt(params.get('numResults') || '25'),
       offset: parseInt(params.get('offset') || '0'),
     };
   }
@@ -62,7 +62,7 @@
         numResults: queryParams.numResults!,
         offset: queryParams.offset!,
         totalResults: data.total || 0,
-        itemsPerPage: data.limit || queryParams.numResults || 50,
+        itemsPerPage: data.limit || queryParams.numResults || 25,
         currentPage: data.current_page || 1,
         totalPages: data.total_pages || 1,
         showingFrom: (queryParams.offset || 0) + 1,
@@ -84,9 +84,25 @@
       const params = new URLSearchParams(window.location.search);
       params.set('offset', String(newOffset));
 
-      // Navigate to new URL with updated offset
-      window.location.href = `${window.location.pathname}?${params.toString()}`;
+      // Update URL without navigation
+      window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+
+      // Fetch new data
+      fetchDetections();
     }
+  }
+
+  // Handle numResults change
+  function handleNumResultsChange(newNumResults: number) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('numResults', String(newNumResults));
+    params.set('offset', '0'); // Reset to first page
+
+    // Update URL without navigation
+    window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+
+    // Fetch new data
+    fetchDetections();
   }
 
   // Handle details click
@@ -116,14 +132,23 @@
     fetchDetections();
   }
 
+  // Handle browser back/forward buttons
+  function handlePopState() {
+    fetchDetections();
+  }
+
   onMount(() => {
     fetchDetections();
 
     // Listen for search updates from SearchBox
     window.addEventListener('searchUpdate', handleSearchUpdate);
 
+    // Listen for browser navigation
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
       window.removeEventListener('searchUpdate', handleSearchUpdate);
+      window.removeEventListener('popstate', handlePopState);
     };
   });
 </script>
@@ -136,5 +161,6 @@
     onPageChange={handlePageChange}
     onDetailsClick={handleDetailsClick}
     onRefresh={fetchDetections}
+    onNumResultsChange={handleNumResultsChange}
   />
 </div>
