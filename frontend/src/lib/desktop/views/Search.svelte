@@ -1,5 +1,4 @@
 <script lang="ts">
-  import CollapsibleSection from '$lib/desktop/components/ui/CollapsibleSection.svelte';
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
@@ -263,123 +262,144 @@
           </div>
         </div>
 
-        <!-- Advanced Filters Section -->
-        <CollapsibleSection
-          title={t('search.advancedFilters')}
-          defaultOpen={advancedFilters}
-          className="bg-transparent shadow-none p-0"
-          contentClassName="space-y-2 pt-2"
-        >
-          <!-- Confidence Range -->
-          <div class="form-control">
-            <label class="label" for="confidenceMin">
-              <span class="label-text">{t('search.fields.confidenceRange')}</span>
-              <span class="label-text-alt">{confidenceRange.min}% - {confidenceRange.max}%</span>
-            </label>
-            <div
-              class="gap-6 search-confidence-grid"
-              role="group"
-              aria-labelledby="confidenceRangeLabel"
+        <!-- Advanced Filters Toggle -->
+        <div class="flex items-center justify-between">
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            onclick={() => (advancedFilters = !advancedFilters)}
+            aria-expanded={advancedFilters}
+            aria-controls="advancedFiltersSection"
+          >
+            <span
+              >{advancedFilters
+                ? t('search.hideAdvancedFilters')
+                : t('search.showAdvancedFilters')}</span
             >
-              <div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  id="confidenceMin"
-                  bind:value={confidenceRange.min}
-                  class="range range-xs"
-                  aria-label={t('search.fields.confidenceMin')}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow={confidenceRange.min}
-                  aria-valuetext="{confidenceRange.min}%"
-                />
-                <div class="flex justify-between text-xs px-2">
-                  <span>0%</span>
-                  <span>{confidenceRange.min}%</span>
+            <span
+              class="transition-transform duration-200"
+              class:rotate-180={advancedFilters}
+              aria-hidden="true"
+            >
+              {@html navigationIcons.chevronDown}
+            </span>
+          </button>
+        </div>
+
+        <!-- Advanced Filters Section -->
+        {#if advancedFilters}
+          <div class="space-y-2 pt-2" id="advancedFiltersSection">
+            <!-- Confidence Range -->
+            <div class="form-control">
+              <label class="label" for="confidenceMin">
+                <span class="label-text">{t('search.fields.confidenceRange')}</span>
+                <span class="label-text-alt">{confidenceRange.min}% - {confidenceRange.max}%</span>
+              </label>
+              <div
+                class="gap-6 search-confidence-grid"
+                role="group"
+                aria-labelledby="confidenceRangeLabel"
+              >
+                <div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    id="confidenceMin"
+                    bind:value={confidenceRange.min}
+                    class="range range-xs"
+                    aria-label={t('search.fields.confidenceMin')}
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow={confidenceRange.min}
+                    aria-valuetext="{confidenceRange.min}%"
+                  />
+                  <div class="flex justify-between text-xs px-2">
+                    <span>0%</span>
+                    <span>{confidenceRange.min}%</span>
+                  </div>
+                </div>
+                <div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    bind:value={confidenceRange.max}
+                    class="range range-xs"
+                    aria-label={t('search.fields.confidenceMax')}
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow={confidenceRange.max}
+                    aria-valuetext="{confidenceRange.max}%"
+                  />
+                  <div class="flex justify-between text-xs px-2">
+                    <span>0%</span>
+                    <span>{confidenceRange.max}%</span>
+                  </div>
                 </div>
               </div>
-              <div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  bind:value={confidenceRange.max}
-                  class="range range-xs"
-                  aria-label={t('search.fields.confidenceMax')}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow={confidenceRange.max}
-                  aria-valuetext="{confidenceRange.max}%"
-                />
-                <div class="flex justify-between text-xs px-2">
-                  <span>0%</span>
-                  <span>{confidenceRange.max}%</span>
+              <!-- Confidence error message -->
+              {#if hasConfidenceError}
+                <div class="text-error text-sm mt-1" role="alert">
+                  {t('search.errors.minMaxConfidence')}
                 </div>
+              {/if}
+            </div>
+
+            <!-- Status & Time of Day Filters -->
+            <div class="gap-6 search-filters-grid">
+              <!-- Verified Status -->
+              <div class="form-control">
+                <label class="label" for="verifiedStatusFilter">
+                  <span class="label-text">{t('search.fields.verifiedStatus')}</span>
+                </label>
+                <select
+                  id="verifiedStatusFilter"
+                  bind:value={verifiedStatus}
+                  class="select select-bordered w-full"
+                >
+                  <option value="any">{t('search.verifiedOptions.any')}</option>
+                  <option value="verified">{t('search.verifiedOptions.verified')}</option>
+                  <option value="unverified">{t('search.verifiedOptions.unverified')}</option>
+                </select>
+              </div>
+
+              <!-- Locked Status -->
+              <div class="form-control">
+                <label class="label" for="lockedStatusFilter">
+                  <span class="label-text">{t('search.fields.lockedStatus')}</span>
+                </label>
+                <select
+                  id="lockedStatusFilter"
+                  bind:value={lockedStatus}
+                  class="select select-bordered w-full"
+                >
+                  <option value="any">{t('search.lockedOptions.any')}</option>
+                  <option value="locked">{t('search.lockedOptions.locked')}</option>
+                  <option value="unlocked">{t('search.lockedOptions.unlocked')}</option>
+                </select>
+              </div>
+
+              <!-- Time of Day -->
+              <div class="form-control">
+                <label class="label" for="timeOfDayFilter">
+                  <span class="label-text">{t('search.fields.timeOfDay')}</span>
+                </label>
+                <select
+                  id="timeOfDayFilter"
+                  bind:value={timeOfDayFilter}
+                  class="select select-bordered w-full"
+                >
+                  <option value="any">{t('search.timeOfDayOptions.any')}</option>
+                  <option value="day">{t('search.timeOfDayOptions.day')}</option>
+                  <option value="night">{t('search.timeOfDayOptions.night')}</option>
+                  <option value="sunrise">{t('search.timeOfDayOptions.sunrise')}</option>
+                  <option value="sunset">{t('search.timeOfDayOptions.sunset')}</option>
+                </select>
               </div>
             </div>
-            <!-- Confidence error message -->
-            {#if hasConfidenceError}
-              <div class="text-error text-sm mt-1" role="alert">
-                {t('search.errors.minMaxConfidence')}
-              </div>
-            {/if}
           </div>
-
-          <!-- Status & Time of Day Filters -->
-          <div class="gap-6 search-filters-grid">
-            <!-- Verified Status -->
-            <div class="form-control">
-              <label class="label" for="verifiedStatusFilter">
-                <span class="label-text">{t('search.fields.verifiedStatus')}</span>
-              </label>
-              <select
-                id="verifiedStatusFilter"
-                bind:value={verifiedStatus}
-                class="select select-bordered w-full"
-              >
-                <option value="any">{t('search.verifiedOptions.any')}</option>
-                <option value="verified">{t('search.verifiedOptions.verified')}</option>
-                <option value="unverified">{t('search.verifiedOptions.unverified')}</option>
-              </select>
-            </div>
-
-            <!-- Locked Status -->
-            <div class="form-control">
-              <label class="label" for="lockedStatusFilter">
-                <span class="label-text">{t('search.fields.lockedStatus')}</span>
-              </label>
-              <select
-                id="lockedStatusFilter"
-                bind:value={lockedStatus}
-                class="select select-bordered w-full"
-              >
-                <option value="any">{t('search.lockedOptions.any')}</option>
-                <option value="locked">{t('search.lockedOptions.locked')}</option>
-                <option value="unlocked">{t('search.lockedOptions.unlocked')}</option>
-              </select>
-            </div>
-
-            <!-- Time of Day -->
-            <div class="form-control">
-              <label class="label" for="timeOfDayFilter">
-                <span class="label-text">{t('search.fields.timeOfDay')}</span>
-              </label>
-              <select
-                id="timeOfDayFilter"
-                bind:value={timeOfDayFilter}
-                class="select select-bordered w-full"
-              >
-                <option value="any">{t('search.timeOfDayOptions.any')}</option>
-                <option value="day">{t('search.timeOfDayOptions.day')}</option>
-                <option value="night">{t('search.timeOfDayOptions.night')}</option>
-                <option value="sunrise">{t('search.timeOfDayOptions.sunrise')}</option>
-                <option value="sunset">{t('search.timeOfDayOptions.sunset')}</option>
-              </select>
-            </div>
-          </div>
-        </CollapsibleSection>
+        {/if}
 
         <!-- Form Action Buttons -->
         <div class="flex flex-row gap-4 justify-end">

@@ -188,8 +188,9 @@
       <a href="https://github.com/Fotguedes" class="btn btn-ghost btn-sm justify-start normal-case"
         >@Fotguedes</a
       >
-      <a href="https://github.com/geekworldtour" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@geekworldtour</a
+      <a
+        href="https://github.com/geekworldtour"
+        class="btn btn-ghost btn-sm justify-start normal-case">@geekworldtour</a
       >
       <a href="https://github.com/isZumpo" class="btn btn-ghost btn-sm justify-start normal-case"
         >@isZumpo</a
