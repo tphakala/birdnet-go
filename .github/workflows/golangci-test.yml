@@ -46,13 +46,6 @@ jobs:
       - name: Install dependencies
         run: task check-tensorflow
 
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-ffmpeg-procps-${{ hashFiles('.github/workflows/golangci-test.yml') }}
-
       - name: Install FFmpeg and test dependencies
         run: |
           sudo apt-get update
