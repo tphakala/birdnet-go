@@ -73,19 +73,31 @@ func (c *Controller) initDetectionRoutes() {
 
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID             uint     `json:"id"`
-	Date           string   `json:"date"`
-	Time           string   `json:"time"`
-	Source         string   `json:"source"`
-	BeginTime      string   `json:"beginTime"`
-	EndTime        string   `json:"endTime"`
-	SpeciesCode    string   `json:"speciesCode"`
-	ScientificName string   `json:"scientificName"`
-	CommonName     string   `json:"commonName"`
-	Confidence     float64  `json:"confidence"`
-	Verified       string   `json:"verified"`
-	Locked         bool     `json:"locked"`
-	Comments       []string `json:"comments,omitempty"`
+	ID             uint                `json:"id"`
+	Date           string              `json:"date"`
+	Time           string              `json:"time"`
+	Source         string              `json:"source"`
+	BeginTime      string              `json:"beginTime"`
+	EndTime        string              `json:"endTime"`
+	SpeciesCode    string              `json:"speciesCode"`
+	ScientificName string              `json:"scientificName"`
+	CommonName     string              `json:"commonName"`
+	Confidence     float64             `json:"confidence"`
+	Verified       string              `json:"verified"`
+	Locked         bool                `json:"locked"`
+	Comments       []string            `json:"comments,omitempty"`
+	Weather        *WeatherInfo        `json:"weather,omitempty"`
+	TimeOfDay      string              `json:"timeOfDay,omitempty"`
+}
+
+// WeatherInfo represents weather data for a detection
+type WeatherInfo struct {
+	WeatherIcon string  `json:"weatherIcon"`
+	WeatherMain string  `json:"weatherMain,omitempty"`
+	Description string  `json:"description,omitempty"`
+	Temperature float64 `json:"temperature,omitempty"`
+	WindSpeed   float64 `json:"windSpeed,omitempty"`
+	Humidity    int     `json:"humidity,omitempty"`
 }
 
 // DetectionRequest represents the query parameters for listing detections
@@ -130,6 +142,8 @@ type detectionQueryParams struct {
 	Verified     string
 	Location     string
 	Locked       string
+	// Include additional data
+	IncludeWeather bool
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
@@ -149,6 +163,8 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 		Verified:   ctx.QueryParam("verified"),
 		Location:   ctx.QueryParam("location"),
 		Locked:     ctx.QueryParam("locked"),
+		// Include weather data
+		IncludeWeather: ctx.QueryParam("includeWeather") == "true",
 	}
 
 	// Parse duration
@@ -379,7 +395,7 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 	}
 
 	// Convert notes to response format
-	detections := c.convertNotesToDetectionResponses(notes)
+	detections := c.convertNotesToDetectionResponses(notes, params.IncludeWeather)
 
 	// Create paginated response
 	response := c.createPaginatedResponse(detections, totalResults, params.NumResults, params.Offset)
@@ -428,18 +444,22 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 }
 
 // convertNotesToDetectionResponses converts datastore notes to API detection responses
-func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note) []DetectionResponse {
+func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note, includeWeather bool) []DetectionResponse {
 	detections := make([]DetectionResponse, 0, len(notes))
+	
+	// Create a map to cache weather data if needed
+	weatherCache := make(map[string][]datastore.HourlyWeather)
+	
 	for i := range notes {
 		note := &notes[i]
-		detection := c.noteToDetectionResponse(note)
+		detection := c.noteToDetectionResponse(note, includeWeather, weatherCache)
 		detections = append(detections, detection)
 	}
 	return detections
 }
 
 // noteToDetectionResponse converts a single note to a detection response
-func (c *Controller) noteToDetectionResponse(note *datastore.Note) DetectionResponse {
+func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
 	detection := DetectionResponse{
 		ID:             note.ID,
 		Date:           note.Date,
@@ -466,6 +486,50 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note) DetectionResp
 		detection.Comments = comments
 	}
 
+	
+	// Add weather and time of day if requested
+	if includeWeather {
+		// Parse detection time
+		detectionTimeStr := note.Date + " " + note.Time
+		detectionTime, err := time.Parse("2006-01-02 15:04:05", detectionTimeStr)
+		if err == nil {
+			// Calculate time of day
+			if c.SunCalc != nil {
+				sunTimes, err := c.SunCalc.GetSunEventTimes(detectionTime)
+				if err == nil {
+					detection.TimeOfDay = calculateTimeOfDay(detectionTime, &sunTimes)
+				}
+			}
+			
+			// Get weather data
+			if weatherCache != nil {
+				// Check if we have weather data for this date in cache
+				if _, exists := weatherCache[note.Date]; !exists {
+					// Fetch weather data for this date
+					hourlyWeather, err := c.DS.GetHourlyWeather(note.Date)
+					if err == nil {
+						weatherCache[note.Date] = hourlyWeather
+					}
+				}
+				
+				// Find closest weather data
+				if weatherData, exists := weatherCache[note.Date]; exists && len(weatherData) > 0 {
+					closestWeather := c.findClosestHourlyWeather(detectionTime, weatherData)
+					if closestWeather.WeatherIcon != "" {
+						detection.Weather = &WeatherInfo{
+							WeatherIcon: closestWeather.WeatherIcon,
+							WeatherMain: closestWeather.WeatherMain,
+							Description: closestWeather.WeatherDesc,
+							Temperature: closestWeather.Temperature,
+							WindSpeed:   closestWeather.WindSpeed,
+							Humidity:    closestWeather.Humidity,
+						}
+					}
+				}
+			}
+		}
+	}
+	
 	return detection
 }
 
@@ -880,23 +944,31 @@ func (c *Controller) GetDetection(ctx echo.Context) error {
 		return ctx.JSON(http.StatusNotFound, map[string]string{"error": "Detection not found"})
 	}
 
-	detection := c.noteToDetectionResponse(&note)
+	// For single detection, include weather data by default
+	weatherCache := make(map[string][]datastore.HourlyWeather)
+	detection := c.noteToDetectionResponse(&note, true, weatherCache)
 	return ctx.JSON(http.StatusOK, detection)
 }
 
 // GetRecentDetections returns the most recent detections
+// Query parameters:
+// - limit: number of detections to return (default: 10)
+// - includeWeather: whether to include weather data (default: false)
 func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 	limit, _ := strconv.Atoi(ctx.QueryParam("limit"))
 	if limit <= 0 {
 		limit = 10
 	}
 
+	// Check if weather data should be included
+	includeWeather := ctx.QueryParam("includeWeather") == "true"
+
 	notes, err := c.DS.GetLastDetections(limit)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
-	detections := c.convertNotesToDetectionResponses(notes)
+	detections := c.convertNotesToDetectionResponses(notes, includeWeather)
 	return ctx.JSON(http.StatusOK, detections)
 }
 

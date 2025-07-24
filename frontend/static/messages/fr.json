@@ -220,7 +220,7 @@
     },
     "timeAgo": {
       "justNow": "À l'instant",
-      "minutesAgo": "{minutes, plural, one {Il y a # minute} other {Il y a # minutes}}", 
+      "minutesAgo": "{minutes, plural, one {Il y a # minute} other {Il y a # minutes}}",
       "hoursAgo": "{hours,   plural, one {Il y a # heure}  other {Il y a # heures}}",
       "daysAgo": "{days,    plural, one {Il y a # jour}   other {Il y a # jours}}"
     }
