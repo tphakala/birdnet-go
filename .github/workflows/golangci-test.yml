@@ -28,6 +28,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
+          cache: true
       - run: go version
 
       - name: Install Task
@@ -35,6 +36,12 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache TensorFlow headers
+        uses: actions/cache@v4
+        with:
+          path: ~/src/tensorflow
+          key: ${{ runner.os }}-tensorflow-v2.17.1
 
       - name: Install dependencies
         run: task check-tensorflow
@@ -44,7 +51,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg procps
 
+      - name: Cache TensorFlow Lite library
+        id: cache-tflite
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/libtensorflowlite_c.so*
+          key: ${{ runner.os }}-tflite-v2.17.1
+
       - name: Download tflite_c
+        if: steps.cache-tflite.outputs.cache-hit != 'true'
         run: |
           TFLITE_VERSION=v2.17.1
           wget -q https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_linux_amd64.tar.gz -P ./
