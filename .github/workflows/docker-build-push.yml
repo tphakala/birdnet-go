@@ -161,9 +161,14 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             BUILD_VERSION=${{ inputs.version }}
+            BUILDKIT_INLINE_CACHE=1
           tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache,mode=max
           provenance: false
 
       - name: Check push status
