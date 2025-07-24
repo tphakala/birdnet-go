@@ -4,7 +4,7 @@
   import { cn } from '$lib/utils/cn';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
 
   interface Notification {
     id: string;
@@ -459,7 +459,7 @@
       bind:this={dropdownRef}
       id="notification-dropdown"
       role="menu"
-      class="absolute right-0 top-full mt-2 min-w-[20rem] w-80 md:w-96 max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 z-50 overflow-hidden flex flex-col"
+      class="absolute right-0 top-full mt-2 min-w-[28rem] max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 z-50 overflow-hidden flex flex-col"
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">
