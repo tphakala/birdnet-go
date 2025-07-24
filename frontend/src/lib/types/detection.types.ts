@@ -89,6 +89,9 @@ export interface Weather {
   weatherIcon: string;
   description?: string;
   weatherMain?: string;
+  temperature?: number;
+  windSpeed?: number;
+  humidity?: number;
 }
 
 export interface TimeOfDayResponse {

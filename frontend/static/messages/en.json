@@ -419,7 +419,29 @@
       "showing": "Showing {from} to {to} of {total} results"
     },
     "weather": {
-      "noData": "No weather data"
+      "noData": "No weather data",
+      "units": {
+        "temperature": "°C",
+        "windSpeed": "m/s",
+        "humidity": "%"
+      },
+      "conditions": {
+        "clearsky_day": "Clear Sky",
+        "clearsky_night": "Clear Sky",
+        "fair_day": "Fair",
+        "fair_night": "Fair",
+        "partlycloudy_day": "Partly Cloudy",
+        "partlycloudy_night": "Partly Cloudy",
+        "cloudy": "Cloudy",
+        "rainshowers_day": "Rain Showers",
+        "rainshowers_night": "Rain Showers",
+        "rain": "Rain",
+        "thunder": "Thunderstorm",
+        "sleet": "Sleet",
+        "snow": "Snow",
+        "fog": "Fog",
+        "unknown": "Unknown"
+      }
     },
     "row": {
       "viewDetails": "View details for {species}"

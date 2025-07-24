@@ -33,12 +33,38 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherIcon from '$lib/desktop/components/data/WeatherIcon.svelte';
+  import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
+
+  // Helper function to translate weather conditions with fallbacks
+  function translateWeatherCondition(condition: string | undefined): string {
+    if (!condition) return '';
+    
+    // Normalize the condition string
+    const normalized = condition.toLowerCase().replace(/ /g, '_');
+    
+    // Try different key variations
+    const keys = [
+      `detections.weather.conditions.${normalized}`,
+      `detections.weather.conditions.${condition.toLowerCase()}`,
+      'detections.weather.conditions.unknown'
+    ];
+    
+    // Return first successful translation or original
+    for (const key of keys) {
+      const translation = t(key);
+      if (translation !== key) {
+        return translation;
+      }
+    }
+    
+    return condition;
+  }
 
   interface Props {
     detection: Detection;
@@ -172,17 +198,25 @@
   </div>
 
   <!-- Weather Column -->
-  <div class="col-span-1 text-sm">
+  <div class="col-span-2 text-sm">
     {#if detection.weather}
-      <div class="flex items-center gap-2">
-        <WeatherIcon
-          weatherIcon={detection.weather.weatherIcon}
-          timeOfDay={detection.timeOfDay}
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center gap-2">
+          <WeatherIcon
+            weatherIcon={detection.weather.weatherIcon}
+            timeOfDay={detection.timeOfDay}
+            size="sm"
+          />
+          <span class="text-xs text-base-content/70">
+            {translateWeatherCondition(detection.weather.description || detection.weather.weatherMain)}
+          </span>
+        </div>
+        <WeatherMetrics
+          temperature={detection.weather.temperature}
+          windSpeed={detection.weather.windSpeed}
           size="sm"
+          className="ml-1"
         />
-        <span class="text-xs text-base-content/70">
-          {detection.weather.weatherMain || detection.weather.description || ''}
-        </span>
       </div>
     {:else}
       <div class="text-base-content/50 text-xs">{t('detections.weather.noData')}</div>
@@ -223,7 +257,7 @@
   {/if}
 
   <!-- Status -->
-  <div class="col-span-2">
+  <div class="col-span-1">
     <StatusBadges {detection} />
   </div>
 
