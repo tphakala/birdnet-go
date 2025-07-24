@@ -250,6 +250,8 @@
       "timeOfDay": "Moment de la journée"
     },
     "advancedFilters": "Filtres avancés",
+    "showAdvancedFilters": "Afficher les filtres avancés",
+    "hideAdvancedFilters": "Masquer les filtres avancés",
     "verifiedOptions": {
       "any": "Tous statuts",
       "verified": "Vérifiés uniquement",
