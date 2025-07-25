@@ -457,7 +457,7 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 	}
 
 	// Start metrics publisher
-	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+	if proc != nil && proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
 		startSoundLevelMetricsPublisherWithDone(wg, mergedQuitChan, proc.Metrics, soundLevelChan)
 	}
 }
