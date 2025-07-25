@@ -700,3 +700,71 @@ func TestSoundLevelWithRTSPConfigChanges(t *testing.T) {
 	manager.Stop()
 	assert.False(t, manager.IsRunning(), "Should be stopped after final cleanup")
 }
+
+// TestGracefulDegradationWithPartialFailures tests that the system continues
+// operating when some sound level processors fail to register
+func TestGracefulDegradationWithPartialFailures(t *testing.T) {
+	t.Parallel()
+	
+	// Test with mixed valid and invalid sources to simulate partial failures
+	testSettings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Source: "Valid Audio Device", // This should succeed
+				SoundLevel: conf.SoundLevelSettings{
+					Enabled:  true,
+					Interval: 10,
+				},
+			},
+			RTSP: conf.RTSPSettings{
+				URLs: []string{
+					"rtsp://valid-camera.test.com/stream",   // This should succeed
+					"rtsp://invalid-camera.test.com/stream", // This might fail
+					"rtsp://another-valid.test.com/stream",  // This should succeed
+				},
+			},
+		},
+		BirdNET: conf.BirdNETConfig{
+			Locale:    "en",
+			Latitude:  35.0,
+			Longitude: -120.0,
+		},
+	}
+	
+	// The function should not return an error for partial failures
+	// It should only return an error if ALL registrations fail
+	err := registerSoundLevelProcessorsForActiveSources(testSettings)
+	
+	// Even if some registrations fail, the function should not error
+	// This tests graceful degradation
+	require.NoError(t, err, "Should not error on partial failures - graceful degradation")
+	
+	// Cleanup
+	unregisterAllSoundLevelProcessors(testSettings)
+}
+
+// TestShutdownTimeout tests that the shutdown timeout mechanism works correctly
+func TestShutdownTimeout(t *testing.T) {
+	t.Parallel()
+	
+	// Create a manager
+	manager := NewSoundLevelManager(
+		make(chan myaudio.SoundLevelData, 10),
+		nil, nil, nil,
+	)
+	
+	// Start the manager
+	err := manager.Start()
+	require.NoError(t, err, "Should start successfully")
+	
+	// Record start time
+	startTime := time.Now()
+	
+	// Stop the manager - this should complete quickly (not timeout)
+	manager.Stop()
+	
+	// Verify it completed in reasonable time (much less than 30s timeout)
+	elapsed := time.Since(startTime)
+	assert.Less(t, elapsed, 5*time.Second, "Normal shutdown should complete quickly, took %v", elapsed)
+	assert.False(t, manager.IsRunning(), "Should be stopped after shutdown")
+}

@@ -53,10 +53,11 @@ func UpdateFFmpegLogLevel() {
 // registerSoundLevelProcessorIfEnabled registers a sound level processor for the given source
 // if sound level processing is enabled in the configuration. This helper function ensures
 // consistent registration behavior across different stream initialization paths.
-func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) {
+// Returns an error if registration fails, nil if disabled or successful.
+func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) error {
 	settings := conf.Setting()
 	if !settings.Realtime.Audio.SoundLevel.Enabled {
-		return
+		return nil // Not enabled, no error
 	}
 	
 	displayName := privacy.SanitizeRTSPUrl(source)
@@ -66,11 +67,18 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) {
 			"error", err,
 			"operation", "register_sound_level")
 		log.Printf("⚠️ Error registering sound level processor for %s: %v", displayName, err)
+		return errors.New(err).
+			Component("ffmpeg-integration").
+			Category(errors.CategorySystem).
+			Context("operation", "register_sound_level_processor").
+			Context("source", displayName).
+			Build()
 	} else if conf.Setting().Debug {
 		logger.Debug("registered sound level processor",
 			"url", displayName,
 			"operation", "register_sound_level")
 	}
+	return nil
 }
 
 // getGlobalManager returns the global FFmpeg manager instance

@@ -4,6 +4,7 @@ import (
 	"log"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -87,8 +88,22 @@ func (m *SoundLevelManager) Stop() {
 		close(m.doneChan)
 	}
 
-	// Wait for all goroutines to finish
-	m.wg.Wait()
+	// Wait for all goroutines to finish with timeout to prevent hanging
+	done := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All goroutines finished cleanly
+		log.Println("🔇 All sound level monitoring goroutines stopped cleanly")
+	case <-time.After(30 * time.Second):
+		// Timeout occurred - force shutdown
+		log.Println("⚠️ Warning: Sound level monitoring shutdown timed out after 30s, forcing cleanup")
+		// Continue with cleanup anyway - don't hang the system
+	}
 
 	// Unregister all sound level processors
 	settings := conf.Setting()
