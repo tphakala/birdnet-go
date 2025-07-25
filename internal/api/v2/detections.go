@@ -97,7 +97,9 @@ type WeatherInfo struct {
 	Description string  `json:"description,omitempty"`
 	Temperature float64 `json:"temperature,omitempty"`
 	WindSpeed   float64 `json:"windSpeed,omitempty"`
+	WindGust    float64 `json:"windGust,omitempty"`
 	Humidity    int     `json:"humidity,omitempty"`
+	Units       string  `json:"units,omitempty"`
 }
 
 // DetectionRequest represents the query parameters for listing detections
@@ -522,7 +524,9 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 							Description: closestWeather.WeatherDesc,
 							Temperature: closestWeather.Temperature,
 							WindSpeed:   closestWeather.WindSpeed,
+							WindGust:    closestWeather.WindGust,
 							Humidity:    closestWeather.Humidity,
+							Units:       c.getWeatherUnits(),
 						}
 					}
 				}
@@ -1316,5 +1320,25 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 		return "Day"
 	default:
 		return "Night"
+	}
+}
+
+// getWeatherUnits returns the weather units based on the provider and configuration
+func (c *Controller) getWeatherUnits() string {
+	// Read settings with mutex
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+	
+	// Check the weather provider
+	switch c.Settings.Realtime.Weather.Provider {
+	case "openweather":
+		// Return the configured units for OpenWeather
+		return c.Settings.Realtime.Weather.OpenWeather.Units
+	case "yrno":
+		// yr.no always provides metric units
+		return "metric"
+	default:
+		// Default to metric if provider is unknown
+		return "metric"
 	}
 }
