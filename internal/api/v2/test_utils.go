@@ -674,8 +674,8 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	}
 	birdImageCache.SetImageProvider(mockImageProvider)
 
-	// Mock the sun calculator constructor
-	sunCalc := &suncalc.SunCalc{}
+	// Create sun calculator with test coordinates (Helsinki, Finland)
+	sunCalc := suncalc.NewSunCalc(60.1699, 24.9384)
 
 	// Create control channel with buffer to prevent blocking in tests
 	// Size 10 is sufficient for concurrent test scenarios (e.g., TestConcurrentControlRequests uses 5)
