@@ -203,25 +203,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// start audio capture
 	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 
-	// start sound level publishers only if sound level monitoring is enabled
-	if settings.Realtime.Audio.SoundLevel.Enabled {
-		// start sound level MQTT publisher if MQTT is enabled
-		if settings.Realtime.MQTT.Enabled {
-			startSoundLevelMQTTPublisher(&wg, quitChan, proc)
-		}
-
-		// start sound level SSE publisher
-		if httpServer.APIV2 != nil {
-			startSoundLevelSSEPublisher(&wg, quitChan, httpServer.APIV2)
-		}
-
-		// start sound level metrics publisher
-		startSoundLevelMetricsPublisher(&wg, quitChan, metrics)
-
-		log.Println("🔊 Sound level monitoring enabled")
-	} else {
-		log.Println("🔇 Sound level monitoring disabled")
-	}
+	// Sound level monitoring is now managed by the control monitor for hot reload support.
+	// The control monitor will start sound level monitoring if enabled in settings.
 
 	// RTSP health monitoring is now built into the FFmpeg manager
 	if len(settings.Realtime.RTSP.URLs) > 0 {
@@ -245,14 +228,15 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
 
 	// start control monitor for hot reloads
-	startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
 
 	// start quit signal monitor
 	monitorCtrlC(quitChan)
 
-	// Track the HTTP server and system monitor for clean shutdown
+	// Track the HTTP server, system monitor and control monitor for clean shutdown
 	httpServerRef := httpServer
 	systemMonitorRef := systemMonitor
+	ctrlMonitorRef := ctrlMonitor
 
 	// loop to monitor quit and restart channels
 	for {
@@ -260,6 +244,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		case <-quitChan:
 			// Close controlChan to signal that no restart attempts should be made.
 			close(controlChan)
+			// Stop control monitor first to clean up sound level and telemetry
+			if ctrlMonitorRef != nil {
+				ctrlMonitorRef.Stop()
+			}
 			// Stop all analysis buffer monitors
 			bufferManager.RemoveAllMonitors()
 			// Perform HLS resources cleanup
@@ -787,10 +775,11 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics) {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics) *ControlMonitor {
 	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics)
 	ctrlMonitor.httpServer = httpServer
 	ctrlMonitor.Start()
+	return ctrlMonitor
 }
 
 // initializeBuffers handles initialization of all audio-related buffers

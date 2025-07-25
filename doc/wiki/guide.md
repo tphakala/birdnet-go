@@ -21,7 +21,7 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 * Dynamic threshold adjustment for better detection
 * OAuth2 authentication options for security
 * Optional privacy-first error tracking and telemetry with Prometheus-compatible endpoint
-* Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration and configurable debug logging
+* Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration and configurable debug logging (supports both sound card and RTSP sources)
 
 ## Supported Platforms
 
@@ -1251,6 +1251,8 @@ BirdNET-Go includes an advanced sound level monitoring feature that provides det
 - **Acoustic habitat assessment**: Understand the soundscape characteristics of your monitoring location
 - **IoT integration**: Send detailed sound level data to smart home systems or environmental monitoring platforms
 - **Research applications**: Collect standardized acoustic measurements for scientific studies
+
+> **Note**: Sound level calculation supports both sound card and RTSP sources. The monitoring automatically registers processors for all configured audio sources and provides real-time measurements in 1/3rd octave bands.
 
 #### How It Works
 

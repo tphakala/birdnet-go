@@ -57,7 +57,15 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 	}
 
 	// Initialize sound level processor if enabled
-	registerSoundLevelProcessorIfEnabled(url, managerLogger)
+	if err := registerSoundLevelProcessorIfEnabled(url, managerLogger); err != nil {
+		managerLogger.Warn("sound level processor registration failed during stream start",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"operation", "start_stream_sound_level_registration")
+		log.Printf("⚠️ Warning: Sound level processor registration failed for %s: %v", 
+			privacy.SanitizeRTSPUrl(url), err)
+		// Continue with stream start - provides graceful degradation
+	}
 
 	// Create new stream
 	stream := NewFFmpegStream(url, transport, audioChan)
@@ -128,6 +136,19 @@ func (m *FFmpegManager) RestartStream(url string) error {
 			Context("url", privacy.SanitizeRTSPUrl(url)).
 			Context("active_streams", activeStreamCount).
 			Build()
+	}
+
+	// Re-register sound level processor if sound level monitoring is enabled
+	// This ensures processor registration survives stream restarts
+	if err := registerSoundLevelProcessorIfEnabled(url, managerLogger); err != nil {
+		managerLogger.Warn("sound level processor registration failed during stream restart",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"operation", "restart_stream_sound_level_registration")
+		log.Printf("⚠️ Warning: Sound level processor registration failed during restart of %s: %v", 
+			privacy.SanitizeRTSPUrl(url), err)
+		// Continue with stream restart even if sound level registration fails
+		// This provides graceful degradation - stream functionality is preserved
 	}
 
 	stream.Restart(false) // false = automatic restart (health-triggered)

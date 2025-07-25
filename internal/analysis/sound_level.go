@@ -62,6 +62,11 @@ func getSoundLevelLogger() *slog.Logger {
 	return soundLevelLogger
 }
 
+// getSoundLevelServiceLevelVar returns the service level var for dynamic log level control
+func getSoundLevelServiceLevelVar() *slog.LevelVar {
+	return serviceLevelVar
+}
+
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
 // and polishes the data to ensure JSON marshaling succeeds. This prevents errors when publishing
 // to MQTT, SSE, or other systems that require valid JSON.
@@ -452,7 +457,7 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 	}
 
 	// Start metrics publisher
-	if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+	if proc != nil && proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
 		startSoundLevelMetricsPublisherWithDone(wg, mergedQuitChan, proc.Metrics, soundLevelChan)
 	}
 }
@@ -642,31 +647,82 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 		}
 	}
 
-	// Register for each RTSP source
+	// Get actually running RTSP streams to ensure we only register for active streams
+	activeStreams := myaudio.GetRTSPStreamHealth()
+	
+	// Register for each configured RTSP source, but prioritize actually running streams
+	configuredURLs := make(map[string]bool)
 	for _, url := range settings.Realtime.RTSP.URLs {
+		configuredURLs[url] = true
 		totalSources++
 		displayName := conf.SanitizeRTSPUrl(url)
+		
 		if err := myaudio.RegisterSoundLevelProcessor(url, displayName); err != nil {
+			// Safely check stream health status
+			var streamRunning bool
+			var streamExists bool
+			if streamHealth, exists := activeStreams[url]; exists {
+				streamRunning = streamHealth.IsHealthy
+				streamExists = true
+			}
+			
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
 				Context("operation", "register_sound_level_processor").
 				Context("source_type", "rtsp").
 				Context("source_url", url).
+				Context("stream_running", streamRunning).
+				Context("stream_exists", streamExists). // indicates if stream was found in health map
 				Build())
 			log.Printf("❌ Failed to register sound level processor for RTSP source %s: %v", displayName, err)
 		} else {
 			successCount++
-			log.Printf("🔊 Registered sound level processor for RTSP source: %s", displayName)
+			if _, isActive := activeStreams[url]; isActive {
+				log.Printf("🔊 Registered sound level processor for active RTSP source: %s", displayName)
+			} else {
+				log.Printf("🔊 Registered sound level processor for configured RTSP source: %s", displayName)
+			}
 		}
 	}
 
-	// Log summary if there were partial failures
-	if len(errs) > 0 && successCount > 0 {
-		log.Printf("⚠️ Registered %d of %d sound level processors successfully", successCount, totalSources)
+	// Warn about active streams that aren't configured (shouldn't normally happen)
+	for url := range activeStreams {
+		if !configuredURLs[url] {
+			log.Printf("⚠️ Found active RTSP stream not in configuration: %s", conf.SanitizeRTSPUrl(url))
+		}
 	}
 
-	if len(errs) > 0 {
+	// Enhanced logging for different success scenarios
+	switch {
+	case len(errs) == 0:
+		// Complete success
+		log.Printf("✅ Successfully registered all %d sound level processors (active streams: %d)", 
+			totalSources, len(activeStreams))
+	case successCount > 0:
+		// Partial success - provide detailed breakdown
+		failureCount := len(errs)
+		log.Printf("⚠️ Partial success: %d/%d sound level processors registered successfully, %d failed (active streams: %d)", 
+			successCount, totalSources, failureCount, len(activeStreams))
+		
+		// Log failure details for troubleshooting
+		log.Printf("💡 Sound level monitoring will continue with available processors. Failed registrations:")
+		for i, err := range errs {
+			if i < 3 { // Limit to first 3 errors to avoid spam
+				log.Printf("   • Error %d: %v", i+1, err)
+			}
+		}
+		if len(errs) > 3 {
+			log.Printf("   • ... and %d more errors", len(errs)-3)
+		}
+	default:
+		// Complete failure
+		log.Printf("❌ Failed to register any sound level processors (%d total failures)", len(errs))
+	}
+
+	// Return error only if we have complete failure
+	// For partial success, we continue operating with available processors
+	if successCount == 0 && len(errs) > 0 {
 		return errors.Join(errs...)
 	}
 	return nil
