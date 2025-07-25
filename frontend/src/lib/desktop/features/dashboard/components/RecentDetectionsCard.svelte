@@ -272,8 +272,8 @@
           class="grid grid-cols-12 gap-4 text-xs font-medium text-base-content/70 pb-2 border-b border-base-300 px-4"
         >
           <div class="col-span-2">{t('dashboard.recentDetections.headers.dateTime')}</div>
-          <div class="col-span-2">{t('dashboard.recentDetections.headers.commonName')}</div>
-          <div class="col-span-2">{t('dashboard.recentDetections.headers.thumbnail')}</div>
+          <div class="col-span-3">{t('dashboard.recentDetections.headers.species')}</div>
+          <div class="col-span-1">{t('dashboard.recentDetections.headers.confidence')}</div>
           <div class="col-span-2">{t('dashboard.recentDetections.headers.status')}</div>
           <div class="col-span-3">{t('dashboard.recentDetections.headers.recording')}</div>
           <div class="col-span-1">{t('dashboard.recentDetections.headers.actions')}</div>
@@ -300,24 +300,12 @@
                 <div class="text-xs">{detection.date} {detection.time}</div>
               </div>
 
-              <!-- Common Name with Confidence -->
-              <div class="col-span-2 text-sm">
-                <div class="flex flex-col items-center gap-2">
-                  <ConfidenceCircle confidence={detection.confidence} size="sm" />
-                  <div class="text-center">
-                    <div class="font-medium hover:text-blue-600 cursor-pointer">
-                      {detection.commonName}
-                    </div>
-                    <div class="text-xs text-base-content/60">{detection.scientificName}</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Thumbnail -->
-              <div class="col-span-2 relative flex items-center">
-                <div class="thumbnail-container w-full">
+              <!-- Combined Species Column with Confidence -->
+              <div class="col-span-3 rd-species-container">
+                <!-- Thumbnail -->
+                <div class="rd-thumbnail-wrapper">
                   <button
-                    class="flex items-center justify-center"
+                    class="rd-thumbnail-button"
                     onclick={() => handleRowClick(detection)}
                     tabindex="-1"
                   >
@@ -327,14 +315,24 @@
                         detection.scientificName
                       )}"
                       alt={detection.commonName}
-                      class="w-full h-auto rounded-md object-contain"
+                      class="rd-thumbnail-image"
                       onerror={handleBirdImageError}
                     />
                   </button>
-                  <div class="thumbnail-tooltip hidden">
-                    <!-- TODO: Add thumbnail attribution when available -->
+                </div>
+                
+                <!-- Species Names and Confidence -->
+                <div class="rd-species-info-wrapper">
+                  <div class="rd-species-names">
+                    <div class="rd-species-common-name">{detection.commonName}</div>
+                    <div class="rd-species-scientific-name">{detection.scientificName}</div>
                   </div>
                 </div>
+              </div>
+
+              <!-- Confidence -->
+              <div class="col-span-1">
+                <ConfidenceCircle confidence={detection.confidence} size="sm" />
               </div>
 
               <!-- Status -->
@@ -348,7 +346,7 @@
 
               <!-- Recording -->
               <div class="col-span-3">
-                <div class="audio-player-container relative min-w-[50px]">
+                <div class="rd-audio-player-container relative min-w-[50px]">
                   <AudioPlayer
                     audioUrl="/api/v2/audio/{detection.id}"
                     detectionId={detection.id.toString()}
@@ -434,26 +432,144 @@
 <style>
   /* Use existing confidence circle styles from custom.css - no additional styles needed */
 
-  /* Thumbnail Container - matches original template styling */
-  .thumbnail-container {
-    position: relative;
-    display: inline-block;
+  /* RD prefix to avoid conflicts with global CSS */
+  
+  /* Species container layout */
+  .rd-species-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0; /* Allow container to shrink */
   }
 
-  /* Audio Player Container */
-  .audio-player-container {
+  /* Thumbnail wrapper - responsive width */
+  .rd-thumbnail-wrapper {
+    flex: 0 0 45%; /* Reduced to give more space to names */
+    min-width: 40px; /* Minimum size on very small screens */
+    max-width: 120px; /* Maximum size on large screens */
+  }
+
+  /* Thumbnail button - maintains aspect ratio */
+  .rd-thumbnail-button {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4/3; /* Consistent aspect ratio */
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background-color: hsl(var(--b2) / 0.3);
+  }
+
+  /* Thumbnail image */
+  .rd-thumbnail-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* Species info wrapper - contains names and confidence */
+  .rd-species-info-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem; /* Small gap between names and confidence */
+    min-width: 0;
+  }
+
+  /* Species names container */
+  .rd-species-names {
+    flex: 1;
+    min-width: 0; /* Allow text to shrink */
+    text-align: left;
+  }
+
+  /* Common name - wraps instead of truncating */
+  .rd-species-common-name {
+    font-weight: 500;
+    line-height: 1.2;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    cursor: pointer;
+  }
+  
+  .rd-species-common-name:hover {
+    color: hsl(var(--p));
+  }
+
+  /* Scientific name - smaller, can wrap on very narrow screens */
+  .rd-species-scientific-name {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    color: hsl(var(--bc) / 0.6);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+
+  /* Confidence indicator - stays close to species names */
+  .rd-confidence-indicator {
+    flex: 0 0 auto;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .rd-species-container {
+      gap: 0.375rem;
+    }
+    
+    .rd-thumbnail-wrapper {
+      flex: 0 0 35%; /* Slightly larger on mobile */
+    }
+    
+    .rd-species-common-name {
+      font-size: 0.875rem;
+    }
+    
+    .rd-species-scientific-name {
+      font-size: 0.7rem;
+    }
+    
+    .rd-species-info-wrapper {
+      gap: 0.25rem;
+    }
+  }
+
+  /* RD Audio Player Container */
+  .rd-audio-player-container {
     position: relative;
     width: 100%;
+    background: linear-gradient(to bottom, rgba(128, 128, 128, 0.4), rgba(128, 128, 128, 0.1));
+    border-radius: 0.5rem;
+  }
+  
+  /* Audio player skeleton (before content loads) */
+  .rd-audio-player-container::before {
+    content: "";
+    width: 1px;
+    margin-left: -1px;
+    float: left;
+    height: 0;
+    padding-top: 50%; /* Maintains a 2:1 ratio */
+  }
+  
+  .rd-audio-player-container::after {
+    content: "";
+    display: table;
+    clear: both;
   }
 
   /* Ensure AudioPlayer fills container width */
-  .audio-player-container :global(.group) {
+  .rd-audio-player-container :global(.group) {
     width: 100% !important;
     height: auto !important;
   }
 
   /* Responsive spectrogram sizing - let it maintain natural aspect ratio */
-  .audio-player-container :global(img) {
+  .rd-audio-player-container :global(img) {
     object-fit: contain !important;
     height: auto !important;
     width: 100% !important;
