@@ -194,7 +194,7 @@ func TestSoundLevelManagerDataFlow(t *testing.T) {
 				assert.NotZero(t, data.Timestamp)
 				assert.NotEmpty(t, data.Source)
 				assert.NotEmpty(t, data.Name)
-				assert.Greater(t, len(data.OctaveBands), 0)
+				assert.NotEmpty(t, data.OctaveBands)
 			case <-timeout:
 				return
 			}
@@ -254,9 +254,9 @@ func TestSoundLevelManagerConcurrentOperations(t *testing.T) {
 	
 	// Start multiple goroutines performing different operations
 	operations := []func(){
-		func() { manager.Start() },
+		func() { _ = manager.Start() },
 		func() { manager.Stop() },
-		func() { manager.Restart() },
+		func() { _ = manager.Restart() },
 		func() { _ = manager.IsRunning() },
 	}
 	
@@ -440,7 +440,7 @@ func BenchmarkSoundLevelManagerOperations(b *testing.B) {
 	b.Run("Start-Stop", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			manager.Start()
+			_ = manager.Start()
 			manager.Stop()
 		}
 	})
@@ -452,7 +452,7 @@ func BenchmarkSoundLevelManagerOperations(b *testing.B) {
 		
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			manager.Restart()
+			_ = manager.Restart()
 		}
 		manager.Stop()
 	})

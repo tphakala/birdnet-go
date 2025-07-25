@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -111,7 +112,7 @@ func TestHotReloadScenarios(t *testing.T) {
 			
 			// Start if expected to be running initially
 			if scenario.setupSettings != nil {
-				manager.Start()
+				_ = manager.Start()
 			}
 			
 			// Apply configuration changes
@@ -119,7 +120,7 @@ func TestHotReloadScenarios(t *testing.T) {
 			
 			// Simulate hot reload
 			err := manager.Restart()
-			assert.NoError(t, err, "Restart should not error")
+			require.NoError(t, err, "Restart should not error")
 			
 			// Verify final state
 			assert.Equal(t, scenario.expectRunning, manager.IsRunning(),
@@ -231,7 +232,7 @@ func TestSoundLevelDataValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateSoundLevelData(&tc.data)
 			if tc.shouldError {
-				assert.Error(t, err, "Should return error for invalid data")
+				require.Error(t, err, "Should return error for invalid data")
 				if tc.errorContains != "" {
 					assert.Contains(t, err.Error(), tc.errorContains)
 				}
@@ -352,8 +353,7 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 	
 	// Simulate control monitor handler
 	handleSignal := func(signal string) {
-		switch signal {
-		case "reconfigure_sound_level":
+		if signal == "reconfigure_sound_level" {
 			settings := conf.Setting()
 			if settings == nil {
 				return
