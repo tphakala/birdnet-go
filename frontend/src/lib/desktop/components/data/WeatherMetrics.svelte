@@ -335,7 +335,7 @@
         </svg>
       {/if}
       <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
-        {windSpeed.toFixed(1)}{windGust !== undefined && windGust > windSpeed ? `(${windGust.toFixed(1)})` : ''}
+        {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed ? `(${windGust.toFixed(0)})` : ''}
         {windSpeedUnit()}
       </span>
     </div>
