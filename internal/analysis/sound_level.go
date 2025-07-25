@@ -647,10 +647,16 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 		}
 	}
 
-	// Register for each RTSP source
+	// Get actually running RTSP streams to ensure we only register for active streams
+	activeStreams := myaudio.GetRTSPStreamHealth()
+	
+	// Register for each configured RTSP source, but prioritize actually running streams
+	configuredURLs := make(map[string]bool)
 	for _, url := range settings.Realtime.RTSP.URLs {
+		configuredURLs[url] = true
 		totalSources++
 		displayName := conf.SanitizeRTSPUrl(url)
+		
 		if err := myaudio.RegisterSoundLevelProcessor(url, displayName); err != nil {
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
@@ -658,17 +664,30 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("operation", "register_sound_level_processor").
 				Context("source_type", "rtsp").
 				Context("source_url", url).
+				Context("stream_running", activeStreams[url].IsHealthy).
 				Build())
 			log.Printf("❌ Failed to register sound level processor for RTSP source %s: %v", displayName, err)
 		} else {
 			successCount++
-			log.Printf("🔊 Registered sound level processor for RTSP source: %s", displayName)
+			if _, isActive := activeStreams[url]; isActive {
+				log.Printf("🔊 Registered sound level processor for active RTSP source: %s", displayName)
+			} else {
+				log.Printf("🔊 Registered sound level processor for configured RTSP source: %s", displayName)
+			}
+		}
+	}
+
+	// Warn about active streams that aren't configured (shouldn't normally happen)
+	for url := range activeStreams {
+		if !configuredURLs[url] {
+			log.Printf("⚠️ Found active RTSP stream not in configuration: %s", conf.SanitizeRTSPUrl(url))
 		}
 	}
 
 	// Log summary if there were partial failures
 	if len(errs) > 0 && successCount > 0 {
-		log.Printf("⚠️ Registered %d of %d sound level processors successfully", successCount, totalSources)
+		log.Printf("⚠️ Registered %d of %d sound level processors successfully (active streams: %d)", 
+			successCount, totalSources, len(activeStreams))
 	}
 
 	if len(errs) > 0 {

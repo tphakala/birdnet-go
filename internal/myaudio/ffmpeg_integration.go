@@ -105,9 +105,8 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	// Update logger level based on current configuration
 	UpdateFFmpegLogLevel()
 	
-	// Initialize sound level processor if enabled
-	registerSoundLevelProcessorIfEnabled(url, integrationLogger)
-	defer UnregisterSoundLevelProcessor(url)
+	// Note: Sound level processor registration is handled by FFmpegManager.StartStream()
+	// to avoid duplicate registrations and ensure proper lifecycle management
 
 	// Check FFmpeg availability
 	if conf.GetFfmpegBinaryName() == "" {

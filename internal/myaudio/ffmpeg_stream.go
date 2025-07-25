@@ -707,10 +707,8 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		Timestamp:  time.Now(),
 	}
 
-	// Skip sound level processing for RTSP streams for now
-	// TODO: Implement proper sound level processor registration for dynamic RTSP streams
-	// Process sound level if enabled (currently disabled for RTSP)
-	if false && conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+	// Process sound level if enabled
+	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
 		if soundLevel, err := ProcessSoundLevelData(s.url, data); err != nil {
 			// Log as warning if it's a registration issue, debug otherwise
 			// Skip logging for normal conditions (interval incomplete, no data)

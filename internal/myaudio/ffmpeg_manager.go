@@ -130,6 +130,10 @@ func (m *FFmpegManager) RestartStream(url string) error {
 			Build()
 	}
 
+	// Re-register sound level processor if sound level monitoring is enabled
+	// This ensures processor registration survives stream restarts
+	registerSoundLevelProcessorIfEnabled(url, managerLogger)
+
 	stream.Restart(false) // false = automatic restart (health-triggered)
 	
 	managerLogger.Info("restarted FFmpeg stream",

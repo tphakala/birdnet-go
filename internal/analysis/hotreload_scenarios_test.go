@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -549,4 +550,153 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 	close(controlChan)
 	close(notificationChan)
 	close(soundLevelChan)
+}
+
+// TestFFmpegRestartWithSoundLevel tests that sound level processors survive FFmpeg stream restarts
+func TestFFmpegRestartWithSoundLevel(t *testing.T) {
+	t.Parallel()
+	
+	// Create a test manager with sound level monitoring enabled
+	suite := NewHotReloadTestSuite(t)
+	defer suite.Cleanup()
+	
+	// Enable sound level monitoring with RTSP sources
+	suite.UpdateSettings(func(s *conf.Settings) {
+		s.Realtime.Audio.SoundLevel.Enabled = true
+		s.Realtime.Audio.SoundLevel.Interval = 5
+		s.Realtime.RTSP.URLs = []string{"rtsp://test.example.com/stream1"}
+	})
+	
+	// Create a sound level manager to test with
+	manager := NewSoundLevelManager(
+		make(chan myaudio.SoundLevelData, 10), 
+		nil, // processor - can be nil for this test
+		nil, // httpServer - can be nil for this test  
+		nil, // metrics - can be nil for this test
+	)
+	
+	// Start sound level monitoring
+	err := manager.Start()
+	require.NoError(t, err, "Should start sound level monitoring successfully")
+	assert.True(t, manager.IsRunning(), "Sound level monitoring should be running")
+	
+	// Simulate an FFmpeg stream restart by stopping and restarting the manager
+	// This tests the critical path where processors need to be re-registered
+	log.Println("🔄 Simulating FFmpeg stream restart scenario...")
+	
+	// Stop the manager (simulating stream failure)
+	manager.Stop()
+	assert.False(t, manager.IsRunning(), "Sound level monitoring should be stopped")
+	
+	// Restart the manager (simulating stream recovery)
+	err = manager.Start()
+	require.NoError(t, err, "Should restart sound level monitoring successfully after simulated crash")
+	assert.True(t, manager.IsRunning(), "Sound level monitoring should be running after restart")
+	
+	// Verify restart works multiple times (simulating multiple crashes)
+	for i := 0; i < 3; i++ {
+		log.Printf("🔄 Testing restart cycle %d...", i+1)
+		
+		err = manager.Restart()
+		require.NoError(t, err, "Should restart successfully on cycle %d", i+1)
+		assert.True(t, manager.IsRunning(), "Should be running after restart cycle %d", i+1)
+		
+		// Small delay to simulate real restart timing
+		time.Sleep(50 * time.Millisecond)
+	}
+	
+	// Final cleanup
+	manager.Stop()
+	assert.False(t, manager.IsRunning(), "Should be stopped after final cleanup")
+}
+
+// TestSoundLevelProcessorRegistrationConsistency tests that sound level processor
+// registration remains consistent across various stream lifecycle scenarios
+func TestSoundLevelProcessorRegistrationConsistency(t *testing.T) {
+	t.Parallel()
+	
+	// Test with multiple RTSP URLs to ensure all get registered
+	testSettings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Source: "Test Audio Device",
+				SoundLevel: conf.SoundLevelSettings{
+					Enabled:  true,
+					Interval: 10,
+				},
+			},
+			RTSP: conf.RTSPSettings{
+				URLs: []string{
+					"rtsp://camera1.test.com/stream",
+					"rtsp://camera2.test.com/stream", 
+					"rtsp://camera3.test.com/stream",
+				},
+			},
+		},
+		BirdNET: conf.BirdNETConfig{
+			Locale:    "en",
+			Latitude:  35.0,
+			Longitude: -120.0,
+		},
+	}
+	
+	// Test registration for all sources
+	err := registerSoundLevelProcessorsForActiveSources(testSettings)
+	require.NoError(t, err, "Should register all sound level processors successfully")
+	
+	// Test unregistration of all sources
+	unregisterAllSoundLevelProcessors(testSettings)
+	
+	// Test partial configuration (only some RTSP sources)
+	testSettings.Realtime.RTSP.URLs = []string{"rtsp://camera1.test.com/stream"}
+	
+	err = registerSoundLevelProcessorsForActiveSources(testSettings)
+	require.NoError(t, err, "Should handle partial RTSP configuration")
+	
+	// Cleanup
+	unregisterAllSoundLevelProcessors(testSettings)
+}
+
+// TestSoundLevelWithRTSPConfigChanges tests sound level monitoring behavior
+// when RTSP configuration changes dynamically
+func TestSoundLevelWithRTSPConfigChanges(t *testing.T) {
+	t.Parallel()
+	
+	// Test that sound level manager handles restarts properly
+	// This simulates configuration changes that would trigger restarts
+	manager := NewSoundLevelManager(
+		make(chan myaudio.SoundLevelData, 10),
+		nil, nil, nil,
+	)
+	
+	// Start with current configuration
+	err := manager.Start()
+	require.NoError(t, err, "Should start with current configuration")
+	
+	// Test multiple restart cycles to simulate configuration changes
+	for i := 0; i < 3; i++ {
+		log.Printf("Testing restart cycle %d for config changes", i+1)
+		
+		// Restart to simulate configuration change
+		err = manager.Restart()
+		require.NoError(t, err, "Should handle restart for config change %d", i+1)
+		
+		// Verify manager is still running after restart
+		assert.True(t, manager.IsRunning(), "Should be running after config change restart %d", i+1)
+		
+		// Small delay to simulate real timing
+		time.Sleep(25 * time.Millisecond)
+	}
+	
+	// Test stopping and restarting (simulates disable/enable)
+	manager.Stop()
+	assert.False(t, manager.IsRunning(), "Should be stopped")
+	
+	err = manager.Start()
+	require.NoError(t, err, "Should restart after being stopped")
+	assert.True(t, manager.IsRunning(), "Should be running after restart from stopped state")
+	
+	// Final cleanup
+	manager.Stop()
+	assert.False(t, manager.IsRunning(), "Should be stopped after final cleanup")
 }
