@@ -354,6 +354,7 @@ func TestGetDetection(t *testing.T) {
 			detectionID: "1",
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
