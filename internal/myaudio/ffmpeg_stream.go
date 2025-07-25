@@ -231,6 +231,10 @@ type FFmpegStream struct {
 	// Dropped data tracking
 	lastDropLogTime time.Time
 	dropLogMu       sync.Mutex
+	
+	// Sound level processor registration tracking
+	soundLevelNotRegisteredLogMu   sync.Mutex
+	lastSoundLevelNotRegisteredLog time.Time
 }
 
 // threadSafeWriter wraps a bytes.Buffer with mutex protection for concurrent access
@@ -261,6 +265,7 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		lastDataTime:    time.Now(),
 		dataRateCalc:    newDataRateCalculator(dataRateWindowSize),
 		lastDropLogTime: time.Now(),
+		lastSoundLevelNotRegisteredLog: time.Now().Add(-dropLogInterval), // Allow immediate first log
 	}
 }
 
@@ -708,11 +713,18 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 			// Log as warning if it's a registration issue, debug otherwise
 			// Skip logging for normal conditions (interval incomplete, no data)
 			if errors.Is(err, ErrSoundLevelProcessorNotRegistered) {
-				streamLogger.Warn("sound level processor not registered",
-					"url", privacy.SanitizeRTSPUrl(s.url),
-					"error", err,
-					"operation", "process_sound_level")
-				log.Printf("⚠️ Sound level processor not registered for %s: %v", privacy.SanitizeRTSPUrl(s.url), err)
+				// Rate limit this specific log message to prevent flooding
+				s.soundLevelNotRegisteredLogMu.Lock()
+				now := time.Now()
+				if now.Sub(s.lastSoundLevelNotRegisteredLog) >= dropLogInterval {
+					s.lastSoundLevelNotRegisteredLog = now
+					streamLogger.Warn("sound level processor not registered",
+						"url", privacy.SanitizeRTSPUrl(s.url),
+						"error", err,
+						"operation", "process_sound_level")
+					log.Printf("⚠️ Sound level processor not registered for %s: %v (further messages suppressed)", privacy.SanitizeRTSPUrl(s.url), err)
+				}
+				s.soundLevelNotRegisteredLogMu.Unlock()
 			} else if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
 				if conf.Setting().Debug {
 					streamLogger.Debug("failed to process sound level data",

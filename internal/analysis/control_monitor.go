@@ -40,10 +40,8 @@ type ControlMonitor struct {
 	unifiedAudioMutex    sync.Mutex
 	unifiedAudioWg       sync.WaitGroup
 
-	// Track sound level publisher goroutines
-	soundLevelPublishersWg    *sync.WaitGroup
-	soundLevelPublishersDone  chan struct{}
-	soundLevelPublishersMutex sync.Mutex
+	// Sound level manager for lifecycle management
+	soundLevelManager *SoundLevelManager
 	
 	// Track telemetry endpoint
 	telemetryEndpoint      *observability.Endpoint
@@ -55,7 +53,7 @@ type ControlMonitor struct {
 
 // NewControlMonitor creates a new ControlMonitor instance
 func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics) *ControlMonitor {
-	return &ControlMonitor{
+	cm := &ControlMonitor{
 		wg:                     wg,
 		controlChan:            controlChan,
 		quitChan:               quitChan,
@@ -66,9 +64,12 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		soundLevelChan:         soundLevelChan,
 		proc:                   proc,
 		bn:                     proc.Bn,
-		soundLevelPublishersWg: &sync.WaitGroup{},
 		metrics:                metrics,
 	}
+	
+	// Initialize the sound level manager but don't start it yet
+	// It will be started by handleReconfigureSoundLevel based on settings
+	return cm
 }
 
 // Start begins monitoring control signals
@@ -76,7 +77,44 @@ func (cm *ControlMonitor) Start() {
 	// Initialize telemetry endpoint if enabled
 	cm.initializeTelemetryIfEnabled()
 	
+	// Initialize sound level monitoring if enabled
+	cm.initializeSoundLevelIfEnabled()
+	
 	go cm.monitor()
+}
+
+// Stop stops the control monitor and cleans up resources
+func (cm *ControlMonitor) Stop() {
+	// Stop sound level monitoring if running
+	if cm.soundLevelManager != nil {
+		cm.soundLevelManager.Stop()
+	}
+	
+	// Stop telemetry endpoint if running
+	cm.telemetryEndpointMutex.Lock()
+	if cm.telemetryEndpoint != nil && cm.telemetryQuitChan != nil {
+		close(cm.telemetryQuitChan)
+		cm.telemetryWg.Wait()
+		cm.telemetryEndpoint = nil
+		cm.telemetryQuitChan = nil
+	}
+	cm.telemetryEndpointMutex.Unlock()
+}
+
+// initializeSoundLevelIfEnabled starts sound level monitoring if it's enabled in settings
+func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
+	settings := conf.Setting()
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		// Initialize the sound level manager
+		if cm.soundLevelManager == nil {
+			cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.httpServer, cm.metrics)
+		}
+		
+		// Start sound level monitoring
+		if err := cm.soundLevelManager.Start(); err != nil {
+			log.Printf("⚠️ Warning: Failed to start sound level monitoring: %v", err)
+		}
+	}
 }
 
 // initializeTelemetryIfEnabled starts the telemetry endpoint if it's enabled in settings.
@@ -408,40 +446,21 @@ func (cm *ControlMonitor) notifyError(message string, err error) {
 // handleReconfigureSoundLevel reconfigures sound level monitoring
 func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	log.Printf("🔄 Reconfiguring sound level monitoring...")
-	settings := conf.Setting()
-
-	// Lock the mutex to ensure thread-safe access
-	cm.soundLevelPublishersMutex.Lock()
-	defer cm.soundLevelPublishersMutex.Unlock()
-
-	// Check if we need to stop existing publishers
-	if cm.soundLevelPublishersDone != nil {
-		// Signal existing publishers to stop
-		close(cm.soundLevelPublishersDone)
-		// Wait for all publishers to finish
-		cm.soundLevelPublishersWg.Wait()
-		cm.soundLevelPublishersDone = nil
+	
+	// Initialize the sound level manager if not already created
+	if cm.soundLevelManager == nil {
+		cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.httpServer, cm.metrics)
 	}
-
-	// Always unregister existing sound level processors first
-	// This ensures that when the interval changes, processors are recreated with the new interval
-	unregisterAllSoundLevelProcessors(settings)
-
-	// If sound level monitoring is enabled, start new publishers
+	
+	// Restart sound level monitoring with new settings
+	if err := cm.soundLevelManager.Restart(); err != nil {
+		log.Printf("❌ Error reconfiguring sound level monitoring: %v", err)
+		cm.notifyError("Failed to reconfigure sound level monitoring", err)
+		return
+	}
+	
+	settings := conf.Setting()
 	if settings.Realtime.Audio.SoundLevel.Enabled {
-		// Register sound level processors for active audio sources
-		// This will create new processors with the updated interval setting
-		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
-			log.Printf("⚠️ Warning: Failed to register some sound level processors: %v", err)
-			// Continue anyway, some sources might work
-		}
-
-		// Create a new done channel
-		cm.soundLevelPublishersDone = make(chan struct{})
-
-		// Start sound level publishers
-		startSoundLevelPublishers(cm.soundLevelPublishersWg, cm.soundLevelPublishersDone, cm.proc, cm.soundLevelChan, cm.httpServer)
-
 		log.Printf("✅ Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval)
 		cm.notifySuccess(fmt.Sprintf("Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval))
 	} else {

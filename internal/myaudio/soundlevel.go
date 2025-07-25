@@ -563,6 +563,15 @@ func getSoundLevelLogger() *slog.Logger {
 	return soundLevelLogger
 }
 
+// UpdateSoundLevelDebugSetting updates the debug log level for sound level processing
+func UpdateSoundLevelDebugSetting(debug bool) {
+	if debug {
+		soundLevelLevelVar.Set(slog.LevelDebug)
+	} else {
+		soundLevelLevelVar.Set(slog.LevelInfo)
+	}
+}
+
 // RegisterSoundLevelProcessor registers a sound level processor for a source
 func RegisterSoundLevelProcessor(source, name string) error {
 	soundLevelProcessorMutex.Lock()
