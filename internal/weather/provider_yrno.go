@@ -36,6 +36,7 @@ type YrResponse struct {
 						RelHumidity    float64 `json:"relative_humidity"`
 						WindSpeed      float64 `json:"wind_speed"`
 						WindDirection  float64 `json:"wind_from_direction"`
+						WindGust       float64 `json:"wind_speed_of_gust"`
 					} `json:"details"`
 				} `json:"instant"`
 				Next1Hours struct {
@@ -231,7 +232,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 		Wind: Wind{
 			Speed: current.Data.Instant.Details.WindSpeed,
 			Deg:   int(current.Data.Instant.Details.WindDirection),
-			// Gust might be available
+			Gust:  current.Data.Instant.Details.WindGust,
 		},
 		Precipitation: Precipitation{
 			Amount: current.Data.Next1Hours.Details.PrecipitationAmount,
