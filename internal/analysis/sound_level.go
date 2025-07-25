@@ -62,6 +62,11 @@ func getSoundLevelLogger() *slog.Logger {
 	return soundLevelLogger
 }
 
+// getSoundLevelServiceLevelVar returns the service level var for dynamic log level control
+func getSoundLevelServiceLevelVar() *slog.LevelVar {
+	return serviceLevelVar
+}
+
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
 // and polishes the data to ensure JSON marshaling succeeds. This prevents errors when publishing
 // to MQTT, SSE, or other systems that require valid JSON.
