@@ -182,6 +182,7 @@
           temperature={detection.weather.temperature}
           windSpeed={detection.weather.windSpeed}
           windGust={detection.weather.windGust}
+          units={detection.weather.units}
           size="md"
           className="ml-1"
         />

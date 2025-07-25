@@ -37,6 +37,7 @@
     temperature?: number;
     windSpeed?: number;
     windGust?: number;
+    units?: 'metric' | 'imperial' | 'standard';
     size?: 'sm' | 'md' | 'lg';
     className?: string;
   }
@@ -47,7 +48,8 @@
     timeOfDay = 'day',
     temperature, 
     windSpeed,
-    windGust, 
+    windGust,
+    units = 'metric', 
     size = 'sm', 
     className = '' 
   }: Props = $props();
@@ -82,12 +84,21 @@
   const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 200);
   const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 300);
 
-  // TODO: When user preferences for measurement units are implemented,
-  // convert temperature and wind speed values here based on user's selected system.
-  // For now, the backend provides metric units (°C, m/s) and the UI displays them as-is.
-  // Future enhancement: check user preference and convert if imperial units are selected:
-  // - Temperature: °C to °F conversion
-  // - Wind speed: m/s to mph conversion
+  // Get the appropriate unit labels based on the units setting
+  const temperatureUnit = $derived(() => {
+    switch (units) {
+      case 'imperial':
+        return '°F';
+      case 'standard':
+        return 'K';
+      default:
+        return '°C';
+    }
+  });
+  
+  const windSpeedUnit = $derived(() => {
+    return units === 'imperial' ? 'mph' : 'm/s';
+  });
 
   // Temperature color calculation
   const tempColor = $derived(() => {
@@ -262,7 +273,7 @@
         </svg>
       {/if}
       <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
-        {temperature.toFixed(1)}{t('detections.weather.units.temperature')}
+        {temperature.toFixed(1)}{temperatureUnit()}
       </span>
     </div>
   {/if}
@@ -325,7 +336,7 @@
       {/if}
       <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
         {windSpeed.toFixed(1)}{windGust !== undefined && windGust > windSpeed ? `(${windGust.toFixed(1)})` : ''}
-        {t('detections.weather.units.windSpeed')}
+        {windSpeedUnit()}
       </span>
     </div>
   {/if}

@@ -93,6 +93,7 @@ export interface Weather {
   windSpeed?: number;
   windGust?: number;
   humidity?: number;
+  units?: 'metric' | 'imperial' | 'standard';
 }
 
 export interface TimeOfDayResponse {
