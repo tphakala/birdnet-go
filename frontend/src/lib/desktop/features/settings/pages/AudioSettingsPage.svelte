@@ -699,9 +699,6 @@
           </div>
 
           <SettingsNote>
-            {#snippet icon()}
-              {@html alertIconsSvg.info}
-            {/snippet}
             <p class="font-semibold">
               {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
             </p>
