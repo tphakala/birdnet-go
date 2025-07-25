@@ -97,6 +97,7 @@ type WeatherInfo struct {
 	Description string  `json:"description,omitempty"`
 	Temperature float64 `json:"temperature,omitempty"`
 	WindSpeed   float64 `json:"windSpeed,omitempty"`
+	WindGust    float64 `json:"windGust,omitempty"`
 	Humidity    int     `json:"humidity,omitempty"`
 }
 
@@ -522,6 +523,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 							Description: closestWeather.WeatherDesc,
 							Temperature: closestWeather.Temperature,
 							WindSpeed:   closestWeather.WindSpeed,
+							WindGust:    closestWeather.WindGust,
 							Humidity:    closestWeather.Humidity,
 						}
 					}

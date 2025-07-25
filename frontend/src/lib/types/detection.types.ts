@@ -91,6 +91,7 @@ export interface Weather {
   weatherMain?: string;
   temperature?: number;
   windSpeed?: number;
+  windGust?: number;
   humidity?: number;
 }
 
