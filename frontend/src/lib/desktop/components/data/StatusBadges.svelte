@@ -15,10 +15,12 @@
   - Handles multiple verification states
   - Consistent styling with design system
   - Responsive display
+  - Size variants for different contexts
   
   Props:
   - detection: Detection - The detection object containing verification status
   - className?: string - Additional CSS classes
+  - size?: 'sm' | 'md' | 'lg' - Badge size variant (default: 'md')
   
   Status Types:
   - correct: Green badge for verified correct detections
@@ -30,6 +32,7 @@
   import type { Detection } from '$lib/types/detection.types';
 
   type Size = 'sm' | 'md' | 'lg';
+  type VerificationStatus = Detection['verified'];
 
   interface Props {
     detection: Detection;
@@ -45,22 +48,22 @@
     lg: 'status-badge-lg',
   };
 
-  const statusBadgeClassMap: Record<string, string> = {
+  const statusBadgeClassMap: Partial<Record<VerificationStatus, string>> = {
     correct: 'status-badge correct',
     false_positive: 'status-badge false',
   };
 
-  const statusTextMap: Record<string, string> = {
+  const statusTextMap: Partial<Record<VerificationStatus, string>> = {
     correct: 'correct',
     false_positive: 'false',
   };
 
-  function getStatusBadgeClass(verified: string): string {
+  function getStatusBadgeClass(verified: VerificationStatus): string {
     const baseClass = statusBadgeClassMap[verified] || 'status-badge unverified';
     return `${baseClass} ${sizeClasses[size]}`;
   }
 
-  function getStatusText(verified: string): string {
+  function getStatusText(verified: VerificationStatus): string {
     return statusTextMap[verified] || 'unverified';
   }
 </script>
@@ -98,17 +101,17 @@
   /* Size variants */
   .status-badge-sm {
     padding: 0.125rem 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.625rem; /* 10px - smaller for compact contexts */
   }
 
   .status-badge-md {
     padding: 0.25rem 0.75rem;
-    font-size: 0.75rem;
+    font-size: 0.75rem; /* 12px - default size */
   }
 
   .status-badge-lg {
     padding: 0.5rem 1rem;
-    font-size: 0.875rem;
+    font-size: 0.875rem; /* 14px - larger for emphasis */
   }
 
   .status-badge.unverified {
