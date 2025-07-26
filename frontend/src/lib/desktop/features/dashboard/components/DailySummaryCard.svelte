@@ -305,7 +305,7 @@
                   {#if column.key === 'common_name'}
                     {column.header}
                     {#if sortedData.length > 0}
-                      <span class="species-ball bg-blue-500 text-white ml-1"
+                      <span class="species-ball bg-primary text-primary-content ml-1"
                         >{sortedData.length}</span
                       >
                     {/if}
@@ -467,17 +467,15 @@
                       {@const maxCount = Math.max(...sortedData.map(d => d.count))}
                       {@const width = (item.count / maxCount) * 100}
                       {@const roundedWidth = Math.round(width / 5) * 5}
-                      <div
-                        class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative"
-                      >
+                      <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
                         <div
-                          class="progress progress-primary bg-gray-400 dark:bg-gray-400"
+                          class="progress progress-primary bg-primary"
                           style:width="{roundedWidth}%"
                         >
                           {#if width >= 45 && width <= 59}
                             <!-- Total detections count for large bars -->
                             <span
-                              class="text-2xs text-gray-100 dark:text-base-300 absolute right-1 top-1/2 transform -translate-y-1/2"
+                              class="text-2xs text-primary-content absolute right-1 top-1/2 transform -translate-y-1/2"
                               >{item.count}</span
                             >
                           {/if}
@@ -486,8 +484,8 @@
                           <!-- Total detections count for small bars -->
                           <span
                             class="text-2xs {width > 59
-                              ? 'text-gray-100 dark:text-base-300'
-                              : 'text-gray-400 dark:text-base-400'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+                              ? 'text-primary-content'
+                              : 'text-base-content/60'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
                             >{item.count}</span
                           >
                         {/if}
@@ -575,6 +573,320 @@
 </section>
 
 <style>
+  /* ========================================================================
+     Table & Heatmap Styles (moved from custom.css)
+     ======================================================================== */
+
+  /* Sticky header for tables */
+  :global(thead.sticky-header) {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: 2rem;
+    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+  }
+
+  /* Table cell display settings */
+  :global(.hour-header),
+  :global(.hour-data),
+  :global(.hourly-count) {
+    display: none;
+  }
+
+  :global(.bi-hourly-count),
+  :global(.six-hourly-count) {
+    display: none;
+  }
+
+  /* Theme-specific borders for hour data cells */
+  :global([data-theme='light'] .hour-data:not(.heatmap-color-0)) {
+    position: relative;
+    z-index: 1;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-clip: padding-box;
+    border-collapse: collapse;
+  }
+
+  :global([data-theme='dark'] .hour-data:not(.heatmap-color-0)) {
+    position: relative;
+    z-index: 1;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background-clip: padding-box;
+    border-collapse: collapse;
+  }
+
+  /* Flex alignment for links inside hour cells */
+  :global(.hour-data a) {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Remove extra borders in specific table rows */
+  :global(.table :where(thead tr, tbody tr:not(:last-child), tbody tr:first-child:last-child)) {
+    border-bottom-width: 0;
+  }
+
+  :global(.table :where(thead td, thead th)) {
+    border-bottom: 1px solid var(--fallback-b2, oklch(var(--b2) / var(--tw-border-opacity)));
+  }
+
+  /* Responsive table adjustments */
+  /* Extra large screens (≥1400px): show hourly view and total detections */
+  @media (min-width: 1400px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: table-cell;
+    }
+  }
+
+  /* Large screens (1200px-1399px): show hourly view, hide total detections */
+  @media (min-width: 1200px) and (max-width: 1399px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Medium-large screens (1024px-1199px): show hourly view, hide total detections */
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count) {
+      padding-left: 0;
+      padding-right: 0;
+      font-size: 0.7rem;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Medium screens (768px-1023px): show bi-hourly */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: table-cell;
+    }
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: none;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly) {
+      padding-left: 0;
+      padding-right: 0;
+      font-size: 0.7rem;
+    }
+  }
+
+  /* Small screens (mobile, <768px): show bi-hourly */
+  @media (max-width: 767px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: table-cell;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly) {
+      padding-left: 0;
+      padding-right: 0;
+    }
+  }
+
+  /* Extra small screens (<480px): show six-hourly */
+  @media (max-width: 479px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: none;
+    }
+    :global(.hour-header.six-hourly),
+    :global(.hour-data.six-hourly),
+    :global(.six-hourly-count) {
+      display: table-cell;
+    }
+  }
+
+  /* Consistent table cell sizing */
+  :global(.hour-data) {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    line-height: 2rem;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  :global(.table tr) {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+  }
+
+  :global(.table td),
+  :global(.table th) {
+    box-sizing: border-box;
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    vertical-align: middle;
+  }
+
+  /* Make hour cells more compact by default */
+  :global(.hour-header),
+  :global(.hour-data) {
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+
+  /* ========================================================================
+     Heatmap Colors (moved from custom.css)
+     ======================================================================== */
+
+  /* Light theme heatmap colors */
+  :root {
+    --heatmap-color-0: #f0f9fc;
+    --heatmap-color-1: #e0f3f8;
+    --heatmap-color-2: #ccebf6;
+    --heatmap-color-3: #99d7ed;
+    --heatmap-color-4: #66c2e4;
+    --heatmap-color-5: #33ade1;
+    --heatmap-color-6: #0099d8;
+    --heatmap-color-7: #0077be;
+    --heatmap-color-8: #005595;
+    --heatmap-color-9: #003366;
+  }
+
+  /* Dark theme heatmap colors */
+  :global([data-theme='dark']) {
+    --heatmap-color-0: #001a20;
+    --heatmap-color-1: #002933;
+    --heatmap-color-2: #004466;
+    --heatmap-color-3: #005c80;
+    --heatmap-color-4: #007399;
+    --heatmap-color-5: #008bb3;
+    --heatmap-color-6: #33a3cc;
+    --heatmap-color-7: #66b8e2;
+    --heatmap-color-8: #99cde9;
+    --heatmap-color-9: #cce3f1;
+  }
+
+  /* Dark theme heatmap text colors */
+  :global([data-theme='dark']) {
+    --heatmap-text-1: #fff;
+    --heatmap-text-2: #fff;
+    --heatmap-text-3: #fff;
+    --heatmap-text-4: #fff;
+    --heatmap-text-5: #fff;
+    --heatmap-text-6: #000;
+    --heatmap-text-7: #000;
+    --heatmap-text-8: #000;
+    --heatmap-text-9: #000;
+  }
+
+  /* Light theme heatmap cell styles */
+  :global([data-theme='light'] .heatmap-color-1) {
+    background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+    color: var(--heatmap-text-1, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-2) {
+    background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+    color: var(--heatmap-text-2, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-3) {
+    background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+    color: var(--heatmap-text-3, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-4) {
+    background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+    color: var(--heatmap-text-4, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-5) {
+    background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+    color: var(--heatmap-text-5, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-6) {
+    background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+    color: var(--heatmap-text-6, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-7) {
+    background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+    color: var(--heatmap-text-7, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-8) {
+    background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+    color: var(--heatmap-text-8, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-9) {
+    background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+    color: var(--heatmap-text-9, #fff);
+  }
+
+  /* Dark theme heatmap cell styles - FIXED to use same gradient direction */
+  :global([data-theme='dark'] .heatmap-color-1) {
+    background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+    color: var(--heatmap-text-1, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-2) {
+    background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+    color: var(--heatmap-text-2, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-3) {
+    background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+    color: var(--heatmap-text-3, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-4) {
+    background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+    color: var(--heatmap-text-4, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-5) {
+    background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+    color: var(--heatmap-text-5, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-6) {
+    background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+    color: var(--heatmap-text-6, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-7) {
+    background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+    color: var(--heatmap-text-7, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-8) {
+    background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+    color: var(--heatmap-text-8, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-9) {
+    background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+    color: var(--heatmap-text-9, #fff);
+  }
+
   /* Dynamic Update Animations - not in custom.css */
 
   /* Count increment animation */
@@ -735,11 +1047,11 @@
   }
 
   /* Dark theme adjustments */
-  [data-theme='dark'] .sun-icon-sunrise {
+  :global([data-theme='dark'] .sun-icon-sunrise) {
     color: #fdba74; /* Slightly lighter orange for dark theme */
   }
 
-  [data-theme='dark'] .sun-icon-sunset {
+  :global([data-theme='dark'] .sun-icon-sunset) {
     color: #f97316; /* Slightly lighter orange for dark theme */
   }
 </style>

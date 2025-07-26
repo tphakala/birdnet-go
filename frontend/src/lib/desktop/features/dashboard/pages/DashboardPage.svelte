@@ -7,7 +7,6 @@
   import type {
     DailySpeciesSummary,
     Detection,
-    DetectionQueryParams,
   } from '$lib/types/detection.types';
 
   // State management
@@ -562,27 +561,6 @@
     // window.location.href = `/detections/${detection.id}`;
   }
 
-  // Handle species click from daily summary
-  function handleSpeciesClick(species: DailySpeciesSummary) {
-    // Navigate to species details page
-    window.location.href = `/ui/species/${species.species_code}`;
-  }
-
-  // Handle detection view navigation from daily summary
-  function handleDetectionView(params: DetectionQueryParams) {
-    // Build query string from parameters
-    const searchParams = new URLSearchParams();
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        searchParams.append(key, String(value));
-      }
-    });
-
-    // Navigate to detections page with query parameters
-    const queryString = searchParams.toString();
-    window.location.href = `/ui/detections${queryString ? `?${queryString}` : ''}`;
-  }
 </script>
 
 <div class="col-span-12 space-y-6">
@@ -593,8 +571,6 @@
     error={summaryError}
     {selectedDate}
     {showThumbnails}
-    onRowClick={handleSpeciesClick}
-    onDetectionView={handleDetectionView}
     onPreviousDay={previousDay}
     onNextDay={nextDay}
     onGoToToday={goToToday}
