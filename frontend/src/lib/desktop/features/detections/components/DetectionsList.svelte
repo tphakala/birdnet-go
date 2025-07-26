@@ -190,7 +190,7 @@
       </div>
 
       <!-- Detection rows -->
-      <div class="divide-y divide-gray-100">
+      <div class="divide-y divide-base-200">
         {#each data.notes as detection}
           <DetectionRow {detection} {onDetailsClick} {onRefresh} />
         {/each}
