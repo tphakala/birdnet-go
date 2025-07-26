@@ -134,15 +134,9 @@
     // Clear animation state on manual refresh
     newDetectionIds.clear();
     detectionArrivalTimes.clear();
-    clearDailySummaryAnimations();
-
-    // For SSE mode, just fetch fresh data without affecting the connection
-    if (connectionStatus === 'connected') {
-      fetchRecentDetections();
-    } else {
-      // For polling mode or when SSE is not working, use regular fetch
-      fetchRecentDetections();
-    }
+    
+    // Just fetch recent detections - don't touch daily summary
+    fetchRecentDetections();
   }
 
   // Animation cleanup timers
