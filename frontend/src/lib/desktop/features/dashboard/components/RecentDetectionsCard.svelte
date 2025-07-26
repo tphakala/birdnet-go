@@ -1,6 +1,7 @@
 <script lang="ts">
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
+  import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
@@ -67,30 +68,6 @@
   function handleRowClick(detection: Detection) {
     if (onRowClick) {
       onRowClick(detection);
-    }
-  }
-
-  // Returns appropriate badge configuration based on detection verification status
-  function getStatusBadge(verified: string) {
-    switch (verified) {
-      case 'correct':
-        return {
-          type: 'correct',
-          text: t('dashboard.recentDetections.status.verified'),
-          class: 'status-badge correct',
-        };
-      case 'false_positive':
-        return {
-          type: 'false',
-          text: t('dashboard.recentDetections.status.false'),
-          class: 'status-badge false',
-        };
-      default:
-        return {
-          type: 'unverified',
-          text: t('dashboard.recentDetections.status.unverified'),
-          class: 'status-badge unverified',
-        };
     }
   }
 
@@ -279,7 +256,6 @@
         <!-- Detection Rows -->
         <div class="divide-y divide-base-200">
           {#each data.slice(0, selectedLimit) as detection}
-            {@const badge = getStatusBadge(detection.verified)}
             {@const isNew = newDetectionIds.has(detection.id)}
             <div
               class="detection-grid-dashboard detection-row"
@@ -335,14 +311,7 @@
 
               <!-- Status -->
               <div>
-                <div class="flex flex-wrap gap-1">
-                  <span class={badge.class}>
-                    {badge.text}
-                  </span>
-                  {#if detection.locked}
-                    <span class="status-badge locked">locked</span>
-                  {/if}
-                </div>
+                <StatusBadges {detection} size="sm" />
               </div>
 
               <!-- Recording -->
