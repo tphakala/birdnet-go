@@ -314,47 +314,42 @@
                     {@const hour = parseInt(column.key.split('_')[1])}
                     {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                     {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
-                    <div class="flex flex-col items-center justify-center h-full min-h-0">
-                      <!-- Sun icon if this hour matches sunrise or sunset -->
-                      {#if hour === sunriseHour}
-                        <div
-                          class="text-orange-400 text-xs mb-0.5"
-                          title="Sunrise: {sunTimes
-                            ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : ''}"
-                        >
-                          {@html weatherIcons.sunrise}
-                        </div>
-                      {:else if hour === sunsetHour}
-                        <div
-                          class="text-orange-600 text-xs mb-0.5"
-                          title="Sunset: {sunTimes
-                            ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : ''}"
-                        >
-                          {@html weatherIcons.sunset}
-                        </div>
-                      {:else}
-                        <!-- Empty spacer to maintain consistent height -->
-                        <div class="h-4 mb-0.5"></div>
-                      {/if}
-                      <!-- Hour number -->
-                      <a
-                        href={buildHourlyUrl(hour, 1)}
-                        class="hover:text-primary cursor-pointer text-xs"
-                        title={t('dashboard.dailySummary.tooltips.viewHourly', {
-                          hour: hour.toString().padStart(2, '0'),
-                        })}
+                    <!-- Sun icon positioned absolutely above hour number -->
+                    {#if hour === sunriseHour}
+                      <span
+                        class="sun-icon sun-icon-sunrise"
+                        title="Sunrise: {sunTimes
+                          ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}"
                       >
-                        {column.header}
-                      </a>
-                    </div>
+                        {@html weatherIcons.sunrise}
+                      </span>
+                    {:else if hour === sunsetHour}
+                      <span
+                        class="sun-icon sun-icon-sunset"
+                        title="Sunset: {sunTimes
+                          ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}"
+                      >
+                        {@html weatherIcons.sunset}
+                      </span>
+                    {/if}
+                    <!-- Hour number as direct child of th -->
+                    <a
+                      href={buildHourlyUrl(hour, 1)}
+                      class="hour-link"
+                      title={t('dashboard.dailySummary.tooltips.viewHourly', {
+                        hour: hour.toString().padStart(2, '0'),
+                      })}
+                    >
+                      {column.header}
+                    </a>
                   {:else if column.key?.startsWith('bi_hour_')}
                     <!-- Bi-hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[2])}
@@ -689,5 +684,62 @@
 
   .hour-data a:hover {
     text-decoration: none;
+  }
+
+  /* Hour header styling - ensure proper table layout */
+  .hour-header {
+    position: relative;
+    text-align: center;
+    vertical-align: bottom;
+  }
+
+  /* Sun icon positioning */
+  .sun-icon {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    font-size: 0.75rem;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .sun-icon-sunrise {
+    color: #fb923c; /* text-orange-400 */
+  }
+
+  .sun-icon-sunset {
+    color: #ea580c; /* text-orange-600 */
+  }
+
+  /* Hour link styling */
+  .hour-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 1.5rem;
+    color: inherit;
+    text-decoration: none;
+    font-size: 0.75rem;
+    padding-top: 1rem; /* Space for sun icon */
+    box-sizing: border-box;
+    text-align: center;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .hour-link:hover {
+    color: oklch(var(--p));
+    text-decoration: none;
+  }
+
+  /* Dark theme adjustments */
+  [data-theme='dark'] .sun-icon-sunrise {
+    color: #fdba74; /* Slightly lighter orange for dark theme */
+  }
+
+  [data-theme='dark'] .sun-icon-sunset {
+    color: #f97316; /* Slightly lighter orange for dark theme */
   }
 </style>
