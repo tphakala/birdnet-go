@@ -37,7 +37,7 @@
         key: 'common_name',
         header: t('dashboard.dailySummary.columns.species'),
         sortable: true,
-        className: 'font-medium min-w-0',
+        className: 'font-medium w-0 whitespace-nowrap',
       },
     ];
 
@@ -46,7 +46,7 @@
       key: 'total_detections',
       header: t('dashboard.dailySummary.columns.detections'),
       align: 'center',
-      className: 'hidden 2xl:table-cell px-4 w-100',
+      className: 'hidden 2xl:table-cell px-2 sm:px-4 w-100',
       render: (item: DailySpeciesSummary) => item.count,
     });
 
@@ -249,7 +249,7 @@
                 <!-- Hourly, bi-hourly, and six-hourly headers -->
                 <th
                   class="py-0 {column.key === 'common_name'
-                    ? 'pl-2 pr-6 sm:pl-0 sm:pr-8'
+                    ? 'pl-2 pr-8 sm:pl-0 sm:pr-12'
                     : 'px-2 sm:px-4'} {column.className || ''}"
                   class:hour-header={column.key?.startsWith('hour_') ||
                     column.key?.startsWith('bi_hour_') ||
@@ -358,7 +358,7 @@
                           classes.push('heatmap-color-0');
                         }
                       } else if (column.key === 'common_name') {
-                        classes.push('pl-2', 'pr-6', 'sm:pl-0', 'sm:pr-8');
+                        classes.push('pl-2', 'pr-8', 'sm:pl-0', 'sm:pr-12');
                       } else {
                         classes.push('px-2', 'sm:px-4');
                       }
