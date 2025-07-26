@@ -21,7 +21,6 @@
   
   Props:
   - detection: Detection - The detection data object
-  - showThumbnails?: boolean - Whether to display species thumbnails
   - isExcluded?: boolean - Whether this detection is excluded
   - onDetailsClick?: (id: number) => void - Handler for detail view
   - onRefresh?: () => void - Handler for data refresh
@@ -159,14 +158,14 @@
   }
 </script>
 
-<div class={cn('detection-grid-list', className)}>
+<!-- DetectionRow now returns table cells for proper table structure -->
   <!-- Date & Time -->
-  <div class="text-sm">
+  <td class="text-sm">
     <span>{detection.date} {detection.time}</span>
-  </div>
+  </td>
 
   <!-- Weather Column -->
-  <div class="text-sm hidden md:block">
+  <td class="text-sm hidden md:table-cell">
     {#if detection.weather}
       <div class="flex flex-col gap-1">
         <WeatherMetrics
@@ -186,10 +185,10 @@
         <!-- Debug: {JSON.stringify(Object.keys(detection))} -->
       </div>
     {/if}
-  </div>
+  </td>
 
   <!-- Bird species (with thumbnail) -->
-  <div class="text-sm">
+  <td class="text-sm">
     <div class="sp-species-container sp-layout-detections">
       <!-- Thumbnail -->
       <div class="sp-thumbnail-wrapper">
@@ -217,20 +216,20 @@
         </div>
       </div>
     </div>
-  </div>
+  </td>
 
   <!-- Confidence -->
-  <div class="text-sm">
+  <td class="text-sm">
     <ConfidenceCircle confidence={detection.confidence} size="md" />
-  </div>
+  </td>
 
   <!-- Status -->
-  <div>
+  <td>
     <StatusBadges {detection} />
-  </div>
+  </td>
 
   <!-- Recording/Spectrogram -->
-  <div class="hidden md:block">
+  <td class="hidden md:table-cell">
     <AudioPlayer
       audioUrl="/api/v2/audio/{detection.id}"
       detectionId={detection.id.toString()}
@@ -240,10 +239,10 @@
       showDownload={true}
       className="w-full max-w-[200px]"
     />
-  </div>
+  </td>
 
   <!-- Action Menu -->
-  <div>
+  <td>
     <ActionMenu
       {detection}
       {isExcluded}
@@ -252,8 +251,7 @@
       onToggleLock={handleToggleLock}
       onDelete={handleDelete}
     />
-  </div>
-</div>
+  </td>
 
 <!-- Modals -->
 <ReviewModal
@@ -317,53 +315,5 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
-  }
-
-  /* CRITICAL FIX: Mobile text wrapping with highest specificity */
-  @media (max-width: 768px) {
-    .sp-species-names {
-      word-break: normal !important;
-      overflow-wrap: break-word !important;
-      hyphens: auto !important;
-      min-width: 0 !important;
-      white-space: normal !important;
-      max-width: 100% !important;
-    }
-
-    .sp-species-common-name,
-    .sp-species-scientific-name {
-      word-break: normal !important;
-      overflow-wrap: break-word !important;
-      hyphens: auto !important;
-      white-space: normal !important;
-      text-overflow: unset !important;
-      overflow: visible !important;
-      max-width: 100% !important;
-      width: auto !important;
-    }
-
-    /* Ensure species column has adequate space */
-    :global(.detection-grid-list) {
-      grid-template-columns:
-        80px /* Date & Time */
-        1fr /* Species (flexible width) */
-        50px /* Confidence */
-        70px /* Status */
-        36px !important; /* Actions */
-      gap: 0.5rem !important;
-      min-width: 0 !important;
-    }
-  }
-
-  @media (max-width: 480px) {
-    :global(.detection-grid-list) {
-      grid-template-columns:
-        60px /* Date & Time (more compact) */
-        1fr /* Species (flexible width) */
-        45px /* Confidence (smaller) */
-        60px /* Status (compact) */
-        32px !important; /* Actions (smaller) */
-      gap: 0.25rem !important;
-    }
   }
 </style>

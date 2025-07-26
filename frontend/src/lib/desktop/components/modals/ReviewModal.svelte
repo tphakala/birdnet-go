@@ -102,7 +102,7 @@
 
 <Modal
   {isOpen}
-  title="Review Detection"
+  title={t('common.review.modalTitle', { species: detection?.commonName || '' })}
   size="lg"
   showCloseButton={true}
   {onClose}

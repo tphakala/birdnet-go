@@ -71,7 +71,7 @@
   }
 
   // Calculate optimal popup position
-  function calculatePosition(event: MouseEvent) {
+  function calculatePosition(_event: MouseEvent) {
     if (!triggerElement) return;
 
     const triggerRect = triggerElement.getBoundingClientRect();
@@ -141,16 +141,6 @@
     imageError = true;
   }
 
-  // Handle keyboard events for accessibility
-  function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      // Navigate to detection URL on keyboard activation
-      window.location.href = detectionUrl;
-    } else if (event.key === 'Escape') {
-      showPopup = false;
-    }
-  }
 
   // Handle focus events for keyboard users
   function handleFocus() {
@@ -173,12 +163,9 @@
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
     onmousemove={handleMouseMove}
-    onkeydown={handleKeyDown}
     onfocus={handleFocus}
     onblur={handleBlur}
-    role="button"
-    tabindex="0"
-    aria-label="View larger image and details for {commonName}"
+    aria-label="View {commonName} detections"
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->

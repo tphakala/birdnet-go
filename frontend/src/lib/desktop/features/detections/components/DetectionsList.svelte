@@ -178,23 +178,27 @@
         className="py-8"
       />
     {:else}
-      <!-- Header -->
-      <div class="detection-header-list">
-        <div>{t('detections.headers.dateTime')}</div>
-        <div class="hidden md:block">{t('detections.headers.weather')}</div>
-        <div>{t('detections.headers.species')}</div>
-        <div>{t('detections.headers.confidence')}</div>
-        <div>{t('detections.headers.status')}</div>
-        <div class="hidden md:block">{t('detections.headers.recording')}</div>
-        <div>{t('detections.headers.actions')}</div>
-      </div>
-
-      <!-- Detection rows -->
-      <div class="divide-y divide-base-200">
-        {#each data.notes as detection}
-          <DetectionRow {detection} {onDetailsClick} {onRefresh} />
-        {/each}
-      </div>
+      <table class="w-full" role="table">
+        <caption class="sr-only">{t('detections.table.caption')}</caption>
+        <thead>
+          <tr class="detection-header-list">
+            <th scope="col">{t('detections.headers.dateTime')}</th>
+            <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
+            <th scope="col">{t('detections.headers.species')}</th>
+            <th scope="col">{t('detections.headers.confidence')}</th>
+            <th scope="col">{t('detections.headers.status')}</th>
+            <th scope="col" class="hidden md:table-cell">{t('detections.headers.recording')}</th>
+            <th scope="col">{t('detections.headers.actions')}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-base-200">
+          {#each data.notes as detection}
+            <tr>
+              <DetectionRow {detection} {onDetailsClick} {onRefresh} />
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 

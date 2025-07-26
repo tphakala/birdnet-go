@@ -92,7 +92,7 @@
   font-size: var(--sp-scientific-size);
   line-height: var(--sp-common-line-height);
   font-style: var(--sp-scientific-style);
-  color: var(--sp-scientific-color, oklch(var(--bc) / 0.4)) !important;
+  color: var(--sp-scientific-color, oklch(var(--bc) / 0.4));
   word-wrap: break-word;
   overflow-wrap: break-word;
   hyphens: auto;
@@ -274,26 +274,20 @@
   background-color: oklch(var(--b2) / 0.3);
 }
 
-/* Detection list grid layout (thumbnail integrated into species column) */
-.detection-grid-list {
-  display: grid;
-  grid-template-columns:
-    minmax(110px, 1fr) /* Date & Time */
-    minmax(60px, 1.5fr) /* Weather (more space for full data) */
-    minmax(180px, 2fr) /* Species (reduced for more weather space) */
-    60px /* Confidence (optimized for circle size) */
-    minmax(80px, 0.8fr) /* Status */
-    minmax(160px, 1.5fr) /* Recording (reduced for more weather space) */
-    48px; /* Actions */
-
-  gap: 1rem;
-  align-items: center;
-  padding: 0.25rem 1rem;
+/* Detection list table layout */
+/* Table row styles for detection list */
+tbody tr {
   transition: background-color 0.15s ease-in-out;
 }
 
-.detection-grid-list:hover {
+tbody tr:hover {
   background-color: oklch(var(--b2) / 0.2);
+}
+
+/* Table cell alignment and padding */
+tbody td {
+  padding: 0.25rem 1rem;
+  vertical-align: middle;
 }
 
 /* Header grid layouts matching their respective row layouts */
@@ -316,32 +310,26 @@
   border-bottom: 1px solid oklch(var(--bc) / 0.1);
 }
 
-.detection-header-list {
-  display: grid;
-  grid-template-columns:
-    minmax(110px, 1fr) /* Date & Time */
-    minmax(60px, 1.5fr) /* Weather (more space for full data) */
-    minmax(180px, 2fr) /* Species (reduced for more weather space) */
-    60px /* Confidence (optimized for circle size) */
-    minmax(80px, 0.8fr) /* Status */
-    minmax(160px, 1.5fr) /* Recording (reduced for more weather space) */
-    48px; /* Actions */
-
-  gap: 1rem;
-  align-items: center;
+/* Table header styles */
+.detection-header-list th {
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
   font-weight: 500;
   color: oklch(var(--bc) / 0.7);
+  text-align: left;
   border-bottom: 1px solid oklch(var(--bc) / 0.2);
 }
 
-/* Actions column content alignment for all grid types */
+/* Actions column content alignment for all types */
 .detection-grid-dashboard > :last-child,
-.detection-grid-list > :last-child,
+tbody td:last-child,
 .detection-header-dashboard > :last-child,
-.detection-header-list > :last-child {
-  justify-self: end;
+.detection-header-list th:last-child {
+  text-align: right;
+}
+
+tbody td:last-child > *,
+.detection-header-list th:last-child {
   display: flex;
   justify-content: flex-end;
 }
@@ -352,8 +340,9 @@
 
 /* Hide thumbnails on narrow viewports to prioritize species text */
 @media (max-width: 1200px) {
-  .sp-thumbnail-wrapper {
-    display: none !important;
+  /* Higher specificity to override thumbnail display */
+  .sp-species-container .sp-thumbnail-wrapper {
+    display: none;
   }
 
   /* Adjust species container when thumbnails are hidden */
@@ -381,30 +370,18 @@
     gap: 0.75rem;
   }
 
-  .detection-grid-list {
-    grid-template-columns:
-      minmax(90px, 0.8fr) /* Date & Time */
-      minmax(85px, 1.4fr) /* Weather (slightly more space) */
-      minmax(140px, 1.8fr) /* Species (more space since no thumbnails) */
-      60px /* Confidence (consistent with desktop) */
-      minmax(70px, 0.7fr) /* Status */
-      minmax(130px, 1.2fr) /* Recording (reduced) */
-      40px; /* Actions */
-
-    gap: 0.75rem;
+  /* Table layout adjustments for tablet */
+  table {
+    table-layout: fixed;
+    width: 100%;
+  }
+  
+  tbody td,
+  .detection-header-list th {
+    padding: 0.25rem 0.75rem;
   }
 
-  .detection-grid-list.with-thumbnails {
-    grid-template-columns:
-      minmax(90px, 0.8fr) /* Date & Time */
-      auto /* Weather */
-      minmax(100px, 1.2fr) /* Species */
-      70px /* Confidence */
-      50px /* Thumbnail */
-      minmax(60px, 0.6fr) /* Status */
-      minmax(130px, 1.3fr) /* Recording */
-      40px; /* Actions */
-  }
+  /* Removed - no longer using .with-thumbnails variant with table structure */
 
   /* Update headers to match */
   .detection-header-dashboard {
@@ -418,46 +395,18 @@
     gap: 0.75rem;
   }
 
-  .detection-header-list {
-    grid-template-columns:
-      minmax(90px, 0.8fr)
-      minmax(85px, 1.4fr) /* Weather (slightly more space) */
-      minmax(140px, 1.8fr) /* Species (more space since no thumbnails) */
-      60px /* Confidence (consistent with desktop) */
-      minmax(70px, 0.7fr)
-      minmax(130px, 1.2fr) /* Recording (reduced) */
-      40px;
-    gap: 0.75rem;
-  }
+  /* Header adjustments handled by general table styles above */
 
-  .detection-header-list.with-thumbnails {
-    grid-template-columns:
-      minmax(90px, 0.8fr)
-      auto
-      minmax(100px, 1.2fr)
-      70px
-      50px
-      minmax(60px, 0.6fr)
-      minmax(130px, 1.3fr)
-      40px;
-  }
+  /* Removed - no longer using .with-thumbnails variant with table structure */
 }
 
 /* Mobile adjustments (max-width: 768px) */
 @media (max-width: 768px) {
-  /* CRITICAL: Override grid layout for proper mobile display */
-  .detection-grid-list {
-    grid-template-columns: 80px 1fr 50px 70px 36px !important;
-    gap: 0.5rem !important;
-    min-width: 0 !important;
-    padding: 0.75rem 0.5rem !important;
-    min-height: 60px !important;
-  }
-
-  .detection-header-list {
-    grid-template-columns: 80px 1fr 50px 70px 36px !important;
-    gap: 0.5rem !important;
-    padding: 0.75rem 0.5rem !important;
+  /* Table layout for mobile */
+  tbody td,
+  .detection-header-list th {
+    padding: 0.75rem 0.5rem;
+    min-height: 60px;
   }
 
   /* Mobile layout: Focus on readable content with proper spacing */
@@ -487,42 +436,38 @@
     padding: 0.75rem 0.5rem;
   }
 
-  /* CRITICAL: Species text wrapping fixes - highest priority override of custom.css */
-  .sp-species-names {
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
-    min-width: 0 !important;
-    white-space: normal !important;
-    max-width: 100% !important;
+  /* Species text wrapping for mobile in table context */
+  tbody .sp-species-names,
+  .detection-grid-dashboard .sp-species-names {
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    min-width: 0;
+    white-space: normal;
+    max-width: 100%;
   }
 
-  .sp-species-common-name,
-  .sp-species-scientific-name {
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
-    white-space: normal !important;
-    text-overflow: unset !important;
-    overflow: visible !important;
-    max-width: 100% !important;
-    width: auto !important;
+  tbody .sp-species-common-name,
+  tbody .sp-species-scientific-name,
+  .detection-grid-dashboard .sp-species-common-name,
+  .detection-grid-dashboard .sp-species-scientific-name {
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    white-space: normal;
+    text-overflow: unset;
+    overflow: visible;
+    max-width: 100%;
+    width: auto;
   }
 }
 
 /* Extra small mobile (max-width: 480px) */
 @media (max-width: 480px) {
-  /* CRITICAL: Override grid layout for extra small screens */
-  .detection-grid-list {
-    grid-template-columns: 60px 1fr 45px 60px 32px !important;
-    gap: 0.25rem !important;
-    padding: 0.5rem 0.25rem !important;
-  }
-
-  .detection-header-list {
-    grid-template-columns: 60px 1fr 45px 60px 32px !important;
-    gap: 0.25rem !important;
-    padding: 0.5rem 0.25rem !important;
+  /* Table layout for extra small screens */
+  tbody td,
+  .detection-header-list th {
+    padding: 0.5rem 0.25rem;
   }
 
   .detection-grid-dashboard {
@@ -549,26 +494,29 @@
     padding: 0.5rem 0.25rem;
   }
 
-  /* CRITICAL: Ensure text wrapping on extra small screens too */
-  .sp-species-names {
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
-    min-width: 0 !important;
-    white-space: normal !important;
-    max-width: 100% !important;
+  /* Ensure text wrapping on extra small screens too */
+  tbody .sp-species-names,
+  .detection-grid-dashboard .sp-species-names {
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    min-width: 0;
+    white-space: normal;
+    max-width: 100%;
   }
 
-  .sp-species-common-name,
-  .sp-species-scientific-name {
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
-    white-space: normal !important;
-    text-overflow: unset !important;
-    overflow: visible !important;
-    max-width: 100% !important;
-    width: auto !important;
+  tbody .sp-species-common-name,
+  tbody .sp-species-scientific-name,
+  .detection-grid-dashboard .sp-species-common-name,
+  .detection-grid-dashboard .sp-species-scientific-name {
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    white-space: normal;
+    text-overflow: unset;
+    overflow: visible;
+    max-width: 100%;
+    width: auto;
   }
 }
 
@@ -578,14 +526,14 @@
 
 @media print {
   .sp-species-common-name {
-    color: black !important;
+    color: black;
   }
 
   .sp-species-scientific-name {
-    color: #666 !important;
+    color: #666;
   }
 
   .sp-species-common-name:hover {
-    color: black !important;
+    color: black;
   }
 }

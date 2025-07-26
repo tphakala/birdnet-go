@@ -383,7 +383,9 @@
     }
   }
 
-  /* Container debugging (remove in production) */
+  /* Container queries for responsive layout */
+  /* These enable the component to adapt its layout based on available container width
+     rather than viewport width, making it more flexible in different contexts */
   .wm-container {
     container-type: inline-size;
   }
