@@ -221,7 +221,7 @@
 
   <!-- Confidence -->
   <div class="text-sm">
-    <ConfidenceCircle confidence={detection.confidence} size="sm" />
+    <ConfidenceCircle confidence={detection.confidence} size="md" />
   </div>
 
   <!-- Status -->

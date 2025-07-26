@@ -396,7 +396,7 @@
                       >
                         <div
                           class="progress progress-primary bg-gray-400 dark:bg-gray-400"
-                          style="width: {roundedWidth}%"
+                          style:width="{roundedWidth}%"
                         >
                           {#if width >= 45 && width <= 59}
                             <!-- Total detections count for large bars -->

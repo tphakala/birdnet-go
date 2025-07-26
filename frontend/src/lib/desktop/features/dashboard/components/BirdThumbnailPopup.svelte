@@ -173,7 +173,7 @@
       bind:this={popupElement}
       id="bird-popup"
       class="fixed z-50 bg-base-100 border border-base-300 rounded-lg shadow-xl p-4 transition-opacity duration-200"
-      style="left: {popupX}px; top: {popupY}px; width: 320px;"
+      style:left="{popupX}px" style:top="{popupY}px" style:width="320px"
       role="tooltip"
       aria-live="polite"
     >
@@ -231,7 +231,7 @@
 
       <!-- Popup arrow pointing to trigger -->
       <div class="absolute w-3 h-3 bg-base-100 border-l border-t border-base-300 rotate-45 -z-10"
-           style="left: 20px; top: -6px;"></div>
+           style:left="20px" style:top="-6px"></div>
     </div>
   {/if}
 </div>

@@ -269,7 +269,7 @@
             <span class="loading loading-spinner loading-md"></span>
           </div>
           <!-- Disable pointer events on content during loading -->
-          <div class="absolute inset-0 z-10" style="pointer-events: auto; cursor: wait;"></div>
+          <div class="absolute inset-0 z-10" style:pointer-events="auto" style:cursor="wait"></div>
         {/if}
         
         <!-- Header Row -->
@@ -336,7 +336,7 @@
 
               <!-- Confidence -->
               <div>
-                <ConfidenceCircle confidence={detection.confidence} size="sm" />
+                <ConfidenceCircle confidence={detection.confidence} size="md" />
               </div>
 
               <!-- Status -->
