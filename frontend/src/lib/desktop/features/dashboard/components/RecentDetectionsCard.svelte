@@ -320,7 +320,7 @@
                     />
                   </button>
                 </div>
-                
+
                 <!-- Species Names and Confidence -->
                 <div class="rd-species-info-wrapper">
                   <div class="rd-species-names">
@@ -433,7 +433,7 @@
   /* Use existing confidence circle styles from custom.css - no additional styles needed */
 
   /* RD prefix to avoid conflicts with global CSS */
-  
+
   /* Species container layout */
   .rd-species-container {
     display: flex;
@@ -495,7 +495,7 @@
     hyphens: auto;
     cursor: pointer;
   }
-  
+
   .rd-species-common-name:hover {
     color: hsl(var(--p));
   }
@@ -520,19 +520,19 @@
     .rd-species-container {
       gap: 0.375rem;
     }
-    
+
     .rd-thumbnail-wrapper {
       flex: 0 0 35%; /* Slightly larger on mobile */
     }
-    
+
     .rd-species-common-name {
       font-size: 0.875rem;
     }
-    
+
     .rd-species-scientific-name {
       font-size: 0.7rem;
     }
-    
+
     .rd-species-info-wrapper {
       gap: 0.25rem;
     }
@@ -545,19 +545,19 @@
     background: linear-gradient(to bottom, rgba(128, 128, 128, 0.4), rgba(128, 128, 128, 0.1));
     border-radius: 0.5rem;
   }
-  
+
   /* Audio player skeleton (before content loads) */
   .rd-audio-player-container::before {
-    content: "";
+    content: '';
     width: 1px;
     margin-left: -1px;
     float: left;
     height: 0;
     padding-top: 50%; /* Maintains a 2:1 ratio */
   }
-  
+
   .rd-audio-player-container::after {
-    content: "";
+    content: '';
     display: table;
     clear: both;
   }

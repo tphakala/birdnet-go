@@ -42,43 +42,43 @@
     className?: string;
   }
 
-  let { 
-    weatherIcon, 
+  let {
+    weatherIcon,
     weatherDescription,
     timeOfDay = 'day',
-    temperature, 
+    temperature,
     windSpeed,
     windGust,
-    units = 'metric', 
-    size = 'sm', 
-    className = '' 
+    units = 'metric',
+    size = 'sm',
+    className = '',
   }: Props = $props();
-  
+
   // Toggle constants for temperature and wind speed icons
   const SHOW_TEMPERATURE_ICON = true;
   const SHOW_WINDSPEED_ICON = true;
-  
+
   // Container element reference for width observation
   let containerElement: HTMLDivElement | null = $state(null);
   let containerWidth = $state(0);
-  
+
   // Observe container width
   $effect(() => {
     if (!containerElement) return;
-    
-    const resizeObserver = new ResizeObserver((entries) => {
+
+    const resizeObserver = new globalThis.ResizeObserver(entries => {
       for (const entry of entries) {
         containerWidth = entry.contentRect.width;
       }
     });
-    
+
     resizeObserver.observe(containerElement);
-    
+
     return () => {
       resizeObserver.disconnect();
     };
   });
-  
+
   // Responsive visibility thresholds - always show icon+text together
   const showWeatherGroup = $derived(containerWidth === 0 || containerWidth >= 100);
   const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 200);
@@ -95,7 +95,7 @@
         return '°C';
     }
   });
-  
+
   const windSpeedUnit = $derived(() => {
     return units === 'imperial' ? 'mph' : 'm/s';
   });
@@ -140,40 +140,42 @@
     '13': { day: '❄️', night: '❄️', description: 'Snow' },
     '50': { day: '🌫️', night: '🌫️', description: 'Mist' },
   };
-  
+
   // Extract base weather code
   const weatherCode = $derived(() => {
     if (!weatherIcon || typeof weatherIcon !== 'string') return '';
     const match = weatherIcon.match(/^(\d{2})[dn]?$/);
     return match ? match[1] : '';
   });
-  
+
   // Determine if it's night time
   const isNight = $derived(timeOfDay === 'night' || weatherIcon?.endsWith('n'));
-  
+
   // Get weather emoji and description
-  const weatherInfo = $derived(weatherIconMap[weatherCode()] || { 
-    day: '❓', 
-    night: '❓', 
-    description: weatherDescription || 'Unknown' 
-  });
-  
+  const weatherInfo = $derived(
+    weatherIconMap[weatherCode()] || {
+      day: '❓',
+      night: '❓',
+      description: weatherDescription || 'Unknown',
+    }
+  );
+
   const weatherEmoji = $derived(isNight ? weatherInfo.night : weatherInfo.day);
-  
+
   // Helper function to translate weather conditions with fallbacks
   function translateWeatherCondition(condition: string | undefined): string {
     if (!condition) return '';
-    
+
     // Normalize the condition string
     const normalized = condition.toLowerCase().replace(/ /g, '_');
-    
+
     // Try different key variations
     const keys = [
       `detections.weather.conditions.${normalized}`,
       `detections.weather.conditions.${condition.toLowerCase()}`,
-      'detections.weather.conditions.unknown'
+      'detections.weather.conditions.unknown',
     ];
-    
+
     // Return first successful translation or original
     for (const key of keys) {
       const translation = t(key);
@@ -181,15 +183,15 @@
         return translation;
       }
     }
-    
+
     return condition;
   }
-  
+
   // Get localized weather description
   const weatherDesc = $derived(
     translateWeatherCondition(weatherDescription || weatherInfo.description)
   );
-  
+
   // Size classes
   const sizeClasses = {
     sm: 'h-5 w-5',
@@ -202,7 +204,7 @@
     md: 'text-sm',
     lg: 'text-base',
   };
-  
+
   const emojiSizeClasses = {
     sm: 'text-base',
     md: 'text-lg',
@@ -210,7 +212,7 @@
   };
 </script>
 
-<div 
+<div
   bind:this={containerElement}
   class={cn('wm-container flex items-center gap-2 overflow-hidden', className)}
   title={weatherDesc}
@@ -218,7 +220,7 @@
   <!-- Weather Group - Icon + Description -->
   {#if weatherIcon && showWeatherGroup}
     <div class="wm-weather-group flex items-center gap-1 flex-shrink-0">
-      <span 
+      <span
         class={cn('wm-weather-icon inline-block flex-shrink-0', emojiSizeClasses[size])}
         aria-label={weatherDesc}
       >
@@ -229,7 +231,7 @@
       </span>
     </div>
   {/if}
-  
+
   <!-- Temperature Group -->
   {#if temperature !== undefined && showTemperatureGroup}
     <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
@@ -264,7 +266,14 @@
               rx="1"
             />
             <!-- Bulb -->
-            <circle cx="12" cy="18" r="3.5" fill={tempColor()} stroke="#64748b" stroke-width="1.5" />
+            <circle
+              cx="12"
+              cy="18"
+              r="3.5"
+              fill={tempColor()}
+              stroke="#64748b"
+              stroke-width="1.5"
+            />
             <!-- Temperature marks -->
             <line x1="8" y1="6" x2="9" y2="6" stroke="#64748b" stroke-width="0.5" />
             <line x1="8" y1="9" x2="9" y2="9" stroke="#64748b" stroke-width="0.5" />
@@ -315,7 +324,11 @@
               stroke="#64748b"
               stroke-width="1.5"
               stroke-linecap="round"
-              opacity={windStrength() === 'calm' ? '0.2' : windStrength() === 'light' ? '0.4' : '0.7'}
+              opacity={windStrength() === 'calm'
+                ? '0.2'
+                : windStrength() === 'light'
+                  ? '0.4'
+                  : '0.7'}
               style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
               style:animation-delay="0.2s"
             />
@@ -335,7 +348,9 @@
         </svg>
       {/if}
       <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
-        {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed ? `(${windGust.toFixed(0)})` : ''}
+        {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
+          ? `(${windGust.toFixed(0)})`
+          : ''}
         {windSpeedUnit()}
       </span>
     </div>
@@ -352,12 +367,12 @@
       transform: translateX(2px);
     }
   }
-  
+
   /* Container debugging (remove in production) */
   .wm-container {
     container-type: inline-size;
   }
-  
+
   /* Responsive visibility using container queries - groups shown/hidden as complete units */
   @container (max-width: 100px) {
     .wm-weather-group,
@@ -366,14 +381,14 @@
       display: none !important;
     }
   }
-  
+
   @container (max-width: 200px) {
     .wm-temperature-group,
     .wm-wind-group {
       display: none !important;
     }
   }
-  
+
   @container (max-width: 300px) {
     .wm-wind-group {
       display: none !important;

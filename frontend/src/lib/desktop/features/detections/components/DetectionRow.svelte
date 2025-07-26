@@ -40,7 +40,6 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
 
-
   interface Props {
     detection: Detection;
     showThumbnails?: boolean;
