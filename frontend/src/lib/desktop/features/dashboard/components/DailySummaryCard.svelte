@@ -60,7 +60,7 @@
   async function fetchSunTimes(date: string): Promise<SunTimes | null> {
     sunTimesLoading = true;
     sunTimesError = null;
-    
+
     try {
       const response = await fetch(`/api/v2/weather/sun/${date}`);
       if (!response.ok) {
@@ -221,9 +221,9 @@
 
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
-    typeof window !== 'undefined' 
-    ? (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false)
-    : false
+    typeof window !== 'undefined'
+      ? (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false)
+      : false
   );
 
   // Sort data by count in descending order for dynamic updates
@@ -509,7 +509,8 @@
                       <!-- Total detections bar -->
                       {@const maxCount = Math.max(...sortedData.map(d => d.count))}
                       {@const width = (item.count / maxCount) * 100}
-                      {@const roundedWidth = Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
+                      {@const roundedWidth =
+                        Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
                       <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
                         <div
                           class="progress progress-primary bg-primary"
@@ -830,11 +831,11 @@
     --heatmap-color-7: #0077be;
     --heatmap-color-8: #005595;
     --heatmap-color-9: #003366;
-    
+
     /* Theme-aware border colors */
     --theme-border-light: rgba(255, 255, 255, 0.1);
     --theme-border-dark: rgba(0, 0, 0, 0.1);
-    
+
     /* Animation durations (for CSS animations) */
     --anim-count-pop: 600ms;
     --anim-heart-pulse: 1000ms;
@@ -1104,11 +1105,11 @@
   }
 
   /* Dark theme adjustments */
-  :global([data-theme='dark'] .sun-icon-sunrise) {
+  :global([data-theme='dark']) .sun-icon-sunrise {
     color: #fdba74; /* Slightly lighter orange for dark theme */
   }
 
-  :global([data-theme='dark'] .sun-icon-sunset) {
+  :global([data-theme='dark']) .sun-icon-sunset {
     color: #f97316; /* Slightly lighter orange for dark theme */
   }
 </style>

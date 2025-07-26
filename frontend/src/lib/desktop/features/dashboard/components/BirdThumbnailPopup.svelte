@@ -7,7 +7,11 @@
   Features:
   - Shows larger image on hover with smooth transitions
   - Displays species common and scientific names
-  - Intelligent positioning to avoid viewport edges
+  - Smart positioning that adapts based on available space:
+    - Positions below thumbnail when there's space
+    - Positions above thumbnail when near bottom of viewport
+    - Adjusts horizontally to stay within viewport bounds
+  - Uses svelte-portal to escape overflow containers
   - Handles image loading states and errors gracefully
   - Fully accessible with proper ARIA attributes
   - Responsive design that works on mobile (tap to show)
@@ -22,6 +26,7 @@
 
 <script lang="ts">
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
+  import Portal from 'svelte-portal';
 
   interface Props {
     thumbnailUrl: string;
@@ -37,6 +42,7 @@
   let showPopup = $state(false);
   let popupX = $state(0);
   let popupY = $state(0);
+  let popupPosition = $state<'above' | 'below'>('below');
   let triggerElement: HTMLElement | undefined = $state();
   let popupElement: HTMLElement | undefined = $state();
   let imageLoaded = $state(false);
@@ -66,31 +72,56 @@
 
   // Calculate optimal popup position
   function calculatePosition(event: MouseEvent) {
-    const mouseX = event.clientX;
-    const mouseY = event.clientY;
-    const offsetX = 20; // Offset from cursor
-    const offsetY = 20;
+    if (!triggerElement) return;
 
+    const triggerRect = triggerElement.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const popupWidth = 320; // Estimated popup width
-    const popupHeight = 280; // Estimated popup height
+    const popupWidth = 320; // Popup width
+    const popupHeight = 280; // Popup height
+    const offsetX = 10; // Horizontal offset from trigger
+    const offsetY = 10; // Vertical offset from trigger when below
+    const offsetYAbove = 20; // Larger vertical offset when above for better separation
 
-    // Default position: bottom-right of cursor
-    let x = mouseX + offsetX;
-    let y = mouseY + offsetY;
+    // Calculate available space in each direction
+    const spaceAbove = triggerRect.top;
+    const spaceBelow = viewportHeight - triggerRect.bottom;
+    const spaceLeft = triggerRect.left;
+    const spaceRight = viewportWidth - triggerRect.right;
 
-    // Adjust if popup would go off right edge
-    if (x + popupWidth > viewportWidth) {
-      x = mouseX - popupWidth - offsetX;
+    // Determine horizontal position
+    let x: number;
+    if (spaceRight >= popupWidth + offsetX) {
+      // Position to the right of trigger
+      x = triggerRect.right + offsetX;
+    } else if (spaceLeft >= popupWidth + offsetX) {
+      // Position to the left of trigger
+      x = triggerRect.left - popupWidth - offsetX;
+    } else {
+      // Center horizontally if not enough space on sides
+      x = Math.max(10, Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - 10));
     }
 
-    // Adjust if popup would go off bottom edge
-    if (y + popupHeight > viewportHeight) {
-      y = mouseY - popupHeight - offsetY;
+    // Determine vertical position
+    // Add extra buffer to trigger earlier (200px buffer)
+    const earlyTriggerBuffer = 200;
+    let y: number;
+    
+    if (spaceBelow >= popupHeight + offsetY + earlyTriggerBuffer) {
+      // Position below trigger
+      y = triggerRect.bottom + offsetY;
+      popupPosition = 'below';
+    } else if (spaceAbove >= popupHeight + offsetYAbove) {
+      // Position above trigger with larger offset
+      y = triggerRect.top - popupHeight - offsetYAbove;
+      popupPosition = 'above';
+    } else {
+      // Position at the top of viewport if not enough space
+      y = 10;
+      popupPosition = 'below';
     }
 
-    // Ensure popup stays within viewport
+    // Ensure popup stays within viewport bounds
     x = Math.max(10, Math.min(x, viewportWidth - popupWidth - 10));
     y = Math.max(10, Math.min(y, viewportHeight - popupHeight - 10));
 
@@ -163,79 +194,91 @@
 
   <!-- Popup overlay -->
   {#if showPopup}
-    <div
-      bind:this={popupElement}
-      id="bird-popup"
-      class="fixed z-50 bg-base-100 border border-base-300 rounded-lg shadow-xl p-4 transition-opacity duration-200"
-      style:left="{popupX}px"
-      style:top="{popupY}px"
-      style:width="320px"
-      role="tooltip"
-      aria-live="polite"
-    >
-      <!-- Popup content -->
-      <div class="space-y-3">
-        <!-- Species information header -->
-        <div class="text-center space-y-1">
-          <h3 class="font-semibold text-base-content text-sm leading-tight">
-            {commonName}
-          </h3>
-          <p class="text-base-content/70 text-xs italic">
-            {scientificName}
-          </p>
-        </div>
-
-        <!-- Large image container -->
-        <div class="relative w-full h-48 bg-base-200 rounded-lg overflow-hidden">
-          {#if !imageLoaded && !imageError}
-            <!-- Loading state -->
-            <div class="absolute inset-0 flex items-center justify-center">
-              <div class="loading loading-spinner loading-md"></div>
-            </div>
-          {/if}
-
-          {#if imageError}
-            <!-- Error state -->
-            <div
-              class="absolute inset-0 flex flex-col items-center justify-center text-base-content/50"
-            >
-              <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              <p class="text-xs text-center">Image not available</p>
-            </div>
-          {:else}
-            <!-- Large image -->
-            <img
-              src={thumbnailUrl}
-              alt={`Large view of ${commonName}`}
-              class="w-full h-full object-cover transition-opacity duration-200"
-              class:opacity-0={!imageLoaded}
-              class:opacity-100={imageLoaded}
-              onload={handleImageLoad}
-              onerror={handleImageError}
-            />
-          {/if}
-        </div>
-
-        <!-- Action hint -->
-        <div class="text-center">
-          <p class="text-xs text-base-content/50">Click to view detections</p>
-        </div>
-      </div>
-
-      <!-- Popup arrow pointing to trigger -->
+    <Portal>
       <div
-        class="absolute w-3 h-3 bg-base-100 border-l border-t border-base-300 rotate-45 -z-10"
-        style:left="20px"
-        style:top="-6px"
-      ></div>
-    </div>
+        bind:this={popupElement}
+        id="bird-popup"
+        class="fixed z-50 bg-base-100 border border-base-300 rounded-lg shadow-xl p-4 transition-opacity duration-200"
+        style:left="{popupX}px"
+        style:top="{popupY}px"
+        style:width="320px"
+        role="tooltip"
+        aria-live="polite"
+      >
+        <!-- Popup content -->
+        <div class="space-y-3">
+          <!-- Species information header -->
+          <div class="text-center space-y-1">
+            <h3 class="font-semibold text-base-content text-sm leading-tight">
+              {commonName}
+            </h3>
+            <p class="text-base-content/70 text-xs italic">
+              {scientificName}
+            </p>
+          </div>
+
+          <!-- Large image container -->
+          <div class="relative w-full h-48 bg-base-200 rounded-lg overflow-hidden">
+            {#if !imageLoaded && !imageError}
+              <!-- Loading state -->
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div class="loading loading-spinner loading-md"></div>
+              </div>
+            {/if}
+
+            {#if imageError}
+              <!-- Error state -->
+              <div
+                class="absolute inset-0 flex flex-col items-center justify-center text-base-content/50"
+              >
+                <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                <p class="text-xs text-center">Image not available</p>
+              </div>
+            {:else}
+              <!-- Large image -->
+              <img
+                src={thumbnailUrl}
+                alt={`Large view of ${commonName}`}
+                class="w-full h-full object-cover transition-opacity duration-200"
+                class:opacity-0={!imageLoaded}
+                class:opacity-100={imageLoaded}
+                onload={handleImageLoad}
+                onerror={handleImageError}
+              />
+            {/if}
+          </div>
+
+          <!-- Action hint -->
+          <div class="text-center">
+            <p class="text-xs text-base-content/50">Click to view detections</p>
+          </div>
+        </div>
+
+        <!-- Popup arrow pointing to trigger -->
+        {#if popupPosition === 'below'}
+          <!-- Arrow at top of popup -->
+          <div
+            class="absolute w-3 h-3 bg-base-100 border-l border-t border-base-300 rotate-45 -z-10"
+            style:left="20px"
+            style:top="-6px"
+          ></div>
+        {:else}
+          <!-- Arrow at bottom of popup -->
+          <div
+            class="absolute w-3 h-3 bg-base-100 border-r border-b border-base-300 rotate-45 -z-10"
+            style:left="20px"
+            style:bottom="-6px"
+          ></div>
+        {/if}
+      </div>
+    </Portal>
   {/if}
 </div>
 

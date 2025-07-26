@@ -4,10 +4,7 @@
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
   import { t } from '$lib/i18n';
-  import type {
-    DailySpeciesSummary,
-    Detection,
-  } from '$lib/types/detection.types';
+  import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
 
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
@@ -160,17 +157,17 @@
   // Process pending cleanups using requestAnimationFrame
   function processCleanups(currentTime: number) {
     const toExecute: Array<() => void> = [];
-    
+
     pendingCleanups.forEach((cleanup, key) => {
       if (currentTime >= cleanup.timestamp) {
         toExecute.push(cleanup.fn);
         pendingCleanups.delete(key);
       }
     });
-    
+
     // Execute cleanups in batch
     toExecute.forEach(fn => fn());
-    
+
     // Continue if there are more pending cleanups
     if (pendingCleanups.size > 0) {
       animationFrame = requestAnimationFrame(processCleanups);
@@ -183,7 +180,7 @@
   function scheduleAnimationCleanup(cleanupFn: () => void, delay: number, key?: string) {
     // Use species code as key if available, otherwise generate one
     const cleanupKey = key || `cleanup-${Date.now()}-${Math.random()}`;
-    
+
     // Performance: Limit concurrent animations to prevent overwhelming the UI
     if (pendingCleanups.size > 50) {
       console.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
@@ -196,7 +193,7 @@
     // Schedule cleanup
     pendingCleanups.set(cleanupKey, {
       fn: cleanupFn,
-      timestamp: performance.now() + delay
+      timestamp: performance.now() + delay,
     });
 
     // Start RAF loop if not already running
@@ -378,13 +375,13 @@
       // Clean up animation timers
       animationCleanupTimers.forEach(timer => clearTimeout(timer));
       animationCleanupTimers.clear();
-      
+
       // Cancel pending RAF
       if (animationFrame !== null) {
         cancelAnimationFrame(animationFrame);
         animationFrame = null;
       }
-      
+
       // Clear pending cleanups
       pendingCleanups.clear();
     };
@@ -526,20 +523,26 @@
       );
 
       // Clear animation flags after animation completes
-      scheduleAnimationCleanup(() => {
-        const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
-        if (currentIndex >= 0) {
-          const cleared = { ...dailySummary[currentIndex] };
-          cleared.countIncreased = false;
-          cleared.hourlyUpdated = [];
+      scheduleAnimationCleanup(
+        () => {
+          const currentIndex = dailySummary.findIndex(
+            s => s.species_code === detection.speciesCode
+          );
+          if (currentIndex >= 0) {
+            const cleared = { ...dailySummary[currentIndex] };
+            cleared.countIncreased = false;
+            cleared.hourlyUpdated = [];
 
-          dailySummary = [
-            ...dailySummary.slice(0, currentIndex),
-            cleared,
-            ...dailySummary.slice(currentIndex + 1),
-          ];
-        }
-      }, 1000, `count-${detection.speciesCode}`);
+            dailySummary = [
+              ...dailySummary.slice(0, currentIndex),
+              cleared,
+              ...dailySummary.slice(currentIndex + 1),
+            ];
+          }
+        },
+        1000,
+        `count-${detection.speciesCode}`
+      );
     } else {
       // Add new species
       const newSpecies: DailySpeciesSummary = {
@@ -575,19 +578,25 @@
       );
 
       // Clear animation flag after animation completes
-      scheduleAnimationCleanup(() => {
-        const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
-        if (currentIndex >= 0) {
-          const cleared = { ...dailySummary[currentIndex] };
-          cleared.isNew = false;
+      scheduleAnimationCleanup(
+        () => {
+          const currentIndex = dailySummary.findIndex(
+            s => s.species_code === detection.speciesCode
+          );
+          if (currentIndex >= 0) {
+            const cleared = { ...dailySummary[currentIndex] };
+            cleared.isNew = false;
 
-          dailySummary = [
-            ...dailySummary.slice(0, currentIndex),
-            cleared,
-            ...dailySummary.slice(currentIndex + 1),
-          ];
-        }
-      }, 800, `new-${detection.speciesCode}`);
+            dailySummary = [
+              ...dailySummary.slice(0, currentIndex),
+              cleared,
+              ...dailySummary.slice(currentIndex + 1),
+            ];
+          }
+        },
+        800,
+        `new-${detection.speciesCode}`
+      );
     }
   }
 
@@ -598,7 +607,6 @@
     // You can implement navigation to detection details here
     // window.location.href = `/detections/${detection.id}`;
   }
-
 </script>
 
 <div class="col-span-12 space-y-6">

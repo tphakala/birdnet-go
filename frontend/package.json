@@ -78,6 +78,7 @@
     "chartjs-adapter-date-fns": "^3.0.0",
     "daisyui": "^4.12.24",
     "eventsource": "^4.0.0",
-    "reconnecting-eventsource": "^1.6.4"
+    "reconnecting-eventsource": "^1.6.4",
+    "svelte-portal": "^2.2.1"
   }
 }
