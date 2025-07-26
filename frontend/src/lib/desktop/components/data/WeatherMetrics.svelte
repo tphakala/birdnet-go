@@ -54,9 +54,10 @@
     className = '',
   }: Props = $props();
 
+
   // Toggle constants for temperature and wind speed icons
-  const SHOW_TEMPERATURE_ICON = true;
-  const SHOW_WINDSPEED_ICON = true;
+  const SHOW_TEMPERATURE_ICON = false;
+  const SHOW_WINDSPEED_ICON = false;
 
   // Container element reference for width observation
   let containerElement: HTMLDivElement | null = $state(null);
@@ -80,9 +81,11 @@
   });
 
   // Responsive visibility thresholds - progressive enhancement
-  const showWeatherGroup = $derived(containerWidth === 0 || containerWidth >= 80);
-  const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 160);
-  const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 240);
+  // With two-line layout, we need less horizontal space per element
+  const showWeatherIcon = $derived(containerWidth === 0 || containerWidth >= 30); // Always show weather icon unless very narrow
+  const showWeatherDescription = $derived(containerWidth === 0 || containerWidth >= 110); // Hide description on narrow
+  const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 30); // Always show temperature 
+  const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 100); // Hide wind speed on narrow
 
   // Get the appropriate unit labels based on the units setting
   const temperatureUnit = $derived(() => {
@@ -132,8 +135,8 @@
   const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
     '01': { day: '☀️', night: '🌙', description: 'Clear sky' },
     '02': { day: '⛅', night: '☁️', description: 'Few clouds' },
-    '03': { day: '☁️', night: '☁️', description: 'Scattered clouds' },
-    '04': { day: '☁️', night: '☁️', description: 'Broken clouds' },
+    '03': { day: '⛅', night: '☁️', description: 'Scattered clouds' },
+    '04': { day: '⛅', night: '☁️', description: 'Broken clouds' },
     '09': { day: '🌧️', night: '🌧️', description: 'Shower rain' },
     '10': { day: '🌦️', night: '🌧️', description: 'Rain' },
     '11': { day: '⛈️', night: '⛈️', description: 'Thunderstorm' },
@@ -214,33 +217,31 @@
 
 <div
   bind:this={containerElement}
-  class={cn('wm-container flex items-center gap-2 overflow-hidden', className)}
+  class={cn('wm-container flex flex-col gap-1 overflow-hidden', className)}
   title={weatherDesc}
 >
-  <!-- Weather Group - Icon + Description -->
-  {#if weatherIcon && showWeatherGroup}
+  <!-- Line 1: Weather Icon + Description -->
+  {#if weatherIcon && showWeatherIcon}
     <div class="wm-weather-group flex items-center gap-1 flex-shrink-0">
+      <!-- Weather Icon - always visible when showWeatherIcon is true -->
       <span
         class={cn('wm-weather-icon inline-block flex-shrink-0', emojiSizeClasses[size])}
         aria-label={weatherDesc}
       >
         {weatherEmoji}
       </span>
-      <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
-        {weatherDesc}
-      </span>
-    </div>
-  {:else if weatherIcon}
-    <!-- Icon only when space is very limited -->
-    <div class="wm-weather-icon-only flex items-center flex-shrink-0">
-      <span
-        class={cn('wm-weather-icon inline-block flex-shrink-0', emojiSizeClasses[size])}
-        aria-label={weatherDesc}
-      >
-        {weatherEmoji}
-      </span>
+      
+      <!-- Weather Description - conditionally visible -->
+      {#if showWeatherDescription}
+        <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
+          {weatherDesc}
+        </span>
+      {/if}
     </div>
   {/if}
+
+  <!-- Line 2: Temperature + Wind Speed -->
+  <div class="flex items-center gap-2 overflow-hidden">
 
   <!-- Temperature Group -->
   {#if temperature !== undefined && showTemperatureGroup}
@@ -365,6 +366,7 @@
       </span>
     </div>
   {/if}
+  </div>
 </div>
 
 <style>
@@ -384,33 +386,23 @@
     container-type: inline-size;
   }
 
-  /* Responsive visibility using container queries - progressive enhancement */
-  /* Respect parent container visibility - don't override display: none from parent */
-  .wm-weather-icon-only {
-    display: none; /* Hidden by default */
+  /* Progressive disclosure based on container width */
+  @container (max-width: 30px) {
+    /* Very narrow: hide temperature too */
+    .wm-temperature-group {
+      display: none;
+    }
+  }
+
+  @container (max-width: 40px) {
+    /* Very narrow: hide weather icon */
+    .wm-weather-group {
+      display: none;
+    }
   }
 
   @container (max-width: 80px) {
-    .wm-weather-group,
-    .wm-temperature-group,
-    .wm-wind-group {
-      display: none;
-    }
-
-    /* Only show icon-only if parent container is visible */
-    .wm-weather-icon-only {
-      display: flex;
-    }
-  }
-
-  @container (max-width: 160px) {
-    .wm-temperature-group,
-    .wm-wind-group {
-      display: none;
-    }
-  }
-
-  @container (max-width: 240px) {
+    /* Medium narrow: hide wind speed */
     .wm-wind-group {
       display: none;
     }
