@@ -542,22 +542,38 @@
     animation: newSpeciesSlide 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
-  /* Heatmap cell update flash */
-  @keyframes heatmapFlash {
-    0%,
-    100% {
-      box-shadow: none;
+  /* Heatmap cell heart pulse animation */
+  @keyframes heartPulse {
+    0% {
       transform: scale(1);
+      box-shadow: 0 0 0 0 oklch(var(--p) / 0.7);
     }
-
-    50% {
-      box-shadow: 0 0 12px hsl(var(--p));
-      transform: scale(1.1);
+    15% {
+      transform: scale(1.15);
+      box-shadow: 0 0 0 4px oklch(var(--p) / 0.5);
+    }
+    25% {
+      transform: scale(1.05);
+      box-shadow: 0 0 0 6px oklch(var(--p) / 0.3);
+    }
+    35% {
+      transform: scale(1.12);
+      box-shadow: 0 0 0 8px oklch(var(--p) / 0.1);
+    }
+    45% {
+      transform: scale(1);
+      box-shadow: 0 0 0 10px oklch(var(--p) / 0);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 oklch(var(--p) / 0);
     }
   }
-
+  
   .hour-updated {
-    animation: heatmapFlash 0.8s ease-out;
+    animation: heartPulse 1s ease-out;
+    position: relative;
+    z-index: 10;
   }
 
   /* Respect user's reduced motion preference */
