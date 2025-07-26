@@ -387,7 +387,7 @@ tbody td:last-child > *,
     table-layout: fixed;
     width: 100%;
   }
-  
+
   tbody td,
   .detection-header-list th {
     padding: 0.25rem 0.75rem;
@@ -404,7 +404,7 @@ tbody td:last-child > *,
       minmax(80px, 1fr) /* Status */
       minmax(150px, 1.5fr) /* Recording */
       40px; /* Actions */
-      
+
     gap: 0.75rem;
   }
 

@@ -55,7 +55,7 @@
   let sunTimes = $state<SunTimes | null>(null);
   let sunTimesError = $state<string | null>(null);
   let sunTimesLoading = $state(false);
-  
+
   // Cache for sun times to avoid repeated API calls
   const sunTimesCache = new Map<string, SunTimes>();
 
@@ -66,7 +66,7 @@
     if (cached) {
       return cached;
     }
-    
+
     sunTimesLoading = true;
     sunTimesError = null;
 
@@ -83,10 +83,10 @@
         sunrise: data.sunrise,
         sunset: data.sunset,
       };
-      
+
       // Cache the result
       sunTimesCache.set(date, sunTimesData);
-      
+
       return sunTimesData;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
@@ -101,10 +101,9 @@
   // Update sun times when selected date changes
   $effect(() => {
     if (selectedDate) {
-      fetchSunTimes(selectedDate)
-        .then(times => {
-          sunTimes = times; // times will be null if there was an error
-        });
+      fetchSunTimes(selectedDate).then(times => {
+        sunTimes = times; // times will be null if there was an error
+      });
     }
   });
 

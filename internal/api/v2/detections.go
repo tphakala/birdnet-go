@@ -108,6 +108,7 @@ type DetectionRequest struct {
 	Verified      string `json:"verified,omitempty"`
 	IgnoreSpecies string `json:"ignoreSpecies,omitempty"`
 	Locked        bool   `json:"locked,omitempty"`
+	LockDetection bool   `json:"lock_detection,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response
@@ -1045,23 +1046,31 @@ func (c *Controller) checkAndHandleLock(idStr string, shouldLock bool) (*datasto
 func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 
-	// Use the shared lock helper
-	note, err := c.checkAndHandleLock(idStr, true)
+	// Get the note directly - allow reviewing locked detections
+	note, err := c.DS.Get(idStr)
 	if err != nil {
-		// Check error type to determine the appropriate status code
-		if strings.Contains(err.Error(), "failed to check lock status") {
-			// Database error during lock check should be 500
-			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
-		} else {
-			// Lock conflicts should be 409
-			return c.HandleError(ctx, err, err.Error(), http.StatusConflict)
-		}
+		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
 	// Parse request
 	req := &DetectionRequest{}
 	if err := ctx.Bind(req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
+	}
+
+	// Log when modifying locked detections for audit trail
+	if note.Locked {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Modifying locked detection",
+				"detection_id", idStr,
+				"current_verified", note.Verified,
+				"new_verified", req.Verified,
+				"current_locked", note.Locked,
+				"new_lock_state", req.LockDetection,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
 	}
 
 	// Handle comment if provided
@@ -1094,6 +1103,32 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		// Handle ignored species
 		if err := c.addToIgnoredSpecies(req.Verified, req.IgnoreSpecies); err != nil {
 			return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
+		}
+	}
+
+	// Handle lock/unlock request separately
+	if req.LockDetection != note.Locked {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Updating lock status",
+				"detection_id", idStr,
+				"current_locked", note.Locked,
+				"new_locked", req.LockDetection,
+				"ip", ctx.RealIP(),
+			)
+		}
+		
+		err = c.AddLock(note.ID, req.LockDetection)
+		if err != nil {
+			// Log the lock operation failure
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Failed to update lock status",
+					"detection_id", idStr,
+					"attempted_lock_state", req.LockDetection,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+				)
+			}
+			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)
 		}
 	}
 

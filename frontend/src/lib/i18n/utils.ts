@@ -118,7 +118,8 @@ export function detectBrowserLocale(): Locale {
   }
 
   // Get browser languages in order of preference
-  const browserLanguages = navigator.languages || [navigator.language || DEFAULT_LOCALE];
+  const browserLanguages =
+    navigator.languages || (navigator.language ? [navigator.language] : [DEFAULT_LOCALE]);
 
   // Find first matching supported locale
   for (const lang of browserLanguages) {

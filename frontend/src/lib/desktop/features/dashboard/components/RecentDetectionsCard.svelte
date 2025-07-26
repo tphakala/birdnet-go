@@ -70,16 +70,8 @@
     }
   }
 
-  // Returns appropriate badge configuration based on detection verification and lock status
-  function getStatusBadge(verified: string, locked: boolean) {
-    if (locked) {
-      return {
-        type: 'locked',
-        text: t('dashboard.recentDetections.status.locked'),
-        class: 'status-badge locked',
-      };
-    }
-
+  // Returns appropriate badge configuration based on detection verification status
+  function getStatusBadge(verified: string) {
     switch (verified) {
       case 'correct':
         return {
@@ -287,7 +279,7 @@
         <!-- Detection Rows -->
         <div class="divide-y divide-base-200">
           {#each data.slice(0, selectedLimit) as detection}
-            {@const badge = getStatusBadge(detection.verified, detection.locked)}
+            {@const badge = getStatusBadge(detection.verified)}
             {@const isNew = newDetectionIds.has(detection.id)}
             <div
               class="detection-grid-dashboard detection-row"
@@ -344,9 +336,12 @@
               <!-- Status -->
               <div>
                 <div class="flex flex-wrap gap-1">
-                  <span class="status-badge {badge.class}">
+                  <span class={badge.class}>
                     {badge.text}
                   </span>
+                  {#if detection.locked}
+                    <span class="status-badge locked">locked</span>
+                  {/if}
                 </div>
               </div>
 
