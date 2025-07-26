@@ -43,6 +43,11 @@
   // Track if any action menu is open
   let isActionMenuOpen = $state(false);
 
+  // Debug effect to monitor action menu state
+  $effect(() => {
+    console.log('DashboardPage: isActionMenuOpen changed to', isActionMenuOpen);
+  });
+
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
   let updateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -646,6 +651,8 @@
     onRefresh={handleManualRefresh}
     {newDetectionIds}
     {detectionArrivalTimes}
-    bind:isActionMenuOpen={isActionMenuOpen}
+    onActionMenuStatusChange={isOpen => {
+      isActionMenuOpen = isOpen;
+    }}
   />
 </div>

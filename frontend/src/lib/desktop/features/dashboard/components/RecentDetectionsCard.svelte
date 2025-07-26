@@ -22,7 +22,7 @@
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
     isRefreshEnabled?: boolean;
-    isActionMenuOpen?: boolean;
+    onActionMenuStatusChange?: (isOpen: boolean) => void;
   }
 
   let {
@@ -36,7 +36,7 @@
     newDetectionIds = new Set(),
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
     isRefreshEnabled = true,
-    isActionMenuOpen = $bindable(false),
+    onActionMenuStatusChange,
   }: Props = $props();
 
   // State for number of detections to show
@@ -45,9 +45,13 @@
   // Track open action menus
   let openActionMenus = $state(new Set<number>());
 
-  // Update bindable prop when menus open/close
+  // Use derived state for menu open status
+  let menuOpenStatus = $derived(openActionMenus.size > 0);
+
+  // Notify parent when menus open/close
   $effect(() => {
-    isActionMenuOpen = openActionMenus.size > 0;
+    console.log('RecentDetectionsCard: Menu open status changed to', menuOpenStatus);
+    onActionMenuStatusChange?.(menuOpenStatus);
   });
 
   // Update selectedLimit when prop changes
@@ -225,9 +229,9 @@
         <button
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
-          disabled={loading || openActionMenus.size > 0}
+          disabled={loading || menuOpenStatus}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
-          title={openActionMenus.size > 0 ? 'Refresh disabled while action menu is open' : ''}
+          title={menuOpenStatus ? 'Refresh disabled while action menu is open' : ''}
         >
           <div class="h-4 w-4" class:animate-spin={loading}>
             {@html actionIcons.refresh}
@@ -348,12 +352,17 @@
                   onToggleSpecies={() => handleToggleSpecies(detection)}
                   onToggleLock={() => handleToggleLock(detection)}
                   onDelete={() => handleDelete(detection)}
-                  onOpenChange={(isOpen) => {
+                  onOpenChange={isOpen => {
+                    console.log(
+                      `ActionMenu for detection ${detection.id} is now ${isOpen ? 'open' : 'closed'}`
+                    );
                     if (isOpen) {
                       openActionMenus.add(detection.id);
                     } else {
                       openActionMenus.delete(detection.id);
                     }
+                    // Force reactivity update
+                    openActionMenus = openActionMenus;
                   }}
                 />
               </div>
