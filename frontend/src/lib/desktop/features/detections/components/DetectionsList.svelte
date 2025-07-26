@@ -178,39 +178,27 @@
         className="py-8"
       />
     {:else}
-      <!-- Header -->
-      <div class="grid grid-cols-12 gap-4 text-xs px-4 pb-2 border-b border-gray-200">
-        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.dateTime')}</div>
-        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.weather')}</div>
-        <div class="col-span-3 min-w-0 break-words">{t('detections.headers.species')}</div>
-        {#if data.dashboardSettings?.thumbnails?.summary}
-          <div class="col-span-1 min-w-0 break-words">{t('detections.headers.thumbnail')}</div>
-        {/if}
-        <div class="col-span-1 min-w-0 break-words">{t('detections.headers.status')}</div>
-        <div
-          class={cn(
-            data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-2',
-            'min-w-0 break-words'
-          )}
-        >
-          {t('detections.headers.recording')}
-        </div>
-        <div class="col-span-1 text-right min-w-0 break-words">
-          {t('detections.headers.actions')}
-        </div>
-      </div>
-
-      <!-- Detection rows -->
-      <div class="divide-y divide-gray-100">
-        {#each data.notes as detection}
-          <DetectionRow
-            {detection}
-            showThumbnails={data.dashboardSettings?.thumbnails?.summary}
-            {onDetailsClick}
-            {onRefresh}
-          />
-        {/each}
-      </div>
+      <table class="w-full">
+        <caption class="sr-only">{t('detections.table.caption')}</caption>
+        <thead>
+          <tr class="detection-header-list">
+            <th scope="col">{t('detections.headers.dateTime')}</th>
+            <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
+            <th scope="col">{t('detections.headers.species')}</th>
+            <th scope="col">{t('detections.headers.confidence')}</th>
+            <th scope="col">{t('detections.headers.status')}</th>
+            <th scope="col" class="hidden md:table-cell">{t('detections.headers.recording')}</th>
+            <th scope="col">{t('detections.headers.actions')}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-base-200">
+          {#each data.notes as detection}
+            <tr>
+              <DetectionRow {detection} {onDetailsClick} {onRefresh} />
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 

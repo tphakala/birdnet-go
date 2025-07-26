@@ -4,11 +4,10 @@
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
   import { t } from '$lib/i18n';
-  import type {
-    DailySpeciesSummary,
-    Detection,
-    DetectionQueryParams,
-  } from '$lib/types/detection.types';
+  import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
+
+  // Constants
+  const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
 
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
@@ -65,9 +64,12 @@
     }
   }
 
-  async function fetchRecentDetections() {
+  async function fetchRecentDetections(applyAnimations = false) {
     isLoadingDetections = true;
     detectionsError = null;
+
+    // Store current detection IDs to identify new ones after fetch
+    const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
       const response = await fetch('/api/v2/detections/recent?limit=10');
@@ -76,7 +78,28 @@
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
         );
       }
-      recentDetections = await response.json();
+      const newData = await response.json();
+
+      // Only apply animations for SSE-triggered updates
+      if (applyAnimations) {
+        // Identify new detections by comparing IDs
+        const arrivalTime = Date.now();
+        newData.forEach((detection: Detection) => {
+          if (!previousIds.has(detection.id)) {
+            // This is a new detection - add to animation state
+            newDetectionIds.add(detection.id);
+            detectionArrivalTimes.set(detection.id, arrivalTime);
+
+            // Remove animation after it completes
+            setTimeout(() => {
+              newDetectionIds.delete(detection.id);
+              detectionArrivalTimes.delete(detection.id);
+            }, ANIMATION_CLEANUP_DELAY);
+          }
+        });
+      }
+
+      recentDetections = newData;
     } catch (error) {
       detectionsError =
         error instanceof Error ? error.message : t('dashboard.errors.recentDetectionsLoad');
@@ -110,19 +133,15 @@
     // Clear animation state on manual refresh
     newDetectionIds.clear();
     detectionArrivalTimes.clear();
-    clearDailySummaryAnimations();
 
-    // For SSE mode, just fetch fresh data without affecting the connection
-    if (connectionStatus === 'connected') {
-      fetchRecentDetections();
-    } else {
-      // For polling mode or when SSE is not working, use regular fetch
-      fetchRecentDetections();
-    }
+    // Just fetch recent detections - don't touch daily summary
+    fetchRecentDetections();
   }
 
-  // Animation cleanup timers
+  // Animation cleanup timers and RAF manager
   let animationCleanupTimers = $state(new Set<ReturnType<typeof setTimeout>>());
+  let animationFrame: number | null = null;
+  let pendingCleanups = new Map<string, { fn: () => void; timestamp: number }>();
 
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
@@ -138,49 +157,68 @@
     animationCleanupTimers.clear();
   }
 
-  // Centralized animation cleanup with timer tracking and limit
-  function scheduleAnimationCleanup(cleanupFn: () => void, delay: number) {
+  // Process pending cleanups using requestAnimationFrame
+  function processCleanups(currentTime: number) {
+    const toExecute: Array<() => void> = [];
+
+    pendingCleanups.forEach((cleanup, key) => {
+      if (currentTime >= cleanup.timestamp) {
+        toExecute.push(cleanup.fn);
+        pendingCleanups.delete(key);
+      }
+    });
+
+    // Execute cleanups in batch
+    toExecute.forEach(fn => fn());
+
+    // Continue if there are more pending cleanups
+    if (pendingCleanups.size > 0) {
+      animationFrame = requestAnimationFrame(processCleanups);
+    } else {
+      animationFrame = null;
+    }
+  }
+
+  // Centralized animation cleanup with RAF batching
+  function scheduleAnimationCleanup(cleanupFn: () => void, delay: number, key?: string) {
+    // Use species code as key if available, otherwise generate one
+    const cleanupKey = key || `cleanup-${Date.now()}-${Math.random()}`;
+
     // Performance: Limit concurrent animations to prevent overwhelming the UI
-    if (animationCleanupTimers.size > 50) {
+    if (pendingCleanups.size > 50) {
       console.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
-      const oldestTimer = animationCleanupTimers.values().next().value;
-      if (oldestTimer) {
-        clearTimeout(oldestTimer);
-        animationCleanupTimers.delete(oldestTimer);
+      const oldestKey = pendingCleanups.keys().next().value;
+      if (oldestKey) {
+        pendingCleanups.delete(oldestKey);
       }
     }
 
-    const timer = setTimeout(() => {
-      cleanupFn();
-      animationCleanupTimers.delete(timer);
-    }, delay);
+    // Schedule cleanup
+    pendingCleanups.set(cleanupKey, {
+      fn: cleanupFn,
+      timestamp: performance.now() + delay,
+    });
 
-    animationCleanupTimers.add(timer);
-    return timer;
+    // Start RAF loop if not already running
+    if (animationFrame === null) {
+      animationFrame = requestAnimationFrame(processCleanups);
+    }
   }
 
   // SSE connection for real-time detection updates
   let eventSource: ReconnectingEventSource | null = null;
   let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
 
-  // Process new detection from SSE
+  // Process new detection from SSE - trigger API fetch instead of direct manipulation
   function handleNewDetection(detection: Detection) {
-    // Mark detection as new for animation and track arrival time
-    const arrivalTime = Date.now();
-    newDetectionIds.add(detection.id);
-    detectionArrivalTimes.set(detection.id, arrivalTime);
+    console.log('New detection via SSE:', detection.commonName);
 
-    // Add new detection to beginning of list and limit to user's selected limit
-    recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
+    // Trigger API fetch to get fresh data with animations enabled
+    // This avoids complex DOM issues with direct data manipulation
+    fetchRecentDetections(true);
 
     // Queue daily summary update with debouncing
     queueDailySummaryUpdate(detection);
-
-    // Remove animation class after animation completes (600ms animation + 400ms buffer)
-    setTimeout(() => {
-      newDetectionIds.delete(detection.id);
-      detectionArrivalTimes.delete(detection.id);
-    }, 1000);
   }
 
   // Connect to SSE stream for real-time updates using ReconnectingEventSource
@@ -340,6 +378,15 @@
       // Clean up animation timers
       animationCleanupTimers.forEach(timer => clearTimeout(timer));
       animationCleanupTimers.clear();
+
+      // Cancel pending RAF
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+
+      // Clear pending cleanups
+      pendingCleanups.clear();
     };
   });
 
@@ -479,20 +526,26 @@
       );
 
       // Clear animation flags after animation completes
-      scheduleAnimationCleanup(() => {
-        const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
-        if (currentIndex >= 0) {
-          const cleared = { ...dailySummary[currentIndex] };
-          cleared.countIncreased = false;
-          cleared.hourlyUpdated = [];
+      scheduleAnimationCleanup(
+        () => {
+          const currentIndex = dailySummary.findIndex(
+            s => s.species_code === detection.speciesCode
+          );
+          if (currentIndex >= 0) {
+            const cleared = { ...dailySummary[currentIndex] };
+            cleared.countIncreased = false;
+            cleared.hourlyUpdated = [];
 
-          dailySummary = [
-            ...dailySummary.slice(0, currentIndex),
-            cleared,
-            ...dailySummary.slice(currentIndex + 1),
-          ];
-        }
-      }, 1000);
+            dailySummary = [
+              ...dailySummary.slice(0, currentIndex),
+              cleared,
+              ...dailySummary.slice(currentIndex + 1),
+            ];
+          }
+        },
+        1000,
+        `count-${detection.speciesCode}`
+      );
     } else {
       // Add new species
       const newSpecies: DailySpeciesSummary = {
@@ -528,19 +581,25 @@
       );
 
       // Clear animation flag after animation completes
-      scheduleAnimationCleanup(() => {
-        const currentIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
-        if (currentIndex >= 0) {
-          const cleared = { ...dailySummary[currentIndex] };
-          cleared.isNew = false;
+      scheduleAnimationCleanup(
+        () => {
+          const currentIndex = dailySummary.findIndex(
+            s => s.species_code === detection.speciesCode
+          );
+          if (currentIndex >= 0) {
+            const cleared = { ...dailySummary[currentIndex] };
+            cleared.isNew = false;
 
-          dailySummary = [
-            ...dailySummary.slice(0, currentIndex),
-            cleared,
-            ...dailySummary.slice(currentIndex + 1),
-          ];
-        }
-      }, 800);
+            dailySummary = [
+              ...dailySummary.slice(0, currentIndex),
+              cleared,
+              ...dailySummary.slice(currentIndex + 1),
+            ];
+          }
+        },
+        800,
+        `new-${detection.speciesCode}`
+      );
     }
   }
 
@@ -550,28 +609,6 @@
     console.log('Detection clicked:', detection);
     // You can implement navigation to detection details here
     // window.location.href = `/detections/${detection.id}`;
-  }
-
-  // Handle species click from daily summary
-  function handleSpeciesClick(species: DailySpeciesSummary) {
-    // Navigate to species details page
-    window.location.href = `/ui/species/${species.species_code}`;
-  }
-
-  // Handle detection view navigation from daily summary
-  function handleDetectionView(params: DetectionQueryParams) {
-    // Build query string from parameters
-    const searchParams = new URLSearchParams();
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        searchParams.append(key, String(value));
-      }
-    });
-
-    // Navigate to detections page with query parameters
-    const queryString = searchParams.toString();
-    window.location.href = `/ui/detections${queryString ? `?${queryString}` : ''}`;
   }
 </script>
 
@@ -583,8 +620,6 @@
     error={summaryError}
     {selectedDate}
     {showThumbnails}
-    onRowClick={handleSpeciesClick}
-    onDetectionView={handleDetectionView}
     onPreviousDay={previousDay}
     onNextDay={nextDay}
     onGoToToday={goToToday}

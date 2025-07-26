@@ -11,7 +11,7 @@
   
   Props:
   - confidence: number - The confidence value (0-1 or 0-100)
-  - size?: 'sm' | 'md' | 'lg' - Size variant
+  - size?: 'sm' | 'md' | 'lg' | 'xl' - Size variant
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
@@ -19,11 +19,11 @@
 
   interface Props {
     confidence: number;
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'sm' | 'md' | 'lg' | 'xl';
     className?: string;
   }
 
-  let { confidence, className = '' }: Props = $props();
+  let { confidence, size = 'md', className = '' }: Props = $props();
 
   // Helper function to validate and normalize confidence input
   function normalizeConfidence(value: number): number {
@@ -51,17 +51,44 @@
     if (clampedPercent >= 40) return 'confidence-medium';
     return 'confidence-low';
   }
+
+  // Size configuration
+  const sizeConfig = {
+    sm: { size: 32, track: 4, fontSize: '0.625rem', iconSize: 12 },
+    md: { size: 42, track: 5, fontSize: '0.75rem', iconSize: 16 },
+    lg: { size: 56, track: 6, fontSize: '0.875rem', iconSize: 20 },
+    xl: { size: 72, track: 8, fontSize: '1rem', iconSize: 24 },
+  };
+
+  const config = $derived(sizeConfig[size]);
 </script>
 
 <div
   class="confidence-circle {getConfidenceClass(confidence)} {className}"
   style:--progress="{confidencePercent()}%"
+  style:width="{config.size}px"
+  style:height="{config.size}px"
+  style:min-width="{config.size}px"
+  style:min-height="{config.size}px"
+  style:font-size={config.fontSize}
 >
-  <div class="confidence-circle-track"></div>
+  <div
+    class="confidence-circle-track"
+    style:top="{config.track}px"
+    style:left="{config.track}px"
+    style:right="{config.track}px"
+    style:bottom="{config.track}px"
+  ></div>
   <div class="confidence-circle-progress"></div>
-  <div class="confidence-circle-text">
+  <div class="confidence-circle-text" style:font-size={config.fontSize}>
     {#if isMaxConfidence}
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        style:width="{config.iconSize}px"
+        style:height="{config.iconSize}px"
+      >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d={alertIcons.check}
         ></path>
       </svg>
@@ -70,3 +97,93 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .confidence-circle {
+    position: relative;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--lighter-color, #f3f4f6);
+  }
+
+  :global([data-theme='dark']) .confidence-circle {
+    background: var(--darker-color, rgb(17, 24, 39));
+  }
+
+  .confidence-circle-track {
+    position: absolute;
+    background: var(--lighter-color, #f3f4f6);
+    border-radius: 50%;
+    z-index: 2;
+  }
+
+  :global([data-theme='dark']) .confidence-circle-track {
+    background: var(--darker-color, rgb(17, 24, 39));
+  }
+
+  .confidence-circle-progress {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    transform-origin: center;
+    transform: rotate(180deg);
+    background: conic-gradient(currentColor var(--progress), transparent 0);
+    transition: all 0.3s ease;
+    z-index: 1;
+  }
+
+  .confidence-circle-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: 600;
+    color: currentColor;
+    z-index: 3;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+
+  .confidence-circle-text svg {
+    stroke-width: 3;
+  }
+
+  /* Confidence level color schemes */
+  .confidence-circle :global(.confidence-high) {
+    color: #059669;
+    --lighter-color: #ecfdf5;
+    --darker-color: rgba(6, 78, 59, 0.2);
+  }
+
+  .confidence-circle :global(.confidence-medium) {
+    color: #d97706;
+    --lighter-color: #fffbeb;
+    --darker-color: rgba(120, 53, 15, 0.2);
+  }
+
+  .confidence-circle :global(.confidence-low) {
+    color: #dc2626;
+    --lighter-color: #fef2f2;
+    --darker-color: rgba(127, 29, 29, 0.2);
+  }
+
+  /* Dark theme adjustments */
+  :global([data-theme='dark']) .confidence-circle :global(.confidence-high) {
+    color: #34d399;
+    --darker-color: rgb(6, 78, 59);
+  }
+
+  :global([data-theme='dark']) .confidence-circle :global(.confidence-medium) {
+    color: #fbbf24;
+    --darker-color: rgb(120, 53, 15);
+  }
+
+  :global([data-theme='dark']) .confidence-circle :global(.confidence-low) {
+    color: #f87171;
+    --darker-color: rgb(127, 29, 29);
+  }
+</style>

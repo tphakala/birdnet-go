@@ -2,9 +2,30 @@
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { alertIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons, weatherIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+
+  // Animation duration constants (in milliseconds)
+  const ANIMATION_DURATIONS = {
+    countPop: 600,
+    heartPulse: 1000,
+    newSpeciesSlide: 800,
+    cleanup: 2200, // Slightly longer than longest animation
+  } as const;
+
+  // Layout constants
+  const GRADIENT_ANGLE = '-45deg';
+  const PROGRESS_BAR_ROUNDING = 5; // Round to nearest 5%
+  const WIDTH_THRESHOLDS = {
+    minTextDisplay: 45,
+    maxTextDisplay: 59,
+  } as const;
+
+  interface SunTimes {
+    sunrise: string; // ISO date string
+    sunset: string; // ISO date string
+  }
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -30,6 +51,75 @@
     onDateChange,
   }: Props = $props();
 
+  // Sun times state
+  let sunTimes = $state<SunTimes | null>(null);
+  let sunTimesError = $state<string | null>(null);
+  let sunTimesLoading = $state(false);
+  
+  // Cache for sun times to avoid repeated API calls
+  const sunTimesCache = new Map<string, SunTimes>();
+
+  // Fetch sun times from weather API with caching
+  async function fetchSunTimes(date: string): Promise<SunTimes | null> {
+    // Check cache first
+    const cached = sunTimesCache.get(date);
+    if (cached) {
+      return cached;
+    }
+    
+    sunTimesLoading = true;
+    sunTimesError = null;
+
+    try {
+      const response = await fetch(`/api/v2/weather/sun/${date}`);
+      if (!response.ok) {
+        const errorMsg = `Failed to fetch sun times: ${response.status} ${response.statusText}`;
+        console.warn(errorMsg);
+        sunTimesError = errorMsg;
+        return null;
+      }
+      const data = await response.json();
+      const sunTimesData: SunTimes = {
+        sunrise: data.sunrise,
+        sunset: data.sunset,
+      };
+      
+      // Cache the result
+      sunTimesCache.set(date, sunTimesData);
+      
+      return sunTimesData;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
+      console.warn('Error fetching sun times:', errorMsg);
+      sunTimesError = errorMsg;
+      return null;
+    } finally {
+      sunTimesLoading = false;
+    }
+  }
+
+  // Update sun times when selected date changes
+  $effect(() => {
+    if (selectedDate) {
+      fetchSunTimes(selectedDate)
+        .then(times => {
+          sunTimes = times; // times will be null if there was an error
+        });
+    }
+  });
+
+  // Calculate which hour column corresponds to sunrise/sunset
+  const getSunHourFromTime = (timeStr: string): number | null => {
+    if (!timeStr) return null;
+    try {
+      const date = new Date(timeStr);
+      return date.getHours();
+    } catch (error) {
+      console.error('Error parsing time:', timeStr, error);
+      return null;
+    }
+  };
+
   // Column definitions - reactive to ensure translations are loaded
   const columns = $derived.by(() => {
     const cols: Column<DailySpeciesSummary>[] = [
@@ -37,7 +127,7 @@
         key: 'common_name',
         header: t('dashboard.dailySummary.columns.species'),
         sortable: true,
-        className: 'font-medium min-w-0',
+        className: 'font-medium w-0 whitespace-nowrap',
       },
     ];
 
@@ -46,7 +136,7 @@
       key: 'total_detections',
       header: t('dashboard.dailySummary.columns.detections'),
       align: 'center',
-      className: 'hidden 2xl:table-cell px-4 w-100',
+      className: 'hidden 2xl:table-cell px-2 sm:px-4 w-100',
       render: (item: DailySpeciesSummary) => item.count,
     });
 
@@ -146,7 +236,9 @@
 
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
-    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    typeof window !== 'undefined'
+      ? (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false)
+      : false
   );
 
   // Sort data by count in descending order for dynamic updates
@@ -195,13 +287,7 @@
   <!-- Card Header with Date Navigation -->
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
-      <span class="card-title grow text-base sm:text-xl"
-        >{t('dashboard.dailySummary.title')}
-        {#if sortedData.length > 0}
-          <!-- Number of species detected -->
-          <span class="species-ball bg-primary text-primary-content ml-2">{sortedData.length}</span>
-        {/if}
-      </span>
+      <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
       <div class="flex items-center gap-2">
         <!-- Previous day button -->
         <button
@@ -245,14 +331,14 @@
       </div>
     {:else}
       <div class="overflow-x-auto">
-        <table class="table table-zebra h-full w-full table-auto">
+        <table class="table table-zebra h-full w-full table-auto daily-summary-table">
           <thead class="sticky-header text-xs">
             <tr>
               {#each columns as column}
                 <!-- Hourly, bi-hourly, and six-hourly headers -->
                 <th
                   class="py-0 {column.key === 'common_name'
-                    ? 'pl-2 pr-6 sm:pl-4 sm:pr-8'
+                    ? 'pl-2 pr-8 sm:pl-0 sm:pr-12'
                     : 'px-2 sm:px-4'} {column.className || ''}"
                   class:hour-header={column.key?.startsWith('hour_') ||
                     column.key?.startsWith('bi_hour_') ||
@@ -260,12 +346,62 @@
                   style:text-align={column.align || 'left'}
                   scope="col"
                 >
-                  {#if column.key?.startsWith('hour_')}
+                  {#if column.key === 'common_name'}
+                    {column.header}
+                    {#if sortedData.length > 0}
+                      <span class="species-ball bg-primary text-primary-content ml-1"
+                        >{sortedData.length}</span
+                      >
+                    {/if}
+                  {:else if column.key?.startsWith('hour_')}
                     <!-- Hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[1])}
+                    {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
+                    {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+                    <!-- Sun icon positioned absolutely above hour number -->
+                    {#if hour === sunriseHour}
+                      <span
+                        class="sun-icon sun-icon-sunrise"
+                        role="img"
+                        aria-label="Sunrise at {sunTimes
+                          ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'unknown time'}"
+                        title="Sunrise: {sunTimes
+                          ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}"
+                      >
+                        {@html weatherIcons.sunrise}
+                      </span>
+                    {:else if hour === sunsetHour}
+                      <span
+                        class="sun-icon sun-icon-sunset"
+                        role="img"
+                        aria-label="Sunset at {sunTimes
+                          ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'unknown time'}"
+                        title="Sunset: {sunTimes
+                          ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}"
+                      >
+                        {@html weatherIcons.sunset}
+                      </span>
+                    {/if}
+                    <!-- Hour number as direct child of th -->
                     <a
                       href={buildHourlyUrl(hour, 1)}
-                      class="hover:text-primary cursor-pointer"
+                      class="hour-link"
                       title={t('dashboard.dailySummary.tooltips.viewHourly', {
                         hour: hour.toString().padStart(2, '0'),
                       })}
@@ -356,7 +492,7 @@
                           classes.push('heatmap-color-0');
                         }
                       } else if (column.key === 'common_name') {
-                        classes.push('pl-2', 'pr-6', 'sm:pl-4', 'sm:pr-8');
+                        classes.push('pl-2', 'pr-8', 'sm:pl-0', 'sm:pr-12');
                       } else {
                         classes.push('px-2', 'sm:px-4');
                       }
@@ -368,15 +504,13 @@
                       <!-- Species thumbnail and name -->
                       <div class="flex items-center gap-2">
                         {#if showThumbnails}
-                          <a href={buildSpeciesUrl(item)}>
-                            <img
-                              src={item.thumbnail_url ||
-                                `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
-                              alt={item.common_name}
-                              class="w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                              onerror={handleBirdImageError}
-                            />
-                          </a>
+                          <BirdThumbnailPopup
+                            thumbnailUrl={item.thumbnail_url ||
+                              `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
+                            commonName={item.common_name}
+                            scientificName={item.scientific_name}
+                            detectionUrl={buildSpeciesUrl(item)}
+                          />
                         {/if}
                         <!-- Species name -->
                         <a
@@ -390,27 +524,27 @@
                       <!-- Total detections bar -->
                       {@const maxCount = Math.max(...sortedData.map(d => d.count))}
                       {@const width = (item.count / maxCount) * 100}
-                      {@const roundedWidth = Math.round(width / 5) * 5}
-                      <div
-                        class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative"
-                      >
+                      {@const roundedWidth =
+                        Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
+                      <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
                         <div
-                          class="progress progress-primary bg-gray-400 dark:bg-gray-400 progress-width-{roundedWidth}"
+                          class="progress progress-primary bg-primary"
+                          style:width="{roundedWidth}%"
                         >
-                          {#if width >= 45 && width <= 59}
+                          {#if width >= WIDTH_THRESHOLDS.minTextDisplay && width <= WIDTH_THRESHOLDS.maxTextDisplay}
                             <!-- Total detections count for large bars -->
                             <span
-                              class="text-2xs text-gray-100 dark:text-base-300 absolute right-1 top-1/2 transform -translate-y-1/2"
+                              class="text-2xs text-primary-content absolute right-1 top-1/2 transform -translate-y-1/2"
                               >{item.count}</span
                             >
                           {/if}
                         </div>
-                        {#if width < 45 || width > 59}
+                        {#if width < WIDTH_THRESHOLDS.minTextDisplay || width > WIDTH_THRESHOLDS.maxTextDisplay}
                           <!-- Total detections count for small bars -->
                           <span
-                            class="text-2xs {width > 59
-                              ? 'text-gray-100 dark:text-base-300'
-                              : 'text-gray-400 dark:text-base-400'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+                            class="text-2xs {width > WIDTH_THRESHOLDS.maxTextDisplay
+                              ? 'text-primary-content'
+                              : 'text-base-content/60'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
                             >{item.count}</span
                           >
                         {/if}
@@ -498,6 +632,334 @@
 </section>
 
 <style>
+  /* ========================================================================
+     Table & Heatmap Styles (moved from custom.css)
+     ======================================================================== */
+
+  /* Performance optimization: CSS containment */
+  :global(.daily-summary-table) {
+    contain: layout style paint;
+  }
+
+  /* Sticky header for tables */
+  :global(thead.sticky-header) {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: 2rem;
+    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+  }
+
+  /* Table cell display settings */
+  :global(.hour-header),
+  :global(.hour-data),
+  :global(.hourly-count) {
+    display: none;
+  }
+
+  :global(.bi-hourly-count),
+  :global(.six-hourly-count) {
+    display: none;
+  }
+
+  /* Theme-specific borders for hour data cells */
+  :global([data-theme='light'] .hour-data:not(.heatmap-color-0)) {
+    position: relative;
+    z-index: 1;
+    padding: 0;
+    border: 1px solid var(--theme-border-light);
+    background-clip: padding-box;
+    border-collapse: collapse;
+  }
+
+  :global([data-theme='dark'] .hour-data:not(.heatmap-color-0)) {
+    position: relative;
+    z-index: 1;
+    padding: 0;
+    border: 1px solid var(--theme-border-dark);
+    background-clip: padding-box;
+    border-collapse: collapse;
+  }
+
+  /* Flex alignment for links inside hour cells */
+  :global(.hour-data a) {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Remove extra borders in specific table rows */
+  :global(.table :where(thead tr, tbody tr:not(:last-child), tbody tr:first-child:last-child)) {
+    border-bottom-width: 0;
+  }
+
+  :global(.table :where(thead td, thead th)) {
+    border-bottom: 1px solid var(--fallback-b2, oklch(var(--b2) / var(--tw-border-opacity)));
+  }
+
+  /* Responsive table adjustments */
+  /* Extra large screens (≥1400px): show hourly view and total detections */
+  @media (min-width: 1400px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: table-cell;
+    }
+  }
+
+  /* Large screens (1200px-1399px): show hourly view, hide total detections */
+  @media (min-width: 1200px) and (max-width: 1399px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Medium-large screens (1024px-1199px): show hourly view, hide total detections */
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count) {
+      padding-left: 0;
+      padding-right: 0;
+      font-size: 0.7rem;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Medium screens (768px-1023px): show bi-hourly */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: table-cell;
+    }
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: none;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly) {
+      padding-left: 0;
+      padding-right: 0;
+      font-size: 0.7rem;
+    }
+  }
+
+  /* Small screens (mobile, <768px): show bi-hourly */
+  @media (max-width: 767px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: table-cell;
+    }
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly) {
+      padding-left: 0;
+      padding-right: 0;
+    }
+  }
+
+  /* Extra small screens (<480px): show six-hourly */
+  @media (max-width: 479px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: none;
+    }
+    :global(.hour-header.six-hourly),
+    :global(.hour-data.six-hourly),
+    :global(.six-hourly-count) {
+      display: table-cell;
+    }
+  }
+
+  /* Consistent table cell sizing */
+  :global(.hour-data) {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    line-height: 2rem;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  :global(.table tr) {
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+  }
+
+  :global(.table td),
+  :global(.table th) {
+    box-sizing: border-box;
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
+    vertical-align: middle;
+  }
+
+  /* Make hour cells more compact by default */
+  :global(.hour-header),
+  :global(.hour-data) {
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+
+  /* ========================================================================
+     Heatmap Colors (moved from custom.css)
+     ======================================================================== */
+
+  /* Light theme heatmap colors and theme-aware variables */
+  :root {
+    --heatmap-color-0: #f0f9fc;
+    --heatmap-color-1: #e0f3f8;
+    --heatmap-color-2: #ccebf6;
+    --heatmap-color-3: #99d7ed;
+    --heatmap-color-4: #66c2e4;
+    --heatmap-color-5: #33ade1;
+    --heatmap-color-6: #0099d8;
+    --heatmap-color-7: #0077be;
+    --heatmap-color-8: #005595;
+    --heatmap-color-9: #003366;
+
+    /* Theme-aware border colors */
+    --theme-border-light: rgba(255, 255, 255, 0.1);
+    --theme-border-dark: rgba(0, 0, 0, 0.1);
+
+    /* Animation durations (for CSS animations) */
+    --anim-count-pop: 600ms;
+    --anim-heart-pulse: 1000ms;
+    --anim-new-species: 800ms;
+  }
+
+  /* Dark theme heatmap colors */
+  :global([data-theme='dark']) {
+    --heatmap-color-0: #001a20;
+    --heatmap-color-1: #002933;
+    --heatmap-color-2: #004466;
+    --heatmap-color-3: #005c80;
+    --heatmap-color-4: #007399;
+    --heatmap-color-5: #008bb3;
+    --heatmap-color-6: #33a3cc;
+    --heatmap-color-7: #66b8e2;
+    --heatmap-color-8: #99cde9;
+    --heatmap-color-9: #cce3f1;
+  }
+
+  /* Dark theme heatmap text colors */
+  :global([data-theme='dark']) {
+    --heatmap-text-1: #fff;
+    --heatmap-text-2: #fff;
+    --heatmap-text-3: #fff;
+    --heatmap-text-4: #fff;
+    --heatmap-text-5: #fff;
+    --heatmap-text-6: #000;
+    --heatmap-text-7: #000;
+    --heatmap-text-8: #000;
+    --heatmap-text-9: #000;
+  }
+
+  /* Light theme heatmap cell styles */
+  :global([data-theme='light'] .heatmap-color-1) {
+    background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+    color: var(--heatmap-text-1, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-2) {
+    background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+    color: var(--heatmap-text-2, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-3) {
+    background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+    color: var(--heatmap-text-3, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-4) {
+    background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+    color: var(--heatmap-text-4, #000);
+  }
+  :global([data-theme='light'] .heatmap-color-5) {
+    background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+    color: var(--heatmap-text-5, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-6) {
+    background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+    color: var(--heatmap-text-6, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-7) {
+    background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+    color: var(--heatmap-text-7, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-8) {
+    background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+    color: var(--heatmap-text-8, #fff);
+  }
+  :global([data-theme='light'] .heatmap-color-9) {
+    background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+    color: var(--heatmap-text-9, #fff);
+  }
+
+  /* Dark theme heatmap cell styles - FIXED to use same gradient direction */
+  :global([data-theme='dark'] .heatmap-color-1) {
+    background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+    color: var(--heatmap-text-1, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-2) {
+    background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+    color: var(--heatmap-text-2, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-3) {
+    background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+    color: var(--heatmap-text-3, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-4) {
+    background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+    color: var(--heatmap-text-4, #000);
+  }
+  :global([data-theme='dark'] .heatmap-color-5) {
+    background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+    color: var(--heatmap-text-5, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-6) {
+    background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+    color: var(--heatmap-text-6, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-7) {
+    background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+    color: var(--heatmap-text-7, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-8) {
+    background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+    color: var(--heatmap-text-8, #fff);
+  }
+  :global([data-theme='dark'] .heatmap-color-9) {
+    background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+    color: var(--heatmap-text-9, #fff);
+  }
+
   /* Dynamic Update Animations - not in custom.css */
 
   /* Count increment animation */
@@ -508,8 +970,8 @@
 
     50% {
       transform: scale(1.3);
-      background-color: hsl(var(--su) / 0.3);
-      box-shadow: 0 0 10px hsl(var(--su) / 0.5);
+      background-color: oklch(var(--su) / 0.3);
+      box-shadow: 0 0 10px oklch(var(--su) / 0.5);
     }
 
     100% {
@@ -519,7 +981,7 @@
   }
 
   .count-increased {
-    animation: countPop 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: countPop var(--anim-count-pop) cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* New species row animation */
@@ -527,7 +989,7 @@
     0% {
       transform: translateY(-30px);
       opacity: 0;
-      background-color: hsl(var(--p) / 0.15);
+      background-color: oklch(var(--p) / 0.15);
     }
 
     100% {
@@ -538,25 +1000,41 @@
   }
 
   .new-species {
-    animation: newSpeciesSlide 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    animation: newSpeciesSlide var(--anim-new-species) cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
-  /* Heatmap cell update flash */
-  @keyframes heatmapFlash {
-    0%,
-    100% {
-      box-shadow: none;
+  /* Heatmap cell heart pulse animation */
+  @keyframes heartPulse {
+    0% {
       transform: scale(1);
+      box-shadow: 0 0 0 0 oklch(var(--p) / 0.7);
     }
-
-    50% {
-      box-shadow: 0 0 12px hsl(var(--p));
-      transform: scale(1.1);
+    15% {
+      transform: scale(1.15);
+      box-shadow: 0 0 0 4px oklch(var(--p) / 0.5);
+    }
+    25% {
+      transform: scale(1.05);
+      box-shadow: 0 0 0 6px oklch(var(--p) / 0.3);
+    }
+    35% {
+      transform: scale(1.12);
+      box-shadow: 0 0 0 8px oklch(var(--p) / 0.1);
+    }
+    45% {
+      transform: scale(1);
+      box-shadow: 0 0 0 10px oklch(var(--p) / 0);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 oklch(var(--p) / 0);
     }
   }
 
   .hour-updated {
-    animation: heatmapFlash 0.8s ease-out;
+    animation: heartPulse var(--anim-heart-pulse) ease-out;
+    position: relative;
+    z-index: 10;
   }
 
   /* Respect user's reduced motion preference */
@@ -591,5 +1069,62 @@
 
   .hour-data a:hover {
     text-decoration: none;
+  }
+
+  /* Hour header styling - ensure proper table layout */
+  .hour-header {
+    position: relative;
+    text-align: center;
+    vertical-align: bottom;
+  }
+
+  /* Sun icon positioning */
+  .sun-icon {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    font-size: 0.75rem;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .sun-icon-sunrise {
+    color: #fb923c; /* text-orange-400 */
+  }
+
+  .sun-icon-sunset {
+    color: #ea580c; /* text-orange-600 */
+  }
+
+  /* Hour link styling */
+  .hour-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 1.5rem;
+    color: inherit;
+    text-decoration: none;
+    font-size: 0.75rem;
+    padding-top: 1rem; /* Space for sun icon */
+    box-sizing: border-box;
+    text-align: center;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .hour-link:hover {
+    color: oklch(var(--p));
+    text-decoration: none;
+  }
+
+  /* Dark theme adjustments */
+  :global([data-theme='dark']) .sun-icon-sunrise {
+    color: #fdba74; /* Slightly lighter orange for dark theme */
+  }
+
+  :global([data-theme='dark']) .sun-icon-sunset {
+    color: #f97316; /* Slightly lighter orange for dark theme */
   }
 </style>
