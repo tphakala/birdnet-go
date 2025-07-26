@@ -54,7 +54,6 @@
     className = '',
   }: Props = $props();
 
-
   // Toggle constants for temperature and wind speed icons
   const SHOW_TEMPERATURE_ICON = false;
   const SHOW_WINDSPEED_ICON = false;
@@ -84,7 +83,7 @@
   // With two-line layout, we need less horizontal space per element
   const showWeatherIcon = $derived(containerWidth === 0 || containerWidth >= 30); // Always show weather icon unless very narrow
   const showWeatherDescription = $derived(containerWidth === 0 || containerWidth >= 110); // Hide description on narrow
-  const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 30); // Always show temperature 
+  const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 30); // Always show temperature
   const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 100); // Hide wind speed on narrow
 
   // Get the appropriate unit labels based on the units setting
@@ -230,7 +229,7 @@
       >
         {weatherEmoji}
       </span>
-      
+
       <!-- Weather Description - conditionally visible -->
       {#if showWeatherDescription}
         <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
@@ -242,130 +241,133 @@
 
   <!-- Line 2: Temperature + Wind Speed -->
   <div class="flex items-center gap-2 overflow-hidden">
+    <!-- Temperature Group -->
+    {#if temperature !== undefined && showTemperatureGroup}
+      <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
+        <!-- Temperature Icon -->
+        {#if SHOW_TEMPERATURE_ICON}
+          <svg
+            class={cn(sizeClasses[size], 'flex-shrink-0')}
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
+          >
+            <g>
+              <!-- Thermometer body -->
+              <rect
+                x="9"
+                y="3"
+                width="6"
+                height="11"
+                rx="3"
+                fill="#e2e8f0"
+                stroke="#64748b"
+                stroke-width="1.5"
+              />
+              <!-- Mercury/liquid -->
+              <rect
+                x="11"
+                y={14 - Math.min(10, Math.max(0, ((temperature + 10) / 40) * 10))}
+                width="2"
+                height={Math.min(10, Math.max(0, ((temperature + 10) / 40) * 10))}
+                fill={tempColor()}
+                rx="1"
+              />
+              <!-- Bulb -->
+              <circle
+                cx="12"
+                cy="18"
+                r="3.5"
+                fill={tempColor()}
+                stroke="#64748b"
+                stroke-width="1.5"
+              />
+              <!-- Temperature marks -->
+              <line x1="8" y1="6" x2="9" y2="6" stroke="#64748b" stroke-width="0.5" />
+              <line x1="8" y1="9" x2="9" y2="9" stroke="#64748b" stroke-width="0.5" />
+              <line x1="8" y1="12" x2="9" y2="12" stroke="#64748b" stroke-width="0.5" />
+            </g>
+          </svg>
+        {/if}
+        <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
+          {temperature.toFixed(1)}{temperatureUnit()}
+        </span>
+      </div>
+    {/if}
 
-  <!-- Temperature Group -->
-  {#if temperature !== undefined && showTemperatureGroup}
-    <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
-      <!-- Temperature Icon -->
-      {#if SHOW_TEMPERATURE_ICON}
-        <svg
-          class={cn(sizeClasses[size], 'flex-shrink-0')}
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
-        >
-          <g>
-            <!-- Thermometer body -->
-            <rect
-              x="9"
-              y="3"
-              width="6"
-              height="11"
-              rx="3"
-              fill="#e2e8f0"
-              stroke="#64748b"
-              stroke-width="1.5"
-            />
-            <!-- Mercury/liquid -->
-            <rect
-              x="11"
-              y={14 - Math.min(10, Math.max(0, ((temperature + 10) / 40) * 10))}
-              width="2"
-              height={Math.min(10, Math.max(0, ((temperature + 10) / 40) * 10))}
-              fill={tempColor()}
-              rx="1"
-            />
-            <!-- Bulb -->
-            <circle
-              cx="12"
-              cy="18"
-              r="3.5"
-              fill={tempColor()}
-              stroke="#64748b"
-              stroke-width="1.5"
-            />
-            <!-- Temperature marks -->
-            <line x1="8" y1="6" x2="9" y2="6" stroke="#64748b" stroke-width="0.5" />
-            <line x1="8" y1="9" x2="9" y2="9" stroke="#64748b" stroke-width="0.5" />
-            <line x1="8" y1="12" x2="9" y2="12" stroke="#64748b" stroke-width="0.5" />
-          </g>
-        </svg>
-      {/if}
-      <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
-        {temperature.toFixed(1)}{temperatureUnit()}
-      </span>
-    </div>
-  {/if}
-
-  <!-- Wind Speed Group -->
-  {#if windSpeed !== undefined && showWindSpeedGroup}
-    <div class="wm-wind-group flex items-center gap-1 flex-shrink-0">
-      <!-- Wind Speed Icon -->
-      {#if SHOW_WINDSPEED_ICON}
-        <svg
-          class={cn(sizeClasses[size], 'flex-shrink-0')}
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
-          style={`--wind-duration: ${windAnimationDuration()}`}
-        >
-          <g>
-            <!-- Wind lines with varying opacity based on strength -->
-            <path
-              d="M3 8h11c1.1 0 2 0.9 2 2s-0.9 2-2 2h-2"
-              stroke="#64748b"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              opacity={windStrength() === 'calm' ? '0.3' : '0.8'}
-              style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-            />
-            <path
-              d="M3 12h15c1.7 0 3 1.3 3 3s-1.3 3-3 3h-3"
-              stroke="#64748b"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              opacity={windStrength() === 'calm' ? '0.3' : windStrength() === 'light' ? '0.6' : '1'}
-              style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-              style:animation-delay="0.1s"
-            />
-            <path
-              d="M3 16h10c0.6 0 1 0.4 1 1s-0.4 1-1 1h-1"
-              stroke="#64748b"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              opacity={windStrength() === 'calm'
-                ? '0.2'
-                : windStrength() === 'light'
-                  ? '0.4'
-                  : '0.7'}
-              style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-              style:animation-delay="0.2s"
-            />
-            {#if windStrength() === 'strong' || windStrength() === 'severe'}
-              <!-- Extra wind line for strong winds -->
+    <!-- Wind Speed Group -->
+    {#if windSpeed !== undefined && showWindSpeedGroup}
+      <div class="wm-wind-group flex items-center gap-1 flex-shrink-0">
+        <!-- Wind Speed Icon -->
+        {#if SHOW_WINDSPEED_ICON}
+          <svg
+            class={cn(sizeClasses[size], 'flex-shrink-0')}
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
+            style={`--wind-duration: ${windAnimationDuration()}`}
+          >
+            <g>
+              <!-- Wind lines with varying opacity based on strength -->
               <path
-                d="M3 4h8c0.6 0 1 0.4 1 1s-0.4 1-1 1h-1"
-                stroke="#94a3b8"
+                d="M3 8h11c1.1 0 2 0.9 2 2s-0.9 2-2 2h-2"
+                stroke="#64748b"
                 stroke-width="1.5"
                 stroke-linecap="round"
-                opacity="0.6"
+                opacity={windStrength() === 'calm' ? '0.3' : '0.8'}
                 style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-                style:animation-delay="0.3s"
               />
-            {/if}
-          </g>
-        </svg>
-      {/if}
-      <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
-        {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
-          ? `(${windGust.toFixed(0)})`
-          : ''}
-        {windSpeedUnit()}
-      </span>
-    </div>
-  {/if}
+              <path
+                d="M3 12h15c1.7 0 3 1.3 3 3s-1.3 3-3 3h-3"
+                stroke="#64748b"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                opacity={windStrength() === 'calm'
+                  ? '0.3'
+                  : windStrength() === 'light'
+                    ? '0.6'
+                    : '1'}
+                style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
+                style:animation-delay="0.1s"
+              />
+              <path
+                d="M3 16h10c0.6 0 1 0.4 1 1s-0.4 1-1 1h-1"
+                stroke="#64748b"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                opacity={windStrength() === 'calm'
+                  ? '0.2'
+                  : windStrength() === 'light'
+                    ? '0.4'
+                    : '0.7'}
+                style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
+                style:animation-delay="0.2s"
+              />
+              {#if windStrength() === 'strong' || windStrength() === 'severe'}
+                <!-- Extra wind line for strong winds -->
+                <path
+                  d="M3 4h8c0.6 0 1 0.4 1 1s-0.4 1-1 1h-1"
+                  stroke="#94a3b8"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  opacity="0.6"
+                  style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
+                  style:animation-delay="0.3s"
+                />
+              {/if}
+            </g>
+          </svg>
+        {/if}
+        <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
+          {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
+            ? `(${windGust.toFixed(0)})`
+            : ''}
+          {windSpeedUnit()}
+        </span>
+      </div>
+    {/if}
   </div>
 </div>
 

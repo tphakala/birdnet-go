@@ -59,7 +59,7 @@
   function handleOpen() {
     // Toggle menu open/closed
     isOpen = !isOpen;
-    
+
     // Only update position when opening
     if (isOpen) {
       requestAnimationFrame(updateMenuPosition);

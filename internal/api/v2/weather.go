@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	errors_pkg "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 )
@@ -71,6 +72,9 @@ func (c *Controller) initWeatherRoutes() {
 
 	// Latest weather data
 	weatherGroup.GET("/latest", c.GetLatestWeather)
+
+	// Sun times endpoint using SunCalc
+	weatherGroup.GET("/sun/:date", c.GetSunTimes)
 }
 
 // buildDailyWeatherResponse creates a DailyWeatherResponse from a DailyEvents struct
@@ -668,4 +672,99 @@ func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *sunc
 	default:
 		return "Night"
 	}
+}
+
+// SunTimesResponse represents the API response for sun times
+type SunTimesResponse struct {
+	Date      string    `json:"date"`
+	Sunrise   time.Time `json:"sunrise"`
+	Sunset    time.Time `json:"sunset"`
+	CivilDawn time.Time `json:"civil_dawn"`
+	CivilDusk time.Time `json:"civil_dusk"`
+}
+
+// GetSunTimes handles GET /api/v2/weather/sun/:date
+// Calculates sunrise and sunset times for a specific date using SunCalc
+func (c *Controller) GetSunTimes(ctx echo.Context) error {
+	date := ctx.Param("date")
+	if date == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing date parameter in sun times request",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, echo.NewHTTPError(http.StatusBadRequest), "Date parameter is required", http.StatusBadRequest)
+	}
+
+	// Validate date format
+	parsedDate, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date format in sun times request",
+				"date", date,
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err, "Invalid date format. Use YYYY-MM-DD", http.StatusBadRequest)
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting sun times",
+			"date", date,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	// Check if SunCalc is available
+	if c.SunCalc == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("SunCalc not initialized",
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, errors_pkg.New(errors.New("sun calculator not available")).
+			Component("weather_api").
+			Category(errors_pkg.CategoryConfiguration).
+			Build(), "Sun calculator not initialized", http.StatusInternalServerError)
+	}
+
+	// Calculate sun times using SunCalc
+	sunTimes, err := c.SunCalc.GetSunEventTimes(parsedDate)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to calculate sun times",
+				"date", date,
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return c.HandleError(ctx, err, "Failed to calculate sun times", http.StatusInternalServerError)
+	}
+
+	// Build response
+	response := SunTimesResponse{
+		Date:      date,
+		Sunrise:   sunTimes.Sunrise,
+		Sunset:    sunTimes.Sunset,
+		CivilDawn: sunTimes.CivilDawn,
+		CivilDusk: sunTimes.CivilDusk,
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Calculated sun times",
+			"date", date,
+			"sunrise", response.Sunrise.Format(time.RFC3339),
+			"sunset", response.Sunset.Format(time.RFC3339),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, response)
 }

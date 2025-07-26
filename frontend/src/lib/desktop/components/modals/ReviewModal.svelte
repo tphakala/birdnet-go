@@ -148,7 +148,7 @@
                 />
               </div>
             </div>
-            
+
             <!-- Species names and status -->
             <div class="flex-1 flex flex-col justify-between py-1">
               <div>
@@ -156,7 +156,9 @@
                 <p class="text-base text-base-content/60 italic mb-3">{detection.scientificName}</p>
               </div>
               <div class="flex items-center gap-3">
-                <span class={`badge badge-lg gap-2 ${getStatusBadgeClass(detection.review?.verified)}`}>
+                <span
+                  class={`badge badge-lg gap-2 ${getStatusBadgeClass(detection.review?.verified)}`}
+                >
                   {#if detection.review?.verified === 'correct'}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -177,15 +179,26 @@
                 </span>
                 {#if detection.locked}
                   <span class="badge badge-lg badge-warning gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="2"
+                      stroke="currentColor"
+                      class="w-4 h-4"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+                      />
                     </svg>
                     Locked
                   </span>
                 {/if}
               </div>
             </div>
-            
+
             <!-- Confidence circle on the right -->
             <div class="flex-shrink-0 mr-4">
               <ConfidenceCircle confidence={detection.confidence} size="lg" />

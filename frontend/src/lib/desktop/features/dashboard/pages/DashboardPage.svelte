@@ -80,7 +80,7 @@
         );
       }
       const newData = await response.json();
-      
+
       // Only apply animations for SSE-triggered updates
       if (applyAnimations) {
         // Identify new detections by comparing IDs
@@ -90,7 +90,7 @@
             // This is a new detection - add to animation state
             newDetectionIds.add(detection.id);
             detectionArrivalTimes.set(detection.id, arrivalTime);
-            
+
             // Remove animation after it completes
             setTimeout(() => {
               newDetectionIds.delete(detection.id);
@@ -99,7 +99,7 @@
           }
         });
       }
-      
+
       recentDetections = newData;
     } catch (error) {
       detectionsError =
@@ -134,7 +134,7 @@
     // Clear animation state on manual refresh
     newDetectionIds.clear();
     detectionArrivalTimes.clear();
-    
+
     // Just fetch recent detections - don't touch daily summary
     fetchRecentDetections();
   }
@@ -184,11 +184,11 @@
   // Process new detection from SSE - trigger API fetch instead of direct manipulation
   function handleNewDetection(detection: Detection) {
     console.log('New detection via SSE:', detection.commonName);
-    
+
     // Trigger API fetch to get fresh data with animations enabled
     // This avoids complex DOM issues with direct data manipulation
     fetchRecentDetections(true);
-    
+
     // Queue daily summary update with debouncing
     queueDailySummaryUpdate(detection);
   }

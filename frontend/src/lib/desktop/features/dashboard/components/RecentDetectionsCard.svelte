@@ -265,13 +265,15 @@
       <div class="relative">
         <!-- Loading overlay -->
         {#if loading}
-          <div class="absolute inset-0 bg-base-100/80 z-20 flex items-center justify-center rounded-lg pointer-events-none">
+          <div
+            class="absolute inset-0 bg-base-100/80 z-20 flex items-center justify-center rounded-lg pointer-events-none"
+          >
             <span class="loading loading-spinner loading-md"></span>
           </div>
           <!-- Disable pointer events on content during loading -->
           <div class="absolute inset-0 z-10" style:pointer-events="auto" style:cursor="wait"></div>
         {/if}
-        
+
         <!-- Header Row -->
         <div class="detection-header-dashboard">
           <div>{t('dashboard.recentDetections.headers.dateTime')}</div>

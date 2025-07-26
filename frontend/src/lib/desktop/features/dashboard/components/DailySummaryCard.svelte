@@ -2,9 +2,14 @@
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons, weatherIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+
+  interface SunTimes {
+    sunrise: string; // ISO date string
+    sunset: string; // ISO date string
+  }
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -29,6 +34,49 @@
     onGoToToday,
     onDateChange,
   }: Props = $props();
+
+  // Sun times state
+  let sunTimes = $state<SunTimes | null>(null);
+
+  // Fetch sun times from weather API
+  async function fetchSunTimes(date: string): Promise<SunTimes | null> {
+    try {
+      const response = await fetch(`/api/v2/weather/sun/${date}`);
+      if (!response.ok) {
+        console.warn('Failed to fetch sun times:', response.status, response.statusText);
+        return null;
+      }
+      const data = await response.json();
+      return {
+        sunrise: data.sunrise,
+        sunset: data.sunset,
+      };
+    } catch (error) {
+      console.warn('Error fetching sun times:', error);
+      return null;
+    }
+  }
+
+  // Update sun times when selected date changes
+  $effect(() => {
+    if (selectedDate) {
+      fetchSunTimes(selectedDate).then(times => {
+        sunTimes = times;
+      });
+    }
+  });
+
+  // Calculate which hour column corresponds to sunrise/sunset
+  const getSunHourFromTime = (timeStr: string): number | null => {
+    if (!timeStr) return null;
+    try {
+      const date = new Date(timeStr);
+      return date.getHours();
+    } catch (error) {
+      console.error('Error parsing time:', timeStr, error);
+      return null;
+    }
+  };
 
   // Column definitions - reactive to ensure translations are loaded
   const columns = $derived.by(() => {
@@ -195,10 +243,7 @@
   <!-- Card Header with Date Navigation -->
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
-      <span class="card-title grow text-base sm:text-xl"
-        >{t('dashboard.dailySummary.title')}
-
-      </span>
+      <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
       <div class="flex items-center gap-2">
         <!-- Previous day button -->
         <button
@@ -257,23 +302,59 @@
                   style:text-align={column.align || 'left'}
                   scope="col"
                 >
-                {#if column.key === 'common_name'}
-                  {column.header}
-                  {#if sortedData.length > 0}
-                    <span class="species-ball bg-blue-500 text-white ml-1">{sortedData.length}</span>
-                  {/if}
-                {:else if column.key?.startsWith('hour_')}
+                  {#if column.key === 'common_name'}
+                    {column.header}
+                    {#if sortedData.length > 0}
+                      <span class="species-ball bg-blue-500 text-white ml-1"
+                        >{sortedData.length}</span
+                      >
+                    {/if}
+                  {:else if column.key?.startsWith('hour_')}
                     <!-- Hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[1])}
-                    <a
-                      href={buildHourlyUrl(hour, 1)}
-                      class="hover:text-primary cursor-pointer"
-                      title={t('dashboard.dailySummary.tooltips.viewHourly', {
-                        hour: hour.toString().padStart(2, '0'),
-                      })}
-                    >
-                      {column.header}
-                    </a>
+                    {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
+                    {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+                    <div class="flex flex-col items-center justify-center h-full min-h-0">
+                      <!-- Sun icon if this hour matches sunrise or sunset -->
+                      {#if hour === sunriseHour}
+                        <div
+                          class="text-orange-400 text-xs mb-0.5"
+                          title="Sunrise: {sunTimes
+                            ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : ''}"
+                        >
+                          {@html weatherIcons.sunrise}
+                        </div>
+                      {:else if hour === sunsetHour}
+                        <div
+                          class="text-orange-600 text-xs mb-0.5"
+                          title="Sunset: {sunTimes
+                            ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : ''}"
+                        >
+                          {@html weatherIcons.sunset}
+                        </div>
+                      {:else}
+                        <!-- Empty spacer to maintain consistent height -->
+                        <div class="h-4 mb-0.5"></div>
+                      {/if}
+                      <!-- Hour number -->
+                      <a
+                        href={buildHourlyUrl(hour, 1)}
+                        class="hover:text-primary cursor-pointer text-xs"
+                        title={t('dashboard.dailySummary.tooltips.viewHourly', {
+                          hour: hour.toString().padStart(2, '0'),
+                        })}
+                      >
+                        {column.header}
+                      </a>
+                    </div>
                   {:else if column.key?.startsWith('bi_hour_')}
                     <!-- Bi-hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[2])}
@@ -569,7 +650,7 @@
       box-shadow: 0 0 0 0 oklch(var(--p) / 0);
     }
   }
-  
+
   .hour-updated {
     animation: heartPulse 1s ease-out;
     position: relative;

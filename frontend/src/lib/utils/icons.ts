@@ -397,6 +397,28 @@ export const weatherIcons = {
   cloudCover: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
   </svg>`,
+
+  sunrise: `<svg class="h-4 w-4 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <!-- Sun circle -->
+    <circle cx="12" cy="8" r="2.5" fill="currentColor"/>
+    <!-- Upward rays (sunrise direction) -->
+    <path stroke-linecap="round" stroke-width="1.5" d="M12 2v2m5.66 1.34l-1.41 1.41M20 8h-2M6.34 3.34L7.75 4.75M2 8h2"/>
+    <!-- Horizon line -->
+    <path stroke-linecap="round" stroke-width="2" d="M4 14h16"/>
+    <!-- Upward arrow indicating sunrise -->
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 17l4-3 4 3"/>
+  </svg>`,
+
+  sunset: `<svg class="h-4 w-4 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <!-- Sun circle (lower position) -->
+    <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+    <!-- Horizontal rays (setting sun) -->
+    <path stroke-linecap="round" stroke-width="1.5" d="M20 12h-2M6 12H4M17.66 7.34l-1.41 1.41M7.75 7.75L6.34 6.34"/>
+    <!-- Horizon line -->
+    <path stroke-linecap="round" stroke-width="2" d="M4 18h16"/>
+    <!-- Downward arrow indicating sunset -->
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 20l4 3 4-3"/>
+  </svg>`,
 };
 
 /**

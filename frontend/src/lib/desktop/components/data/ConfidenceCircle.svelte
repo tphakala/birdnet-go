@@ -57,7 +57,7 @@
     sm: { size: 32, track: 4, fontSize: '0.625rem', iconSize: 12 },
     md: { size: 42, track: 5, fontSize: '0.75rem', iconSize: 16 },
     lg: { size: 56, track: 6, fontSize: '0.875rem', iconSize: 20 },
-    xl: { size: 72, track: 8, fontSize: '1rem', iconSize: 24 }
+    xl: { size: 72, track: 8, fontSize: '1rem', iconSize: 24 },
   };
 
   const config = $derived(sizeConfig[size]);
@@ -70,9 +70,9 @@
   style:height="{config.size}px"
   style:min-width="{config.size}px"
   style:min-height="{config.size}px"
-  style:font-size="{config.fontSize}"
+  style:font-size={config.fontSize}
 >
-  <div 
+  <div
     class="confidence-circle-track"
     style:top="{config.track}px"
     style:left="{config.track}px"
@@ -80,14 +80,11 @@
     style:bottom="{config.track}px"
   ></div>
   <div class="confidence-circle-progress"></div>
-  <div 
-    class="confidence-circle-text"
-    style:font-size="{config.fontSize}"
-  >
+  <div class="confidence-circle-text" style:font-size={config.fontSize}>
     {#if isMaxConfidence}
-      <svg 
-        viewBox="0 0 24 24" 
-        fill="none" 
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
         stroke="currentColor"
         style:width="{config.iconSize}px"
         style:height="{config.iconSize}px"
