@@ -6,6 +6,22 @@
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
 
+  // Animation duration constants (in milliseconds)
+  const ANIMATION_DURATIONS = {
+    countPop: 600,
+    heartPulse: 1000,
+    newSpeciesSlide: 800,
+    cleanup: 2200, // Slightly longer than longest animation
+  } as const;
+
+  // Layout constants
+  const GRADIENT_ANGLE = '-45deg';
+  const PROGRESS_BAR_ROUNDING = 5; // Round to nearest 5%
+  const WIDTH_THRESHOLDS = {
+    minTextDisplay: 45,
+    maxTextDisplay: 59,
+  } as const;
+
   interface SunTimes {
     sunrise: string; // ISO date string
     sunset: string; // ISO date string
@@ -37,13 +53,20 @@
 
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
+  let sunTimesError = $state<string | null>(null);
+  let sunTimesLoading = $state(false);
 
   // Fetch sun times from weather API
   async function fetchSunTimes(date: string): Promise<SunTimes | null> {
+    sunTimesLoading = true;
+    sunTimesError = null;
+    
     try {
       const response = await fetch(`/api/v2/weather/sun/${date}`);
       if (!response.ok) {
-        console.warn('Failed to fetch sun times:', response.status, response.statusText);
+        const errorMsg = `Failed to fetch sun times: ${response.status} ${response.statusText}`;
+        console.warn(errorMsg);
+        sunTimesError = errorMsg;
         return null;
       }
       const data = await response.json();
@@ -52,8 +75,12 @@
         sunset: data.sunset,
       };
     } catch (error) {
-      console.warn('Error fetching sun times:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
+      console.warn('Error fetching sun times:', errorMsg);
+      sunTimesError = errorMsg;
       return null;
+    } finally {
+      sunTimesLoading = false;
     }
   }
 
@@ -194,7 +221,9 @@
 
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
-    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    typeof window !== 'undefined' 
+    ? (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false)
+    : false
   );
 
   // Sort data by count in descending order for dynamic updates
@@ -287,7 +316,7 @@
       </div>
     {:else}
       <div class="overflow-x-auto">
-        <table class="table table-zebra h-full w-full table-auto">
+        <table class="table table-zebra h-full w-full table-auto daily-summary-table">
           <thead class="sticky-header text-xs">
             <tr>
               {#each columns as column}
@@ -318,6 +347,13 @@
                     {#if hour === sunriseHour}
                       <span
                         class="sun-icon sun-icon-sunrise"
+                        role="img"
+                        aria-label="Sunrise at {sunTimes
+                          ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'unknown time'}"
                         title="Sunrise: {sunTimes
                           ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
                               hour: '2-digit',
@@ -330,6 +366,13 @@
                     {:else if hour === sunsetHour}
                       <span
                         class="sun-icon sun-icon-sunset"
+                        role="img"
+                        aria-label="Sunset at {sunTimes
+                          ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'unknown time'}"
                         title="Sunset: {sunTimes
                           ? new Date(sunTimes.sunset).toLocaleTimeString([], {
                               hour: '2-digit',
@@ -466,13 +509,13 @@
                       <!-- Total detections bar -->
                       {@const maxCount = Math.max(...sortedData.map(d => d.count))}
                       {@const width = (item.count / maxCount) * 100}
-                      {@const roundedWidth = Math.round(width / 5) * 5}
+                      {@const roundedWidth = Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
                       <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
                         <div
                           class="progress progress-primary bg-primary"
                           style:width="{roundedWidth}%"
                         >
-                          {#if width >= 45 && width <= 59}
+                          {#if width >= WIDTH_THRESHOLDS.minTextDisplay && width <= WIDTH_THRESHOLDS.maxTextDisplay}
                             <!-- Total detections count for large bars -->
                             <span
                               class="text-2xs text-primary-content absolute right-1 top-1/2 transform -translate-y-1/2"
@@ -480,10 +523,10 @@
                             >
                           {/if}
                         </div>
-                        {#if width < 45 || width > 59}
+                        {#if width < WIDTH_THRESHOLDS.minTextDisplay || width > WIDTH_THRESHOLDS.maxTextDisplay}
                           <!-- Total detections count for small bars -->
                           <span
-                            class="text-2xs {width > 59
+                            class="text-2xs {width > WIDTH_THRESHOLDS.maxTextDisplay
                               ? 'text-primary-content'
                               : 'text-base-content/60'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
                             >{item.count}</span
@@ -577,6 +620,11 @@
      Table & Heatmap Styles (moved from custom.css)
      ======================================================================== */
 
+  /* Performance optimization: CSS containment */
+  :global(.daily-summary-table) {
+    contain: layout style paint;
+  }
+
   /* Sticky header for tables */
   :global(thead.sticky-header) {
     position: sticky;
@@ -603,7 +651,7 @@
     position: relative;
     z-index: 1;
     padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--theme-border-light);
     background-clip: padding-box;
     border-collapse: collapse;
   }
@@ -612,7 +660,7 @@
     position: relative;
     z-index: 1;
     padding: 0;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--theme-border-dark);
     background-clip: padding-box;
     border-collapse: collapse;
   }
@@ -770,7 +818,7 @@
      Heatmap Colors (moved from custom.css)
      ======================================================================== */
 
-  /* Light theme heatmap colors */
+  /* Light theme heatmap colors and theme-aware variables */
   :root {
     --heatmap-color-0: #f0f9fc;
     --heatmap-color-1: #e0f3f8;
@@ -782,6 +830,15 @@
     --heatmap-color-7: #0077be;
     --heatmap-color-8: #005595;
     --heatmap-color-9: #003366;
+    
+    /* Theme-aware border colors */
+    --theme-border-light: rgba(255, 255, 255, 0.1);
+    --theme-border-dark: rgba(0, 0, 0, 0.1);
+    
+    /* Animation durations (for CSS animations) */
+    --anim-count-pop: 600ms;
+    --anim-heart-pulse: 1000ms;
+    --anim-new-species: 800ms;
   }
 
   /* Dark theme heatmap colors */
@@ -908,7 +965,7 @@
   }
 
   .count-increased {
-    animation: countPop 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: countPop var(--anim-count-pop) cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* New species row animation */
@@ -927,7 +984,7 @@
   }
 
   .new-species {
-    animation: newSpeciesSlide 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    animation: newSpeciesSlide var(--anim-new-species) cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   /* Heatmap cell heart pulse animation */
@@ -959,7 +1016,7 @@
   }
 
   .hour-updated {
-    animation: heartPulse 1s ease-out;
+    animation: heartPulse var(--anim-heart-pulse) ease-out;
     position: relative;
     z-index: 10;
   }

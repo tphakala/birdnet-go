@@ -138,8 +138,10 @@
     fetchRecentDetections();
   }
 
-  // Animation cleanup timers
+  // Animation cleanup timers and RAF manager
   let animationCleanupTimers = $state(new Set<ReturnType<typeof setTimeout>>());
+  let animationFrame: number | null = null;
+  let pendingCleanups = new Map<string, { fn: () => void; timestamp: number }>();
 
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
@@ -155,25 +157,52 @@
     animationCleanupTimers.clear();
   }
 
-  // Centralized animation cleanup with timer tracking and limit
-  function scheduleAnimationCleanup(cleanupFn: () => void, delay: number) {
+  // Process pending cleanups using requestAnimationFrame
+  function processCleanups(currentTime: number) {
+    const toExecute: Array<() => void> = [];
+    
+    pendingCleanups.forEach((cleanup, key) => {
+      if (currentTime >= cleanup.timestamp) {
+        toExecute.push(cleanup.fn);
+        pendingCleanups.delete(key);
+      }
+    });
+    
+    // Execute cleanups in batch
+    toExecute.forEach(fn => fn());
+    
+    // Continue if there are more pending cleanups
+    if (pendingCleanups.size > 0) {
+      animationFrame = requestAnimationFrame(processCleanups);
+    } else {
+      animationFrame = null;
+    }
+  }
+
+  // Centralized animation cleanup with RAF batching
+  function scheduleAnimationCleanup(cleanupFn: () => void, delay: number, key?: string) {
+    // Use species code as key if available, otherwise generate one
+    const cleanupKey = key || `cleanup-${Date.now()}-${Math.random()}`;
+    
     // Performance: Limit concurrent animations to prevent overwhelming the UI
-    if (animationCleanupTimers.size > 50) {
+    if (pendingCleanups.size > 50) {
       console.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
-      const oldestTimer = animationCleanupTimers.values().next().value;
-      if (oldestTimer) {
-        clearTimeout(oldestTimer);
-        animationCleanupTimers.delete(oldestTimer);
+      const oldestKey = pendingCleanups.keys().next().value;
+      if (oldestKey) {
+        pendingCleanups.delete(oldestKey);
       }
     }
 
-    const timer = setTimeout(() => {
-      cleanupFn();
-      animationCleanupTimers.delete(timer);
-    }, delay);
+    // Schedule cleanup
+    pendingCleanups.set(cleanupKey, {
+      fn: cleanupFn,
+      timestamp: performance.now() + delay
+    });
 
-    animationCleanupTimers.add(timer);
-    return timer;
+    // Start RAF loop if not already running
+    if (animationFrame === null) {
+      animationFrame = requestAnimationFrame(processCleanups);
+    }
   }
 
   // SSE connection for real-time detection updates
@@ -349,6 +378,15 @@
       // Clean up animation timers
       animationCleanupTimers.forEach(timer => clearTimeout(timer));
       animationCleanupTimers.clear();
+      
+      // Cancel pending RAF
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+      
+      // Clear pending cleanups
+      pendingCleanups.clear();
     };
   });
 
@@ -501,7 +539,7 @@
             ...dailySummary.slice(currentIndex + 1),
           ];
         }
-      }, 1000);
+      }, 1000, `count-${detection.speciesCode}`);
     } else {
       // Add new species
       const newSpecies: DailySpeciesSummary = {
@@ -549,7 +587,7 @@
             ...dailySummary.slice(currentIndex + 1),
           ];
         }
-      }, 800);
+      }, 800, `new-${detection.speciesCode}`);
     }
   }
 
