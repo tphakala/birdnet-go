@@ -1,0 +1,265 @@
+/* ========================================================================
+   Species Display Shared Styles
+   
+   Shared CSS for species listing components across dashboard and detections
+   features. Uses 'sp-' prefix to avoid conflicts with existing custom.css.
+   
+   Used by:
+   - RecentDetectionsCard.svelte (dashboard)
+   - DetectionRow.svelte (detections)
+   - DetectionsCard.svelte (detections)
+   ======================================================================== */
+
+/* CSS Custom Properties for theming */
+:root {
+  /* Species display spacing */
+  --sp-container-gap: 0.375rem;
+  --sp-mobile-gap: 0.25rem;
+  
+  /* Species typography */
+  --sp-common-font-weight: 500;
+  --sp-common-line-height: 1.2;
+  --sp-scientific-size: 0.75rem;
+  --sp-mobile-common-size: 0.875rem;
+  --sp-mobile-scientific-size: 0.7rem;
+
+  /* Scientific name font style */
+  --sp-scientific-style: italic;
+
+  /* Species colors */
+  --sp-hover-color: hsl(var(--p));
+  --sp-scientific-color: oklch(var(--bc) / 0.7);
+  
+  /* Species layout */
+  --sp-thumbnail-mobile-size: 35%;
+}
+
+/* ========================================================================
+   Base Species Container Styles
+   ======================================================================== */
+
+/* Main species container - flexible for different layouts */
+.sp-species-container {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-container-gap);
+  min-width: 0;
+}
+
+/* Species thumbnail wrapper - responsive sizing */
+.sp-thumbnail-wrapper {
+  flex: 0 0 45%; /* Default size - can be overridden by layout variants */
+  min-width: 40px; /* Minimum size on very small screens */
+  max-width: 120px; /* Maximum size on large screens */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Species info wrapper - contains names and confidence */
+.sp-species-info-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-container-gap);
+  min-width: 0;
+}
+
+/* Species names container */
+.sp-species-names {
+  flex: 1;
+  min-width: 0; /* Allow text to shrink */
+  text-align: left;
+}
+
+/* Common name - wraps instead of truncating */
+.sp-species-common-name {
+  font-weight: var(--sp-common-font-weight);
+  line-height: var(--sp-common-line-height);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.sp-species-common-name:hover {
+  color: var(--sp-hover-color);
+}
+
+/* Scientific name - smaller, can wrap on very narrow screens */
+.sp-species-scientific-name {
+  font-size: var(--sp-scientific-size);
+  line-height: var(--sp-common-line-height);
+  font-style: var(--sp-scientific-style);
+  color: var(--sp-scientific-color, oklch(var(--bc) / 0.4)) !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Confidence indicator - stays close to species names */
+.sp-confidence-indicator {
+  flex: 0 0 auto;
+}
+
+/* ========================================================================
+   Layout Variants for Different Components
+   ======================================================================== */
+
+/* Dashboard Recent Detections Layout (compact, horizontal) */
+.sp-layout-dashboard {
+  /* Compact layout for dashboard - thumbnails visible */
+  gap: 0.5rem;
+}
+
+/* Detections Page Layout (spacious, grid-based) */
+.sp-layout-detections {
+  gap: 0.75rem; /* Slightly larger gap for detections page */
+}
+
+.sp-layout-detections .sp-species-common-name {
+  font-size: 0.95rem; /* Slightly larger for better readability */
+}
+
+.sp-layout-detections .sp-species-scientific-name {
+  font-size: 0.8rem; /* Proportionally larger scientific name */
+}
+
+/* ========================================================================
+   Responsive Adjustments
+   ======================================================================== */
+
+/* Mobile adjustments (max-width: 768px) */
+@media (max-width: 768px) {
+  .sp-species-container {
+    gap: var(--sp-mobile-gap);
+  }
+
+  .sp-thumbnail-wrapper {
+    flex: 0 0 var(--sp-thumbnail-mobile-size); /* 35% on mobile */
+  }
+
+  .sp-species-common-name {
+    font-size: var(--sp-mobile-common-size);
+  }
+
+  .sp-species-scientific-name {
+    font-size: var(--sp-mobile-scientific-size);
+  }
+
+  .sp-species-info-wrapper {
+    gap: var(--sp-mobile-gap);
+  }
+}
+
+/* Extra small screens (max-width: 480px) */
+@media (max-width: 480px) {
+  .sp-species-container {
+    gap: 0.25rem;
+  }
+
+  .sp-species-common-name {
+    font-size: 0.8rem;
+  }
+
+  .sp-species-scientific-name {
+    font-size: 0.65rem;
+  }
+}
+
+/* ========================================================================
+   Accessibility Enhancements
+   ======================================================================== */
+
+/* Focus states for interactive elements */
+.sp-species-common-name:focus-visible {
+  outline: 2px solid var(--sp-hover-color);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  .sp-species-scientific-name {
+    color: var(--bc);
+    opacity: 0.8;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .sp-species-common-name {
+    transition: none;
+  }
+}
+
+/* ========================================================================
+   Animation Classes for Live Updates
+   ======================================================================== */
+
+/* New detection animation */
+.sp-new-detection {
+  animation: sp-highlight-new 1.5s ease-out;
+}
+
+@keyframes sp-highlight-new {
+  0% {
+    background-color: oklch(var(--p) / 0.2);
+    transform: scale(1.02);
+  }
+  50% {
+    background-color: oklch(var(--p) / 0.1);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+/* Updated detection animation */
+.sp-updated-detection {
+  animation: sp-highlight-update 1s ease-out;
+}
+
+@keyframes sp-highlight-update {
+  0% {
+    background-color: oklch(var(--a) / 0.15);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* ========================================================================
+   Dark Theme Adjustments
+   ======================================================================== */
+
+[data-theme="dark"] {
+  /* Override scientific name color for better contrast in dark mode */
+  --sp-scientific-color: oklch(var(--bc) / 0.5);
+}
+
+/* Remove duplicate - already defined above */
+
+[data-theme="dark"] .sp-species-common-name:hover {
+  color: oklch(var(--p) / 0.9);
+}
+
+/* ========================================================================
+   Print Styles
+   ======================================================================== */
+
+@media print {
+  .sp-species-common-name {
+    color: black !important;
+  }
+  
+  .sp-species-scientific-name {
+    color: #666 !important;
+  }
+  
+  .sp-species-common-name:hover {
+    color: black !important;
+  }
+}

@@ -39,6 +39,7 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
+  import '$lib/styles/species-display.css';
 
   interface Props {
     detection: Detection;
@@ -192,16 +193,25 @@
   </div>
 
   <!-- Bird species with confidence -->
-  <div class="col-span-3 text-sm">
-    <div class="flex items-center gap-3">
-      <ConfidenceCircle confidence={detection.confidence} size="sm" />
-      <button
-        onclick={handleDetailsClick}
-        class="hover:text-blue-600 transition-colors cursor-pointer text-left"
-      >
-        {detection.commonName}
-      </button>
+  <div class="col-span-2 text-sm">
+    <div class="sp-species-container sp-layout-detections">
+      <div class="sp-species-info-wrapper">
+        <div class="sp-species-names">
+          <button
+            onclick={handleDetailsClick}
+            class="sp-species-common-name hover:text-blue-600 transition-colors cursor-pointer text-left"
+          >
+            {detection.commonName}
+          </button>
+          <div class="sp-species-scientific-name">{detection.scientificName}</div>
+        </div>
+      </div>
     </div>
+  </div>
+
+  <!-- Confidence -->
+  <div class="col-span-1 text-sm">
+    <ConfidenceCircle confidence={detection.confidence} size="sm" />
   </div>
 
   <!-- Bird thumbnail -->

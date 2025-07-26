@@ -508,8 +508,8 @@
 
     50% {
       transform: scale(1.3);
-      background-color: hsl(var(--su) / 0.3);
-      box-shadow: 0 0 10px hsl(var(--su) / 0.5);
+      background-color: oklch(var(--su) / 0.3);
+      box-shadow: 0 0 10px oklch(var(--su) / 0.5);
     }
 
     100% {
@@ -527,7 +527,7 @@
     0% {
       transform: translateY(-30px);
       opacity: 0;
-      background-color: hsl(var(--p) / 0.15);
+      background-color: oklch(var(--p) / 0.15);
     }
 
     100% {

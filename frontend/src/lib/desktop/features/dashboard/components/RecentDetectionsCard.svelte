@@ -9,6 +9,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import '$lib/styles/species-display.css';
 
   interface Props {
     data: Detection[];
@@ -301,9 +302,9 @@
               </div>
 
               <!-- Combined Species Column with Confidence -->
-              <div class="col-span-3 rd-species-container">
+              <div class="col-span-3 sp-species-container sp-layout-dashboard">
                 <!-- Thumbnail -->
-                <div class="rd-thumbnail-wrapper">
+                <div class="sp-thumbnail-wrapper">
                   <button
                     class="rd-thumbnail-button"
                     onclick={() => handleRowClick(detection)}
@@ -322,10 +323,10 @@
                 </div>
 
                 <!-- Species Names and Confidence -->
-                <div class="rd-species-info-wrapper">
-                  <div class="rd-species-names">
-                    <div class="rd-species-common-name">{detection.commonName}</div>
-                    <div class="rd-species-scientific-name">{detection.scientificName}</div>
+                <div class="sp-species-info-wrapper">
+                  <div class="sp-species-names">
+                    <div class="sp-species-common-name">{detection.commonName}</div>
+                    <div class="sp-species-scientific-name">{detection.scientificName}</div>
                   </div>
                 </div>
               </div>
@@ -434,13 +435,7 @@
 
   /* RD prefix to avoid conflicts with global CSS */
 
-  /* Species container layout */
-  .rd-species-container {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0; /* Allow container to shrink */
-  }
+  /* Dashboard-specific species container adjustments handled by shared CSS */
 
   /* Thumbnail wrapper - responsive width */
   .rd-thumbnail-wrapper {
@@ -457,7 +452,7 @@
     position: relative;
     overflow: hidden;
     border-radius: 0.375rem;
-    background-color: hsl(var(--b2) / 0.3);
+    background-color: oklch(var(--b2) / 0.3);
   }
 
   /* Thumbnail image */
@@ -470,79 +465,14 @@
     object-fit: contain;
   }
 
-  /* Species info wrapper - contains names and confidence */
-  .rd-species-info-wrapper {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 0.375rem; /* Small gap between names and confidence */
-    min-width: 0;
-  }
-
-  /* Species names container */
-  .rd-species-names {
-    flex: 1;
-    min-width: 0; /* Allow text to shrink */
-    text-align: left;
-  }
-
-  /* Common name - wraps instead of truncating */
-  .rd-species-common-name {
-    font-weight: 500;
-    line-height: 1.2;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
-    cursor: pointer;
-  }
-
-  .rd-species-common-name:hover {
-    color: hsl(var(--p));
-  }
-
-  /* Scientific name - smaller, can wrap on very narrow screens */
-  .rd-species-scientific-name {
-    font-size: 0.75rem;
-    line-height: 1.2;
-    color: hsl(var(--bc) / 0.6);
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
-  }
-
-  /* Confidence indicator - stays close to species names */
-  .rd-confidence-indicator {
-    flex: 0 0 auto;
-  }
-
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-    .rd-species-container {
-      gap: 0.375rem;
-    }
-
-    .rd-thumbnail-wrapper {
-      flex: 0 0 35%; /* Slightly larger on mobile */
-    }
-
-    .rd-species-common-name {
-      font-size: 0.875rem;
-    }
-
-    .rd-species-scientific-name {
-      font-size: 0.7rem;
-    }
-
-    .rd-species-info-wrapper {
-      gap: 0.25rem;
-    }
-  }
-
+  /* Species display styles now handled by shared CSS (/lib/styles/species-display.css) */
+  /* Dashboard-specific overrides below */
+  
   /* RD Audio Player Container */
   .rd-audio-player-container {
     position: relative;
     width: 100%;
-    background: linear-gradient(to bottom, rgba(128, 128, 128, 0.4), rgba(128, 128, 128, 0.1));
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.4), rgb(128 128 128 / 0.1));
     border-radius: 0.5rem;
   }
 
@@ -580,7 +510,7 @@
 
   /* Detection row theme-aware styling with hover effects */
   .detection-row {
-    border-bottom: 1px solid hsl(var(--bc) / 0.1);
+    border-bottom: 1px solid oklch(var(--bc) / 0.1);
     transition:
       transform 0.3s ease-out,
       background-color 0.15s ease-in-out;
@@ -595,12 +525,12 @@
     0% {
       transform: translateY(-30px);
       opacity: 0;
-      background-color: hsl(var(--p) / 0.2);
+      background-color: oklch(var(--p) / 0.2);
       border-left: 4px solid hsl(var(--p));
     }
 
     50% {
-      background-color: hsl(var(--p) / 0.15);
+      background-color: oklch(var(--p) / 0.15);
       border-left: 4px solid hsl(var(--p));
     }
 
