@@ -38,12 +38,11 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
-  import '$lib/styles/species-display.css';
 
   interface Props {
     detection: Detection;
-    showThumbnails?: boolean;
     isExcluded?: boolean;
     onDetailsClick?: (id: number) => void;
     onRefresh?: () => void;
@@ -52,7 +51,6 @@
 
   let {
     detection,
-    showThumbnails = false,
     isExcluded = false,
     onDetailsClick,
     onRefresh,
@@ -161,19 +159,14 @@
   }
 </script>
 
-<div
-  class={cn(
-    'grid grid-cols-12 actions-narrow gap-4 items-center px-4 py-1 hover:bg-gray-50 transition-colors',
-    className
-  )}
->
+<div class={cn('detection-grid-list', className)}>
   <!-- Date & Time -->
-  <div class="col-span-2 text-sm">
+  <div class="text-sm">
     <span>{detection.date} {detection.time}</span>
   </div>
 
   <!-- Weather Column -->
-  <div class="col-span-2 text-sm">
+  <div class="text-sm hidden md:block">
     {#if detection.weather}
       <div class="flex flex-col gap-1">
         <WeatherMetrics
@@ -188,13 +181,30 @@
         />
       </div>
     {:else}
-      <div class="text-base-content/50 text-xs">{t('detections.weather.noData')}</div>
+      <div class="text-base-content/50 text-xs">
+        {t('detections.weather.noData')}
+        <!-- Debug: {JSON.stringify(Object.keys(detection))} -->
+      </div>
     {/if}
   </div>
 
-  <!-- Bird species with confidence -->
-  <div class="col-span-2 text-sm">
+  <!-- Bird species (with thumbnail) -->
+  <div class="text-sm">
     <div class="sp-species-container sp-layout-detections">
+      <!-- Thumbnail -->
+      <div class="sp-thumbnail-wrapper">
+        <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="-1">
+          <img
+            loading="lazy"
+            src={getThumbnailUrl(detection.scientificName)}
+            alt={detection.commonName}
+            class="sp-thumbnail-image"
+            onerror={handleBirdImageError}
+          />
+        </button>
+      </div>
+
+      <!-- Species Names -->
       <div class="sp-species-info-wrapper">
         <div class="sp-species-names">
           <button
@@ -210,37 +220,17 @@
   </div>
 
   <!-- Confidence -->
-  <div class="col-span-1 text-sm">
+  <div class="text-sm">
     <ConfidenceCircle confidence={detection.confidence} size="sm" />
   </div>
 
-  <!-- Bird thumbnail -->
-  {#if showThumbnails}
-    <div class="col-span-1">
-      <div class="thumbnail-container w-full max-w-[80px]">
-        <button
-          onclick={handleDetailsClick}
-          class="flex items-center justify-center cursor-pointer"
-          aria-label={t('detections.row.viewDetails', { species: detection.commonName })}
-        >
-          <img
-            loading="lazy"
-            src={getThumbnailUrl(detection.scientificName)}
-            alt={`${detection.commonName} thumbnail`}
-            class="w-full h-auto rounded-md object-contain"
-          />
-        </button>
-      </div>
-    </div>
-  {/if}
-
   <!-- Status -->
-  <div class="col-span-1">
+  <div>
     <StatusBadges {detection} />
   </div>
 
   <!-- Recording/Spectrogram -->
-  <div class={showThumbnails ? 'col-span-2' : 'col-span-3'}>
+  <div class="hidden md:block">
     <AudioPlayer
       audioUrl="/api/v2/audio/{detection.id}"
       detectionId={detection.id.toString()}
@@ -253,7 +243,7 @@
   </div>
 
   <!-- Action Menu -->
-  <div class="col-span-1 actions-column">
+  <div>
     <ActionMenu
       {detection}
       {isExcluded}
@@ -299,3 +289,81 @@
     showConfirmModal = false;
   }}
 />
+
+<style>
+  /* Thumbnail wrapper - responsive width */
+  .sp-thumbnail-wrapper {
+    flex: 0 0 30%; /* Reduced to give more space to names */
+    min-width: 40px; /* Minimum size on very small screens */
+    max-width: 80px; /* Maximum size on large screens */
+  }
+
+  /* Thumbnail button - maintains aspect ratio */
+  .sp-thumbnail-button {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4/3; /* Consistent aspect ratio */
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background-color: oklch(var(--b2) / 0.3);
+  }
+
+  /* Thumbnail image */
+  .sp-thumbnail-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* CRITICAL FIX: Mobile text wrapping with highest specificity */
+  @media (max-width: 768px) {
+    .sp-species-names {
+      word-break: normal !important;
+      overflow-wrap: break-word !important;
+      hyphens: auto !important;
+      min-width: 0 !important;
+      white-space: normal !important;
+      max-width: 100% !important;
+    }
+
+    .sp-species-common-name,
+    .sp-species-scientific-name {
+      word-break: normal !important;
+      overflow-wrap: break-word !important;
+      hyphens: auto !important;
+      white-space: normal !important;
+      text-overflow: unset !important;
+      overflow: visible !important;
+      max-width: 100% !important;
+      width: auto !important;
+    }
+
+    /* Ensure species column has adequate space */
+    :global(.detection-grid-list) {
+      grid-template-columns:
+        80px /* Date & Time */
+        1fr /* Species (flexible width) */
+        50px /* Confidence */
+        70px /* Status */
+        36px !important; /* Actions */
+      gap: 0.5rem !important;
+      min-width: 0 !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    :global(.detection-grid-list) {
+      grid-template-columns:
+        60px /* Date & Time (more compact) */
+        1fr /* Species (flexible width) */
+        45px /* Confidence (smaller) */
+        60px /* Status (compact) */
+        32px !important; /* Actions (smaller) */
+      gap: 0.25rem !important;
+    }
+  }
+</style>

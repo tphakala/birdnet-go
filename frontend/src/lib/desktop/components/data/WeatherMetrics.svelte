@@ -79,10 +79,10 @@
     };
   });
 
-  // Responsive visibility thresholds - always show icon+text together
-  const showWeatherGroup = $derived(containerWidth === 0 || containerWidth >= 100);
-  const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 200);
-  const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 300);
+  // Responsive visibility thresholds - progressive enhancement
+  const showWeatherGroup = $derived(containerWidth === 0 || containerWidth >= 80);
+  const showTemperatureGroup = $derived(containerWidth === 0 || containerWidth >= 160);
+  const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 240);
 
   // Get the appropriate unit labels based on the units setting
   const temperatureUnit = $derived(() => {
@@ -230,6 +230,16 @@
         {weatherDesc}
       </span>
     </div>
+  {:else if weatherIcon}
+    <!-- Icon only when space is very limited -->
+    <div class="wm-weather-icon-only flex items-center flex-shrink-0">
+      <span
+        class={cn('wm-weather-icon inline-block flex-shrink-0', emojiSizeClasses[size])}
+        aria-label={weatherDesc}
+      >
+        {weatherEmoji}
+      </span>
+    </div>
   {/if}
 
   <!-- Temperature Group -->
@@ -363,6 +373,7 @@
     100% {
       transform: translateX(0);
     }
+
     50% {
       transform: translateX(2px);
     }
@@ -373,25 +384,35 @@
     container-type: inline-size;
   }
 
-  /* Responsive visibility using container queries - groups shown/hidden as complete units */
-  @container (max-width: 100px) {
+  /* Responsive visibility using container queries - progressive enhancement */
+  /* Respect parent container visibility - don't override display: none from parent */
+  .wm-weather-icon-only {
+    display: none; /* Hidden by default */
+  }
+
+  @container (max-width: 80px) {
     .wm-weather-group,
     .wm-temperature-group,
     .wm-wind-group {
-      display: none !important;
+      display: none;
+    }
+
+    /* Only show icon-only if parent container is visible */
+    .wm-weather-icon-only {
+      display: flex;
     }
   }
 
-  @container (max-width: 200px) {
+  @container (max-width: 160px) {
     .wm-temperature-group,
     .wm-wind-group {
-      display: none !important;
+      display: none;
     }
   }
 
-  @container (max-width: 300px) {
+  @container (max-width: 240px) {
     .wm-wind-group {
-      display: none !important;
+      display: none;
     }
   }
 </style>

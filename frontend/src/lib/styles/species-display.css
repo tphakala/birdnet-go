@@ -15,7 +15,7 @@
   /* Species display spacing */
   --sp-container-gap: 0.375rem;
   --sp-mobile-gap: 0.25rem;
-  
+
   /* Species typography */
   --sp-common-font-weight: 500;
   --sp-common-line-height: 1.2;
@@ -29,7 +29,7 @@
   /* Species colors */
   --sp-hover-color: hsl(var(--p));
   --sp-scientific-color: oklch(var(--bc) / 0.7);
-  
+
   /* Species layout */
   --sp-thumbnail-mobile-size: 35%;
 }
@@ -208,9 +208,11 @@
     background-color: oklch(var(--p) / 0.2);
     transform: scale(1.02);
   }
+
   50% {
     background-color: oklch(var(--p) / 0.1);
   }
+
   100% {
     background-color: transparent;
     transform: scale(1);
@@ -226,6 +228,7 @@
   0% {
     background-color: oklch(var(--a) / 0.15);
   }
+
   100% {
     background-color: transparent;
   }
@@ -235,31 +238,338 @@
    Dark Theme Adjustments
    ======================================================================== */
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   /* Override scientific name color for better contrast in dark mode */
   --sp-scientific-color: oklch(var(--bc) / 0.5);
 }
 
 /* Remove duplicate - already defined above */
 
-[data-theme="dark"] .sp-species-common-name:hover {
+[data-theme='dark'] .sp-species-common-name:hover {
   color: oklch(var(--p) / 0.9);
 }
 
 /* ========================================================================
-   Grid Layout Utilities
+   Custom Detection Grid Layouts
    ======================================================================== */
 
-/* Override grid-cols-12 to make actions column narrow */
-.grid-cols-12.actions-narrow {
-  grid-template-columns: repeat(11, 1fr) 48px !important;
+/* Dashboard grid layout (Recent Detections Card) */
+.detection-grid-dashboard {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 1.5fr) /* Date & Time */
+    minmax(200px, 2.5fr) /* Species (larger for thumbnails) */
+    80px /* Confidence (fixed circle size) */
+    minmax(100px, 1.2fr) /* Status */
+    minmax(200px, 2fr) /* Recording/Audio */
+    48px; /* Actions (fixed narrow) */
+
+  gap: 1rem;
+  align-items: center;
+  padding: 0.25rem 1rem;
+  transition: background-color 0.15s ease-in-out;
 }
 
-/* Actions column content alignment */
-.actions-column {
+.detection-grid-dashboard:hover {
+  background-color: oklch(var(--b2) / 0.3);
+}
+
+/* Detection list grid layout (thumbnail integrated into species column) */
+.detection-grid-list {
+  display: grid;
+  grid-template-columns:
+    minmax(110px, 1fr) /* Date & Time */
+    minmax(60px, 1.5fr) /* Weather (more space for full data) */
+    minmax(180px, 2fr) /* Species (reduced for more weather space) */
+    60px /* Confidence (optimized for circle size) */
+    minmax(80px, 0.8fr) /* Status */
+    minmax(160px, 1.5fr) /* Recording (reduced for more weather space) */
+    48px; /* Actions */
+
+  gap: 1rem;
+  align-items: center;
+  padding: 0.25rem 1rem;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.detection-grid-list:hover {
+  background-color: oklch(var(--b2) / 0.2);
+}
+
+/* Header grid layouts matching their respective row layouts */
+.detection-header-dashboard {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 1.5fr) /* Date & Time */
+    minmax(200px, 2.5fr) /* Species */
+    80px /* Confidence */
+    minmax(100px, 1.2fr) /* Status */
+    minmax(200px, 2fr) /* Recording */
+    48px; /* Actions */
+
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: oklch(var(--bc) / 0.7);
+  border-bottom: 1px solid oklch(var(--bc) / 0.1);
+}
+
+.detection-header-list {
+  display: grid;
+  grid-template-columns:
+    minmax(110px, 1fr) /* Date & Time */
+    minmax(60px, 1.5fr) /* Weather (more space for full data) */
+    minmax(180px, 2fr) /* Species (reduced for more weather space) */
+    60px /* Confidence (optimized for circle size) */
+    minmax(80px, 0.8fr) /* Status */
+    minmax(160px, 1.5fr) /* Recording (reduced for more weather space) */
+    48px; /* Actions */
+
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: oklch(var(--bc) / 0.7);
+  border-bottom: 1px solid oklch(var(--bc) / 0.2);
+}
+
+/* Actions column content alignment for all grid types */
+.detection-grid-dashboard > :last-child,
+.detection-grid-list > :last-child,
+.detection-header-dashboard > :last-child,
+.detection-header-list > :last-child {
   justify-self: end;
   display: flex;
   justify-content: flex-end;
+}
+
+/* ========================================================================
+   Responsive Grid Adjustments
+   ======================================================================== */
+
+/* Hide thumbnails on narrow viewports to prioritize species text */
+@media (max-width: 1200px) {
+  .sp-thumbnail-wrapper {
+    display: none !important;
+  }
+
+  /* Adjust species container when thumbnails are hidden */
+  .sp-species-container {
+    justify-content: flex-start;
+  }
+
+  .sp-species-info-wrapper {
+    flex: 1;
+    max-width: 100%;
+  }
+}
+
+/* Tablet adjustments (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .detection-grid-dashboard {
+    grid-template-columns:
+      minmax(100px, 1fr) /* Date & Time (smaller) */
+      minmax(160px, 1.8fr) /* Species (reduced) */
+      70px /* Confidence (smaller) */
+      minmax(80px, 1fr) /* Status */
+      minmax(130px, 1.3fr) /* Recording (reduced) */
+      40px; /* Actions (smaller) */
+
+    gap: 0.75rem;
+  }
+
+  .detection-grid-list {
+    grid-template-columns:
+      minmax(90px, 0.8fr) /* Date & Time */
+      minmax(85px, 1.4fr) /* Weather (slightly more space) */
+      minmax(140px, 1.8fr) /* Species (more space since no thumbnails) */
+      60px /* Confidence (consistent with desktop) */
+      minmax(70px, 0.7fr) /* Status */
+      minmax(130px, 1.2fr) /* Recording (reduced) */
+      40px; /* Actions */
+
+    gap: 0.75rem;
+  }
+
+  .detection-grid-list.with-thumbnails {
+    grid-template-columns:
+      minmax(90px, 0.8fr) /* Date & Time */
+      auto /* Weather */
+      minmax(100px, 1.2fr) /* Species */
+      70px /* Confidence */
+      50px /* Thumbnail */
+      minmax(60px, 0.6fr) /* Status */
+      minmax(130px, 1.3fr) /* Recording */
+      40px; /* Actions */
+  }
+
+  /* Update headers to match */
+  .detection-header-dashboard {
+    grid-template-columns:
+      minmax(100px, 1fr)
+      minmax(180px, 2fr)
+      70px
+      minmax(80px, 1fr)
+      minmax(150px, 1.5fr)
+      40px;
+    gap: 0.75rem;
+  }
+
+  .detection-header-list {
+    grid-template-columns:
+      minmax(90px, 0.8fr)
+      minmax(85px, 1.4fr) /* Weather (slightly more space) */
+      minmax(140px, 1.8fr) /* Species (more space since no thumbnails) */
+      60px /* Confidence (consistent with desktop) */
+      minmax(70px, 0.7fr)
+      minmax(130px, 1.2fr) /* Recording (reduced) */
+      40px;
+    gap: 0.75rem;
+  }
+
+  .detection-header-list.with-thumbnails {
+    grid-template-columns:
+      minmax(90px, 0.8fr)
+      auto
+      minmax(100px, 1.2fr)
+      70px
+      50px
+      minmax(60px, 0.6fr)
+      minmax(130px, 1.3fr)
+      40px;
+  }
+}
+
+/* Mobile adjustments (max-width: 768px) */
+@media (max-width: 768px) {
+  /* CRITICAL: Override grid layout for proper mobile display */
+  .detection-grid-list {
+    grid-template-columns: 80px 1fr 50px 70px 36px !important;
+    gap: 0.5rem !important;
+    min-width: 0 !important;
+    padding: 0.75rem 0.5rem !important;
+    min-height: 60px !important;
+  }
+
+  .detection-header-list {
+    grid-template-columns: 80px 1fr 50px 70px 36px !important;
+    gap: 0.5rem !important;
+    padding: 0.75rem 0.5rem !important;
+  }
+
+  /* Mobile layout: Focus on readable content with proper spacing */
+  /* Switch to simplified 5-column layout: Date/Time, Species, Confidence, Status, Actions */
+  .detection-grid-dashboard {
+    grid-template-columns:
+      minmax(80px, 1fr) /* Date & Time (flexible) */
+      minmax(120px, 3fr) /* Species (main content, min width for readability) */
+      50px /* Confidence (smaller but readable) */
+      minmax(70px, 1fr) /* Status (visible, compact) */
+      36px; /* Actions (compact) */
+
+    gap: 0.5rem;
+    padding: 0.75rem 0.5rem;
+    min-height: 60px; /* Ensure adequate row height */
+  }
+
+  .detection-header-dashboard {
+    grid-template-columns:
+      minmax(80px, 1fr) /* Date & Time */
+      minmax(120px, 3fr) /* Species */
+      50px /* Confidence */
+      minmax(70px, 1fr) /* Status */
+      36px; /* Actions */
+
+    gap: 0.5rem;
+    padding: 0.75rem 0.5rem;
+  }
+
+  /* CRITICAL: Species text wrapping fixes - highest priority override of custom.css */
+  .sp-species-names {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+    min-width: 0 !important;
+    white-space: normal !important;
+    max-width: 100% !important;
+  }
+
+  .sp-species-common-name,
+  .sp-species-scientific-name {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+    white-space: normal !important;
+    text-overflow: unset !important;
+    overflow: visible !important;
+    max-width: 100% !important;
+    width: auto !important;
+  }
+}
+
+/* Extra small mobile (max-width: 480px) */
+@media (max-width: 480px) {
+  /* CRITICAL: Override grid layout for extra small screens */
+  .detection-grid-list {
+    grid-template-columns: 60px 1fr 45px 60px 32px !important;
+    gap: 0.25rem !important;
+    padding: 0.5rem 0.25rem !important;
+  }
+
+  .detection-header-list {
+    grid-template-columns: 60px 1fr 45px 60px 32px !important;
+    gap: 0.25rem !important;
+    padding: 0.5rem 0.25rem !important;
+  }
+
+  .detection-grid-dashboard {
+    grid-template-columns:
+      70px /* Date & Time (more compact) */
+      1fr /* Species (flexible, main content) */
+      45px /* Confidence (smaller) */
+      60px /* Status (compact) */
+      32px; /* Actions (smaller) */
+
+    gap: 0.25rem;
+    padding: 0.5rem 0.25rem;
+  }
+
+  .detection-header-dashboard {
+    grid-template-columns:
+      70px /* Date & Time */
+      1fr /* Species */
+      45px /* Confidence */
+      60px /* Status */
+      32px; /* Actions */
+
+    gap: 0.25rem;
+    padding: 0.5rem 0.25rem;
+  }
+
+  /* CRITICAL: Ensure text wrapping on extra small screens too */
+  .sp-species-names {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+    min-width: 0 !important;
+    white-space: normal !important;
+    max-width: 100% !important;
+  }
+
+  .sp-species-common-name,
+  .sp-species-scientific-name {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+    white-space: normal !important;
+    text-overflow: unset !important;
+    overflow: visible !important;
+    max-width: 100% !important;
+    width: auto !important;
+  }
 }
 
 /* ========================================================================
@@ -270,11 +580,11 @@
   .sp-species-common-name {
     color: black !important;
   }
-  
+
   .sp-species-scientific-name {
     color: #666 !important;
   }
-  
+
   .sp-species-common-name:hover {
     color: black !important;
   }

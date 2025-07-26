@@ -9,7 +9,6 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
-  import '$lib/styles/species-display.css';
 
   interface Props {
     data: Detection[];
@@ -269,15 +268,13 @@
       <!-- Desktop Layout -->
       <div>
         <!-- Header Row -->
-        <div
-          class="grid grid-cols-12 actions-narrow gap-4 text-xs font-medium text-base-content/70 pb-2 border-b border-base-300 px-4"
-        >
-          <div class="col-span-2">{t('dashboard.recentDetections.headers.dateTime')}</div>
-          <div class="col-span-3">{t('dashboard.recentDetections.headers.species')}</div>
-          <div class="col-span-1">{t('dashboard.recentDetections.headers.confidence')}</div>
-          <div class="col-span-2">{t('dashboard.recentDetections.headers.status')}</div>
-          <div class="col-span-3">{t('dashboard.recentDetections.headers.recording')}</div>
-          <div class="col-span-1 actions-column">{t('dashboard.recentDetections.headers.actions')}</div>
+        <div class="detection-header-dashboard">
+          <div>{t('dashboard.recentDetections.headers.dateTime')}</div>
+          <div>{t('dashboard.recentDetections.headers.species')}</div>
+          <div>{t('dashboard.recentDetections.headers.confidence')}</div>
+          <div>{t('dashboard.recentDetections.headers.status')}</div>
+          <div>{t('dashboard.recentDetections.headers.recording')}</div>
+          <div>{t('dashboard.recentDetections.headers.actions')}</div>
         </div>
 
         <!-- Detection Rows -->
@@ -286,10 +283,9 @@
             {@const badge = getStatusBadge(detection.verified, detection.locked)}
             {@const isNew = newDetectionIds.has(detection.id)}
             <div
-              class="grid grid-cols-12 actions-narrow gap-4 items-center px-4 py-1 hover:bg-base-200/30 transition-colors detection-row"
+              class="detection-grid-dashboard detection-row"
               class:cursor-pointer={onRowClick}
               class:new-detection={isNew}
-              style=""
               role="button"
               tabindex="0"
               onclick={() => handleRowClick(detection)}
@@ -297,12 +293,12 @@
                 e.key === 'Enter' || e.key === ' ' ? handleRowClick(detection) : null}
             >
               <!-- Date & Time -->
-              <div class="col-span-2 text-sm">
+              <div class="text-sm">
                 <div class="text-xs">{detection.date} {detection.time}</div>
               </div>
 
-              <!-- Combined Species Column with Confidence -->
-              <div class="col-span-3 sp-species-container sp-layout-dashboard">
+              <!-- Combined Species Column with thumbnail -->
+              <div class="sp-species-container sp-layout-dashboard">
                 <!-- Thumbnail -->
                 <div class="sp-thumbnail-wrapper">
                   <button
@@ -322,7 +318,7 @@
                   </button>
                 </div>
 
-                <!-- Species Names and Confidence -->
+                <!-- Species Names -->
                 <div class="sp-species-info-wrapper">
                   <div class="sp-species-names">
                     <div class="sp-species-common-name">{detection.commonName}</div>
@@ -332,12 +328,12 @@
               </div>
 
               <!-- Confidence -->
-              <div class="col-span-1">
+              <div>
                 <ConfidenceCircle confidence={detection.confidence} size="sm" />
               </div>
 
               <!-- Status -->
-              <div class="col-span-2">
+              <div>
                 <div class="flex flex-wrap gap-1">
                   <span class="status-badge {badge.class}">
                     {badge.text}
@@ -346,7 +342,7 @@
               </div>
 
               <!-- Recording -->
-              <div class="col-span-3">
+              <div>
                 <div class="rd-audio-player-container relative min-w-[50px]">
                   <AudioPlayer
                     audioUrl="/api/v2/audio/{detection.id}"
@@ -358,7 +354,7 @@
               </div>
 
               <!-- Action Menu -->
-              <div class="col-span-1 actions-column">
+              <div>
                 <ActionMenu
                   {detection}
                   isExcluded={false}
@@ -467,12 +463,12 @@
 
   /* Species display styles now handled by shared CSS (/lib/styles/species-display.css) */
   /* Dashboard-specific overrides below */
-  
+
   /* RD Audio Player Container */
   .rd-audio-player-container {
     position: relative;
     width: 100%;
-    background: linear-gradient(to bottom, rgb(128 128 128 / 0.4), rgb(128 128 128 / 0.1));
+    background: linear-gradient(to bottom, rgb(128, 128, 128, 0.4), rgb(128, 128, 128, 0.1));
     border-radius: 0.5rem;
   }
 

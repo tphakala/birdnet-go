@@ -1,0 +1,646 @@
+/* ========================================================================
+   Extracted styles from legacy custom.css that are used by Svelte UI
+   ======================================================================== */
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ========================================================================
+   Confidence Circle Component
+   ======================================================================== */
+
+.confidence-circle {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--lighter-color, #f3f4f6);
+}
+
+[data-theme='dark'] .confidence-circle {
+  background: var(--darker-color, rgb(17, 24, 39));
+}
+
+.confidence-circle-track {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  background: var(--lighter-color, #f3f4f6);
+  border-radius: 50%;
+  z-index: 2;
+}
+
+[data-theme='dark'] .confidence-circle-track {
+  background: var(--darker-color, rgb(17, 24, 39));
+}
+
+.confidence-circle-progress {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform-origin: center;
+  transform: rotate(180deg);
+  background: conic-gradient(currentColor var(--progress), transparent 0);
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+/* Confidence level color schemes */
+.confidence-high {
+  color: #059669;
+  --lighter-color: #ecfdf5;
+  --darker-color: rgba(6, 78, 59, 0.2);
+}
+
+.confidence-medium {
+  color: #d97706;
+  --lighter-color: #fffbeb;
+  --darker-color: rgba(120, 53, 15, 0.2);
+}
+
+.confidence-low {
+  color: #dc2626;
+  --lighter-color: #fef2f2;
+  --darker-color: rgba(127, 29, 29, 0.2);
+}
+
+.confidence-circle-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: currentColor;
+  z-index: 3;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.confidence-circle-text svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 3;
+}
+
+/* Dark theme adjustments */
+[data-theme='dark'] .confidence-high {
+  color: #34d399;
+  --darker-color: rgb(6, 78, 59);
+}
+
+[data-theme='dark'] .confidence-medium {
+  color: #fbbf24;
+  --darker-color: rgb(120, 53, 15);
+}
+
+[data-theme='dark'] .confidence-low {
+  color: #f87171;
+  --darker-color: rgb(127, 29, 29);
+}
+
+/* ========================================================================
+   Status Badges
+   ======================================================================== */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid;
+}
+
+.status-badge.unverified {
+  color: #6b7280;
+  border-color: #6b7280;
+  background-color: #f3f4f6;
+}
+
+.status-badge.correct {
+  color: #059669;
+  border-color: #059669;
+  background-color: #ecfdf5;
+}
+
+.status-badge.false {
+  color: #dc2626;
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.status-badge.locked {
+  color: #d97706;
+  border-color: #d97706;
+  background-color: #fffbeb;
+}
+
+.status-badge.comment {
+  color: #2563eb;
+  border-color: #2563eb;
+  background-color: #eff6ff;
+}
+
+/* Dark theme status badges */
+[data-theme='dark'] .status-badge.unverified {
+  color: #9ca3af;
+  border-color: #9ca3af;
+  background-color: rgba(156, 163, 175, 0.1);
+}
+
+[data-theme='dark'] .status-badge.correct {
+  color: #34d399;
+  border-color: #34d399;
+  background-color: rgba(52, 211, 153, 0.1);
+}
+
+[data-theme='dark'] .status-badge.false {
+  color: #f87171;
+  border-color: #f87171;
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+[data-theme='dark'] .status-badge.locked {
+  color: #fbbf24;
+  border-color: #fbbf24;
+  background-color: rgba(251, 191, 36, 0.1);
+}
+
+[data-theme='dark'] .status-badge.comment {
+  color: #60a5fa;
+  border-color: #60a5fa;
+  background-color: rgba(96, 165, 250, 0.1);
+}
+
+/* ========================================================================
+   Species Ball Component
+   ======================================================================== */
+
+.species-ball {
+  min-width: 1rem;
+  height: 1.25rem;
+  display: inline-flex;
+  padding: 0.2rem 0.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+@media (max-width: 1024px) {
+  .species-ball {
+    font-size: 0.65rem;
+  }
+}
+
+/* ========================================================================
+   Miscellaneous Utilities
+   ======================================================================== */
+
+/* Focus states for inputs and selects */
+.input:focus-visible,
+.select:focus-visible {
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+}
+
+/* Progress minimum height */
+.progress {
+  min-height: 14px;
+}
+
+/* Notification bell animation */
+@keyframes wiggle {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-15deg);
+  }
+  50% {
+    transform: rotate(15deg);
+  }
+  75% {
+    transform: rotate(-10deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-wiggle {
+  transform-origin: top center;
+  animation: wiggle 0.5s ease-in-out 2;
+}
+
+/* Theme toggle rotation */
+.swap-rotate {
+  transition: transform 0.2s ease-in-out;
+}
+
+/* ========================================================================
+   Table & Heatmap Styles (used by DailySummaryCard)
+   ======================================================================== */
+
+/* Sticky header for tables */
+thead.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 2rem;
+  background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+}
+
+[data-theme='dark'] thead.sticky-header {
+  background-image: linear-gradient(to bottom, #1d232a 50%, transparent 100%);
+}
+
+/* Table cell display settings */
+.hour-header,
+.hour-data,
+.hourly-count {
+  display: none;
+}
+
+.bi-hourly-count,
+.six-hourly-count {
+  display: none;
+}
+
+/* Light theme borders for hour data cells */
+[data-theme='light'] .hour-data:not(.heatmap-color-0) {
+  position: relative;
+  z-index: 1;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-clip: padding-box;
+  border-collapse: collapse;
+}
+
+/* Flex alignment for links inside hour cells */
+.hour-data a {
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Remove extra borders in specific table rows */
+.table :where(thead tr, tbody tr:not(:last-child), tbody tr:first-child:last-child) {
+  border-bottom-width: 0;
+}
+
+.table :where(thead td, thead th) {
+  border-bottom: 1px solid var(--fallback-b2, oklch(var(--b2) / var(--tw-border-opacity)));
+}
+
+/* Responsive table adjustments */
+/* Extra large screens (≥1400px): show hourly view and total detections */
+@media (min-width: 1400px) {
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: table-cell;
+  }
+  [class*='hidden'][class*='2xl:table-cell'] {
+    display: table-cell;
+  }
+}
+
+/* Large screens (1200px-1399px): show hourly view, hide total detections */
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: table-cell;
+  }
+  [class*='hidden'][class*='2xl:table-cell'] {
+    display: none !important;
+  }
+}
+
+/* Medium-large screens (1024px-1199px): show hourly view, hide total detections */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: table-cell;
+  }
+  .hour-header.hourly-count,
+  .hour-data.hourly-count {
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 0.7rem;
+  }
+  [class*='hidden'][class*='2xl:table-cell'] {
+    display: none !important;
+  }
+}
+
+/* Medium screens (768px-1023px): show bi-hourly */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly,
+  .bi-hourly-count {
+    display: table-cell;
+  }
+  .hour-header.hourly-count,
+  .hour-data.hourly-count,
+  .hourly-count {
+    display: none;
+  }
+  [class*='hidden'][class*='2xl:table-cell'] {
+    display: none !important;
+  }
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly {
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 0.7rem;
+  }
+}
+
+/* Small screens (mobile, <768px): show bi-hourly */
+@media (max-width: 767px) {
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly,
+  .bi-hourly-count {
+    display: table-cell;
+  }
+  [class*='hidden'][class*='2xl:table-cell'] {
+    display: none !important;
+  }
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Extra small screens (<480px): show six-hourly */
+@media (max-width: 479px) {
+  .hour-header.bi-hourly,
+  .hour-data.bi-hourly,
+  .bi-hourly-count {
+    display: none;
+  }
+  .hour-header.six-hourly,
+  .hour-data.six-hourly,
+  .six-hourly-count {
+    display: table-cell;
+  }
+}
+
+/* Consistent table cell sizing */
+.hour-data {
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  line-height: 2rem;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.table tr {
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+}
+
+.table td,
+.table th {
+  box-sizing: border-box;
+  height: 2rem;
+  min-height: 2rem;
+  max-height: 2rem;
+  vertical-align: middle;
+}
+
+/* Make hour cells more compact by default */
+.hour-header,
+.hour-data {
+  padding-left: 0.1rem;
+  padding-right: 0.1rem;
+}
+
+/* ========================================================================
+   Heatmap Colors (used by DailySummaryCard)
+   ======================================================================== */
+
+/* Light theme heatmap colors */
+:root {
+  --heatmap-color-0: #f0f9fc;
+  --heatmap-color-1: #e0f3f8;
+  --heatmap-color-2: #ccebf6;
+  --heatmap-color-3: #99d7ed;
+  --heatmap-color-4: #66c2e4;
+  --heatmap-color-5: #33ade1;
+  --heatmap-color-6: #0099d8;
+  --heatmap-color-7: #0077be;
+  --heatmap-color-8: #005595;
+  --heatmap-color-9: #003366;
+}
+
+/* Dark theme heatmap colors */
+[data-theme='dark'] {
+  --heatmap-color-0: #001a20;
+  --heatmap-color-1: #002933;
+  --heatmap-color-2: #004466;
+  --heatmap-color-3: #005c80;
+  --heatmap-color-4: #007399;
+  --heatmap-color-5: #008bb3;
+  --heatmap-color-6: #33a3cc;
+  --heatmap-color-7: #66b8e2;
+  --heatmap-color-8: #99cde9;
+  --heatmap-color-9: #cce3f1;
+}
+
+/* Dark theme heatmap text colors */
+[data-theme='dark'] {
+  --heatmap-text-1: #fff;
+  --heatmap-text-2: #fff;
+  --heatmap-text-3: #fff;
+  --heatmap-text-4: #fff;
+  --heatmap-text-5: #fff;
+  --heatmap-text-6: #000;
+  --heatmap-text-7: #000;
+  --heatmap-text-8: #000;
+  --heatmap-text-9: #000;
+}
+
+/* Light theme heatmap cell styles */
+[data-theme='light'] .heatmap-color-1 {
+  background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+  color: var(--heatmap-text-1, #000);
+}
+[data-theme='light'] .heatmap-color-2 {
+  background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+  color: var(--heatmap-text-2, #000);
+}
+[data-theme='light'] .heatmap-color-3 {
+  background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+  color: var(--heatmap-text-3, #000);
+}
+[data-theme='light'] .heatmap-color-4 {
+  background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+  color: var(--heatmap-text-4, #000);
+}
+[data-theme='light'] .heatmap-color-5 {
+  background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+  color: var(--heatmap-text-5, #fff);
+}
+[data-theme='light'] .heatmap-color-6 {
+  background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+  color: var(--heatmap-text-6, #fff);
+}
+[data-theme='light'] .heatmap-color-7 {
+  background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+  color: var(--heatmap-text-7, #fff);
+}
+[data-theme='light'] .heatmap-color-8 {
+  background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+  color: var(--heatmap-text-8, #fff);
+}
+[data-theme='light'] .heatmap-color-9 {
+  background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+  color: var(--heatmap-text-9, #fff);
+}
+
+/* Dark theme heatmap cell styles */
+[data-theme='dark'] .heatmap-color-1 {
+  background: linear-gradient(135deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+  color: var(--heatmap-text-1, #000);
+}
+[data-theme='dark'] .heatmap-color-2 {
+  background: linear-gradient(135deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+  color: var(--heatmap-text-2, #000);
+}
+[data-theme='dark'] .heatmap-color-3 {
+  background: linear-gradient(135deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+  color: var(--heatmap-text-3, #000);
+}
+[data-theme='dark'] .heatmap-color-4 {
+  background: linear-gradient(135deg, var(--heatmap-color-4) 66%, var(--heatmap-color-3) 110%);
+  color: var(--heatmap-text-4, #000);
+}
+[data-theme='dark'] .heatmap-color-5 {
+  background: linear-gradient(135deg, var(--heatmap-color-5) 66%, var(--heatmap-color-4) 110%);
+  color: var(--heatmap-text-5, #fff);
+}
+[data-theme='dark'] .heatmap-color-6 {
+  background: linear-gradient(135deg, var(--heatmap-color-6) 66%, var(--heatmap-color-5) 110%);
+  color: var(--heatmap-text-6, #fff);
+}
+[data-theme='dark'] .heatmap-color-7 {
+  background: linear-gradient(135deg, var(--heatmap-color-7) 66%, var(--heatmap-color-6) 110%);
+  color: var(--heatmap-text-7, #fff);
+}
+[data-theme='dark'] .heatmap-color-8 {
+  background: linear-gradient(135deg, var(--heatmap-color-8) 66%, var(--heatmap-color-7) 110%);
+  color: var(--heatmap-text-8, #fff);
+}
+[data-theme='dark'] .heatmap-color-9 {
+  background: linear-gradient(135deg, var(--heatmap-color-9) 66%, var(--heatmap-color-8) 110%);
+  color: var(--heatmap-text-9, #fff);
+}
+
+/* ========================================================================
+   Progress Width Classes & Utility Styles (used by DailySummaryCard)
+   ======================================================================== */
+
+.progress-width-0 {
+  width: 0%;
+}
+.progress-width-5 {
+  width: 5%;
+}
+.progress-width-10 {
+  width: 10%;
+}
+.progress-width-15 {
+  width: 15%;
+}
+.progress-width-20 {
+  width: 20%;
+}
+.progress-width-25 {
+  width: 25%;
+}
+.progress-width-30 {
+  width: 30%;
+}
+.progress-width-35 {
+  width: 35%;
+}
+.progress-width-40 {
+  width: 40%;
+}
+.progress-width-45 {
+  width: 45%;
+}
+.progress-width-50 {
+  width: 50%;
+}
+.progress-width-55 {
+  width: 55%;
+}
+.progress-width-60 {
+  width: 60%;
+}
+.progress-width-65 {
+  width: 65%;
+}
+.progress-width-70 {
+  width: 70%;
+}
+.progress-width-75 {
+  width: 75%;
+}
+.progress-width-80 {
+  width: 80%;
+}
+.progress-width-85 {
+  width: 85%;
+}
+.progress-width-90 {
+  width: 90%;
+}
+.progress-width-95 {
+  width: 95%;
+}
+.progress-width-100 {
+  width: 100%;
+}
+
+/* Extra small text size */
+.text-2xs {
+  font-size: 0.6rem;
+}

@@ -36,7 +36,6 @@
   import DetectionRow from './DetectionRow.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
-  import '$lib/styles/species-display.css';
 
   interface Props {
     data: DetectionsListData | null;
@@ -180,35 +179,20 @@
       />
     {:else}
       <!-- Header -->
-      <div class="grid grid-cols-12 actions-narrow gap-4 text-xs px-4 pb-2 border-b border-gray-200">
-        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.dateTime')}</div>
-        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.weather')}</div>
-        <div class="col-span-2 min-w-0 break-words">{t('detections.headers.species')}</div>
-        <div class="col-span-1 min-w-0 break-words">{t('detections.headers.confidence')}</div>
-        {#if data.dashboardSettings?.thumbnails?.summary}
-          <div class="col-span-1 min-w-0 break-words">{t('detections.headers.thumbnail')}</div>
-        {/if}
-        <div class="col-span-1 min-w-0 break-words">{t('detections.headers.status')}</div>
-        <div
-          class={cn(
-            data.dashboardSettings?.thumbnails?.summary ? 'col-span-2' : 'col-span-3',
-            'min-w-0 break-words'
-          )}
-        >
-          {t('detections.headers.recording')}
-        </div>
-        <div class="col-span-1 actions-column min-w-0 break-words">{t('detections.headers.actions')}</div>
+      <div class="detection-header-list">
+        <div>{t('detections.headers.dateTime')}</div>
+        <div class="hidden md:block">{t('detections.headers.weather')}</div>
+        <div>{t('detections.headers.species')}</div>
+        <div>{t('detections.headers.confidence')}</div>
+        <div>{t('detections.headers.status')}</div>
+        <div class="hidden md:block">{t('detections.headers.recording')}</div>
+        <div>{t('detections.headers.actions')}</div>
       </div>
 
       <!-- Detection rows -->
       <div class="divide-y divide-gray-100">
         {#each data.notes as detection}
-          <DetectionRow
-            {detection}
-            showThumbnails={data.dashboardSettings?.thumbnails?.summary}
-            {onDetailsClick}
-            {onRefresh}
-          />
+          <DetectionRow {detection} {onDetailsClick} {onRefresh} />
         {/each}
       </div>
     {/if}
