@@ -197,10 +197,7 @@
     <div class="flex items-center justify-between mb-4">
       <span class="card-title grow text-base sm:text-xl"
         >{t('dashboard.dailySummary.title')}
-        {#if sortedData.length > 0}
-          <!-- Number of species detected -->
-          <span class="species-ball bg-primary text-primary-content ml-2">{sortedData.length}</span>
-        {/if}
+
       </span>
       <div class="flex items-center gap-2">
         <!-- Previous day button -->
@@ -260,7 +257,12 @@
                   style:text-align={column.align || 'left'}
                   scope="col"
                 >
-                  {#if column.key?.startsWith('hour_')}
+                {#if column.key === 'common_name'}
+                  {column.header}
+                  {#if sortedData.length > 0}
+                    <span class="species-ball bg-blue-500 text-white ml-1">{sortedData.length}</span>
+                  {/if}
+                {:else if column.key?.startsWith('hour_')}
                     <!-- Hourly columns -->
                     {@const hour = parseInt(column.key.split('_')[1])}
                     <a
