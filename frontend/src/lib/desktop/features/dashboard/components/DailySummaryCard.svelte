@@ -249,7 +249,7 @@
                 <!-- Hourly, bi-hourly, and six-hourly headers -->
                 <th
                   class="py-0 {column.key === 'common_name'
-                    ? 'pl-2 pr-6 sm:pl-4 sm:pr-8'
+                    ? 'pl-2 pr-6 sm:pl-0 sm:pr-8'
                     : 'px-2 sm:px-4'} {column.className || ''}"
                   class:hour-header={column.key?.startsWith('hour_') ||
                     column.key?.startsWith('bi_hour_') ||
@@ -358,7 +358,7 @@
                           classes.push('heatmap-color-0');
                         }
                       } else if (column.key === 'common_name') {
-                        classes.push('pl-2', 'pr-6', 'sm:pl-4', 'sm:pr-8');
+                        classes.push('pl-2', 'pr-6', 'sm:pl-0', 'sm:pr-8');
                       } else {
                         classes.push('px-2', 'sm:px-4');
                       }
