@@ -3,7 +3,7 @@
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { alertIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -397,7 +397,8 @@
                         class="w-full bg-base-300 dark:bg-base-300 rounded-full overflow-hidden relative"
                       >
                         <div
-                          class="progress progress-primary bg-gray-400 dark:bg-gray-400 progress-width-{roundedWidth}"
+                          class="progress progress-primary bg-gray-400 dark:bg-gray-400"
+                          style="width: {roundedWidth}%"
                         >
                           {#if width >= 45 && width <= 59}
                             <!-- Total detections count for large bars -->
