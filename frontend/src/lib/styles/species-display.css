@@ -8,6 +8,18 @@
    - RecentDetectionsCard.svelte (dashboard)
    - DetectionRow.svelte (detections)
    - DetectionsCard.svelte (detections)
+   
+   FILE ORGANIZATION:
+   1. CSS Custom Properties & Theming (lines 13-35)
+   2. Base Component Styles (lines 37-128)
+   3. Responsive Design & Media Queries (lines 130-506)
+   4. Animations & Keyframes (lines 197-237)
+   5. Accessibility & Print Styles (lines 171-195, 504+)
+   
+   TODO: Consider splitting into focused modules:
+   - species-display-base.css (theming + core styles)
+   - species-display-responsive.css (media queries)
+   - species-display-animations.css (keyframes + transitions)
    ======================================================================== */
 
 /* CSS Custom Properties for theming */

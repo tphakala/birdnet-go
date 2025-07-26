@@ -103,11 +103,7 @@
     if (selectedDate) {
       fetchSunTimes(selectedDate)
         .then(times => {
-          sunTimes = times;
-        })
-        .catch(error => {
-          console.error('Failed to update sun times:', error);
-          sunTimesError = 'Failed to update sun times';
+          sunTimes = times; // times will be null if there was an error
         });
     }
   });
