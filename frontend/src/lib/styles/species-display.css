@@ -247,6 +247,22 @@
 }
 
 /* ========================================================================
+   Grid Layout Utilities
+   ======================================================================== */
+
+/* Override grid-cols-12 to make actions column narrow */
+.grid-cols-12.actions-narrow {
+  grid-template-columns: repeat(11, 1fr) 48px !important;
+}
+
+/* Actions column content alignment */
+.actions-column {
+  justify-self: end;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ========================================================================
    Print Styles
    ======================================================================== */
 

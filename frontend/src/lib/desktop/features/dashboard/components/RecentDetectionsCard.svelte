@@ -270,14 +270,14 @@
       <div>
         <!-- Header Row -->
         <div
-          class="grid grid-cols-12 gap-4 text-xs font-medium text-base-content/70 pb-2 border-b border-base-300 px-4"
+          class="grid grid-cols-12 actions-narrow gap-4 text-xs font-medium text-base-content/70 pb-2 border-b border-base-300 px-4"
         >
           <div class="col-span-2">{t('dashboard.recentDetections.headers.dateTime')}</div>
           <div class="col-span-3">{t('dashboard.recentDetections.headers.species')}</div>
           <div class="col-span-1">{t('dashboard.recentDetections.headers.confidence')}</div>
           <div class="col-span-2">{t('dashboard.recentDetections.headers.status')}</div>
           <div class="col-span-3">{t('dashboard.recentDetections.headers.recording')}</div>
-          <div class="col-span-1">{t('dashboard.recentDetections.headers.actions')}</div>
+          <div class="col-span-1 actions-column">{t('dashboard.recentDetections.headers.actions')}</div>
         </div>
 
         <!-- Detection Rows -->
@@ -286,7 +286,7 @@
             {@const badge = getStatusBadge(detection.verified, detection.locked)}
             {@const isNew = newDetectionIds.has(detection.id)}
             <div
-              class="grid grid-cols-12 gap-4 items-center px-4 py-1 hover:bg-base-200/30 transition-colors detection-row"
+              class="grid grid-cols-12 actions-narrow gap-4 items-center px-4 py-1 hover:bg-base-200/30 transition-colors detection-row"
               class:cursor-pointer={onRowClick}
               class:new-detection={isNew}
               style=""
@@ -358,7 +358,7 @@
               </div>
 
               <!-- Action Menu -->
-              <div class="col-span-1 flex justify-end">
+              <div class="col-span-1 actions-column">
                 <ActionMenu
                   {detection}
                   isExcluded={false}

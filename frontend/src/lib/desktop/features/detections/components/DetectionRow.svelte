@@ -163,7 +163,7 @@
 
 <div
   class={cn(
-    'grid grid-cols-12 gap-4 items-center px-4 py-1 hover:bg-gray-50 transition-colors',
+    'grid grid-cols-12 actions-narrow gap-4 items-center px-4 py-1 hover:bg-gray-50 transition-colors',
     className
   )}
 >
@@ -253,7 +253,7 @@
   </div>
 
   <!-- Action Menu -->
-  <div class="col-span-1 flex justify-end">
+  <div class="col-span-1 actions-column">
     <ActionMenu
       {detection}
       {isExcluded}
