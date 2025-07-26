@@ -2,9 +2,9 @@
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
 
   interface Props {
     data: DailySpeciesSummary[];
@@ -370,15 +370,13 @@
                       <!-- Species thumbnail and name -->
                       <div class="flex items-center gap-2">
                         {#if showThumbnails}
-                          <a href={buildSpeciesUrl(item)}>
-                            <img
-                              src={item.thumbnail_url ||
-                                `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
-                              alt={item.common_name}
-                              class="w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                              onerror={handleBirdImageError}
-                            />
-                          </a>
+                          <BirdThumbnailPopup
+                            thumbnailUrl={item.thumbnail_url ||
+                              `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
+                            commonName={item.common_name}
+                            scientificName={item.scientific_name}
+                            detectionUrl={buildSpeciesUrl(item)}
+                          />
                         {/if}
                         <!-- Species name -->
                         <a
