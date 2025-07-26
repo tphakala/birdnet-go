@@ -182,7 +182,6 @@
     {:else}
       <div class="text-base-content/50 text-xs">
         {t('detections.weather.noData')}
-        <!-- Debug: {JSON.stringify(Object.keys(detection))} -->
       </div>
     {/if}
   </td>
@@ -192,13 +191,13 @@
     <div class="sp-species-container sp-layout-detections">
       <!-- Thumbnail -->
       <div class="sp-thumbnail-wrapper">
-        <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="-1">
+        <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="0">
           <img
             loading="lazy"
             src={getThumbnailUrl(detection.scientificName)}
             alt={detection.commonName}
             class="sp-thumbnail-image"
-            onerror={handleBirdImageError}
+            onerror={(e) => handleBirdImageError(e)}
           />
         </button>
       </div>

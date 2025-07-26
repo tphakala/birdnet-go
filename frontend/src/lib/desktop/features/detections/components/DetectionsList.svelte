@@ -178,7 +178,7 @@
         className="py-8"
       />
     {:else}
-      <table class="w-full" role="table">
+      <table class="w-full">
         <caption class="sr-only">{t('detections.table.caption')}</caption>
         <thead>
           <tr class="detection-header-list">

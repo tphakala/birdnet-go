@@ -135,8 +135,9 @@
     imageError = false;
   }
 
-  // Handle image load error
-  function handleImageError() {
+  // Handle image load error - wraps imported handler and updates component state
+  function handleImageError(event: Event) {
+    handleBirdImageError(event);
     imageLoaded = false;
     imageError = true;
   }
@@ -174,7 +175,7 @@
       src={thumbnailUrl}
       alt={commonName}
       class="thumbnail-image w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
-      onerror={handleBirdImageError}
+      onerror={handleImageError}
       loading="lazy"
     />
   </a>

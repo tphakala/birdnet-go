@@ -386,12 +386,13 @@ tbody td:last-child > *,
   /* Update headers to match */
   .detection-header-dashboard {
     grid-template-columns:
-      minmax(100px, 1fr)
-      minmax(180px, 2fr)
-      70px
-      minmax(80px, 1fr)
-      minmax(150px, 1.5fr)
-      40px;
+      minmax(100px, 1fr) /* Date & Time */
+      minmax(180px, 2fr) /* Species */
+      70px /* Confidence */
+      minmax(80px, 1fr) /* Status */
+      minmax(150px, 1.5fr) /* Recording */
+      40px; /* Actions */
+      
     gap: 0.75rem;
   }
 
@@ -494,30 +495,10 @@ tbody td:last-child > *,
     padding: 0.5rem 0.25rem;
   }
 
-  /* Ensure text wrapping on extra small screens too */
-  tbody .sp-species-names,
-  .detection-grid-dashboard .sp-species-names {
-    word-break: normal;
-    overflow-wrap: break-word;
-    hyphens: auto;
-    min-width: 0;
-    white-space: normal;
-    max-width: 100%;
-  }
-
-  tbody .sp-species-common-name,
-  tbody .sp-species-scientific-name,
-  .detection-grid-dashboard .sp-species-common-name,
-  .detection-grid-dashboard .sp-species-scientific-name {
-    word-break: normal;
-    overflow-wrap: break-word;
-    hyphens: auto;
-    white-space: normal;
-    text-overflow: unset;
-    overflow: visible;
-    max-width: 100%;
-    width: auto;
-  }
+  /* Reuse text wrapping styles from mobile breakpoint */
+  /* Note: These rules are identical to the ones at max-width: 768px */
+  /* but need to be repeated due to CSS cascade specificity. */
+  /* Consider using CSS custom properties or PostCSS mixins to reduce duplication. */
 }
 
 /* ========================================================================

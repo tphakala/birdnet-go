@@ -6,6 +6,9 @@
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
 
+  // Constants
+  const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
+
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
   let recentDetections = $state<Detection[]>([]);
@@ -91,7 +94,7 @@
             setTimeout(() => {
               newDetectionIds.delete(detection.id);
               detectionArrivalTimes.delete(detection.id);
-            }, 2200); // Slightly longer than 2s animation
+            }, ANIMATION_CLEANUP_DELAY);
           }
         });
       }
