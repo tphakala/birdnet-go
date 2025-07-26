@@ -54,15 +54,8 @@
       if (onSave) {
         await onSave(reviewStatus, lockDetection, ignoreSpecies, comment);
       } else {
-        // Calculate the desired lock state based on current state and user choice
-        let desiredLockState;
-        if (detection.locked) {
-          // If currently locked, lockDetection checkbox means "unlock"
-          desiredLockState = !lockDetection; // if checked (unlock), then false
-        } else {
-          // If currently unlocked, lockDetection checkbox means "lock"
-          desiredLockState = lockDetection; // if checked (lock), then true
-        }
+        // Calculate the desired lock state: if locked, checkbox means "unlock"; if unlocked, checkbox means "lock"
+        const desiredLockState = detection.locked ? !lockDetection : lockDetection;
 
         // Default save implementation
         await fetchWithCSRF('/api/v2/detections/review', {
@@ -82,7 +75,21 @@
       onClose();
     } catch (error) {
       console.error('Error saving review:', error);
-      errorMessage = error instanceof Error ? error.message : t('common.review.errors.saveFailed');
+
+      // Provide more specific error messages based on the error
+      if (error instanceof Error) {
+        if (error.message.includes('lock status')) {
+          errorMessage = 'Failed to update lock status. Please try again.';
+        } else if (error.message.includes('verification')) {
+          errorMessage = 'Failed to update verification status. Please try again.';
+        } else if (error.message.includes('comment')) {
+          errorMessage = 'Failed to save comment. Please try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      } else {
+        errorMessage = t('common.review.errors.saveFailed');
+      }
     } finally {
       isLoading = false;
     }

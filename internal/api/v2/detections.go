@@ -1058,6 +1058,21 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
+	// Log when modifying locked detections for audit trail
+	if note.Locked {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Modifying locked detection",
+				"detection_id", idStr,
+				"current_verified", note.Verified,
+				"new_verified", req.Verified,
+				"current_locked", note.Locked,
+				"new_lock_state", req.LockDetection,
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+	}
+
 	// Handle comment if provided
 	if req.Comment != "" {
 		// Save comment using the datastore method for adding comments
@@ -1093,8 +1108,26 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 
 	// Handle lock/unlock request separately
 	if req.LockDetection != note.Locked {
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Updating lock status",
+				"detection_id", idStr,
+				"current_locked", note.Locked,
+				"new_locked", req.LockDetection,
+				"ip", ctx.RealIP(),
+			)
+		}
+		
 		err = c.AddLock(note.ID, req.LockDetection)
 		if err != nil {
+			// Log the lock operation failure
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Failed to update lock status",
+					"detection_id", idStr,
+					"attempted_lock_state", req.LockDetection,
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+				)
+			}
 			return c.HandleError(ctx, err, fmt.Sprintf("Failed to update lock status: %v", err), http.StatusInternalServerError)
 		}
 	}
