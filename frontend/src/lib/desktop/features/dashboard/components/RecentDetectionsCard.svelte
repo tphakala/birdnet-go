@@ -255,18 +255,23 @@
     </div>
 
     <!-- Content -->
-    {#if loading}
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-md"></span>
-      </div>
-    {:else if error}
+    {#if error}
       <div class="alert alert-error">
         {@html alertIconsSvg.error}
         <span>{error}</span>
       </div>
     {:else}
       <!-- Desktop Layout -->
-      <div>
+      <div class="relative">
+        <!-- Loading overlay -->
+        {#if loading}
+          <div class="absolute inset-0 bg-base-100/80 z-20 flex items-center justify-center rounded-lg pointer-events-none">
+            <span class="loading loading-spinner loading-md"></span>
+          </div>
+          <!-- Disable pointer events on content during loading -->
+          <div class="absolute inset-0 z-10" style="pointer-events: auto; cursor: wait;"></div>
+        {/if}
+        
         <!-- Header Row -->
         <div class="detection-header-dashboard">
           <div>{t('dashboard.recentDetections.headers.dateTime')}</div>
@@ -300,14 +305,13 @@
               <!-- Combined Species Column with thumbnail -->
               <div class="sp-species-container sp-layout-dashboard">
                 <!-- Thumbnail -->
-                <div class="sp-thumbnail-wrapper">
+                <div class="rd-thumbnail-wrapper">
                   <button
                     class="rd-thumbnail-button"
                     onclick={() => handleRowClick(detection)}
                     tabindex="-1"
                   >
                     <img
-                      loading="lazy"
                       src="/api/v2/media/species-image?name={encodeURIComponent(
                         detection.scientificName
                       )}"
@@ -348,7 +352,7 @@
                     audioUrl="/api/v2/audio/{detection.id}"
                     detectionId={detection.id.toString()}
                     showSpectrogram={true}
-                    className="w-full h-auto"
+                    className="w-full"
                   />
                 </div>
               </div>
