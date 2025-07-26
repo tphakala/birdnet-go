@@ -21,7 +21,6 @@
   
   Props:
   - detection: Detection - The detection data object
-  - showThumbnails?: boolean - Whether to display species thumbnails
   - isExcluded?: boolean - Whether this detection is excluded
   - onDetailsClick?: (id: number) => void - Handler for detail view
   - onRefresh?: () => void - Handler for data refresh
@@ -38,12 +37,11 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
-
 
   interface Props {
     detection: Detection;
-    showThumbnails?: boolean;
     isExcluded?: boolean;
     onDetailsClick?: (id: number) => void;
     onRefresh?: () => void;
@@ -52,7 +50,6 @@
 
   let {
     detection,
-    showThumbnails = false,
     isExcluded = false,
     onDetailsClick,
     onRefresh,
@@ -161,19 +158,14 @@
   }
 </script>
 
-<div
-  class={cn(
-    'grid grid-cols-12 gap-4 items-center px-4 py-1 hover:bg-gray-50 transition-colors',
-    className
-  )}
->
+<!-- DetectionRow now returns table cells for proper table structure -->
   <!-- Date & Time -->
-  <div class="col-span-2 text-sm">
+  <td class="text-sm">
     <span>{detection.date} {detection.time}</span>
-  </div>
+  </td>
 
   <!-- Weather Column -->
-  <div class="col-span-2 text-sm">
+  <td class="text-sm hidden md:table-cell">
     {#if detection.weather}
       <div class="flex flex-col gap-1">
         <WeatherMetrics
@@ -188,50 +180,55 @@
         />
       </div>
     {:else}
-      <div class="text-base-content/50 text-xs">{t('detections.weather.noData')}</div>
+      <div class="text-base-content/50 text-xs">
+        {t('detections.weather.noData')}
+      </div>
     {/if}
-  </div>
+  </td>
 
-  <!-- Bird species with confidence -->
-  <div class="col-span-3 text-sm">
-    <div class="flex items-center gap-3">
-      <ConfidenceCircle confidence={detection.confidence} size="sm" />
-      <button
-        onclick={handleDetailsClick}
-        class="hover:text-blue-600 transition-colors cursor-pointer text-left"
-      >
-        {detection.commonName}
-      </button>
-    </div>
-  </div>
-
-  <!-- Bird thumbnail -->
-  {#if showThumbnails}
-    <div class="col-span-1">
-      <div class="thumbnail-container w-full max-w-[80px]">
-        <button
-          onclick={handleDetailsClick}
-          class="flex items-center justify-center cursor-pointer"
-          aria-label={t('detections.row.viewDetails', { species: detection.commonName })}
-        >
+  <!-- Bird species (with thumbnail) -->
+  <td class="text-sm">
+    <div class="sp-species-container sp-layout-detections">
+      <!-- Thumbnail -->
+      <div class="sp-thumbnail-wrapper">
+        <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="0">
           <img
             loading="lazy"
             src={getThumbnailUrl(detection.scientificName)}
-            alt={`${detection.commonName} thumbnail`}
-            class="w-full h-auto rounded-md object-contain"
+            alt={detection.commonName}
+            class="sp-thumbnail-image"
+            onerror={(e) => handleBirdImageError(e)}
           />
         </button>
       </div>
+
+      <!-- Species Names -->
+      <div class="sp-species-info-wrapper">
+        <div class="sp-species-names">
+          <button
+            onclick={handleDetailsClick}
+            class="sp-species-common-name hover:text-blue-600 transition-colors cursor-pointer text-left"
+          >
+            {detection.commonName}
+          </button>
+          <div class="sp-species-scientific-name">{detection.scientificName}</div>
+        </div>
+      </div>
     </div>
-  {/if}
+  </td>
+
+  <!-- Confidence -->
+  <td class="text-sm">
+    <ConfidenceCircle confidence={detection.confidence} size="md" />
+  </td>
 
   <!-- Status -->
-  <div class="col-span-1">
+  <td>
     <StatusBadges {detection} />
-  </div>
+  </td>
 
   <!-- Recording/Spectrogram -->
-  <div class={showThumbnails ? 'col-span-2' : 'col-span-3'}>
+  <td class="hidden md:table-cell">
     <AudioPlayer
       audioUrl="/api/v2/audio/{detection.id}"
       detectionId={detection.id.toString()}
@@ -241,10 +238,10 @@
       showDownload={true}
       className="w-full max-w-[200px]"
     />
-  </div>
+  </td>
 
   <!-- Action Menu -->
-  <div class="col-span-1 flex justify-end">
+  <td>
     <ActionMenu
       {detection}
       {isExcluded}
@@ -253,8 +250,7 @@
       onToggleLock={handleToggleLock}
       onDelete={handleDelete}
     />
-  </div>
-</div>
+  </td>
 
 <!-- Modals -->
 <ReviewModal
@@ -290,3 +286,33 @@
     showConfirmModal = false;
   }}
 />
+
+<style>
+  /* Thumbnail wrapper - responsive width */
+  .sp-thumbnail-wrapper {
+    flex: 0 0 30%; /* Reduced to give more space to names */
+    min-width: 40px; /* Minimum size on very small screens */
+    max-width: 80px; /* Maximum size on large screens */
+  }
+
+  /* Thumbnail button - maintains aspect ratio */
+  .sp-thumbnail-button {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4/3; /* Consistent aspect ratio */
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background-color: oklch(var(--b2) / 0.3);
+  }
+
+  /* Thumbnail image */
+  .sp-thumbnail-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+</style>

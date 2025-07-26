@@ -66,11 +66,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
   <link rel="shortcut icon" href="/assets/images/favicon.ico">
   
-  <!-- Load Tailwind CSS and custom CSS from old UI assets -->
-  <link href="/assets/tailwind.css?v={{.Settings.Version}}" rel="stylesheet" />
-  <link href="/assets/custom.css?v={{.Settings.Version}}" rel="stylesheet" />
-
-  <!-- Load Svelte CSS -->
+  <!-- Load Svelte CSS (includes its own Tailwind build) -->
   <link rel="stylesheet" href="/ui/assets/index.css">
   
   <meta name="csrf-token" content="{{.CSRFToken}}">

@@ -68,10 +68,10 @@
     drawerOpen = !drawerOpen;
   }
 
-  // Handle search
+  // Handle search - passed through to SearchBox component
   function handleSearch(_query: string) {
-    // TODO: Implement search navigation for query: ${query}
-    // When API is ready, navigate to search results
+    // SearchBox component handles the search implementation internally
+    // including navigation to /ui/detections with query parameters
   }
 
   // Handle navigation
@@ -87,28 +87,32 @@
 
   <div class="drawer-content">
     <!-- Header -->
-    <div class="grid grid-cols-12 grid-rows-[min-content] p-3 pt-0 lg:px-8 lg:pb-0">
-      <Header
-        {title}
-        {currentPage}
-        {securityEnabled}
-        {accessAllowed}
-        showSidebarToggle={true}
-        onSidebarToggle={handleSidebarToggle}
-        onSearch={handleSearch}
-        onNavigate={handleNavigate}
-      />
+    <div class="mx-auto max-w-7xl">
+      <div class="grid grid-cols-12 grid-rows-[min-content] p-3 pt-0 lg:px-8 lg:pb-0">
+        <Header
+          {title}
+          {currentPage}
+          {securityEnabled}
+          {accessAllowed}
+          showSidebarToggle={true}
+          onSidebarToggle={handleSidebarToggle}
+          onSearch={handleSearch}
+          onNavigate={handleNavigate}
+        />
+      </div>
     </div>
 
     <!-- Main content -->
-    <main>
-      <div
-        id="mainContent"
-        class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0"
-      >
-        {#if children}
-          {@render children()}
-        {/if}
+    <main class="min-h-screen">
+      <div class="mx-auto max-w-7xl">
+        <div
+          id="mainContent"
+          class="grid grid-cols-12 grid-rows-[min-content] gap-y-8 p-3 pt-0 lg:p-8 lg:pt-0"
+        >
+          {#if children}
+            {@render children()}
+          {/if}
+        </div>
       </div>
 
       <!-- Placeholder for dynamic notifications -->
@@ -129,23 +133,35 @@
   <dialog id="loginModal" class="modal modal-bottom sm:modal-middle">
     <!-- Login form will be loaded here dynamically -->
   </dialog>
-
-  <!-- Global Loading Indicator (hidden by default in Svelte UI) -->
-  <!-- This was for HTMX loading states, not needed in Svelte -->
 </div>
 
 <!-- Global Toast Container -->
 <ToastContainer />
 
 <style>
-  /* Ensure consistent drawer behavior */
+  /* =================================================================
+     Drawer Layout Styles
+     All drawer-related styles are centralized here for maintainability
+     ================================================================= */
+
+  /* Base drawer content styles */
   :global(.drawer-content) {
     position: relative;
     overflow-x: hidden;
     min-width: 0;
   }
 
-  /* Fix drawer layout for desktop */
+  /* Prevent horizontal scroll while allowing max-width utilities */
+  :global(.drawer-content > *:not(.mx-auto)) {
+    max-width: 100%;
+  }
+
+  /* Ensure grid containers respect parent width */
+  :global(.drawer-content .grid) {
+    width: 100%;
+  }
+
+  /* Desktop drawer layout (≥1024px) */
   @media (min-width: 1024px) {
     :global(.drawer.lg\:drawer-open) {
       grid-template-columns: 256px 1fr;
@@ -156,5 +172,38 @@
       position: sticky;
       width: 256px;
     }
+
+    :global(.drawer.lg\:drawer-open .drawer-content) {
+      min-width: 0;
+      overflow-x: hidden;
+    }
+  }
+
+  /* =================================================================
+     Content Container Styles
+     Container with max-width of 80rem (1280px)
+     ================================================================= */
+
+  /* Max-width container */
+  :global(.drawer-content .max-w-7xl) {
+    max-width: 80rem; /* 1280px */
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* =================================================================
+     Tooltip Overflow Prevention
+     Ensures tooltips don't cause horizontal scrollbars
+     ================================================================= */
+
+  /* Prevent tooltips from extending beyond viewport */
+  :global(.drawer-content .invisible.group-hover\:visible) {
+    max-width: calc(100vw - 2rem);
+  }
+
+  /* Fix transform-based centered tooltips */
+  :global(.drawer-content .absolute.left-1\/2.transform.-translate-x-1\/2) {
+    transform-origin: center;
   }
 </style>

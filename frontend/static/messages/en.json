@@ -408,6 +408,7 @@
       "dateTime": "Date & Time",
       "weather": "Weather",
       "species": "Species",
+      "confidence": "Confidence",
       "thumbnail": "Thumbnail",
       "status": "Status",
       "recording": "Recording",
