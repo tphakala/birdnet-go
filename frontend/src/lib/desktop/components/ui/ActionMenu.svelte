@@ -57,8 +57,13 @@
   }
 
   function handleOpen() {
-    isOpen = true;
-    requestAnimationFrame(updateMenuPosition);
+    // Toggle menu open/closed
+    isOpen = !isOpen;
+    
+    // Only update position when opening
+    if (isOpen) {
+      requestAnimationFrame(updateMenuPosition);
+    }
   }
 
   function handleAction(action: (() => void) | undefined) {

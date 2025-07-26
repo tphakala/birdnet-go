@@ -500,6 +500,17 @@
     height: auto !important;
     width: 100% !important;
     max-width: 400px;
+    /* Smooth fade-in for spectrogram to prevent flash */
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   /* Grid alignment - items-center is handled by Tailwind class */
@@ -507,34 +518,27 @@
   /* Detection row theme-aware styling with hover effects */
   .detection-row {
     border-bottom: 1px solid oklch(var(--bc) / 0.1);
-    transition:
-      transform 0.3s ease-out,
-      background-color 0.15s ease-in-out;
+    transition: background-color 0.15s ease-in-out;
   }
 
-  /* New detection animations - theme-aware fade-in */
+  /* New detection animations - very subtle highlight */
   .new-detection {
-    animation: slideInFade 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+    animation: subtleHighlight 2s ease-out both;
+    position: relative;
+    z-index: 1; /* Lower than action menu */
   }
 
-  @keyframes slideInFade {
+  @keyframes subtleHighlight {
     0% {
-      transform: translateY(-30px);
-      opacity: 0;
-      background-color: oklch(var(--p) / 0.2);
-      border-left: 4px solid hsl(var(--p));
-    }
-
-    50% {
-      background-color: oklch(var(--p) / 0.15);
-      border-left: 4px solid hsl(var(--p));
+      opacity: 0.95;
+      background-color: oklch(var(--p) / 0.03);
+      border-left: 2px solid oklch(var(--p) / 0.15);
     }
 
     100% {
-      transform: translateY(0);
       opacity: 1;
       background-color: transparent;
-      border-left: none;
+      border-left: 2px solid transparent;
     }
   }
 

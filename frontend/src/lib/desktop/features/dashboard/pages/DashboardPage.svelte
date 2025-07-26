@@ -65,9 +65,12 @@
     }
   }
 
-  async function fetchRecentDetections() {
+  async function fetchRecentDetections(applyAnimations = false) {
     isLoadingDetections = true;
     detectionsError = null;
+
+    // Store current detection IDs to identify new ones after fetch
+    const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
       const response = await fetch('/api/v2/detections/recent?limit=10');
@@ -76,7 +79,28 @@
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
         );
       }
-      recentDetections = await response.json();
+      const newData = await response.json();
+      
+      // Only apply animations for SSE-triggered updates
+      if (applyAnimations) {
+        // Identify new detections by comparing IDs
+        const arrivalTime = Date.now();
+        newData.forEach((detection: Detection) => {
+          if (!previousIds.has(detection.id)) {
+            // This is a new detection - add to animation state
+            newDetectionIds.add(detection.id);
+            detectionArrivalTimes.set(detection.id, arrivalTime);
+            
+            // Remove animation after it completes
+            setTimeout(() => {
+              newDetectionIds.delete(detection.id);
+              detectionArrivalTimes.delete(detection.id);
+            }, 2200); // Slightly longer than 2s animation
+          }
+        });
+      }
+      
+      recentDetections = newData;
     } catch (error) {
       detectionsError =
         error instanceof Error ? error.message : t('dashboard.errors.recentDetectionsLoad');
@@ -163,24 +187,16 @@
   let eventSource: ReconnectingEventSource | null = null;
   let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
 
-  // Process new detection from SSE
+  // Process new detection from SSE - trigger API fetch instead of direct manipulation
   function handleNewDetection(detection: Detection) {
-    // Mark detection as new for animation and track arrival time
-    const arrivalTime = Date.now();
-    newDetectionIds.add(detection.id);
-    detectionArrivalTimes.set(detection.id, arrivalTime);
-
-    // Add new detection to beginning of list and limit to user's selected limit
-    recentDetections = [detection, ...recentDetections].slice(0, detectionLimit);
-
+    console.log('New detection via SSE:', detection.commonName);
+    
+    // Trigger API fetch to get fresh data with animations enabled
+    // This avoids complex DOM issues with direct data manipulation
+    fetchRecentDetections(true);
+    
     // Queue daily summary update with debouncing
     queueDailySummaryUpdate(detection);
-
-    // Remove animation class after animation completes (600ms animation + 400ms buffer)
-    setTimeout(() => {
-      newDetectionIds.delete(detection.id);
-      detectionArrivalTimes.delete(detection.id);
-    }, 1000);
   }
 
   // Connect to SSE stream for real-time updates using ReconnectingEventSource
