@@ -70,16 +70,8 @@
     }
   }
 
-  // Returns appropriate badge configuration based on detection verification and lock status
+  // Returns appropriate badge configuration based on detection verification status
   function getStatusBadge(verified: string, locked: boolean) {
-    if (locked) {
-      return {
-        type: 'locked',
-        text: t('dashboard.recentDetections.status.locked'),
-        class: 'status-badge locked',
-      };
-    }
-
     switch (verified) {
       case 'correct':
         return {
@@ -344,9 +336,12 @@
               <!-- Status -->
               <div>
                 <div class="flex flex-wrap gap-1">
-                  <span class="status-badge {badge.class}">
+                  <span class={badge.class}>
                     {badge.text}
                   </span>
+                  {#if detection.locked}
+                    <span class="status-badge locked">locked</span>
+                  {/if}
                 </div>
               </div>
 

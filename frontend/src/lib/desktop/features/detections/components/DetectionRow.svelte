@@ -159,98 +159,98 @@
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
-  <!-- Date & Time -->
-  <td class="text-sm">
-    <span>{detection.date} {detection.time}</span>
-  </td>
+<!-- Date & Time -->
+<td class="text-sm">
+  <span>{detection.date} {detection.time}</span>
+</td>
 
-  <!-- Weather Column -->
-  <td class="text-sm hidden md:table-cell">
-    {#if detection.weather}
-      <div class="flex flex-col gap-1">
-        <WeatherMetrics
-          weatherIcon={detection.weather.weatherIcon}
-          weatherDescription={detection.weather.description}
-          temperature={detection.weather.temperature}
-          windSpeed={detection.weather.windSpeed}
-          windGust={detection.weather.windGust}
-          units={detection.weather.units}
-          size="md"
-          className="ml-1"
+<!-- Weather Column -->
+<td class="text-sm hidden md:table-cell">
+  {#if detection.weather}
+    <div class="flex flex-col gap-1">
+      <WeatherMetrics
+        weatherIcon={detection.weather.weatherIcon}
+        weatherDescription={detection.weather.description}
+        temperature={detection.weather.temperature}
+        windSpeed={detection.weather.windSpeed}
+        windGust={detection.weather.windGust}
+        units={detection.weather.units}
+        size="md"
+        className="ml-1"
+      />
+    </div>
+  {:else}
+    <div class="text-base-content/50 text-xs">
+      {t('detections.weather.noData')}
+    </div>
+  {/if}
+</td>
+
+<!-- Bird species (with thumbnail) -->
+<td class="text-sm">
+  <div class="sp-species-container sp-layout-detections">
+    <!-- Thumbnail -->
+    <div class="sp-thumbnail-wrapper">
+      <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="0">
+        <img
+          loading="lazy"
+          src={getThumbnailUrl(detection.scientificName)}
+          alt={detection.commonName}
+          class="sp-thumbnail-image"
+          onerror={e => handleBirdImageError(e)}
         />
-      </div>
-    {:else}
-      <div class="text-base-content/50 text-xs">
-        {t('detections.weather.noData')}
-      </div>
-    {/if}
-  </td>
+      </button>
+    </div>
 
-  <!-- Bird species (with thumbnail) -->
-  <td class="text-sm">
-    <div class="sp-species-container sp-layout-detections">
-      <!-- Thumbnail -->
-      <div class="sp-thumbnail-wrapper">
-        <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="0">
-          <img
-            loading="lazy"
-            src={getThumbnailUrl(detection.scientificName)}
-            alt={detection.commonName}
-            class="sp-thumbnail-image"
-            onerror={(e) => handleBirdImageError(e)}
-          />
+    <!-- Species Names -->
+    <div class="sp-species-info-wrapper">
+      <div class="sp-species-names">
+        <button
+          onclick={handleDetailsClick}
+          class="sp-species-common-name hover:text-blue-600 transition-colors cursor-pointer text-left"
+        >
+          {detection.commonName}
         </button>
-      </div>
-
-      <!-- Species Names -->
-      <div class="sp-species-info-wrapper">
-        <div class="sp-species-names">
-          <button
-            onclick={handleDetailsClick}
-            class="sp-species-common-name hover:text-blue-600 transition-colors cursor-pointer text-left"
-          >
-            {detection.commonName}
-          </button>
-          <div class="sp-species-scientific-name">{detection.scientificName}</div>
-        </div>
+        <div class="sp-species-scientific-name">{detection.scientificName}</div>
       </div>
     </div>
-  </td>
+  </div>
+</td>
 
-  <!-- Confidence -->
-  <td class="text-sm">
-    <ConfidenceCircle confidence={detection.confidence} size="md" />
-  </td>
+<!-- Confidence -->
+<td class="text-sm">
+  <ConfidenceCircle confidence={detection.confidence} size="md" />
+</td>
 
-  <!-- Status -->
-  <td>
-    <StatusBadges {detection} />
-  </td>
+<!-- Status -->
+<td>
+  <StatusBadges {detection} />
+</td>
 
-  <!-- Recording/Spectrogram -->
-  <td class="hidden md:table-cell">
-    <AudioPlayer
-      audioUrl="/api/v2/audio/{detection.id}"
-      detectionId={detection.id.toString()}
-      width={200}
-      height={80}
-      showSpectrogram={true}
-      showDownload={true}
-      className="w-full max-w-[200px]"
-    />
-  </td>
+<!-- Recording/Spectrogram -->
+<td class="hidden md:table-cell">
+  <AudioPlayer
+    audioUrl="/api/v2/audio/{detection.id}"
+    detectionId={detection.id.toString()}
+    width={200}
+    height={80}
+    showSpectrogram={true}
+    showDownload={true}
+    className="w-full max-w-[200px]"
+  />
+</td>
 
-  <!-- Action Menu -->
-  <td>
-    <ActionMenu
-      {detection}
-      {isExcluded}
-      onReview={handleReview}
-      onToggleSpecies={handleToggleSpecies}
-      onToggleLock={handleToggleLock}
-      onDelete={handleDelete}
-    />
-  </td>
+<!-- Action Menu -->
+<td>
+  <ActionMenu
+    {detection}
+    {isExcluded}
+    onReview={handleReview}
+    onToggleSpecies={handleToggleSpecies}
+    onToggleLock={handleToggleLock}
+    onDelete={handleDelete}
+  />
+</td>
 
 <!-- Modals -->
 <ReviewModal

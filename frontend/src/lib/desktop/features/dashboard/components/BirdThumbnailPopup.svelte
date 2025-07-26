@@ -100,14 +100,17 @@
       x = triggerRect.left - popupWidth - offsetX;
     } else {
       // Center horizontally if not enough space on sides
-      x = Math.max(10, Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - 10));
+      x = Math.max(
+        10,
+        Math.min(viewportWidth / 2 - popupWidth / 2, viewportWidth - popupWidth - 10)
+      );
     }
 
     // Determine vertical position
     // Add extra buffer to trigger earlier (200px buffer)
     const earlyTriggerBuffer = 200;
     let y: number;
-    
+
     if (spaceBelow >= popupHeight + offsetY + earlyTriggerBuffer) {
       // Position below trigger
       y = triggerRect.bottom + offsetY;
@@ -142,7 +145,6 @@
     imageLoaded = false;
     imageError = true;
   }
-
 
   // Handle focus events for keyboard users
   function handleFocus() {

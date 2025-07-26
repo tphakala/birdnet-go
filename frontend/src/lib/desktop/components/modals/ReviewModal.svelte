@@ -36,7 +36,8 @@
     if (detection) {
       const verified = detection.review?.verified;
       reviewStatus = verified === 'correct' || verified === 'false_positive' ? verified : 'correct';
-      lockDetection = detection.locked || false;
+      // Initialize lockDetection to false - user intent to lock, not current status
+      lockDetection = false;
       ignoreSpecies = isExcluded;
       comment = detection.comments?.[0]?.entry || '';
       // Show comment section if there's already a comment
@@ -53,6 +54,16 @@
       if (onSave) {
         await onSave(reviewStatus, lockDetection, ignoreSpecies, comment);
       } else {
+        // Calculate the desired lock state based on current state and user choice
+        let desiredLockState;
+        if (detection.locked) {
+          // If currently locked, lockDetection checkbox means "unlock"
+          desiredLockState = !lockDetection; // if checked (unlock), then false
+        } else {
+          // If currently unlocked, lockDetection checkbox means "lock"
+          desiredLockState = lockDetection; // if checked (lock), then true
+        }
+
         // Default save implementation
         await fetchWithCSRF('/api/v2/detections/review', {
           method: 'POST',
@@ -62,7 +73,7 @@
           body: JSON.stringify({
             id: detection.id,
             verified: reviewStatus,
-            lock_detection: lockDetection,
+            lock_detection: desiredLockState,
             ignore_species: ignoreSpecies ? detection.commonName : null,
             comment: comment,
           }),
@@ -228,7 +239,6 @@
               value="correct"
               bind:group={reviewStatus}
               class="radio radio-primary radio-xs"
-              disabled={detection.locked}
             />
             <span class="label-text">{t('common.review.form.correctDetection')}</span>
           </label>
@@ -239,13 +249,12 @@
               value="false_positive"
               bind:group={reviewStatus}
               class="radio radio-primary radio-xs"
-              disabled={detection.locked}
             />
             <span class="label-text">{t('common.review.form.falsePositiveLabel')}</span>
           </label>
 
           {#if detection.locked}
-            <div class="text-sm text-base-content mt-2">
+            <div class="text-sm text-base-content/70 mt-2">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="inline-block w-4 h-4 mr-1"
@@ -260,13 +269,13 @@
                   d={alertIcons.warning}
                 />
               </svg>
-              This detection is locked. You must unlock it first to change its review status.
+              This detection is currently locked.
             </div>
           {/if}
         </div>
 
-        <!-- Lock Detection (only show when correct) -->
-        {#if reviewStatus === 'correct'}
+        <!-- Lock Detection (only show when correct and not already locked) -->
+        {#if reviewStatus === 'correct' && !detection.locked}
           <div class="form-control">
             <label class="label cursor-pointer justify-start gap-4">
               <input
@@ -274,10 +283,27 @@
                 bind:checked={lockDetection}
                 class="checkbox checkbox-primary checkbox-xs"
               />
-              <span class="label-text">Lock this detection</span>
+              <span class="label-text">Lock this detection after saving</span>
             </label>
             <div class="text-sm text-base-content/70 ml-8">
               Locking this detection will prevent it from being deleted during regular cleanup.
+            </div>
+          </div>
+        {/if}
+
+        <!-- Unlock Detection (only show when detection is currently locked) -->
+        {#if detection.locked}
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="checkbox"
+                bind:checked={lockDetection}
+                class="checkbox checkbox-primary checkbox-xs"
+              />
+              <span class="label-text">Unlock this detection after saving</span>
+            </label>
+            <div class="text-sm text-base-content/70 ml-8">
+              Unlocking will allow this detection to be deleted during regular cleanup.
             </div>
           </div>
         {/if}
