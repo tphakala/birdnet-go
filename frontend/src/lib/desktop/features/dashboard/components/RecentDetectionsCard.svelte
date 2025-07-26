@@ -21,6 +21,8 @@
     onLimitChange?: (limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
+    isRefreshEnabled?: boolean;
+    isActionMenuOpen?: boolean;
   }
 
   let {
@@ -33,10 +35,20 @@
     onLimitChange,
     newDetectionIds = new Set(),
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
+    isRefreshEnabled = true,
+    isActionMenuOpen = $bindable(false),
   }: Props = $props();
 
   // State for number of detections to show
   let selectedLimit = $state(limit);
+
+  // Track open action menus
+  let openActionMenus = $state(new Set<number>());
+
+  // Update bindable prop when menus open/close
+  $effect(() => {
+    isActionMenuOpen = openActionMenus.size > 0;
+  });
 
   // Update selectedLimit when prop changes
   $effect(() => {
@@ -213,8 +225,9 @@
         <button
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
-          disabled={loading}
+          disabled={loading || openActionMenus.size > 0}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
+          title={openActionMenus.size > 0 ? 'Refresh disabled while action menu is open' : ''}
         >
           <div class="h-4 w-4" class:animate-spin={loading}>
             {@html actionIcons.refresh}
@@ -335,6 +348,13 @@
                   onToggleSpecies={() => handleToggleSpecies(detection)}
                   onToggleLock={() => handleToggleLock(detection)}
                   onDelete={() => handleDelete(detection)}
+                  onOpenChange={(isOpen) => {
+                    if (isOpen) {
+                      openActionMenus.add(detection.id);
+                    } else {
+                      openActionMenus.delete(detection.id);
+                    }
+                  }}
                 />
               </div>
             </div>

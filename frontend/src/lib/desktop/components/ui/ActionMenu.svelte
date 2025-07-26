@@ -12,6 +12,7 @@
     onToggleLock?: () => void;
     onDelete?: () => void;
     className?: string;
+    onOpenChange?: (isOpen: boolean) => void;
   }
 
   let {
@@ -22,9 +23,15 @@
     onToggleLock,
     onDelete,
     className = '',
+    onOpenChange,
   }: Props = $props();
 
   let isOpen = $state(false);
+
+  // Notify parent when open state changes
+  $effect(() => {
+    onOpenChange?.(isOpen);
+  });
   let buttonElement: HTMLButtonElement;
   // svelte-ignore non_reactive_update
   let menuElement: HTMLUListElement;

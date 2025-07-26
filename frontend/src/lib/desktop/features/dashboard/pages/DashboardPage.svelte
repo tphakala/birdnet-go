@@ -40,6 +40,9 @@
   let newDetectionIds = $state(new Set<number>());
   let detectionArrivalTimes = $state(new Map<number, number>());
 
+  // Track if any action menu is open
+  let isActionMenuOpen = $state(false);
+
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
   let updateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -212,6 +215,12 @@
   // Process new detection from SSE - trigger API fetch instead of direct manipulation
   function handleNewDetection(detection: Detection) {
     console.log('New detection via SSE:', detection.commonName);
+
+    // Skip refresh if action menu is open
+    if (isActionMenuOpen) {
+      console.log('Skipping refresh - action menu is open');
+      return;
+    }
 
     // Trigger API fetch to get fresh data with animations enabled
     // This avoids complex DOM issues with direct data manipulation
@@ -637,5 +646,6 @@
     onRefresh={handleManualRefresh}
     {newDetectionIds}
     {detectionArrivalTimes}
+    bind:isActionMenuOpen={isActionMenuOpen}
   />
 </div>
