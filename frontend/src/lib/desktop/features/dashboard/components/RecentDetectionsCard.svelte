@@ -311,6 +311,8 @@
                     onclick={() => handleRowClick(detection)}
                     tabindex="-1"
                   >
+                    <!-- Placeholder background that maintains aspect ratio -->
+                    <div class="rd-thumbnail-placeholder"></div>
                     <img
                       src="/api/v2/media/species-image?name={encodeURIComponent(
                         detection.scientificName
@@ -318,6 +320,7 @@
                       alt={detection.commonName}
                       class="rd-thumbnail-image"
                       onerror={handleBirdImageError}
+                      loading="lazy"
                     />
                   </button>
                 </div>
@@ -455,6 +458,32 @@
     background-color: oklch(var(--b2) / 0.3);
   }
 
+  /* Thumbnail placeholder - animated skeleton */
+  .rd-thumbnail-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      oklch(var(--b2) / 0.5) 0%,
+      oklch(var(--b2) / 0.3) 50%,
+      oklch(var(--b2) / 0.5) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
   /* Thumbnail image */
   .rd-thumbnail-image {
     position: absolute;
@@ -463,6 +492,9 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+    /* Hide placeholder when image loads */
+    z-index: 1;
+    background-color: oklch(var(--b1));
   }
 
   /* Species display styles now handled by shared CSS (/lib/styles/species-display.css) */
@@ -490,6 +522,18 @@
     content: '';
     display: table;
     clear: both;
+  }
+
+  /* Add shimmer effect to audio player container while loading */
+  .rd-audio-player-container:not(:has(img)) {
+    background: linear-gradient(
+      90deg,
+      oklch(var(--b2) / 0.4) 0%,
+      oklch(var(--b2) / 0.2) 50%,
+      oklch(var(--b2) / 0.4) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
   }
 
   /* Ensure AudioPlayer fills container width */
@@ -547,4 +591,13 @@
   }
 
   /* Smooth transitions handled above in .detection-row */
+
+  /* Respect reduced motion for placeholder animations */
+  @media (prefers-reduced-motion: reduce) {
+    .rd-thumbnail-placeholder,
+    .rd-audio-player-container:not(:has(img)) {
+      animation: none;
+      background: oklch(var(--b2) / 0.4);
+    }
+  }
 </style>

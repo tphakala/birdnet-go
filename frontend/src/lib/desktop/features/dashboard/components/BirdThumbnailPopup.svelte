@@ -144,7 +144,7 @@
   <a
     href={detectionUrl}
     bind:this={triggerElement}
-    class="inline-block {className}"
+    class="inline-block {className} relative"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
     onmousemove={handleMouseMove}
@@ -156,11 +156,14 @@
     aria-label="View larger image and details for {commonName}"
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
+    <!-- Thumbnail placeholder -->
+    <div class="thumbnail-placeholder w-8 h-8 rounded bg-base-200"></div>
     <img
       src={thumbnailUrl}
       alt={commonName}
-      class="w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
+      class="thumbnail-image w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
       onerror={handleBirdImageError}
+      loading="lazy"
     />
   </a>
 
@@ -234,6 +237,37 @@
 </div>
 
 <style>
+  /* Thumbnail placeholder - animated shimmer */
+  .thumbnail-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: linear-gradient(
+      90deg,
+      oklch(var(--b2) / 0.5) 0%,
+      oklch(var(--b2) / 0.3) 50%,
+      oklch(var(--b2) / 0.5) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Thumbnail image - covers placeholder when loaded */
+  .thumbnail-image {
+    position: relative;
+    z-index: 1;
+    background-color: oklch(var(--b1));
+  }
+
   /* Ensure popup appears above other elements */
   .fixed {
     pointer-events: auto;
@@ -267,6 +301,14 @@
       width: calc(100vw - 20px) !important;
       left: 10px !important;
       right: 10px !important;
+    }
+  }
+
+  /* Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .thumbnail-placeholder {
+      animation: none;
+      background: oklch(var(--b2) / 0.4);
     }
   }
 </style>
