@@ -71,7 +71,7 @@
   }
 
   // Returns appropriate badge configuration based on detection verification status
-  function getStatusBadge(verified: string, locked: boolean) {
+  function getStatusBadge(verified: string) {
     switch (verified) {
       case 'correct':
         return {
@@ -279,7 +279,7 @@
         <!-- Detection Rows -->
         <div class="divide-y divide-base-200">
           {#each data.slice(0, selectedLimit) as detection}
-            {@const badge = getStatusBadge(detection.verified, detection.locked)}
+            {@const badge = getStatusBadge(detection.verified)}
             {@const isNew = newDetectionIds.has(detection.id)}
             <div
               class="detection-grid-dashboard detection-row"

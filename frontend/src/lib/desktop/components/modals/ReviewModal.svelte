@@ -289,10 +289,11 @@
                 type="checkbox"
                 bind:checked={lockDetection}
                 class="checkbox checkbox-primary checkbox-xs"
+                aria-describedby="lock-detection-help"
               />
               <span class="label-text">Lock this detection after saving</span>
             </label>
-            <div class="text-sm text-base-content/70 ml-8">
+            <div id="lock-detection-help" class="text-sm text-base-content/70 ml-8">
               Locking this detection will prevent it from being deleted during regular cleanup.
             </div>
           </div>
@@ -306,10 +307,11 @@
                 type="checkbox"
                 bind:checked={lockDetection}
                 class="checkbox checkbox-primary checkbox-xs"
+                aria-describedby="unlock-detection-help"
               />
               <span class="label-text">Unlock this detection after saving</span>
             </label>
-            <div class="text-sm text-base-content/70 ml-8">
+            <div id="unlock-detection-help" class="text-sm text-base-content/70 ml-8">
               Unlocking will allow this detection to be deleted during regular cleanup.
             </div>
           </div>
