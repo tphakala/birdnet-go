@@ -141,7 +141,10 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	if c.EBirdClient != nil {
 		taxonomyTree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
 		if err != nil {
-			// Log error but don't fail the request
+			// The eBird client already creates enhanced errors with proper
+			// categorization. These errors will be automatically published
+			// to the event bus when Build() is called in the client.
+			// We just log here for debugging purposes.
 			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
 			// Continue without taxonomy info
 		} else {

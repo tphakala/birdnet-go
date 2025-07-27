@@ -85,12 +85,8 @@ func (c *Client) GetTaxonomy(ctx context.Context, locale string) ([]TaxonomyEntr
 	var taxonomy []TaxonomyEntry
 	err := c.doRequest(ctx, "GET", url, nil, &taxonomy)
 	if err != nil {
-		return nil, errors.New(err).
-			Category(errors.CategoryNetwork).
-			Context("operation", "get_taxonomy").
-			Context("locale", locale).
-			Component("ebird").
-			Build()
+		// doRequest already returns enhanced errors, just return them
+		return nil, err
 	}
 
 	// Cache the result
@@ -120,13 +116,8 @@ func (c *Client) GetSpeciesTaxonomy(ctx context.Context, speciesCode, locale str
 	var entries []TaxonomyEntry
 	err := c.doRequest(ctx, "GET", url, nil, &entries)
 	if err != nil {
-		return nil, errors.New(err).
-			Category(errors.CategoryNetwork).
-			Context("operation", "get_species_taxonomy").
-			Context("species_code", speciesCode).
-			Context("locale", locale).
-			Component("ebird").
-			Build()
+		// doRequest already returns enhanced errors, just return them
+		return nil, err
 	}
 
 	if len(entries) == 0 {
@@ -271,10 +262,24 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 	if resp.StatusCode >= 400 {
 		var apiErr Error
 		if err := json.Unmarshal(bodyBytes, &apiErr); err != nil {
-			return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+			// If we can't parse error response, create a generic one
+			return errors.Newf("eBird API error (status %d): %s", resp.StatusCode, string(bodyBytes)).
+				Category(getErrorCategory(resp.StatusCode)).
+				Context("status_code", resp.StatusCode).
+				Context("url", url).
+				Component("ebird").
+				Build()
 		}
 		apiErr.Status = resp.StatusCode
-		return &apiErr
+		
+		// Wrap API error with enhanced error for proper notification
+		return errors.Newf("eBird API error: %s", apiErr.Detail).
+			Category(getErrorCategory(resp.StatusCode)).
+			Context("status_code", resp.StatusCode).
+			Context("error_title", apiErr.Title).
+			Context("url", url).
+			Component("ebird").
+			Build()
 	}
 
 	// Parse successful response
@@ -297,4 +302,23 @@ func (c *Client) GetCacheStats() (itemCount int, size int64) {
 	itemCount = c.cache.ItemCount()
 	// Note: go-cache doesn't provide size info directly
 	return itemCount, 0
+}
+
+// getErrorCategory determines the appropriate error category based on HTTP status code
+func getErrorCategory(statusCode int) errors.ErrorCategory {
+	switch statusCode {
+	case 401, 403:
+		// Authentication/authorization errors - these are critical for user attention
+		return errors.CategoryConfiguration
+	case 429:
+		// Rate limiting
+		return errors.CategoryLimit
+	case 404:
+		return errors.CategoryNotFound
+	case 500, 502, 503, 504:
+		// Server errors
+		return errors.CategoryNetwork
+	default:
+		return errors.CategoryNetwork
+	}
 }
