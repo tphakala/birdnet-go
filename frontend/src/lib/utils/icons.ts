@@ -378,16 +378,94 @@ export const iconPaths = {
  * Weather icons for meteorological data display
  */
 export const weatherIcons = {
-  temperature: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+  temperature: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Thermometer body -->
+    <rect x="9" y="3" width="6" height="11" rx="3" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+    <!-- Mercury/liquid indicator (dynamic red color) -->
+    <rect x="11" y="9" width="2" height="5" fill="#ef4444" rx="1"/>
+    <!-- Bulb -->
+    <circle cx="12" cy="18" r="3.5" fill="#ef4444" stroke="#64748b" stroke-width="1.5"/>
+    <!-- Temperature marks -->
+    <line x1="8" y1="6" x2="9" y2="6" stroke="#64748b" stroke-width="0.5"/>
+    <line x1="8" y1="9" x2="9" y2="9" stroke="#64748b" stroke-width="0.5"/>
+    <line x1="8" y1="12" x2="9" y2="12" stroke="#64748b" stroke-width="0.5"/>
   </svg>`,
 
   sun: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
   </svg>`,
 
-  wind: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+  wind: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Windsock pole -->
+    <line x1="3" y1="5" x2="3" y2="19" stroke="#64748b" stroke-width="2"/>
+    <!-- Windsock attachment -->
+    <circle cx="3" cy="8" r="1" fill="#64748b"/>
+    <!-- Windsock body with red/white/red pattern -->
+    <!-- Red section 1 -->
+    <path d="M4 7 L10 7 L9 9 L4 9 Z" fill="#ef4444"/>
+    <!-- White section -->
+    <path d="M10 7 L16 7 L15 9 L9 9 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.5"/>
+    <!-- Red section 2 -->
+    <path d="M16 7 L21 7 L19 9 L15 9 Z" fill="#ef4444"/>
+    <!-- Windsock outline -->
+    <path d="M4 7 L21 7 L19 9 L4 9 Z" stroke="#64748b" stroke-width="1" fill="none"/>
+    <!-- Wind direction lines -->
+    <path d="M22 6 L24 8 M22 10 L24 8" stroke="#94a3b8" stroke-width="1" stroke-linecap="round"/>
+  </svg>`,
+
+  windLight: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Windsock pole -->
+    <line x1="3" y1="5" x2="3" y2="19" stroke="#64748b" stroke-width="2"/>
+    <!-- Windsock attachment -->
+    <circle cx="3" cy="8" r="1" fill="#64748b"/>
+    <!-- Light wind: windsock drooping, partially inflated -->
+    <!-- Red section 1 -->
+    <path d="M4 7.5 L8 8 L7.5 9.5 L4 9 Z" fill="#ef4444"/>
+    <!-- White section -->
+    <path d="M8 8 L12 8.5 L11.5 10 L7.5 9.5 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.5"/>
+    <!-- Red section 2 (drooping) -->
+    <path d="M12 8.5 L15 9.5 L14 11 L11.5 10 Z" fill="#ef4444"/>
+    <!-- Windsock outline -->
+    <path d="M4 7.5 L15 9.5 L14 11 L4 9 Z" stroke="#64748b" stroke-width="1" fill="none"/>
+    <!-- Light wind direction lines -->
+    <path d="M16 9 L18 10" stroke="#94a3b8" stroke-width="1" stroke-linecap="round"/>
+  </svg>`,
+
+  windModerate: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Windsock pole -->
+    <line x1="3" y1="5" x2="3" y2="19" stroke="#64748b" stroke-width="2"/>
+    <!-- Windsock attachment -->
+    <circle cx="3" cy="8" r="1" fill="#64748b"/>
+    <!-- Moderate wind: windsock moderately extended -->
+    <!-- Red section 1 -->
+    <path d="M4 7 L9 7.5 L8.5 9 L4 8.5 Z" fill="#ef4444"/>
+    <!-- White section -->
+    <path d="M9 7.5 L14 8 L13.5 9.5 L8.5 9 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.5"/>
+    <!-- Red section 2 -->
+    <path d="M14 8 L18 9 L17 10.5 L13.5 9.5 Z" fill="#ef4444"/>
+    <!-- Windsock outline -->
+    <path d="M4 7 L18 9 L17 10.5 L4 8.5 Z" stroke="#64748b" stroke-width="1" fill="none"/>
+    <!-- Moderate wind direction lines -->
+    <path d="M19 8 L21 9 M19 10 L21 9" stroke="#94a3b8" stroke-width="1" stroke-linecap="round"/>
+  </svg>`,
+
+  windStrong: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Windsock pole -->
+    <line x1="3" y1="5" x2="3" y2="19" stroke="#64748b" stroke-width="2"/>
+    <!-- Windsock attachment -->
+    <circle cx="3" cy="8" r="1" fill="#64748b"/>
+    <!-- Strong wind: windsock fully extended and horizontal -->
+    <!-- Red section 1 -->
+    <path d="M4 7 L10 7 L9.5 9 L4 9 Z" fill="#ef4444"/>
+    <!-- White section -->
+    <path d="M10 7 L16 7 L15.5 9 L9.5 9 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.5"/>
+    <!-- Red section 2 -->
+    <path d="M16 7 L22 7 L21 9 L15.5 9 Z" fill="#ef4444"/>
+    <!-- Windsock outline -->
+    <path d="M4 7 L22 7 L21 9 L4 9 Z" stroke="#64748b" stroke-width="1" fill="none"/>
+    <!-- Strong wind direction lines -->
+    <path d="M23 6 L24 8 M23 10 L24 8" stroke="#94a3b8" stroke-width="1" stroke-linecap="round"/>
+    <path d="M21 5.5 L22.5 7.5 M21 9.5 L22.5 7.5" stroke="#94a3b8" stroke-width="1" stroke-linecap="round"/>
   </svg>`,
 
   humidity: `<svg class="h-5 w-5 mr-2 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

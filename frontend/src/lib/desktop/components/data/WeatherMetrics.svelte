@@ -11,11 +11,10 @@
   
   Features:
   - Integrated weather icon display
-  - Dynamic temperature thermometer (color changes with temperature)
-  - Animated wind indicator (speed changes with wind strength)
   - Responsive visibility based on container width
   - Horizontal layout with smart metric prioritization
   - Accessible labels and descriptions
+  - Uses centralized icon system from icons.ts
   
   Props:
   - weatherIcon?: string - Weather icon code (e.g., '01d', '09n')
@@ -29,6 +28,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { weatherIcons } from '$lib/utils/icons';
 
   interface Props {
     weatherIcon?: string;
@@ -102,34 +102,6 @@
     return units === 'imperial' ? 'mph' : 'm/s';
   });
 
-  // Temperature color calculation
-  const tempColor = $derived(() => {
-    if (temperature === undefined) return '#94a3b8'; // gray-400
-    if (temperature <= 0) return '#3b82f6'; // blue-500 - freezing
-    if (temperature <= 10) return '#06b6d4'; // cyan-500 - cold
-    if (temperature <= 20) return '#10b981'; // emerald-500 - comfortable
-    if (temperature <= 30) return '#f59e0b'; // amber-500 - warm
-    return '#ef4444'; // red-500 - hot
-  });
-
-  // Wind animation speed calculation
-  const windAnimationDuration = $derived(() => {
-    if (windSpeed === undefined || windSpeed === 0) return '0s';
-    // Faster animation for stronger winds
-    const duration = Math.max(0.5, 3 - windSpeed * 0.1);
-    return `${duration}s`;
-  });
-
-  // Wind strength indicator
-  const windStrength = $derived(() => {
-    if (windSpeed === undefined) return 'none';
-    if (windSpeed < 1) return 'calm';
-    if (windSpeed < 5) return 'light';
-    if (windSpeed < 10) return 'moderate';
-    if (windSpeed < 15) return 'strong';
-    return 'severe';
-  });
-
   // Weather icon mapping
   const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
     '01': { day: '☀️', night: '🌙', description: 'Clear sky' },
@@ -194,6 +166,15 @@
     translateWeatherCondition(weatherDescription || weatherInfo.description)
   );
 
+  // Get appropriate wind icon based on wind speed
+  const getWindIcon = $derived(() => {
+    if (windSpeed === undefined) return weatherIcons.wind;
+    if (windSpeed < 3) return weatherIcons.windLight;      // Light wind: 0-3 m/s
+    if (windSpeed < 8) return weatherIcons.windModerate;   // Moderate wind: 3-8 m/s
+    return weatherIcons.windStrong;                        // Strong wind: 8+ m/s
+  });
+
+
   // Size classes
   const sizeClasses = {
     sm: 'h-5 w-5',
@@ -246,49 +227,9 @@
       <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
-          <svg
-            class={cn(sizeClasses[size], 'flex-shrink-0')}
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
-          >
-            <g>
-              <!-- Thermometer body -->
-              <rect
-                x="9"
-                y="3"
-                width="6"
-                height="11"
-                rx="3"
-                fill="#e2e8f0"
-                stroke="#64748b"
-                stroke-width="1.5"
-              />
-              <!-- Mercury/liquid -->
-              <rect
-                x="11"
-                y={14 - Math.min(10, Math.max(0, ((temperature + 10) / 40) * 10))}
-                width="2"
-                height={Math.min(10, Math.max(0, ((temperature + 10) / 40) * 10))}
-                fill={tempColor()}
-                rx="1"
-              />
-              <!-- Bulb -->
-              <circle
-                cx="12"
-                cy="18"
-                r="3.5"
-                fill={tempColor()}
-                stroke="#64748b"
-                stroke-width="1.5"
-              />
-              <!-- Temperature marks -->
-              <line x1="8" y1="6" x2="9" y2="6" stroke="#64748b" stroke-width="0.5" />
-              <line x1="8" y1="9" x2="9" y2="9" stroke="#64748b" stroke-width="0.5" />
-              <line x1="8" y1="12" x2="9" y2="12" stroke="#64748b" stroke-width="0.5" />
-            </g>
-          </svg>
+          <div class={cn(sizeClasses[size], 'flex-shrink-0')} aria-label={`Temperature: ${temperature.toFixed(1)}°C`}>
+            {@html weatherIcons.temperature}
+          </div>
         {/if}
         <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
           {temperature.toFixed(1)}{temperatureUnit()}
@@ -301,64 +242,9 @@
       <div class="wm-wind-group flex items-center gap-1 flex-shrink-0">
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
-          <svg
-            class={cn(sizeClasses[size], 'flex-shrink-0')}
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
-            style={`--wind-duration: ${windAnimationDuration()}`}
-          >
-            <g>
-              <!-- Wind lines with varying opacity based on strength -->
-              <path
-                d="M3 8h11c1.1 0 2 0.9 2 2s-0.9 2-2 2h-2"
-                stroke="#64748b"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                opacity={windStrength() === 'calm' ? '0.3' : '0.8'}
-                style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-              />
-              <path
-                d="M3 12h15c1.7 0 3 1.3 3 3s-1.3 3-3 3h-3"
-                stroke="#64748b"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                opacity={windStrength() === 'calm'
-                  ? '0.3'
-                  : windStrength() === 'light'
-                    ? '0.6'
-                    : '1'}
-                style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-                style:animation-delay="0.1s"
-              />
-              <path
-                d="M3 16h10c0.6 0 1 0.4 1 1s-0.4 1-1 1h-1"
-                stroke="#64748b"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                opacity={windStrength() === 'calm'
-                  ? '0.2'
-                  : windStrength() === 'light'
-                    ? '0.4'
-                    : '0.7'}
-                style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-                style:animation-delay="0.2s"
-              />
-              {#if windStrength() === 'strong' || windStrength() === 'severe'}
-                <!-- Extra wind line for strong winds -->
-                <path
-                  d="M3 4h8c0.6 0 1 0.4 1 1s-0.4 1-1 1h-1"
-                  stroke="#94a3b8"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  opacity="0.6"
-                  style:animation="windBlow {windAnimationDuration()} ease-in-out infinite"
-                  style:animation-delay="0.3s"
-                />
-              {/if}
-            </g>
-          </svg>
+          <div class={cn(sizeClasses[size], 'flex-shrink-0')} aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}>
+            {@html getWindIcon()}
+          </div>
         {/if}
         <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
           {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
@@ -372,17 +258,6 @@
 </div>
 
 <style>
-  @keyframes windBlow {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-
-    50% {
-      transform: translateX(2px);
-    }
-  }
-
   /* Container queries for responsive layout */
   /* These enable the component to adapt its layout based on available container width
      rather than viewport width, making it more flexible in different contexts */
@@ -410,5 +285,13 @@
     .wm-wind-group {
       display: none;
     }
+  }
+
+  /* Override the centralized icon sizing to match our component needs */
+  .wm-temperature-group :global(svg),
+  .wm-wind-group :global(svg) {
+    margin-right: 0 !important; /* Remove built-in margin from centralized icons */
+    height: inherit !important; /* Use our size classes */
+    width: inherit !important; /* Use our size classes */
   }
 </style>

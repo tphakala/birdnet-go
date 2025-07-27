@@ -15,8 +15,10 @@
 - `RecentDetectionsTable.svelte` - Table view of recent detections
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
+- `WeatherDetails.svelte` - Detailed weather display for modals (vertical layout, icons always visible)
 - `WeatherIcon.svelte` - Weather condition icons
 - `WeatherInfo.svelte` - Weather information display
+- `WeatherMetrics.svelte` - Compact weather display for tables (responsive horizontal layout)
 
 ## Forms
 

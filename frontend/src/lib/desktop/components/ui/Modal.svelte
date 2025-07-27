@@ -9,7 +9,7 @@
   const FOCUSABLE_SELECTOR =
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-  type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
   type ModalType = 'default' | 'confirm' | 'alert';
 
   interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
@@ -62,6 +62,12 @@
     md: 'modal-box max-w-md',
     lg: 'modal-box max-w-lg',
     xl: 'modal-box max-w-xl',
+    '2xl': 'modal-box max-w-2xl',
+    '3xl': 'modal-box max-w-3xl',
+    '4xl': 'modal-box max-w-4xl',
+    '5xl': 'modal-box max-w-5xl',
+    '6xl': 'modal-box max-w-6xl',
+    '7xl': 'modal-box max-w-7xl',
     full: 'modal-box max-w-full w-full',
   };
 
