@@ -40,6 +40,13 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - Test with race detection
 - Document all exports
 
+## Build Instructions
+- **Default build** (detects target automatically): `task`
+- **Cross-platform builds**: `task linux_amd64`, `task darwin_arm64`, etc.
+- **Development server**: `task dev_server` (requires air) - check if already running first
+- **Clean build artifacts**: `task clean`
+- **Frontend only**: `task frontend-build`
+
 ## Development Workflow
 - When running linter, run for full project: `golangci-lint run -v`
 
