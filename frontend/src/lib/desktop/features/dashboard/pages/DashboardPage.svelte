@@ -617,18 +617,15 @@
   // Update freeze state management
   function handleFreezeStart() {
     freezeCount++;
-    console.log(`Dashboard: freeze started, count now: ${freezeCount}`);
   }
 
   function handleFreezeEnd() {
     freezeCount--;
     // Clamp to prevent negative values due to unmount edge cases
     freezeCount = Math.max(0, freezeCount);
-    console.log(`Dashboard: freeze ended, count now: ${freezeCount}`);
     
     // Process pending detections when all interactions are complete
     if (freezeCount === 0 && pendingDetectionQueue.length > 0) {
-      console.log(`Dashboard: processing ${pendingDetectionQueue.length} pending detections`);
       // Process all pending detections
       pendingDetectionQueue.forEach(detection => {
         processDetectionUpdate(detection);

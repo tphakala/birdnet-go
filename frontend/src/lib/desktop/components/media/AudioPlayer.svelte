@@ -50,9 +50,9 @@
     spectrogramSize?: SpectrogramSize;
     /** Display raw spectrogram without axes and legends */
     spectrogramRaw?: boolean;
-    /** Callback fired when audio starts playing (freezes detection updates) */
+    /** Fired when audio playback starts - freezes detection updates */
     onPlayStart?: () => void;
-    /** Callback fired when audio stops playing after delay (resumes detection updates) */
+    /** Fired 3 seconds after audio stops - resumes detection updates */
     onPlayEnd?: () => void;
   }
 
