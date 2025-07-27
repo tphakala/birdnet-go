@@ -1058,19 +1058,20 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
-	// Log when modifying locked detections for audit trail
+	// If detection was already locked when modal opened, prevent review unless we're unlocking
 	if note.Locked {
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Modifying locked detection",
-				"detection_id", idStr,
-				"current_verified", note.Verified,
-				"new_verified", req.Verified,
-				"current_locked", note.Locked,
-				"new_lock_state", req.LockDetection,
-				"ip", ctx.RealIP(),
-				"path", ctx.Request().URL.Path,
-			)
-		}
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked and cannot be reviewed", http.StatusConflict)
+	}
+
+	// Check if the detection is locked in the database (race condition check)
+	isLocked, err := c.DS.IsNoteLocked(idStr)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to check lock status", http.StatusInternalServerError)
+	}
+	
+	// If became locked by another process, prevent modification
+	if isLocked {
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "detection is locked", http.StatusConflict)
 	}
 
 	// Handle comment if provided
