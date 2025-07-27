@@ -76,7 +76,7 @@
     const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
-      const response = await fetch('/api/v2/detections/recent?limit=10');
+      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, 10)}`);
       if (!response.ok) {
         throw new Error(
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
