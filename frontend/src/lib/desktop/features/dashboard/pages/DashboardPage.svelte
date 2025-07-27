@@ -8,6 +8,7 @@
 
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
+  const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
 
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
@@ -76,7 +77,7 @@
     const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
-      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, 10)}`);
+      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}`);
       if (!response.ok) {
         throw new Error(
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
@@ -215,14 +216,12 @@
 
   // Process new detection from SSE - queue if menus are open, otherwise process immediately
   function handleNewDetection(detection: Detection) {
-    console.log('New detection via SSE:', detection.commonName);
-
     // If any action menus are open, queue the detection for later processing
     if (openMenuCount > 0) {
-      console.log('Menu is open, queuing detection:', detection.commonName);
-      
-      // Avoid duplicate detections in queue
-      const isDuplicate = pendingDetectionQueue.some(pending => pending.id === detection.id);
+      // Avoid duplicate detections in queue - add null-safety check
+      const isDuplicate = pendingDetectionQueue.some(pending => 
+        pending?.id != null && detection?.id != null && pending.id === detection.id
+      );
       if (!isDuplicate) {
         pendingDetectionQueue.push(detection);
       }
@@ -618,17 +617,13 @@
   // Menu state management
   function handleMenuOpen() {
     openMenuCount++;
-    console.log('Menu opened, count:', openMenuCount);
   }
 
   function handleMenuClose() {
     openMenuCount--;
-    console.log('Menu closed, count:', openMenuCount);
     
     // Process pending detections when all menus are closed
     if (openMenuCount === 0 && pendingDetectionQueue.length > 0) {
-      console.log('All menus closed, processing', pendingDetectionQueue.length, 'pending detections');
-      
       // Process all pending detections
       pendingDetectionQueue.forEach(detection => {
         processDetectionUpdate(detection);
@@ -641,8 +636,6 @@
 
   // Helper function to process a detection update (extracted from handleNewDetection)
   function processDetectionUpdate(detection: Detection) {
-    console.log('Processing detection update:', detection.commonName);
-    
     // Trigger API fetch to get fresh data with animations enabled
     fetchRecentDetections(true);
     
