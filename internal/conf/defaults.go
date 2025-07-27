@@ -116,6 +116,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.retrysettings.maxdelay", 3600)
 	viper.SetDefault("realtime.birdweather.retrysettings.backoffmultiplier", 2.0)
 
+	// eBird configuration
+	viper.SetDefault("realtime.ebird.enabled", false)
+	viper.SetDefault("realtime.ebird.apikey", "")
+	viper.SetDefault("realtime.ebird.cachettl", 24) // 24 hours default
+	viper.SetDefault("realtime.ebird.locale", "en")
+
 	// OpenWeather configuration
 	/*
 		viper.SetDefault("realtime.OpenWeather.Enabled", false)

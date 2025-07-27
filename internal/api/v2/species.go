@@ -2,12 +2,14 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
@@ -29,6 +31,7 @@ type SpeciesInfo struct {
 	ScientificName string                 `json:"scientific_name"`
 	CommonName     string                 `json:"common_name"`
 	Rarity         *SpeciesRarityInfo     `json:"rarity,omitempty"`
+	Taxonomy       *ebird.TaxonomyTree    `json:"taxonomy,omitempty"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -71,7 +74,7 @@ func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
 	}
 
 	// Get species info
-	speciesInfo, err := c.getSpeciesInfo(scientificName)
+	speciesInfo, err := c.getSpeciesInfo(ctx.Request().Context(), scientificName)
 	if err != nil {
 		var enhancedErr *errors.EnhancedError
 		if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
@@ -84,7 +87,7 @@ func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
 }
 
 // getSpeciesInfo retrieves species information including rarity status
-func (c *Controller) getSpeciesInfo(scientificName string) (*SpeciesInfo, error) {
+func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) (*SpeciesInfo, error) {
 	// Get the BirdNET instance from the processor
 	if c.Processor == nil || c.Processor.Bn == nil {
 		return nil, errors.Newf("BirdNET processor not available").
@@ -132,6 +135,18 @@ func (c *Controller) getSpeciesInfo(scientificName string) (*SpeciesInfo, error)
 		// Continue without rarity info
 	} else {
 		info.Rarity = rarityInfo
+	}
+
+	// Get taxonomy/family tree information from eBird if available
+	if c.EBirdClient != nil {
+		taxonomyTree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
+		if err != nil {
+			// Log error but don't fail the request
+			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
+			// Continue without taxonomy info
+		} else {
+			info.Taxonomy = taxonomyTree
+		}
 	}
 
 	return info, nil
