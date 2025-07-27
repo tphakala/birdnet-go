@@ -2,10 +2,12 @@
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
+  import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
+  import SpeciesBadges from './SpeciesBadges.svelte';
+  import SpeciesThumbnail from './SpeciesThumbnail.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { alertIcons, navigationIcons } from '$lib/utils/icons';
-  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
+  import { alertIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -74,7 +76,7 @@
       }
       onClose();
     } catch (error) {
-      console.error('Error saving review:', error);
+      // Error handled with specific error messages below
 
       // Provide more specific error messages based on the error
       if (error instanceof Error) {
@@ -95,33 +97,12 @@
     }
   }
 
-  function getStatusBadgeClass(verified?: string): string {
-    switch (verified) {
-      case 'correct':
-        return 'badge-success';
-      case 'false_positive':
-        return 'badge-error';
-      default:
-        return 'badge-ghost';
-    }
-  }
-
-  function getStatusText(verified?: string): string {
-    switch (verified) {
-      case 'correct':
-        return t('common.review.status.verifiedCorrect');
-      case 'false_positive':
-        return t('common.review.status.falsePositive');
-      default:
-        return t('common.review.status.notReviewed');
-    }
-  }
 </script>
 
 <Modal
   {isOpen}
   title={t('common.review.modalTitle', { species: detection?.commonName || '' })}
-  size="lg"
+  size="7xl"
   showCloseButton={true}
   {onClose}
   className="modal-bottom sm:modal-middle"
@@ -148,90 +129,76 @@
         </div>
       {/if}
 
-      <div class="space-y-6">
-        <!-- Species info with thumbnail -->
-        <div class="bg-base-200/50 rounded-lg p-4">
-          <div class="flex gap-4 items-center">
-            <!-- Bird thumbnail -->
-            <div class="flex-shrink-0">
-              <div class="w-32 h-24 relative overflow-hidden rounded-lg bg-base-100 shadow-md">
-                <img
-                  src="/api/v2/media/species-image?name={encodeURIComponent(
-                    detection.scientificName
-                  )}"
-                  alt={detection.commonName}
-                  class="w-full h-full object-cover"
-                  onerror={handleBirdImageError}
-                  loading="lazy"
+      <!-- Horizontal layout: Media content left, Controls right -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column: Species info and Audio/Spectrogram -->
+        <div class="lg:col-span-2 space-y-4">
+          <!-- Species info with thumbnail - 4 column layout -->
+          <div class="bg-base-200/50 rounded-lg p-4">
+            <!-- Single Row Layout: All 4 segments in one row using flex -->
+            <div class="flex gap-4 items-start">
+              <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
+              <div class="flex gap-4 items-center flex-1 min-w-0">
+                <SpeciesThumbnail 
+                  scientificName={detection.scientificName}
+                  commonName={detection.commonName}
+                  size="lg"
                 />
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-2xl font-semibold text-base-content mb-1 truncate">{detection.commonName}</h3>
+                  <p class="text-base text-base-content/60 italic truncate">{detection.scientificName}</p>
+                  <div class="mt-2">
+                    <SpeciesBadges {detection} size="md" />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <!-- Species names and status -->
-            <div class="flex-1 flex flex-col justify-between py-1">
-              <div>
-                <h3 class="text-2xl font-bold text-base-content mb-1">{detection.commonName}</h3>
-                <p class="text-base text-base-content/60 italic mb-3">{detection.scientificName}</p>
-              </div>
-              <div class="flex items-center gap-3">
-                <span
-                  class={`badge badge-lg gap-2 ${getStatusBadgeClass(detection.review?.verified)}`}
-                >
-                  {#if detection.review?.verified === 'correct'}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke-width="2"
-                      stroke="currentColor"
-                      class="w-4 h-4"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" d={alertIcons.success} />
-                    </svg>
-                  {:else if detection.review?.verified === 'false_positive'}
-                    <div class="w-4 h-4">
-                      {@html navigationIcons.close}
-                    </div>
-                  {/if}
-                  {getStatusText(detection.review?.verified)}
-                </span>
-                {#if detection.locked}
-                  <span class="badge badge-lg badge-warning gap-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke-width="2"
-                      stroke="currentColor"
-                      class="w-4 h-4"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                      />
-                    </svg>
-                    Locked
-                  </span>
+              <!-- Section 2: Date & Time (fixed width) -->
+              <div class="flex-shrink-0 text-center" style:min-width="120px">
+                <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
+                <div class="text-base text-base-content">{detection.date}</div>
+                <div class="text-base text-base-content">{detection.time}</div>
+                {#if detection.timeOfDay}
+                  <div class="text-sm text-base-content/60 mt-1 capitalize">{detection.timeOfDay}</div>
                 {/if}
               </div>
-            </div>
 
-            <!-- Confidence circle on the right -->
-            <div class="flex-shrink-0 mr-4">
-              <ConfidenceCircle confidence={detection.confidence} size="lg" />
+              <!-- Section 3: Weather Conditions (fixed width) -->
+              <div class="flex-shrink-0 text-center" style:min-width="180px">
+                <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
+                {#if detection.weather}
+                  <div class="flex justify-center">
+                    <WeatherDetails
+                      weatherIcon={detection.weather.weatherIcon}
+                      weatherDescription={detection.weather.description}
+                      temperature={detection.weather.temperature}
+                      windSpeed={detection.weather.windSpeed}
+                      windGust={detection.weather.windGust}
+                      units={detection.weather.units}
+                      size="md"
+                      className="text-center"
+                    />
+                  </div>
+                {:else}
+                  <div class="text-sm text-base-content/40 italic">{t('detections.weather.noData')}</div>
+                {/if}
+              </div>
+
+              <!-- Section 4: Confidence (fixed width) -->
+              <div class="flex-shrink-0 flex flex-col items-center" style:min-width="100px">
+                <div class="text-sm text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
+                <ConfidenceCircle confidence={detection.confidence} size="lg" />
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Audio and Spectrogram -->
-        <div class="mb-4">
+          <!-- Audio and Spectrogram -->
           <div class="relative bg-base-200 rounded-lg p-4">
             <AudioPlayer
               audioUrl="/api/v2/audio/{detection.id}"
               detectionId={detection.id.toString()}
               showSpectrogram={true}
-              spectrogramSize="md"
+              spectrogramSize="lg"
               spectrogramRaw={false}
               responsive={true}
               className="w-full mx-auto"
@@ -239,145 +206,148 @@
           </div>
         </div>
 
-        <!-- Review Form -->
-        <div class="form-control">
-          <label class="label cursor-pointer justify-start gap-4">
-            <input
-              type="radio"
-              name="verified"
-              value="correct"
-              bind:group={reviewStatus}
-              class="radio radio-primary radio-xs"
-            />
-            <span class="label-text">{t('common.review.form.correctDetection')}</span>
-          </label>
-          <label class="label cursor-pointer justify-start gap-4">
-            <input
-              type="radio"
-              name="verified"
-              value="false_positive"
-              bind:group={reviewStatus}
-              class="radio radio-primary radio-xs"
-            />
-            <span class="label-text">{t('common.review.form.falsePositiveLabel')}</span>
-          </label>
+        <!-- Right Column: Review Controls -->
+        <div class="space-y-4">
+          <!-- Review Form -->
+          <div class="form-control bg-base-100 rounded-lg p-4">
+            <h4 class="text-lg font-semibold mb-4">{t('common.review.form.reviewDetectionTitle')}</h4>
+            
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="radio"
+                name="verified"
+                value="correct"
+                bind:group={reviewStatus}
+                class="radio radio-primary radio-xs"
+              />
+              <span class="label-text">{t('common.review.form.correctDetection')}</span>
+            </label>
+            <label class="label cursor-pointer justify-start gap-4">
+              <input
+                type="radio"
+                name="verified"
+                value="false_positive"
+                bind:group={reviewStatus}
+                class="radio radio-primary radio-xs"
+              />
+              <span class="label-text">{t('common.review.form.falsePositiveLabel')}</span>
+            </label>
 
-          {#if detection.locked}
-            <div class="text-sm text-base-content/70 mt-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="inline-block w-4 h-4 mr-1"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d={alertIcons.warning}
+            {#if detection.locked}
+              <div class="text-sm text-base-content/70 mt-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="inline-block w-4 h-4 mr-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d={alertIcons.warning}
+                  />
+                </svg>
+                {t('common.review.form.detectionLocked')}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Lock/Unlock Controls -->
+          {#if reviewStatus === 'correct' && !detection.locked}
+            <div class="form-control bg-base-100 rounded-lg p-4">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  bind:checked={lockDetection}
+                  class="checkbox checkbox-primary checkbox-xs"
+                  aria-describedby="lock-detection-help"
                 />
-              </svg>
-              This detection is currently locked.
+                <span class="label-text">{t('common.review.form.lockDetection')}</span>
+              </label>
+              <div id="lock-detection-help" class="text-sm text-base-content/70 ml-8">
+                {t('common.review.form.lockDetectionHelp')}
+              </div>
             </div>
           {/if}
-        </div>
 
-        <!-- Lock Detection (only show when correct and not already locked) -->
-        {#if reviewStatus === 'correct' && !detection.locked}
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input
-                type="checkbox"
-                bind:checked={lockDetection}
-                class="checkbox checkbox-primary checkbox-xs"
-                aria-describedby="lock-detection-help"
-              />
-              <span class="label-text">Lock this detection after saving</span>
-            </label>
-            <div id="lock-detection-help" class="text-sm text-base-content/70 ml-8">
-              Locking this detection will prevent it from being deleted during regular cleanup.
+          {#if detection.locked}
+            <div class="form-control bg-base-100 rounded-lg p-4">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  bind:checked={lockDetection}
+                  class="checkbox checkbox-primary checkbox-xs"
+                  aria-describedby="unlock-detection-help"
+                />
+                <span class="label-text">{t('common.review.form.unlockDetection')}</span>
+              </label>
+              <div id="unlock-detection-help" class="text-sm text-base-content/70 ml-8">
+                {t('common.review.form.unlockDetectionHelp')}
+              </div>
             </div>
-          </div>
-        {/if}
+          {/if}
 
-        <!-- Unlock Detection (only show when detection is currently locked) -->
-        {#if detection.locked}
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input
-                type="checkbox"
-                bind:checked={lockDetection}
-                class="checkbox checkbox-primary checkbox-xs"
-                aria-describedby="unlock-detection-help"
-              />
-              <span class="label-text">Unlock this detection after saving</span>
-            </label>
-            <div id="unlock-detection-help" class="text-sm text-base-content/70 ml-8">
-              Unlocking will allow this detection to be deleted during regular cleanup.
+          <!-- Ignore Species -->
+          {#if !detection.locked && reviewStatus === 'false_positive'}
+            <div class="form-control bg-base-100 rounded-lg p-4">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  bind:checked={ignoreSpecies}
+                  class="checkbox checkbox-primary checkbox-xs"
+                />
+                <span class="label-text">{t('common.review.form.ignoreSpecies')}</span>
+              </label>
+              <div class="text-sm text-base-content/70 ml-8">
+                {t('common.review.form.ignoreSpeciesHelp')}
+              </div>
             </div>
-          </div>
-        {/if}
+          {/if}
 
-        <!-- Ignore Species (only show when false positive and not locked) -->
-        {#if !detection.locked && reviewStatus === 'false_positive'}
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input
-                type="checkbox"
-                bind:checked={ignoreSpecies}
-                class="checkbox checkbox-primary checkbox-xs"
-              />
-              <span class="label-text">Ignore this species</span>
-            </label>
-            <div class="text-sm text-base-content/70 ml-8">
-              Ignoring this species will prevent future detections of this species. This will not
-              remove existing detections.
-            </div>
-          </div>
-        {/if}
-
-        <!-- Comment Section Toggle -->
-        <div class="form-control">
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm justify-start gap-2 p-2"
-            onclick={() => (showCommentSection = !showCommentSection)}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
-              class="w-4 h-4 transition-transform duration-200"
-              class:rotate-90={showCommentSection}
+          <!-- Comment Section -->
+          <div class="form-control bg-base-100 rounded-lg p-4">
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm justify-start gap-2 p-2"
+              onclick={() => (showCommentSection = !showCommentSection)}
             >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
-            <span class="text-sm">
-              {showCommentSection ? 'Hide' : 'Add'} Comment
-              {#if comment && !showCommentSection}
-                <span class="text-xs text-base-content/60">({comment.length} chars)</span>
-              {/if}
-            </span>
-          </button>
-        </div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                class="w-4 h-4 transition-transform duration-200"
+                class:rotate-90={showCommentSection}
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+              <span class="text-sm">
+                {showCommentSection ? t('common.review.form.hideComment') : t('common.review.form.addComment')}
+                {#if comment && !showCommentSection}
+                  <span class="text-xs text-base-content/60">{t('common.review.form.commentCount', { chars: comment.length })}</span>
+                {/if}
+              </span>
+            </button>
 
-        <!-- Collapsible Comment Input -->
-        {#if showCommentSection}
-          <div class="form-control">
-            <label class="label" for="comment-textarea">
-              <span class="label-text">Comment</span>
-            </label>
-            <textarea
-              id="comment-textarea"
-              bind:value={comment}
-              class="textarea textarea-bordered h-24"
-              placeholder="Add a comment about this detection..."
-            ></textarea>
+            <!-- Collapsible Comment Input -->
+            {#if showCommentSection}
+              <div class="mt-3">
+                <label class="label" for="comment-textarea">
+                  <span class="label-text">{t('common.review.form.comment')}</span>
+                </label>
+                <textarea
+                  id="comment-textarea"
+                  bind:value={comment}
+                  class="textarea textarea-bordered h-24 w-full"
+                  placeholder={t('common.review.form.commentPlaceholder')}
+                ></textarea>
+              </div>
+            {/if}
           </div>
-        {/if}
+        </div>
       </div>
     {/if}
   {/snippet}
