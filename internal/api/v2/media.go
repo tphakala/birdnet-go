@@ -768,12 +768,6 @@ func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw b
 	if raw {
 		// Raw mode: no axes, labels, or legends for clean display
 		args = append(args, "-r")
-	} else {
-		// Add -r for small spectrograms when not in raw mode (SoX behavior)
-		width, _ := strconv.Atoi(widthStr)
-		if width < SpectrogramSizeMd {
-			args = append(args, "-r")
-		}
 	}
 	return args
 }
