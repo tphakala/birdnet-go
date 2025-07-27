@@ -385,14 +385,14 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, speciesCode string) []SubspeciesInfo {
 	var subspecies []SubspeciesInfo
 
-	for _, entry := range taxonomy {
+	for i := range taxonomy {
 		// Check if this entry reports as our species and is a subspecies category
-		if entry.ReportAs == speciesCode &&
-			(entry.Category == "issf" || entry.Category == "form") {
+		if taxonomy[i].ReportAs == speciesCode &&
+			(taxonomy[i].Category == "issf" || taxonomy[i].Category == "form") {
 			
 			// Extract region from common name if present (often in parentheses)
 			region := ""
-			commonName := entry.CommonName
+			commonName := taxonomy[i].CommonName
 			if start := strings.Index(commonName, "("); start != -1 {
 				if end := strings.Index(commonName[start:], ")"); end != -1 {
 					region = strings.TrimSpace(commonName[start+1 : start+end])
@@ -400,8 +400,8 @@ func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, spec
 			}
 
 			subspecies = append(subspecies, SubspeciesInfo{
-				ScientificName: entry.ScientificName,
-				CommonName:     entry.CommonName,
+				ScientificName: taxonomy[i].ScientificName,
+				CommonName:     taxonomy[i].CommonName,
 				Region:         region,
 			})
 		}

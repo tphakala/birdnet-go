@@ -364,7 +364,12 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 		c.metrics.mu.Lock()
 		c.metrics.apiErrors++
 		c.metrics.mu.Unlock()
-		return err
+		return errors.Newf("failed to create HTTP request: %w", err).
+			Category(errors.CategoryNetwork).
+			Context("method", method).
+			Context("url", url).
+			Component("ebird").
+			Build()
 	}
 
 	// Add authentication header
@@ -394,7 +399,12 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 			"error", err,
 			"method", method,
 			"url", url)
-		return err
+		return errors.Newf("HTTP request failed: %w", err).
+			Category(errors.CategoryNetwork).
+			Context("method", method).
+			Context("url", url).
+			Component("ebird").
+			Build()
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -410,7 +420,12 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 			"error", err,
 			"url", url,
 			"status_code", resp.StatusCode)
-		return err
+		return errors.Newf("failed to read response body: %w", err).
+			Category(errors.CategoryNetwork).
+			Context("url", url).
+			Context("status_code", resp.StatusCode).
+			Component("ebird").
+			Build()
 	}
 
 	// Check content type for non-error responses
@@ -513,7 +528,12 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 				"response_size", len(bodyBytes),
 				"response_preview", responsePreview,
 				"content_type", resp.Header.Get("Content-Type"))
-			return fmt.Errorf("failed to parse response: %w", err)
+			return errors.Newf("failed to parse response: %w", err).
+				Category(errors.CategoryFileParsing).
+				Context("url", url).
+				Context("response_size", len(bodyBytes)).
+				Component("ebird").
+				Build()
 		}
 	}
 

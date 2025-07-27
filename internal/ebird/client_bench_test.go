@@ -55,7 +55,8 @@ func BenchmarkBuildFamilyTree(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	b.ReportAllocs()
+	for b.Loop() {
 		_, err := client.BuildFamilyTree(ctx, "Turdus migratorius")
 		if err != nil {
 			b.Fatal(err)
@@ -83,7 +84,8 @@ func BenchmarkGetTaxonomyWithCache(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	b.ReportAllocs()
+	for b.Loop() {
 		_, err := client.GetTaxonomy(ctx, "")
 		if err != nil {
 			b.Fatal(err)
@@ -108,7 +110,8 @@ func BenchmarkCacheLookup(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	b.ReportAllocs()
+	for b.Loop() {
 		if _, found := client.cache.Get("taxonomy:m"); !found {
 			b.Fatal("Cache lookup failed")
 		}

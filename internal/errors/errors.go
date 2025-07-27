@@ -340,6 +340,7 @@ func init() {
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
 	RegisterComponent("diskmanager", "diskmanager")
+	RegisterComponent("ebird", "ebird")
 	RegisterComponent("mqtt", "mqtt")
 	RegisterComponent("weather", "weather")
 	RegisterComponent("conf", "configuration")
@@ -348,7 +349,6 @@ func init() {
 	RegisterComponent("backup", "backup")
 	RegisterComponent("audiocore", "audiocore")
 	RegisterComponent("api", "api")
-	RegisterComponent("ebird", "ebird")
 }
 
 // Helper functions for auto-detection and categorization
