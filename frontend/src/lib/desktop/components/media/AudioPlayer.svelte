@@ -8,6 +8,7 @@
   - Visual spectrogram display
   - Play/pause controls with progress tracking
   - Download functionality
+  - SSE update freezing during playback to prevent UI disruption
   
   Props:
   - audioUrl: URL of the audio file to play
@@ -17,7 +18,11 @@
   - showSpectrogram: Show spectrogram image (default: true)
   - showDownload: Show download button (default: true)
   - className: Additional CSS classes
-  - controlsClassName: CSS classes for controls container
+  - responsive: Enable responsive sizing (default: false)
+  - spectrogramSize: Spectrogram display size - sm/md/lg/xl (default: md)
+  - spectrogramRaw: Display raw spectrogram without axes (default: false)
+  - onPlayStart: Callback when audio starts playing (freezes SSE updates)
+  - onPlayEnd: Callback when audio stops playing after 3s delay (resumes SSE updates)
 -->
 
 <script lang="ts">
@@ -45,6 +50,10 @@
     spectrogramSize?: SpectrogramSize;
     /** Display raw spectrogram without axes and legends */
     spectrogramRaw?: boolean;
+    /** Callback fired when audio starts playing (freezes detection updates) */
+    onPlayStart?: () => void;
+    /** Callback fired when audio stops playing after delay (resumes detection updates) */
+    onPlayEnd?: () => void;
   }
 
   let {
@@ -58,6 +67,8 @@
     responsive = false,
     spectrogramSize = 'md',
     spectrogramRaw = false,
+    onPlayStart,
+    onPlayEnd,
   }: Props = $props();
 
   // Audio and UI elements
@@ -97,6 +108,7 @@
   // Cleanup tracking for memory leak prevention
   let resizeObserver: ResizeObserver | null = null;
   let sliderTimeout: ReturnType<typeof setTimeout> | undefined;
+  let playEndTimeout: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
     element: HTMLElement | Document | Window;
     event: string;
@@ -116,6 +128,7 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
   const FILTER_HP_DEFAULT_FREQ = 20;
+  const PLAY_END_DELAY_MS = 3000; // 3 second delay after audio stops before resuming updates
 
   // Computed values
   const spectrogramUrl = $derived(
@@ -151,6 +164,13 @@
     if (sliderTimeout) {
       clearTimeout(sliderTimeout);
       sliderTimeout = undefined;
+    }
+  };
+
+  const clearPlayEndTimeout = () => {
+    if (playEndTimeout) {
+      clearTimeout(playEndTimeout);
+      playEndTimeout = undefined;
     }
   };
 
@@ -351,16 +371,35 @@
       addTrackedEventListener(audioElement, 'play', () => {
         isPlaying = true;
         startInterval();
+        // Clear any pending delay timeout and immediately signal play start
+        clearPlayEndTimeout();
+        if (onPlayStart) {
+          onPlayStart();
+        }
       });
 
       addTrackedEventListener(audioElement, 'pause', () => {
         isPlaying = false;
         stopInterval();
+        // Set delay before signaling play end to avoid disrupting UI during brief pauses
+        clearPlayEndTimeout();
+        playEndTimeout = setTimeout(() => {
+          if (onPlayEnd) {
+            onPlayEnd();
+          }
+        }, PLAY_END_DELAY_MS);
       });
 
       addTrackedEventListener(audioElement, 'ended', () => {
         isPlaying = false;
         stopInterval();
+        // Set delay before signaling play end
+        clearPlayEndTimeout();
+        playEndTimeout = setTimeout(() => {
+          if (onPlayEnd) {
+            onPlayEnd();
+          }
+        }, PLAY_END_DELAY_MS);
       });
 
       addTrackedEventListener(audioElement, 'timeupdate', handleTimeUpdate);
@@ -400,6 +439,7 @@
 
     // Clear any pending timeouts
     clearSliderTimeout();
+    clearPlayEndTimeout();
 
     // Remove all tracked event listeners
     eventListeners.forEach(({ element, event, handler }) => {
