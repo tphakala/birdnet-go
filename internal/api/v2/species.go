@@ -26,6 +26,14 @@ const (
 	RarityUnknown    RarityStatus = "unknown"
 )
 
+// Rarity threshold constants for score-based classification
+const (
+	RarityThresholdVeryCommon = 0.8
+	RarityThresholdCommon     = 0.5
+	RarityThresholdUncommon   = 0.2
+	RarityThresholdRare       = 0.05
+)
+
 // SpeciesInfo represents extended information about a bird species
 type SpeciesInfo struct {
 	ScientificName string                 `json:"scientific_name"`
@@ -212,13 +220,13 @@ func (c *Controller) getSpeciesRarityInfo(bn *birdnet.BirdNET, speciesLabel stri
 // calculateRarityStatus determines the rarity status based on the probability score
 func calculateRarityStatus(score float64) RarityStatus {
 	switch {
-	case score > 0.8:
+	case score > RarityThresholdVeryCommon:
 		return RarityVeryCommon
-	case score > 0.5:
+	case score > RarityThresholdCommon:
 		return RarityCommon
-	case score > 0.2:
+	case score > RarityThresholdUncommon:
 		return RarityUncommon
-	case score > 0.05:
+	case score > RarityThresholdRare:
 		return RarityRare
 	default:
 		return RarityVeryRare
@@ -377,14 +385,14 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, speciesCode string) []SubspeciesInfo {
 	var subspecies []SubspeciesInfo
 
-	for i := range taxonomy {
+	for _, entry := range taxonomy {
 		// Check if this entry reports as our species and is a subspecies category
-		if taxonomy[i].ReportAs == speciesCode &&
-			(taxonomy[i].Category == "issf" || taxonomy[i].Category == "form") {
+		if entry.ReportAs == speciesCode &&
+			(entry.Category == "issf" || entry.Category == "form") {
 			
 			// Extract region from common name if present (often in parentheses)
 			region := ""
-			commonName := taxonomy[i].CommonName
+			commonName := entry.CommonName
 			if start := strings.Index(commonName, "("); start != -1 {
 				if end := strings.Index(commonName[start:], ")"); end != -1 {
 					region = strings.TrimSpace(commonName[start+1 : start+end])
@@ -392,8 +400,8 @@ func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, spec
 			}
 
 			subspecies = append(subspecies, SubspeciesInfo{
-				ScientificName: taxonomy[i].ScientificName,
-				CommonName:     taxonomy[i].CommonName,
+				ScientificName: entry.ScientificName,
+				CommonName:     entry.CommonName,
 				Region:         region,
 			})
 		}

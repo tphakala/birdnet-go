@@ -460,3 +460,55 @@ func TestCacheStats(t *testing.T) {
 	count, _ = client.GetCacheStats()
 	assert.Equal(t, 2, count)
 }
+
+func TestMetrics(t *testing.T) {
+	server := setupMockServer(t, map[string]mockResponse{
+		"/ref/taxonomy/ebird?fmt=json": {
+			status: http.StatusOK,
+			body:   `[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`,
+		},
+		"/error": {
+			status: http.StatusInternalServerError,
+			body:   `{"error": "Internal Server Error"}`,
+		},
+	})
+	defer server.Close()
+	
+	client := setupTestClient(t, server)
+	disableLogging(t)
+	
+	// Initial metrics should be zero
+	metrics := client.GetMetrics()
+	assert.Equal(t, int64(0), metrics.APICalls)
+	assert.Equal(t, int64(0), metrics.CacheHits)
+	assert.Equal(t, int64(0), metrics.CacheMisses)
+	assert.Equal(t, int64(0), metrics.APIErrors)
+	
+	// Make a successful API call (cache miss)
+	_, err := client.GetTaxonomy(context.Background(), "")
+	require.NoError(t, err)
+	
+	metrics = client.GetMetrics()
+	assert.Equal(t, int64(1), metrics.APICalls)
+	assert.Equal(t, int64(0), metrics.CacheHits)
+	assert.Equal(t, int64(1), metrics.CacheMisses)
+	assert.Equal(t, int64(0), metrics.APIErrors)
+	assert.Greater(t, metrics.TotalDuration, time.Duration(0))
+	assert.Greater(t, metrics.AvgDuration, time.Duration(0))
+	
+	// Make another call (cache hit)
+	_, err = client.GetTaxonomy(context.Background(), "")
+	require.NoError(t, err)
+	
+	metrics = client.GetMetrics()
+	assert.Equal(t, int64(1), metrics.APICalls, "API calls should not increase for cache hit")
+	assert.Equal(t, int64(1), metrics.CacheHits)
+	assert.Equal(t, int64(1), metrics.CacheMisses)
+	
+	// Make an error call
+	_ = client.doRequestWithRetry(context.Background(), "GET", server.URL+"/error", nil, nil)
+	
+	metrics = client.GetMetrics()
+	assert.Equal(t, int64(4), metrics.APICalls, "Should count all retry attempts")
+	assert.Equal(t, int64(3), metrics.APIErrors, "Should count all error responses")
+}

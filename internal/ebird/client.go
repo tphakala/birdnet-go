@@ -56,6 +56,16 @@ type Client struct {
 	debug           bool // Enable debug logging
 	firstCallMade   bool // Track if first successful API call has been made
 	firstCallMu     sync.Once
+	
+	// Metrics
+	metrics struct {
+		apiCalls      int64
+		cacheHits     int64
+		cacheMisses   int64
+		apiErrors     int64
+		totalDuration time.Duration
+		mu            sync.RWMutex
+	}
 }
 
 // NewClient creates a new eBird API client
@@ -128,12 +138,25 @@ func (c *Client) GetTaxonomy(ctx context.Context, locale string) ([]TaxonomyEntr
 	// Check cache first
 	if cached, found := c.cache.Get(cacheKey); found {
 		if taxonomy, ok := cached.([]TaxonomyEntry); ok {
+			c.metrics.mu.Lock()
+			c.metrics.cacheHits++
+			c.metrics.mu.Unlock()
+			
 			logger.Debug("eBird taxonomy cache hit",
 				"cache_key", cacheKey,
 				"entries", len(taxonomy))
 			return taxonomy, nil
 		}
 	}
+	
+	// Cache miss
+	c.metrics.mu.Lock()
+	c.metrics.cacheMisses++
+	c.metrics.mu.Unlock()
+
+	// Apply timeout to API request
+	reqCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
 
 	// Build URL - eBird API defaults to CSV, we need to specify fmt=json
 	url := fmt.Sprintf("%s/ref/taxonomy/ebird?fmt=json", c.config.BaseURL)
@@ -141,9 +164,9 @@ func (c *Client) GetTaxonomy(ctx context.Context, locale string) ([]TaxonomyEntr
 		url = fmt.Sprintf("%s&locale=%s", url, locale)
 	}
 
-	// Make API request
+	// Make API request with retry for transient failures
 	var taxonomy []TaxonomyEntry
-	err := c.doRequest(ctx, "GET", url, nil, &taxonomy)
+	err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &taxonomy)
 	if err != nil {
 		// doRequest already returns enhanced errors, just return them
 		return nil, err
@@ -167,12 +190,25 @@ func (c *Client) GetSpeciesTaxonomy(ctx context.Context, speciesCode, locale str
 	// Check cache first
 	if cached, found := c.cache.Get(cacheKey); found {
 		if entry, ok := cached.(*TaxonomyEntry); ok {
+			c.metrics.mu.Lock()
+			c.metrics.cacheHits++
+			c.metrics.mu.Unlock()
+			
 			logger.Debug("eBird species cache hit",
 				"cache_key", cacheKey,
 				"species_code", speciesCode)
 			return entry, nil
 		}
 	}
+	
+	// Cache miss
+	c.metrics.mu.Lock()
+	c.metrics.cacheMisses++
+	c.metrics.mu.Unlock()
+
+	// Apply timeout to API request
+	reqCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
 
 	// Build URL - eBird API defaults to CSV, we need to specify fmt=json
 	url := fmt.Sprintf("%s/ref/taxonomy/ebird/%s?fmt=json", c.config.BaseURL, speciesCode)
@@ -180,9 +216,9 @@ func (c *Client) GetSpeciesTaxonomy(ctx context.Context, speciesCode, locale str
 		url = fmt.Sprintf("%s&locale=%s", url, locale)
 	}
 
-	// Make API request
+	// Make API request with retry for transient failures
 	var entries []TaxonomyEntry
-	err := c.doRequest(ctx, "GET", url, nil, &entries)
+	err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &entries)
 	if err != nil {
 		// doRequest already returns enhanced errors, just return them
 		return nil, err
@@ -214,12 +250,21 @@ func (c *Client) BuildFamilyTree(ctx context.Context, scientificName string) (*T
 	// Check cache first
 	if cached, found := c.cache.Get(cacheKey); found {
 		if tree, ok := cached.(*TaxonomyTree); ok {
+			c.metrics.mu.Lock()
+			c.metrics.cacheHits++
+			c.metrics.mu.Unlock()
+			
 			logger.Debug("eBird family tree cache hit",
 				"cache_key", cacheKey,
 				"scientific_name", scientificName)
 			return tree, nil
 		}
 	}
+	
+	// Cache miss
+	c.metrics.mu.Lock()
+	c.metrics.cacheMisses++
+	c.metrics.mu.Unlock()
 
 	// Get full taxonomy to search for the species
 	taxonomy, err := c.GetTaxonomy(ctx, "")
@@ -307,10 +352,18 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 	c.mu.Unlock()
 
 	start := time.Now()
+	
+	// Track API call
+	c.metrics.mu.Lock()
+	c.metrics.apiCalls++
+	c.metrics.mu.Unlock()
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
+		c.metrics.mu.Lock()
+		c.metrics.apiErrors++
+		c.metrics.mu.Unlock()
 		return err
 	}
 
@@ -333,6 +386,10 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.metrics.mu.Lock()
+		c.metrics.apiErrors++
+		c.metrics.mu.Unlock()
+		
 		logger.Error("eBird API request failed",
 			"error", err,
 			"method", method,
@@ -382,6 +439,11 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 	
 	// Check for errors
 	if resp.StatusCode >= 400 {
+		// Track API error
+		c.metrics.mu.Lock()
+		c.metrics.apiErrors++
+		c.metrics.mu.Unlock()
+		
 		var apiErr Error
 		if err := json.Unmarshal(bodyBytes, &apiErr); err != nil {
 			// Log authentication failures specially
@@ -485,8 +547,84 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body io.Read
 				"duration_ms", duration.Milliseconds())
 		}
 	}
+	
+	// Track successful API call duration
+	c.metrics.mu.Lock()
+	c.metrics.totalDuration += duration
+	c.metrics.mu.Unlock()
 
 	return nil
+}
+
+// doRequestWithRetry wraps doRequest with retry logic for transient failures
+func (c *Client) doRequestWithRetry(ctx context.Context, method, url string, body io.Reader, result interface{}) error {
+	const maxRetries = 3
+	var lastErr error
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// For retries after the first attempt, create a new body reader if needed
+		var reqBody io.Reader
+		if body != nil && attempt > 0 {
+			// Body was already consumed, we can't retry with body
+			// This is a limitation - callers should use bytes.Buffer if retry is needed
+			logger.Debug("Retry attempted but request body cannot be re-read",
+				"attempt", attempt+1,
+				"url", url)
+			return lastErr
+		}
+		reqBody = body
+		
+		err := c.doRequest(ctx, method, url, reqBody, result)
+		if err == nil {
+			return nil
+		}
+		
+		// Check if error is retryable
+		var enhancedErr *errors.EnhancedError
+		if errors.As(err, &enhancedErr) {
+			// Don't retry authentication errors or not found errors
+			if enhancedErr.Category == errors.CategoryConfiguration ||
+				enhancedErr.Category == errors.CategoryNotFound ||
+				enhancedErr.Category == errors.CategoryValidation {
+				return err
+			}
+			
+			// Check for specific status codes
+			if statusCode, ok := enhancedErr.Context["status_code"].(int); ok {
+				// Don't retry client errors (except 429 which is handled by rate limiter)
+				if statusCode >= 400 && statusCode < 500 && statusCode != 429 {
+					return err
+				}
+			}
+		}
+		
+		lastErr = err
+		
+		// Don't retry if context is cancelled
+		if ctx.Err() != nil {
+			return lastErr
+		}
+		
+		// Calculate backoff delay
+		delay := time.Duration(attempt+1) * 500 * time.Millisecond
+		if attempt < maxRetries-1 {
+			logger.Warn("eBird API request failed, retrying",
+				"attempt", attempt+1,
+				"max_retries", maxRetries,
+				"delay_ms", delay.Milliseconds(),
+				"url", url,
+				"error", err.Error())
+			
+			select {
+			case <-time.After(delay):
+				// Continue to next retry
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	
+	return lastErr
 }
 
 // ClearCache clears all cached data
@@ -500,6 +638,36 @@ func (c *Client) GetCacheStats() (itemCount int, size int64) {
 	itemCount = c.cache.ItemCount()
 	// Note: go-cache doesn't provide size info directly
 	return itemCount, 0
+}
+
+// Metrics represents eBird client performance metrics
+type Metrics struct {
+	APICalls      int64         `json:"api_calls"`
+	CacheHits     int64         `json:"cache_hits"`
+	CacheMisses   int64         `json:"cache_misses"`
+	APIErrors     int64         `json:"api_errors"`
+	TotalDuration time.Duration `json:"total_duration"`
+	AvgDuration   time.Duration `json:"avg_duration"`
+}
+
+// GetMetrics returns current client metrics
+func (c *Client) GetMetrics() Metrics {
+	c.metrics.mu.RLock()
+	defer c.metrics.mu.RUnlock()
+	
+	metrics := Metrics{
+		APICalls:      c.metrics.apiCalls,
+		CacheHits:     c.metrics.cacheHits,
+		CacheMisses:   c.metrics.cacheMisses,
+		APIErrors:     c.metrics.apiErrors,
+		TotalDuration: c.metrics.totalDuration,
+	}
+	
+	if metrics.APICalls > 0 {
+		metrics.AvgDuration = time.Duration(int64(metrics.TotalDuration) / metrics.APICalls)
+	}
+	
+	return metrics
 }
 
 // getErrorCategory determines the appropriate error category based on HTTP status code
