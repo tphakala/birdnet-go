@@ -155,9 +155,115 @@
         <div class="lg:col-span-2 space-y-4">
           <!-- Species info with thumbnail - 4 column layout -->
           <div class="bg-base-200/50 rounded-lg p-4">
-            <div class="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-4 items-start">
-              <!-- Column 1: Thumbnail + Species Names (6/4/4 columns responsive) -->
-              <div class="col-span-6 md:col-span-4 lg:col-span-4 flex gap-4 items-center">
+            <!-- Mobile/Small: Stack vertically, Medium+: Use grid layout -->
+            <div class="block md:hidden space-y-4">
+              <!-- Mobile: Species info in single column -->
+              <div class="flex gap-4 items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-24 h-18 relative overflow-hidden rounded-lg bg-base-100 shadow-md">
+                    <img
+                      src="/api/v2/media/species-image?name={encodeURIComponent(
+                        detection.scientificName
+                      )}"
+                      alt={detection.commonName}
+                      class="w-full h-full object-cover"
+                      onerror={handleBirdImageError}
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-xl font-semibold text-base-content mb-1 truncate">{detection.commonName}</h3>
+                  <p class="text-sm text-base-content/60 italic truncate">{detection.scientificName}</p>
+                  <div class="flex items-center gap-2 mt-2 flex-wrap">
+                    <span
+                      class={`badge badge-sm gap-1 ${getStatusBadgeClass(detection.review?.verified)}`}
+                    >
+                      {#if detection.review?.verified === 'correct'}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          class="w-2 h-2"
+                        >
+                          <path stroke-linecap="round" stroke-linejoin="round" d={alertIcons.success} />
+                        </svg>
+                      {:else if detection.review?.verified === 'false_positive'}
+                        <div class="w-2 h-2">
+                          {@html navigationIcons.close}
+                        </div>
+                      {/if}
+                      {getStatusText(detection.review?.verified)}
+                    </span>
+                    {#if detection.locked}
+                      <span class="badge badge-sm badge-warning gap-1">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          class="w-2 h-2"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+                          />
+                        </svg>
+                        Locked
+                      </span>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Mobile: 3-column grid for date/weather/confidence -->
+              <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div class="text-xs text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
+                  <div class="text-sm text-base-content">{detection.date}</div>
+                  <div class="text-sm text-base-content">{detection.time}</div>
+                  {#if detection.timeOfDay}
+                    <div class="text-xs text-base-content/60 mt-1 capitalize">{detection.timeOfDay}</div>
+                  {/if}
+                </div>
+                
+                <div>
+                  <div class="text-xs text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
+                  {#if detection.weather}
+                    <div class="flex justify-center">
+                      <WeatherDetails
+                        weatherIcon={detection.weather.weatherIcon}
+                        weatherDescription={detection.weather.description}
+                        temperature={detection.weather.temperature}
+                        windSpeed={detection.weather.windSpeed}
+                        windGust={detection.weather.windGust}
+                        units={detection.weather.units}
+                        size="md"
+                        className="text-center"
+                      />
+                    </div>
+                  {:else}
+                    <div class="text-xs text-base-content/40 italic">{t('detections.weather.noData')}</div>
+                  {/if}
+                </div>
+                
+                <div>
+                  <div class="text-xs text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
+                  <div class="flex justify-center">
+                    <ConfidenceCircle confidence={detection.confidence} size="md" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Medium and Large: Better responsive layout -->
+            <div class="hidden md:block space-y-4">
+              <!-- Top: Species info (always full width) -->
+              <div class="flex gap-4 items-center">
                 <div class="flex-shrink-0">
                   <div class="w-32 h-24 relative overflow-hidden rounded-lg bg-base-100 shadow-md">
                     <img
@@ -218,42 +324,44 @@
                   </div>
                 </div>
               </div>
-
-              <!-- Column 2: Date & Time (3/2/2 columns responsive) -->
-              <div class="col-span-3 md:col-span-2 lg:col-span-2 text-center">
-                <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
-                <div class="text-base text-base-content">{detection.date}</div>
-                <div class="text-base text-base-content">{detection.time}</div>
-                {#if detection.timeOfDay}
-                  <div class="text-sm text-base-content/60 mt-1 capitalize">{detection.timeOfDay}</div>
-                {/if}
-              </div>
-
-              <!-- Column 3: Weather Conditions (6/2/4 columns responsive) -->
-              <div class="col-span-6 md:col-span-2 lg:col-span-4 text-center">
-                <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
-                {#if detection.weather}
+              
+              <!-- Bottom: 3-column grid for metadata -->
+              <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
+                  <div class="text-base text-base-content">{detection.date}</div>
+                  <div class="text-base text-base-content">{detection.time}</div>
+                  {#if detection.timeOfDay}
+                    <div class="text-sm text-base-content/60 mt-1 capitalize">{detection.timeOfDay}</div>
+                  {/if}
+                </div>
+                
+                <div>
+                  <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
+                  {#if detection.weather}
+                    <div class="flex justify-center">
+                      <WeatherDetails
+                        weatherIcon={detection.weather.weatherIcon}
+                        weatherDescription={detection.weather.description}
+                        temperature={detection.weather.temperature}
+                        windSpeed={detection.weather.windSpeed}
+                        windGust={detection.weather.windGust}
+                        units={detection.weather.units}
+                        size="md"
+                        className="text-center"
+                      />
+                    </div>
+                  {:else}
+                    <div class="text-sm text-base-content/40 italic">{t('detections.weather.noData')}</div>
+                  {/if}
+                </div>
+                
+                <div>
+                  <div class="text-sm text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
                   <div class="flex justify-center">
-                    <WeatherDetails
-                      weatherIcon={detection.weather.weatherIcon}
-                      weatherDescription={detection.weather.description}
-                      temperature={detection.weather.temperature}
-                      windSpeed={detection.weather.windSpeed}
-                      windGust={detection.weather.windGust}
-                      units={detection.weather.units}
-                      size="md"
-                      className="text-center"
-                    />
+                    <ConfidenceCircle confidence={detection.confidence} size="lg" />
                   </div>
-                {:else}
-                  <div class="text-sm text-base-content/40 italic">{t('detections.weather.noData')}</div>
-                {/if}
-              </div>
-
-              <!-- Column 4: Confidence (6/8/2 columns responsive) -->
-              <div class="col-span-6 md:col-span-8 lg:col-span-2 flex flex-col items-center">
-                <div class="text-sm text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
-                <ConfidenceCircle confidence={detection.confidence} size="lg" />
+                </div>
               </div>
             </div>
           </div>
