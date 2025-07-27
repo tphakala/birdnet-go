@@ -100,6 +100,12 @@ realtime:
       maxdelay: 600       # maximum delay between retries in seconds
       backoffmultiplier: 2.0  # multiplier for exponential backoff
 
+  ebird:
+    enabled: false        # true to enable eBird API integration
+    apikey: ""            # eBird API key (get from https://ebird.org/api/keygen)
+    cachettl: 24          # cache time-to-live in hours (default: 24)
+    locale: "en"          # locale for eBird data (e.g., "en", "es", "fr")
+
   weather:
     provider: yrno
     pollinterval: 60
