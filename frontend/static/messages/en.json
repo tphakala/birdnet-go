@@ -112,7 +112,20 @@
       },
       "form": {
         "correctDetection": "Correct Detection",
-        "falsePositiveLabel": "False Positive"
+        "falsePositiveLabel": "False Positive",
+        "reviewDetectionTitle": "Review Detection",
+        "lockDetection": "Lock this detection after saving",
+        "lockDetectionHelp": "Locking this detection will prevent it from being deleted during regular cleanup.",
+        "unlockDetection": "Unlock this detection after saving",
+        "unlockDetectionHelp": "Unlocking will allow this detection to be deleted during regular cleanup.",
+        "ignoreSpecies": "Ignore this species",
+        "ignoreSpeciesHelp": "Ignoring this species will prevent future detections of this species. This will not remove existing detections.",
+        "detectionLocked": "This detection is currently locked.",
+        "comment": "Comment",
+        "addComment": "Add Comment",
+        "hideComment": "Hide Comment",
+        "commentPlaceholder": "Add a comment about this detection...",
+        "commentCount": "({chars} chars)"
       },
       "errors": {
         "saveFailed": "Failed to save review. Please try again.",

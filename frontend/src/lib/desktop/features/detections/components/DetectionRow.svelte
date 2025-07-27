@@ -156,6 +156,7 @@
     // TODO: Replace with actual thumbnail API endpoint
     return `/api/v2/media/species-image?name=${encodeURIComponent(scientificName)}`;
   }
+
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->

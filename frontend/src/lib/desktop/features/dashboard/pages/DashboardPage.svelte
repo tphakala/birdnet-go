@@ -77,7 +77,7 @@
     const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
-      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}`);
+      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true`);
       if (!response.ok) {
         throw new Error(
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
