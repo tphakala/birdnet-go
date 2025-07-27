@@ -261,8 +261,33 @@
     white-space: nowrap;
   }
 
-  /* Override the centralized icon sizing to match our component needs */
-  /* Use more specific selectors to override without !important */
+  /* 
+   * Icon sizing override: Adapting centralized icon styles to component-specific needs
+   * 
+   * ISSUE: The centralized icon system in $lib/utils/icons.ts includes hardcoded sizing 
+   * classes (h-5, w-5, mr-2) directly in the SVG markup. This creates inflexibility 
+   * when components need different icon sizes or spacing.
+   * 
+   * CURRENT SOLUTION: Using highly specific CSS selectors to override without !important.
+   * This approach works but is fragile - changes to the centralized icon markup or 
+   * class structure could break these overrides.
+   * 
+   * FRAGILITY CONCERNS:
+   * - If centralized icons change class names or structure, these overrides fail
+   * - If new icon variants are added, they may not be covered by these selectors
+   * - Maintenance burden increases as more components need similar overrides
+   * 
+   * RECOMMENDED ENHANCEMENT: Consider enhancing the centralized icon system to:
+   * 1. Accept a 'disableDefaultSizing' prop to exclude hardcoded size classes
+   * 2. Separate icon definitions from styling concerns
+   * 3. Use CSS custom properties for more flexible size control
+   * 4. Provide utility functions that return unstyled SVG content
+   * 
+   * Example improved API:
+   * {@html weatherIcons.temperature({ disableDefaultSizing: true })}
+   * or
+   * <IconComponent name="temperature" size={iconSizeClasses[size]} />
+   */
   .wd-temperature-row > div :global(svg.h-5.w-5),
   .wd-wind-row > div :global(svg.h-5.w-5) {
     height: inherit;
@@ -270,7 +295,7 @@
     margin-right: 0;
   }
   
-  /* Ensure our size classes take precedence */
+  /* Ensure our size classes take precedence over any inherited sizing */
   .wd-temperature-row > .h-5.w-5,
   .wd-temperature-row > .h-6.w-6,
   .wd-temperature-row > .h-8.w-8,

@@ -96,6 +96,8 @@
 
 - `ConfirmModal.svelte` - Confirmation dialog
 - `ReviewModal.svelte` - Detection review modal
+- `SpeciesBadges.svelte` - Reusable species status and lock badges for modals
+- `SpeciesThumbnail.svelte` - Reusable species thumbnail image component
 
 ## UI
 

@@ -3,10 +3,11 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
+  import SpeciesBadges from './SpeciesBadges.svelte';
+  import SpeciesThumbnail from './SpeciesThumbnail.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { alertIcons, navigationIcons } from '$lib/utils/icons';
-  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
+  import { alertIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -96,27 +97,6 @@
     }
   }
 
-  function getStatusBadgeClass(verified?: string): string {
-    switch (verified) {
-      case 'correct':
-        return 'badge-success';
-      case 'false_positive':
-        return 'badge-error';
-      default:
-        return 'badge-ghost';
-    }
-  }
-
-  function getStatusText(verified?: string): string {
-    switch (verified) {
-      case 'correct':
-        return t('common.review.status.verifiedCorrect');
-      case 'false_positive':
-        return t('common.review.status.falsePositive');
-      default:
-        return t('common.review.status.notReviewed');
-    }
-  }
 </script>
 
 <Modal
@@ -159,69 +139,22 @@
             <div class="flex gap-4 items-start">
               <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
               <div class="flex gap-4 items-center flex-1 min-w-0">
-                <div class="flex-shrink-0">
-                  <div class="w-32 h-24 relative overflow-hidden rounded-lg bg-base-100 shadow-md">
-                    <img
-                      src="/api/v2/media/species-image?name={encodeURIComponent(
-                        detection.scientificName
-                      )}"
-                      alt={detection.commonName}
-                      class="w-full h-full object-cover"
-                      onerror={handleBirdImageError}
-                      loading="lazy"
-                    />
-                  </div>
-                </div>
+                <SpeciesThumbnail 
+                  scientificName={detection.scientificName}
+                  commonName={detection.commonName}
+                  size="lg"
+                />
                 <div class="flex-1 min-w-0">
                   <h3 class="text-2xl font-semibold text-base-content mb-1 truncate">{detection.commonName}</h3>
                   <p class="text-base text-base-content/60 italic truncate">{detection.scientificName}</p>
-                  <div class="flex items-center gap-2 mt-2 flex-wrap">
-                    <span
-                      class={`badge badge-md gap-2 ${getStatusBadgeClass(detection.review?.verified)}`}
-                    >
-                      {#if detection.review?.verified === 'correct'}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke-width="2"
-                          stroke="currentColor"
-                          class="w-3 h-3"
-                        >
-                          <path stroke-linecap="round" stroke-linejoin="round" d={alertIcons.success} />
-                        </svg>
-                      {:else if detection.review?.verified === 'false_positive'}
-                        <div class="w-3 h-3">
-                          {@html navigationIcons.close}
-                        </div>
-                      {/if}
-                      {getStatusText(detection.review?.verified)}
-                    </span>
-                    {#if detection.locked}
-                      <span class="badge badge-md badge-warning gap-1">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke-width="2"
-                          stroke="currentColor"
-                          class="w-3 h-3"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                          />
-                        </svg>
-                        Locked
-                      </span>
-                    {/if}
+                  <div class="mt-2">
+                    <SpeciesBadges {detection} size="md" />
                   </div>
                 </div>
               </div>
 
               <!-- Section 2: Date & Time (fixed width) -->
-              <div class="flex-shrink-0 text-center" style="min-width: 120px;">
+              <div class="flex-shrink-0 text-center" style:min-width="120px">
                 <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
                 <div class="text-base text-base-content">{detection.date}</div>
                 <div class="text-base text-base-content">{detection.time}</div>
@@ -231,7 +164,7 @@
               </div>
 
               <!-- Section 3: Weather Conditions (fixed width) -->
-              <div class="flex-shrink-0 text-center" style="min-width: 180px;">
+              <div class="flex-shrink-0 text-center" style:min-width="180px">
                 <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
                 {#if detection.weather}
                   <div class="flex justify-center">
@@ -252,7 +185,7 @@
               </div>
 
               <!-- Section 4: Confidence (fixed width) -->
-              <div class="flex-shrink-0 flex flex-col items-center" style="min-width: 100px;">
+              <div class="flex-shrink-0 flex flex-col items-center" style:min-width="100px">
                 <div class="text-sm text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
                 <ConfidenceCircle confidence={detection.confidence} size="lg" />
               </div>
