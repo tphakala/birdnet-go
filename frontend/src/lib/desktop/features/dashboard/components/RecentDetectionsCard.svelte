@@ -11,6 +11,9 @@
   import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
+  // Animation control - set to false to disable all animations
+  const ENABLE_NEW_DETECTION_ANIMATIONS = false;
+
   interface Props {
     data: Detection[];
     loading?: boolean;
@@ -256,7 +259,7 @@
         <!-- Detection Rows -->
         <div class="divide-y divide-base-200">
           {#each data.slice(0, selectedLimit) as detection}
-            {@const isNew = newDetectionIds.has(detection.id)}
+            {@const isNew = ENABLE_NEW_DETECTION_ANIMATIONS && newDetectionIds.has(detection.id)}
             <div
               class="detection-grid-dashboard detection-row"
               class:cursor-pointer={onRowClick}
