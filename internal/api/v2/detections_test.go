@@ -645,7 +645,6 @@ func TestReviewDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
 				m.On("IsNoteLocked", "1").Return(false, nil)
-				m.On("LockNote", "1").Return(nil)
 				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 			},
@@ -658,7 +657,6 @@ func TestReviewDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "2").Return(datastore.Note{ID: 2, Locked: false}, nil)
 				m.On("IsNoteLocked", "2").Return(false, nil)
-				m.On("LockNote", "2").Return(nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 			},
 			expectedStatus: http.StatusOK,
@@ -670,7 +668,6 @@ func TestReviewDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "3").Return(datastore.Note{ID: 3, Locked: false}, nil)
 				m.On("IsNoteLocked", "3").Return(false, nil)
-				m.On("LockNote", "3").Return(nil)
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -690,7 +687,6 @@ func TestReviewDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "5").Return(datastore.Note{ID: 5, Locked: false}, nil)
 				m.On("IsNoteLocked", "5").Return(false, nil)
-				m.On("LockNote", "5").Return(nil)
 				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 			},
@@ -703,7 +699,6 @@ func TestReviewDetection(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "6").Return(datastore.Note{ID: 6, Locked: false}, nil)
 				m.On("IsNoteLocked", "6").Return(false, nil)
-				m.On("LockNote", "6").Return(nil)
 				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 			},
@@ -1218,16 +1213,15 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		jsonData, err := json.Marshal(reviewRequest)
 		require.NoError(t, err)
 
-		// Setup mock behavior - note is not locked initially, but becomes locked
+		// Setup mock behavior - note is not locked initially, then becomes locked
 		mockDS.On("Get", "1").Return(mockNote, nil).Times(2)
 
-		// First request will find the note unlocked
+		// First request will find the note unlocked and complete successfully
 		mockDS.On("IsNoteLocked", "1").Return(false, nil).Once()
+		mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Once()
+		mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Once()
 
-		// But will fail to acquire the lock (simulating race condition)
-		mockDS.On("LockNote", "1").Return(errors.New("concurrent access")).Once()
-
-		// Second request will find the note already locked
+		// Second request will find the note already locked (race condition)
 		mockDS.On("IsNoteLocked", "1").Return(true, nil).Once()
 
 		// Create two requests
@@ -1250,22 +1244,19 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		c2.SetParamValues("1")
 
 		// Execute both requests sequentially (simulating the race condition outcome)
-		_ = controller.ReviewDetection(c1) // Expected to fail with conflict in test
-		_ = controller.ReviewDetection(c2) // Expected to fail with conflict in test
+		_ = controller.ReviewDetection(c1) // Expected to succeed
+		_ = controller.ReviewDetection(c2) // Expected to fail with conflict
 
 		// Verify results - check status codes
-		assert.Equal(t, http.StatusConflict, rec1.Code, "First request should fail with conflict due to lock acquisition failure")
+		assert.Equal(t, http.StatusOK, rec1.Code, "First request should succeed")
 		assert.Equal(t, http.StatusConflict, rec2.Code, "Second request should fail with conflict due to note being locked")
 
-		// Parse responses to verify error messages
-		var resp1, resp2 map[string]interface{}
-		err1 := json.Unmarshal(rec1.Body.Bytes(), &resp1)
+		// Parse second response to verify error message
+		var resp2 map[string]interface{}
 		err2 := json.Unmarshal(rec2.Body.Bytes(), &resp2)
-		require.NoError(t, err1)
 		require.NoError(t, err2)
 
-		// Check error messages
-		assert.Contains(t, resp1["message"], "failed to acquire lock")
+		// Check error message for second request
 		assert.Contains(t, resp2["message"], "detection is locked")
 
 		// Verify expectations
@@ -1322,9 +1313,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 	mockDS.On("IsNoteLocked", "1").Return(false, nil).Maybe()
 	mockDS.On("IsNoteLocked", "1").Return(true, nil).Maybe()
 
-	// LockNote - might succeed or fail with error depending on timing
-	mockDS.On("LockNote", "1").Return(nil).Maybe()
-	mockDS.On("LockNote", "1").Return(errors.New("concurrent access")).Maybe()
+	// No longer using temporary locks during review operations
 
 	// SaveNoteComment and SaveNoteReview - might be called depending on success
 	mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Maybe()
@@ -1427,8 +1416,6 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	mockDS.On("Get", "1").Return(mockNote, nil).Maybe()
 	mockDS.On("IsNoteLocked", "1").Return(false, nil).Maybe()
 	mockDS.On("IsNoteLocked", "1").Return(true, nil).Maybe()
-	mockDS.On("LockNote", "1").Return(nil).Maybe()
-	mockDS.On("LockNote", "1").Return(errors.New("concurrent access")).Maybe()
 	mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Maybe()
 	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Maybe()
 

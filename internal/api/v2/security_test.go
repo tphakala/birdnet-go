@@ -248,7 +248,6 @@ func TestInputValidation(t *testing.T) {
 				// For the review operation on the specific item
 				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
 				m.On("IsNoteLocked", "1").Return(false, nil)
-				m.On("LockNote", "1").Return(nil)
 
 				// Comment should be passed through but properly escaped
 				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
@@ -342,7 +341,6 @@ func TestInputValidation(t *testing.T) {
 				// Need to mock Get since it's called before JSON validation
 				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
 				m.On("IsNoteLocked", "1").Return(false, nil)
-				m.On("LockNote", "1").Return(nil)
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "unexpected EOF",
@@ -500,7 +498,6 @@ func TestInputValidation(t *testing.T) {
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
 				m.On("IsNoteLocked", "1").Return(false, nil)
-				m.On("LockNote", "1").Return(nil)
 				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 			},
