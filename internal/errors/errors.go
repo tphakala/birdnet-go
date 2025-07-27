@@ -340,6 +340,7 @@ func init() {
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
 	RegisterComponent("diskmanager", "diskmanager")
+	RegisterComponent("ebird", "ebird")
 	RegisterComponent("mqtt", "mqtt")
 	RegisterComponent("weather", "weather")
 	RegisterComponent("conf", "configuration")

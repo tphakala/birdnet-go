@@ -1,0 +1,33 @@
+[
+  {
+    "sciName": "Turdus migratorius",
+    "comName": "American Robin",
+    "speciesCode": "amerob",
+    "category": "species",
+    "taxonOrder": 19156.0,
+    "order": "Passeriformes",
+    "familyComName": "Thrushes and Allies",
+    "familySciName": "Turdidae"
+  },
+  {
+    "sciName": "Turdus migratorius nigrideus",
+    "comName": "American Robin (nigrideus)",
+    "speciesCode": "amerob1",
+    "category": "issf",
+    "taxonOrder": 19157.0,
+    "reportAs": "amerob",
+    "order": "Passeriformes",
+    "familyComName": "Thrushes and Allies",
+    "familySciName": "Turdidae"
+  },
+  {
+    "sciName": "Corvus corax",
+    "comName": "Common Raven",
+    "speciesCode": "comrav",
+    "category": "species",
+    "taxonOrder": 18268.0,
+    "order": "Passeriformes",
+    "familyComName": "Crows, Jays, and Magpies",
+    "familySciName": "Corvidae"
+  }
+]

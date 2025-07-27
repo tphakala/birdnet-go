@@ -166,6 +166,13 @@ routeInitializers := []struct {
 | PUT | `/settings` | `UpdateSettings` | ✅ | Update all settings |
 | PATCH | `/settings/:section` | `UpdateSectionSettings` | ✅ | Update settings section |
 
+### Species (`species.go`)
+
+| Method | Route | Handler | Auth | Description |
+|--------|-------|---------|------|-------------|
+| GET | `/species` | `GetSpeciesInfo` | ❌ | Get extended species information including rarity status |
+| GET | `/species/taxonomy` | `GetSpeciesTaxonomy` | ❌ | Get detailed taxonomy data with subspecies and hierarchy |
+
 ### Server-Sent Events (`sse.go`)
 
 | Method | Route | Handler | Auth | Description |

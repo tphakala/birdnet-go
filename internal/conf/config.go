@@ -120,6 +120,14 @@ type BirdweatherSettings struct {
 	RetrySettings    RetrySettings `json:"retrySettings"`    // settings for retry mechanism
 }
 
+// EBirdSettings contains settings for eBird API integration.
+type EBirdSettings struct {
+	Enabled  bool   `json:"enabled"`  // true to enable eBird integration
+	APIKey   string `json:"apiKey"`   // eBird API key
+	CacheTTL int    `json:"cacheTTL"` // cache time-to-live in hours (default: 24)
+	Locale   string `json:"locale"`   // locale for eBird data (e.g., "en", "es")
+}
+
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
 	Provider     string              `json:"provider"`     // "none", "yrno" or "openweather"
@@ -239,6 +247,7 @@ type RealtimeSettings struct {
 		Path    string `json:"path"`    // path to OBS chat log
 	} `json:"log"`
 	Birdweather   BirdweatherSettings   `json:"birdweather"`   // Birdweather integration settings
+	EBird         EBirdSettings         `json:"ebird"`         // eBird integration settings
 	OpenWeather   OpenWeatherSettings   `yaml:"-" json:"-"`    // OpenWeather integration settings
 	PrivacyFilter PrivacyFilterSettings `json:"privacyFilter"` // Privacy filter settings
 	DogBarkFilter DogBarkFilterSettings `json:"dogBarkFilter"` // Dog bark filter settings

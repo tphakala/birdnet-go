@@ -4,7 +4,6 @@ package api
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +25,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/ebird"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -43,6 +44,7 @@ type Controller struct {
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
 	Processor           *processor.Processor
+	EBirdClient         *ebird.Client
 	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
@@ -77,9 +79,9 @@ type Controller struct {
 
 // Define specific errors for token handling failures
 var (
-	errMalformedAuthHeader = errors.New("malformed authorization header")
-	errInvalidAuthToken    = errors.New("invalid or expired token")
-	errAuthServiceNil      = errors.New("internal configuration error: auth service is nil")
+	errMalformedAuthHeader = fmt.Errorf("malformed authorization header")
+	errInvalidAuthToken    = fmt.Errorf("invalid or expired token")
+	errAuthServiceNil      = fmt.Errorf("internal configuration error: auth service is nil")
 )
 
 // Custom IP Extractor prioritizing CF-Connecting-IP
@@ -305,6 +307,36 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Initialize SSE manager
 	c.sseManager = NewSSEManager(logger)
 
+	// Initialize eBird client if enabled
+	if settings.Realtime.EBird.Enabled {
+		if settings.Realtime.EBird.APIKey == "" {
+			// Create notification for missing API key
+			// The Build() method automatically publishes to the event bus for notifications
+			_ = errors.Newf("eBird integration enabled but API key not configured").
+				Category(errors.CategoryConfiguration).
+				Context("setting", "realtime.ebird.apikey").
+				Component("ebird").
+				Build()
+			logger.Println("Warning: eBird integration enabled but API key not configured")
+		} else {
+			ebirdConfig := ebird.Config{
+				APIKey:   settings.Realtime.EBird.APIKey,
+				CacheTTL: time.Duration(settings.Realtime.EBird.CacheTTL) * time.Hour,
+			}
+			ebirdClient, err := ebird.NewClient(ebirdConfig)
+			if err != nil {
+				// Initialization error - already enhanced by ebird.NewClient
+				logger.Printf("Warning: Failed to initialize eBird client: %v", err)
+				// Continue without eBird client - it's not critical
+			} else {
+				c.EBirdClient = ebirdClient
+				logger.Println("Initialized eBird API client")
+			}
+		}
+	} else {
+		logger.Println("eBird integration disabled")
+	}
+
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
 		// Initialize synchronization channel for testing
@@ -389,6 +421,7 @@ func (c *Controller) initRoutes() {
 		{"notification routes", c.initNotificationRoutes},
 		{"support routes", c.initSupportRoutes},
 		{"debug routes", c.initDebugRoutes},
+		{"species routes", c.initSpeciesRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
