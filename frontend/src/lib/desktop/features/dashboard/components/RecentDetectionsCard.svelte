@@ -24,9 +24,9 @@
     onLimitChange?: (limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
-    onMenuOpen?: () => void;
-    onMenuClose?: () => void;
-    hasOpenMenus?: boolean;
+    onFreezeStart?: () => void;
+    onFreezeEnd?: () => void;
+    updatesAreFrozen?: boolean;
   }
 
   let {
@@ -39,9 +39,9 @@
     onLimitChange,
     newDetectionIds = new Set(),
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
-    onMenuOpen,
-    onMenuClose,
-    hasOpenMenus = false,
+    onFreezeStart,
+    onFreezeEnd,
+    updatesAreFrozen = false,
   }: Props = $props();
 
   // State for number of detections to show
@@ -222,10 +222,10 @@
         <button
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
-          class:opacity-50={hasOpenMenus}
-          disabled={loading || hasOpenMenus}
-          title={hasOpenMenus
-            ? 'Refresh paused while menu is open'
+          class:opacity-50={updatesAreFrozen}
+          disabled={loading || updatesAreFrozen}
+          title={updatesAreFrozen
+            ? 'Refresh paused while interaction is active'
             : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
@@ -337,6 +337,8 @@
                     spectrogramSize="sm"
                     spectrogramRaw={true}
                     className="w-full"
+                    onPlayStart={onFreezeStart}
+                    onPlayEnd={onFreezeEnd}
                   />
                 </div>
               </div>
@@ -350,8 +352,8 @@
                   onToggleSpecies={() => handleToggleSpecies(detection)}
                   onToggleLock={() => handleToggleLock(detection)}
                   onDelete={() => handleDelete(detection)}
-                  {onMenuOpen}
-                  {onMenuClose}
+                  onMenuOpen={onFreezeStart}
+                  onMenuClose={onFreezeEnd}
                 />
               </div>
             </div>
