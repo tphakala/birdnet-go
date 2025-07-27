@@ -41,6 +41,29 @@
 - Use dependency injection
 - Document all exports: `// TypeName does...`
 
+## Dependency Injection for Testability
+- **Pass dependencies as interfaces** through constructors or struct fields
+- **Avoid global state** - inject configuration, loggers, and clients
+- **Define minimal interfaces** close to where they're used
+- **Constructor pattern**: `NewService(deps...) *Service`
+- **Identify untestable code** - if you see direct instantiation of external dependencies, flag it
+- **Example pattern**:
+  ```go
+  type Store interface {
+      Get(id string) (*Item, error)
+  }
+  
+  type Service struct {
+      store Store  // inject interface, not concrete type
+  }
+  
+  func NewService(store Store) *Service {
+      return &Service{store: store}
+  }
+  ```
+- **Common injection targets**: databases, HTTP clients, file systems, time providers
+- **If you encounter code that would benefit from DI**, communicate it rather than leaving it untestable
+
 ## Security
 - Validate all user input
 - Check path traversal, injection attacks
