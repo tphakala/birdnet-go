@@ -41,8 +41,8 @@
   let newDetectionIds = $state(new Set<number>());
   let detectionArrivalTimes = $state(new Map<number, number>());
 
-  // Menu state tracking to prevent SSE updates during menu interactions
-  let openMenuCount = $state(0);
+  // Update freeze tracking to prevent SSE updates during user interactions (menus, audio playback, etc.)
+  let freezeCount = $state(0);
   let pendingDetectionQueue = $state<Detection[]>([]);
 
   // Debouncing for rapid daily summary updates
@@ -214,10 +214,10 @@
   let eventSource: ReconnectingEventSource | null = null;
   let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
 
-  // Process new detection from SSE - queue if menus are open, otherwise process immediately
+  // Process new detection from SSE - queue if updates are frozen, otherwise process immediately
   function handleNewDetection(detection: Detection) {
-    // If any action menus are open, queue the detection for later processing
-    if (openMenuCount > 0) {
+    // If any interactions are active (menus, audio playback), queue the detection for later processing
+    if (freezeCount > 0) {
       // Avoid duplicate detections in queue - add null-safety check
       const isDuplicate = pendingDetectionQueue.some(pending => 
         pending?.id != null && detection?.id != null && pending.id === detection.id
@@ -228,7 +228,7 @@
       return;
     }
 
-    // Process immediately if no menus are open
+    // Process immediately if no interactions are active
     processDetectionUpdate(detection);
   }
 
@@ -614,18 +614,18 @@
     }
   }
 
-  // Menu state management
-  function handleMenuOpen() {
-    openMenuCount++;
+  // Update freeze state management
+  function handleFreezeStart() {
+    freezeCount++;
   }
 
-  function handleMenuClose() {
-    openMenuCount--;
+  function handleFreezeEnd() {
+    freezeCount--;
     // Clamp to prevent negative values due to unmount edge cases
-    openMenuCount = Math.max(0, openMenuCount);
+    freezeCount = Math.max(0, freezeCount);
     
-    // Process pending detections when all menus are closed
-    if (openMenuCount === 0 && pendingDetectionQueue.length > 0) {
+    // Process pending detections when all interactions are complete
+    if (freezeCount === 0 && pendingDetectionQueue.length > 0) {
       // Process all pending detections
       pendingDetectionQueue.forEach(detection => {
         processDetectionUpdate(detection);
@@ -679,8 +679,8 @@
     onRefresh={handleManualRefresh}
     {newDetectionIds}
     {detectionArrivalTimes}
-    onMenuOpen={handleMenuOpen}
-    onMenuClose={handleMenuClose}
-    hasOpenMenus={openMenuCount > 0}
+    onFreezeStart={handleFreezeStart}
+    onFreezeEnd={handleFreezeEnd}
+    updatesAreFrozen={freezeCount > 0}
   />
 </div>
