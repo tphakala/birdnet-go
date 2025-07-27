@@ -73,21 +73,21 @@ func (c *Controller) initDetectionRoutes() {
 
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID             uint                `json:"id"`
-	Date           string              `json:"date"`
-	Time           string              `json:"time"`
-	Source         string              `json:"source"`
-	BeginTime      string              `json:"beginTime"`
-	EndTime        string              `json:"endTime"`
-	SpeciesCode    string              `json:"speciesCode"`
-	ScientificName string              `json:"scientificName"`
-	CommonName     string              `json:"commonName"`
-	Confidence     float64             `json:"confidence"`
-	Verified       string              `json:"verified"`
-	Locked         bool                `json:"locked"`
-	Comments       []string            `json:"comments,omitempty"`
-	Weather        *WeatherInfo        `json:"weather,omitempty"`
-	TimeOfDay      string              `json:"timeOfDay,omitempty"`
+	ID             uint         `json:"id"`
+	Date           string       `json:"date"`
+	Time           string       `json:"time"`
+	Source         string       `json:"source"`
+	BeginTime      string       `json:"beginTime"`
+	EndTime        string       `json:"endTime"`
+	SpeciesCode    string       `json:"speciesCode"`
+	ScientificName string       `json:"scientificName"`
+	CommonName     string       `json:"commonName"`
+	Confidence     float64      `json:"confidence"`
+	Verified       string       `json:"verified"`
+	Locked         bool         `json:"locked"`
+	Comments       []string     `json:"comments,omitempty"`
+	Weather        *WeatherInfo `json:"weather,omitempty"`
+	TimeOfDay      string       `json:"timeOfDay,omitempty"`
 }
 
 // WeatherInfo represents weather data for a detection
@@ -113,12 +113,12 @@ type DetectionRequest struct {
 
 // PaginatedResponse represents a paginated API response
 type PaginatedResponse struct {
-	Data        any `json:"data"`
-	Total       int64       `json:"total"`
-	Limit       int         `json:"limit"`
-	Offset      int         `json:"offset"`
-	CurrentPage int         `json:"current_page"`
-	TotalPages  int         `json:"total_pages"`
+	Data        any   `json:"data"`
+	Total       int64 `json:"total"`
+	Limit       int   `json:"limit"`
+	Offset      int   `json:"offset"`
+	CurrentPage int   `json:"current_page"`
+	TotalPages  int   `json:"total_pages"`
 }
 
 // TimeOfDayResponse represents the time of day response for a detection
@@ -128,23 +128,23 @@ type TimeOfDayResponse struct {
 
 // detectionQueryParams holds all query parameters for detection requests
 type detectionQueryParams struct {
-	Date         string
-	Hour         string
-	Duration     int
-	Species      string
-	Search       string
-	StartDate    string
-	EndDate      string
-	NumResults   int
-	Offset       int
-	QueryType    string
+	Date       string
+	Hour       string
+	Duration   int
+	Species    string
+	Search     string
+	StartDate  string
+	EndDate    string
+	NumResults int
+	Offset     int
+	QueryType  string
 	// Advanced filter parameters
-	Confidence   string
-	TimeOfDay    string
-	HourRange    string
-	Verified     string
-	Location     string
-	Locked       string
+	Confidence string
+	TimeOfDay  string
+	HourRange  string
+	Verified   string
+	Location   string
+	Locked     string
 	// Include additional data
 	IncludeWeather bool
 }
@@ -152,13 +152,13 @@ type detectionQueryParams struct {
 // parseDetectionQueryParams extracts and validates query parameters from the request
 func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryParams, error) {
 	params := &detectionQueryParams{
-		Date:       ctx.QueryParam("date"),
-		Hour:       ctx.QueryParam("hour"),
-		Species:    ctx.QueryParam("species"),
-		Search:     ctx.QueryParam("search"),
-		StartDate:  ctx.QueryParam("start_date"),
-		EndDate:    ctx.QueryParam("end_date"),
-		QueryType:  ctx.QueryParam("queryType"),
+		Date:      ctx.QueryParam("date"),
+		Hour:      ctx.QueryParam("hour"),
+		Species:   ctx.QueryParam("species"),
+		Search:    ctx.QueryParam("search"),
+		StartDate: ctx.QueryParam("start_date"),
+		EndDate:   ctx.QueryParam("end_date"),
+		QueryType: ctx.QueryParam("queryType"),
 		// Advanced filter parameters
 		Confidence: ctx.QueryParam("confidence"),
 		TimeOfDay:  ctx.QueryParam("timeOfDay"),
@@ -364,7 +364,6 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-
 	// Log the retrieval attempt
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Retrieving detections",
@@ -422,8 +421,8 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
 	// Check if advanced filters are present
-	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" || 
-		params.HourRange != "" || params.Verified != "" || 
+	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" ||
+		params.HourRange != "" || params.Verified != "" ||
 		params.Location != "" || params.Locked != ""
 
 	switch params.QueryType {
@@ -449,10 +448,10 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 // convertNotesToDetectionResponses converts datastore notes to API detection responses
 func (c *Controller) convertNotesToDetectionResponses(notes []datastore.Note, includeWeather bool) []DetectionResponse {
 	detections := make([]DetectionResponse, 0, len(notes))
-	
+
 	// Create a map to cache weather data if needed
 	weatherCache := make(map[string][]datastore.HourlyWeather)
-	
+
 	for i := range notes {
 		note := &notes[i]
 		detection := c.noteToDetectionResponse(note, includeWeather, weatherCache)
@@ -489,7 +488,6 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		detection.Comments = comments
 	}
 
-	
 	// Add weather and time of day if requested
 	if includeWeather {
 		// Parse detection time
@@ -503,7 +501,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 					detection.TimeOfDay = calculateTimeOfDay(detectionTime, &sunTimes)
 				}
 			}
-			
+
 			// Get weather data
 			if weatherCache != nil {
 				// Check if we have weather data for this date in cache
@@ -514,7 +512,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 						weatherCache[note.Date] = hourlyWeather
 					}
 				}
-				
+
 				// Find closest weather data
 				if weatherData, exists := weatherCache[note.Date]; exists && len(weatherData) > 0 {
 					closestWeather := c.findClosestHourlyWeather(detectionTime, weatherData)
@@ -534,7 +532,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 			}
 		}
 	}
-	
+
 	return detection
 }
 
@@ -707,7 +705,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 		// Parse operator and value (e.g., ">85", ">=90")
 		var operator string
 		var value string
-		
+
 		switch {
 		case strings.HasPrefix(confidenceParam, ">="):
 			operator = ">="
@@ -725,7 +723,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 			operator = "="
 			value = confidenceParam
 		}
-		
+
 		if confValue, err := strconv.ParseFloat(value, 64); err == nil {
 			filters.Confidence = &datastore.ConfidenceFilter{
 				Operator: operator,
@@ -744,7 +742,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 	if hourParam == "" {
 		hourParam = params.Hour
 	}
-	
+
 	if hourParam != "" {
 		if strings.Contains(hourParam, "-") {
 			// Range format: "6-9"
@@ -1058,9 +1056,9 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
-	// If detection was already locked when modal opened, prevent review unless we're unlocking
+	// If detection was already locked when modal opened, prevent review state change unless we're unlocking
 	if note.Locked {
-		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked and cannot be reviewed", http.StatusConflict)
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked and status cannot be changed", http.StatusConflict)
 	}
 
 	// Check if the detection is locked in the database (race condition check)
@@ -1068,10 +1066,10 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to check lock status", http.StatusInternalServerError)
 	}
-	
+
 	// If became locked by another process, prevent modification
 	if isLocked {
-		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "detection is locked", http.StatusConflict)
+		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked and status cannot be changed", http.StatusConflict)
 	}
 
 	// Handle comment if provided
@@ -1117,7 +1115,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 				"ip", ctx.RealIP(),
 			)
 		}
-		
+
 		err = c.AddLock(note.ID, req.LockDetection)
 		if err != nil {
 			// Log the lock operation failure
@@ -1364,7 +1362,7 @@ func (c *Controller) getWeatherUnits() string {
 	// Read settings with mutex
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
-	
+
 	// Check the weather provider
 	switch c.Settings.Realtime.Weather.Provider {
 	case "openweather":
