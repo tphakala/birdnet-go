@@ -43,7 +43,7 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
   
   bin = "./tmp/main"  # Path to the compiled binary
   delay = 1000  # Delay (in milliseconds) before restarting the app after a change
-  rerun_delay = 1000
+  rerun_delay = 5000
   
   # Directories to exclude from watching
   exclude_dir = ["tmp", "vendor", "testdata", "bin", "frontend/node_modules", "frontend/dist", "frontend/.svelte-kit"]
