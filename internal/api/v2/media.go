@@ -28,6 +28,27 @@ const (
 	StatusClientClosedRequest = 499 // Nginx's non-standard status for client closed connection
 )
 
+// Spectrogram size constants
+// Sizes are optimized for different UI contexts:
+// - sm (400px): Compact display in lists and dashboards
+// - md (800px): Standard detail view and review modals  
+// - lg (1000px): Large display for detailed analysis
+// - xl (1200px): Maximum quality for expert review
+const (
+	SpectrogramSizeSm = 400
+	SpectrogramSizeMd = 800
+	SpectrogramSizeLg = 1000
+	SpectrogramSizeXl = 1200
+)
+
+// spectrogramSizes maps size names to pixel widths
+var spectrogramSizes = map[string]int{
+	"sm": SpectrogramSizeSm,
+	"md": SpectrogramSizeMd,
+	"lg": SpectrogramSizeLg,
+	"xl": SpectrogramSizeXl,
+}
+
 // Sentinel errors for media operations
 var (
 	// Audio file errors
@@ -346,21 +367,13 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Parse size parameter
-	width := 800 // Default width (md)
+	width := SpectrogramSizeMd // Default width (md)
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		switch sizeStr {
-		case "sm":
-			width = 400
-		case "md":
-			width = 800
-		case "lg":
-			width = 1000
-		case "xl":
-			width = 1200
-		default:
-			// Fall back to width parameter if size is invalid
+		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+			width = validWidth
 		}
+		// Invalid size parameter falls back to width parameter or default
 	}
 
 	// Legacy width parameter support
@@ -407,21 +420,13 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 
 	// Parse size parameter
-	width := 800 // Default width (md)
+	width := SpectrogramSizeMd // Default width (md)
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		switch sizeStr {
-		case "sm":
-			width = 400
-		case "md":
-			width = 800
-		case "lg":
-			width = 1000
-		case "xl":
-			width = 1200
-		default:
-			// Fall back to width parameter if size is invalid
+		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+			width = validWidth
 		}
+		// Invalid size parameter falls back to width parameter or default
 	}
 
 	// Legacy width parameter support
@@ -761,11 +766,12 @@ func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw b
 	const dynamicRange = "100"
 	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", absSpectrogramPath}
 	if raw {
+		// Raw mode: no axes, labels, or legends for clean display
 		args = append(args, "-r")
 	} else {
-		// Only add -r for small spectrograms when not raw
+		// Add -r for small spectrograms when not in raw mode (SoX behavior)
 		width, _ := strconv.Atoi(widthStr)
-		if width < 800 {
+		if width < SpectrogramSizeMd {
 			args = append(args, "-r")
 		}
 	}
@@ -793,10 +799,10 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 
 	var filterStr string
 	if raw {
-		// Raw spectrogram without axes or legends
+		// Raw spectrogram without frequency/time axes and legends for clean display
 		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr)
 	} else {
-		// Standard spectrogram with legend
+		// Standard spectrogram with frequency/time axes and legends for analysis
 		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=1:gain=3:drange=100", widthStr, heightStr)
 	}
 

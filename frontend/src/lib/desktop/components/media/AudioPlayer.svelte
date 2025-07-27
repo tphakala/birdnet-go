@@ -41,7 +41,9 @@
     showDownload?: boolean;
     className?: string;
     responsive?: boolean;
+    /** Spectrogram display size: sm (400px), md (800px), lg (1000px), xl (1200px) */
     spectrogramSize?: SpectrogramSize;
+    /** Display raw spectrogram without axes and legends */
     spectrogramRaw?: boolean;
   }
 
@@ -116,15 +118,11 @@
   const FILTER_HP_DEFAULT_FREQ = 20;
 
   // Computed values
-  const spectrogramUrl = $derived(() => {
-    if (!showSpectrogram) return null;
-    const params = new URLSearchParams();
-    params.set('size', spectrogramSize);
-    if (spectrogramRaw) {
-      params.set('raw', 'true');
-    }
-    return `/api/v2/spectrogram/${detectionId}?${params.toString()}`;
-  });
+  const spectrogramUrl = $derived(
+    showSpectrogram
+      ? `/api/v2/spectrogram/${detectionId}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+      : null
+  );
 
   const playPauseId = $derived(`playPause-${detectionId}`);
   const audioId = $derived(`audio-${detectionId}`);
@@ -453,9 +451,9 @@
     ? ''
     : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
 >
-  {#if spectrogramUrl()}
+  {#if spectrogramUrl}
     <img
-      src={spectrogramUrl()}
+      src={spectrogramUrl}
       alt="Audio spectrogram"
       loading="lazy"
       class={responsive
