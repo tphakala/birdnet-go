@@ -24,6 +24,9 @@
     onLimitChange?: (limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
+    onMenuOpen?: () => void;
+    onMenuClose?: () => void;
+    hasOpenMenus?: boolean;
   }
 
   let {
@@ -36,6 +39,9 @@
     onLimitChange,
     newDetectionIds = new Set(),
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
+    onMenuOpen,
+    onMenuClose,
+    hasOpenMenus = false,
   }: Props = $props();
 
   // State for number of detections to show
@@ -216,7 +222,11 @@
         <button
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
-          disabled={loading}
+          class:opacity-50={hasOpenMenus}
+          disabled={loading || hasOpenMenus}
+          title={hasOpenMenus 
+            ? 'Refresh paused while menu is open' 
+            : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
           <div class="h-4 w-4" class:animate-spin={loading}>
@@ -338,6 +348,8 @@
                   onToggleSpecies={() => handleToggleSpecies(detection)}
                   onToggleLock={() => handleToggleLock(detection)}
                   onDelete={() => handleDelete(detection)}
+                  {onMenuOpen}
+                  {onMenuClose}
                 />
               </div>
             </div>

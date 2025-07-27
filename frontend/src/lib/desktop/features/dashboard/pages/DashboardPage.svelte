@@ -40,6 +40,10 @@
   let newDetectionIds = $state(new Set<number>());
   let detectionArrivalTimes = $state(new Map<number, number>());
 
+  // Menu state tracking to prevent SSE updates during menu interactions
+  let openMenuCount = $state(0);
+  let pendingDetectionQueue = $state<Detection[]>([]);
+
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
   let updateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -209,16 +213,24 @@
   let eventSource: ReconnectingEventSource | null = null;
   let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
 
-  // Process new detection from SSE - trigger API fetch instead of direct manipulation
+  // Process new detection from SSE - queue if menus are open, otherwise process immediately
   function handleNewDetection(detection: Detection) {
     console.log('New detection via SSE:', detection.commonName);
 
-    // Trigger API fetch to get fresh data with animations enabled
-    // This avoids complex DOM issues with direct data manipulation
-    fetchRecentDetections(true);
+    // If any action menus are open, queue the detection for later processing
+    if (openMenuCount > 0) {
+      console.log('Menu is open, queuing detection:', detection.commonName);
+      
+      // Avoid duplicate detections in queue
+      const isDuplicate = pendingDetectionQueue.some(pending => pending.id === detection.id);
+      if (!isDuplicate) {
+        pendingDetectionQueue.push(detection);
+      }
+      return;
+    }
 
-    // Queue daily summary update with debouncing
-    queueDailySummaryUpdate(detection);
+    // Process immediately if no menus are open
+    processDetectionUpdate(detection);
   }
 
   // Connect to SSE stream for real-time updates using ReconnectingEventSource
@@ -603,6 +615,41 @@
     }
   }
 
+  // Menu state management
+  function handleMenuOpen() {
+    openMenuCount++;
+    console.log('Menu opened, count:', openMenuCount);
+  }
+
+  function handleMenuClose() {
+    openMenuCount--;
+    console.log('Menu closed, count:', openMenuCount);
+    
+    // Process pending detections when all menus are closed
+    if (openMenuCount === 0 && pendingDetectionQueue.length > 0) {
+      console.log('All menus closed, processing', pendingDetectionQueue.length, 'pending detections');
+      
+      // Process all pending detections
+      pendingDetectionQueue.forEach(detection => {
+        processDetectionUpdate(detection);
+      });
+      
+      // Clear the queue
+      pendingDetectionQueue = [];
+    }
+  }
+
+  // Helper function to process a detection update (extracted from handleNewDetection)
+  function processDetectionUpdate(detection: Detection) {
+    console.log('Processing detection update:', detection.commonName);
+    
+    // Trigger API fetch to get fresh data with animations enabled
+    fetchRecentDetections(true);
+    
+    // Queue daily summary update with debouncing
+    queueDailySummaryUpdate(detection);
+  }
+
   // Handle detection click
   function handleDetectionClick(detection: Detection) {
     // Navigate to detection details or open modal
@@ -637,5 +684,8 @@
     onRefresh={handleManualRefresh}
     {newDetectionIds}
     {detectionArrivalTimes}
+    onMenuOpen={handleMenuOpen}
+    onMenuClose={handleMenuClose}
+    hasOpenMenus={openMenuCount > 0}
   />
 </div>

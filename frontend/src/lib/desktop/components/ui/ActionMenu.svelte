@@ -35,6 +35,10 @@
     onDelete?: () => void;
     /** Additional CSS classes to apply to the component */
     className?: string;
+    /** Callback fired when menu opens */
+    onMenuOpen?: () => void;
+    /** Callback fired when menu closes */
+    onMenuClose?: () => void;
   }
 
   let {
@@ -45,6 +49,8 @@
     onToggleLock,
     onDelete,
     className = '',
+    onMenuOpen,
+    onMenuClose,
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -87,15 +93,19 @@
     // Toggle menu open/closed
     isOpen = !isOpen;
 
-    // Only update position when opening
+    // Call appropriate callback
     if (isOpen) {
+      onMenuOpen?.();
       requestAnimationFrame(updateMenuPosition);
+    } else {
+      onMenuClose?.();
     }
   }
 
   /** Executes an action callback and closes the menu */
   function handleAction(action: (() => void) | undefined) {
     isOpen = false;
+    onMenuClose?.();
     if (action) {
       action();
     }
@@ -111,6 +121,7 @@
       !buttonElement.contains(event.target as Node)
     ) {
       isOpen = false;
+      onMenuClose?.();
     }
   }
 
@@ -118,6 +129,7 @@
   function handleKeydown(event: KeyboardEvent) {
     if (isOpen && event.key === 'Escape') {
       isOpen = false;
+      onMenuClose?.();
       buttonElement?.focus();
     }
   }
