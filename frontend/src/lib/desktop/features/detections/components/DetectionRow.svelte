@@ -236,6 +236,8 @@
     height={80}
     showSpectrogram={true}
     showDownload={true}
+    spectrogramSize="sm"
+    spectrogramRaw={true}
     className="w-full max-w-[200px]"
   />
 </td>
