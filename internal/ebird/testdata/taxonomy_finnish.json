@@ -1,0 +1,23 @@
+[
+  {
+    "sciName": "Turdus migratorius",
+    "comName": "punarintarastas",
+    "speciesCode": "amerob",
+    "category": "species",
+    "taxonOrder": 19156.0,
+    "order": "Passeriformes",
+    "familyComName": "Thrushes and Allies",
+    "familySciName": "Turdidae"
+  },
+  {
+    "sciName": "Turdus migratorius nigrideus",
+    "comName": "punarintarastas (nigrideus)",
+    "speciesCode": "amerob1",
+    "category": "issf",
+    "taxonOrder": 19157.0,
+    "reportAs": "amerob",
+    "order": "Passeriformes",
+    "familyComName": "Thrushes and Allies",
+    "familySciName": "Turdidae"
+  }
+]

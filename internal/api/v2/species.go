@@ -50,6 +50,7 @@ type SpeciesRarityInfo struct {
 func (c *Controller) initSpeciesRoutes() {
 	// Public endpoints for species information
 	c.Group.GET("/species", c.GetSpeciesInfo)
+	c.Group.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
@@ -222,4 +223,181 @@ func calculateRarityStatus(score float64) RarityStatus {
 	default:
 		return RarityVeryRare
 	}
+}
+
+// TaxonomyInfo represents detailed taxonomy information for a species
+type TaxonomyInfo struct {
+	ScientificName     string                 `json:"scientific_name"`
+	SpeciesCode        string                 `json:"species_code,omitempty"`
+	Taxonomy           *TaxonomyHierarchy     `json:"taxonomy,omitempty"`
+	Subspecies         []SubspeciesInfo       `json:"subspecies,omitempty"`
+	Synonyms           []string               `json:"synonyms,omitempty"`
+	ConservationStatus string                 `json:"conservation_status,omitempty"`
+	NativeRegions      []string               `json:"native_regions,omitempty"`
+	Metadata           map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// TaxonomyHierarchy represents the full taxonomic classification
+type TaxonomyHierarchy struct {
+	Kingdom       string `json:"kingdom"`
+	Phylum        string `json:"phylum"`
+	Class         string `json:"class"`
+	Order         string `json:"order"`
+	Family        string `json:"family"`
+	FamilyCommon  string `json:"family_common,omitempty"`
+	Genus         string `json:"genus"`
+	Species       string `json:"species"`
+	SpeciesCommon string `json:"species_common,omitempty"`
+}
+
+// SubspeciesInfo represents information about a subspecies
+type SubspeciesInfo struct {
+	ScientificName string `json:"scientific_name"`
+	CommonName     string `json:"common_name,omitempty"`
+	Region         string `json:"region,omitempty"`
+}
+
+// GetSpeciesTaxonomy retrieves detailed taxonomy information for a species
+func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
+	// Get parameters from query
+	scientificName := ctx.QueryParam("scientific_name")
+	if scientificName == "" {
+		return c.HandleError(ctx, errors.Newf("scientific_name parameter is required").
+			Category(errors.CategoryValidation).
+			Component("api-species").
+			Build(), "Missing required parameter", http.StatusBadRequest)
+	}
+
+	// Validate the scientific name format (basic validation)
+	scientificName = strings.TrimSpace(scientificName)
+	if len(scientificName) < 3 || !strings.Contains(scientificName, " ") {
+		return c.HandleError(ctx, errors.Newf("invalid scientific name format").
+			Category(errors.CategoryValidation).
+			Context("scientific_name", scientificName).
+			Component("api-species").
+			Build(), "Invalid scientific name format", http.StatusBadRequest)
+	}
+
+	// Get optional parameters
+	locale := ctx.QueryParam("locale")
+	includeSubspecies := ctx.QueryParam("include_subspecies") != "false" // default true
+	includeHierarchy := ctx.QueryParam("include_hierarchy") != "false"  // default true
+
+	// Get taxonomy info
+	taxonomyInfo, err := c.getDetailedTaxonomy(ctx.Request().Context(), scientificName, locale, includeSubspecies, includeHierarchy)
+	if err != nil {
+		var enhancedErr *errors.EnhancedError
+		if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
+			return c.HandleError(ctx, err, "Species not found", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get taxonomy information", http.StatusInternalServerError)
+	}
+
+	return ctx.JSON(http.StatusOK, taxonomyInfo)
+}
+
+// getDetailedTaxonomy retrieves detailed taxonomy information from eBird
+func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
+	// Check if eBird client is available
+	if c.EBirdClient == nil {
+		return nil, errors.Newf("eBird integration not available").
+			Category(errors.CategoryConfiguration).
+			Component("api-species").
+			Build()
+	}
+
+	// Get full taxonomy data with locale if specified
+	taxonomyData, err := c.EBirdClient.GetTaxonomy(ctx, locale)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the species in taxonomy
+	var speciesEntry *ebird.TaxonomyEntry
+	for i := range taxonomyData {
+		if strings.EqualFold(taxonomyData[i].ScientificName, scientificName) {
+			speciesEntry = &taxonomyData[i]
+			break
+		}
+	}
+
+	if speciesEntry == nil {
+		return nil, errors.Newf("species '%s' not found in eBird taxonomy", scientificName).
+			Category(errors.CategoryNotFound).
+			Context("scientific_name", scientificName).
+			Component("api-species").
+			Build()
+	}
+
+	// Create taxonomy info
+	info := &TaxonomyInfo{
+		ScientificName: speciesEntry.ScientificName,
+		SpeciesCode:    speciesEntry.SpeciesCode,
+		Metadata: map[string]interface{}{
+			"source":     "ebird",
+			"updated_at": time.Now().Format(time.RFC3339),
+			"locale":     locale,
+		},
+	}
+
+	// Add hierarchy if requested
+	if includeHierarchy {
+		// Parse genus from scientific name
+		parts := strings.Split(speciesEntry.ScientificName, " ")
+		genus := ""
+		if len(parts) > 0 {
+			genus = parts[0]
+		}
+
+		info.Taxonomy = &TaxonomyHierarchy{
+			Kingdom:       "Animalia", // All birds are in kingdom Animalia
+			Phylum:        "Chordata", // All birds are in phylum Chordata
+			Class:         "Aves",     // All entries are birds
+			Order:         speciesEntry.Order,
+			Family:        speciesEntry.FamilySciName,
+			FamilyCommon:  speciesEntry.FamilyComName,
+			Genus:         genus,
+			Species:       speciesEntry.ScientificName,
+			SpeciesCommon: speciesEntry.CommonName,
+		}
+	}
+
+	// Add subspecies if requested and it's a species entry
+	if includeSubspecies && speciesEntry.Category == "species" {
+		subspecies := c.findDetailedSubspecies(taxonomyData, speciesEntry.SpeciesCode)
+		info.Subspecies = subspecies
+	}
+
+	// TODO: Add conservation status and native regions when available from eBird API
+
+	return info, nil
+}
+
+// findDetailedSubspecies finds all subspecies with detailed information
+func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, speciesCode string) []SubspeciesInfo {
+	var subspecies []SubspeciesInfo
+
+	for i := range taxonomy {
+		// Check if this entry reports as our species and is a subspecies category
+		if taxonomy[i].ReportAs == speciesCode &&
+			(taxonomy[i].Category == "issf" || taxonomy[i].Category == "form") {
+			
+			// Extract region from common name if present (often in parentheses)
+			region := ""
+			commonName := taxonomy[i].CommonName
+			if start := strings.Index(commonName, "("); start != -1 {
+				if end := strings.Index(commonName[start:], ")"); end != -1 {
+					region = strings.TrimSpace(commonName[start+1 : start+end])
+				}
+			}
+
+			subspecies = append(subspecies, SubspeciesInfo{
+				ScientificName: taxonomy[i].ScientificName,
+				CommonName:     taxonomy[i].CommonName,
+				Region:         region,
+			})
+		}
+	}
+
+	return subspecies
 }
