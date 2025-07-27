@@ -345,17 +345,38 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
 	}
 
-	width := 800 // Default width
+	// Parse size parameter
+	width := 800 // Default width (md)
+	sizeStr := ctx.QueryParam("size")
+	if sizeStr != "" {
+		switch sizeStr {
+		case "sm":
+			width = 400
+		case "md":
+			width = 800
+		case "lg":
+			width = 1000
+		case "xl":
+			width = 1200
+		default:
+			// Fall back to width parameter if size is invalid
+		}
+	}
+
+	// Legacy width parameter support
 	widthStr := ctx.QueryParam("width")
-	if widthStr != "" {
+	if widthStr != "" && sizeStr == "" {
 		parsedWidth, err := strconv.Atoi(widthStr)
 		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
 			width = parsedWidth
 		}
 	}
 
+	// Check for raw spectrogram parameter
+	raw := ctx.QueryParam("raw") == "true"
+
 	// Pass the request context for cancellation/timeout
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width, raw)
 	if err != nil {
 		return c.spectrogramHTTPError(ctx, err)
 	}
@@ -385,17 +406,38 @@ func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
 func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 
-	width := 800 // Default width
+	// Parse size parameter
+	width := 800 // Default width (md)
+	sizeStr := ctx.QueryParam("size")
+	if sizeStr != "" {
+		switch sizeStr {
+		case "sm":
+			width = 400
+		case "md":
+			width = 800
+		case "lg":
+			width = 1000
+		case "xl":
+			width = 1200
+		default:
+			// Fall back to width parameter if size is invalid
+		}
+	}
+
+	// Legacy width parameter support
 	widthStr := ctx.QueryParam("width")
-	if widthStr != "" {
+	if widthStr != "" && sizeStr == "" {
 		parsedWidth, err := strconv.Atoi(widthStr)
 		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
 			width = parsedWidth
 		}
 	}
 
+	// Check for raw spectrogram parameter
+	raw := ctx.QueryParam("raw") == "true"
+
 	// Pass the request context for cancellation/timeout
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw)
 	if err != nil {
 		return c.spectrogramHTTPError(ctx, err)
 	}
@@ -493,7 +535,7 @@ var (
 // generateSpectrogram creates a spectrogram image for the given audio file path (relative to SecureFS root).
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
-func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int) (string, error) {
+func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool) (string, error) {
 	// The audioPath from the DB is already relative to the baseDir. Validate it.
 	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
 	if err != nil {
@@ -526,8 +568,13 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
 	relAudioDir := filepath.Dir(relAudioPath)
 
-	// Generate spectrogram filename with width (relative path)
-	spectrogramFilename := fmt.Sprintf("%s_%d.png", relBaseFilename, width)
+	// Generate spectrogram filename with width and raw suffix (relative path)
+	var spectrogramFilename string
+	if raw {
+		spectrogramFilename = fmt.Sprintf("%s_%d-r.png", relBaseFilename, width)
+	} else {
+		spectrogramFilename = fmt.Sprintf("%s_%d.png", relBaseFilename, width)
+	}
 
 	// Since we're constructing the spectrogram path from an already-validated audio path
 	// and appending a simple formatted filename, we can safely construct the path without
@@ -552,10 +599,10 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		}
 
 		// --- Generate Spectrogram ---
-		if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err != nil {
+		if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, raw, c.Settings); err != nil {
 			log.Printf("SoX failed for '%s', falling back to FFmpeg: %v", absAudioPath, err)
 			// Pass the context down to the fallback function as well.
-			if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, c.Settings); err2 != nil {
+			if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, raw, c.Settings); err2 != nil {
 				// Check for context errors specifically (propagate them up)
 				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err2, context.DeadlineExceeded) {
 					// Return the specific context error to be handled by the caller
@@ -595,7 +642,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 // createSpectrogramWithSoX generates a spectrogram using ffmpeg and SoX.
 // Accepts a context for timeout and cancellation.
 // Requires absolute paths for external commands.
-func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
+func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, raw bool, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
 
@@ -636,7 +683,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 
 	if useFFmpeg {
 		ffmpegArgs := []string{"-hide_banner", "-i", absAudioClipPath, "-f", "sox", "-"}
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath)...)
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath, raw)...)
 
 		if runtime.GOOS == "windows" {
 			// #nosec G204 - ffmpegBinary and soxBinary are validated by ValidateToolPath/exec.LookPath
@@ -685,7 +732,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		}
 		runtime.Gosched()
 	} else {
-		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath)...)
+		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath, raw)...)
 
 		if runtime.GOOS == "windows" {
 			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
@@ -709,20 +756,25 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 }
 
 // getSoxSpectrogramArgs returns the common SoX arguments.
-func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string) []string {
+func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw bool) []string {
 	const audioLength = "15"
 	const dynamicRange = "100"
 	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", absSpectrogramPath}
-	width, _ := strconv.Atoi(widthStr)
-	if width < 800 {
+	if raw {
 		args = append(args, "-r")
+	} else {
+		// Only add -r for small spectrograms when not raw
+		width, _ := strconv.Atoi(widthStr)
+		if width < 800 {
+			args = append(args, "-r")
+		}
 	}
 	return args
 }
 
 // createSpectrogramWithFFmpeg generates a spectrogram using only ffmpeg.
 // Accepts a context for timeout and cancellation.
-func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, settings *conf.Settings) error {
+func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, raw bool, settings *conf.Settings) error {
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	if ffmpegBinary == "" {
 		return ErrFFmpegNotConfigured
@@ -739,11 +791,20 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	heightStr := strconv.Itoa(height)
 	widthStr := strconv.Itoa(width)
 
+	var filterStr string
+	if raw {
+		// Raw spectrogram without axes or legends
+		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr)
+	} else {
+		// Standard spectrogram with legend
+		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=1:gain=3:drange=100", widthStr, heightStr)
+	}
+
 	ffmpegArgs := []string{
 		"-hide_banner",
 		"-y",
 		"-i", absAudioClipPath,
-		"-lavfi", fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr),
+		"-lavfi", filterStr,
 		"-frames:v", "1",
 		absSpectrogramPath,
 	}

@@ -29,6 +29,9 @@
   // Web Audio API types - these are built-in browser types
   /* global AudioContext, MediaElementAudioSourceNode, GainNode, DynamicsCompressorNode, BiquadFilterNode, EventListener, ResizeObserver */
 
+  // Size type for spectrogram
+  type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
+
   interface Props {
     audioUrl: string;
     detectionId: string;
@@ -38,6 +41,8 @@
     showDownload?: boolean;
     className?: string;
     responsive?: boolean;
+    spectrogramSize?: SpectrogramSize;
+    spectrogramRaw?: boolean;
   }
 
   let {
@@ -49,6 +54,8 @@
     showDownload = true,
     className = '',
     responsive = false,
+    spectrogramSize = 'md',
+    spectrogramRaw = false,
   }: Props = $props();
 
   // Audio and UI elements
@@ -109,7 +116,15 @@
   const FILTER_HP_DEFAULT_FREQ = 20;
 
   // Computed values
-  const spectrogramUrl = $derived(showSpectrogram ? `/api/v2/spectrogram/${detectionId}` : null);
+  const spectrogramUrl = $derived(() => {
+    if (!showSpectrogram) return null;
+    const params = new URLSearchParams();
+    params.set('size', spectrogramSize);
+    if (spectrogramRaw) {
+      params.set('raw', 'true');
+    }
+    return `/api/v2/spectrogram/${detectionId}?${params.toString()}`;
+  });
 
   const playPauseId = $derived(`playPause-${detectionId}`);
   const audioId = $derived(`audio-${detectionId}`);
@@ -438,9 +453,9 @@
     ? ''
     : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
 >
-  {#if spectrogramUrl}
+  {#if spectrogramUrl()}
     <img
-      src={spectrogramUrl}
+      src={spectrogramUrl()}
       alt="Audio spectrogram"
       loading="lazy"
       class={responsive

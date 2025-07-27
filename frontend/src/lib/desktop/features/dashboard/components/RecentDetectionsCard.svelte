@@ -224,8 +224,8 @@
           class="btn btn-sm btn-ghost"
           class:opacity-50={hasOpenMenus}
           disabled={loading || hasOpenMenus}
-          title={hasOpenMenus 
-            ? 'Refresh paused while menu is open' 
+          title={hasOpenMenus
+            ? 'Refresh paused while menu is open'
             : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
@@ -334,6 +334,8 @@
                     audioUrl="/api/v2/audio/{detection.id}"
                     detectionId={detection.id.toString()}
                     showSpectrogram={true}
+                    spectrogramSize="sm"
+                    spectrogramRaw={true}
                     className="w-full"
                   />
                 </div>

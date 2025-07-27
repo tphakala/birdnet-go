@@ -231,6 +231,8 @@
               audioUrl="/api/v2/audio/{detection.id}"
               detectionId={detection.id.toString()}
               showSpectrogram={true}
+              spectrogramSize="md"
+              spectrogramRaw={false}
               responsive={true}
               className="w-full mx-auto"
             />
