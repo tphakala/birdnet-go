@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { actionIcons, systemIcons } from '$lib/utils/icons';
 
@@ -154,6 +154,13 @@
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('scroll', handleResize, true);
     };
+  });
+
+  onDestroy(() => {
+    // If menu is open when component unmounts, call onMenuClose to keep count synchronized
+    if (isOpen && onMenuClose) {
+      onMenuClose();
+    }
   });
 </script>
 

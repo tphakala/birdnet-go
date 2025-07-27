@@ -621,6 +621,8 @@
 
   function handleMenuClose() {
     openMenuCount--;
+    // Clamp to prevent negative values due to unmount edge cases
+    openMenuCount = Math.max(0, openMenuCount);
     
     // Process pending detections when all menus are closed
     if (openMenuCount === 0 && pendingDetectionQueue.length > 0) {
