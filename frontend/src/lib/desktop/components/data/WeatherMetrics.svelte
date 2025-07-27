@@ -288,10 +288,21 @@
   }
 
   /* Override the centralized icon sizing to match our component needs */
-  .wm-temperature-group :global(svg),
-  .wm-wind-group :global(svg) {
-    margin-right: 0 !important; /* Remove built-in margin from centralized icons */
-    height: inherit !important; /* Use our size classes */
-    width: inherit !important; /* Use our size classes */
+  /* Use more specific selectors to override without !important */
+  .wm-temperature-group > div :global(svg.h-5.w-5),
+  .wm-wind-group > div :global(svg.h-5.w-5) {
+    height: inherit;
+    width: inherit;
+    margin-right: 0;
+  }
+  
+  /* Ensure our size classes take precedence */
+  .wm-temperature-group > .h-5.w-5,
+  .wm-temperature-group > .h-6.w-6,
+  .wm-temperature-group > .h-8.w-8,
+  .wm-wind-group > .h-5.w-5,
+  .wm-wind-group > .h-6.w-6,
+  .wm-wind-group > .h-8.w-8 {
+    display: block;
   }
 </style>

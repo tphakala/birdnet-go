@@ -155,9 +155,9 @@
         <div class="lg:col-span-2 space-y-4">
           <!-- Species info with thumbnail - 4 column layout -->
           <div class="bg-base-200/50 rounded-lg p-4">
-            <div class="grid grid-cols-12 gap-4 items-start">
-              <!-- Column 1: Thumbnail + Species Names (4 columns) -->
-              <div class="col-span-4 flex gap-4 items-center">
+            <div class="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-4 items-start">
+              <!-- Column 1: Thumbnail + Species Names (6/4/4 columns responsive) -->
+              <div class="col-span-6 md:col-span-4 lg:col-span-4 flex gap-4 items-center">
                 <div class="flex-shrink-0">
                   <div class="w-32 h-24 relative overflow-hidden rounded-lg bg-base-100 shadow-md">
                     <img
@@ -219,8 +219,8 @@
                 </div>
               </div>
 
-              <!-- Column 2: Date & Time (2 columns) -->
-              <div class="col-span-2 text-center">
+              <!-- Column 2: Date & Time (3/2/2 columns responsive) -->
+              <div class="col-span-3 md:col-span-2 lg:col-span-2 text-center">
                 <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
                 <div class="text-base text-base-content">{detection.date}</div>
                 <div class="text-base text-base-content">{detection.time}</div>
@@ -229,8 +229,8 @@
                 {/if}
               </div>
 
-              <!-- Column 3: Weather Conditions (4 columns = more space) -->
-              <div class="col-span-4 text-center">
+              <!-- Column 3: Weather Conditions (6/2/4 columns responsive) -->
+              <div class="col-span-6 md:col-span-2 lg:col-span-4 text-center">
                 <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
                 {#if detection.weather}
                   <div class="flex justify-center">
@@ -250,8 +250,8 @@
                 {/if}
               </div>
 
-              <!-- Column 4: Confidence (2 columns) -->
-              <div class="col-span-2 flex flex-col items-center">
+              <!-- Column 4: Confidence (6/8/2 columns responsive) -->
+              <div class="col-span-6 md:col-span-8 lg:col-span-2 flex flex-col items-center">
                 <div class="text-sm text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
                 <ConfidenceCircle confidence={detection.confidence} size="lg" />
               </div>
@@ -276,7 +276,7 @@
         <div class="space-y-4">
           <!-- Review Form -->
           <div class="form-control bg-base-100 rounded-lg p-4">
-            <h4 class="text-lg font-semibold mb-4">Review Detection</h4>
+            <h4 class="text-lg font-semibold mb-4">{t('common.review.form.reviewDetectionTitle')}</h4>
             
             <label class="label cursor-pointer justify-start gap-4">
               <input
@@ -315,7 +315,7 @@
                     d={alertIcons.warning}
                   />
                 </svg>
-                This detection is currently locked.
+                {t('common.review.form.detectionLocked')}
               </div>
             {/if}
           </div>
@@ -330,10 +330,10 @@
                   class="checkbox checkbox-primary checkbox-xs"
                   aria-describedby="lock-detection-help"
                 />
-                <span class="label-text">Lock this detection after saving</span>
+                <span class="label-text">{t('common.review.form.lockDetection')}</span>
               </label>
               <div id="lock-detection-help" class="text-sm text-base-content/70 ml-8">
-                Locking this detection will prevent it from being deleted during regular cleanup.
+                {t('common.review.form.lockDetectionHelp')}
               </div>
             </div>
           {/if}
@@ -347,10 +347,10 @@
                   class="checkbox checkbox-primary checkbox-xs"
                   aria-describedby="unlock-detection-help"
                 />
-                <span class="label-text">Unlock this detection after saving</span>
+                <span class="label-text">{t('common.review.form.unlockDetection')}</span>
               </label>
               <div id="unlock-detection-help" class="text-sm text-base-content/70 ml-8">
-                Unlocking will allow this detection to be deleted during regular cleanup.
+                {t('common.review.form.unlockDetectionHelp')}
               </div>
             </div>
           {/if}
@@ -364,11 +364,10 @@
                   bind:checked={ignoreSpecies}
                   class="checkbox checkbox-primary checkbox-xs"
                 />
-                <span class="label-text">Ignore this species</span>
+                <span class="label-text">{t('common.review.form.ignoreSpecies')}</span>
               </label>
               <div class="text-sm text-base-content/70 ml-8">
-                Ignoring this species will prevent future detections of this species. This will not
-                remove existing detections.
+                {t('common.review.form.ignoreSpeciesHelp')}
               </div>
             </div>
           {/if}
@@ -392,9 +391,9 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
               <span class="text-sm">
-                {showCommentSection ? 'Hide' : 'Add'} Comment
+                {showCommentSection ? t('common.review.form.hideComment') : t('common.review.form.addComment')}
                 {#if comment && !showCommentSection}
-                  <span class="text-xs text-base-content/60">({comment.length} chars)</span>
+                  <span class="text-xs text-base-content/60">{t('common.review.form.commentCount', { chars: comment.length })}</span>
                 {/if}
               </span>
             </button>
@@ -403,13 +402,13 @@
             {#if showCommentSection}
               <div class="mt-3">
                 <label class="label" for="comment-textarea">
-                  <span class="label-text">Comment</span>
+                  <span class="label-text">{t('common.review.form.comment')}</span>
                 </label>
                 <textarea
                   id="comment-textarea"
                   bind:value={comment}
                   class="textarea textarea-bordered h-24 w-full"
-                  placeholder="Add a comment about this detection..."
+                  placeholder={t('common.review.form.commentPlaceholder')}
                 ></textarea>
               </div>
             {/if}

@@ -43,6 +43,8 @@
     units?: 'metric' | 'imperial' | 'standard';
     size?: 'md' | 'lg' | 'xl';
     className?: string;
+    loading?: boolean;
+    error?: string | null;
   }
 
   let {
@@ -55,6 +57,8 @@
     units = 'metric',
     size = 'lg',
     className = '',
+    loading = false,
+    error = null,
   }: Props = $props();
 
   // Get the appropriate unit labels based on the units setting
@@ -172,8 +176,29 @@
 </script>
 
 <div class={cn('wd-container flex flex-col', gapClasses[size], className)}>
+  <!-- Loading State -->
+  {#if loading}
+    <div class="animate-pulse space-y-2">
+      <div class="flex items-center gap-2">
+        <div class={cn('rounded-full bg-base-300', iconSizeClasses[size])}></div>
+        <div class="h-4 bg-base-300 rounded w-24"></div>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class={cn('rounded bg-base-300', iconSizeClasses[size])}></div>
+        <div class="h-4 bg-base-300 rounded w-16"></div>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class={cn('rounded bg-base-300', iconSizeClasses[size])}></div>
+        <div class="h-4 bg-base-300 rounded w-20"></div>
+      </div>
+    </div>
+  <!-- Error State -->
+  {:else if error}
+    <div class="text-error text-sm">
+      {error}
+    </div>
   <!-- Weather Condition with Icon and Description -->
-  {#if weatherIcon}
+  {:else if weatherIcon}
     <div class="wd-weather-row flex items-center gap-2">
       <span class={cn('wd-weather-icon', emojiSizeClasses[size])} aria-label={weatherDesc}>
         {weatherEmoji}
@@ -208,6 +233,11 @@
           : ''} {windSpeedUnit()}
       </span>
     </div>
+  {:else}
+    <!-- No Data State -->
+    <div class={cn(textSizeClasses[size], 'text-base-content/40 italic')}>
+      {t('detections.weather.noData')}
+    </div>
   {/if}
 </div>
 
@@ -232,10 +262,21 @@
   }
 
   /* Override the centralized icon sizing to match our component needs */
-  .wd-temperature-row :global(svg),
-  .wd-wind-row :global(svg) {
-    margin-right: 0 !important; /* Remove built-in margin from centralized icons */
-    height: inherit !important; /* Use our size classes */
-    width: inherit !important; /* Use our size classes */
+  /* Use more specific selectors to override without !important */
+  .wd-temperature-row > div :global(svg.h-5.w-5),
+  .wd-wind-row > div :global(svg.h-5.w-5) {
+    height: inherit;
+    width: inherit;
+    margin-right: 0;
+  }
+  
+  /* Ensure our size classes take precedence */
+  .wd-temperature-row > .h-5.w-5,
+  .wd-temperature-row > .h-6.w-6,
+  .wd-temperature-row > .h-8.w-8,
+  .wd-wind-row > .h-5.w-5,
+  .wd-wind-row > .h-6.w-6,
+  .wd-wind-row > .h-8.w-8 {
+    display: block;
   }
 </style>

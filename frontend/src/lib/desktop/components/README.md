@@ -1,5 +1,23 @@
 # Component Inventory
 
+## Weather Components Guide
+
+### WeatherDetails vs WeatherMetrics
+
+- **WeatherDetails**: Use in modals, cards, and detailed views where vertical space is available
+  - Vertical stacked layout
+  - Always shows all icons (weather, temperature, wind)
+  - Larger text and icon sizes
+  - Supports loading and error states
+  - Best for: ReviewModal, detail panels, dashboards
+
+- **WeatherMetrics**: Use in table rows and compact layouts where horizontal space is limited
+  - Horizontal two-line layout
+  - Responsive hiding of elements based on container width
+  - Compact sizing options
+  - Icons can be toggled on/off via constants
+  - Best for: DetectionRow, tables, lists
+
 ## Charts
 
 - `ChartWrapper.svelte` - Wrapper for chart components with common styling
@@ -16,9 +34,33 @@
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
 - `WeatherDetails.svelte` - Detailed weather display for modals (vertical layout, icons always visible)
+  ```svelte
+  <WeatherDetails
+    weatherIcon={detection.weather.weatherIcon}
+    weatherDescription={detection.weather.description}
+    temperature={detection.weather.temperature}
+    windSpeed={detection.weather.windSpeed}
+    windGust={detection.weather.windGust}
+    units={detection.weather.units}
+    size="lg"
+    loading={isLoadingWeather}
+    error={weatherError}
+  />
+  ```
 - `WeatherIcon.svelte` - Weather condition icons
 - `WeatherInfo.svelte` - Weather information display
 - `WeatherMetrics.svelte` - Compact weather display for tables (responsive horizontal layout)
+  ```svelte
+  <WeatherMetrics
+    weatherIcon={detection.weather.weatherIcon}
+    weatherDescription={detection.weather.description}
+    temperature={detection.weather.temperature}
+    windSpeed={detection.weather.windSpeed}
+    windGust={detection.weather.windGust}
+    units={detection.weather.units}
+    size="sm"
+  />
+  ```
 
 ## Forms
 
