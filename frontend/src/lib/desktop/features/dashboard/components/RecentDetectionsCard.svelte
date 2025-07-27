@@ -11,6 +11,9 @@
   import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
+  // Animation control - set to false to disable all animations
+  const ENABLE_NEW_DETECTION_ANIMATIONS = false;
+
   interface Props {
     data: Detection[];
     loading?: boolean;
@@ -21,6 +24,9 @@
     onLimitChange?: (limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
+    onMenuOpen?: () => void;
+    onMenuClose?: () => void;
+    hasOpenMenus?: boolean;
   }
 
   let {
@@ -33,6 +39,9 @@
     onLimitChange,
     newDetectionIds = new Set(),
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
+    onMenuOpen,
+    onMenuClose,
+    hasOpenMenus = false,
   }: Props = $props();
 
   // State for number of detections to show
@@ -213,7 +222,11 @@
         <button
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
-          disabled={loading}
+          class:opacity-50={hasOpenMenus}
+          disabled={loading || hasOpenMenus}
+          title={hasOpenMenus 
+            ? 'Refresh paused while menu is open' 
+            : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
           <div class="h-4 w-4" class:animate-spin={loading}>
@@ -256,7 +269,7 @@
         <!-- Detection Rows -->
         <div class="divide-y divide-base-200">
           {#each data.slice(0, selectedLimit) as detection}
-            {@const isNew = newDetectionIds.has(detection.id)}
+            {@const isNew = ENABLE_NEW_DETECTION_ANIMATIONS && newDetectionIds.has(detection.id)}
             <div
               class="detection-grid-dashboard detection-row"
               class:cursor-pointer={onRowClick}
@@ -335,6 +348,8 @@
                   onToggleSpecies={() => handleToggleSpecies(detection)}
                   onToggleLock={() => handleToggleLock(detection)}
                   onDelete={() => handleDelete(detection)}
+                  {onMenuOpen}
+                  {onMenuClose}
                 />
               </div>
             </div>

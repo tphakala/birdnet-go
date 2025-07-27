@@ -1,17 +1,44 @@
+<!--
+  ActionMenu Component
+  
+  A dropdown menu component that provides action buttons for detection items.
+  Displays common actions like review, toggle species visibility, lock/unlock, and delete.
+  
+  Features:
+  - Automatically positions menu to stay within viewport
+  - High z-index (9999) to appear above all other elements
+  - Keyboard navigation support (Escape to close)
+  - Click-outside-to-close behavior
+  - Responsive positioning (above/below button based on available space)
+  - Fixed positioning to handle scrollable containers
+  
+  @component
+-->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { actionIcons, systemIcons } from '$lib/utils/icons';
 
   interface Props {
+    /** The detection object containing data for this action menu */
     detection: Detection;
+    /** Whether the species is currently excluded from detection */
     isExcluded?: boolean;
+    /** Callback fired when user clicks review action */
     onReview?: () => void;
+    /** Callback fired when user toggles species visibility */
     onToggleSpecies?: () => void;
+    /** Callback fired when user toggles detection lock status */
     onToggleLock?: () => void;
+    /** Callback fired when user deletes the detection */
     onDelete?: () => void;
+    /** Additional CSS classes to apply to the component */
     className?: string;
+    /** Callback fired when menu opens */
+    onMenuOpen?: () => void;
+    /** Callback fired when menu closes */
+    onMenuClose?: () => void;
   }
 
   let {
@@ -22,6 +49,8 @@
     onToggleLock,
     onDelete,
     className = '',
+    onMenuOpen,
+    onMenuClose,
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -29,7 +58,10 @@
   // svelte-ignore non_reactive_update
   let menuElement: HTMLUListElement;
 
-  // Update menu position when opened
+  /**
+   * Updates the menu position to ensure it stays within the viewport.
+   * Uses fixed positioning and calculates optimal placement above or below the button.
+   */
   function updateMenuPosition() {
     if (!menuElement || !buttonElement) return;
 
@@ -40,7 +72,7 @@
 
     // Position menu relative to viewport
     menuElement.style.position = 'fixed';
-    menuElement.style.zIndex = '50';
+    menuElement.style.zIndex = '9999';
 
     // Determine vertical position
     if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
@@ -56,24 +88,30 @@
     menuElement.style.right = `${window.innerWidth - buttonRect.right}px`;
   }
 
+  /** Toggles the menu open/closed state and updates position when opening */
   function handleOpen() {
     // Toggle menu open/closed
     isOpen = !isOpen;
 
-    // Only update position when opening
+    // Call appropriate callback
     if (isOpen) {
+      onMenuOpen?.();
       requestAnimationFrame(updateMenuPosition);
+    } else {
+      onMenuClose?.();
     }
   }
 
+  /** Executes an action callback and closes the menu */
   function handleAction(action: (() => void) | undefined) {
     isOpen = false;
+    onMenuClose?.();
     if (action) {
       action();
     }
   }
 
-  // Close menu when clicking outside
+  /** Closes menu when clicking outside the menu or button */
   function handleClickOutside(event: MouseEvent) {
     if (
       isOpen &&
@@ -83,13 +121,15 @@
       !buttonElement.contains(event.target as Node)
     ) {
       isOpen = false;
+      onMenuClose?.();
     }
   }
 
-  // Close menu on escape key
+  /** Closes menu when Escape key is pressed */
   function handleKeydown(event: KeyboardEvent) {
     if (isOpen && event.key === 'Escape') {
       isOpen = false;
+      onMenuClose?.();
       buttonElement?.focus();
     }
   }
@@ -114,6 +154,13 @@
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('scroll', handleResize, true);
     };
+  });
+
+  onDestroy(() => {
+    // If menu is open when component unmounts, call onMenuClose to keep count synchronized
+    if (isOpen && onMenuClose) {
+      onMenuClose();
+    }
   });
 </script>
 
@@ -208,6 +255,8 @@
 <style>
   .menu {
     animation: fadeIn 0.2s ease-out;
+    /* Ensure menu is always on top - fallback for CSS-only scenarios */
+    z-index: 9999 !important;
   }
 
   @keyframes fadeIn {

@@ -8,6 +8,7 @@
 
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
+  const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
 
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
@@ -39,6 +40,10 @@
   // Animation state for new detections
   let newDetectionIds = $state(new Set<number>());
   let detectionArrivalTimes = $state(new Map<number, number>());
+
+  // Menu state tracking to prevent SSE updates during menu interactions
+  let openMenuCount = $state(0);
+  let pendingDetectionQueue = $state<Detection[]>([]);
 
   // Debouncing for rapid daily summary updates
   let updateQueue = $state(new Map<string, Detection>());
@@ -72,7 +77,7 @@
     const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
-      const response = await fetch('/api/v2/detections/recent?limit=10');
+      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}`);
       if (!response.ok) {
         throw new Error(
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
@@ -209,16 +214,22 @@
   let eventSource: ReconnectingEventSource | null = null;
   let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
 
-  // Process new detection from SSE - trigger API fetch instead of direct manipulation
+  // Process new detection from SSE - queue if menus are open, otherwise process immediately
   function handleNewDetection(detection: Detection) {
-    console.log('New detection via SSE:', detection.commonName);
+    // If any action menus are open, queue the detection for later processing
+    if (openMenuCount > 0) {
+      // Avoid duplicate detections in queue - add null-safety check
+      const isDuplicate = pendingDetectionQueue.some(pending => 
+        pending?.id != null && detection?.id != null && pending.id === detection.id
+      );
+      if (!isDuplicate) {
+        pendingDetectionQueue.push(detection);
+      }
+      return;
+    }
 
-    // Trigger API fetch to get fresh data with animations enabled
-    // This avoids complex DOM issues with direct data manipulation
-    fetchRecentDetections(true);
-
-    // Queue daily summary update with debouncing
-    queueDailySummaryUpdate(detection);
+    // Process immediately if no menus are open
+    processDetectionUpdate(detection);
   }
 
   // Connect to SSE stream for real-time updates using ReconnectingEventSource
@@ -603,6 +614,37 @@
     }
   }
 
+  // Menu state management
+  function handleMenuOpen() {
+    openMenuCount++;
+  }
+
+  function handleMenuClose() {
+    openMenuCount--;
+    // Clamp to prevent negative values due to unmount edge cases
+    openMenuCount = Math.max(0, openMenuCount);
+    
+    // Process pending detections when all menus are closed
+    if (openMenuCount === 0 && pendingDetectionQueue.length > 0) {
+      // Process all pending detections
+      pendingDetectionQueue.forEach(detection => {
+        processDetectionUpdate(detection);
+      });
+      
+      // Clear the queue
+      pendingDetectionQueue = [];
+    }
+  }
+
+  // Helper function to process a detection update (extracted from handleNewDetection)
+  function processDetectionUpdate(detection: Detection) {
+    // Trigger API fetch to get fresh data with animations enabled
+    fetchRecentDetections(true);
+    
+    // Queue daily summary update with debouncing
+    queueDailySummaryUpdate(detection);
+  }
+
   // Handle detection click
   function handleDetectionClick(detection: Detection) {
     // Navigate to detection details or open modal
@@ -637,5 +679,8 @@
     onRefresh={handleManualRefresh}
     {newDetectionIds}
     {detectionArrivalTimes}
+    onMenuOpen={handleMenuOpen}
+    onMenuClose={handleMenuClose}
+    hasOpenMenus={openMenuCount > 0}
   />
 </div>
