@@ -237,38 +237,6 @@ export const systemIcons = {
   </svg>`,
 
   starAnimated: `<svg class="w-5 h-5 inline-block align-text-bottom star-wiggle" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <style>
-      @keyframes star-wiggle {
-        0% { 
-          transform: rotate(0deg) scale(1); 
-          filter: drop-shadow(0 0 2px currentColor);
-        }
-        20% { 
-          transform: rotate(-15deg) scale(1.3); 
-          filter: drop-shadow(0 0 6px currentColor);
-        }
-        40% { 
-          transform: rotate(10deg) scale(1.1); 
-          filter: drop-shadow(0 0 4px currentColor);
-        }
-        60% { 
-          transform: rotate(-8deg) scale(1.25); 
-          filter: drop-shadow(0 0 8px currentColor);
-        }
-        80% { 
-          transform: rotate(12deg) scale(1.15); 
-          filter: drop-shadow(0 0 5px currentColor);
-        }
-        100% { 
-          transform: rotate(0deg) scale(1); 
-          filter: drop-shadow(0 0 2px currentColor);
-        }
-      }
-      .star-wiggle {
-        animation: star-wiggle 1.5s ease-in-out infinite;
-        transform-origin: center;
-      }
-    </style>
     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
   </svg>`,
 

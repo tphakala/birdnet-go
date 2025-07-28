@@ -593,34 +593,21 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 		return nil
 	}
 	
-	// Create the optimized composite index with correct column order
-	// (scientific_name, date) - this order is critical for query performance
-	var createIndexSQL string
-	switch strings.ToLower(dbType) {
-	case "sqlite":
-		createIndexSQL = fmt.Sprintf(
-			"CREATE INDEX IF NOT EXISTS %s ON %s (scientific_name, date)",
-			indexName, tableName)
-	case "mysql":
-		createIndexSQL = fmt.Sprintf(
-			"CREATE INDEX %s ON %s (scientific_name, date)",
-			indexName, tableName)
-	default:
-		return errors.Newf("unsupported database type for index creation").
-			Component("datastore").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "create_optimized_indexes").
-			Context("db_type", dbType).
-			Build()
-	}
-	
-	// Execute the index creation
-	if err := db.Exec(createIndexSQL).Error; err != nil {
-		// For MySQL, ignore duplicate index errors as they're expected in some cases
-		if strings.EqualFold(dbType, "mysql") && strings.Contains(strings.ToLower(err.Error()), "duplicate key name") {
-			lgr.Debug("Index already exists (MySQL duplicate key), continuing",
+	// Create the optimized composite index using GORM's built-in index management
+	// Column order (scientific_name, date) is critical for query performance
+	if err := db.Migrator().CreateIndex(&Note{}, indexName); err != nil {
+		// Handle duplicate index errors gracefully
+		errMsg := strings.ToLower(err.Error())
+		isDuplicateIndex := strings.Contains(errMsg, "duplicate key name") || 
+							strings.Contains(errMsg, "already exists") || 
+							strings.Contains(errMsg, "duplicate") ||
+							strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
+		
+		if isDuplicateIndex {
+			lgr.Debug("Index already exists, continuing",
 				"index", indexName,
-				"table", tableName)
+				"table", tableName,
+				"db_type", dbType)
 			return nil
 		}
 		
@@ -631,7 +618,6 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 			Context("db_type", dbType).
 			Context("index_name", indexName).
 			Context("table_name", tableName).
-			Context("sql", createIndexSQL).
 			Build()
 	}
 	

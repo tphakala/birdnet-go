@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -23,20 +24,21 @@ const (
 
 func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 	// Create mock datastore with some historical species data
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{
-			{
-				ScientificName: "Parus major",
-				CommonName:     "Great Tit",
-				FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
-			},
-			{
-				ScientificName: "Turdus merula",
-				CommonName:     "Common Blackbird",
-				FirstSeenDate:  time.Now().Add(-recentSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
-			},
+	ds := &MockSpeciesDatastore{}
+	historicalData := []datastore.NewSpeciesData{
+		{
+			ScientificName: "Parus major",
+			CommonName:     "Great Tit",
+			FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
+		},
+		{
+			ScientificName: "Turdus merula",
+			CommonName:     "Common Blackbird",
+			FirstSeenDate:  time.Now().Add(-recentSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
 		},
 	}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return(historicalData, nil)
 
 	// Create tracker with new species window
 	settings := &conf.SpeciesTrackingSettings{
@@ -90,9 +92,9 @@ func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{},
-	}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -135,9 +137,9 @@ func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 }
 
 func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{},
-	}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -179,14 +181,15 @@ func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
 
 func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 	// Create tracker with exactly 14 days old species
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{
-			{
-				ScientificName: "Parus major",
-				FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format("2006-01-02"), // Exactly 14 days ago
-			},
+	ds := &MockSpeciesDatastore{}
+	historicalData := []datastore.NewSpeciesData{
+		{
+			ScientificName: "Parus major",
+			FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format("2006-01-02"), // Exactly 14 days ago
 		},
 	}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return(historicalData, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -222,18 +225,19 @@ func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 }
 
 func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{
-			{
-				ScientificName: "Old Species",
-				FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format("2006-01-02"), // 30 days ago
-			},
-			{
-				ScientificName: "Recent Species",
-				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"), // 5 days ago
-			},
+	ds := &MockSpeciesDatastore{}
+	historicalData := []datastore.NewSpeciesData{
+		{
+			ScientificName: "Old Species",
+			FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format("2006-01-02"), // 30 days ago
+		},
+		{
+			ScientificName: "Recent Species",
+			FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"), // 5 days ago
 		},
 	}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return(historicalData, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -274,9 +278,9 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{},
-	}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -308,9 +312,9 @@ func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 }
 
 func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{},
-	}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -340,9 +344,9 @@ func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
 }
 
 func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{},
-	}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -381,9 +385,9 @@ func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
 }
 
 func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
-	ds := &mockSpeciesDatastore{
-		species: []datastore.NewSpeciesData{},
-	}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -415,7 +419,9 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 // Multi-period tracking tests
 
 func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	// Create basic configuration
 	settings := &conf.SpeciesTrackingSettings{
@@ -452,7 +458,9 @@ func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -501,7 +509,9 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -550,7 +560,9 @@ func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 }
 
 func TestSeasonDetection(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -591,7 +603,9 @@ func TestSeasonDetection(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -655,7 +669,9 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -719,7 +735,9 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_YearReset(t *testing.T) {
-	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
