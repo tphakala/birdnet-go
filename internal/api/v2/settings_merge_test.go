@@ -32,10 +32,11 @@ func TestMergeJSONIntoStruct(t *testing.T) {
 				"longitude": -0.1278
 			}`,
 			validate: func(t *testing.T, result conf.BirdNETConfig) {
-				assert.Equal(t, 51.5074, result.Latitude)
-				assert.Equal(t, -0.1278, result.Longitude)
+				t.Helper()
+				assert.InDelta(t, 51.5074, result.Latitude, 0.0001)
+				assert.InDelta(t, -0.1278, result.Longitude, 0.0001)
 				assert.Equal(t, "latest", result.RangeFilter.Model)
-				assert.Equal(t, float32(0.03), result.RangeFilter.Threshold)
+				assert.InDelta(t, float32(0.03), result.RangeFilter.Threshold, 0.0001)
 			},
 		},
 		{
@@ -54,10 +55,11 @@ func TestMergeJSONIntoStruct(t *testing.T) {
 				}
 			}`,
 			validate: func(t *testing.T, result conf.BirdNETConfig) {
-				assert.Equal(t, 40.7128, result.Latitude)
-				assert.Equal(t, -74.0060, result.Longitude)
+				t.Helper()
+				assert.InDelta(t, 40.7128, result.Latitude, 0.0001)
+				assert.InDelta(t, -74.0060, result.Longitude, 0.0001)
 				assert.Equal(t, "latest", result.RangeFilter.Model)
-				assert.Equal(t, float32(0.05), result.RangeFilter.Threshold)
+				assert.InDelta(t, float32(0.05), result.RangeFilter.Threshold, 0.0001)
 			},
 		},
 		{
@@ -81,12 +83,13 @@ func TestMergeJSONIntoStruct(t *testing.T) {
 				}
 			}`,
 			validate: func(t *testing.T, result conf.BirdNETConfig) {
-				assert.Equal(t, 48.8566, result.Latitude)
-				assert.Equal(t, 2.3522, result.Longitude)
-				assert.Equal(t, 1.2, result.Sensitivity)
-				assert.Equal(t, 0.8, result.Threshold) // Should be preserved
+				t.Helper()
+				assert.InDelta(t, 48.8566, result.Latitude, 0.0001)
+				assert.InDelta(t, 2.3522, result.Longitude, 0.0001)
+				assert.InDelta(t, 1.2, result.Sensitivity, 0.0001)
+				assert.InDelta(t, 0.8, result.Threshold, 0.0001) // Should be preserved
 				assert.Equal(t, "latest", result.RangeFilter.Model)
-				assert.Equal(t, float32(0.02), result.RangeFilter.Threshold) // Should be preserved
+				assert.InDelta(t, float32(0.02), result.RangeFilter.Threshold, 0.0001) // Should be preserved
 			},
 		},
 	}
