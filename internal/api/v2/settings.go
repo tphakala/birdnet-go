@@ -560,11 +560,12 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 
 // handleBirdnetSection handles updates to the BirdNET section
 func handleBirdnetSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Create a temporary copy for filtering
+	// Start with a copy of current settings
 	tempSettings := settings.BirdNET
 
-	// Apply the allowed fields filter using reflection
-	if err := json.Unmarshal(data, &tempSettings); err != nil {
+	// Only update fields that are present in the incoming JSON
+	// This prevents zeroing out fields that weren't included
+	if err := mergeJSONIntoStruct(data, &tempSettings); err != nil {
 		return err
 	}
 
@@ -792,6 +793,71 @@ func handleBirdweatherSection(settings *conf.Settings, data json.RawMessage, ski
 	}
 	settings.Realtime.Birdweather = tempBirdweatherSettings
 	return nil
+}
+
+// mergeJSONIntoStruct merges JSON data into an existing struct without zeroing out missing fields
+// This is crucial for preserving nested object values when partial updates are sent
+func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
+	// First unmarshal into a map
+	var updateMap map[string]interface{}
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	// Get current values as a map
+	currentJSON, err := json.Marshal(target)
+	if err != nil {
+		return err
+	}
+	
+	var currentMap map[string]interface{}
+	if err := json.Unmarshal(currentJSON, &currentMap); err != nil {
+		return err
+	}
+
+	// Deep merge the maps
+	mergedMap := deepMergeMaps(currentMap, updateMap)
+
+	// Marshal back to JSON and unmarshal into the target
+	mergedJSON, err := json.Marshal(mergedMap)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(mergedJSON, target)
+}
+
+// deepMergeMaps recursively merges two maps, with values from src overwriting dst
+func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	// Copy all values from dst
+	for k, v := range dst {
+		result[k] = v
+	}
+	
+	// Merge values from src
+	for k, v := range src {
+		if v == nil {
+			// If src value is explicitly null, set it to null
+			result[k] = nil
+			continue
+		}
+		
+		// Check if both dst and src have maps at this key
+		if dstMap, dstOk := dst[k].(map[string]interface{}); dstOk {
+			if srcMap, srcOk := v.(map[string]interface{}); srcOk {
+				// Both are maps, merge recursively
+				result[k] = deepMergeMaps(dstMap, srcMap)
+				continue
+			}
+		}
+		
+		// Otherwise, just use the src value
+		result[k] = v
+	}
+	
+	return result
 }
 
 // Helper functions

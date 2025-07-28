@@ -258,6 +258,7 @@
           latitude: settings.birdnet.latitude,
           longitude: settings.birdnet.longitude,
           threshold: settings.birdnet.rangeFilter.threshold,
+          model: settings.birdnet.rangeFilter.model, // Include model in the test
         }
       );
 
@@ -269,6 +270,8 @@
     } catch (error) {
       console.error('Failed to test range filter:', error);
       rangeFilterError = t('settings.main.errors.rangeFilterTestFailed');
+      // Set count to null on error to show loading state next time
+      rangeFilterSpeciesCount = null;
     } finally {
       testingRangeFilter = false;
     }
@@ -285,6 +288,7 @@
         latitude: settings.birdnet.latitude.toString(),
         longitude: settings.birdnet.longitude.toString(),
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
+        model: settings.birdnet.rangeFilter.model, // Include model parameter
       });
 
       const data = await api.get<{ count: number; species: any[] }>(
@@ -302,7 +306,16 @@
 
   // Watch for changes that affect range filter
   $effect(() => {
-    debouncedTestRangeFilter();
+    // Track the specific values that should trigger a range filter update
+    const lat = settings.birdnet.latitude;
+    const lng = settings.birdnet.longitude;
+    const threshold = settings.birdnet.rangeFilter.threshold;
+    const model = settings.birdnet.rangeFilter.model;
+
+    // Only test if we have valid coordinates
+    if (lat && lng) {
+      debouncedTestRangeFilter();
+    }
   });
 
   // Update handlers
@@ -886,7 +899,8 @@
 <!-- Range Filter Species Modal -->
 {#if showRangeFilterModal}
   <div
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+    style="z-index: 9999"
     role="dialog"
     aria-modal="true"
     aria-labelledby="modal-title"
@@ -894,9 +908,12 @@
     onclick={() => (showRangeFilterModal = false)}
     onkeydown={e => e.key === 'Escape' && (showRangeFilterModal = false)}
   >
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="bg-base-100 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col"
       role="document"
+      onclick={e => e.stopPropagation()}
     >
       <div class="flex justify-between items-center mb-4">
         <h3 id="modal-title" class="text-lg font-bold">
