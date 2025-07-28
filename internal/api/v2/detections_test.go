@@ -1257,7 +1257,7 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		require.NoError(t, err2)
 
 		// Check error message for second request
-		assert.Contains(t, resp2["message"], "detection is locked")
+		assert.Contains(t, resp2["message"], "Detection is locked and status cannot be changed")
 
 		// Verify expectations
 		mockDS.AssertExpectations(t)
