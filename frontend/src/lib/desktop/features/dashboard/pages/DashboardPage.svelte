@@ -500,7 +500,14 @@
     }
 
     // Parse the time string (HH:MM:SS format) to extract the hour
-    const hour = parseHour(detection.time);
+    let hour: number;
+    try {
+      hour = parseHour(detection.time);
+    } catch (error) {
+      console.error(`Failed to parse detection time: ${detection.time}`, error);
+      // Default to hour 0 if parsing fails
+      hour = 0;
+    }
     const existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
 
     if (existingIndex >= 0) {
