@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import { navigationIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { getLocalDateString } from '$lib/utils/date';
 
   interface Props {
     value: string; // YYYY-MM-DD format
@@ -16,7 +17,7 @@
   let {
     value,
     onChange,
-    maxDate = new Date().toISOString().split('T')[0],
+    maxDate = getLocalDateString(new Date()),
     minDate,
     className = '',
     disabled = false,
@@ -24,7 +25,7 @@
   }: Props = $props();
 
   let showCalendar = $state(false);
-  let displayMonth = $state(new Date(value || new Date().toISOString()));
+  let displayMonth = $state(value ? new Date(value + 'T12:00:00') : new Date());
   let calendarRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
@@ -78,7 +79,7 @@
   function isDateSelectable(date: Date): boolean {
     if (!date) return false;
 
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(date);
 
     if (minDate && dateStr < minDate) return false;
     if (maxDate && dateStr > maxDate) return false;
@@ -111,7 +112,7 @@
   function selectDate(date: Date) {
     if (!date || !isDateSelectable(date)) return;
 
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(date);
     onChange(dateStr);
     showCalendar = false;
   }
