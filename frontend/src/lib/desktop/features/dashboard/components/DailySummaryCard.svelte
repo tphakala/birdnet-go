@@ -563,7 +563,7 @@
                               class="text-warning"
                               title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                             >
-                              {@html systemIcons.star}
+                              {@html systemIcons.starAnimated}
                             </span>
                           {/if}
                           {#if item.is_new_this_year && !item.is_new_species}

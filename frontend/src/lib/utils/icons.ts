@@ -236,6 +236,42 @@ export const systemIcons = {
     <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
   </svg>`,
 
+  starAnimated: `<svg class="w-5 h-5 inline-block align-text-bottom star-wiggle" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <style>
+      @keyframes star-wiggle {
+        0% { 
+          transform: rotate(0deg) scale(1); 
+          filter: drop-shadow(0 0 2px currentColor);
+        }
+        20% { 
+          transform: rotate(-15deg) scale(1.3); 
+          filter: drop-shadow(0 0 6px currentColor);
+        }
+        40% { 
+          transform: rotate(10deg) scale(1.1); 
+          filter: drop-shadow(0 0 4px currentColor);
+        }
+        60% { 
+          transform: rotate(-8deg) scale(1.25); 
+          filter: drop-shadow(0 0 8px currentColor);
+        }
+        80% { 
+          transform: rotate(12deg) scale(1.15); 
+          filter: drop-shadow(0 0 5px currentColor);
+        }
+        100% { 
+          transform: rotate(0deg) scale(1); 
+          filter: drop-shadow(0 0 2px currentColor);
+        }
+      }
+      .star-wiggle {
+        animation: star-wiggle 1.5s ease-in-out infinite;
+        transform-origin: center;
+      }
+    </style>
+    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+  </svg>`,
+
   user: `<svg class="h-4 w-4 inline-block align-text-bottom" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
   </svg>`,
