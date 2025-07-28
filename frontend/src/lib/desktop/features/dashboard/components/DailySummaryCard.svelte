@@ -506,7 +506,7 @@
                         {#if showThumbnails}
                           <BirdThumbnailPopup
                             thumbnailUrl={item.thumbnail_url ||
-                              `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
+                              `/api/v2/species/${item.species_code}/thumbnail`}
                             commonName={item.common_name}
                             scientificName={item.scientific_name}
                             detectionUrl={buildSpeciesUrl(item)}
