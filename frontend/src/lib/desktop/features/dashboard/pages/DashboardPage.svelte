@@ -59,6 +59,24 @@
   const dailySummaryCache = new Map<string, CachedDailySummary>();
   const CACHE_TTL = 60000; // 1 minute TTL for daily summary cache
 
+  // Selective cache update functions for incremental SSE updates
+  function updateDailySummaryCacheEntry(date: string, updatedSummary: DailySpeciesSummary[]) {
+    const cached = dailySummaryCache.get(date);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      // Update cache with new data, preserve timestamp to maintain TTL
+      cached.data = updatedSummary;
+      console.debug(`Daily summary cache updated incrementally for ${date}`);
+    }
+  }
+
+  function getDailySummaryCacheEntry(date: string): DailySpeciesSummary[] | null {
+    const cached = dailySummaryCache.get(date);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+    return null;
+  }
+
   // Fetch functions
   async function fetchDailySummary() {
     isLoadingSummary = true;
@@ -540,16 +558,12 @@
     }, 150); // Batch updates within 150ms window
   }
 
-  // Update daily summary when new detection arrives via SSE
+  // Incremental daily summary update when new detection arrives via SSE
   function updateDailySummary(detection: Detection) {
     // Only update if detection is for the currently selected date
     if (detection.date !== selectedDate) {
       return;
     }
-
-    // Invalidate cache for current date since we're updating the data
-    dailySummaryCache.delete(selectedDate);
-    console.debug(`Daily summary cache invalidated for ${selectedDate} due to SSE update`);
 
     // Parse the time string (HH:MM:SS format) to extract the hour
     let hour: number;
@@ -560,10 +574,11 @@
       // Default to hour 0 if parsing fails
       hour = 0;
     }
+
     const existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
 
     if (existingIndex >= 0) {
-      // Update existing species
+      // Incremental update for existing species - minimize object creation
       const updated = { ...dailySummary[existingIndex] };
       updated.previousCount = updated.count;
       updated.count++;
@@ -573,29 +588,43 @@
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
 
-      // Remove the species from its current position
-      const withoutUpdated = [
-        ...dailySummary.slice(0, existingIndex),
-        ...dailySummary.slice(existingIndex + 1),
-      ];
+      // Optimized position update - only rebuild array if position changes
+      const currentPosition = existingIndex;
+      let newPosition = -1;
 
-      // Find the correct position for the updated species based on its new count
-      const newPosition = withoutUpdated.findIndex(s => s.count < updated.count);
-      if (newPosition === -1) {
-        // Add to end if it has the lowest count
-        dailySummary = [...withoutUpdated, updated];
-      } else {
-        // Insert at the correct position
-        dailySummary = [
-          ...withoutUpdated.slice(0, newPosition),
-          updated,
-          ...withoutUpdated.slice(newPosition),
-        ];
+      // Check if species needs to move up (higher count)
+      for (let i = 0; i < currentPosition; i++) {
+        if (dailySummary[i].count < updated.count) {
+          newPosition = i;
+          break;
+        }
       }
 
-      console.log(
-        `Updated existing species: ${detection.commonName} (count: ${updated.count}, hour: ${hour})`
-      );
+      if (newPosition !== -1) {
+        // Species needs to move up - rebuild array with minimal changes
+        dailySummary = [
+          ...dailySummary.slice(0, newPosition),
+          updated,
+          ...dailySummary.slice(newPosition, currentPosition),
+          ...dailySummary.slice(currentPosition + 1),
+        ];
+        console.log(
+          `Moved species up: ${detection.commonName} from position ${currentPosition} to ${newPosition} (count: ${updated.count})`
+        );
+      } else {
+        // Species stays in same position - just update in place
+        dailySummary = [
+          ...dailySummary.slice(0, currentPosition),
+          updated,
+          ...dailySummary.slice(currentPosition + 1),
+        ];
+        console.log(
+          `Updated species in place: ${detection.commonName} at position ${currentPosition} (count: ${updated.count})`
+        );
+      }
+
+      // Update cache incrementally instead of invalidating
+      updateDailySummaryCacheEntry(selectedDate, dailySummary);
 
       // Clear animation flags after animation completes
       scheduleAnimationCleanup(
@@ -613,13 +642,16 @@
               cleared,
               ...dailySummary.slice(currentIndex + 1),
             ];
+
+            // Update cache after animation cleanup too
+            updateDailySummaryCacheEntry(selectedDate, dailySummary);
           }
         },
         1000,
         `count-${detection.speciesCode}`
       );
     } else {
-      // Add new species
+      // Add new species with optimized insertion
       const newSpecies: DailySpeciesSummary = {
         scientific_name: detection.scientificName,
         common_name: detection.commonName,
@@ -634,7 +666,7 @@
       };
       newSpecies.hourly_counts[hour] = 1;
 
-      // Insert new species in correct position based on count (sorted descending)
+      // Find insertion position with early termination for performance
       const insertPosition = dailySummary.findIndex(s => s.count < newSpecies.count);
       if (insertPosition === -1) {
         // Add to end if it has the lowest count
@@ -652,6 +684,9 @@
         `Added new species: ${detection.commonName} (count: 1, hour: ${hour}) at position ${insertPosition === -1 ? dailySummary.length - 1 : insertPosition}`
       );
 
+      // Update cache incrementally with new species included
+      updateDailySummaryCacheEntry(selectedDate, dailySummary);
+
       // Clear animation flag after animation completes
       scheduleAnimationCleanup(
         () => {
@@ -667,6 +702,9 @@
               cleared,
               ...dailySummary.slice(currentIndex + 1),
             ];
+
+            // Update cache after animation cleanup too
+            updateDailySummaryCacheEntry(selectedDate, dailySummary);
           }
         },
         800,
