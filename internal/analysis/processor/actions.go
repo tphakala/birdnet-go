@@ -209,26 +209,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	}
 	
 	// After successful save, publish detection event for new species
-	if isNewSpecies && events.IsInitialized() {
-		eventBus := events.GetEventBus()
-		if eventBus != nil {
-			detectionEvent := events.NewDetectionEvent(
-				a.Note.CommonName,
-				a.Note.ScientificName,
-				float64(a.Note.Confidence),
-				a.Note.Source,
-				isNewSpecies,
-				daysSinceFirstSeen,
-			)
-			
-			// Publish the detection event
-			if published := eventBus.TryPublishDetection(detectionEvent); published {
-				if a.Settings.Debug {
-					log.Printf("🌟 Published new species detection event: %s", a.Note.CommonName)
-				}
-			}
-		}
-	}
+	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
@@ -258,6 +239,35 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	}
 
 	return nil
+}
+
+// publishNewSpeciesDetectionEvent publishes a detection event for new species
+// This helper method handles event bus retrieval, event creation, publishing, and debug logging
+func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) {
+	if !isNewSpecies || !events.IsInitialized() {
+		return
+	}
+
+	eventBus := events.GetEventBus()
+	if eventBus == nil {
+		return
+	}
+
+	detectionEvent := events.NewDetectionEvent(
+		a.Note.CommonName,
+		a.Note.ScientificName,
+		float64(a.Note.Confidence),
+		a.Note.Source,
+		isNewSpecies,
+		daysSinceFirstSeen,
+	)
+
+	// Publish the detection event
+	if published := eventBus.TryPublishDetection(detectionEvent); published {
+		if a.Settings.Debug {
+			log.Printf("🌟 Published new species detection event: %s", a.Note.CommonName)
+		}
+	}
 }
 
 // Execute saves the audio clip to a file

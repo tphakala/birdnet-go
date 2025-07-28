@@ -186,6 +186,47 @@
   transition: transform 0.2s ease-in-out;
 }
 
+/* Star wiggle animation for new species detection */
+@keyframes star-wiggle {
+  0% { 
+    transform: rotate(0deg) scale(1); 
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  20% { 
+    transform: rotate(-15deg) scale(1.3); 
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+  40% { 
+    transform: rotate(10deg) scale(1.1); 
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+  60% { 
+    transform: rotate(-8deg) scale(1.25); 
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+  80% { 
+    transform: rotate(12deg) scale(1.15); 
+    filter: drop-shadow(0 0 5px currentColor);
+  }
+  100% { 
+    transform: rotate(0deg) scale(1); 
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+}
+
+.star-wiggle {
+  animation: star-wiggle 1.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .star-wiggle {
+    animation: none;
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+}
+
 /* ========================================================================
    Moved to DailySummaryCard.svelte component
    ======================================================================== */
