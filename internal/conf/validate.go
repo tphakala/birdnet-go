@@ -81,6 +81,11 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate Species Tracking settings
+	if err := validateSpeciesTrackingSettings(&settings.Realtime.SpeciesTracking); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
@@ -500,6 +505,30 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 			Context("validation_type", "weather-poll-interval").
 			Context("poll_interval", settings.PollInterval).
 			Build()
+	}
+	return nil
+}
+
+// validateSpeciesTrackingSettings validates the species tracking settings
+func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
+	if settings.Enabled {
+		// Validate window days
+		if settings.NewSpeciesWindowDays < 1 || settings.NewSpeciesWindowDays > 365 {
+			return errors.New(fmt.Errorf("species tracking window days must be between 1 and 365, got %d", settings.NewSpeciesWindowDays)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "species-tracking-window-days").
+				Context("window_days", settings.NewSpeciesWindowDays).
+				Build()
+		}
+
+		// Validate sync interval
+		if settings.SyncIntervalMinutes < 5 || settings.SyncIntervalMinutes > 1440 {
+			return errors.New(fmt.Errorf("species tracking sync interval must be between 5 and 1440 minutes (24 hours), got %d", settings.SyncIntervalMinutes)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "species-tracking-sync-interval").
+				Context("sync_interval", settings.SyncIntervalMinutes).
+				Build()
+		}
 	}
 	return nil
 }

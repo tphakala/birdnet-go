@@ -200,6 +200,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.monitoring.disk.critical", 95.0)
 	viper.SetDefault("realtime.monitoring.disk.paths", []string{"/"})
 
+	// Species tracking configuration
+	viper.SetDefault("realtime.speciestracking.enabled", true)
+	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", 30)
+	viper.SetDefault("realtime.speciestracking.syncintervalminutes", 60)
+
 	// Webserver configuration
 	viper.SetDefault("webserver.debug", false)
 	viper.SetDefault("webserver.enabled", true)
