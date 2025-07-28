@@ -518,12 +518,29 @@
                           class="text-sm hover:text-primary cursor-pointer font-medium flex-1 min-w-0 leading-tight flex items-center gap-1"
                         >
                           {item.common_name}
+                          <!-- Multi-period tracking badges -->
                           {#if item.is_new_species}
                             <span 
                               class="text-warning" 
                               title={`New species (first seen ${item.days_since_first_seen} day${item.days_since_first_seen === 1 ? '' : 's'} ago)`}
                             >
                               {@html systemIcons.star}
+                            </span>
+                          {/if}
+                          {#if item.is_new_this_year && !item.is_new_species}
+                            <span 
+                              class="text-info" 
+                              title={`First time this year (${item.days_this_year} day${item.days_this_year === 1 ? '' : 's'} ago)`}
+                            >
+                              📅
+                            </span>
+                          {/if}
+                          {#if item.is_new_this_season && !item.is_new_species && !item.is_new_this_year}
+                            <span 
+                              class="text-success" 
+                              title={`First time this ${item.current_season || 'season'} (${item.days_this_season} day${item.days_this_season === 1 ? '' : 's'} ago)`}
+                            >
+                              🌿
                             </span>
                           {/if}
                         </a>

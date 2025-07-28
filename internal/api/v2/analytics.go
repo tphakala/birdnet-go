@@ -31,6 +31,12 @@ type SpeciesDailySummary struct {
 	ThumbnailURL       string `json:"thumbnail_url,omitempty"`
 	IsNewSpecies       bool   `json:"is_new_species,omitempty"`       // First seen within tracking window
 	DaysSinceFirstSeen int    `json:"days_since_first_seen,omitempty"` // Days since species was first detected
+	// Multi-period tracking metadata
+	IsNewThisYear      bool   `json:"is_new_this_year,omitempty"`      // First time this year
+	IsNewThisSeason    bool   `json:"is_new_this_season,omitempty"`    // First time this season  
+	DaysThisYear       int    `json:"days_this_year,omitempty"`        // Days since first this year
+	DaysThisSeason     int    `json:"days_this_season,omitempty"`      // Days since first this season
+	CurrentSeason      string `json:"current_season,omitempty"`        // Current season name
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -364,6 +370,13 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(data.ScientificName, time.Now())
 			speciesSummary.IsNewSpecies = status.IsNew
 			speciesSummary.DaysSinceFirstSeen = status.DaysSinceFirst
+			
+			// Multi-period tracking metadata
+			speciesSummary.IsNewThisYear = status.IsNewThisYear
+			speciesSummary.IsNewThisSeason = status.IsNewThisSeason
+			speciesSummary.DaysThisYear = status.DaysThisYear
+			speciesSummary.DaysThisSeason = status.DaysThisSeason
+			speciesSummary.CurrentSeason = status.CurrentSeason
 		}
 		
 		result = append(result, speciesSummary)

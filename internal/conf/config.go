@@ -284,9 +284,32 @@ type SpeciesSettings struct {
 
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
-	Enabled              bool `json:"enabled"`              // true to enable new species tracking
-	NewSpeciesWindowDays int  `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
-	SyncIntervalMinutes  int  `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
+	Enabled              bool                   `json:"enabled"`              // true to enable new species tracking
+	NewSpeciesWindowDays int                    `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes  int                    `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
+	YearlyTracking       YearlyTrackingSettings `json:"yearlyTracking"`       // Settings for yearly species tracking
+	SeasonalTracking     SeasonalTrackingSettings `json:"seasonalTracking"`   // Settings for seasonal species tracking
+}
+
+// YearlyTrackingSettings contains settings for tracking first arrivals each year
+type YearlyTrackingSettings struct {
+	Enabled    bool `json:"enabled"`    // true to enable yearly tracking
+	ResetMonth int  `json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
+	ResetDay   int  `json:"resetDay"`   // Day to reset yearly tracking (default: 1)
+	WindowDays int  `json:"windowDays"` // Days to show "new this year" indicator (default: 30)
+}
+
+// SeasonalTrackingSettings contains settings for tracking first arrivals each season
+type SeasonalTrackingSettings struct {
+	Enabled    bool              `json:"enabled"`    // true to enable seasonal tracking
+	WindowDays int               `json:"windowDays"` // Days to show "new this season" indicator (default: 21)
+	Seasons    map[string]Season `json:"seasons"`    // Season definitions
+}
+
+// Season defines the start date for a season
+type Season struct {
+	StartMonth int `json:"startMonth"` // Month when season starts (1-12)
+	StartDay   int `json:"startDay"`   // Day when season starts (1-31)
 }
 
 // ActionConfig holds configuration details for a specific action.

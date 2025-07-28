@@ -24,7 +24,7 @@ func TestDetectionEventCreation(t *testing.T) {
 	assert.NotNil(t, event)
 	assert.Equal(t, "Test Bird", event.GetSpeciesName())
 	assert.Equal(t, "Testus birdus", event.GetScientificName())
-	assert.Equal(t, 0.95, event.GetConfidence())
+	assert.InDelta(t, 0.95, event.GetConfidence(), 0.001)
 	assert.Equal(t, "test-source", event.GetLocation())
 	assert.True(t, event.IsNewSpecies())
 	assert.Equal(t, 0, event.GetDaysSinceFirstSeen())
@@ -87,7 +87,7 @@ func (c *testDetectionConsumer) ProcessEvent(event events.ErrorEvent) error {
 	return nil
 }
 
-func (c *testDetectionConsumer) ProcessBatch(events []events.ErrorEvent) error {
+func (c *testDetectionConsumer) ProcessBatch(errorEvents []events.ErrorEvent) error {
 	return nil
 }
 

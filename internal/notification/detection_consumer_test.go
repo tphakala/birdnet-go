@@ -65,7 +65,7 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	// Verify metadata
 	assert.Equal(t, "American Robin", notif.Metadata["species"])
 	assert.Equal(t, "Turdus migratorius", notif.Metadata["scientific_name"])
-	assert.Equal(t, 0.92, notif.Metadata["confidence"])
+	assert.InDelta(t, 0.92, notif.Metadata["confidence"], 0.001)
 	assert.Equal(t, "backyard-camera", notif.Metadata["location"])
 	assert.Equal(t, true, notif.Metadata["is_new_species"])
 	assert.Equal(t, 0, notif.Metadata["days_since_first_seen"])
