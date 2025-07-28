@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -39,13 +40,14 @@ type LogAction struct {
 }
 
 type DatabaseAction struct {
-	Settings     *conf.Settings
-	Ds           datastore.Interface
-	Note         datastore.Note
-	Results      []datastore.Results
-	EventTracker *EventTracker
-	Description  string
-	mu           sync.Mutex // Protect concurrent access to Note and Results
+	Settings          *conf.Settings
+	Ds                datastore.Interface
+	Note              datastore.Note
+	Results           []datastore.Results
+	EventTracker      *EventTracker
+	NewSpeciesTracker *NewSpeciesTracker // Add reference to new species tracker
+	Description       string
+	mu                sync.Mutex // Protect concurrent access to Note and Results
 }
 
 type SaveAudioAction struct {
@@ -191,10 +193,45 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		return nil
 	}
 
+	// Check if this is a new species before saving
+	var isNewSpecies bool
+	var daysSinceFirstSeen int
+	if a.NewSpeciesTracker != nil {
+		// Use GetSpeciesStatus which is thread-safe
+		status := a.NewSpeciesTracker.GetSpeciesStatus(a.Note.ScientificName, time.Now())
+		isNewSpecies = status.IsNew
+		daysSinceFirstSeen = status.DaysSinceFirst
+		
+		// Update the tracker with this detection
+		a.NewSpeciesTracker.UpdateSpecies(a.Note.ScientificName, time.Now())
+	}
+	
 	// Save note to database
 	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 		log.Printf("❌ Failed to save note and results to database: %v", err)
 		return err
+	}
+	
+	// After successful save, publish detection event for new species
+	if isNewSpecies && events.IsInitialized() {
+		eventBus := events.GetEventBus()
+		if eventBus != nil {
+			detectionEvent := events.NewDetectionEvent(
+				a.Note.CommonName,
+				a.Note.ScientificName,
+				float64(a.Note.Confidence),
+				a.Note.Source,
+				isNewSpecies,
+				daysSinceFirstSeen,
+			)
+			
+			// Publish the detection event
+			if published := eventBus.TryPublishDetection(detectionEvent); published {
+				if a.Settings.Debug {
+					log.Printf("🌟 Published new species detection event: %s", a.Note.CommonName)
+				}
+			}
+		}
 	}
 
 	// Save audio clip to file if enabled

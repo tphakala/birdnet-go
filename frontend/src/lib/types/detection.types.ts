@@ -110,8 +110,11 @@ export interface DailySpeciesSummary {
   first_heard: string;
   latest_heard: string;
   thumbnail_url: string;
+  // Species tracking metadata
+  is_new_species?: boolean; // True if first seen within tracking window (persistent from API)
+  days_since_first_seen?: number; // Days since species was first detected
   // Animation state flags
-  isNew?: boolean; // New species row animation
+  isNew?: boolean; // New species row animation (temporary for SSE updates)
   countIncreased?: boolean; // Count increment animation
   hourlyUpdated?: number[]; // Which hours were just updated
   previousCount?: number; // For animated counter

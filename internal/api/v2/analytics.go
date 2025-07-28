@@ -20,15 +20,17 @@ const placeholderImageURL = "/assets/images/bird-placeholder.svg"
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
-	ScientificName string `json:"scientific_name"`
-	CommonName     string `json:"common_name"`
-	SpeciesCode    string `json:"species_code,omitempty"`
-	Count          int    `json:"count"`
-	HourlyCounts   []int  `json:"hourly_counts"`
-	HighConfidence bool   `json:"high_confidence"`
-	FirstHeard     string `json:"first_heard,omitempty"`
-	LatestHeard    string `json:"latest_heard,omitempty"`
-	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
+	ScientificName     string `json:"scientific_name"`
+	CommonName         string `json:"common_name"`
+	SpeciesCode        string `json:"species_code,omitempty"`
+	Count              int    `json:"count"`
+	HourlyCounts       []int  `json:"hourly_counts"`
+	HighConfidence     bool   `json:"high_confidence"`
+	FirstHeard         string `json:"first_heard,omitempty"`
+	LatestHeard        string `json:"latest_heard,omitempty"`
+	ThumbnailURL       string `json:"thumbnail_url,omitempty"`
+	IsNewSpecies       bool   `json:"is_new_species,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int    `json:"days_since_first_seen,omitempty"` // Days since species was first detected
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -344,7 +346,8 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			thumbnailURL = placeholderImageURL
 		}
 
-		result = append(result, SpeciesDailySummary{
+		// Initialize the species summary
+		speciesSummary := SpeciesDailySummary{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
 			SpeciesCode:    data.SpeciesCode,
@@ -354,7 +357,16 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			FirstHeard:     data.First,
 			LatestHeard:    data.Latest,
 			ThumbnailURL:   thumbnailURL,
-		})
+		}
+		
+		// Add species tracking metadata if processor has tracker
+		if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {
+			status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(data.ScientificName, time.Now())
+			speciesSummary.IsNewSpecies = status.IsNew
+			speciesSummary.DaysSinceFirstSeen = status.DaysSinceFirst
+		}
+		
+		result = append(result, speciesSummary)
 	}
 
 	return result, nil

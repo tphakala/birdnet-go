@@ -601,11 +601,12 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
 		actions = append(actions, &DatabaseAction{
-			Settings:     p.Settings,
-			EventTracker: p.GetEventTracker(),
-			Note:         detection.Note,
-			Results:      detection.Results,
-			Ds:           p.Ds})
+			Settings:          p.Settings,
+			EventTracker:      p.GetEventTracker(),
+			NewSpeciesTracker: p.NewSpeciesTracker,
+			Note:              detection.Note,
+			Results:           detection.Results,
+			Ds:                p.Ds})
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized

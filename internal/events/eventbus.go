@@ -61,8 +61,9 @@ var (
 // EventBus provides asynchronous event processing with non-blocking guarantees
 type EventBus struct {
 	// Channels for different event types
-	errorEventChan    chan ErrorEvent
-	resourceEventChan chan ResourceEvent
+	errorEventChan     chan ErrorEvent
+	resourceEventChan  chan ResourceEvent
+	detectionEventChan chan DetectionEvent
 	
 	// Configuration
 	config     *Config
@@ -78,8 +79,9 @@ type EventBus struct {
 	mu          sync.Mutex
 	
 	// Consumers
-	consumers         []EventConsumer
-	resourceConsumers []ResourceEventConsumer  // Separate slice for resource event consumers
+	consumers          []EventConsumer
+	resourceConsumers  []ResourceEventConsumer  // Separate slice for resource event consumers
+	detectionConsumers []DetectionEventConsumer // Separate slice for detection event consumers
 	
 	// Deduplication
 	deduplicator *ErrorDeduplicator
@@ -174,17 +176,19 @@ func Initialize(config *Config) (*EventBus, error) {
 	}
 	
 	eb := &EventBus{
-		config:            config,
-		errorEventChan:    make(chan ErrorEvent, config.BufferSize),
-		resourceEventChan: make(chan ResourceEvent, resourceBufSize),
-		bufferSize:        config.BufferSize,
-		workers:           config.Workers,
-		ctx:               ctx,
-		cancel:            cancel,
-		consumers:         make([]EventConsumer, 0),
-		resourceConsumers: make([]ResourceEventConsumer, 0),
-		logger:            logger,
-		startTime:         time.Now(),
+		config:             config,
+		errorEventChan:     make(chan ErrorEvent, config.BufferSize),
+		resourceEventChan:  make(chan ResourceEvent, resourceBufSize),
+		detectionEventChan: make(chan DetectionEvent, config.BufferSize),
+		bufferSize:         config.BufferSize,
+		workers:            config.Workers,
+		ctx:                ctx,
+		cancel:             cancel,
+		consumers:          make([]EventConsumer, 0),
+		resourceConsumers:  make([]ResourceEventConsumer, 0),
+		detectionConsumers: make([]DetectionEventConsumer, 0),
+		logger:             logger,
+		startTime:          time.Now(),
 	}
 	
 	// Initialize deduplicator if enabled
@@ -245,6 +249,11 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 	// Check if consumer also implements ResourceEventConsumer
 	if resourceConsumer, ok := consumer.(ResourceEventConsumer); ok {
 		eb.resourceConsumers = append(eb.resourceConsumers, resourceConsumer)
+	}
+	
+	// Check if consumer also implements DetectionEventConsumer
+	if detectionConsumer, ok := consumer.(DetectionEventConsumer); ok {
+		eb.detectionConsumers = append(eb.detectionConsumers, detectionConsumer)
 	}
 	
 	// Update global flag for fast path optimization
@@ -333,6 +342,8 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 
 // TryPublishResource attempts to publish a resource event without blocking
 // Returns true if the event was accepted, false if dropped
+//
+//nolint:dupl // Similar to TryPublishDetection but handles different event type
 func (eb *EventBus) TryPublishResource(event ResourceEvent) bool {
 	// Ultra-fast path: check global flag first (lock-free)
 	if !hasActiveConsumers.Load() {
@@ -382,6 +393,65 @@ func (eb *EventBus) TryPublishResource(event ResourceEvent) bool {
 			eb.logger.Debug("resource event dropped due to full buffer",
 				"resource_type", event.GetResourceType(),
 				"severity", event.GetSeverity(),
+			)
+		}
+		return false
+	}
+}
+
+// TryPublishDetection attempts to publish a detection event without blocking
+// Returns true if the event was accepted, false if dropped
+//
+//nolint:dupl // Similar to TryPublishResource but handles different event type
+func (eb *EventBus) TryPublishDetection(event DetectionEvent) bool {
+	// Ultra-fast path: check global flag first (lock-free)
+	if !hasActiveConsumers.Load() {
+		if eb != nil {
+			atomic.AddUint64(&eb.stats.FastPathHits, 1)
+		}
+		return false
+	}
+	
+	if eb == nil || !eb.initialized.Load() || !eb.running.Load() {
+		return false
+	}
+	
+	// Debug logging for event publishing
+	if eb.config != nil && eb.config.Debug {
+		eb.logger.Debug("publishing detection event",
+			"species", event.GetSpeciesName(),
+			"confidence", event.GetConfidence(),
+			"is_new_species", event.IsNewSpecies(),
+			"buffer_used", len(eb.detectionEventChan),
+			"buffer_capacity", cap(eb.detectionEventChan),
+			"active_consumers", len(eb.consumers),
+		)
+	}
+	
+	// Fast path - check if we have consumers
+	eb.mu.Lock()
+	hasConsumers := len(eb.consumers) > 0
+	eb.mu.Unlock()
+	
+	if !hasConsumers {
+		atomic.AddUint64(&eb.stats.FastPathHits, 1)
+		return false
+	}
+	
+	// Non-blocking send
+	select {
+	case eb.detectionEventChan <- event:
+		atomic.AddUint64(&eb.stats.EventsReceived, 1)
+		return true
+	default:
+		// Channel full, drop the event
+		atomic.AddUint64(&eb.stats.EventsDropped, 1)
+		
+		// Log at debug level to avoid spam
+		if eb.logger != nil {
+			eb.logger.Debug("detection event dropped due to full buffer",
+				"species", event.GetSpeciesName(),
+				"is_new_species", event.IsNewSpecies(),
 			)
 		}
 		return false
@@ -459,6 +529,27 @@ func (eb *EventBus) worker(id int) {
 				)
 			} else {
 				eb.processResourceEvent(event, logger)
+			}
+			
+		case event, ok := <-eb.detectionEventChan:
+			if !ok {
+				logger.Debug("worker stopping due to detection channel closure")
+				return
+			}
+			
+			// Add timing for debug mode
+			if eb.config != nil && eb.config.Debug {
+				start := time.Now()
+				eb.processDetectionEvent(event, logger)
+				duration := time.Since(start)
+				logger.Debug("detection event processed",
+					"event_type", fmt.Sprintf("%T", event),
+					"species", event.GetSpeciesName(),
+					"is_new_species", event.IsNewSpecies(),
+					"duration_ms", duration.Milliseconds(),
+				)
+			} else {
+				eb.processDetectionEvent(event, logger)
 			}
 		}
 	}
@@ -558,6 +649,28 @@ func (eb *EventBus) processResourceEvent(event ResourceEvent, logger *slog.Logge
 	}
 }
 
+// processDetectionEvent sends the detection event to all registered detection consumers
+func (eb *EventBus) processDetectionEvent(event DetectionEvent, logger *slog.Logger) {
+	eb.mu.Lock()
+	detectionConsumers := make([]DetectionEventConsumer, len(eb.detectionConsumers))
+	copy(detectionConsumers, eb.detectionConsumers)
+	eb.mu.Unlock()
+	
+	// No type assertions needed - iterate directly over detection consumers
+	for _, consumer := range detectionConsumers {
+		logFields := map[string]any{
+			"species":        event.GetSpeciesName(),
+			"is_new_species": event.IsNewSpecies(),
+		}
+		eb.processEvent(
+			consumer.Name(),
+			func() error { return consumer.ProcessDetectionEvent(event) },
+			logFields,
+			logger,
+		)
+	}
+}
+
 // Shutdown gracefully shuts down the event bus
 func (eb *EventBus) Shutdown(timeout time.Duration) error {
 	if eb == nil || !eb.initialized.Load() {
@@ -591,6 +704,7 @@ func (eb *EventBus) Shutdown(timeout time.Duration) error {
 			"total_events_dropped", atomic.LoadUint64(&eb.stats.EventsDropped),
 			"final_error_buffer_size", len(eb.errorEventChan),
 			"final_resource_buffer_size", len(eb.resourceEventChan),
+			"final_detection_buffer_size", len(eb.detectionEventChan),
 			"uptime_seconds", time.Since(eb.startTime).Seconds(),
 		)
 		return nil
@@ -663,13 +777,17 @@ func (eb *EventBus) logMetrics(reason string) {
 		fastPathPercent = float64(stats.FastPathHits) / float64(totalAttempts) * 100
 	}
 	
-	// Calculate buffer utilization for both channels
+	// Calculate buffer utilization for all channels
 	errorBufferUtil := float64(len(eb.errorEventChan)) / float64(cap(eb.errorEventChan)) * 100
 	resourceBufferUtil := float64(len(eb.resourceEventChan)) / float64(cap(eb.resourceEventChan)) * 100
-	avgBufferUtilization := (errorBufferUtil + resourceBufferUtil) / 2
+	detectionBufferUtil := float64(len(eb.detectionEventChan)) / float64(cap(eb.detectionEventChan)) * 100
+	avgBufferUtilization := (errorBufferUtil + resourceBufferUtil + detectionBufferUtil) / 3
 	maxBufferUtilization := errorBufferUtil
 	if resourceBufferUtil > maxBufferUtilization {
 		maxBufferUtilization = resourceBufferUtil
+	}
+	if detectionBufferUtil > maxBufferUtilization {
+		maxBufferUtilization = detectionBufferUtil
 	}
 	
 	eb.logger.Info("event bus performance metrics",
@@ -687,6 +805,7 @@ func (eb *EventBus) logMetrics(reason string) {
 		"max_buffer_utilization", fmt.Sprintf("%.1f%%", maxBufferUtilization),
 		"error_buffer_utilization", fmt.Sprintf("%.1f%%", errorBufferUtil),
 		"resource_buffer_utilization", fmt.Sprintf("%.1f%%", resourceBufferUtil),
+		"detection_buffer_utilization", fmt.Sprintf("%.1f%%", detectionBufferUtil),
 		"dedup_total_seen", dedupStats.TotalSeen,
 		"dedup_total_suppressed", dedupStats.TotalSuppressed,
 		"dedup_cache_size", dedupStats.CacheSize,

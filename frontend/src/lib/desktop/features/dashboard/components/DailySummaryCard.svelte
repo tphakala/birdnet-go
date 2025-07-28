@@ -2,7 +2,7 @@
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { alertIconsSvg, navigationIcons, weatherIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons, weatherIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
   import { getLocalDateString } from '$lib/utils/date';
@@ -515,9 +515,17 @@
                         <!-- Species name -->
                         <a
                           href={buildSpeciesUrl(item)}
-                          class="text-sm hover:text-primary cursor-pointer font-medium flex-1 min-w-0 leading-tight"
+                          class="text-sm hover:text-primary cursor-pointer font-medium flex-1 min-w-0 leading-tight flex items-center gap-1"
                         >
                           {item.common_name}
+                          {#if item.is_new_species}
+                            <span 
+                              class="text-warning" 
+                              title={`New species (first seen ${item.days_since_first_seen} day${item.days_since_first_seen === 1 ? '' : 's'} ago)`}
+                            >
+                              {@html systemIcons.star}
+                            </span>
+                          {/if}
                         </a>
                       </div>
                     {:else if column.key === 'total_detections'}
