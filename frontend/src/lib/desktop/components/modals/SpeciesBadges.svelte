@@ -53,32 +53,43 @@
   // Size classes for responsive badges
   const badgeSize = $derived(() => {
     switch (size) {
-      case 'sm': return 'badge-sm';
-      case 'lg': return 'badge-lg';
-      default: return 'badge-md';
+      case 'sm':
+        return 'badge-sm';
+      case 'lg':
+        return 'badge-lg';
+      default:
+        return 'badge-md';
     }
   });
 
   const iconSize = $derived(() => {
     switch (size) {
-      case 'sm': return 'w-2 h-2';
-      case 'lg': return 'w-4 h-4';
-      default: return 'w-3 h-3';
+      case 'sm':
+        return 'w-2 h-2';
+      case 'lg':
+        return 'w-4 h-4';
+      default:
+        return 'w-3 h-3';
     }
   });
 
   const gapSize = $derived(() => {
     switch (size) {
-      case 'sm': return 'gap-1';
-      case 'lg': return 'gap-3';
-      default: return 'gap-2';
+      case 'sm':
+        return 'gap-1';
+      case 'lg':
+        return 'gap-3';
+      default:
+        return 'gap-2';
     }
   });
 </script>
 
 <div class={`flex items-center gap-2 flex-wrap ${className}`}>
   <!-- Verification Status Badge -->
-  <span class={`badge ${badgeSize()} ${gapSize()} ${getStatusBadgeClass(detection.review?.verified)}`}>
+  <span
+    class={`badge ${badgeSize()} ${gapSize()} ${getStatusBadgeClass(detection.review?.verified)}`}
+  >
     {#if detection.review?.verified === 'correct'}
       <svg
         xmlns="http://www.w3.org/2000/svg"

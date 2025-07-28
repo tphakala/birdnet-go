@@ -9,7 +9,18 @@
   const FOCUSABLE_SELECTOR =
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-  type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
+  type ModalSize =
+    | 'sm'
+    | 'md'
+    | 'lg'
+    | 'xl'
+    | '2xl'
+    | '3xl'
+    | '4xl'
+    | '5xl'
+    | '6xl'
+    | '7xl'
+    | 'full';
   type ModalType = 'default' | 'confirm' | 'alert';
 
   interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {

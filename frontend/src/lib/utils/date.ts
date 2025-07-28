@@ -5,7 +5,7 @@
 /**
  * Format a Date object as YYYY-MM-DD string in the local timezone
  * This avoids timezone conversion issues that occur with toISOString()
- * 
+ *
  * @param date - The date to format (defaults to current date)
  * @returns Date string in YYYY-MM-DD format
  */
@@ -18,7 +18,7 @@ export function getLocalDateString(date: Date = new Date()): string {
 
 /**
  * Check if a date string represents today in the local timezone
- * 
+ *
  * @param dateString - Date string in YYYY-MM-DD format
  * @returns True if the date is today
  */
@@ -28,7 +28,7 @@ export function isToday(dateString: string): boolean {
 
 /**
  * Check if a date string represents a future date in the local timezone
- * 
+ *
  * @param dateString - Date string in YYYY-MM-DD format
  * @returns True if the date is in the future
  */
@@ -38,7 +38,7 @@ export function isFutureDate(dateString: string): boolean {
 
 /**
  * Parse a time string (HH:MM:SS) and extract the hour component
- * 
+ *
  * @param timeString - Time string in HH:MM:SS format
  * @returns Hour as a number (0-23)
  * @throws Error if the time string is invalid
@@ -63,26 +63,29 @@ export function parseHour(timeString: string): number {
 
 /**
  * Format a Date object as HH:MM:SS string in the local timezone
- * 
+ *
  * @param date - The date to format (defaults to current date)
  * @param includeSeconds - Whether to include seconds (defaults to true)
  * @returns Time string in HH:MM:SS or HH:MM format
  */
-export function getLocalTimeString(date: Date = new Date(), includeSeconds: boolean = true): string {
+export function getLocalTimeString(
+  date: Date = new Date(),
+  includeSeconds: boolean = true
+): string {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
-  
+
   if (!includeSeconds) {
     return `${hours}:${minutes}`;
   }
-  
+
   const seconds = String(date.getSeconds()).padStart(2, '0');
   return `${hours}:${minutes}:${seconds}`;
 }
 
 /**
  * Parse a time string (HH:MM:SS or HH:MM) and return hours, minutes, and seconds
- * 
+ *
  * @param timeString - Time string in HH:MM:SS or HH:MM format
  * @returns Object with hours, minutes, and seconds (seconds default to 0 if not provided)
  * @throws Error if the time string is invalid

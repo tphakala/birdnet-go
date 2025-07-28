@@ -144,9 +144,9 @@
   // Get appropriate wind icon based on wind speed
   const getWindIcon = $derived(() => {
     if (windSpeed === undefined) return weatherIcons.wind;
-    if (windSpeed < 3) return weatherIcons.windLight;      // Light wind: 0-3 m/s
-    if (windSpeed < 8) return weatherIcons.windModerate;   // Moderate wind: 3-8 m/s
-    return weatherIcons.windStrong;                        // Strong wind: 8+ m/s
+    if (windSpeed < 3) return weatherIcons.windLight; // Light wind: 0-3 m/s
+    if (windSpeed < 8) return weatherIcons.windModerate; // Moderate wind: 3-8 m/s
+    return weatherIcons.windStrong; // Strong wind: 8+ m/s
   });
 
   // Size classes
@@ -192,12 +192,12 @@
         <div class="h-4 bg-base-300 rounded w-20"></div>
       </div>
     </div>
-  <!-- Error State -->
+    <!-- Error State -->
   {:else if error}
     <div class="text-error text-sm">
       {error}
     </div>
-  <!-- Weather Condition with Icon and Description -->
+    <!-- Weather Condition with Icon and Description -->
   {:else if weatherIcon}
     <div class="wd-weather-row flex items-center gap-2">
       <span class={cn('wd-weather-icon', emojiSizeClasses[size])} aria-label={weatherDesc}>
@@ -212,7 +212,10 @@
   <!-- Temperature with Thermometer Icon -->
   {#if temperature !== undefined}
     <div class="wd-temperature-row flex items-center gap-2">
-      <div class={cn(iconSizeClasses[size], 'flex-shrink-0')} aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit()}`}>
+      <div
+        class={cn(iconSizeClasses[size], 'flex-shrink-0')}
+        aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit()}`}
+      >
         {@html weatherIcons.temperature}
       </div>
       <span class={cn(textSizeClasses[size], 'text-base-content')}>
@@ -224,13 +227,17 @@
   <!-- Wind Speed with Wind Icon -->
   {#if windSpeed !== undefined}
     <div class="wd-wind-row flex items-center gap-2">
-      <div class={cn(iconSizeClasses[size], 'flex-shrink-0')} aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit()}`}>
+      <div
+        class={cn(iconSizeClasses[size], 'flex-shrink-0')}
+        aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit()}`}
+      >
         {@html getWindIcon()}
       </div>
       <span class={cn(textSizeClasses[size], 'text-base-content')}>
         {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
           ? `(${windGust.toFixed(0)})`
-          : ''} {windSpeedUnit()}
+          : ''}
+        {windSpeedUnit()}
       </span>
     </div>
   {:else}
@@ -294,7 +301,7 @@
     width: inherit;
     margin-right: 0;
   }
-  
+
   /* Ensure our size classes take precedence over any inherited sizing */
   .wd-temperature-row > .h-5.w-5,
   .wd-temperature-row > .h-6.w-6,
