@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -9,90 +8,49 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"gorm.io/gorm"
 )
 
-// mockDatastore implements the datastore.Interface for testing
-// We only implement the methods we actually use in tests
-type mockDatastore struct {
-	species []datastore.NewSpeciesData
-}
+// Test constants for day counts and time windows
+const (
+	oldSpeciesDays    = 20 // Days ago for old species (outside window)
+	recentSpeciesDays = 5  // Days ago for recent species (within window)
+	newSpeciesWindow  = 14 // Default window for considering species "new"
+	syncIntervalMins  = 60 // Default sync interval in minutes
+	yearlyWindowDays  = 30 // Default yearly tracking window
+	seasonalWindowDays = 21 // Default seasonal tracking window
+)
 
-// GetNewSpeciesDetections is the only method we need for tracker initialization
-func (m *mockDatastore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	return m.species, nil
-}
-
-// All other interface methods - stubbed out for testing
-func (m *mockDatastore) Open() error { return nil }
-func (m *mockDatastore) Close() error { return nil }
-func (m *mockDatastore) Save(note *datastore.Note, results []datastore.Results) error { return nil }
-func (m *mockDatastore) Delete(id string) error { return nil }
-func (m *mockDatastore) Get(id string) (datastore.Note, error) { return datastore.Note{}, nil }
-func (m *mockDatastore) SetMetrics(metrics *datastore.Metrics) {}
-func (m *mockDatastore) SetSunCalcMetrics(suncalcMetrics any) {}
-func (m *mockDatastore) Optimize(ctx context.Context) error { return nil }
-func (m *mockDatastore) GetAllNotes() ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) { return [24]int{}, nil }
-func (m *mockDatastore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) GetLastDetections(numDetections int) ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) { return nil, 0, nil }
-func (m *mockDatastore) GetNoteClipPath(noteID string) (string, error) { return "", nil }
-func (m *mockDatastore) DeleteNoteClipPath(noteID string) error { return nil }
-func (m *mockDatastore) GetNoteReview(noteID string) (*datastore.NoteReview, error) { return &datastore.NoteReview{}, nil }
-func (m *mockDatastore) SaveNoteReview(review *datastore.NoteReview) error { return nil }
-func (m *mockDatastore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
-func (m *mockDatastore) SaveNoteComment(comment *datastore.NoteComment) error { return nil }
-func (m *mockDatastore) UpdateNoteComment(commentID, entry string) error { return nil }
-func (m *mockDatastore) DeleteNoteComment(commentID string) error { return nil }
-func (m *mockDatastore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error { return nil }
-func (m *mockDatastore) GetDailyEvents(date string) (datastore.DailyEvents, error) { return datastore.DailyEvents{}, nil }
-func (m *mockDatastore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error { return nil }
-func (m *mockDatastore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) { return nil, nil }
-func (m *mockDatastore) LatestHourlyWeather() (*datastore.HourlyWeather, error) { return &datastore.HourlyWeather{}, nil }
-func (m *mockDatastore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) { return nil, nil }
-func (m *mockDatastore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) { return 0, nil }
-func (m *mockDatastore) CountSearchResults(query string) (int64, error) { return 0, nil }
-func (m *mockDatastore) Transaction(fc func(tx *gorm.DB) error) error { return nil }
-func (m *mockDatastore) LockNote(noteID string) error { return nil }
-func (m *mockDatastore) UnlockNote(noteID string) error { return nil }
-func (m *mockDatastore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return &datastore.NoteLock{}, nil }
-func (m *mockDatastore) IsNoteLocked(noteID string) (bool, error) { return false, nil }
-func (m *mockDatastore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) { return &datastore.ImageCache{}, nil }
-func (m *mockDatastore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) { return make(map[string]*datastore.ImageCache), nil }
-func (m *mockDatastore) SaveImageCache(cache *datastore.ImageCache) error { return nil }
-func (m *mockDatastore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) { return nil, nil }
-func (m *mockDatastore) GetLockedNotesClipPaths() ([]string, error) { return nil, nil }
-func (m *mockDatastore) CountHourlyDetections(date, hour string, duration int) (int64, error) { return 0, nil }
-func (m *mockDatastore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) { return nil, nil }
-func (m *mockDatastore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) { return nil, nil }
-func (m *mockDatastore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) { return nil, nil }
-func (m *mockDatastore) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) { return nil, nil }
-func (m *mockDatastore) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) { return nil, nil }
-func (m *mockDatastore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) { return nil, 0, nil }
 
 func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 	// Create mock datastore with some historical species data
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{
 			{
 				ScientificName: "Parus major",
 				CommonName:     "Great Tit",
-				FirstSeenDate:  time.Now().Add(-20 * 24 * time.Hour).Format("2006-01-02"), // 20 days ago
+				FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
 			},
 			{
 				ScientificName: "Turdus merula",
 				CommonName:     "Common Blackbird",
-				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"), // 5 days ago
+				FirstSeenDate:  time.Now().Add(-recentSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
 			},
 		},
 	}
 
-	// Create tracker with 14-day window
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	// Create tracker with new species window
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	
 	// Initialize from database
 	err := tracker.InitFromDatabase()
@@ -113,28 +71,41 @@ func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 	// Test old species (outside window)
 	status = tracker.GetSpeciesStatus("Parus major", currentTime)
 	if status.IsNew {
-		t.Errorf("Expected Parus major to not be a new species (20 days old)")
+		t.Errorf("Expected Parus major to not be a new species (%d days old)", oldSpeciesDays)
 	}
-	if status.DaysSinceFirst != 20 {
-		t.Errorf("Expected DaysSinceFirst to be 20, got %d", status.DaysSinceFirst)
+	if status.DaysSinceFirst != oldSpeciesDays {
+		t.Errorf("Expected DaysSinceFirst to be %d, got %d", oldSpeciesDays, status.DaysSinceFirst)
 	}
 
 	// Test recent species (within window)
 	status = tracker.GetSpeciesStatus("Turdus merula", currentTime)
 	if !status.IsNew {
-		t.Errorf("Expected Turdus merula to be a new species (5 days old, within 14-day window)")
+		t.Errorf("Expected Turdus merula to be a new species (%d days old, within %d-day window)", recentSpeciesDays, newSpeciesWindow)
 	}
-	if status.DaysSinceFirst != 5 {
-		t.Errorf("Expected DaysSinceFirst to be 5, got %d", status.DaysSinceFirst)
+	if status.DaysSinceFirst != recentSpeciesDays {
+		t.Errorf("Expected DaysSinceFirst to be %d, got %d", recentSpeciesDays, status.DaysSinceFirst)
 	}
 }
 
 func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
-	ds := &mockDatastore{
+	t.Parallel()
+	
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Test concurrent reads and writes
@@ -164,11 +135,22 @@ func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 }
 
 func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	currentTime := time.Now()
@@ -197,7 +179,7 @@ func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
 
 func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 	// Create tracker with exactly 14 days old species
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{
 			{
 				ScientificName: "Parus major",
@@ -206,7 +188,18 @@ func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	currentTime := time.Now()
@@ -229,7 +222,7 @@ func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 }
 
 func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{
 			{
 				ScientificName: "Old Species",
@@ -242,7 +235,18 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Initial species count
@@ -270,11 +274,22 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Pre-populate with some species
@@ -293,11 +308,22 @@ func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 }
 
 func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	currentTime := time.Now()
@@ -314,11 +340,22 @@ func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
 }
 
 func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Pre-populate with some species
@@ -344,11 +381,22 @@ func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
 }
 
 func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
-	ds := &mockDatastore{
+	ds := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
-	tracker := NewSpeciesTrackerWithConfig(ds, 14, 60)
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: newSpeciesWindow,
+		SyncIntervalMinutes:  syncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	currentTime := time.Now()
@@ -367,7 +415,7 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 // Multi-period tracking tests
 
 func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	// Create basic configuration
 	settings := &conf.SpeciesTrackingSettings{
@@ -404,7 +452,7 @@ func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -453,7 +501,7 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -502,7 +550,7 @@ func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 }
 
 func TestSeasonDetection(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -543,7 +591,7 @@ func TestSeasonDetection(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -607,7 +655,7 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -671,7 +719,7 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_YearReset(t *testing.T) {
-	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	ds := &mockSpeciesDatastore{species: []datastore.NewSpeciesData{}}
 	
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -688,9 +736,9 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 		},
 	}
 	
-	// Create tracker and manually set to 2023 to simulate starting in previous year
+	// Create tracker and set to 2023 to simulate starting in previous year
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	tracker.currentYear = 2023 // Manually set for test scenario
+	tracker.SetCurrentYearForTesting(2023) // Use test helper method
 	_ = tracker.InitFromDatabase()
 	
 	speciesName := "Poecile palustris"

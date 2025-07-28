@@ -113,16 +113,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
-		windowDays := settings.Realtime.SpeciesTracking.NewSpeciesWindowDays
-		if windowDays <= 0 {
-			windowDays = 14 // Default
-		}
-		syncInterval := settings.Realtime.SpeciesTracking.SyncIntervalMinutes
-		if syncInterval <= 0 {
-			syncInterval = 60 // Default
-		}
-		
-		p.NewSpeciesTracker = NewSpeciesTrackerWithConfig(ds, windowDays, syncInterval)
+		p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &settings.Realtime.SpeciesTracking)
 		
 		// Initialize species tracker from database
 		if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
@@ -130,7 +121,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			// Continue anyway - tracker will work for new detections
 		}
 		
-		log.Printf("Species tracking enabled: window=%d days, sync=%d minutes", windowDays, syncInterval)
+		log.Printf("Species tracking enabled: window=%d days, sync=%d minutes", 
+			settings.Realtime.SpeciesTracking.NewSpeciesWindowDays, 
+			settings.Realtime.SpeciesTracking.SyncIntervalMinutes)
 	}
 
 	// Start the detection processor

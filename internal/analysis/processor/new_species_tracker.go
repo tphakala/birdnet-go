@@ -10,6 +10,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// SpeciesDatastore defines the minimal interface needed by NewSpeciesTracker
+type SpeciesDatastore interface {
+	GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
+}
+
 // SpeciesStatus represents the tracking status of a species across multiple periods
 type SpeciesStatus struct {
 	// Existing lifetime tracking
@@ -53,7 +58,7 @@ type NewSpeciesTracker struct {
 	seasons          map[string]seasonDates // season name -> start dates
 	
 	// Configuration
-	ds               datastore.Interface
+	ds               SpeciesDatastore
 	lastSyncTime     time.Time
 	syncIntervalMins int
 	yearlyEnabled    bool
@@ -84,55 +89,9 @@ type seasonDates struct {
 	day   int
 }
 
-// NewSpeciesTracker creates a new species tracker with the specified window
-func NewSpeciesTrackerWithConfig(ds datastore.Interface, windowDays, syncIntervalMins int) *NewSpeciesTracker {
-	if windowDays <= 0 {
-		windowDays = 14 // Default to 14 days
-	}
-	if syncIntervalMins <= 0 {
-		syncIntervalMins = 60 // Default to 1 hour
-	}
-	
-	now := time.Now()
-	tracker := &NewSpeciesTracker{
-		// Lifetime tracking
-		speciesFirstSeen: make(map[string]time.Time, 100), // Pre-allocate for ~100 species
-		windowDays:       windowDays,
-		
-		// Multi-period tracking
-		speciesThisYear:  make(map[string]time.Time, 100),
-		speciesBySeason:  make(map[string]map[string]time.Time),
-		currentYear:      now.Year(),
-		seasons:          make(map[string]seasonDates),
-		
-		// Configuration
-		ds:               ds,
-		syncIntervalMins: syncIntervalMins,
-		yearlyEnabled:    false,  // Will be set by NewSpeciesTrackerFromSettings
-		seasonalEnabled:  false,  // Will be set by NewSpeciesTrackerFromSettings
-		yearlyWindowDays: 30,     // Default
-		seasonalWindowDays: 21,   // Default
-		resetMonth:       1,      // January
-		resetDay:         1,      // 1st
-		
-		// Status result caching
-		statusCache:      make(map[string]cachedSpeciesStatus, 100), // Pre-allocate for ~100 species
-		cacheTTL:         30 * time.Second,                          // 30-second TTL for cached results
-		lastCacheCleanup: now,
-		
-		// Season calculation caching
-		seasonCacheTTL:   time.Hour, // 1-hour TTL for season cache
-	}
-	
-	// Initialize with default seasons
-	tracker.initializeDefaultSeasons()
-	tracker.currentSeason = tracker.getCurrentSeason(now)
-	
-	return tracker
-}
 
 // NewSpeciesTrackerFromSettings creates a tracker from configuration settings
-func NewSpeciesTrackerFromSettings(ds datastore.Interface, settings *conf.SpeciesTrackingSettings) *NewSpeciesTracker {
+func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings) *NewSpeciesTracker {
 	now := time.Now()
 	tracker := &NewSpeciesTracker{
 		// Lifetime tracking
@@ -187,6 +146,14 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["summer"] = seasonDates{month: 6, day: 21}  // June 21  
 	t.seasons["fall"] = seasonDates{month: 9, day: 22}    // September 22
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
+}
+
+// SetCurrentYearForTesting sets the current year for testing purposes only
+// This method provides controlled access to the currentYear field for test scenarios
+func (t *NewSpeciesTracker) SetCurrentYearForTesting(year int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.currentYear = year
 }
 
 // getCurrentSeason determines which season we're currently in with intelligent caching
@@ -333,9 +300,7 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 	defer t.mu.Unlock()
 
 	// Clear existing data
-	for k := range t.speciesFirstSeen {
-		delete(t.speciesFirstSeen, k)
-	}
+	t.speciesFirstSeen = make(map[string]time.Time, 100)
 
 	// Populate map with first seen dates
 	for _, species := range newSpeciesData {

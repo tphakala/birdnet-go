@@ -9,6 +9,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/events"
 )
 
+// mockSpeciesDatastore implements the minimal SpeciesDatastore interface for testing
+type mockSpeciesDatastore struct {
+	species []datastore.NewSpeciesData
+}
+
+// GetNewSpeciesDetections is the only method needed by NewSpeciesTracker
+func (m *mockSpeciesDatastore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	return m.species, nil
+}
+
 // TestDetectionEventCreation tests the creation of detection events
 func TestDetectionEventCreation(t *testing.T) {
 	// Test creating a new species detection event
@@ -35,7 +45,7 @@ func TestDetectionEventCreation(t *testing.T) {
 // TestSpeciesStatusTracking tests species status tracking functionality
 func TestSpeciesStatusTracking(t *testing.T) {
 	// Create mock datastore  
-	mockDS := &mockDatastore{
+	mockDS := &mockSpeciesDatastore{
 		species: []datastore.NewSpeciesData{},
 	}
 
