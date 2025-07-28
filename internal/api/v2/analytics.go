@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -337,6 +338,12 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		}
 	}
 
+	// Batch fetch species tracking status to avoid N+1 queries
+	var batchSpeciesStatus map[string]processor.SpeciesStatus
+	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil && len(scientificNames) > 0 {
+		batchSpeciesStatus = c.Processor.NewSpeciesTracker.GetBatchSpeciesStatus(scientificNames, time.Now())
+	}
+
 	// Build the final result slice
 	result := make([]SpeciesDailySummary, 0, len(scientificNames))
 	for _, scientificName := range scientificNames { // Iterate using the filtered list
@@ -365,9 +372,8 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			ThumbnailURL:   thumbnailURL,
 		}
 		
-		// Add species tracking metadata if processor has tracker
-		if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {
-			status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(data.ScientificName, time.Now())
+		// Add species tracking metadata from batch results
+		if status, exists := batchSpeciesStatus[scientificName]; exists {
 			speciesSummary.IsNewSpecies = status.IsNew
 			
 			// Only set days fields if they have valid values (>= 0)

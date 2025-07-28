@@ -39,16 +39,20 @@ func TestSpeciesStatusTracking(t *testing.T) {
 		species: []datastore.NewSpeciesData{},
 	}
 
+	// First detection should be new
+	now := time.Now()
+
 	// Create new species tracker
 	tracker := &NewSpeciesTracker{
 		speciesFirstSeen: make(map[string]time.Time),
 		windowDays:       14,
 		ds:               mockDS,
 		syncIntervalMins: 60,
+		statusCache:      make(map[string]cachedSpeciesStatus),
+		cacheTTL:         30 * time.Second,
+		lastCacheCleanup: now,
+		seasonCacheTTL:   time.Hour,
 	}
-
-	// First detection should be new
-	now := time.Now()
 	status := tracker.GetSpeciesStatus("Testus birdus", now)
 	assert.True(t, status.IsNew)
 	assert.Equal(t, 0, status.DaysSinceFirst)
