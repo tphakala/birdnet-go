@@ -553,12 +553,15 @@ func validateYearlyTrackingSettings(settings *YearlyTrackingSettings) error {
 				Context("reset_month", settings.ResetMonth).
 				Build()
 		}
-		// Validate reset day
-		if settings.ResetDay < 1 || settings.ResetDay > 31 {
-			return errors.New(fmt.Errorf("yearly tracking reset day must be between 1 and 31, got %d", settings.ResetDay)).
+		// Validate reset day - must be valid for the specified month
+		maxDaysInMonth := getMaxDaysInMonth(settings.ResetMonth)
+		if settings.ResetDay < 1 || settings.ResetDay > maxDaysInMonth {
+			return errors.New(fmt.Errorf("yearly tracking reset day must be between 1 and %d for month %d, got %d", maxDaysInMonth, settings.ResetMonth, settings.ResetDay)).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "yearly-tracking-reset-day").
+				Context("reset_month", settings.ResetMonth).
 				Context("reset_day", settings.ResetDay).
+				Context("max_days_in_month", maxDaysInMonth).
 				Build()
 		}
 		// Validate window days
@@ -599,15 +602,30 @@ func validateSeasonalTrackingSettings(settings *SeasonalTrackingSettings) error 
 					Context("start_month", season.StartMonth).
 					Build()
 			}
-			if season.StartDay < 1 || season.StartDay > 31 {
-				return errors.New(fmt.Errorf("season %s start day must be between 1 and 31, got %d", seasonName, season.StartDay)).
+			maxDaysInMonth := getMaxDaysInMonth(season.StartMonth)
+			if season.StartDay < 1 || season.StartDay > maxDaysInMonth {
+				return errors.New(fmt.Errorf("season %s start day must be between 1 and %d for month %d, got %d", seasonName, maxDaysInMonth, season.StartMonth, season.StartDay)).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "seasonal-tracking-season-day").
 					Context("season", seasonName).
+					Context("start_month", season.StartMonth).
 					Context("start_day", season.StartDay).
+					Context("max_days_in_month", maxDaysInMonth).
 					Build()
 			}
 		}
 	}
 	return nil
+}
+
+// getMaxDaysInMonth returns the maximum number of days for a given month (1-12)
+func getMaxDaysInMonth(month int) int {
+	switch month {
+	case 2: // February
+		return 29 // Assume leap year to be safe
+	case 4, 6, 9, 11: // April, June, September, November
+		return 30
+	default: // January, March, May, July, August, October, December
+		return 31
+	}
 }

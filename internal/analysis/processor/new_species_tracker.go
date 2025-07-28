@@ -624,7 +624,7 @@ func (t *NewSpeciesTracker) GetSpeciesCount() int {
 }
 
 // PruneOldEntries removes species entries older than 2x the window period
-// This prevents unbounded memory growth over time
+// This prevents unbounded memory growth over time across all tracking maps
 func (t *NewSpeciesTracker) PruneOldEntries() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -632,10 +632,37 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 	cutoffTime := time.Now().AddDate(0, 0, -t.windowDays*2)
 	pruned := 0
 
+	// Prune lifetime tracking map
 	for scientificName, firstSeen := range t.speciesFirstSeen {
 		if firstSeen.Before(cutoffTime) {
 			delete(t.speciesFirstSeen, scientificName)
 			pruned++
+		}
+	}
+
+	// Prune yearly tracking map if enabled
+	if t.yearlyEnabled {
+		for scientificName, firstSeen := range t.speciesThisYear {
+			if firstSeen.Before(cutoffTime) {
+				delete(t.speciesThisYear, scientificName)
+				pruned++
+			}
+		}
+	}
+
+	// Prune seasonal tracking maps if enabled
+	if t.seasonalEnabled {
+		for season, speciesMap := range t.speciesBySeason {
+			for scientificName, firstSeen := range speciesMap {
+				if firstSeen.Before(cutoffTime) {
+					delete(speciesMap, scientificName)
+					pruned++
+				}
+			}
+			// Remove empty seasonal maps to prevent memory leaks
+			if len(speciesMap) == 0 {
+				delete(t.speciesBySeason, season)
+			}
 		}
 	}
 

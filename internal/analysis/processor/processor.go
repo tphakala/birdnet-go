@@ -226,9 +226,13 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 	}
 
 	// Sync species tracker if needed (non-blocking)
-	if p.NewSpeciesTracker != nil {
+	p.speciesTrackerMu.RLock()
+	tracker := p.NewSpeciesTracker
+	p.speciesTrackerMu.RUnlock()
+	
+	if tracker != nil {
 		go func() {
-			if err := p.NewSpeciesTracker.SyncIfNeeded(); err != nil {
+			if err := tracker.SyncIfNeeded(); err != nil {
 				log.Printf("Failed to sync species tracker: %v", err)
 			}
 		}()
@@ -324,10 +328,12 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 			item.ElapsedTime)
 
 		// Update species tracker if enabled
+		p.speciesTrackerMu.RLock()
 		if p.NewSpeciesTracker != nil {
 			// Update tracker with this detection
 			p.NewSpeciesTracker.UpdateSpecies(scientificName, item.StartTime)
 		}
+		p.speciesTrackerMu.RUnlock()
 
 		// Detection passed all filters, process it
 		detections = append(detections, Detections{
@@ -593,10 +599,14 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	}
 
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
+		p.speciesTrackerMu.RLock()
+		tracker := p.NewSpeciesTracker
+		p.speciesTrackerMu.RUnlock()
+		
 		actions = append(actions, &DatabaseAction{
 			Settings:          p.Settings,
 			EventTracker:      p.GetEventTracker(),
-			NewSpeciesTracker: p.NewSpeciesTracker,
+			NewSpeciesTracker: tracker,
 			Note:              detection.Note,
 			Results:           detection.Results,
 			Ds:                p.Ds})
