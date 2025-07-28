@@ -5,6 +5,7 @@
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
+  import { getLocalDateString, isToday, isFutureDate, parseHour } from '$lib/utils/date';
 
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
@@ -13,7 +14,7 @@
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
   let recentDetections = $state<Detection[]>([]);
-  let selectedDate = $state(new Date().toISOString().split('T')[0]);
+  let selectedDate = $state(getLocalDateString());
   let isLoadingSummary = $state(true);
   let isLoadingDetections = $state(true);
   let summaryError = $state<string | null>(null);
@@ -418,7 +419,7 @@
   function previousDay() {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() - 1);
-    selectedDate = date.toISOString().split('T')[0];
+    selectedDate = getLocalDateString(date);
     handleDateChangeWithCleanup();
     fetchDailySummary();
   }
@@ -426,16 +427,16 @@
   function nextDay() {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() + 1);
-    const today = new Date().toISOString().split('T')[0];
-    if (date.toISOString().split('T')[0] <= today) {
-      selectedDate = date.toISOString().split('T')[0];
+    const newDateString = getLocalDateString(date);
+    if (!isFutureDate(newDateString)) {
+      selectedDate = newDateString;
       handleDateChangeWithCleanup();
       fetchDailySummary();
     }
   }
 
   function goToToday() {
-    selectedDate = new Date().toISOString().split('T')[0];
+    selectedDate = getLocalDateString();
     handleDateChangeWithCleanup();
     fetchDailySummary();
   }
@@ -498,7 +499,8 @@
       return;
     }
 
-    const hour = new Date(`${detection.date} ${detection.time}`).getHours();
+    // Parse the time string (HH:MM:SS format) to extract the hour
+    const hour = parseHour(detection.time);
     const existingIndex = dailySummary.findIndex(s => s.species_code === detection.speciesCode);
 
     if (existingIndex >= 0) {

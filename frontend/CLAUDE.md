@@ -189,6 +189,31 @@ eventSource.close();
 - No manual reconnection logic needed
 - Automatic exponential backoff
 
+## Date and Time Handling
+
+**IMPORTANT**: Always use local timezone functions to avoid timezone bugs.
+
+```typescript
+import { getLocalDateString, isToday, isFutureDate, parseHour } from '$lib/utils/date';
+
+// ✅ Correct: Use local timezone helpers
+const today = getLocalDateString(); // "2024-01-15"
+const tomorrow = getLocalDateString(new Date(Date.now() + 86400000));
+const isCurrentDay = isToday('2024-01-15'); // true/false
+const isFuture = isFutureDate('2024-12-31'); // true/false
+const hour = parseHour('14:30:00'); // 14
+
+// ❌ Wrong: Never use toISOString() for date display
+const wrongDate = new Date().toISOString().split('T')[0]; // UTC conversion!
+```
+
+**Key Points:**
+
+- `toISOString()` converts to UTC, causing wrong dates for users in timezones ahead/behind UTC
+- Always use `getLocalDateString()` for YYYY-MM-DD formatting
+- Use provided helpers for date comparisons and time parsing
+- These utilities ensure consistent behavior across all timezones
+
 ## TypeScript Type Assertions in Svelte Bindings
 
 **Problem**: Prettier conflicts with TypeScript type assertions in Svelte component bindings.

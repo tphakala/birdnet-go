@@ -5,6 +5,7 @@
   import { alertIconsSvg, navigationIcons, weatherIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+  import { getLocalDateString } from '$lib/utils/date';
 
   // Animation duration constants (in milliseconds)
   const ANIMATION_DURATIONS = {
@@ -231,7 +232,7 @@
     return `/ui/detections?${params.toString()}`;
   }
 
-  const isToday = $derived(selectedDate === new Date().toISOString().split('T')[0]);
+  const isToday = $derived(selectedDate === getLocalDateString());
 
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
