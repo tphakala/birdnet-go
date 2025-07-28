@@ -107,6 +107,17 @@ func InitializeEventBusIntegration() error {
 		"debug", resourceConfig.Debug,
 	)
 	
+	// Create and register detection notification consumer
+	detectionConsumer := NewDetectionNotificationConsumer(service)
+	if err := eventBus.RegisterConsumer(detectionConsumer); err != nil {
+		return fmt.Errorf("failed to register detection notification consumer: %w", err)
+	}
+	
+	logger.Info("detection notification consumer registered with event bus",
+		"consumer", detectionConsumer.Name(),
+		"debug", config.Debug,
+	)
+	
 	return nil
 }
 
