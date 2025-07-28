@@ -238,13 +238,13 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 			Build()
 	}
 
-	// Calculate date range for initial load
-	// Load data from 2x window period to ensure we catch all relevant species
+	// Load ALL historical first detection data to properly initialize the tracker
+	// We need the complete history, not just a window, to know when species were truly first seen
 	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -t.windowDays*2).Format("2006-01-02")
+	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
 	// Use existing analytics method to get new species data
-	newSpeciesData, err := t.ds.GetNewSpeciesDetections(startDate, endDate, 1000, 0)
+	newSpeciesData, err := t.ds.GetNewSpeciesDetections(startDate, endDate, 10000, 0)
 	if err != nil {
 		return errors.New(err).
 			Component("new-species-tracker").
@@ -454,4 +454,57 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 	}
 
 	return pruned
+}
+
+// CheckAndUpdateSpecies atomically checks if a species is new and updates the tracker
+// This prevents race conditions where multiple concurrent detections of the same species
+// could all be considered "new" before any of them update the tracker.
+// Returns (isNew, daysSinceFirstSeen)
+func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Check and reset periods if needed
+	t.checkAndResetPeriods(detectionTime)
+
+	// Check current status before any updates
+	firstSeen, exists := t.speciesFirstSeen[scientificName]
+
+	if !exists {
+		// Species not seen before - definitely new
+		isNew = true
+		daysSinceFirstSeen = 0
+		// Record this as the first detection
+		t.speciesFirstSeen[scientificName] = detectionTime
+	} else {
+		// Calculate days since first seen
+		daysSince := int(detectionTime.Sub(firstSeen).Hours() / 24)
+		daysSinceFirstSeen = daysSince
+		isNew = daysSince <= t.windowDays
+		
+		// Update if this detection is earlier than recorded
+		if detectionTime.Before(firstSeen) {
+			t.speciesFirstSeen[scientificName] = detectionTime
+		}
+	}
+
+	// Update yearly tracking
+	if t.yearlyEnabled {
+		if _, yearExists := t.speciesThisYear[scientificName]; !yearExists {
+			t.speciesThisYear[scientificName] = detectionTime
+		}
+	}
+
+	// Update seasonal tracking
+	if t.seasonalEnabled {
+		currentSeason := t.getCurrentSeason(detectionTime)
+		if t.speciesBySeason[currentSeason] == nil {
+			t.speciesBySeason[currentSeason] = make(map[string]time.Time)
+		}
+		if _, seasonExists := t.speciesBySeason[currentSeason][scientificName]; !seasonExists {
+			t.speciesBySeason[currentSeason][scientificName] = detectionTime
+		}
+	}
+
+	return
 }

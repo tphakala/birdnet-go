@@ -269,6 +269,11 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 		return err
 	}
 	
+	// Create optimized indexes for new species tracking performance
+	if err := createOptimizedIndexes(db, dbType, migrationLogger); err != nil {
+		return err
+	}
+	
 	// Log successful migration completion
 	migrationLogger.Info("Database migration completed successfully",
 		"db_type", dbType,
@@ -567,6 +572,76 @@ func findNewColumns(db *gorm.DB, model interface{}, columnsBefore []string) []st
 	}
 	
 	return addedColumns
+}
+
+// createOptimizedIndexes creates optimized database indexes for performance
+func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error {
+	indexStart := time.Now()
+	lgr.Info("Creating optimized indexes",
+		"db_type", dbType)
+	
+	// Define the optimized index for new species tracking
+	// This index benefits the new species tracking queries that filter by scientific_name and date
+	indexName := "idx_notes_sciname_date_optimized"
+	tableName := "notes"
+	
+	// Check if index already exists using GORM's migrator
+	if db.Migrator().HasIndex(&Note{}, indexName) {
+		lgr.Debug("Optimized index already exists, skipping creation",
+			"index", indexName,
+			"table", tableName)
+		return nil
+	}
+	
+	// Create the optimized composite index with correct column order
+	// (scientific_name, date) - this order is critical for query performance
+	var createIndexSQL string
+	switch strings.ToLower(dbType) {
+	case "sqlite":
+		createIndexSQL = fmt.Sprintf(
+			"CREATE INDEX IF NOT EXISTS %s ON %s (scientific_name, date)",
+			indexName, tableName)
+	case "mysql":
+		createIndexSQL = fmt.Sprintf(
+			"CREATE INDEX %s ON %s (scientific_name, date)",
+			indexName, tableName)
+	default:
+		return errors.Newf("unsupported database type for index creation").
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "create_optimized_indexes").
+			Context("db_type", dbType).
+			Build()
+	}
+	
+	// Execute the index creation
+	if err := db.Exec(createIndexSQL).Error; err != nil {
+		// For MySQL, ignore duplicate index errors as they're expected in some cases
+		if strings.EqualFold(dbType, "mysql") && strings.Contains(strings.ToLower(err.Error()), "duplicate key name") {
+			lgr.Debug("Index already exists (MySQL duplicate key), continuing",
+				"index", indexName,
+				"table", tableName)
+			return nil
+		}
+		
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_optimized_index").
+			Context("db_type", dbType).
+			Context("index_name", indexName).
+			Context("table_name", tableName).
+			Context("sql", createIndexSQL).
+			Build()
+	}
+	
+	lgr.Info("Optimized index created successfully",
+		"index", indexName,
+		"table", tableName,
+		"duration", time.Since(indexStart),
+		"db_type", dbType)
+	
+	return nil
 }
 
 // logTableMigration logs the result of a table migration

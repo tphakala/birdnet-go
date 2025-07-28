@@ -905,15 +905,12 @@
     aria-modal="true"
     aria-labelledby="modal-title"
     tabindex="-1"
-    onclick={() => (showRangeFilterModal = false)}
+    onclick={e => e.target === e.currentTarget && (showRangeFilterModal = false)}
     onkeydown={e => e.key === 'Escape' && (showRangeFilterModal = false)}
   >
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="bg-base-100 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col"
       role="document"
-      onclick={e => e.stopPropagation()}
     >
       <div class="flex justify-between items-center mb-4">
         <h3 id="modal-title" class="text-lg font-bold">
