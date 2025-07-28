@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"gorm.io/gorm"
 )
@@ -362,3 +363,397 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 		}
 	}
 }
+
+// Multi-period tracking tests
+
+func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	// Create basic configuration
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:                true,
+		NewSpeciesWindowDays:   30,
+		SyncIntervalMinutes:    60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+			WindowDays: 30,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]conf.Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		},
+	}
+	
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	if tracker == nil {
+		t.Fatal("Expected tracker to be created")
+	}
+	
+	// Verify window settings are applied
+	if tracker.GetWindowDays() != 30 {
+		t.Errorf("Expected window days to be 30, got %d", tracker.GetWindowDays())
+	}
+}
+
+func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 14,
+		SyncIntervalMinutes:  60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+			WindowDays: 30,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	_ = tracker.InitFromDatabase()
+	
+	currentTime := time.Now()
+	speciesName := "Parus major"
+	
+	// First detection - should be new for all periods
+	isNew := tracker.UpdateSpecies(speciesName, currentTime)
+	if !isNew {
+		t.Error("Expected first detection to be new")
+	}
+	
+	status := tracker.GetSpeciesStatus(speciesName, currentTime)
+	
+	// Check lifetime tracking
+	if !status.IsNew {
+		t.Error("Expected species to be new (lifetime)")
+	}
+	if status.DaysSinceFirst != 0 {
+		t.Errorf("Expected DaysSinceFirst to be 0, got %d", status.DaysSinceFirst)
+	}
+	
+	// Check yearly tracking
+	if !status.IsNewThisYear {
+		t.Error("Expected species to be new this year")
+	}
+	if status.DaysThisYear != 0 {
+		t.Errorf("Expected DaysThisYear to be 0, got %d", status.DaysThisYear)
+	}
+}
+
+func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 14,
+		SyncIntervalMinutes:  60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]conf.Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		},
+	}
+	
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	_ = tracker.InitFromDatabase()
+	
+	// Test during spring season (April)
+	springTime := time.Date(2024, 4, 15, 12, 0, 0, 0, time.UTC)
+	speciesName := "Turdus migratorius"
+	
+	// First detection in spring
+	isNew := tracker.UpdateSpecies(speciesName, springTime)
+	if !isNew {
+		t.Error("Expected first detection to be new")
+	}
+	
+	status := tracker.GetSpeciesStatus(speciesName, springTime)
+	
+	// Check seasonal tracking
+	if !status.IsNewThisSeason {
+		t.Error("Expected species to be new this season")
+	}
+	if status.DaysThisSeason != 0 {
+		t.Errorf("Expected DaysThisSeason to be 0, got %d", status.DaysThisSeason)
+	}
+	if status.CurrentSeason != "spring" {
+		t.Errorf("Expected current season to be 'spring', got '%s'", status.CurrentSeason)
+	}
+}
+
+func TestSeasonDetection(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 14,
+		SyncIntervalMinutes:  60,
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]conf.Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		},
+	}
+	
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	
+	testCases := []struct {
+		date           time.Time
+		expectedSeason string
+	}{
+		{time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC), "winter"},
+		{time.Date(2024, 3, 25, 12, 0, 0, 0, time.UTC), "spring"},
+		{time.Date(2024, 6, 25, 12, 0, 0, 0, time.UTC), "summer"},
+		{time.Date(2024, 9, 25, 12, 0, 0, 0, time.UTC), "fall"},
+		{time.Date(2024, 12, 25, 12, 0, 0, 0, time.UTC), "winter"},
+	}
+	
+	for _, tc := range testCases {
+		season := tracker.getCurrentSeason(tc.date)
+		if season != tc.expectedSeason {
+			t.Errorf("For date %v, expected season '%s', got '%s'", 
+				tc.date.Format("2006-01-02"), tc.expectedSeason, season)
+		}
+	}
+}
+
+func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 7, // Short window for lifetime tracking
+		SyncIntervalMinutes:  60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+			WindowDays: 14,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 10,
+			Seasons: map[string]conf.Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		},
+	}
+	
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	_ = tracker.InitFromDatabase()
+	
+	speciesName := "Cyanistes caeruleus"
+	
+	// First detection in spring, many days ago (lifetime not new, but season/year new)
+	springTime := time.Date(2024, 4, 1, 12, 0, 0, 0, time.UTC)
+	tracker.UpdateSpecies(speciesName, springTime)
+	
+	// Check status much later (after lifetime window expires)
+	laterTime := time.Date(2024, 4, 20, 12, 0, 0, 0, time.UTC)
+	status := tracker.GetSpeciesStatus(speciesName, laterTime)
+	
+	// Lifetime should not be new (19 days > 7 day window)
+	if status.IsNew {
+		t.Error("Expected species to not be new (lifetime) after window expired")
+	}
+	if status.DaysSinceFirst != 19 {
+		t.Errorf("Expected DaysSinceFirst to be 19, got %d", status.DaysSinceFirst)
+	}
+	
+	// Yearly should not be new (19 days > 14 day window)
+	// The species was detected this year, but outside the yearly window
+	if status.IsNewThisYear {
+		t.Errorf("Expected species to not be new this year (19 days > 14 day window). DaysThisYear: %d", status.DaysThisYear)
+	}
+	if status.DaysThisYear != 19 {
+		t.Errorf("Expected DaysThisYear to be 19, got %d", status.DaysThisYear)
+	}
+	
+	// Seasonal should not be new (19 days > 10 day window)
+	if status.IsNewThisSeason {
+		t.Error("Expected species to not be new this season after window expired")
+	}
+	if status.DaysThisSeason != 19 {
+		t.Errorf("Expected DaysThisSeason to be 19, got %d", status.DaysThisSeason)
+	}
+}
+
+func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 30,
+		SyncIntervalMinutes:  60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+			WindowDays: 30,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]conf.Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		},
+	}
+	
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	_ = tracker.InitFromDatabase()
+	
+	speciesName := "Hirundo rustica" // Barn Swallow
+	
+	// First seen in spring
+	springTime := time.Date(2024, 4, 15, 12, 0, 0, 0, time.UTC)
+	tracker.UpdateSpecies(speciesName, springTime)
+	
+	// Check in summer (after season transition)
+	summerTime := time.Date(2024, 7, 15, 12, 0, 0, 0, time.UTC)
+	status := tracker.GetSpeciesStatus(speciesName, summerTime)
+	
+	// Should be new this season (first time in summer)
+	if !status.IsNewThisSeason {
+		t.Error("Expected species to be new this season after season transition")
+	}
+	if status.CurrentSeason != "summer" {
+		t.Errorf("Expected current season to be 'summer', got '%s'", status.CurrentSeason)
+	}
+	
+	// Should not be new this year (91 days > 30 day window)
+	if status.IsNewThisYear {
+		t.Error("Expected species to not be new this year (91 days > 30 day window)")
+	}
+	
+	// Now detect it in summer
+	tracker.UpdateSpecies(speciesName, summerTime)
+	
+	// Check status later in summer
+	laterSummerTime := time.Date(2024, 8, 1, 12, 0, 0, 0, time.UTC)
+	status = tracker.GetSpeciesStatus(speciesName, laterSummerTime)
+	
+	// Should now have records for both seasons
+	if status.DaysThisSeason != 17 { // Days since July 15
+		t.Errorf("Expected DaysThisSeason to be 17, got %d", status.DaysThisSeason)
+	}
+}
+
+func TestMultiPeriodTracking_YearReset(t *testing.T) {
+	ds := &mockDatastore{species: []datastore.NewSpeciesData{}}
+	
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 365, // Long window so it doesn't interfere
+		SyncIntervalMinutes:  60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+			WindowDays: 30,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
+	}
+	
+	// Create tracker and manually set to 2023 to simulate starting in previous year
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker.currentYear = 2023 // Manually set for test scenario
+	_ = tracker.InitFromDatabase()
+	
+	speciesName := "Poecile palustris"
+	
+	// First detection in 2023
+	year2023Time := time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC)
+	tracker.UpdateSpecies(speciesName, year2023Time)
+	
+	// Verify state after 2023 detection
+	status := tracker.GetSpeciesStatus(speciesName, year2023Time)
+	if !status.IsNewThisYear {
+		t.Error("Expected species to be new in 2023 when first detected")
+	}
+	if status.DaysThisYear != 0 {
+		t.Errorf("Expected DaysThisYear to be 0 in 2023, got %d", status.DaysThisYear)
+	}
+	
+	// Check in 2024 (after year transition) - this should trigger yearly reset
+	year2024Time := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	status = tracker.GetSpeciesStatus(speciesName, year2024Time)
+	
+	// After year reset, species should be "new this year" because it wasn't detected in 2024 yet
+	if !status.IsNewThisYear {
+		t.Errorf("Expected species to be new this year after yearly reset. IsNewThisYear=%v, DaysThisYear=%d", status.IsNewThisYear, status.DaysThisYear)
+	}
+	if status.DaysThisYear != 0 {
+		t.Errorf("Expected DaysThisYear to be 0 after yearly reset, got %d", status.DaysThisYear)
+	}
+	
+	// Now detect it in 2024
+	tracker.UpdateSpecies(speciesName, year2024Time)
+	
+	// Check status after detection in 2024
+	status = tracker.GetSpeciesStatus(speciesName, year2024Time)
+	
+	// Should still be new this year (first detection in 2024)
+	if !status.IsNewThisYear {
+		t.Error("Expected species to be new this year after first detection in 2024")
+	}
+	if status.DaysThisYear != 0 {
+		t.Errorf("Expected DaysThisYear to be 0 (just detected), got %d", status.DaysThisYear)
+	}
+	
+	// Should not be new lifetime (seen in 2023)
+	if status.IsNew {
+		t.Error("Expected species to not be new (lifetime) - seen in previous year")
+	}
+	
+	// Days since first should be 365 (roughly)
+	expectedDays := 365
+	if status.DaysSinceFirst < expectedDays-1 || status.DaysSinceFirst > expectedDays+1 {
+		t.Errorf("Expected DaysSinceFirst to be around %d, got %d", expectedDays, status.DaysSinceFirst)
+	}
+	
+	// Test that species becomes "not new this year" after the yearly window expires
+	laterTime := year2024Time.Add(35 * 24 * time.Hour) // 35 days later (beyond 30-day window)
+	status = tracker.GetSpeciesStatus(speciesName, laterTime)
+	
+	if status.IsNewThisYear {
+		t.Error("Expected species to not be new this year after yearly window expires")
+	}
+	if status.DaysThisYear != 35 {
+		t.Errorf("Expected DaysThisYear to be 35, got %d", status.DaysThisYear)
+	}
+}
+
