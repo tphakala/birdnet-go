@@ -34,6 +34,8 @@ type Processor struct {
 	BirdImageCache      *imageprovider.BirdImageCache
 	EventTracker        *EventTracker
 	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
+	NewSpeciesTracker   *NewSpeciesTracker   // Tracks new species detections
+	speciesTrackerMu    sync.RWMutex         // Mutex to protect NewSpeciesTracker access
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
@@ -107,6 +109,28 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		lastDogDetectionLog: make(map[string]time.Time),
 		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
 		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
+	}
+
+	// Initialize new species tracker if enabled
+	if settings.Realtime.SpeciesTracking.Enabled {
+		windowDays := settings.Realtime.SpeciesTracking.NewSpeciesWindowDays
+		if windowDays <= 0 {
+			windowDays = 14 // Default
+		}
+		syncInterval := settings.Realtime.SpeciesTracking.SyncIntervalMinutes
+		if syncInterval <= 0 {
+			syncInterval = 60 // Default
+		}
+		
+		p.NewSpeciesTracker = NewSpeciesTrackerWithConfig(ds, windowDays, syncInterval)
+		
+		// Initialize species tracker from database
+		if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
+			log.Printf("Failed to initialize species tracker from database: %v", err)
+			// Continue anyway - tracker will work for new detections
+		}
+		
+		log.Printf("Species tracking enabled: window=%d days, sync=%d minutes", windowDays, syncInterval)
 	}
 
 	// Start the detection processor
@@ -208,6 +232,15 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
 	}
 
+	// Sync species tracker if needed (non-blocking)
+	if p.NewSpeciesTracker != nil {
+		go func() {
+			if err := p.NewSpeciesTracker.SyncIfNeeded(); err != nil {
+				log.Printf("Failed to sync species tracker: %v", err)
+			}
+		}()
+	}
+
 	// Process each result in item.Results
 	for _, result := range item.Results {
 		var confidenceThreshold float32
@@ -296,6 +329,12 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 			float64(result.Confidence),
 			item.Source, clipName,
 			item.ElapsedTime)
+
+		// Update species tracker if enabled
+		if p.NewSpeciesTracker != nil {
+			// Update tracker with this detection
+			p.NewSpeciesTracker.UpdateSpecies(scientificName, item.StartTime)
+		}
 
 		// Detection passed all filters, process it
 		detections = append(detections, Detections{

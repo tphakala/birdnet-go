@@ -19,9 +19,11 @@ import (
 // SSEDetectionData represents the detection data sent via SSE
 type SSEDetectionData struct {
 	datastore.Note
-	BirdImage imageprovider.BirdImage `json:"birdImage"`
-	Timestamp time.Time               `json:"timestamp"`
-	EventType string                  `json:"eventType"`
+	BirdImage          imageprovider.BirdImage `json:"birdImage"`
+	Timestamp          time.Time               `json:"timestamp"`
+	EventType          string                  `json:"eventType"`
+	IsNewSpecies       bool                    `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int                     `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 }
 
 // SSESoundLevelData represents sound level data sent via SSE
@@ -480,6 +482,13 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 		BirdImage: *birdImage,
 		Timestamp: time.Now(),
 		EventType: "new_detection",
+	}
+
+	// Add species tracking metadata if processor has tracker
+	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {
+		status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(note.ScientificName, time.Now())
+		detection.IsNewSpecies = status.IsNew
+		detection.DaysSinceFirstSeen = status.DaysSinceFirst
 	}
 
 	c.sseManager.BroadcastDetection(&detection)

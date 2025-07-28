@@ -252,11 +252,12 @@ type RealtimeSettings struct {
 	PrivacyFilter PrivacyFilterSettings `json:"privacyFilter"` // Privacy filter settings
 	DogBarkFilter DogBarkFilterSettings `json:"dogBarkFilter"` // Dog bark filter settings
 	RTSP          RTSPSettings          `json:"rtsp"`          // RTSP settings
-	MQTT          MQTTSettings          `json:"mqtt"`          // MQTT settings
-	Telemetry     TelemetrySettings     `json:"telemetry"`     // Telemetry settings
-	Monitoring    MonitoringSettings    `json:"monitoring"`    // System resource monitoring settings
-	Species       SpeciesSettings       `json:"species"`       // Custom thresholds and actions for species
-	Weather       WeatherSettings       `json:"weather"`       // Weather provider related settings
+	MQTT            MQTTSettings            `json:"mqtt"`            // MQTT settings
+	Telemetry       TelemetrySettings       `json:"telemetry"`       // Telemetry settings
+	Monitoring      MonitoringSettings      `json:"monitoring"`      // System resource monitoring settings
+	Species         SpeciesSettings         `json:"species"`         // Custom thresholds and actions for species
+	Weather         WeatherSettings         `json:"weather"`         // Weather provider related settings
+	SpeciesTracking SpeciesTrackingSettings `json:"speciesTracking"` // New species tracking settings
 }
 
 // SpeciesAction represents a single action configuration
@@ -279,6 +280,13 @@ type SpeciesSettings struct {
 	Include []string                 `yaml:"include" json:"include"` // Always include these species
 	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
 	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration
+}
+
+// SpeciesTrackingSettings contains settings for tracking new species
+type SpeciesTrackingSettings struct {
+	Enabled              bool `json:"enabled"`              // true to enable new species tracking
+	NewSpeciesWindowDays int  `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes  int  `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
 }
 
 // ActionConfig holds configuration details for a specific action.
