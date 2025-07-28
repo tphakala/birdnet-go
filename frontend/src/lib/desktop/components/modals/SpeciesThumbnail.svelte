@@ -31,15 +31,21 @@
   // Size classes for responsive thumbnails
   const sizeClasses = $derived(() => {
     switch (size) {
-      case 'sm': return 'w-20 h-15';
-      case 'md': return 'w-24 h-18';
-      case 'lg': return 'w-32 h-24';
-      default: return 'w-32 h-24';
+      case 'sm':
+        return 'w-20 h-15';
+      case 'md':
+        return 'w-24 h-18';
+      case 'lg':
+        return 'w-32 h-24';
+      default:
+        return 'w-32 h-24';
     }
   });
 </script>
 
-<div class={`${sizeClasses()} relative overflow-hidden rounded-lg bg-base-100 shadow-md flex-shrink-0 ${className}`}>
+<div
+  class={`${sizeClasses()} relative overflow-hidden rounded-lg bg-base-100 shadow-md flex-shrink-0 ${className}`}
+>
   <img
     src="/api/v2/media/species-image?name={encodeURIComponent(scientificName)}"
     alt={commonName}

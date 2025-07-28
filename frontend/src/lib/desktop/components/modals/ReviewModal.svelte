@@ -96,7 +96,6 @@
       isLoading = false;
     }
   }
-
 </script>
 
 <Modal
@@ -139,14 +138,18 @@
             <div class="flex gap-4 items-start">
               <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
               <div class="flex gap-4 items-center flex-1 min-w-0">
-                <SpeciesThumbnail 
+                <SpeciesThumbnail
                   scientificName={detection.scientificName}
                   commonName={detection.commonName}
                   size="lg"
                 />
                 <div class="flex-1 min-w-0">
-                  <h3 class="text-2xl font-semibold text-base-content mb-1 truncate">{detection.commonName}</h3>
-                  <p class="text-base text-base-content/60 italic truncate">{detection.scientificName}</p>
+                  <h3 class="text-2xl font-semibold text-base-content mb-1 truncate">
+                    {detection.commonName}
+                  </h3>
+                  <p class="text-base text-base-content/60 italic truncate">
+                    {detection.scientificName}
+                  </p>
                   <div class="mt-2">
                     <SpeciesBadges {detection} size="md" />
                   </div>
@@ -155,17 +158,23 @@
 
               <!-- Section 2: Date & Time (fixed width) -->
               <div class="flex-shrink-0 text-center" style:min-width="120px">
-                <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
+                <div class="text-sm text-base-content/60 mb-2">
+                  {t('detections.headers.dateTime')}
+                </div>
                 <div class="text-base text-base-content">{detection.date}</div>
                 <div class="text-base text-base-content">{detection.time}</div>
                 {#if detection.timeOfDay}
-                  <div class="text-sm text-base-content/60 mt-1 capitalize">{detection.timeOfDay}</div>
+                  <div class="text-sm text-base-content/60 mt-1 capitalize">
+                    {detection.timeOfDay}
+                  </div>
                 {/if}
               </div>
 
               <!-- Section 3: Weather Conditions (fixed width) -->
               <div class="flex-shrink-0 text-center" style:min-width="180px">
-                <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.weather')}</div>
+                <div class="text-sm text-base-content/60 mb-2">
+                  {t('detections.headers.weather')}
+                </div>
                 {#if detection.weather}
                   <div class="flex justify-center">
                     <WeatherDetails
@@ -180,13 +189,17 @@
                     />
                   </div>
                 {:else}
-                  <div class="text-sm text-base-content/40 italic">{t('detections.weather.noData')}</div>
+                  <div class="text-sm text-base-content/40 italic">
+                    {t('detections.weather.noData')}
+                  </div>
                 {/if}
               </div>
 
               <!-- Section 4: Confidence (fixed width) -->
               <div class="flex-shrink-0 flex flex-col items-center" style:min-width="100px">
-                <div class="text-sm text-base-content/60 mb-2">{t('search.tableHeaders.confidence')}</div>
+                <div class="text-sm text-base-content/60 mb-2">
+                  {t('search.tableHeaders.confidence')}
+                </div>
                 <ConfidenceCircle confidence={detection.confidence} size="lg" />
               </div>
             </div>
@@ -210,8 +223,10 @@
         <div class="space-y-4">
           <!-- Review Form -->
           <div class="form-control bg-base-100 rounded-lg p-4">
-            <h4 class="text-lg font-semibold mb-4">{t('common.review.form.reviewDetectionTitle')}</h4>
-            
+            <h4 class="text-lg font-semibold mb-4">
+              {t('common.review.form.reviewDetectionTitle')}
+            </h4>
+
             <label class="label cursor-pointer justify-start gap-4">
               <input
                 type="radio"
@@ -322,12 +337,20 @@
                 class="w-4 h-4 transition-transform duration-200"
                 class:rotate-90={showCommentSection}
               >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8.25 4.5l7.5 7.5-7.5 7.5"
+                />
               </svg>
               <span class="text-sm">
-                {showCommentSection ? t('common.review.form.hideComment') : t('common.review.form.addComment')}
+                {showCommentSection
+                  ? t('common.review.form.hideComment')
+                  : t('common.review.form.addComment')}
                 {#if comment && !showCommentSection}
-                  <span class="text-xs text-base-content/60">{t('common.review.form.commentCount', { chars: comment.length })}</span>
+                  <span class="text-xs text-base-content/60"
+                    >{t('common.review.form.commentCount', { chars: comment.length })}</span
+                  >
                 {/if}
               </span>
             </button>

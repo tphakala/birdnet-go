@@ -169,11 +169,10 @@
   // Get appropriate wind icon based on wind speed
   const getWindIcon = $derived(() => {
     if (windSpeed === undefined) return weatherIcons.wind;
-    if (windSpeed < 3) return weatherIcons.windLight;      // Light wind: 0-3 m/s
-    if (windSpeed < 8) return weatherIcons.windModerate;   // Moderate wind: 3-8 m/s
-    return weatherIcons.windStrong;                        // Strong wind: 8+ m/s
+    if (windSpeed < 3) return weatherIcons.windLight; // Light wind: 0-3 m/s
+    if (windSpeed < 8) return weatherIcons.windModerate; // Moderate wind: 3-8 m/s
+    return weatherIcons.windStrong; // Strong wind: 8+ m/s
   });
-
 
   // Size classes
   const sizeClasses = {
@@ -227,7 +226,10 @@
       <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
-          <div class={cn(sizeClasses[size], 'flex-shrink-0')} aria-label={`Temperature: ${temperature.toFixed(1)}°C`}>
+          <div
+            class={cn(sizeClasses[size], 'flex-shrink-0')}
+            aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
+          >
             {@html weatherIcons.temperature}
           </div>
         {/if}
@@ -242,7 +244,10 @@
       <div class="wm-wind-group flex items-center gap-1 flex-shrink-0">
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
-          <div class={cn(sizeClasses[size], 'flex-shrink-0')} aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}>
+          <div
+            class={cn(sizeClasses[size], 'flex-shrink-0')}
+            aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
+          >
             {@html getWindIcon()}
           </div>
         {/if}
@@ -295,7 +300,7 @@
     width: inherit;
     margin-right: 0;
   }
-  
+
   /* Ensure our size classes take precedence */
   .wm-temperature-group > .h-5.w-5,
   .wm-temperature-group > .h-6.w-6,

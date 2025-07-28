@@ -78,7 +78,9 @@
     const previousIds = new Set(recentDetections.map(d => d.id));
 
     try {
-      const response = await fetch(`/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true`);
+      const response = await fetch(
+        `/api/v2/detections/recent?limit=${Math.max(detectionLimit, MIN_FETCH_LIMIT)}&includeWeather=true`
+      );
       if (!response.ok) {
         throw new Error(
           t('dashboard.errors.recentDetectionsFetch', { status: response.statusText })
@@ -220,8 +222,8 @@
     // If any interactions are active (menus, audio playback), queue the detection for later processing
     if (freezeCount > 0) {
       // Avoid duplicate detections in queue - add null-safety check
-      const isDuplicate = pendingDetectionQueue.some(pending => 
-        pending?.id != null && detection?.id != null && pending.id === detection.id
+      const isDuplicate = pendingDetectionQueue.some(
+        pending => pending?.id != null && detection?.id != null && pending.id === detection.id
       );
       if (!isDuplicate) {
         pendingDetectionQueue.push(detection);
@@ -632,14 +634,14 @@
     freezeCount--;
     // Clamp to prevent negative values due to unmount edge cases
     freezeCount = Math.max(0, freezeCount);
-    
+
     // Process pending detections when all interactions are complete
     if (freezeCount === 0 && pendingDetectionQueue.length > 0) {
       // Process all pending detections
       pendingDetectionQueue.forEach(detection => {
         processDetectionUpdate(detection);
       });
-      
+
       // Clear the queue
       pendingDetectionQueue = [];
     }
@@ -649,7 +651,7 @@
   function processDetectionUpdate(detection: Detection) {
     // Trigger API fetch to get fresh data with animations enabled
     fetchRecentDetections(true);
-    
+
     // Queue daily summary update with debouncing
     queueDailySummaryUpdate(detection);
   }

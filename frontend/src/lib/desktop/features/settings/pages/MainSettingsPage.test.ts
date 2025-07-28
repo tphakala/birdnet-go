@@ -5,7 +5,7 @@ import MainSettingsPage from './MainSettingsPage.svelte';
 
 // Mock the stores
 vi.mock('$lib/stores/settings', () => {
-  const mockNodeSettings = writable({
+  const mockMainSettings = writable({
     name: 'test-node',
   });
 
@@ -15,8 +15,8 @@ vi.mock('$lib/stores/settings', () => {
     overlap: 0.0,
     locale: 'en',
     threads: 0,
-    latitude: 0,
-    longitude: 0,
+    latitude: 40.7128,
+    longitude: -74.006,
     modelPath: '',
     labelPath: '',
     rangeFilter: {
@@ -41,6 +41,17 @@ vi.mock('$lib/stores/settings', () => {
     },
   });
 
+  const mockDashboardSettings = writable({
+    thumbnails: {
+      summary: true,
+      recent: true,
+      imageProvider: 'wikimedia',
+      fallbackPolicy: 'all',
+    },
+    summaryLimit: 100,
+    locale: 'en',
+  });
+
   const mockSettingsStore = writable({
     isLoading: false,
     isSaving: false,
@@ -53,14 +64,51 @@ vi.mock('$lib/stores/settings', () => {
     settingsActions: {
       updateSection: vi.fn(),
     },
-    nodeSettings: mockNodeSettings,
+    mainSettings: mockMainSettings,
     birdnetSettings: mockBirdnetSettings,
+    dashboardSettings: mockDashboardSettings,
   };
 });
 
 // Mock utilities
 vi.mock('$lib/utils/settingsChanges', () => ({
   hasSettingsChanged: vi.fn(() => false),
+}));
+
+// Mock i18n
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string) => key),
+  getLocale: vi.fn(() => 'en'),
+  setLocale: vi.fn(),
+  LOCALES: {
+    en: { name: 'English', flag: '🇬🇧' },
+    de: { name: 'Deutsch', flag: '🇩🇪' },
+  },
+}));
+
+// Mock api
+vi.mock('$lib/utils/api', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {
+    status: number;
+    data?: any;
+    constructor(message: string, status: number, data?: any) {
+      super(message);
+      this.status = status;
+      this.data = data;
+    }
+  },
+}));
+
+// Mock toast actions
+vi.mock('$lib/stores/toast', () => ({
+  toastActions: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 // Mock fetch globally
@@ -151,11 +199,11 @@ describe('MainSettingsPage', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/v2/settings/imageproviders');
     });
 
-    // Check that main sections are rendered
-    expect(screen.getByText('Node Settings')).toBeInTheDocument();
-    expect(screen.getByText('BirdNET Settings')).toBeInTheDocument();
-    expect(screen.getByText('Database Settings')).toBeInTheDocument();
-    expect(screen.getByText('User Interface Settings')).toBeInTheDocument();
+    // Check that main sections are rendered (using translation keys)
+    expect(screen.getByText('settings.main.sections.basic')).toBeInTheDocument();
+    expect(screen.getByText('settings.main.sections.birdnet')).toBeInTheDocument();
+    expect(screen.getByText('settings.main.sections.database')).toBeInTheDocument();
+    expect(screen.getByText('settings.main.sections.ui')).toBeInTheDocument();
   });
 
   it('should fetch and populate locales dropdown', async () => {
@@ -391,6 +439,337 @@ describe('MainSettingsPage', () => {
 
       // Verify the API was called correctly
       expect(mockFetch).toHaveBeenCalledTimes(3); // locales, imageproviders, and range count
+    });
+  });
+
+  describe('Range Filter Species Count Updates', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should update species count when coordinates change', async () => {
+      const { api } = await import('$lib/utils/api');
+      const { settingsActions } = await import('$lib/stores/settings');
+
+      // Setup mocks for API calls
+      mockFetch.mockImplementation(url => {
+        if (url.includes('/api/v2/settings/locales')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ en: 'English' }),
+          });
+        }
+        if (url.includes('/api/v2/settings/imageproviders')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ providers: [] }),
+          });
+        }
+        if (url.includes('/api/v2/range/species/count')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ count: 100 }),
+          });
+        }
+        return Promise.reject(new Error('Unknown URL'));
+      });
+
+      // Mock api.post for range filter test
+      vi.mocked(api.post).mockResolvedValue({ count: 150, species: [] });
+
+      render(MainSettingsPage);
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('/api/v2/settings/locales');
+      });
+
+      // Clear mocks
+      vi.mocked(api.post).mockClear();
+
+      // Update coordinates
+      settingsActions.updateSection('birdnet', {
+        latitude: 51.5074,
+        longitude: -0.1278,
+      });
+
+      // Advance timers past the debounce delay (500ms)
+      vi.advanceTimersByTime(600);
+
+      await waitFor(() => {
+        expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
+          latitude: 51.5074,
+          longitude: -0.1278,
+          threshold: 0.01,
+          model: 'latest',
+        });
+      });
+    });
+
+    it('should update species count when range filter threshold changes', async () => {
+      const { api } = await import('$lib/utils/api');
+      const { settingsActions } = await import('$lib/stores/settings');
+
+      // Setup mocks for API calls
+      mockFetch.mockImplementation(url => {
+        if (url.includes('/api/v2/settings/locales')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ en: 'English' }),
+          });
+        }
+        if (url.includes('/api/v2/settings/imageproviders')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ providers: [] }),
+          });
+        }
+        if (url.includes('/api/v2/range/species/count')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ count: 100 }),
+          });
+        }
+        return Promise.reject(new Error('Unknown URL'));
+      });
+
+      // Mock api.post for range filter test
+      vi.mocked(api.post).mockResolvedValue({ count: 200, species: [] });
+
+      render(MainSettingsPage);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+      });
+
+      // Clear mocks
+      vi.mocked(api.post).mockClear();
+
+      // Update range filter threshold
+      settingsActions.updateSection('birdnet', {
+        rangeFilter: {
+          model: 'latest',
+          threshold: 0.05,
+          speciesCount: null,
+          species: [],
+        },
+      });
+
+      // Advance timers past the debounce delay
+      vi.advanceTimersByTime(600);
+
+      await waitFor(() => {
+        expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
+          latitude: 40.7128,
+          longitude: -74.006,
+          threshold: 0.05,
+          model: 'latest',
+        });
+      });
+    });
+
+    it('should update species count when range filter model changes', async () => {
+      const { api } = await import('$lib/utils/api');
+      const { settingsActions } = await import('$lib/stores/settings');
+
+      // Setup mocks for API calls
+      mockFetch.mockImplementation(url => {
+        if (url.includes('/api/v2/settings/locales')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ en: 'English' }),
+          });
+        }
+        if (url.includes('/api/v2/settings/imageproviders')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ providers: [] }),
+          });
+        }
+        if (url.includes('/api/v2/range/species/count')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ count: 100 }),
+          });
+        }
+        return Promise.reject(new Error('Unknown URL'));
+      });
+
+      // Mock api.post for range filter test
+      vi.mocked(api.post).mockResolvedValue({ count: 180, species: [] });
+
+      render(MainSettingsPage);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+      });
+
+      // Clear mocks
+      vi.mocked(api.post).mockClear();
+
+      // Update range filter model
+      settingsActions.updateSection('birdnet', {
+        rangeFilter: {
+          model: 'legacy',
+          threshold: 0.01,
+          speciesCount: null,
+          species: [],
+        },
+      });
+
+      // Advance timers past the debounce delay
+      vi.advanceTimersByTime(600);
+
+      await waitFor(() => {
+        expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
+          latitude: 40.7128,
+          longitude: -74.006,
+          threshold: 0.01,
+          model: 'legacy',
+        });
+      });
+    });
+
+    it('should debounce multiple rapid updates', async () => {
+      const { api } = await import('$lib/utils/api');
+      const { settingsActions } = await import('$lib/stores/settings');
+
+      // Setup mocks for API calls
+      mockFetch.mockImplementation(url => {
+        if (url.includes('/api/v2/settings/locales')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ en: 'English' }),
+          });
+        }
+        if (url.includes('/api/v2/settings/imageproviders')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ providers: [] }),
+          });
+        }
+        if (url.includes('/api/v2/range/species/count')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ count: 100 }),
+          });
+        }
+        return Promise.reject(new Error('Unknown URL'));
+      });
+
+      // Mock api.post for range filter test
+      vi.mocked(api.post).mockResolvedValue({ count: 175, species: [] });
+
+      render(MainSettingsPage);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+      });
+
+      // Clear mocks
+      vi.mocked(api.post).mockClear();
+
+      // Make multiple rapid updates
+      settingsActions.updateSection('birdnet', {
+        latitude: 48.8566,
+        longitude: 2.3522,
+      });
+
+      vi.advanceTimersByTime(200);
+
+      settingsActions.updateSection('birdnet', {
+        rangeFilter: {
+          model: 'latest',
+          threshold: 0.04,
+          speciesCount: null,
+          species: [],
+        },
+      });
+
+      vi.advanceTimersByTime(200);
+
+      settingsActions.updateSection('birdnet', {
+        rangeFilter: {
+          model: 'legacy',
+          threshold: 0.05,
+          speciesCount: null,
+          species: [],
+        },
+      });
+
+      // Advance past debounce time
+      vi.advanceTimersByTime(600);
+
+      await waitFor(() => {
+        // Should only have made one API call with the final values
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
+          latitude: 48.8566,
+          longitude: 2.3522,
+          threshold: 0.05,
+          model: 'legacy',
+        });
+      });
+    });
+
+    it('should handle API errors gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { api } = await import('$lib/utils/api');
+      const { settingsActions } = await import('$lib/stores/settings');
+
+      // Setup mocks for API calls
+      mockFetch.mockImplementation(url => {
+        if (url.includes('/api/v2/settings/locales')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ en: 'English' }),
+          });
+        }
+        if (url.includes('/api/v2/settings/imageproviders')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ providers: [] }),
+          });
+        }
+        if (url.includes('/api/v2/range/species/count')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ count: 100 }),
+          });
+        }
+        return Promise.reject(new Error('Unknown URL'));
+      });
+
+      // Mock api.post to throw error
+      vi.mocked(api.post).mockRejectedValue(new Error('Network error'));
+
+      render(MainSettingsPage);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+      });
+
+      // Update coordinates to trigger API call
+      settingsActions.updateSection('birdnet', {
+        latitude: 51.5074,
+        longitude: -0.1278,
+      });
+
+      // Advance timers past the debounce delay
+      vi.advanceTimersByTime(600);
+
+      await waitFor(() => {
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          'Failed to test range filter:',
+          expect.any(Error)
+        );
+      });
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });

@@ -5,13 +5,13 @@ import {
   isFutureDate,
   parseHour,
   getLocalTimeString,
-  parseTime
+  parseTime,
 } from './date';
 
 describe('Date Utilities', () => {
   // Store original Date constructor
   const OriginalDate = global.Date;
-  
+
   beforeEach(() => {
     // Reset to real Date
     global.Date = OriginalDate;
@@ -27,7 +27,7 @@ describe('Date Utilities', () => {
     it('should format current date correctly', () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(getLocalDateString()).toBe('2024-01-15');
     });
 
@@ -49,31 +49,31 @@ describe('Date Utilities', () => {
     it('should handle year boundaries', () => {
       const date = new Date('2023-12-31T23:59:59');
       expect(getLocalDateString(date)).toBe('2023-12-31');
-      
+
       const nextDay = new Date('2024-01-01T00:00:00');
       expect(getLocalDateString(nextDay)).toBe('2024-01-01');
     });
   });
 
   describe('isToday', () => {
-    it('should return true for today\'s date', () => {
+    it("should return true for today's date", () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(isToday('2024-01-15')).toBe(true);
     });
 
     it('should return false for past dates', () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(isToday('2024-01-14')).toBe(false);
     });
 
     it('should return false for future dates', () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(isToday('2024-01-16')).toBe(false);
     });
 
@@ -81,7 +81,7 @@ describe('Date Utilities', () => {
       // Test at 23:59:59 local time
       const mockDate = new Date('2024-01-15T23:59:59');
       vi.setSystemTime(mockDate);
-      
+
       expect(isToday('2024-01-15')).toBe(true);
       expect(isToday('2024-01-16')).toBe(false);
     });
@@ -91,7 +91,7 @@ describe('Date Utilities', () => {
     it('should return true for future dates', () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(isFutureDate('2024-01-16')).toBe(true);
       expect(isFutureDate('2024-12-31')).toBe(true);
     });
@@ -99,14 +99,14 @@ describe('Date Utilities', () => {
     it('should return false for today', () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(isFutureDate('2024-01-15')).toBe(false);
     });
 
     it('should return false for past dates', () => {
       const mockDate = new Date('2024-01-15T12:00:00');
       vi.setSystemTime(mockDate);
-      
+
       expect(isFutureDate('2024-01-14')).toBe(false);
       expect(isFutureDate('2023-12-31')).toBe(false);
     });
@@ -133,8 +133,12 @@ describe('Date Utilities', () => {
 
     it('should throw error for invalid input', () => {
       expect(() => parseHour('')).toThrow('Invalid time string: expected non-empty string');
-      expect(() => parseHour(null as unknown as string)).toThrow('Invalid time string: expected non-empty string');
-      expect(() => parseHour(undefined as unknown as string)).toThrow('Invalid time string: expected non-empty string');
+      expect(() => parseHour(null as unknown as string)).toThrow(
+        'Invalid time string: expected non-empty string'
+      );
+      expect(() => parseHour(undefined as unknown as string)).toThrow(
+        'Invalid time string: expected non-empty string'
+      );
     });
 
     it('should throw error for invalid hour values', () => {
@@ -174,7 +178,7 @@ describe('Date Utilities', () => {
     it('should use current time when no date provided', () => {
       const mockDate = new Date('2024-01-15T14:30:45');
       vi.setSystemTime(mockDate);
-      
+
       expect(getLocalTimeString()).toBe('14:30:45');
     });
   });
@@ -194,13 +198,21 @@ describe('Date Utilities', () => {
 
     it('should throw error for invalid input', () => {
       expect(() => parseTime('')).toThrow('Invalid time string: expected non-empty string');
-      expect(() => parseTime(null as unknown as string)).toThrow('Invalid time string: expected non-empty string');
-      expect(() => parseTime(undefined as unknown as string)).toThrow('Invalid time string: expected non-empty string');
+      expect(() => parseTime(null as unknown as string)).toThrow(
+        'Invalid time string: expected non-empty string'
+      );
+      expect(() => parseTime(undefined as unknown as string)).toThrow(
+        'Invalid time string: expected non-empty string'
+      );
     });
 
     it('should throw error for invalid format', () => {
-      expect(() => parseTime('14')).toThrow('Invalid time format: "14". Expected HH:MM or HH:MM:SS');
-      expect(() => parseTime('14:30:45:00')).toThrow('Invalid time format: "14:30:45:00". Expected HH:MM or HH:MM:SS');
+      expect(() => parseTime('14')).toThrow(
+        'Invalid time format: "14". Expected HH:MM or HH:MM:SS'
+      );
+      expect(() => parseTime('14:30:45:00')).toThrow(
+        'Invalid time format: "14:30:45:00". Expected HH:MM or HH:MM:SS'
+      );
     });
 
     it('should throw error for invalid values', () => {
@@ -223,7 +235,7 @@ describe('Date Utilities', () => {
       // This is a conceptual test - actual DST dates vary by location
       const springForward = new Date('2024-03-10T02:00:00'); // US DST starts
       const fallBack = new Date('2024-11-03T02:00:00'); // US DST ends
-      
+
       expect(getLocalDateString(springForward)).toBe('2024-03-10');
       expect(getLocalDateString(fallBack)).toBe('2024-11-03');
     });
@@ -233,7 +245,7 @@ describe('Date Utilities', () => {
       // by checking that date strings are formatted based on local date components
       const testDate = new Date(2024, 0, 15, 23, 59, 59); // Jan 15, 2024, 23:59:59 local
       expect(getLocalDateString(testDate)).toBe('2024-01-15');
-      
+
       // One second later
       const nextDay = new Date(2024, 0, 16, 0, 0, 0); // Jan 16, 2024, 00:00:00 local
       expect(getLocalDateString(nextDay)).toBe('2024-01-16');
@@ -242,10 +254,10 @@ describe('Date Utilities', () => {
     it('should handle dates near midnight correctly', () => {
       const beforeMidnight = new Date('2024-01-15T23:59:59');
       const afterMidnight = new Date('2024-01-16T00:00:01');
-      
+
       expect(getLocalDateString(beforeMidnight)).toBe('2024-01-15');
       expect(getLocalDateString(afterMidnight)).toBe('2024-01-16');
-      
+
       // Time formatting
       expect(getLocalTimeString(beforeMidnight)).toBe('23:59:59');
       expect(getLocalTimeString(afterMidnight)).toBe('00:00:01');
@@ -254,7 +266,7 @@ describe('Date Utilities', () => {
     it('should handle month boundaries', () => {
       const endOfMonth = new Date('2024-01-31T23:59:59');
       const startOfNextMonth = new Date('2024-02-01T00:00:00');
-      
+
       expect(getLocalDateString(endOfMonth)).toBe('2024-01-31');
       expect(getLocalDateString(startOfNextMonth)).toBe('2024-02-01');
     });
@@ -262,7 +274,7 @@ describe('Date Utilities', () => {
     it('should handle year boundaries', () => {
       const endOfYear = new Date('2023-12-31T23:59:59');
       const startOfNewYear = new Date('2024-01-01T00:00:00');
-      
+
       expect(getLocalDateString(endOfYear)).toBe('2023-12-31');
       expect(getLocalDateString(startOfNewYear)).toBe('2024-01-01');
     });

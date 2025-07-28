@@ -194,13 +194,13 @@ eventSource.close();
 **IMPORTANT**: Always use local timezone functions to avoid timezone bugs.
 
 ```typescript
-import { 
-  getLocalDateString, 
+import {
+  getLocalDateString,
   getLocalTimeString,
-  isToday, 
-  isFutureDate, 
+  isToday,
+  isFutureDate,
   parseHour,
-  parseTime 
+  parseTime,
 } from '$lib/utils/date';
 
 // ✅ Correct: Use local timezone helpers
