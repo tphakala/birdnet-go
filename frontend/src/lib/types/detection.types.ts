@@ -23,14 +23,14 @@ export interface Detection {
   weather?: Weather;
   timeOfDay?: string;
   // Species tracking metadata
-  isNewSpecies?: boolean;        // First seen within tracking window
-  daysSinceFirstSeen?: number;   // Days since species was first detected
+  isNewSpecies?: boolean; // First seen within tracking window
+  daysSinceFirstSeen?: number; // Days since species was first detected
   // Multi-period tracking metadata
-  isNewThisYear?: boolean;       // First time this year
-  isNewThisSeason?: boolean;     // First time this season
-  daysThisYear?: number;         // Days since first this year
-  daysThisSeason?: number;       // Days since first this season
-  currentSeason?: string;        // Current season name
+  isNewThisYear?: boolean; // First time this year
+  isNewThisSeason?: boolean; // First time this season
+  daysThisYear?: number; // Days since first this year
+  daysThisSeason?: number; // Days since first this season
+  currentSeason?: string; // Current season name
   review?: {
     verified: 'correct' | 'false_positive' | 'unverified';
   };

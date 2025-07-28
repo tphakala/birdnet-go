@@ -900,7 +900,7 @@
 {#if showRangeFilterModal}
   <div
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
-    style="z-index: 9999"
+    style:z-index="9999"
     role="dialog"
     aria-modal="true"
     aria-labelledby="modal-title"

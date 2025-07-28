@@ -50,23 +50,66 @@
   let updateQueue = $state(new Map<string, Detection>());
   let updateTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Daily summary response caching for performance optimization
+  interface CachedDailySummary {
+    data: DailySpeciesSummary[];
+    timestamp: number;
+  }
+
+  const dailySummaryCache = new Map<string, CachedDailySummary>();
+  const CACHE_TTL = 60000; // 1 minute TTL for daily summary cache
+
   // Fetch functions
   async function fetchDailySummary() {
     isLoadingSummary = true;
     summaryError = null;
 
     try {
+      // Check cache first - if valid entry exists within TTL, return it
+      const cached = dailySummaryCache.get(selectedDate);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        // Cache hit - use cached data directly
+        dailySummary = cached.data;
+        isLoadingSummary = false;
+        console.debug(`Daily summary cache hit for ${selectedDate}`);
+        return;
+      }
+
+      // Cache miss or expired - fetch from API
+      console.debug(`Daily summary cache miss for ${selectedDate}, fetching from API`);
       const response = await fetch(`/api/v2/analytics/species/daily?date=${selectedDate}`);
       if (!response.ok) {
         throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
       }
-      dailySummary = await response.json();
+      const data = await response.json();
+
+      // Update UI
+      dailySummary = data;
+
+      // Cache the result for future requests
+      dailySummaryCache.set(selectedDate, {
+        data: data,
+        timestamp: Date.now(),
+      });
+
+      // Cleanup old cache entries to prevent memory leaks
+      cleanupDailySummaryCache();
     } catch (error) {
       summaryError =
         error instanceof Error ? error.message : t('dashboard.errors.dailySummaryLoad');
       console.error('Error fetching daily summary:', error);
     } finally {
       isLoadingSummary = false;
+    }
+  }
+
+  // Cleanup expired cache entries to prevent unbounded memory growth
+  function cleanupDailySummaryCache() {
+    const now = Date.now();
+    for (const [date, cached] of dailySummaryCache.entries()) {
+      if (now - cached.timestamp >= CACHE_TTL) {
+        dailySummaryCache.delete(date);
+      }
     }
   }
 
@@ -401,6 +444,9 @@
 
       // Clear pending cleanups
       pendingCleanups.clear();
+
+      // Clean up daily summary cache
+      dailySummaryCache.clear();
     };
   });
 
@@ -500,6 +546,10 @@
     if (detection.date !== selectedDate) {
       return;
     }
+
+    // Invalidate cache for current date since we're updating the data
+    dailySummaryCache.delete(selectedDate);
+    console.debug(`Daily summary cache invalidated for ${selectedDate} due to SSE update`);
 
     // Parse the time string (HH:MM:SS format) to extract the hour
     let hour: number;

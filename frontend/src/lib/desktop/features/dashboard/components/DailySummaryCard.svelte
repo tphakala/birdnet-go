@@ -244,14 +244,14 @@
   // Sort data by count in descending order for dynamic updates
   const sortedData = $derived(data.length === 0 ? [] : [...data].sort((a, b) => b.count - a.count));
 
-  // Calculate global maximum count across all species for proper heatmap scaling
+  // Global maximum calculation for hourly counts
   const globalMaxHourlyCount = $derived(
     sortedData.length === 0
       ? 1
       : Math.max(...sortedData.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
   );
 
-  // Calculate max count for bi-hourly intervals (every 2 hours) to normalize heatmap intensity
+  // Global maximum calculation for bi-hourly counts
   const globalMaxBiHourlyCount = $derived(() => {
     if (sortedData.length === 0) return 1;
 
@@ -265,7 +265,7 @@
     return maxCount || 1;
   });
 
-  // Calculate max count for six-hourly intervals (every 6 hours) to normalize heatmap intensity
+  // Global maximum calculation for six-hourly counts
   const globalMaxSixHourlyCount = $derived(() => {
     if (sortedData.length === 0) return 1;
 
@@ -472,7 +472,7 @@
                         if (count > 0) {
                           const intensity = Math.min(
                             9,
-                            Math.floor((count / globalMaxBiHourlyCount()) * 9)
+                            Math.floor((count / globalMaxBiHourlyCount) * 9)
                           );
                           classes.push(`heatmap-color-${intensity}`);
                         } else {
@@ -485,7 +485,7 @@
                         if (count > 0) {
                           const intensity = Math.min(
                             9,
-                            Math.floor((count / globalMaxSixHourlyCount()) * 9)
+                            Math.floor((count / globalMaxSixHourlyCount) * 9)
                           );
                           classes.push(`heatmap-color-${intensity}`);
                         } else {
@@ -520,24 +520,24 @@
                           {item.common_name}
                           <!-- Multi-period tracking badges -->
                           {#if item.is_new_species}
-                            <span 
-                              class="text-warning" 
+                            <span
+                              class="text-warning"
                               title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                             >
                               {@html systemIcons.star}
                             </span>
                           {/if}
                           {#if item.is_new_this_year && !item.is_new_species}
-                            <span 
-                              class="text-info" 
+                            <span
+                              class="text-info"
                               title={`First time this year (${item.days_this_year ?? 0} day${(item.days_this_year ?? 0) === 1 ? '' : 's'} ago)`}
                             >
                               📅
                             </span>
                           {/if}
                           {#if item.is_new_this_season && !item.is_new_species && !item.is_new_this_year}
-                            <span 
-                              class="text-success" 
+                            <span
+                              class="text-success"
                               title={`First time this ${item.current_season || 'season'} (${item.days_this_season ?? 0} day${(item.days_this_season ?? 0) === 1 ? '' : 's'} ago)`}
                             >
                               🌿
