@@ -193,17 +193,13 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		return nil
 	}
 
-	// Check if this is a new species before saving
+	// Check if this is a new species and update atomically to prevent race conditions
 	var isNewSpecies bool
 	var daysSinceFirstSeen int
 	if a.NewSpeciesTracker != nil {
-		// Use GetSpeciesStatus which is thread-safe
-		status := a.NewSpeciesTracker.GetSpeciesStatus(a.Note.ScientificName, time.Now())
-		isNewSpecies = status.IsNew
-		daysSinceFirstSeen = status.DaysSinceFirst
-		
-		// Update the tracker with this detection
-		a.NewSpeciesTracker.UpdateSpecies(a.Note.ScientificName, time.Now())
+		// Use atomic check-and-update to prevent duplicate "new species" notifications
+		// when multiple detections of the same species arrive concurrently
+		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, time.Now())
 	}
 	
 	// Save note to database

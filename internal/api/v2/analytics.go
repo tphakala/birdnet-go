@@ -369,13 +369,24 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {
 			status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(data.ScientificName, time.Now())
 			speciesSummary.IsNewSpecies = status.IsNew
-			speciesSummary.DaysSinceFirstSeen = status.DaysSinceFirst
+			
+			// Only set days fields if they have valid values (>= 0)
+			if status.DaysSinceFirst >= 0 {
+				speciesSummary.DaysSinceFirstSeen = status.DaysSinceFirst
+			}
 			
 			// Multi-period tracking metadata
 			speciesSummary.IsNewThisYear = status.IsNewThisYear
 			speciesSummary.IsNewThisSeason = status.IsNewThisSeason
-			speciesSummary.DaysThisYear = status.DaysThisYear
-			speciesSummary.DaysThisSeason = status.DaysThisSeason
+			
+			if status.DaysThisYear >= 0 {
+				speciesSummary.DaysThisYear = status.DaysThisYear
+			}
+			
+			if status.DaysThisSeason >= 0 {
+				speciesSummary.DaysThisSeason = status.DaysThisSeason
+			}
+			
 			speciesSummary.CurrentSeason = status.CurrentSeason
 		}
 		
