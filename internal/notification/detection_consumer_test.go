@@ -34,7 +34,7 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	assert.False(t, consumer.SupportsBatching())
 
 	// Create a new species detection event
-	event := events.NewDetectionEvent(
+	event, err := events.NewDetectionEvent(
 		"American Robin",
 		"Turdus migratorius",
 		0.92,
@@ -42,9 +42,10 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 		true, // isNewSpecies
 		0,    // daysSinceFirstSeen
 	)
+	require.NoError(t, err)
 
 	// Process the event
-	err := consumer.ProcessDetectionEvent(event)
+	err = consumer.ProcessDetectionEvent(event)
 	require.NoError(t, err)
 
 	// Verify notification was created
@@ -73,7 +74,7 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	assert.Equal(t, 0, notif.Metadata["days_since_first_seen"])
 
 	// Test that non-new species don't create notifications
-	oldSpeciesEvent := events.NewDetectionEvent(
+	oldSpeciesEvent, err := events.NewDetectionEvent(
 		"House Sparrow",
 		"Passer domesticus",
 		0.88,
@@ -81,6 +82,7 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 		false, // not a new species
 		10,    // seen 10 days ago
 	)
+	require.NoError(t, err)
 
 	err = consumer.ProcessDetectionEvent(oldSpeciesEvent)
 	require.NoError(t, err)

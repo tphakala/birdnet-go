@@ -730,11 +730,48 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 }
 
 // cleanupExpiredCache removes expired entries from the status cache to prevent memory leaks
+// cleanupExpiredCache removes expired entries and enforces size limits with LRU eviction
 func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
+	const maxStatusCacheSize = 1000 // Maximum number of species to cache
+	
+	// First pass: remove expired entries
 	for scientificName := range t.statusCache {
 		if currentTime.Sub(t.statusCache[scientificName].timestamp) >= t.cacheTTL {
 			delete(t.statusCache, scientificName)
 		}
+	}
+	
+	// Second pass: if still over limit, remove oldest entries (LRU)
+	if len(t.statusCache) > maxStatusCacheSize {
+		// Create a slice of entries for sorting
+		type cacheEntry struct {
+			name      string
+			timestamp time.Time
+		}
+		entries := make([]cacheEntry, 0, len(t.statusCache))
+		for name, cached := range t.statusCache {
+			entries = append(entries, cacheEntry{name: name, timestamp: cached.timestamp})
+		}
+		
+		// Sort by timestamp (oldest first)
+		// Note: We could optimize this with a proper LRU implementation if needed
+		for i := 0; i < len(entries)-1; i++ {
+			for j := i + 1; j < len(entries); j++ {
+				if entries[i].timestamp.After(entries[j].timestamp) {
+					entries[i], entries[j] = entries[j], entries[i]
+				}
+			}
+		}
+		
+		// Remove oldest entries until we're under the limit
+		entriesToRemove := len(t.statusCache) - maxStatusCacheSize
+		for i := 0; i < entriesToRemove && i < len(entries); i++ {
+			delete(t.statusCache, entries[i].name)
+		}
+		
+		logger.Debug("Cache cleanup completed",
+			"removed_count", entriesToRemove,
+			"remaining_count", len(t.statusCache))
 	}
 }
 

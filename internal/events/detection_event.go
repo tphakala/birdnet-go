@@ -53,19 +53,19 @@ func NewDetectionEvent(
 	location string,
 	isNewSpecies bool,
 	daysSinceFirstSeen int,
-) DetectionEvent {
+) (DetectionEvent, error) {
 	// Validate input parameters to prevent invalid DetectionEvent instances
 	if speciesName == "" {
-		panic("NewDetectionEvent: speciesName cannot be empty")
+		return nil, fmt.Errorf("NewDetectionEvent: speciesName cannot be empty")
 	}
 	if scientificName == "" {
-		panic("NewDetectionEvent: scientificName cannot be empty")
+		return nil, fmt.Errorf("NewDetectionEvent: scientificName cannot be empty")
 	}
 	if confidence < 0.0 || confidence > 1.0 {
-		panic(fmt.Sprintf("NewDetectionEvent: confidence must be between 0 and 1, got %f", confidence))
+		return nil, fmt.Errorf("NewDetectionEvent: confidence must be between 0 and 1, got %f", confidence)
 	}
 	if daysSinceFirstSeen < 0 {
-		panic(fmt.Sprintf("NewDetectionEvent: daysSinceFirstSeen cannot be negative, got %d", daysSinceFirstSeen))
+		return nil, fmt.Errorf("NewDetectionEvent: daysSinceFirstSeen cannot be negative, got %d", daysSinceFirstSeen)
 	}
 
 	return &detectionEventImpl{
@@ -77,7 +77,7 @@ func NewDetectionEvent(
 		metadata:           make(map[string]interface{}),
 		isNewSpecies:       isNewSpecies,
 		daysSinceFirstSeen: daysSinceFirstSeen,
-	}
+	}, nil
 }
 
 // GetSpeciesName returns the common name of the detected species

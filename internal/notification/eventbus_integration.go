@@ -13,6 +13,8 @@ var (
 	notificationWorker *NotificationWorker
 	// resourceWorker is the singleton resource event worker
 	resourceWorker *ResourceEventWorker
+	// detectionConsumer is the singleton detection notification consumer
+	detectionConsumer *DetectionNotificationConsumer
 	logger         *slog.Logger
 )
 
@@ -108,7 +110,7 @@ func InitializeEventBusIntegration() error {
 	)
 
 	// Create and register detection notification consumer
-	detectionConsumer := NewDetectionNotificationConsumer(service)
+	detectionConsumer = NewDetectionNotificationConsumer(service)
 	if err := eventBus.RegisterConsumer(detectionConsumer); err != nil {
 		return fmt.Errorf("failed to register detection notification consumer: %w", err)
 	}
@@ -124,6 +126,16 @@ func InitializeEventBusIntegration() error {
 // GetNotificationWorker returns the notification worker instance
 func GetNotificationWorker() *NotificationWorker {
 	return notificationWorker
+}
+
+// GetResourceWorker returns the resource event worker instance
+func GetResourceWorker() *ResourceEventWorker {
+	return resourceWorker
+}
+
+// GetDetectionConsumer returns the detection notification consumer instance
+func GetDetectionConsumer() *DetectionNotificationConsumer {
+	return detectionConsumer
 }
 
 // GetWorkerStats returns notification worker statistics

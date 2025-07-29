@@ -36,6 +36,8 @@ type Processor struct {
 	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
 	NewSpeciesTracker   *NewSpeciesTracker   // Tracks new species detections
 	speciesTrackerMu    sync.RWMutex         // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt     time.Time            // Last time sync was attempted
+	syncMutex           sync.Mutex           // Mutex to protect sync operations
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
@@ -225,17 +227,23 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
 	}
 
-	// Sync species tracker if needed (non-blocking)
+	// Sync species tracker if needed (non-blocking, rate-limited)
 	p.speciesTrackerMu.RLock()
 	tracker := p.NewSpeciesTracker
 	p.speciesTrackerMu.RUnlock()
 
 	if tracker != nil {
-		go func() {
-			if err := tracker.SyncIfNeeded(); err != nil {
-				log.Printf("Failed to sync species tracker: %v", err)
-			}
-		}()
+		// Rate limit sync operations to avoid excessive goroutines
+		p.syncMutex.Lock()
+		if time.Since(p.lastSyncAttempt) >= time.Minute {
+			p.lastSyncAttempt = time.Now()
+			go func() {
+				if err := tracker.SyncIfNeeded(); err != nil {
+					log.Printf("Failed to sync species tracker: %v", err)
+				}
+			}()
+		}
+		p.syncMutex.Unlock()
 	}
 
 	// Process each result in item.Results
@@ -815,6 +823,17 @@ func (p *Processor) Shutdown() error {
 	mqttClient := p.GetMQTTClient()
 	if mqttClient != nil && mqttClient.IsConnected() {
 		mqttClient.Disconnect()
+	}
+
+	// Close the species tracker to release resources
+	p.speciesTrackerMu.RLock()
+	tracker := p.NewSpeciesTracker
+	p.speciesTrackerMu.RUnlock()
+	
+	if tracker != nil {
+		if err := Close(); err != nil {
+			log.Printf("Warning: failed to close species tracker logger: %v", err)
+		}
 	}
 
 	log.Println("Processor shutdown complete")

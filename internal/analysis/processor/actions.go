@@ -253,7 +253,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
-	detectionEvent := events.NewDetectionEvent(
+	detectionEvent, err := events.NewDetectionEvent(
 		a.Note.CommonName,
 		a.Note.ScientificName,
 		float64(a.Note.Confidence),
@@ -261,6 +261,12 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		isNewSpecies,
 		daysSinceFirstSeen,
 	)
+	if err != nil {
+		if a.Settings.Debug {
+			log.Printf("❌ Failed to create detection event: %v", err)
+		}
+		return
+	}
 
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {

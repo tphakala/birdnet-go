@@ -32,7 +32,7 @@ func TestDetectionEventCreation(t *testing.T) {
 	t.Parallel()
 	
 	// Test creating a new species detection event
-	event := events.NewDetectionEvent(
+	event, err := events.NewDetectionEvent(
 		testSpeciesCommonName,
 		testSpeciesScientificName,
 		testConfidence,
@@ -40,6 +40,7 @@ func TestDetectionEventCreation(t *testing.T) {
 		true,  // isNewSpecies
 		0,     // daysSinceFirstSeen
 	)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, event)
 	assert.Equal(t, testSpeciesCommonName, event.GetSpeciesName())

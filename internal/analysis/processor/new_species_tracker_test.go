@@ -442,6 +442,7 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 // Multi-period tracking tests
 
 func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
+	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -708,6 +709,7 @@ func TestSeasonDetection(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
+	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -748,29 +750,17 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 	status := tracker.GetSpeciesStatus(speciesName, laterTime)
 
 	// Lifetime should not be new (19 days > 7 day window)
-	if status.IsNew {
-		t.Error("Expected species to not be new (lifetime) after window expired")
-	}
-	if status.DaysSinceFirst != 19 {
-		t.Errorf("Expected DaysSinceFirst to be 19, got %d", status.DaysSinceFirst)
-	}
+	assert.False(t, status.IsNew, "Expected species to not be new (lifetime) after window expired")
+	assert.Equal(t, 19, status.DaysSinceFirst, "Expected DaysSinceFirst to be 19")
 
 	// Yearly should not be new (19 days > 14 day window)
 	// The species was detected this year, but outside the yearly window
-	if status.IsNewThisYear {
-		t.Errorf("Expected species to not be new this year (19 days > 14 day window). DaysThisYear: %d", status.DaysThisYear)
-	}
-	if status.DaysThisYear != 19 {
-		t.Errorf("Expected DaysThisYear to be 19, got %d", status.DaysThisYear)
-	}
+	assert.False(t, status.IsNewThisYear, "Expected species to not be new this year (19 days > 14 day window). DaysThisYear: %d", status.DaysThisYear)
+	assert.Equal(t, 19, status.DaysThisYear, "Expected DaysThisYear to be 19")
 
 	// Seasonal should not be new (19 days > 10 day window)
-	if status.IsNewThisSeason {
-		t.Error("Expected species to not be new this season after window expired")
-	}
-	if status.DaysThisSeason != 19 {
-		t.Errorf("Expected DaysThisSeason to be 19, got %d", status.DaysThisSeason)
-	}
+	assert.False(t, status.IsNewThisSeason, "Expected species to not be new this season after window expired")
+	assert.Equal(t, 19, status.DaysThisSeason, "Expected DaysThisSeason to be 19")
 }
 
 func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
@@ -816,17 +806,11 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	status := tracker.GetSpeciesStatus(speciesName, summerTime)
 
 	// Should be new this season (first time in summer)
-	if !status.IsNewThisSeason {
-		t.Error("Expected species to be new this season after season transition")
-	}
-	if status.CurrentSeason != "summer" {
-		t.Errorf("Expected current season to be 'summer', got '%s'", status.CurrentSeason)
-	}
+	assert.True(t, status.IsNewThisSeason, "Expected species to be new this season after season transition")
+	assert.Equal(t, "summer", status.CurrentSeason, "Expected current season to be 'summer'")
 
 	// Should not be new this year (91 days > 30 day window)
-	if status.IsNewThisYear {
-		t.Error("Expected species to not be new this year (91 days > 30 day window)")
-	}
+	assert.False(t, status.IsNewThisYear, "Expected species to not be new this year (91 days > 30 day window)")
 
 	// Now detect it in summer
 	tracker.UpdateSpecies(speciesName, summerTime)
@@ -836,12 +820,11 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	status = tracker.GetSpeciesStatus(speciesName, laterSummerTime)
 
 	// Should now have records for both seasons
-	if status.DaysThisSeason != 17 { // Days since July 15
-		t.Errorf("Expected DaysThisSeason to be 17, got %d", status.DaysThisSeason)
-	}
+	assert.Equal(t, 17, status.DaysThisSeason, "Expected DaysThisSeason to be 17 (days since July 15)")
 }
 
 func TestMultiPeriodTracking_YearReset(t *testing.T) {
+	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -874,24 +857,16 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 
 	// Verify state after 2023 detection
 	status := tracker.GetSpeciesStatus(speciesName, year2023Time)
-	if !status.IsNewThisYear {
-		t.Error("Expected species to be new in 2023 when first detected")
-	}
-	if status.DaysThisYear != 0 {
-		t.Errorf("Expected DaysThisYear to be 0 in 2023, got %d", status.DaysThisYear)
-	}
+	assert.True(t, status.IsNewThisYear, "Expected species to be new in 2023 when first detected")
+	assert.Equal(t, 0, status.DaysThisYear, "Expected DaysThisYear to be 0 in 2023")
 
 	// Check in 2024 (after year transition) - this should trigger yearly reset
 	year2024Time := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 	status = tracker.GetSpeciesStatus(speciesName, year2024Time)
 
 	// After year reset, species should be "new this year" because it wasn't detected in 2024 yet
-	if !status.IsNewThisYear {
-		t.Errorf("Expected species to be new this year after yearly reset. IsNewThisYear=%v, DaysThisYear=%d", status.IsNewThisYear, status.DaysThisYear)
-	}
-	if status.DaysThisYear != 0 {
-		t.Errorf("Expected DaysThisYear to be 0 after yearly reset, got %d", status.DaysThisYear)
-	}
+	assert.True(t, status.IsNewThisYear, "Expected species to be new this year after yearly reset. DaysThisYear=%d", status.DaysThisYear)
+	assert.Equal(t, 0, status.DaysThisYear, "Expected DaysThisYear to be 0 after yearly reset")
 
 	// Now detect it in 2024
 	tracker.UpdateSpecies(speciesName, year2024Time)
@@ -900,32 +875,20 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	status = tracker.GetSpeciesStatus(speciesName, year2024Time)
 
 	// Should still be new this year (first detection in 2024)
-	if !status.IsNewThisYear {
-		t.Error("Expected species to be new this year after first detection in 2024")
-	}
-	if status.DaysThisYear != 0 {
-		t.Errorf("Expected DaysThisYear to be 0 (just detected), got %d", status.DaysThisYear)
-	}
+	assert.True(t, status.IsNewThisYear, "Expected species to be new this year after first detection in 2024")
+	assert.Equal(t, 0, status.DaysThisYear, "Expected DaysThisYear to be 0 (just detected)")
 
 	// Should not be new lifetime (seen in 2023)
-	if status.IsNew {
-		t.Error("Expected species to not be new (lifetime) - seen in previous year")
-	}
+	assert.False(t, status.IsNew, "Expected species to not be new (lifetime) - seen in previous year")
 
 	// Days since first should be 365 (roughly)
 	expectedDays := 365
-	if status.DaysSinceFirst < expectedDays-1 || status.DaysSinceFirst > expectedDays+1 {
-		t.Errorf("Expected DaysSinceFirst to be around %d, got %d", expectedDays, status.DaysSinceFirst)
-	}
+	assert.InDelta(t, expectedDays, status.DaysSinceFirst, 1, "Expected DaysSinceFirst to be around %d", expectedDays)
 
 	// Test that species becomes "not new this year" after the yearly window expires
 	laterTime := year2024Time.Add(35 * 24 * time.Hour) // 35 days later (beyond 30-day window)
 	status = tracker.GetSpeciesStatus(speciesName, laterTime)
 
-	if status.IsNewThisYear {
-		t.Error("Expected species to not be new this year after yearly window expires")
-	}
-	if status.DaysThisYear != 35 {
-		t.Errorf("Expected DaysThisYear to be 35, got %d", status.DaysThisYear)
-	}
+	assert.False(t, status.IsNewThisYear, "Expected species to not be new this year after yearly window expires")
+	assert.Equal(t, 35, status.DaysThisYear, "Expected DaysThisYear to be 35")
 }
