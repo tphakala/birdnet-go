@@ -97,16 +97,13 @@ func TestSeasonalPeriodInitialization(t *testing.T) {
 		assert.Equal(t, 0, status.DaysThisSeason, "Expected DaysThisSeason to be 0 on first detection")
 	}
 
-	// Verify all season maps are initialized (not nil)
-	tracker.mu.Lock()
-	assert.NotNil(t, tracker.speciesBySeason, "speciesBySeason map should not be nil")
+	// Verify all season maps are initialized using public methods
 	for season := range settings.SeasonalTracking.Seasons {
-		// Accessing map should not panic even if empty
-		if tracker.speciesBySeason[season] == nil {
-			t.Errorf("Season map for '%s' is nil - this would cause panics", season)
+		// Check that season maps are properly initialized
+		if !tracker.IsSeasonMapInitialized(season) {
+			t.Errorf("Season map for '%s' is not initialized - this would cause panics", season)
 		}
 	}
-	tracker.mu.Unlock()
 }
 
 // TestSeasonalTrackingWithNilMaps tests behavior when seasonal maps might be nil
@@ -400,6 +397,57 @@ func TestBatchSpeciesStatusPerformance(t *testing.T) {
 	}
 }
 
+// BenchmarkBatchSpeciesStatusPerformance benchmarks the performance of batch species status retrieval
+func BenchmarkBatchSpeciesStatusPerformance(b *testing.B) {
+	ds := &MockSpeciesDatastore{}
+	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 14,
+		SyncIntervalMinutes:  60,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+			WindowDays: 30,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+		},
+	}
+
+	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	_ = tracker.InitFromDatabase()
+
+	// Simulate many species for dashboard
+	species := []string{
+		"Parus major", "Turdus merula", "Cyanistes caeruleus",
+		"Erithacus rubecula", "Fringilla coelebs", "Sylvia atricapilla",
+		"Phylloscopus trochilus", "Carduelis carduelis", "Columba palumbus",
+		"Corvus corone", "Pica pica", "Garrulus glandarius",
+	}
+
+	currentTime := time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC)
+
+	// Add detections at various times
+	for i, sp := range species {
+		detectionTime := currentTime.Add(-time.Duration(i*2) * 24 * time.Hour)
+		tracker.UpdateSpecies(sp, detectionTime)
+	}
+
+	b.ResetTimer()
+
+	// Benchmark the batch retrieval operation
+	for i := 0; i < b.N; i++ {
+		_ = tracker.GetBatchSpeciesStatus(species, currentTime)
+	}
+}
+
 // TestConcurrentSeasonalUpdates tests thread safety of seasonal tracking
 func TestConcurrentSeasonalUpdates(t *testing.T) {
 	t.Parallel()
@@ -510,15 +558,17 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		checkTime := detectionTime.Add(time.Duration(tc.daysLater) * 24 * time.Hour)
-		status := tracker.GetSpeciesStatus(species, checkTime)
+		t.Run(tc.description, func(t *testing.T) {
+			checkTime := detectionTime.Add(time.Duration(tc.daysLater) * 24 * time.Hour)
+			status := tracker.GetSpeciesStatus(species, checkTime)
 
-		assert.Equal(t, tc.expectNew, status.IsNew, 
-			"%s: IsNew mismatch", tc.description)
-		assert.Equal(t, tc.expectNewYear, status.IsNewThisYear, 
-			"%s: IsNewThisYear mismatch", tc.description)
-		assert.Equal(t, tc.expectNewSeason, status.IsNewThisSeason, 
-			"%s: IsNewThisSeason mismatch", tc.description)
+			assert.Equal(t, tc.expectNew, status.IsNew, 
+				"%s: IsNew mismatch", tc.description)
+			assert.Equal(t, tc.expectNewYear, status.IsNewThisYear, 
+				"%s: IsNewThisYear mismatch", tc.description)
+			assert.Equal(t, tc.expectNewSeason, status.IsNewThisSeason, 
+				"%s: IsNewThisSeason mismatch", tc.description)
+		})
 	}
 }
 
@@ -564,14 +614,8 @@ func TestSpeciesStatusCaching(t *testing.T) {
 	// Results should be identical
 	assert.Equal(t, status1, status2, "Cached result should match original")
 
-	// Simulate cache expiration by manipulating internal state
-	tracker.mu.Lock()
-	if cached, exists := tracker.statusCache[species]; exists {
-		// Set timestamp to expired
-		cached.timestamp = currentTime.Add(-time.Hour)
-		tracker.statusCache[species] = cached
-	}
-	tracker.mu.Unlock()
+	// Simulate cache expiration using test method
+	tracker.ExpireCacheForTesting(species)
 
 	// Third call after cache expiration - should recompute
 	status3 := tracker.GetSpeciesStatus(species, currentTime)
@@ -794,7 +838,7 @@ func TestInitFromDatabaseWithSeasonalTracking(t *testing.T) {
 	status = tracker.GetSpeciesStatus("Sylvia curruca", currentTime)
 	assert.False(t, status.IsNew, "Recent species should not be new lifetime")
 	// This species was detected on June 25, which is summer (after June 21)
-	// Current time is July 15, so it's been 20 days
-	assert.False(t, status.IsNewThisYear, "Should not be new this year (20 days ago)")
+	// Current time is July 15, so it's been 20 days (within 30-day yearly window)
+	assert.True(t, status.IsNewThisYear, "Should be new this year (20 days < 30 day window)")
 	assert.True(t, status.IsNewThisSeason, "Should be new this season (within 21-day window)")
 }

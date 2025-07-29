@@ -1057,3 +1057,52 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 
 	return
 }
+
+// IsSeasonMapInitialized checks if the season map is properly initialized for the given season.
+// This method provides safe access to internal state for testing purposes.
+func (t *NewSpeciesTracker) IsSeasonMapInitialized(season string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	
+	if !t.seasonalEnabled {
+		return false
+	}
+	
+	return t.speciesBySeason != nil && t.speciesBySeason[season] != nil
+}
+
+// GetSeasonMapCount returns the number of species tracked for the given season.
+// This method provides safe access to internal state for testing purposes.
+func (t *NewSpeciesTracker) GetSeasonMapCount(season string) int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	
+	if !t.seasonalEnabled || t.speciesBySeason == nil || t.speciesBySeason[season] == nil {
+		return 0
+	}
+	
+	return len(t.speciesBySeason[season])
+}
+
+// ExpireCacheForTesting forces cache expiration for the given species for testing purposes.
+// This method should only be used in tests to simulate cache expiration without
+// manipulating internal state directly.
+func (t *NewSpeciesTracker) ExpireCacheForTesting(scientificName string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	
+	if cached, exists := t.statusCache[scientificName]; exists {
+		// Set timestamp to expired (1 hour ago)
+		cached.timestamp = time.Now().Add(-time.Hour)
+		t.statusCache[scientificName] = cached
+	}
+}
+
+// ClearCacheForTesting clears the entire status cache for testing purposes.
+// This method should only be used in tests.
+func (t *NewSpeciesTracker) ClearCacheForTesting() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	
+	t.statusCache = make(map[string]cachedSpeciesStatus)
+}

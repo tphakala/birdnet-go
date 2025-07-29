@@ -1,10 +1,12 @@
 package processor
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
 
@@ -61,17 +63,19 @@ func TestSpeciesStatusTracking(t *testing.T) {
 	// First detection should be new
 	now := time.Now()
 
-	// Create new species tracker
-	tracker := &NewSpeciesTracker{
-		speciesFirstSeen: make(map[string]time.Time),
-		windowDays:       testWindowDays,
-		ds:               mockDS,
-		syncIntervalMins: testSyncIntervalMins,
-		statusCache:      make(map[string]cachedSpeciesStatus),
-		cacheTTL:         testCacheTTL,
-		lastCacheCleanup: now,
-		seasonCacheTTL:   testSeasonCacheTTL,
+	// Create new species tracker using constructor with minimal test configuration
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: testWindowDays,
+		SyncIntervalMinutes:  testSyncIntervalMins,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled: false,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled: false,
+		},
 	}
+	tracker := NewSpeciesTrackerFromSettings(mockDS, settings)
 	status := tracker.GetSpeciesStatus(testSpeciesScientificName, now)
 	assert.True(t, status.IsNew)
 	assert.Equal(t, 0, status.DaysSinceFirst)
@@ -99,8 +103,11 @@ func TestSpeciesStatusTracking(t *testing.T) {
 	// No expectations to verify since this test doesn't call InitFromDatabase
 }
 
-// testDetectionConsumer captures detection events for testing
+// testDetectionConsumer is a test helper that captures detection events for testing.
+// It implements the detection event consumer interface and provides thread-safe
+// access to received events for verification in concurrent test scenarios.
 type testDetectionConsumer struct {
+	mu             sync.Mutex
 	receivedEvents []events.DetectionEvent
 }
 
@@ -121,6 +128,18 @@ func (c *testDetectionConsumer) SupportsBatching() bool {
 }
 
 func (c *testDetectionConsumer) ProcessDetectionEvent(event events.DetectionEvent) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.receivedEvents = append(c.receivedEvents, event)
 	return nil
+}
+
+// GetReceivedEvents returns a copy of the received events slice for safe concurrent access
+func (c *testDetectionConsumer) GetReceivedEvents() []events.DetectionEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Return a copy to prevent race conditions
+	events := make([]events.DetectionEvent, len(c.receivedEvents))
+	copy(events, c.receivedEvents)
+	return events
 }
