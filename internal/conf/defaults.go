@@ -202,18 +202,18 @@ func setDefaultConfig() {
 
 	// Species tracking configuration
 	viper.SetDefault("realtime.speciestracking.enabled", true)
-	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", 14)
+	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", 7)
 	viper.SetDefault("realtime.speciestracking.syncintervalminutes", 60)
 
 	// Yearly tracking defaults
 	viper.SetDefault("realtime.speciestracking.yearlytracking.enabled", true)
 	viper.SetDefault("realtime.speciestracking.yearlytracking.resetmonth", 1)
 	viper.SetDefault("realtime.speciestracking.yearlytracking.resetday", 1)
-	viper.SetDefault("realtime.speciestracking.yearlytracking.windowdays", 30)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.windowdays", 7)
 
 	// Seasonal tracking defaults
 	viper.SetDefault("realtime.speciestracking.seasonaltracking.enabled", true)
-	viper.SetDefault("realtime.speciestracking.seasonaltracking.windowdays", 21)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.windowdays", 7)
 
 	// Default seasons (Northern Hemisphere)
 	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.spring.startmonth", 3)

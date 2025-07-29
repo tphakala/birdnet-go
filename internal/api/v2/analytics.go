@@ -154,7 +154,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	}
 
 	// 4. Build Response (including fetching thumbnails)
-	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData)
+	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData, selectedDate)
 	if err != nil {
 		// Error logged in helper
 		return c.HandleError(ctx, err, "Failed to build response", http.StatusInternalServerError)
@@ -314,7 +314,7 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 }
 
 // buildDailySpeciesSummaryResponse converts aggregated data into the final API response slice.
-func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo) ([]SpeciesDailySummary, error) {
+func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo, selectedDate string) ([]SpeciesDailySummary, error) {
 	// Collect scientific names for batch thumbnail fetching
 	scientificNames := make([]string, 0, len(aggregatedData))
 	for key := range aggregatedData {
@@ -338,10 +338,19 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		}
 	}
 
+	// Parse selected date to use for species status computation
+	statusTime := time.Now() // Default to now
+	if selectedDate != "" {
+		if parsedDate, err := time.Parse("2006-01-02", selectedDate); err == nil {
+			// Use end of day for the selected date to include all detections from that day
+			statusTime = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		}
+	}
+	
 	// Batch fetch species tracking status to avoid N+1 queries
 	var batchSpeciesStatus map[string]processor.SpeciesStatus
 	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil && len(scientificNames) > 0 {
-		batchSpeciesStatus = c.Processor.NewSpeciesTracker.GetBatchSpeciesStatus(scientificNames, time.Now())
+		batchSpeciesStatus = c.Processor.NewSpeciesTracker.GetBatchSpeciesStatus(scientificNames, statusTime)
 	}
 
 	// Build the final result slice

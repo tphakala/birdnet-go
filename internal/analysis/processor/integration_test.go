@@ -21,6 +21,10 @@ func (m *MockDatastoreAdapter) GetNewSpeciesDetections(startDate, endDate string
 	return m.ds.GetNewSpeciesDetections(startDate, endDate, limit, offset)
 }
 
+func (m *MockDatastoreAdapter) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	return m.ds.GetSpeciesFirstDetectionInPeriod(startDate, endDate, limit, offset)
+}
+
 // setupIntegrationTestDB creates a real SQLite database for integration testing
 func setupIntegrationTestDB(t *testing.T) *datastore.DataStore {
 	t.Helper()
