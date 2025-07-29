@@ -10,6 +10,7 @@
     mainSettings,
     birdnetSettings,
     dashboardSettings,
+    dynamicThresholdSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -38,7 +39,7 @@
         threshold: 0.01,
       },
     },
-    dynamicThreshold: $birdnetSettings?.dynamicThreshold || {
+    dynamicThreshold: $dynamicThresholdSettings || {
       enabled: false,
       debug: false,
       trigger: 0.8,
@@ -76,7 +77,11 @@
   );
 
   let birdnetSettingsHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.birdnet, (store.formData as any)?.birdnet)
+    hasSettingsChanged((store.originalData as any)?.birdnet, (store.formData as any)?.birdnet) ||
+      hasSettingsChanged(
+        (store.originalData as any)?.realtime?.dynamicThreshold,
+        (store.formData as any)?.realtime?.dynamicThreshold
+      )
   );
 
   let databaseSettingsHasChanges = $derived(
@@ -328,7 +333,7 @@
   }
 
   function updateDynamicThreshold(key: string, value: any) {
-    settingsActions.updateSection('birdnet', {
+    settingsActions.updateSection('realtime', {
       dynamicThreshold: { ...settings.dynamicThreshold, [key]: value },
     });
   }

@@ -66,7 +66,6 @@ export interface BirdNetSettings {
   threads: number;
   latitude: number;
   longitude: number;
-  dynamicThreshold: DynamicThresholdSettings;
   rangeFilter: RangeFilterSettings;
   database: DatabaseSettings;
 }
@@ -465,13 +464,6 @@ function createEmptySettings(): SettingsFormData {
       threads: 4,
       latitude: 0,
       longitude: 0,
-      dynamicThreshold: {
-        enabled: false,
-        debug: false,
-        trigger: 3,
-        min: 0.1,
-        validHours: 24,
-      },
       rangeFilter: {
         model: 'latest',
         threshold: 0.03,
@@ -491,6 +483,13 @@ function createEmptySettings(): SettingsFormData {
     realtime: {
       interval: 15,
       processingTime: false,
+      dynamicThreshold: {
+        enabled: false,
+        debug: false,
+        trigger: 0.8,
+        min: 0.3,
+        validHours: 24,
+      },
       audio: {
         source: '',
         ffmpegPath: '',
@@ -695,6 +694,12 @@ export const supportSettings = derived(settingsStore, $store => ({
   sentry: $store.formData.sentry,
   telemetry: $store.formData.realtime?.telemetry,
 }));
+
+// Dynamic threshold settings derived store
+export const dynamicThresholdSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.dynamicThreshold
+);
 
 // Settings actions
 export const settingsActions = {

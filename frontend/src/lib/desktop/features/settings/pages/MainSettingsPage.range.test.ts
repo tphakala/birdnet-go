@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
-import type { BirdNetSettings } from '$lib/stores/settings';
+import type { BirdNetSettings, SettingsFormData } from '$lib/stores/settings';
 
 // Mock API module
 vi.mock('$lib/utils/api', () => ({
@@ -11,8 +11,8 @@ vi.mock('$lib/utils/api', () => ({
   },
   ApiError: class ApiError extends Error {
     status: number;
-    data?: any;
-    constructor(message: string, status: number, data?: any) {
+    data?: unknown;
+    constructor(message: string, status: number, data?: unknown) {
       super(message);
       this.status = status;
       this.data = data;
@@ -28,51 +28,53 @@ vi.mock('$lib/stores/toast', () => ({
   },
 }));
 
-const { api } = await import('$lib/utils/api');
-
 describe('Settings Store - Range Filter Dynamic Updates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Initialize store with complete settings
-    settingsStore.set({
-      formData: {
-        main: { name: 'TestNode' },
-        birdnet: {
-          modelPath: '',
-          labelPath: '',
-          sensitivity: 1.0,
-          threshold: 0.8,
-          overlap: 0.0,
-          locale: 'en',
-          threads: 4,
-          latitude: 40.7128,
-          longitude: -74.006,
-          dynamicThreshold: {
-            enabled: false,
-            debug: false,
-            trigger: 0.8,
-            min: 0.3,
-            validHours: 24,
-          },
-          rangeFilter: {
-            model: 'latest',
-            threshold: 0.03,
-            speciesCount: null,
-            species: [],
-          },
-          database: {
-            type: 'sqlite',
-            path: 'birds.db',
-            host: '',
-            port: 3306,
-            name: '',
-            username: '',
-            password: '',
-          },
+    const formData: SettingsFormData = {
+      main: { name: 'TestNode' },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.8,
+        overlap: 0.0,
+        locale: 'en',
+        threads: 4,
+        latitude: 40.7128,
+        longitude: -74.006,
+        rangeFilter: {
+          model: 'latest',
+          threshold: 0.03,
+          speciesCount: null,
+          species: [],
+        },
+        database: {
+          type: 'sqlite',
+          path: 'birds.db',
+          host: '',
+          port: 3306,
+          name: '',
+          username: '',
+          password: '',
         },
       },
-      originalData: {} as any,
+      realtime: {
+        dynamicThreshold: {
+          enabled: false,
+          debug: false,
+          trigger: 0.8,
+          min: 0.3,
+          validHours: 24,
+        },
+      },
+    };
+
+    settingsStore.set({
+      formData,
+      originalData: {} as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -87,8 +89,8 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
   it('should trigger range filter test when coordinates change', async () => {
     // Verify initial state
     const initialState = get(settingsStore);
-    expect(initialState.formData.birdnet?.latitude).toBe(40.7128);
-    expect(initialState.formData.birdnet?.longitude).toBe(-74.006);
+    expect(initialState.formData.birdnet.latitude).toBe(40.7128);
+    expect(initialState.formData.birdnet.longitude).toBe(-74.006);
 
     // Update coordinates
     settingsActions.updateSection('birdnet', {
@@ -98,12 +100,12 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify coordinates were updated in the store
     const updatedState = get(settingsStore);
-    expect(updatedState.formData.birdnet?.latitude).toBe(51.5074);
-    expect(updatedState.formData.birdnet?.longitude).toBe(-0.1278);
+    expect(updatedState.formData.birdnet.latitude).toBe(51.5074);
+    expect(updatedState.formData.birdnet.longitude).toBe(-0.1278);
 
     // Verify range filter settings were preserved
-    expect(updatedState.formData.birdnet?.rangeFilter.model).toBe('latest');
-    expect(updatedState.formData.birdnet?.rangeFilter.threshold).toBe(0.03);
+    expect(updatedState.formData.birdnet.rangeFilter.model).toBe('latest');
+    expect(updatedState.formData.birdnet.rangeFilter.threshold).toBe(0.03);
   });
 
   it('should trigger range filter test when threshold changes', async () => {
@@ -119,11 +121,11 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify threshold was updated
     const updatedState = get(settingsStore);
-    expect(updatedState.formData.birdnet?.rangeFilter.threshold).toBe(0.05);
+    expect(updatedState.formData.birdnet.rangeFilter.threshold).toBe(0.05);
 
     // Verify coordinates were preserved
-    expect(updatedState.formData.birdnet?.latitude).toBe(40.7128);
-    expect(updatedState.formData.birdnet?.longitude).toBe(-74.006);
+    expect(updatedState.formData.birdnet.latitude).toBe(40.7128);
+    expect(updatedState.formData.birdnet.longitude).toBe(-74.006);
   });
 
   it('should trigger range filter test when model changes', async () => {
@@ -139,12 +141,12 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify model was updated
     const updatedState = get(settingsStore);
-    expect(updatedState.formData.birdnet?.rangeFilter.model).toBe('legacy');
+    expect(updatedState.formData.birdnet.rangeFilter.model).toBe('legacy');
 
     // Verify other settings were preserved
-    expect(updatedState.formData.birdnet?.rangeFilter.threshold).toBe(0.03);
-    expect(updatedState.formData.birdnet?.latitude).toBe(40.7128);
-    expect(updatedState.formData.birdnet?.longitude).toBe(-74.006);
+    expect(updatedState.formData.birdnet.rangeFilter.threshold).toBe(0.03);
+    expect(updatedState.formData.birdnet.latitude).toBe(40.7128);
+    expect(updatedState.formData.birdnet.longitude).toBe(-74.006);
   });
 
   it('should handle multiple sequential updates correctly', async () => {
@@ -188,7 +190,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     // Set initial range filter with custom values
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'latest' as any, // Testing with a different value
+        model: 'latest' as const, // Testing with a different value
         threshold: 0.1,
         speciesCount: 250,
         species: ['species1', 'species2'],
@@ -197,10 +199,10 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify initial range filter state
     const initialState = get(settingsStore);
-    expect(initialState.formData.birdnet?.rangeFilter.model).toBe('latest');
-    expect(initialState.formData.birdnet?.rangeFilter.threshold).toBe(0.1);
-    expect(initialState.formData.birdnet?.rangeFilter.speciesCount).toBe(250);
-    expect(initialState.formData.birdnet?.rangeFilter.species).toEqual(['species1', 'species2']);
+    expect(initialState.formData.birdnet.rangeFilter.model).toBe('latest');
+    expect(initialState.formData.birdnet.rangeFilter.threshold).toBe(0.1);
+    expect(initialState.formData.birdnet.rangeFilter.speciesCount).toBe(250);
+    expect(initialState.formData.birdnet.rangeFilter.species).toEqual(['species1', 'species2']);
 
     // Update only coordinates
     settingsActions.updateSection('birdnet', {
@@ -223,13 +225,13 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
   it('should preserve other birdnet settings during range filter updates', async () => {
     // Get initial values
     const initialState = get(settingsStore);
-    const initialSensitivity = initialState.formData.birdnet?.sensitivity;
-    const initialThreshold = initialState.formData.birdnet?.threshold;
+    const initialSensitivity = initialState.formData.birdnet.sensitivity;
+    const initialThreshold = initialState.formData.birdnet.threshold;
 
     // Update range filter
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'legacy' as any, // Testing update
+        model: 'legacy' as const, // Testing update
         threshold: 0.08,
         speciesCount: null,
         species: [],
