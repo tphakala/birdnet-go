@@ -313,12 +313,15 @@ type Season struct {
 }
 
 // DetectHemisphere determines the hemisphere based on latitude
-// Returns "northern" for latitude >= 0, "southern" for latitude < 0
+// Returns "equatorial" for latitudes between -10 and 10 degrees,
+// "northern" for latitude > 10, "southern" for latitude < -10
 func DetectHemisphere(latitude float64) string {
-	if latitude >= 0 {
+	if latitude > 10 {
 		return "northern"
+	} else if latitude < -10 {
+		return "southern"
 	}
-	return "southern"
+	return "equatorial"
 }
 
 // GetSeasonalTrackingWithHemisphere returns seasonal tracking configuration adjusted for hemisphere
@@ -333,7 +336,10 @@ func GetSeasonalTrackingWithHemisphere(settings SeasonalTrackingSettings, latitu
 
 // GetDefaultSeasons returns default seasons based on hemisphere
 func GetDefaultSeasons(latitude float64) map[string]Season {
-	if DetectHemisphere(latitude) == "northern" {
+	hemisphere := DetectHemisphere(latitude)
+	
+	switch hemisphere {
+	case "northern":
 		// Northern hemisphere seasons
 		return map[string]Season{
 			"spring": {StartMonth: 3, StartDay: 20},  // March 20
@@ -341,13 +347,22 @@ func GetDefaultSeasons(latitude float64) map[string]Season {
 			"fall":   {StartMonth: 9, StartDay: 22},  // September 22
 			"winter": {StartMonth: 12, StartDay: 21}, // December 21
 		}
-	} else {
+	case "southern":
 		// Southern hemisphere seasons (shifted by 6 months)
 		return map[string]Season{
 			"spring": {StartMonth: 9, StartDay: 22},  // September 22
 			"summer": {StartMonth: 12, StartDay: 21}, // December 21
 			"fall":   {StartMonth: 3, StartDay: 20},  // March 20
 			"winter": {StartMonth: 6, StartDay: 21},  // June 21
+		}
+	default: // equatorial
+		// Equatorial regions typically have wet and dry seasons
+		// Using approximate dates common to many equatorial regions
+		return map[string]Season{
+			"wet1": {StartMonth: 3, StartDay: 1},   // March-May wet season
+			"dry1": {StartMonth: 6, StartDay: 1},   // June-August dry season
+			"wet2": {StartMonth: 9, StartDay: 1},   // September-November wet season
+			"dry2": {StartMonth: 12, StartDay: 1},  // December-February dry season
 		}
 	}
 }

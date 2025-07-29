@@ -73,7 +73,13 @@ func TestDetectHemisphere(t *testing.T) {
 		want     string
 	}{
 		{"northern positive", 45.5, "northern"},
-		{"northern zero", 0.0, "northern"},
+		{"equator zero", 0.0, "equatorial"},
+		{"equatorial north", 5.0, "equatorial"},
+		{"equatorial south", -5.0, "equatorial"},
+		{"boundary north", 10.1, "northern"},
+		{"boundary south", -10.1, "southern"},
+		{"exactly 10", 10.0, "equatorial"},
+		{"exactly -10", -10.0, "equatorial"},
 		{"southern negative", -33.8, "southern"},
 		{"far north", 90.0, "northern"},
 		{"far south", -90.0, "southern"},
@@ -106,6 +112,26 @@ func TestGetDefaultSeasons(t *testing.T) {
 		}
 		if spring, ok := seasons["spring"]; !ok || spring.StartMonth != 9 {
 			t.Errorf("Expected spring to start in September for southern hemisphere")
+		}
+	})
+
+	t.Run("equatorial region", func(t *testing.T) {
+		seasons := GetDefaultSeasons(0.0)
+		if len(seasons) != 4 {
+			t.Errorf("Expected 4 seasons (wet/dry), got %d", len(seasons))
+		}
+		if wet1, ok := seasons["wet1"]; !ok || wet1.StartMonth != 3 {
+			t.Errorf("Expected first wet season to start in March")
+		}
+		if dry1, ok := seasons["dry1"]; !ok || dry1.StartMonth != 6 {
+			t.Errorf("Expected first dry season to start in June")
+		}
+		// Verify all expected seasons exist
+		expectedSeasons := []string{"wet1", "dry1", "wet2", "dry2"}
+		for _, season := range expectedSeasons {
+			if _, ok := seasons[season]; !ok {
+				t.Errorf("Expected season %s not found", season)
+			}
 		}
 	})
 }
