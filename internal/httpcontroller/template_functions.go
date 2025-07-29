@@ -214,7 +214,8 @@ func urlSafe(path string) string {
 
 // formatDateTime converts a date string to a formatted string
 func formatDateTime(dateStr string) string {
-	t, err := time.Parse("2006-01-02 15:04:05", dateStr)
+	// IMPORTANT: Database stores local time strings, parse as local time
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", dateStr, time.Local)
 	if err != nil {
 		return dateStr // Return original string if parsing fails
 	}

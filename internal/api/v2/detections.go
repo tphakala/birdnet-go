@@ -514,8 +514,9 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 	// Add weather and time of day if requested
 	if includeWeather {
 		// Parse detection time
+		// IMPORTANT: Database stores local time strings, parse as local time
 		detectionTimeStr := note.Date + " " + note.Time
-		detectionTime, err := time.Parse("2006-01-02 15:04:05", detectionTimeStr)
+		detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
 		if err == nil {
 			// Calculate time of day
 			if c.SunCalc != nil {
