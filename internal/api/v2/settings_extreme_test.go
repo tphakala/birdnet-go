@@ -113,10 +113,10 @@ func TestExtremeValues(t *testing.T) {
 			name:    "Negative zero",
 			section: "birdnet",
 			extremeData: map[string]interface{}{
-				"overlap": -0.0,
+				"overlap": 0.0,
 			},
 			expectedError: false,
-			description:   "Should handle negative zero",
+			description:   "Should handle zero",
 		},
 		{
 			name:    "Unicode in string fields",
@@ -174,7 +174,6 @@ func TestExtremeValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -305,7 +304,6 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

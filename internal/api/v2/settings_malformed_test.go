@@ -84,7 +84,6 @@ func TestMalformedJSONData(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -102,8 +101,8 @@ func TestMalformedJSONData(t *testing.T) {
 			err := controller.UpdateSectionSettings(ctx)
 			require.Error(t, err)
 
-			httpErr, ok := err.(*echo.HTTPError)
-			require.True(t, ok)
+			var httpErr *echo.HTTPError
+			require.ErrorAs(t, err, &httpErr)
 			assert.Equal(t, http.StatusBadRequest, httpErr.Code)
 			assert.Contains(t, httpErr.Message, tt.expectedError)
 		})

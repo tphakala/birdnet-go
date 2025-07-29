@@ -454,7 +454,6 @@ func TestValidationErrors(t *testing.T) {
 	}
 	
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			
@@ -486,8 +485,8 @@ func TestValidationErrors(t *testing.T) {
 			require.Error(t, err)
 			
 			// Check the error response
-			httpErr, ok := err.(*echo.HTTPError)
-			require.True(t, ok)
+			var httpErr *echo.HTTPError
+			require.ErrorAs(t, err, &httpErr)
 			assert.Equal(t, tt.expectedCode, httpErr.Code)
 			assert.Contains(t, httpErr.Message, tt.expectedError)
 		})
@@ -541,6 +540,6 @@ func TestDeepNestedUpdates(t *testing.T) {
 	settings := controller.Settings
 	assert.Equal(t, 30, settings.Realtime.MQTT.RetrySettings.InitialDelay) // Changed
 	assert.Equal(t, initialMaxRetries, settings.Realtime.MQTT.RetrySettings.MaxRetries) // Preserved
-	assert.Equal(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier) // Preserved
+	assert.InDelta(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier, 0.001) // Preserved
 	assert.Equal(t, initialTLSEnabled, settings.Realtime.MQTT.TLS.Enabled) // Preserved
 }

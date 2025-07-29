@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -121,7 +122,6 @@ func TestMaliciousInputData(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -143,8 +143,8 @@ func TestMaliciousInputData(t *testing.T) {
 			err = controller.UpdateSectionSettings(ctx)
 			if err != nil {
 				// Some malicious inputs might be rejected, which is also fine
-				httpErr, ok := err.(*echo.HTTPError)
-				if ok && httpErr.Code == http.StatusBadRequest {
+				var httpErr *echo.HTTPError
+				if errors.As(err, &httpErr) && httpErr.Code == http.StatusBadRequest {
 					t.Logf("Input rejected as expected: %v", err)
 					return
 				}
@@ -240,7 +240,6 @@ func TestTypeConfusionAttacks(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

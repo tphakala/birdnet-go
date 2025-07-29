@@ -122,7 +122,6 @@ func TestBoundaryValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -229,7 +228,6 @@ func TestSpecialCharacterHandling(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -318,7 +316,6 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -341,8 +338,8 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			// Main section should be rejected entirely
 			if tt.section == "main" {
 				require.Error(t, err)
-				httpErr, ok := err.(*echo.HTTPError)
-				require.True(t, ok)
+				var httpErr *echo.HTTPError
+				require.ErrorAs(t, err, &httpErr)
 				assert.Equal(t, http.StatusBadRequest, httpErr.Code)
 				assert.Contains(t, httpErr.Message, "main settings cannot be updated")
 				return
