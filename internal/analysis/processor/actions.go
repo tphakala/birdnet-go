@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -39,13 +40,14 @@ type LogAction struct {
 }
 
 type DatabaseAction struct {
-	Settings     *conf.Settings
-	Ds           datastore.Interface
-	Note         datastore.Note
-	Results      []datastore.Results
-	EventTracker *EventTracker
-	Description  string
-	mu           sync.Mutex // Protect concurrent access to Note and Results
+	Settings          *conf.Settings
+	Ds                datastore.Interface
+	Note              datastore.Note
+	Results           []datastore.Results
+	EventTracker      *EventTracker
+	NewSpeciesTracker *NewSpeciesTracker // Add reference to new species tracker
+	Description       string
+	mu                sync.Mutex // Protect concurrent access to Note and Results
 }
 
 type SaveAudioAction struct {
@@ -191,11 +193,23 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		return nil
 	}
 
+	// Check if this is a new species and update atomically to prevent race conditions
+	var isNewSpecies bool
+	var daysSinceFirstSeen int
+	if a.NewSpeciesTracker != nil {
+		// Use atomic check-and-update to prevent duplicate "new species" notifications
+		// when multiple detections of the same species arrive concurrently
+		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, time.Now())
+	}
+	
 	// Save note to database
 	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 		log.Printf("❌ Failed to save note and results to database: %v", err)
 		return err
 	}
+	
+	// After successful save, publish detection event for new species
+	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
@@ -225,6 +239,41 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	}
 
 	return nil
+}
+
+// publishNewSpeciesDetectionEvent publishes a detection event for new species
+// This helper method handles event bus retrieval, event creation, publishing, and debug logging
+func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) {
+	if !isNewSpecies || !events.IsInitialized() {
+		return
+	}
+
+	eventBus := events.GetEventBus()
+	if eventBus == nil {
+		return
+	}
+
+	detectionEvent, err := events.NewDetectionEvent(
+		a.Note.CommonName,
+		a.Note.ScientificName,
+		float64(a.Note.Confidence),
+		a.Note.Source,
+		isNewSpecies,
+		daysSinceFirstSeen,
+	)
+	if err != nil {
+		if a.Settings.Debug {
+			log.Printf("❌ Failed to create detection event: %v", err)
+		}
+		return
+	}
+
+	// Publish the detection event
+	if published := eventBus.TryPublishDetection(detectionEvent); published {
+		if a.Settings.Debug {
+			log.Printf("🌟 Published new species detection event: %s", a.Note.CommonName)
+		}
+	}
 }
 
 // Execute saves the audio clip to a file

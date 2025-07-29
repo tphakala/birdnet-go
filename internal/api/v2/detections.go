@@ -73,21 +73,30 @@ func (c *Controller) initDetectionRoutes() {
 
 // DetectionResponse represents a detection in the API response
 type DetectionResponse struct {
-	ID             uint         `json:"id"`
-	Date           string       `json:"date"`
-	Time           string       `json:"time"`
-	Source         string       `json:"source"`
-	BeginTime      string       `json:"beginTime"`
-	EndTime        string       `json:"endTime"`
-	SpeciesCode    string       `json:"speciesCode"`
-	ScientificName string       `json:"scientificName"`
-	CommonName     string       `json:"commonName"`
-	Confidence     float64      `json:"confidence"`
-	Verified       string       `json:"verified"`
-	Locked         bool         `json:"locked"`
-	Comments       []string     `json:"comments,omitempty"`
-	Weather        *WeatherInfo `json:"weather,omitempty"`
-	TimeOfDay      string       `json:"timeOfDay,omitempty"`
+	ID                 uint         `json:"id"`
+	Date               string       `json:"date"`
+	Time               string       `json:"time"`
+	Source             string       `json:"source"`
+	BeginTime          string       `json:"beginTime"`
+	EndTime            string       `json:"endTime"`
+	SpeciesCode        string       `json:"speciesCode"`
+	ScientificName     string       `json:"scientificName"`
+	CommonName         string       `json:"commonName"`
+	Confidence         float64      `json:"confidence"`
+	Verified           string       `json:"verified"`
+	Locked             bool         `json:"locked"`
+	Comments           []string     `json:"comments,omitempty"`
+	Weather            *WeatherInfo `json:"weather,omitempty"`
+	TimeOfDay          string       `json:"timeOfDay,omitempty"`
+	IsNewSpecies       bool         `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int          `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	
+	// Multi-period tracking metadata
+	IsNewThisYear      bool         `json:"isNewThisYear,omitempty"`      // First time this year
+	IsNewThisSeason    bool         `json:"isNewThisSeason,omitempty"`    // First time this season  
+	DaysThisYear       int          `json:"daysThisYear,omitempty"`       // Days since first this year
+	DaysThisSeason     int          `json:"daysThisSeason,omitempty"`     // Days since first this season
+	CurrentSeason      string       `json:"currentSeason,omitempty"`      // Current season name
 }
 
 // WeatherInfo represents weather data for a detection
@@ -474,6 +483,20 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
 		Locked:         note.Locked,
+	}
+
+	// Add species tracking metadata if processor has tracker
+	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {
+		status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(note.ScientificName, time.Now())
+		detection.IsNewSpecies = status.IsNew
+		detection.DaysSinceFirstSeen = status.DaysSinceFirst
+		
+		// Multi-period tracking metadata
+		detection.IsNewThisYear = status.IsNewThisYear
+		detection.IsNewThisSeason = status.IsNewThisSeason
+		detection.DaysThisYear = status.DaysThisYear
+		detection.DaysThisSeason = status.DaysThisSeason
+		detection.CurrentSeason = status.CurrentSeason
 	}
 
 	// Handle verification status

@@ -200,6 +200,31 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.monitoring.disk.critical", 95.0)
 	viper.SetDefault("realtime.monitoring.disk.paths", []string{"/"})
 
+	// Species tracking configuration
+	viper.SetDefault("realtime.speciestracking.enabled", true)
+	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", 7)
+	viper.SetDefault("realtime.speciestracking.syncintervalminutes", 60)
+
+	// Yearly tracking defaults
+	viper.SetDefault("realtime.speciestracking.yearlytracking.enabled", true)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.resetmonth", 1)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.resetday", 1)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.windowdays", 7)
+
+	// Seasonal tracking defaults
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.enabled", true)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.windowdays", 7)
+
+	// Default seasons (Northern Hemisphere)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.spring.startmonth", 3)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.spring.startday", 20)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.summer.startmonth", 6)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.summer.startday", 21)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.fall.startmonth", 9)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.fall.startday", 22)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.winter.startmonth", 12)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.winter.startday", 21)
+
 	// Webserver configuration
 	viper.SetDefault("webserver.debug", false)
 	viper.SetDefault("webserver.enabled", true)

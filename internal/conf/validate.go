@@ -81,6 +81,11 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate Species Tracking settings
+	if err := validateSpeciesTrackingSettings(&settings.Realtime.SpeciesTracking); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
@@ -502,4 +507,125 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 			Build()
 	}
 	return nil
+}
+
+// validateSpeciesTrackingSettings validates the species tracking settings
+func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
+	if settings.Enabled {
+		// Validate window days
+		if settings.NewSpeciesWindowDays < 1 || settings.NewSpeciesWindowDays > 365 {
+			return errors.New(fmt.Errorf("species tracking window days must be between 1 and 365, got %d", settings.NewSpeciesWindowDays)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "species-tracking-window-days").
+				Context("window_days", settings.NewSpeciesWindowDays).
+				Build()
+		}
+
+		// Validate sync interval
+		if settings.SyncIntervalMinutes < 5 || settings.SyncIntervalMinutes > 1440 {
+			return errors.New(fmt.Errorf("species tracking sync interval must be between 5 and 1440 minutes (24 hours), got %d", settings.SyncIntervalMinutes)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "species-tracking-sync-interval").
+				Context("sync_interval", settings.SyncIntervalMinutes).
+				Build()
+		}
+
+		// Validate yearly tracking settings
+		if err := validateYearlyTrackingSettings(&settings.YearlyTracking); err != nil {
+			return err
+		}
+
+		// Validate seasonal tracking settings
+		if err := validateSeasonalTrackingSettings(&settings.SeasonalTracking); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateYearlyTrackingSettings(settings *YearlyTrackingSettings) error {
+	if settings.Enabled {
+		// Validate reset month
+		if settings.ResetMonth < 1 || settings.ResetMonth > 12 {
+			return errors.New(fmt.Errorf("yearly tracking reset month must be between 1 and 12, got %d", settings.ResetMonth)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "yearly-tracking-reset-month").
+				Context("reset_month", settings.ResetMonth).
+				Build()
+		}
+		// Validate reset day - must be valid for the specified month
+		maxDaysInMonth := getMaxDaysInMonth(settings.ResetMonth)
+		if settings.ResetDay < 1 || settings.ResetDay > maxDaysInMonth {
+			return errors.New(fmt.Errorf("yearly tracking reset day must be between 1 and %d for month %d, got %d", maxDaysInMonth, settings.ResetMonth, settings.ResetDay)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "yearly-tracking-reset-day").
+				Context("reset_month", settings.ResetMonth).
+				Context("reset_day", settings.ResetDay).
+				Context("max_days_in_month", maxDaysInMonth).
+				Build()
+		}
+		// Validate window days
+		if settings.WindowDays < 1 || settings.WindowDays > 365 {
+			return errors.New(fmt.Errorf("yearly tracking window days must be between 1 and 365, got %d", settings.WindowDays)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "yearly-tracking-window-days").
+				Context("window_days", settings.WindowDays).
+				Build()
+		}
+	}
+	return nil
+}
+
+func validateSeasonalTrackingSettings(settings *SeasonalTrackingSettings) error {
+	if settings.Enabled {
+		// Validate window days
+		if settings.WindowDays < 1 || settings.WindowDays > 365 {
+			return errors.New(fmt.Errorf("seasonal tracking window days must be between 1 and 365, got %d", settings.WindowDays)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "seasonal-tracking-window-days").
+				Context("window_days", settings.WindowDays).
+				Build()
+		}
+		// Validate seasons
+		if len(settings.Seasons) == 0 {
+			return errors.New(fmt.Errorf("seasonal tracking requires at least one season to be defined")).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "seasonal-tracking-seasons").
+				Build()
+		}
+		for seasonName, season := range settings.Seasons {
+			if season.StartMonth < 1 || season.StartMonth > 12 {
+				return errors.New(fmt.Errorf("season %s start month must be between 1 and 12, got %d", seasonName, season.StartMonth)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "seasonal-tracking-season-month").
+					Context("season", seasonName).
+					Context("start_month", season.StartMonth).
+					Build()
+			}
+			maxDaysInMonth := getMaxDaysInMonth(season.StartMonth)
+			if season.StartDay < 1 || season.StartDay > maxDaysInMonth {
+				return errors.New(fmt.Errorf("season %s start day must be between 1 and %d for month %d, got %d", seasonName, maxDaysInMonth, season.StartMonth, season.StartDay)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "seasonal-tracking-season-day").
+					Context("season", seasonName).
+					Context("start_month", season.StartMonth).
+					Context("start_day", season.StartDay).
+					Context("max_days_in_month", maxDaysInMonth).
+					Build()
+			}
+		}
+	}
+	return nil
+}
+
+// getMaxDaysInMonth returns the maximum number of days for a given month (1-12)
+func getMaxDaysInMonth(month int) int {
+	switch month {
+	case 2: // February
+		return 29 // Return 29 to safely accommodate leap years, ensuring validation doesn't reject valid Feb 29 dates
+	case 4, 6, 9, 11: // April, June, September, November
+		return 30
+	default: // January, March, May, July, August, October, December
+		return 31
+	}
 }

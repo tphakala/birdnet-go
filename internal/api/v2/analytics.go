@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -20,15 +21,23 @@ const placeholderImageURL = "/assets/images/bird-placeholder.svg"
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
-	ScientificName string `json:"scientific_name"`
-	CommonName     string `json:"common_name"`
-	SpeciesCode    string `json:"species_code,omitempty"`
-	Count          int    `json:"count"`
-	HourlyCounts   []int  `json:"hourly_counts"`
-	HighConfidence bool   `json:"high_confidence"`
-	FirstHeard     string `json:"first_heard,omitempty"`
-	LatestHeard    string `json:"latest_heard,omitempty"`
-	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
+	ScientificName     string `json:"scientific_name"`
+	CommonName         string `json:"common_name"`
+	SpeciesCode        string `json:"species_code,omitempty"`
+	Count              int    `json:"count"`
+	HourlyCounts       []int  `json:"hourly_counts"`
+	HighConfidence     bool   `json:"high_confidence"`
+	FirstHeard         string `json:"first_heard,omitempty"`
+	LatestHeard        string `json:"latest_heard,omitempty"`
+	ThumbnailURL       string `json:"thumbnail_url,omitempty"`
+	IsNewSpecies       bool   `json:"is_new_species,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int    `json:"days_since_first_seen,omitempty"` // Days since species was first detected
+	// Multi-period tracking metadata
+	IsNewThisYear      bool   `json:"is_new_this_year,omitempty"`      // First time this year
+	IsNewThisSeason    bool   `json:"is_new_this_season,omitempty"`    // First time this season  
+	DaysThisYear       int    `json:"days_this_year,omitempty"`        // Days since first this year
+	DaysThisSeason     int    `json:"days_this_season,omitempty"`      // Days since first this season
+	CurrentSeason      string `json:"current_season,omitempty"`        // Current season name
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -145,7 +154,7 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 	}
 
 	// 4. Build Response (including fetching thumbnails)
-	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData)
+	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData, selectedDate)
 	if err != nil {
 		// Error logged in helper
 		return c.HandleError(ctx, err, "Failed to build response", http.StatusInternalServerError)
@@ -305,7 +314,7 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 }
 
 // buildDailySpeciesSummaryResponse converts aggregated data into the final API response slice.
-func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo) ([]SpeciesDailySummary, error) {
+func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]aggregatedBirdInfo, selectedDate string) ([]SpeciesDailySummary, error) {
 	// Collect scientific names for batch thumbnail fetching
 	scientificNames := make([]string, 0, len(aggregatedData))
 	for key := range aggregatedData {
@@ -329,6 +338,21 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		}
 	}
 
+	// Parse selected date to use for species status computation
+	statusTime := time.Now() // Default to now
+	if selectedDate != "" {
+		if parsedDate, err := time.Parse("2006-01-02", selectedDate); err == nil {
+			// Use end of day for the selected date to include all detections from that day
+			statusTime = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		}
+	}
+	
+	// Batch fetch species tracking status to avoid N+1 queries
+	var batchSpeciesStatus map[string]processor.SpeciesStatus
+	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil && len(scientificNames) > 0 {
+		batchSpeciesStatus = c.Processor.NewSpeciesTracker.GetBatchSpeciesStatus(scientificNames, statusTime)
+	}
+
 	// Build the final result slice
 	result := make([]SpeciesDailySummary, 0, len(scientificNames))
 	for _, scientificName := range scientificNames { // Iterate using the filtered list
@@ -344,7 +368,8 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			thumbnailURL = placeholderImageURL
 		}
 
-		result = append(result, SpeciesDailySummary{
+		// Initialize the species summary
+		speciesSummary := SpeciesDailySummary{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
 			SpeciesCode:    data.SpeciesCode,
@@ -354,7 +379,33 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			FirstHeard:     data.First,
 			LatestHeard:    data.Latest,
 			ThumbnailURL:   thumbnailURL,
-		})
+		}
+		
+		// Add species tracking metadata from batch results
+		if status, exists := batchSpeciesStatus[scientificName]; exists {
+			speciesSummary.IsNewSpecies = status.IsNew
+			
+			// Only set days fields if they have valid values (>= 0)
+			if status.DaysSinceFirst >= 0 {
+				speciesSummary.DaysSinceFirstSeen = status.DaysSinceFirst
+			}
+			
+			// Multi-period tracking metadata
+			speciesSummary.IsNewThisYear = status.IsNewThisYear
+			speciesSummary.IsNewThisSeason = status.IsNewThisSeason
+			
+			if status.DaysThisYear >= 0 {
+				speciesSummary.DaysThisYear = status.DaysThisYear
+			}
+			
+			if status.DaysThisSeason >= 0 {
+				speciesSummary.DaysThisSeason = status.DaysThisSeason
+			}
+			
+			speciesSummary.CurrentSeason = status.CurrentSeason
+		}
+		
+		result = append(result, speciesSummary)
 	}
 
 	return result, nil

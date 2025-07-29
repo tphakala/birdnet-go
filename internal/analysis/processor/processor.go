@@ -34,6 +34,10 @@ type Processor struct {
 	BirdImageCache      *imageprovider.BirdImageCache
 	EventTracker        *EventTracker
 	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
+	NewSpeciesTracker   *NewSpeciesTracker   // Tracks new species detections
+	speciesTrackerMu    sync.RWMutex         // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt     time.Time            // Last time sync was attempted
+	syncMutex           sync.Mutex           // Mutex to protect sync operations
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
@@ -107,6 +111,40 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		lastDogDetectionLog: make(map[string]time.Time),
 		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
 		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
+	}
+
+	// Initialize new species tracker if enabled
+	if settings.Realtime.SpeciesTracking.Enabled {
+		// Validate species tracking configuration
+		if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
+			log.Printf("Invalid species tracking configuration: %v", err)
+			// Continue with defaults or disable tracking
+			settings.Realtime.SpeciesTracking.Enabled = false
+		} else {
+			// Adjust seasonal tracking for hemisphere based on BirdNET latitude
+			hemisphereAwareTracking := settings.Realtime.SpeciesTracking
+			if hemisphereAwareTracking.SeasonalTracking.Enabled {
+				hemisphereAwareTracking.SeasonalTracking = conf.GetSeasonalTrackingWithHemisphere(
+					hemisphereAwareTracking.SeasonalTracking,
+					settings.BirdNET.Latitude,
+				)
+			}
+			
+			p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &hemisphereAwareTracking)
+
+			// Initialize species tracker from database
+			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
+				log.Printf("Failed to initialize species tracker from database: %v", err)
+				// Continue anyway - tracker will work for new detections
+			}
+
+			hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
+			log.Printf("Species tracking enabled: window=%d days, sync=%d minutes, hemisphere=%s (lat=%.2f)",
+				settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
+				settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
+				hemisphere,
+				settings.BirdNET.Latitude)
+		}
 	}
 
 	// Start the detection processor
@@ -208,6 +246,25 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
 	}
 
+	// Sync species tracker if needed (non-blocking, rate-limited)
+	p.speciesTrackerMu.RLock()
+	tracker := p.NewSpeciesTracker
+	p.speciesTrackerMu.RUnlock()
+
+	if tracker != nil {
+		// Rate limit sync operations to avoid excessive goroutines
+		p.syncMutex.Lock()
+		if time.Since(p.lastSyncAttempt) >= time.Minute {
+			p.lastSyncAttempt = time.Now()
+			go func() {
+				if err := tracker.SyncIfNeeded(); err != nil {
+					log.Printf("Failed to sync species tracker: %v", err)
+				}
+			}()
+		}
+		p.syncMutex.Unlock()
+	}
+
 	// Process each result in item.Results
 	for _, result := range item.Results {
 		var confidenceThreshold float32
@@ -296,6 +353,16 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 			float64(result.Confidence),
 			item.Source, clipName,
 			item.ElapsedTime)
+
+		// Update species tracker if enabled
+		p.speciesTrackerMu.RLock()
+		tracker := p.NewSpeciesTracker
+		p.speciesTrackerMu.RUnlock()
+
+		if tracker != nil {
+			// Update tracker with this detection (released lock to reduce contention)
+			tracker.UpdateSpecies(scientificName, item.StartTime)
+		}
 
 		// Detection passed all filters, process it
 		detections = append(detections, Detections{
@@ -561,12 +628,17 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	}
 
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
+		p.speciesTrackerMu.RLock()
+		tracker := p.NewSpeciesTracker
+		p.speciesTrackerMu.RUnlock()
+
 		actions = append(actions, &DatabaseAction{
-			Settings:     p.Settings,
-			EventTracker: p.GetEventTracker(),
-			Note:         detection.Note,
-			Results:      detection.Results,
-			Ds:           p.Ds})
+			Settings:          p.Settings,
+			EventTracker:      p.GetEventTracker(),
+			NewSpeciesTracker: tracker,
+			Note:              detection.Note,
+			Results:           detection.Results,
+			Ds:                p.Ds})
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -770,6 +842,17 @@ func (p *Processor) Shutdown() error {
 	mqttClient := p.GetMQTTClient()
 	if mqttClient != nil && mqttClient.IsConnected() {
 		mqttClient.Disconnect()
+	}
+
+	// Close the species tracker to release resources
+	p.speciesTrackerMu.RLock()
+	tracker := p.NewSpeciesTracker
+	p.speciesTrackerMu.RUnlock()
+	
+	if tracker != nil {
+		if err := tracker.Close(); err != nil {
+			log.Printf("Warning: failed to close species tracker logger: %v", err)
+		}
 	}
 
 	log.Println("Processor shutdown complete")

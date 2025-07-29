@@ -22,6 +22,15 @@ export interface Detection {
   clipName?: string;
   weather?: Weather;
   timeOfDay?: string;
+  // Species tracking metadata
+  isNewSpecies?: boolean; // First seen within tracking window
+  daysSinceFirstSeen?: number; // Days since species was first detected
+  // Multi-period tracking metadata
+  isNewThisYear?: boolean; // First time this year
+  isNewThisSeason?: boolean; // First time this season
+  daysThisYear?: number; // Days since first this year
+  daysThisSeason?: number; // Days since first this season
+  currentSeason?: string; // Current season name
   review?: {
     verified: 'correct' | 'false_positive' | 'unverified';
   };
@@ -110,8 +119,17 @@ export interface DailySpeciesSummary {
   first_heard: string;
   latest_heard: string;
   thumbnail_url: string;
+  // Species tracking metadata
+  is_new_species?: boolean; // True if first seen within tracking window (persistent from API)
+  days_since_first_seen?: number; // Days since species was first detected
+  // Multi-period tracking metadata
+  is_new_this_year?: boolean; // First time this year
+  is_new_this_season?: boolean; // First time this season
+  days_this_year?: number; // Days since first this year
+  days_this_season?: number; // Days since first this season
+  current_season?: string; // Current season name
   // Animation state flags
-  isNew?: boolean; // New species row animation
+  isNew?: boolean; // New species row animation (temporary for SSE updates)
   countIncreased?: boolean; // Count increment animation
   hourlyUpdated?: number[]; // Which hours were just updated
   previousCount?: number; // For animated counter

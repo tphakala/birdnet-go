@@ -252,11 +252,12 @@ type RealtimeSettings struct {
 	PrivacyFilter PrivacyFilterSettings `json:"privacyFilter"` // Privacy filter settings
 	DogBarkFilter DogBarkFilterSettings `json:"dogBarkFilter"` // Dog bark filter settings
 	RTSP          RTSPSettings          `json:"rtsp"`          // RTSP settings
-	MQTT          MQTTSettings          `json:"mqtt"`          // MQTT settings
-	Telemetry     TelemetrySettings     `json:"telemetry"`     // Telemetry settings
-	Monitoring    MonitoringSettings    `json:"monitoring"`    // System resource monitoring settings
-	Species       SpeciesSettings       `json:"species"`       // Custom thresholds and actions for species
-	Weather       WeatherSettings       `json:"weather"`       // Weather provider related settings
+	MQTT            MQTTSettings            `json:"mqtt"`            // MQTT settings
+	Telemetry       TelemetrySettings       `json:"telemetry"`       // Telemetry settings
+	Monitoring      MonitoringSettings      `json:"monitoring"`      // System resource monitoring settings
+	Species         SpeciesSettings         `json:"species"`         // Custom thresholds and actions for species
+	Weather         WeatherSettings         `json:"weather"`         // Weather provider related settings
+	SpeciesTracking SpeciesTrackingSettings `json:"speciesTracking"` // New species tracking settings
 }
 
 // SpeciesAction represents a single action configuration
@@ -279,6 +280,222 @@ type SpeciesSettings struct {
 	Include []string                 `yaml:"include" json:"include"` // Always include these species
 	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
 	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration
+}
+
+// SpeciesTrackingSettings contains settings for tracking new species
+type SpeciesTrackingSettings struct {
+	Enabled              bool                   `json:"enabled"`              // true to enable new species tracking
+	NewSpeciesWindowDays int                    `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes  int                    `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
+	YearlyTracking       YearlyTrackingSettings `json:"yearlyTracking"`       // Settings for yearly species tracking
+	SeasonalTracking     SeasonalTrackingSettings `json:"seasonalTracking"`   // Settings for seasonal species tracking
+}
+
+// YearlyTrackingSettings contains settings for tracking first arrivals each year
+type YearlyTrackingSettings struct {
+	Enabled    bool `json:"enabled"`    // true to enable yearly tracking
+	ResetMonth int  `json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
+	ResetDay   int  `json:"resetDay"`   // Day to reset yearly tracking (default: 1)
+	WindowDays int  `json:"windowDays"` // Days to show "new this year" indicator (default: 30)
+}
+
+// SeasonalTrackingSettings contains settings for tracking first arrivals each season
+type SeasonalTrackingSettings struct {
+	Enabled    bool              `json:"enabled"`    // true to enable seasonal tracking
+	WindowDays int               `json:"windowDays"` // Days to show "new this season" indicator (default: 21)
+	Seasons    map[string]Season `json:"seasons"`    // Season definitions
+}
+
+// Season defines the start date for a season
+type Season struct {
+	StartMonth int `json:"startMonth"` // Month when season starts (1-12)
+	StartDay   int `json:"startDay"`   // Day when season starts (1-31)
+}
+
+// DetectHemisphere determines the hemisphere based on latitude
+// Returns "equatorial" for latitudes between -10 and 10 degrees,
+// "northern" for latitude > 10, "southern" for latitude < -10
+func DetectHemisphere(latitude float64) string {
+	if latitude > 10 {
+		return "northern"
+	} else if latitude < -10 {
+		return "southern"
+	}
+	return "equatorial"
+}
+
+// GetSeasonalTrackingWithHemisphere returns seasonal tracking configuration adjusted for hemisphere
+// For southern hemisphere, seasons are shifted by 6 months
+func GetSeasonalTrackingWithHemisphere(settings SeasonalTrackingSettings, latitude float64) SeasonalTrackingSettings {
+	// If no custom seasons are defined, use defaults based on hemisphere
+	if len(settings.Seasons) == 0 {
+		settings.Seasons = GetDefaultSeasons(latitude)
+	}
+	return settings
+}
+
+// GetDefaultSeasons returns default seasons based on hemisphere
+func GetDefaultSeasons(latitude float64) map[string]Season {
+	hemisphere := DetectHemisphere(latitude)
+	
+	switch hemisphere {
+	case "northern":
+		// Northern hemisphere seasons
+		return map[string]Season{
+			"spring": {StartMonth: 3, StartDay: 20},  // March 20
+			"summer": {StartMonth: 6, StartDay: 21},  // June 21
+			"fall":   {StartMonth: 9, StartDay: 22},  // September 22
+			"winter": {StartMonth: 12, StartDay: 21}, // December 21
+		}
+	case "southern":
+		// Southern hemisphere seasons (shifted by 6 months)
+		return map[string]Season{
+			"spring": {StartMonth: 9, StartDay: 22},  // September 22
+			"summer": {StartMonth: 12, StartDay: 21}, // December 21
+			"fall":   {StartMonth: 3, StartDay: 20},  // March 20
+			"winter": {StartMonth: 6, StartDay: 21},  // June 21
+		}
+	default: // equatorial
+		// Equatorial regions typically have wet and dry seasons
+		// Using approximate dates common to many equatorial regions
+		return map[string]Season{
+			"wet1": {StartMonth: 3, StartDay: 1},   // March-May wet season
+			"dry1": {StartMonth: 6, StartDay: 1},   // June-August dry season
+			"wet2": {StartMonth: 9, StartDay: 1},   // September-November wet season
+			"dry2": {StartMonth: 12, StartDay: 1},  // December-February dry season
+		}
+	}
+}
+
+// Validate validates the SpeciesTrackingSettings configuration
+func (s *SpeciesTrackingSettings) Validate() error {
+	// Validate window days
+	if s.NewSpeciesWindowDays < 1 || s.NewSpeciesWindowDays > 365 {
+		return errors.Newf("new species window days must be between 1 and 365, got %d", s.NewSpeciesWindowDays).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Validate sync interval
+	if s.SyncIntervalMinutes < 1 || s.SyncIntervalMinutes > 1440 { // 1440 minutes = 24 hours
+		return errors.Newf("sync interval minutes must be between 1 and 1440, got %d", s.SyncIntervalMinutes).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Validate yearly tracking if enabled
+	if s.YearlyTracking.Enabled {
+		if err := s.YearlyTracking.Validate(); err != nil {
+			return err
+		}
+	}
+
+	// Validate seasonal tracking if enabled
+	if s.SeasonalTracking.Enabled {
+		if err := s.SeasonalTracking.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate validates the YearlyTrackingSettings configuration
+func (y *YearlyTrackingSettings) Validate() error {
+	// Validate window days
+	if y.WindowDays < 1 || y.WindowDays > 365 {
+		return errors.Newf("yearly window days must be between 1 and 365, got %d", y.WindowDays).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Validate reset month
+	if y.ResetMonth < 1 || y.ResetMonth > 12 {
+		return errors.Newf("reset month must be between 1 and 12, got %d", y.ResetMonth).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Validate reset day based on month
+	maxDays := 31
+	switch y.ResetMonth {
+	case 2: // February
+		maxDays = 29
+	case 4, 6, 9, 11: // April, June, September, November
+		maxDays = 30
+	}
+	
+	if y.ResetDay < 1 || y.ResetDay > maxDays {
+		return errors.Newf("reset day must be between 1 and %d for month %d, got %d", maxDays, y.ResetMonth, y.ResetDay).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	return nil
+}
+
+// Validate validates the SeasonalTrackingSettings configuration
+func (s *SeasonalTrackingSettings) Validate() error {
+	// Validate window days
+	if s.WindowDays < 1 || s.WindowDays > 365 {
+		return errors.Newf("seasonal window days must be between 1 and 365, got %d", s.WindowDays).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Validate seasons if custom ones are defined
+	if len(s.Seasons) > 0 {
+		for name, season := range s.Seasons {
+			if err := season.Validate(name); err != nil {
+				return err
+			}
+		}
+		
+		// Check that we have at least 2 seasons
+		if len(s.Seasons) < 2 {
+			return errors.Newf("at least 2 seasons must be defined, got %d", len(s.Seasons)).
+				Component("config").
+				Category(errors.CategoryValidation).
+				Build()
+		}
+	}
+
+	return nil
+}
+
+// Validate validates a Season configuration
+func (s *Season) Validate(name string) error {
+	// Validate month
+	if s.StartMonth < 1 || s.StartMonth > 12 {
+		return errors.Newf("season '%s' start month must be between 1 and 12, got %d", name, s.StartMonth).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	// Validate day based on month
+	maxDays := 31
+	switch s.StartMonth {
+	case 2: // February
+		maxDays = 29
+	case 4, 6, 9, 11: // April, June, September, November
+		maxDays = 30
+	}
+	
+	if s.StartDay < 1 || s.StartDay > maxDays {
+		return errors.Newf("season '%s' start day must be between 1 and %d for month %d, got %d", name, maxDays, s.StartMonth, s.StartDay).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
+	return nil
 }
 
 // ActionConfig holds configuration details for a specific action.

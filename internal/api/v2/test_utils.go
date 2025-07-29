@@ -314,6 +314,12 @@ func (m *MockDataStore) GetNewSpeciesDetections(startDate, endDate string, limit
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
+// GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
+func (m *MockDataStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(startDate, endDate, limit, offset)
+	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
+}
+
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.
@@ -589,6 +595,12 @@ func (m *MockDataStoreV2) GetDailyAnalyticsData(startDate, endDate, species stri
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
 func (m *MockDataStoreV2) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(startDate, endDate, limit, offset)
+	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
+}
+
+// GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
+func (m *MockDataStoreV2) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
 	args := m.Called(startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }

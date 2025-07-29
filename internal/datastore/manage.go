@@ -269,6 +269,11 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 		return err
 	}
 	
+	// Create optimized indexes for new species tracking performance
+	if err := createOptimizedIndexes(db, dbType, migrationLogger); err != nil {
+		return err
+	}
+	
 	// Log successful migration completion
 	migrationLogger.Info("Database migration completed successfully",
 		"db_type", dbType,
@@ -567,6 +572,62 @@ func findNewColumns(db *gorm.DB, model interface{}, columnsBefore []string) []st
 	}
 	
 	return addedColumns
+}
+
+// createOptimizedIndexes creates optimized database indexes for performance
+func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error {
+	indexStart := time.Now()
+	lgr.Info("Creating optimized indexes",
+		"db_type", dbType)
+	
+	// Define the optimized index for new species tracking
+	// This index benefits the new species tracking queries that filter by scientific_name and date
+	indexName := "idx_notes_sciname_date_optimized"
+	tableName := "notes"
+	
+	// Check if index already exists using GORM's migrator
+	if db.Migrator().HasIndex(&Note{}, indexName) {
+		lgr.Debug("Optimized index already exists, skipping creation",
+			"index", indexName,
+			"table", tableName)
+		return nil
+	}
+	
+	// Create the optimized composite index using GORM's built-in index management
+	// Column order (scientific_name, date) is critical for query performance
+	if err := db.Migrator().CreateIndex(&Note{}, indexName); err != nil {
+		// Handle duplicate index errors gracefully
+		errMsg := strings.ToLower(err.Error())
+		isDuplicateIndex := strings.Contains(errMsg, "duplicate key name") || 
+							strings.Contains(errMsg, "already exists") || 
+							strings.Contains(errMsg, "duplicate") ||
+							strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
+		
+		if isDuplicateIndex {
+			lgr.Debug("Index already exists, continuing",
+				"index", indexName,
+				"table", tableName,
+				"db_type", dbType)
+			return nil
+		}
+		
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_optimized_index").
+			Context("db_type", dbType).
+			Context("index_name", indexName).
+			Context("table_name", tableName).
+			Build()
+	}
+	
+	lgr.Info("Optimized index created successfully",
+		"index", indexName,
+		"table", tableName,
+		"duration", time.Since(indexStart),
+		"db_type", dbType)
+	
+	return nil
 }
 
 // logTableMigration logs the result of a table migration

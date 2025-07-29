@@ -425,7 +425,77 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	return results, nil
 }
 
+// GetSpeciesFirstDetectionInPeriod finds the first detection of each species within a specific date range.
+// This is suitable for seasonal and yearly tracking where we need to know when each species
+// was first detected within that specific period, regardless of prior detections.
+// It returns all species detected in the period with their first detection date in that period.
+func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
+	// Validate input
+	if startDate != "" && endDate != "" && startDate > endDate {
+		return nil, errors.Newf("start date cannot be after end date").
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_species_first_detection_in_period").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// Default pagination values
+	if limit <= 0 {
+		limit = 10000 // Higher default for period tracking
+	}
+
+	type Result struct {
+		ScientificName     string
+		CommonName         string
+		FirstDetectionDate string
+		CountInPeriod      int
+	}
+	var results []Result
+
+	// Query to find the first detection of each species within the specified period
+	query := `
+	SELECT 
+		scientific_name,
+		MAX(common_name) as common_name,
+		MIN(date) as first_detection_date,
+		COUNT(*) as count_in_period
+	FROM notes
+	WHERE date BETWEEN ? AND ?
+		AND date != ''
+		AND date IS NOT NULL
+	GROUP BY scientific_name
+	ORDER BY first_detection_date ASC
+	LIMIT ? OFFSET ?
+	`
+
+	if err := ds.DB.Raw(query, startDate, endDate, limit, offset).Scan(&results).Error; err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_first_detection_in_period").
+			Context("start_date", startDate).
+			Context("end_date", endDate).
+			Build()
+	}
+
+	// Convert to NewSpeciesData format
+	speciesData := make([]NewSpeciesData, len(results))
+	for i, r := range results {
+		speciesData[i] = NewSpeciesData{
+			ScientificName: r.ScientificName,
+			CommonName:     r.CommonName,
+			FirstSeenDate:  r.FirstDetectionDate,
+			CountInPeriod:  r.CountInPeriod,
+		}
+	}
+
+	return speciesData, nil
+}
+
 // GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
+// This is suitable for lifetime tracking only - NOT for seasonal or yearly tracking.
 // It supports pagination with limit and offset parameters.
 // NOTE: For optimal performance with large datasets, add a composite index on (scientific_name, date)
 func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {

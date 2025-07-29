@@ -243,6 +243,12 @@ func (m *mockStore) GetNewSpeciesDetections(startDate, endDate string, limit, of
 	return []datastore.NewSpeciesData{}, nil
 }
 
+// GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
+func (m *mockStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	// This is a mock test implementation, so we'll return empty data
+	return []datastore.NewSpeciesData{}, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore
@@ -310,6 +316,20 @@ func (m *mockFailingStore) GetHourlyAnalyticsData(date, species string) ([]datas
 
 func (m *mockFailingStore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	return m.mockStore.GetSpeciesSummaryData(startDate, endDate)
+}
+
+func (m *mockFailingStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	if m.failGetAllCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetNewSpeciesDetections(startDate, endDate, limit, offset)
+}
+
+func (m *mockFailingStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	if m.failGetAllCache {
+		return nil, fmt.Errorf("simulated database error")
+	}
+	return m.mockStore.GetSpeciesFirstDetectionInPeriod(startDate, endDate, limit, offset)
 }
 
 // TestBirdImageCache tests the BirdImageCache implementation
