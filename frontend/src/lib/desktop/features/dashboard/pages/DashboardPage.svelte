@@ -5,7 +5,7 @@
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
-  import { getLocalDateString, isToday, isFutureDate, parseHour } from '$lib/utils/date';
+  import { getLocalDateString, isFutureDate, parseHour } from '$lib/utils/date';
 
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
@@ -69,13 +69,6 @@
     }
   }
 
-  function getDailySummaryCacheEntry(date: string): DailySpeciesSummary[] | null {
-    const cached = dailySummaryCache.get(date);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-    return null;
-  }
 
   // Fetch functions
   async function fetchDailySummary() {
@@ -661,7 +654,7 @@
         high_confidence: detection.confidence >= 0.8,
         first_heard: detection.time,
         latest_heard: detection.time,
-        thumbnail_url: `/api/v2/species/${detection.speciesCode}/thumbnail`,
+        thumbnail_url: '', // Empty string will trigger fallback in BirdThumbnailPopup
         isNew: true,
       };
       newSpecies.hourly_counts[hour] = 1;
