@@ -102,7 +102,8 @@ func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
 
 	// Test concurrent reads and writes
 	var wg sync.WaitGroup
@@ -302,7 +303,9 @@ func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	if err := tracker.InitFromDatabase(); err != nil {
+		b.Fatalf("Failed to initialize tracker from database: %v", err)
+	}
 
 	// Pre-populate with some species
 	currentTime := time.Now()
@@ -337,7 +340,9 @@ func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	if err := tracker.InitFromDatabase(); err != nil {
+		b.Fatalf("Failed to initialize tracker from database: %v", err)
+	}
 
 	currentTime := time.Now()
 	species := make([]string, b.N)
@@ -370,7 +375,9 @@ func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	if err := tracker.InitFromDatabase(); err != nil {
+		b.Fatalf("Failed to initialize tracker from database: %v", err)
+	}
 
 	// Pre-populate with some species
 	currentTime := time.Now()
@@ -418,7 +425,9 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	if err := tracker.InitFromDatabase(); err != nil {
+		b.Fatalf("Failed to initialize tracker from database: %v", err)
+	}
 
 	// Pre-generate all unique species names to isolate map growth measurements
 	uniqueSpeciesNames := make([]string, b.N)
@@ -740,7 +749,8 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 	}
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
 
 	speciesName := "Cyanistes caeruleus"
 
@@ -851,7 +861,8 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	// Create tracker and set to 2023 to simulate starting in previous year
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023) // Use test helper method
-	_ = tracker.InitFromDatabase()
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
 
 	speciesName := "Poecile palustris"
 
