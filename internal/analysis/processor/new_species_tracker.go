@@ -281,28 +281,49 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 			Build()
 	}
 
-	// Load ALL historical first detection data to properly initialize the tracker
-	// We need the complete history, not just a window, to know when species were truly first seen
-	endDate := time.Now().Format("2006-01-02")
+	now := time.Now()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Step 1: Load lifetime tracking data (existing logic)
+	if err := t.loadLifetimeDataFromDatabase(now); err != nil {
+		return err
+	}
+
+	// Step 2: Load yearly tracking data if enabled
+	if t.yearlyEnabled {
+		if err := t.loadYearlyDataFromDatabase(now); err != nil {
+			return err
+		}
+	}
+
+	// Step 3: Load seasonal tracking data if enabled
+	if t.seasonalEnabled {
+		if err := t.loadSeasonalDataFromDatabase(now); err != nil {
+			return err
+		}
+	}
+
+	t.lastSyncTime = now
+	return nil
+}
+
+// loadLifetimeDataFromDatabase loads all-time first detection data
+func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
+	endDate := now.Format("2006-01-02")
 	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
-	// Use existing analytics method to get new species data
 	newSpeciesData, err := t.ds.GetNewSpeciesDetections(startDate, endDate, 10000, 0)
 	if err != nil {
 		return errors.New(err).
 			Component("new-species-tracker").
 			Category(errors.CategoryDatabase).
-			Context("operation", "init_from_database").
+			Context("operation", "load_lifetime_data").
 			Build()
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	// Clear existing data
-	t.speciesFirstSeen = make(map[string]time.Time, 100)
-
-	// Populate map with first seen dates
+	// Clear and populate lifetime tracking map
+	t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
 	for _, species := range newSpeciesData {
 		if species.FirstSeenDate != "" {
 			firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
@@ -312,8 +333,133 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 		}
 	}
 
-	t.lastSyncTime = time.Now()
 	return nil
+}
+
+// loadYearlyDataFromDatabase loads first detection data for the current year
+func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
+	startDate, endDate := t.getYearDateRange(now)
+	
+	yearlyData, err := t.ds.GetNewSpeciesDetections(startDate, endDate, 10000, 0)
+	if err != nil {
+		return errors.New(err).
+			Component("new-species-tracker").
+			Category(errors.CategoryDatabase).
+			Context("operation", "load_yearly_data").
+			Context("year_start", startDate).
+			Context("year_end", endDate).
+			Build()
+	}
+
+	// Clear and populate yearly tracking map
+	t.speciesThisYear = make(map[string]time.Time, len(yearlyData))
+	for _, species := range yearlyData {
+		if species.FirstSeenDate != "" {
+			firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
+			if err == nil {
+				t.speciesThisYear[species.ScientificName] = firstSeen
+			}
+		}
+	}
+
+	return nil
+}
+
+// loadSeasonalDataFromDatabase loads first detection data for each season in the current year
+func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
+	// Initialize seasonal maps
+	t.speciesBySeason = make(map[string]map[string]time.Time)
+	
+	for seasonName := range t.seasons {
+		startDate, endDate := t.getSeasonDateRange(seasonName, now)
+		
+		seasonalData, err := t.ds.GetNewSpeciesDetections(startDate, endDate, 10000, 0)
+		if err != nil {
+			return errors.New(err).
+				Component("new-species-tracker").
+				Category(errors.CategoryDatabase).
+				Context("operation", "load_seasonal_data").
+				Context("season", seasonName).
+				Context("season_start", startDate).
+				Context("season_end", endDate).
+				Build()
+		}
+
+		// Initialize season map
+		seasonMap := make(map[string]time.Time, len(seasonalData))
+		for _, species := range seasonalData {
+			if species.FirstSeenDate != "" {
+				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
+				if err == nil {
+					seasonMap[species.ScientificName] = firstSeen
+				}
+			}
+		}
+		t.speciesBySeason[seasonName] = seasonMap
+	}
+
+	return nil
+}
+
+// getYearDateRange calculates the start and end dates for yearly tracking
+func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
+	currentYear := now.Year()
+	
+	// Calculate year start based on reset settings
+	yearStart := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+	
+	// If we haven't reached the reset date this year, use last year's reset date
+	if now.Before(yearStart) {
+		yearStart = time.Date(currentYear-1, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+	}
+	
+	startDate = yearStart.Format("2006-01-02")
+	endDate = now.Format("2006-01-02")
+	
+	return startDate, endDate
+}
+
+// getSeasonDateRange calculates the start and end dates for a specific season
+func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (startDate, endDate string) {
+	season, exists := t.seasons[seasonName]
+	if !exists {
+		// Return empty range for unknown season
+		return now.Format("2006-01-02"), now.Format("2006-01-02")
+	}
+	
+	currentYear := now.Year()
+	
+	// Calculate season start date for this year
+	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
+	
+	// Handle winter season that might start in previous year
+	if season.month >= 12 && now.Month() < time.Month(season.month) {
+		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
+	}
+	
+	// If the season hasn't started yet this year, don't return any data
+	if now.Before(seasonStart) {
+		return now.Format("2006-01-02"), now.Format("2006-01-02") // Empty range
+	}
+	
+	startDate = seasonStart.Format("2006-01-02")
+	endDate = now.Format("2006-01-02")
+	
+	return startDate, endDate
+}
+
+// isWithinCurrentYear checks if a detection time falls within the current tracking year
+func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
+	// Use the tracker's current year (respects SetCurrentYearForTesting)
+	referenceTime := time.Date(t.currentYear, time.December, 31, 23, 59, 59, 0, time.UTC)
+	startDate, _ := t.getYearDateRange(referenceTime)
+	yearStart, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return false
+	}
+	
+	// Check if the detection falls within this year's tracking period
+	return detectionTime.After(yearStart) || detectionTime.Equal(yearStart)
 }
 
 // GetSpeciesStatus returns the tracking status for a species with caching for performance
@@ -568,8 +714,10 @@ func (t *NewSpeciesTracker) UpdateSpecies(scientificName string, detectionTime t
 
 	// Update yearly tracking
 	if t.yearlyEnabled {
-		if _, yearExists := t.speciesThisYear[scientificName]; !yearExists {
-			t.speciesThisYear[scientificName] = detectionTime
+		if t.isWithinCurrentYear(detectionTime) {
+			if _, yearExists := t.speciesThisYear[scientificName]; !yearExists {
+				t.speciesThisYear[scientificName] = detectionTime
+			}
 		}
 	}
 
@@ -703,8 +851,10 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 
 	// Update yearly tracking
 	if t.yearlyEnabled {
-		if _, yearExists := t.speciesThisYear[scientificName]; !yearExists {
-			t.speciesThisYear[scientificName] = detectionTime
+		if t.isWithinCurrentYear(detectionTime) {
+			if _, yearExists := t.speciesThisYear[scientificName]; !yearExists {
+				t.speciesThisYear[scientificName] = detectionTime
+			}
 		}
 	}
 

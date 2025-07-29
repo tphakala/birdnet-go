@@ -259,7 +259,8 @@ func TestSpeciesStatusForDailySummaryCard(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test scenario 1: Brand new species (shows star icon)
-	currentTime := time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC)
+	currentYear := time.Now().Year()
+	currentTime := time.Date(currentYear, 7, 15, 10, 0, 0, 0, time.UTC)
 	tracker.UpdateSpecies("Alcedo atthis", currentTime)
 
 	status := tracker.GetSpeciesStatus("Alcedo atthis", currentTime)
@@ -273,15 +274,15 @@ func TestSpeciesStatusForDailySummaryCard(t *testing.T) {
 
 	// Test scenario 2: Species seen before but new this year (shows calendar icon)
 	// Simulate species seen last year
-	oldDetection := time.Date(2023, 7, 15, 10, 0, 0, 0, time.UTC)
+	oldDetection := time.Date(currentYear-1, 7, 15, 10, 0, 0, 0, time.UTC)
 	tracker.UpdateSpecies("Hirundo rustica", oldDetection)
 
 	// Check in current year
-	firstThisYear := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	firstThisYear := time.Date(currentYear, 6, 1, 10, 0, 0, 0, time.UTC)
 	tracker.UpdateSpecies("Hirundo rustica", firstThisYear)
 
 	// Check a few days later
-	checkTime := time.Date(2024, 6, 5, 10, 0, 0, 0, time.UTC)
+	checkTime := time.Date(currentYear, 6, 5, 10, 0, 0, 0, time.UTC)
 	status = tracker.GetSpeciesStatus("Hirundo rustica", checkTime)
 
 	// DailySummaryCard checks: item.is_new_this_year && !item.is_new_species
@@ -291,11 +292,11 @@ func TestSpeciesStatusForDailySummaryCard(t *testing.T) {
 
 	// Test scenario 3: Species seen this year but new this season (shows leaf icon)
 	// Species seen in spring
-	springDetection := time.Date(2024, 4, 15, 10, 0, 0, 0, time.UTC)
+	springDetection := time.Date(currentYear, 4, 15, 10, 0, 0, 0, time.UTC)
 	tracker.UpdateSpecies("Loxia leucoptera", springDetection)
 
 	// Now check in summer
-	summerCheck := time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC)
+	summerCheck := time.Date(currentYear, 7, 1, 10, 0, 0, 0, time.UTC)
 	status = tracker.GetSpeciesStatus("Loxia leucoptera", summerCheck)
 
 	// DailySummaryCard checks: item.is_new_this_season && !item.is_new_species && !item.is_new_this_year
@@ -307,7 +308,7 @@ func TestSpeciesStatusForDailySummaryCard(t *testing.T) {
 
 	// Now detect it in summer
 	tracker.UpdateSpecies("Loxia leucoptera", summerCheck)
-	summerLater := time.Date(2024, 7, 10, 10, 0, 0, 0, time.UTC)
+	summerLater := time.Date(currentYear, 7, 10, 10, 0, 0, 0, time.UTC)
 	status = tracker.GetSpeciesStatus("Loxia leucoptera", summerLater)
 
 	assert.True(t, status.IsNewThisSeason, "Expected IsNewThisSeason=true (within seasonal window)")
