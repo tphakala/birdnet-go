@@ -391,7 +391,11 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
 				if err == nil {
-					seasonMap[species.ScientificName] = firstSeen
+					// Only add if the detection actually occurred during this season
+					detectionSeason := t.getCurrentSeason(firstSeen)
+					if detectionSeason == seasonName {
+						seasonMap[species.ScientificName] = firstSeen
+					}
 				}
 			}
 		}
@@ -509,7 +513,9 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	var firstThisYear *time.Time
 	if t.yearlyEnabled {
 		if yearTime, yearExists := t.speciesThisYear[scientificName]; yearExists {
-			firstThisYear = &yearTime
+			// Create a copy to avoid pointer to loop variable issue
+			timeCopy := yearTime
+			firstThisYear = &timeCopy
 		}
 	}
 	
@@ -517,7 +523,9 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	var firstThisSeason *time.Time
 	if t.seasonalEnabled && t.speciesBySeason[currentSeason] != nil {
 		if seasonTime, seasonExists := t.speciesBySeason[currentSeason][scientificName]; seasonExists {
-			firstThisSeason = &seasonTime
+			// Create a copy to avoid pointer to loop variable issue
+			timeCopy := seasonTime
+			firstThisSeason = &timeCopy
 		}
 	}
 	
@@ -623,7 +631,9 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	var firstThisYear *time.Time
 	if t.yearlyEnabled {
 		if yearTime, yearExists := t.speciesThisYear[scientificName]; yearExists {
-			firstThisYear = &yearTime
+			// Create a copy to avoid pointer to loop variable issue
+			timeCopy := yearTime
+			firstThisYear = &timeCopy
 		}
 	}
 	
@@ -631,7 +641,9 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	var firstThisSeason *time.Time
 	if t.seasonalEnabled && t.speciesBySeason[currentSeason] != nil {
 		if seasonTime, seasonExists := t.speciesBySeason[currentSeason][scientificName]; seasonExists {
-			firstThisSeason = &seasonTime
+			// Create a copy to avoid pointer to loop variable issue
+			timeCopy := seasonTime
+			firstThisSeason = &timeCopy
 		}
 	}
 	
