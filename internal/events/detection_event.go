@@ -10,25 +10,25 @@ import (
 type DetectionEvent interface {
 	// GetSpeciesName returns the common name of the detected species
 	GetSpeciesName() string
-	
+
 	// GetScientificName returns the scientific name of the detected species
 	GetScientificName() string
-	
+
 	// GetConfidence returns the confidence level of the detection
 	GetConfidence() float64
-	
+
 	// GetTimestamp returns when the detection occurred
 	GetTimestamp() time.Time
-	
+
 	// GetLocation returns the detection location/source
 	GetLocation() string
-	
+
 	// GetMetadata returns additional context data
 	GetMetadata() map[string]interface{}
-	
+
 	// IsNewSpecies returns true if this is the first detection of this species
 	IsNewSpecies() bool
-	
+
 	// GetDaysSinceFirstSeen returns days since species was first detected
 	GetDaysSinceFirstSeen() int
 }
@@ -45,7 +45,7 @@ type detectionEventImpl struct {
 	daysSinceFirstSeen int
 }
 
-// NewDetectionEvent creates a new detection event
+// NewDetectionEvent creates a new detection event with input validation
 func NewDetectionEvent(
 	speciesName string,
 	scientificName string,
@@ -54,6 +54,20 @@ func NewDetectionEvent(
 	isNewSpecies bool,
 	daysSinceFirstSeen int,
 ) DetectionEvent {
+	// Validate input parameters to prevent invalid DetectionEvent instances
+	if speciesName == "" {
+		panic("NewDetectionEvent: speciesName cannot be empty")
+	}
+	if scientificName == "" {
+		panic("NewDetectionEvent: scientificName cannot be empty")
+	}
+	if confidence < 0.0 || confidence > 1.0 {
+		panic(fmt.Sprintf("NewDetectionEvent: confidence must be between 0 and 1, got %f", confidence))
+	}
+	if daysSinceFirstSeen < 0 {
+		panic(fmt.Sprintf("NewDetectionEvent: daysSinceFirstSeen cannot be negative, got %d", daysSinceFirstSeen))
+	}
+
 	return &detectionEventImpl{
 		speciesName:        speciesName,
 		scientificName:     scientificName,
@@ -115,7 +129,7 @@ func (e *detectionEventImpl) String() string {
 // DetectionEventConsumer represents a consumer that processes detection events
 type DetectionEventConsumer interface {
 	EventConsumer
-	
+
 	// ProcessDetectionEvent processes a single detection event
 	ProcessDetectionEvent(event DetectionEvent) error
 }

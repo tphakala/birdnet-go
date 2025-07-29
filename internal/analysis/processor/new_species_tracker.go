@@ -23,16 +23,16 @@ func init() {
 	// Initialize species tracking logger
 	// This creates a dedicated log file at logs/species-tracking.log
 	var err error
-	
+
 	// Set initial level to Debug for comprehensive logging
 	serviceLevelVar.Set(slog.LevelDebug)
-	
+
 	logger, closeLogger, err = logging.NewFileLogger(
 		"logs/species-tracking.log",
 		"species-tracking",
 		serviceLevelVar,
 	)
-	
+
 	if err != nil || logger == nil {
 		// Fallback to default logger if file logger creation fails
 		logger = slog.Default().With("service", "species-tracking")
@@ -44,6 +44,15 @@ func init() {
 	}
 }
 
+// Close releases the file logger resources to prevent resource leaks.
+// This should be called during application shutdown or when the logger is no longer needed.
+func Close() error {
+	if closeLogger != nil {
+		return closeLogger()
+	}
+	return nil
+}
+
 // SpeciesDatastore defines the minimal interface needed by NewSpeciesTracker
 type SpeciesDatastore interface {
 	GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
@@ -53,21 +62,21 @@ type SpeciesDatastore interface {
 // SpeciesStatus represents the tracking status of a species across multiple periods
 type SpeciesStatus struct {
 	// Existing lifetime tracking
-	FirstSeenTime    time.Time
-	IsNew            bool
-	DaysSinceFirst   int
-	LastUpdatedTime  time.Time // For cache management
-	
+	FirstSeenTime   time.Time
+	IsNew           bool
+	DaysSinceFirst  int
+	LastUpdatedTime time.Time // For cache management
+
 	// Multi-period tracking
-	FirstThisYear    *time.Time // First detection this calendar year
-	FirstThisSeason  *time.Time // First detection this season
-	CurrentSeason    string     // Current season name
-	
+	FirstThisYear   *time.Time // First detection this calendar year
+	FirstThisSeason *time.Time // First detection this season
+	CurrentSeason   string     // Current season name
+
 	// Status flags for each period
-	IsNewThisYear    bool       // First time this year
-	IsNewThisSeason  bool       // First time this season
-	DaysThisYear     int        // Days since first this year
-	DaysThisSeason   int        // Days since first this season
+	IsNewThisYear   bool // First time this year
+	IsNewThisSeason bool // First time this season
+	DaysThisYear    int  // Days since first this year
+	DaysThisSeason  int  // Days since first this season
 }
 
 // cachedSpeciesStatus represents a cached species status result with timestamp
@@ -79,38 +88,38 @@ type cachedSpeciesStatus struct {
 // NewSpeciesTracker tracks species detections and identifies new species
 // within a configurable time window. Designed for minimal memory allocations.
 type NewSpeciesTracker struct {
-	mu               sync.RWMutex
-	
+	mu sync.RWMutex
+
 	// Lifetime tracking (existing)
 	speciesFirstSeen map[string]time.Time // scientificName -> first detection time
 	windowDays       int                  // Days to consider a species "new"
-	
+
 	// Multi-period tracking
-	speciesThisYear  map[string]time.Time // scientificName -> first detection this year
-	speciesBySeason  map[string]map[string]time.Time // season -> scientificName -> first detection time
-	currentYear      int
-	currentSeason    string
-	seasons          map[string]seasonDates // season name -> start dates
-	
+	speciesThisYear map[string]time.Time            // scientificName -> first detection this year
+	speciesBySeason map[string]map[string]time.Time // season -> scientificName -> first detection time
+	currentYear     int
+	currentSeason   string
+	seasons         map[string]seasonDates // season name -> start dates
+
 	// Configuration
-	ds               SpeciesDatastore
-	lastSyncTime     time.Time
-	syncIntervalMins int
-	yearlyEnabled    bool
-	seasonalEnabled  bool
-	yearlyWindowDays int
+	ds                 SpeciesDatastore
+	lastSyncTime       time.Time
+	syncIntervalMins   int
+	yearlyEnabled      bool
+	seasonalEnabled    bool
+	yearlyWindowDays   int
 	seasonalWindowDays int
-	resetMonth       int // Month to reset yearly tracking (1-12)
-	resetDay         int // Day to reset yearly tracking (1-31)
-	
+	resetMonth         int // Month to reset yearly tracking (1-12)
+	resetDay           int // Day to reset yearly tracking (1-31)
+
 	// Pre-allocated for efficiency
-	statusBuffer     SpeciesStatus // Reusable buffer for status calculations
-	
+	statusBuffer SpeciesStatus // Reusable buffer for status calculations
+
 	// Status result caching for performance optimization
 	statusCache      map[string]cachedSpeciesStatus // scientificName -> cached status with TTL
 	cacheTTL         time.Duration                  // Time-to-live for cached results
 	lastCacheCleanup time.Time                      // Last time cache cleanup was performed
-	
+
 	// Season calculation caching for performance optimization
 	cachedSeason       string        // Cached current season name
 	seasonCacheTime    time.Time     // Timestamp when season was cached
@@ -124,11 +133,10 @@ type seasonDates struct {
 	day   int
 }
 
-
 // NewSpeciesTrackerFromSettings creates a tracker from configuration settings
 func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings) *NewSpeciesTracker {
 	now := time.Now()
-	
+
 	// Log initialization
 	logger.Debug("Creating new species tracker",
 		"enabled", settings.Enabled,
@@ -136,18 +144,18 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		"yearly_enabled", settings.YearlyTracking.Enabled,
 		"seasonal_enabled", settings.SeasonalTracking.Enabled,
 		"current_time", now.Format("2006-01-02 15:04:05"))
-	
+
 	tracker := &NewSpeciesTracker{
 		// Lifetime tracking
 		speciesFirstSeen: make(map[string]time.Time, 100),
 		windowDays:       settings.NewSpeciesWindowDays,
-		
+
 		// Multi-period tracking
-		speciesThisYear:    make(map[string]time.Time, 100),
-		speciesBySeason:    make(map[string]map[string]time.Time),
-		currentYear:        now.Year(),
-		seasons:            make(map[string]seasonDates),
-		
+		speciesThisYear: make(map[string]time.Time, 100),
+		speciesBySeason: make(map[string]map[string]time.Time),
+		currentYear:     now.Year(),
+		seasons:         make(map[string]seasonDates),
+
 		// Configuration
 		ds:                 ds,
 		syncIntervalMins:   settings.SyncIntervalMinutes,
@@ -157,16 +165,16 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		seasonalWindowDays: settings.SeasonalTracking.WindowDays,
 		resetMonth:         settings.YearlyTracking.ResetMonth,
 		resetDay:           settings.YearlyTracking.ResetDay,
-		
+
 		// Status result caching
-		statusCache:        make(map[string]cachedSpeciesStatus, 100), // Pre-allocate for ~100 species
-		cacheTTL:           30 * time.Second,                          // 30-second TTL for cached results
-		lastCacheCleanup:   now,
-		
+		statusCache:      make(map[string]cachedSpeciesStatus, 100), // Pre-allocate for ~100 species
+		cacheTTL:         30 * time.Second,                          // 30-second TTL for cached results
+		lastCacheCleanup: now,
+
 		// Season calculation caching
-		seasonCacheTTL:     time.Hour, // 1-hour TTL for season cache
+		seasonCacheTTL: time.Hour, // 1-hour TTL for season cache
 	}
-	
+
 	// Initialize seasons from configuration
 	if settings.SeasonalTracking.Enabled && len(settings.SeasonalTracking.Seasons) > 0 {
 		for name, season := range settings.SeasonalTracking.Seasons {
@@ -182,21 +190,21 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 	} else {
 		tracker.initializeDefaultSeasons()
 	}
-	
+
 	tracker.currentSeason = tracker.getCurrentSeason(now)
-	
+
 	logger.Debug("Species tracker initialized",
 		"current_season", tracker.currentSeason,
 		"current_year", tracker.currentYear,
 		"total_seasons", len(tracker.seasons))
-	
+
 	return tracker
 }
 
 // initializeDefaultSeasons sets up the default Northern Hemisphere seasons
 func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["spring"] = seasonDates{month: 3, day: 20}  // March 20
-	t.seasons["summer"] = seasonDates{month: 6, day: 21}  // June 21  
+	t.seasons["summer"] = seasonDates{month: 6, day: 21}  // June 21
 	t.seasons["fall"] = seasonDates{month: 9, day: 22}    // September 22
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
@@ -212,21 +220,21 @@ func (t *NewSpeciesTracker) SetCurrentYearForTesting(year int) {
 // getCurrentSeason determines which season we're currently in with intelligent caching
 func (t *NewSpeciesTracker) getCurrentSeason(currentTime time.Time) string {
 	// Check cache first - if valid entry exists and the input time is reasonably close to cached time
-	if t.cachedSeason != "" && 
-	   t.isSameSeasonPeriod(currentTime, t.seasonCacheForTime) &&
-	   time.Since(t.seasonCacheTime) < t.seasonCacheTTL {
+	if t.cachedSeason != "" &&
+		t.isSameSeasonPeriod(currentTime, t.seasonCacheForTime) &&
+		time.Since(t.seasonCacheTime) < t.seasonCacheTTL {
 		// Cache hit - return cached season directly
 		return t.cachedSeason
 	}
-	
+
 	// Cache miss or expired - compute fresh season
 	season := t.computeCurrentSeason(currentTime)
-	
+
 	// Cache the computed result for future requests
 	t.cachedSeason = season
-	t.seasonCacheTime = time.Now() // Cache time is when we computed it
+	t.seasonCacheTime = time.Now()     // Cache time is when we computed it
 	t.seasonCacheForTime = currentTime // Input time for which we computed
-	
+
 	return season
 }
 
@@ -237,12 +245,12 @@ func (t *NewSpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	if time1.Year() != time2.Year() {
 		return false
 	}
-	
+
 	// If times are within the same day, they're definitely in the same season
 	if time1.YearDay() == time2.YearDay() {
 		return true
 	}
-	
+
 	// If times are within 7 days of each other, they're very likely in the same season
 	// (seasons typically last ~90 days, so 7 days is a safe buffer)
 	timeDiff := time1.Sub(time2)
@@ -255,21 +263,21 @@ func (t *NewSpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 // computeCurrentSeason performs the actual season calculation (moved from getCurrentSeason)
 func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	currentMonth := int(currentTime.Month())
-	
+
 	// Log season calculation
 	logger.Debug("Computing current season",
 		"input_time", currentTime.Format("2006-01-02 15:04:05"),
 		"current_month", currentMonth,
 		"current_year", currentTime.Year())
-	
+
 	// Find the most recent season start date
 	var currentSeason string
 	var latestDate time.Time
-	
+
 	for seasonName, seasonStart := range t.seasons {
 		// Create a date for this year's season start
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
-		
+
 		// Handle winter season that might start in previous year
 		if seasonStart.month >= 12 && currentMonth < 6 {
 			seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
@@ -277,10 +285,10 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 				"season", seasonName,
 				"adjusted_date", seasonDate.Format("2006-01-02"))
 		}
-		
+
 		// If this season has started and is more recent than our current candidate
-		if (currentTime.After(seasonDate) || currentTime.Equal(seasonDate)) && 
-		   (currentSeason == "" || seasonDate.After(latestDate)) {
+		if (currentTime.After(seasonDate) || currentTime.Equal(seasonDate)) &&
+			(currentSeason == "" || seasonDate.After(latestDate)) {
 			logger.Debug("Season candidate found",
 				"season", seasonName,
 				"start_date", seasonDate.Format("2006-01-02"),
@@ -289,17 +297,17 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 			latestDate = seasonDate
 		}
 	}
-	
+
 	// Default to winter if we couldn't determine the season
 	if currentSeason == "" {
 		currentSeason = "winter"
 		logger.Debug("Defaulting to winter season - no match found")
 	}
-	
+
 	logger.Debug("Computed season result",
 		"season", currentSeason,
 		"season_start_date", latestDate.Format("2006-01-02"))
-	
+
 	return currentSeason
 }
 
@@ -317,7 +325,7 @@ func (t *NewSpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 			"new_year", t.currentYear,
 			"check_time", currentTime.Format("2006-01-02 15:04:05"))
 	}
-	
+
 	// Check for seasonal reset
 	if t.seasonalEnabled {
 		newSeason := t.getCurrentSeason(currentTime)
@@ -335,17 +343,17 @@ func (t *NewSpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 func (t *NewSpeciesTracker) shouldResetYear(currentTime time.Time) bool {
 	// Check if we've crossed the yearly reset date
 	resetDate := time.Date(currentTime.Year(), time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, currentTime.Location())
-	
+
 	// If current time is after reset date and we haven't reset for this year
 	if currentTime.After(resetDate) && currentTime.Year() > t.currentYear {
 		return true
 	}
-	
+
 	// Handle case where reset date hasn't occurred yet this year
 	if currentTime.Year() > t.currentYear {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -360,12 +368,12 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 	}
 
 	now := time.Now()
-	
+
 	logger.Debug("Initializing species tracker from database",
 		"current_time", now.Format("2006-01-02 15:04:05"),
 		"yearly_enabled", t.yearlyEnabled,
 		"seasonal_enabled", t.seasonalEnabled)
-	
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -389,12 +397,12 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 	}
 
 	t.lastSyncTime = now
-	
+
 	logger.Debug("Database initialization complete",
 		"lifetime_species", len(t.speciesFirstSeen),
 		"yearly_species", len(t.speciesThisYear),
 		"total_seasons", len(t.speciesBySeason))
-	
+
 	return nil
 }
 
@@ -429,7 +437,7 @@ func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 // loadYearlyDataFromDatabase loads first detection data for the current year
 func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 	startDate, endDate := t.getYearDateRange(now)
-	
+
 	// Use GetSpeciesFirstDetectionInPeriod for yearly tracking
 	yearlyData, err := t.ds.GetSpeciesFirstDetectionInPeriod(startDate, endDate, 10000, 0)
 	if err != nil {
@@ -460,18 +468,18 @@ func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 	// Initialize seasonal maps
 	t.speciesBySeason = make(map[string]map[string]time.Time)
-	
+
 	logger.Debug("Loading seasonal data from database",
 		"total_seasons", len(t.seasons))
-	
+
 	for seasonName := range t.seasons {
 		startDate, endDate := t.getSeasonDateRange(seasonName, now)
-		
+
 		logger.Debug("Loading data for season",
 			"season", seasonName,
 			"start_date", startDate,
 			"end_date", endDate)
-		
+
 		// Get first detection of each species within this season period
 		seasonalData, err := t.ds.GetSpeciesFirstDetectionInPeriod(startDate, endDate, 10000, 0)
 		if err != nil {
@@ -504,7 +512,7 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 			}
 		}
 		t.speciesBySeason[seasonName] = seasonMap
-		
+
 		logger.Debug("Season loading complete",
 			"season", seasonName,
 			"total_retrieved", len(seasonalData),
@@ -517,18 +525,18 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 // getYearDateRange calculates the start and end dates for yearly tracking
 func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
 	currentYear := now.Year()
-	
+
 	// Calculate year start based on reset settings
 	yearStart := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-	
+
 	// If we haven't reached the reset date this year, use last year's reset date
 	if now.Before(yearStart) {
 		yearStart = time.Date(currentYear-1, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
 	}
-	
+
 	startDate = yearStart.Format("2006-01-02")
 	endDate = now.Format("2006-01-02")
-	
+
 	return startDate, endDate
 }
 
@@ -539,25 +547,25 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 		// Return empty range for unknown season
 		return now.Format("2006-01-02"), now.Format("2006-01-02")
 	}
-	
+
 	currentYear := now.Year()
-	
+
 	// Calculate season start date for this year
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
-	
+
 	// Handle winter season that might start in previous year
 	if season.month >= 12 && now.Month() < time.Month(season.month) {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
-	
+
 	// If the season hasn't started yet this year, don't return any data
 	if now.Before(seasonStart) {
 		return now.Format("2006-01-02"), now.Format("2006-01-02") // Empty range
 	}
-	
+
 	startDate = seasonStart.Format("2006-01-02")
 	endDate = now.Format("2006-01-02")
-	
+
 	return startDate, endDate
 }
 
@@ -570,7 +578,7 @@ func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	// Check if the detection falls within this year's tracking period
 	return detectionTime.After(yearStart) || detectionTime.Equal(yearStart)
 }
@@ -580,7 +588,7 @@ func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
 func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime time.Time) SpeciesStatus {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	
+
 	// Check cache first - if valid entry exists within TTL, return it
 	if cached, exists := t.statusCache[scientificName]; exists {
 		if currentTime.Sub(cached.timestamp) < t.cacheTTL {
@@ -589,35 +597,35 @@ func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime 
 		}
 		// Cache expired - will recompute and update cache below
 	}
-	
+
 	// Perform periodic cache cleanup to prevent unbounded growth
 	if currentTime.Sub(t.lastCacheCleanup) > t.cacheTTL*10 { // Cleanup every 10 TTL periods (5 minutes)
 		t.cleanupExpiredCache(currentTime)
 		t.lastCacheCleanup = currentTime
 	}
-	
+
 	// Cache miss or expired - compute fresh status
 	t.checkAndResetPeriods(currentTime)
 	currentSeason := t.getCurrentSeason(currentTime)
-	
+
 	// Build fresh status using the same logic as buildSpeciesStatusLocked but with buffer reuse
 	status := t.buildSpeciesStatusWithBuffer(scientificName, currentTime, currentSeason)
-	
+
 	firstSeenStr := "never"
 	if !status.FirstSeenTime.IsZero() {
 		firstSeenStr = status.FirstSeenTime.Format("2006-01-02")
 	}
-	
+
 	firstThisYearStr := "nil"
 	if status.FirstThisYear != nil {
 		firstThisYearStr = status.FirstThisYear.Format("2006-01-02")
 	}
-	
+
 	firstThisSeasonStr := "nil"
 	if status.FirstThisSeason != nil {
 		firstThisSeasonStr = status.FirstThisSeason.Format("2006-01-02")
 	}
-	
+
 	logger.Debug("Species status computed",
 		"species", scientificName,
 		"current_time", currentTime.Format("2006-01-02 15:04:05"),
@@ -631,13 +639,13 @@ func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime 
 		"first_seen", firstSeenStr,
 		"first_this_year", firstThisYearStr,
 		"first_this_season", firstThisSeasonStr)
-	
+
 	// Cache the computed result for future requests
 	t.statusCache[scientificName] = cachedSpeciesStatus{
 		status:    status,
 		timestamp: currentTime,
 	}
-	
+
 	return status
 }
 
@@ -646,7 +654,7 @@ func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime 
 func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
 	// Lifetime tracking
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
-	
+
 	// Yearly tracking
 	var firstThisYear *time.Time
 	if t.yearlyEnabled {
@@ -656,7 +664,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 			firstThisYear = &timeCopy
 		}
 	}
-	
+
 	// Seasonal tracking - check current season only (matches original behavior)
 	var firstThisSeason *time.Time
 	if t.seasonalEnabled && t.speciesBySeason[currentSeason] != nil {
@@ -666,7 +674,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 			firstThisSeason = &timeCopy
 		}
 	}
-	
+
 	// Reuse the pre-allocated status buffer
 	status := &t.statusBuffer
 	status.FirstSeenTime = firstSeen
@@ -680,7 +688,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	status.IsNewThisSeason = false
 	status.DaysThisYear = -1
 	status.DaysThisSeason = -1
-	
+
 	// Calculate lifetime status
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / 24)
@@ -691,7 +699,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 		status.IsNew = true
 		status.DaysSinceFirst = 0
 	}
-	
+
 	// Calculate yearly status
 	if t.yearlyEnabled {
 		if firstThisYear != nil {
@@ -704,7 +712,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 			status.DaysThisYear = 0
 		}
 	}
-	
+
 	// Calculate seasonal status
 	if t.seasonalEnabled {
 		if firstThisSeason != nil {
@@ -717,7 +725,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 			status.DaysThisSeason = 0
 		}
 	}
-	
+
 	return *status
 }
 
@@ -731,30 +739,30 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 }
 
 // GetBatchSpeciesStatus returns the tracking status for multiple species in a single operation
-// This method significantly reduces mutex contention and redundant computations compared to 
+// This method significantly reduces mutex contention and redundant computations compared to
 // calling GetSpeciesStatus individually for each species. It performs expensive operations
 // like checkAndResetPeriods() and getCurrentSeason() only once for the entire batch.
 func (t *NewSpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, currentTime time.Time) map[string]SpeciesStatus {
 	if len(scientificNames) == 0 {
 		return make(map[string]SpeciesStatus)
 	}
-	
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	
+
 	// Perform expensive operations only once for the entire batch
 	t.checkAndResetPeriods(currentTime)
 	currentSeason := t.getCurrentSeason(currentTime)
-	
+
 	// Pre-allocate result map with exact capacity
 	results := make(map[string]SpeciesStatus, len(scientificNames))
-	
+
 	// Process each species using the cached season information
 	for _, scientificName := range scientificNames {
 		status := t.buildSpeciesStatusLocked(scientificName, currentTime, currentSeason)
 		results[scientificName] = status
 	}
-	
+
 	return results
 }
 
@@ -764,7 +772,7 @@ func (t *NewSpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, curr
 func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
 	// Lifetime tracking
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
-	
+
 	// Yearly tracking
 	var firstThisYear *time.Time
 	if t.yearlyEnabled {
@@ -774,7 +782,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 			firstThisYear = &timeCopy
 		}
 	}
-	
+
 	// Seasonal tracking - check current season only (matches original behavior)
 	var firstThisSeason *time.Time
 	if t.seasonalEnabled && t.speciesBySeason[currentSeason] != nil {
@@ -784,22 +792,22 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 			firstThisSeason = &timeCopy
 		}
 	}
-	
+
 	// Build status struct (cannot reuse statusBuffer in batch operations)
 	status := SpeciesStatus{
-		FirstSeenTime:    firstSeen,
-		IsNew:            false,
-		DaysSinceFirst:   -1,
-		LastUpdatedTime:  currentTime,
-		FirstThisYear:    firstThisYear,
-		FirstThisSeason:  firstThisSeason,
-		CurrentSeason:    currentSeason,
-		IsNewThisYear:    false,
-		IsNewThisSeason:  false,
-		DaysThisYear:     -1,
-		DaysThisSeason:   -1,
+		FirstSeenTime:   firstSeen,
+		IsNew:           false,
+		DaysSinceFirst:  -1,
+		LastUpdatedTime: currentTime,
+		FirstThisYear:   firstThisYear,
+		FirstThisSeason: firstThisSeason,
+		CurrentSeason:   currentSeason,
+		IsNewThisYear:   false,
+		IsNewThisSeason: false,
+		DaysThisYear:    -1,
+		DaysThisSeason:  -1,
 	}
-	
+
 	// Calculate lifetime status
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / 24)
@@ -810,7 +818,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 		status.IsNew = true
 		status.DaysSinceFirst = 0
 	}
-	
+
 	// Calculate yearly status
 	if t.yearlyEnabled {
 		if firstThisYear != nil {
@@ -823,7 +831,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 			status.DaysThisYear = 0
 		}
 	}
-	
+
 	// Calculate seasonal status
 	if t.seasonalEnabled {
 		if firstThisSeason != nil {
@@ -836,7 +844,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 			status.DaysThisSeason = 0
 		}
 	}
-	
+
 	return status
 }
 
@@ -852,7 +860,7 @@ func (t *NewSpeciesTracker) UpdateSpecies(scientificName string, detectionTime t
 	// Lifetime tracking
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
 	isNewSpecies := false
-	
+
 	if !exists {
 		// New species detected
 		t.speciesFirstSeen[scientificName] = detectionTime
@@ -957,18 +965,21 @@ func (t *NewSpeciesTracker) GetSpeciesCount() int {
 	return len(t.speciesFirstSeen)
 }
 
-// PruneOldEntries removes species entries older than 2x the window period
-// This prevents unbounded memory growth over time across all tracking maps
+// PruneOldEntries removes species entries older than 2x their respective window periods
+// This prevents unbounded memory growth over time using period-specific cutoff times
 func (t *NewSpeciesTracker) PruneOldEntries() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	cutoffTime := time.Now().AddDate(0, 0, -t.windowDays*2)
+	now := time.Now()
 	pruned := 0
+
+	// Calculate separate cutoff times for each tracking period
+	lifetimeCutoff := now.AddDate(0, 0, -t.windowDays*2)
 
 	// Prune lifetime tracking map
 	for scientificName, firstSeen := range t.speciesFirstSeen {
-		if firstSeen.Before(cutoffTime) {
+		if firstSeen.Before(lifetimeCutoff) {
 			delete(t.speciesFirstSeen, scientificName)
 			pruned++
 		}
@@ -976,8 +987,9 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 
 	// Prune yearly tracking map if enabled
 	if t.yearlyEnabled {
+		yearlyCutoff := now.AddDate(0, 0, -t.yearlyWindowDays*2)
 		for scientificName, firstSeen := range t.speciesThisYear {
-			if firstSeen.Before(cutoffTime) {
+			if firstSeen.Before(yearlyCutoff) {
 				delete(t.speciesThisYear, scientificName)
 				pruned++
 			}
@@ -986,9 +998,10 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 
 	// Prune seasonal tracking maps if enabled
 	if t.seasonalEnabled {
+		seasonalCutoff := now.AddDate(0, 0, -t.seasonalWindowDays*2)
 		for season, speciesMap := range t.speciesBySeason {
 			for scientificName, firstSeen := range speciesMap {
-				if firstSeen.Before(cutoffTime) {
+				if firstSeen.Before(seasonalCutoff) {
 					delete(speciesMap, scientificName)
 					pruned++
 				}
@@ -1028,7 +1041,7 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 		daysSince := int(detectionTime.Sub(firstSeen).Hours() / 24)
 		daysSinceFirstSeen = daysSince
 		isNew = daysSince <= t.windowDays
-		
+
 		// Update if this detection is earlier than recorded
 		if detectionTime.Before(firstSeen) {
 			t.speciesFirstSeen[scientificName] = detectionTime
@@ -1063,11 +1076,11 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 func (t *NewSpeciesTracker) IsSeasonMapInitialized(season string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	
+
 	if !t.seasonalEnabled {
 		return false
 	}
-	
+
 	return t.speciesBySeason != nil && t.speciesBySeason[season] != nil
 }
 
@@ -1076,11 +1089,11 @@ func (t *NewSpeciesTracker) IsSeasonMapInitialized(season string) bool {
 func (t *NewSpeciesTracker) GetSeasonMapCount(season string) int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	
+
 	if !t.seasonalEnabled || t.speciesBySeason == nil || t.speciesBySeason[season] == nil {
 		return 0
 	}
-	
+
 	return len(t.speciesBySeason[season])
 }
 
@@ -1090,7 +1103,7 @@ func (t *NewSpeciesTracker) GetSeasonMapCount(season string) int {
 func (t *NewSpeciesTracker) ExpireCacheForTesting(scientificName string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	
+
 	if cached, exists := t.statusCache[scientificName]; exists {
 		// Set timestamp to expired (1 hour ago)
 		cached.timestamp = time.Now().Add(-time.Hour)
@@ -1103,6 +1116,6 @@ func (t *NewSpeciesTracker) ExpireCacheForTesting(scientificName string) {
 func (t *NewSpeciesTracker) ClearCacheForTesting() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	
+
 	t.statusCache = make(map[string]cachedSpeciesStatus)
 }

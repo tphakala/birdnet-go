@@ -114,15 +114,15 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
 		p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &settings.Realtime.SpeciesTracking)
-		
+
 		// Initialize species tracker from database
 		if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
 			log.Printf("Failed to initialize species tracker from database: %v", err)
 			// Continue anyway - tracker will work for new detections
 		}
-		
-		log.Printf("Species tracking enabled: window=%d days, sync=%d minutes", 
-			settings.Realtime.SpeciesTracking.NewSpeciesWindowDays, 
+
+		log.Printf("Species tracking enabled: window=%d days, sync=%d minutes",
+			settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
 			settings.Realtime.SpeciesTracking.SyncIntervalMinutes)
 	}
 
@@ -229,7 +229,7 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 	p.speciesTrackerMu.RLock()
 	tracker := p.NewSpeciesTracker
 	p.speciesTrackerMu.RUnlock()
-	
+
 	if tracker != nil {
 		go func() {
 			if err := tracker.SyncIfNeeded(); err != nil {
@@ -329,11 +329,13 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 
 		// Update species tracker if enabled
 		p.speciesTrackerMu.RLock()
-		if p.NewSpeciesTracker != nil {
-			// Update tracker with this detection
-			p.NewSpeciesTracker.UpdateSpecies(scientificName, item.StartTime)
-		}
+		tracker := p.NewSpeciesTracker
 		p.speciesTrackerMu.RUnlock()
+
+		if tracker != nil {
+			// Update tracker with this detection (released lock to reduce contention)
+			tracker.UpdateSpecies(scientificName, item.StartTime)
+		}
 
 		// Detection passed all filters, process it
 		detections = append(detections, Detections{
@@ -602,7 +604,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 		p.speciesTrackerMu.RLock()
 		tracker := p.NewSpeciesTracker
 		p.speciesTrackerMu.RUnlock()
-		
+
 		actions = append(actions, &DatabaseAction{
 			Settings:          p.Settings,
 			EventTracker:      p.GetEventTracker(),

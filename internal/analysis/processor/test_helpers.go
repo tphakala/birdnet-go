@@ -24,6 +24,7 @@ func (m *MockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(startDate, endDa
 
 // safeSlice is a helper for mock methods returning slices.
 // It safely handles nil arguments and performs type assertion.
+// TODO: Move to a shared test utilities package to reduce duplication
 func safeSlice[T any](args mock.Arguments, index int) []T {
 	if arg := args.Get(index); arg != nil {
 		if slice, ok := arg.([]T); ok {

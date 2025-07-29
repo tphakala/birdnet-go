@@ -622,7 +622,7 @@ func validateSeasonalTrackingSettings(settings *SeasonalTrackingSettings) error 
 func getMaxDaysInMonth(month int) int {
 	switch month {
 	case 2: // February
-		return 29 // Assume leap year to be safe
+		return 29 // Return 29 to safely accommodate leap years, ensuring validation doesn't reject valid Feb 29 dates
 	case 4, 6, 9, 11: // April, June, September, November
 		return 30
 	default: // January, March, May, July, August, October, December
