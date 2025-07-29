@@ -10,6 +10,8 @@ import (
 )
 
 func TestDetectionNotificationConsumer(t *testing.T) {
+	t.Parallel()
+
 	// Create notification service
 	config := &ServiceConfig{
 		MaxNotifications:   100,
