@@ -161,17 +161,28 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		}
 
 		// Parse time strings to time.Time
+		// IMPORTANT: Database stores local time strings, parse as local time
 		if firstSeenStr != "" {
-			firstSeen, err := time.Parse("2006-01-02 15:04:05", firstSeenStr)
+			firstSeen, err := time.ParseInLocation("2006-01-02 15:04:05", firstSeenStr, time.Local)
 			if err == nil {
 				summary.FirstSeen = firstSeen
+			} else if isDebugLoggingEnabled() {
+				datastoreLogger.Debug("Failed to parse firstSeen time", 
+					"species", summary.ScientificName,
+					"firstSeenStr", firstSeenStr,
+					"error", err)
 			}
 		}
 
 		if lastSeenStr != "" {
-			lastSeen, err := time.Parse("2006-01-02 15:04:05", lastSeenStr)
+			lastSeen, err := time.ParseInLocation("2006-01-02 15:04:05", lastSeenStr, time.Local)
 			if err == nil {
 				summary.LastSeen = lastSeen
+			} else if isDebugLoggingEnabled() {
+				datastoreLogger.Debug("Failed to parse lastSeen time", 
+					"species", summary.ScientificName,
+					"lastSeenStr", lastSeenStr,
+					"error", err)
 			}
 		}
 

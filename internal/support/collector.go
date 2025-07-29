@@ -771,7 +771,8 @@ func (c *Collector) parseLogLine(line string, anonymizePII bool) *LogEntry {
 	}
 
 	// Parse timestamp
-	timestamp, err := time.Parse("2006-01-02 15:04:05", parts[0]+" "+parts[1])
+	// IMPORTANT: Database log entries use local time strings, parse as local time
+	timestamp, err := time.ParseInLocation("2006-01-02 15:04:05", parts[0]+" "+parts[1], time.Local)
 	if err != nil {
 		return nil
 	}

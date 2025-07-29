@@ -146,7 +146,8 @@ func calculateDateRangeComplexity(startDate, endDate string) float64 {
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
 		// Try alternative date format
-		start, err = time.Parse("2006-01-02 15:04:05", startDate)
+		// IMPORTANT: Database stores local time strings, parse as local time
+		start, err = time.ParseInLocation("2006-01-02 15:04:05", startDate, time.Local)
 		if err != nil {
 			// Return default complexity if parsing fails
 			return 1.0
@@ -157,7 +158,8 @@ func calculateDateRangeComplexity(startDate, endDate string) float64 {
 	end, err := time.Parse("2006-01-02", endDate)
 	if err != nil {
 		// Try alternative date format
-		end, err = time.Parse("2006-01-02 15:04:05", endDate)
+		// IMPORTANT: Database stores local time strings, parse as local time
+		end, err = time.ParseInLocation("2006-01-02 15:04:05", endDate, time.Local)
 		if err != nil {
 			// Return default complexity if parsing fails
 			return 1.0
