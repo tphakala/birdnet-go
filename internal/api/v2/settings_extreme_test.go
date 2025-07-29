@@ -178,7 +178,7 @@ func TestExtremeValues(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			body, err := json.Marshal(tt.extremeData)
 			require.NoError(t, err)
@@ -308,7 +308,7 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			largeData := tt.largeData()
 			body, err := json.Marshal(largeData)

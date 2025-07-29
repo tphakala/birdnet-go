@@ -18,7 +18,7 @@ import (
 // TestDashboardPartialUpdate verifies dashboard settings preserve unmodified fields
 func TestDashboardPartialUpdate(t *testing.T) {
 	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider = "testprovider"
 	initialSettings.Realtime.Dashboard.SummaryLimit = 200
 	
@@ -75,7 +75,7 @@ func TestDashboardPartialUpdate(t *testing.T) {
 // TestWeatherPartialUpdate verifies weather settings preserve unmodified fields
 func TestWeatherPartialUpdate(t *testing.T) {
 	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.Weather.Debug = true
 	
 	// Capture initial values
@@ -121,7 +121,7 @@ func TestWeatherPartialUpdate(t *testing.T) {
 // TestMQTTPartialUpdate verifies MQTT settings preserve unmodified fields
 func TestMQTTPartialUpdate(t *testing.T) {
 	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.MQTT.Enabled = true
 	initialSettings.Realtime.MQTT.Retain = true
 	initialSettings.Realtime.MQTT.Username = "testuser"
@@ -173,7 +173,7 @@ func TestMQTTPartialUpdate(t *testing.T) {
 // TestBirdNETCoordinatesUpdate verifies BirdNET settings preserve range filter
 func TestBirdNETCoordinatesUpdate(t *testing.T) {
 	// Get initial settings (already has the values we need from getTestSettings)
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	
 	// Create controller with settings
 	e := echo.New()
@@ -218,7 +218,7 @@ func TestBirdNETCoordinatesUpdate(t *testing.T) {
 // TestNestedRangeFilterUpdate verifies nested updates preserve parent fields
 func TestNestedRangeFilterUpdate(t *testing.T) {
 	// Get initial settings (already has the values we need from getTestSettings)
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	
 	// Create controller with settings
 	e := echo.New()
@@ -262,7 +262,7 @@ func TestNestedRangeFilterUpdate(t *testing.T) {
 // TestAudioExportPartialUpdate verifies audio export settings preserve unmodified fields
 func TestAudioExportPartialUpdate(t *testing.T) {
 	// Get initial settings (already has the values we need from getTestSettings)
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	
 	// Create controller with settings
 	e := echo.New()
@@ -306,7 +306,7 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 // TestSpeciesConfigUpdate verifies complex nested species config updates
 func TestSpeciesConfigUpdate(t *testing.T) {
 	// Get initial settings and setup species config
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.Species.Config["American Robin"] = conf.SpeciesConfig{
 		Threshold: 0.8,
 		Interval: 30,
@@ -368,7 +368,7 @@ func TestSpeciesConfigUpdate(t *testing.T) {
 // TestEmptyUpdatePreservesEverything verifies empty updates don't change anything
 func TestEmptyUpdatePreservesEverything(t *testing.T) {
 	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia"
 	
 	// Get initial state
@@ -498,7 +498,7 @@ func TestDeepNestedUpdates(t *testing.T) {
 	t.Parallel()
 
 	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.MQTT.TLS.Enabled = true
 	initialSettings.Realtime.MQTT.TLS.InsecureSkipVerify = false
 

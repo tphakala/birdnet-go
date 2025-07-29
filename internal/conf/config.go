@@ -1065,6 +1065,8 @@ func SetTestSettings(settings *Settings) {
 	settingsMutex.Lock()
 	defer settingsMutex.Unlock()
 	settingsInstance = settings
+	// Reset the sync.Once to allow reinitialization in tests
+	once = sync.Once{}
 }
 
 // SaveYAMLConfig updates the YAML configuration file with new settings.

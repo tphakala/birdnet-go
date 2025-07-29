@@ -3,16 +3,18 @@ package api
 import (
 	"log"
 	"os"
+	"testing"
 	
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // getTestController creates a test controller with disabled saving
-func getTestController(e *echo.Echo) *Controller {
+func getTestController(t *testing.T, e *echo.Echo) *Controller {
+	t.Helper()
 	return &Controller{
 		Echo:                e,
-		Settings:            getTestSettings(),
+		Settings:            getTestSettings(t),
 		controlChan:         make(chan string, 10),
 		DisableSaveSettings: true, // Disable saving to disk during tests
 		logger:              log.New(os.Stderr, "TEST: ", log.LstdFlags), // Add logger for tests
@@ -21,7 +23,8 @@ func getTestController(e *echo.Echo) *Controller {
 
 // getTestSettings returns a valid Settings instance for testing
 // This bypasses the global singleton and config file loading
-func getTestSettings() *conf.Settings {
+func getTestSettings(t *testing.T) *conf.Settings {
+	t.Helper()
 	settings := &conf.Settings{}
 	
 	// Initialize with valid defaults

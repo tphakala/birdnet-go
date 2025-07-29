@@ -60,7 +60,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			e := echo.New()
 			controller := &Controller{
 				Echo:        e,
-				Settings:    getTestSettings(),
+				Settings:    getTestSettings(t),
 				controlChan: make(chan string, 100),
 			}
 
@@ -322,7 +322,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 			e := echo.New()
 			controller := &Controller{
 				Echo:        e,
-				Settings:    getTestSettings(),
+				Settings:    getTestSettings(t),
 				controlChan: make(chan string, 100),
 			}
 

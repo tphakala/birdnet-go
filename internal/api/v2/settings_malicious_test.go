@@ -126,7 +126,7 @@ func TestMaliciousInputData(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			body, err := json.Marshal(tt.maliciousData)
 			require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			body, err := json.Marshal(tt.confusedData)
 			require.NoError(t, err)

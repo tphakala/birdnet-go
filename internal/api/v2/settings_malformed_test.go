@@ -88,7 +88,7 @@ func TestMalformedJSONData(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
 				strings.NewReader(tt.malformedData))

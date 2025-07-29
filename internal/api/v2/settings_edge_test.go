@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -99,7 +101,13 @@ func TestBoundaryValues(t *testing.T) {
 			name:    "Maximum array size",
 			section: "rtsp",
 			boundaryData: map[string]interface{}{
-				"urls": make([]string, 100), // Large array
+				"urls": func() []string {
+					urls := make([]string, 100)
+					for i := 0; i < 100; i++ {
+						urls[i] = fmt.Sprintf("rtsp://camera%d.example.com:554/stream%d", i+1, i+1)
+					}
+					return urls
+				}(), // Large array of actual RTSP URLs
 			},
 			description: "Should handle large URL arrays",
 		},
@@ -115,7 +123,7 @@ func TestBoundaryValues(t *testing.T) {
 			name:    "Maximum string length",
 			section: "mqtt",
 			boundaryData: map[string]interface{}{
-				"broker": "tcp://" + string(make([]byte, 250)),
+				"broker": "tcp://" + strings.Repeat("a", 250),
 			},
 			description: "Should handle long broker strings",
 		},
@@ -126,7 +134,7 @@ func TestBoundaryValues(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			body, err := json.Marshal(tt.boundaryData)
 			require.NoError(t, err)
@@ -232,7 +240,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			body, err := json.Marshal(tt.specialData)
 			require.NoError(t, err)
@@ -320,7 +328,7 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			t.Parallel()
 
 			e := echo.New()
-			controller := getTestController(e)
+			controller := getTestController(t, e)
 
 			body, err := json.Marshal(tt.update)
 			require.NoError(t, err)
@@ -383,7 +391,7 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 // TestComplexNestedPreservation verifies complex nested structures preserve all unmodified data
 func TestComplexNestedPreservation(t *testing.T) {
 	// Get test settings and update them with complex initial state
-	initialSettings := getTestSettings()
+	initialSettings := getTestSettings(t)
 	initialSettings.Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
 	initialSettings.Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
 	initialSettings.Realtime.Species.Config["Robin"] = conf.SpeciesConfig{

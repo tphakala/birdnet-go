@@ -626,7 +626,12 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 		)
 	}
 
-	// Return an echo.HTTPError for testing compatibility
+	return ctx.JSON(code, errorResp)
+}
+
+// HandleErrorForTest constructs and returns an echo.HTTPError for testing purposes
+// This method is used in tests where echo.HTTPError is expected for error assertions
+func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message string, code int) error {
 	// Include the original error message for better test assertions
 	fullMessage := message
 	if err != nil {
