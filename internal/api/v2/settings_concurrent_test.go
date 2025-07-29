@@ -11,10 +11,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestConcurrentUpdates verifies the system handles concurrent updates safely
@@ -58,18 +56,12 @@ func TestConcurrentUpdates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
-			// Set initial values
-			viper.Set("realtime.dashboard.summaryLimit", 100)
-			viper.Set("realtime.mqtt.broker", "tcp://localhost:1883")
-			viper.Set("birdnet.latitude", 40.0)
-			viper.Set("realtime.weather.pollInterval", 60)
-			viper.Set("realtime.audio.export.bitrate", "96k")
+			// Initialize test settings with known values
 
 			e := echo.New()
 			controller := &Controller{
 				Echo:        e,
-				Settings:    conf.Setting(),
+				Settings:    getTestSettings(),
 				controlChan: make(chan string, 100),
 			}
 
@@ -189,7 +181,7 @@ func TestConcurrentUpdates(t *testing.T) {
 			assert.Empty(t, errors, "Concurrent operations should not produce errors")
 
 			// Verify final state is consistent
-			settings := conf.Setting()
+			settings := controller.Settings
 			assert.NotNil(t, settings)
 
 			// For same-section updates, verify one of the values "won"
@@ -282,7 +274,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 				wg.Wait()
 
 				// Verify both fields were updated
-				settings := conf.Setting()
+				settings := controller.Settings
 				assert.NotNil(t, settings.Realtime.Dashboard.Thumbnails)
 			},
 		},
@@ -293,15 +285,10 @@ func TestRaceConditionScenarios(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
-			viper.Set("realtime.dashboard.summaryLimit", 100)
-			viper.Set("realtime.dashboard.thumbnails.summary", false)
-			viper.Set("realtime.dashboard.thumbnails.recent", true)
-
 			e := echo.New()
 			controller := &Controller{
 				Echo:        e,
-				Settings:    conf.Setting(),
+				Settings:    getTestSettings(),
 				controlChan: make(chan string, 100),
 			}
 

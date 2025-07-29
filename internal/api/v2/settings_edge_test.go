@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -127,13 +126,8 @@ func TestBoundaryValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
 			e := echo.New()
-			controller := &Controller{
-				Echo:        e,
-				Settings:    conf.Setting(),
-				controlChan: make(chan string, 10),
-			}
+			controller := getTestController(e)
 
 			body, err := json.Marshal(tt.boundaryData)
 			require.NoError(t, err)
@@ -239,13 +233,8 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
 			e := echo.New()
-			controller := &Controller{
-				Echo:        e,
-				Settings:    conf.Setting(),
-				controlChan: make(chan string, 10),
-			}
+			controller := getTestController(e)
 
 			body, err := json.Marshal(tt.specialData)
 			require.NoError(t, err)
@@ -333,13 +322,8 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
 			e := echo.New()
-			controller := &Controller{
-				Echo:        e,
-				Settings:    conf.Setting(),
-				controlChan: make(chan string, 10),
-			}
+			controller := getTestController(e)
 
 			body, err := json.Marshal(tt.update)
 			require.NoError(t, err)
@@ -401,23 +385,24 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 
 // TestComplexNestedPreservation verifies complex nested structures preserve all unmodified data
 func TestComplexNestedPreservation(t *testing.T) {
-	// Setup complex initial state
-	viper.Reset()
-	viper.Set("realtime.species.include", []string{"Robin", "Eagle", "Owl"})
-	viper.Set("realtime.species.exclude", []string{"Crow", "Pigeon"})
-	viper.Set("realtime.species.config.Robin.threshold", 0.8)
-	viper.Set("realtime.species.config.Robin.interval", 30)
-	viper.Set("realtime.species.config.Robin.actions", []map[string]interface{}{
-		{
-			"type":    "ExecuteCommand",
-			"command": "/usr/bin/notify",
-		},
-	})
-	viper.Set("realtime.species.config.Eagle.threshold", 0.9)
-	viper.Set("realtime.species.config.Eagle.interval", 60)
-
+	// Get test settings and update them with complex initial state
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
+	initialSettings.Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
+	initialSettings.Realtime.Species.Config["Robin"] = conf.SpeciesConfig{
+		Threshold: 0.8,
+		Interval: 30,
+		Actions: []conf.SpeciesAction{{
+			Type: "ExecuteCommand",
+			Command: "/usr/bin/notify",
+		}},
+	}
+	initialSettings.Realtime.Species.Config["Eagle"] = conf.SpeciesConfig{
+		Threshold: 0.9,
+		Interval: 60,
+	}
+	
 	// Capture initial state
-	initialSettings := conf.Setting()
 	initialInclude := make([]string, len(initialSettings.Realtime.Species.Include))
 	copy(initialInclude, initialSettings.Realtime.Species.Include)
 	initialExclude := make([]string, len(initialSettings.Realtime.Species.Exclude))
@@ -426,7 +411,7 @@ func TestComplexNestedPreservation(t *testing.T) {
 	e := echo.New()
 	controller := &Controller{
 		Echo:        e,
-		Settings:    conf.Setting(),
+		Settings:    initialSettings,
 		controlChan: make(chan string, 10),
 	}
 
@@ -454,7 +439,7 @@ func TestComplexNestedPreservation(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify preservation
-	settings := conf.Setting()
+	settings := controller.Settings
 	
 	// Include/Exclude lists preserved
 	assert.Equal(t, initialInclude, settings.Realtime.Species.Include)

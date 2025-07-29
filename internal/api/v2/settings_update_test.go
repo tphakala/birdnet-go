@@ -3,12 +3,13 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -16,15 +17,12 @@ import (
 
 // TestDashboardPartialUpdate verifies dashboard settings preserve unmodified fields
 func TestDashboardPartialUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("realtime.dashboard.thumbnails.summary", true)
-	viper.Set("realtime.dashboard.thumbnails.recent", true)
-	viper.Set("realtime.dashboard.thumbnails.imageProvider", "testprovider")
-	viper.Set("realtime.dashboard.summaryLimit", 200)
+	// Get initial settings and override some values for testing
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider = "testprovider"
+	initialSettings.Realtime.Dashboard.SummaryLimit = 200
 	
-	// Get initial settings to capture actual values
-	initialSettings := conf.Setting()
+	// Capture initial values
 	initialProvider := initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider
 	initialLimit := initialSettings.Realtime.Dashboard.SummaryLimit
 	initialRecent := initialSettings.Realtime.Dashboard.Thumbnails.Recent
@@ -32,9 +30,10 @@ func TestDashboardPartialUpdate(t *testing.T) {
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only summary field
@@ -66,7 +65,7 @@ func TestDashboardPartialUpdate(t *testing.T) {
 	assert.Contains(t, response["message"], "dashboard settings updated successfully")
 	
 	// Verify only the summary field changed, others preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.False(t, settings.Realtime.Dashboard.Thumbnails.Summary) // Changed
 	assert.Equal(t, initialRecent, settings.Realtime.Dashboard.Thumbnails.Recent) // Preserved
 	assert.Equal(t, initialProvider, settings.Realtime.Dashboard.Thumbnails.ImageProvider) // Preserved
@@ -75,23 +74,21 @@ func TestDashboardPartialUpdate(t *testing.T) {
 
 // TestWeatherPartialUpdate verifies weather settings preserve unmodified fields
 func TestWeatherPartialUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("realtime.weather.provider", "yrno")
-	viper.Set("realtime.weather.pollInterval", 60)
-	viper.Set("realtime.weather.debug", true)
+	// Get initial settings and override some values for testing
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.Weather.Debug = true
 	
-	// Get initial settings
-	initialSettings := conf.Setting()
+	// Capture initial values
 	initialPollInterval := initialSettings.Realtime.Weather.PollInterval
 	initialDebug := initialSettings.Realtime.Weather.Debug
 	
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only provider
@@ -115,7 +112,7 @@ func TestWeatherPartialUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify settings were preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.Equal(t, "openweather", settings.Realtime.Weather.Provider) // Changed
 	assert.Equal(t, initialPollInterval, settings.Realtime.Weather.PollInterval) // Preserved
 	assert.Equal(t, initialDebug, settings.Realtime.Weather.Debug) // Preserved
@@ -123,16 +120,13 @@ func TestWeatherPartialUpdate(t *testing.T) {
 
 // TestMQTTPartialUpdate verifies MQTT settings preserve unmodified fields
 func TestMQTTPartialUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("realtime.mqtt.enabled", true)
-	viper.Set("realtime.mqtt.broker", "tcp://localhost:1883")
-	viper.Set("realtime.mqtt.topic", "birdnet/detections")
-	viper.Set("realtime.mqtt.retain", true)
-	viper.Set("realtime.mqtt.username", "testuser")
+	// Get initial settings and override some values for testing
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.MQTT.Enabled = true
+	initialSettings.Realtime.MQTT.Retain = true
+	initialSettings.Realtime.MQTT.Username = "testuser"
 	
-	// Get initial settings
-	initialSettings := conf.Setting()
+	// Capture initial values
 	initialEnabled := initialSettings.Realtime.MQTT.Enabled
 	initialTopic := initialSettings.Realtime.MQTT.Topic
 	initialRetain := initialSettings.Realtime.MQTT.Retain
@@ -141,9 +135,10 @@ func TestMQTTPartialUpdate(t *testing.T) {
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only broker
@@ -167,7 +162,7 @@ func TestMQTTPartialUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify settings were preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.Equal(t, "tcp://newbroker:1883", settings.Realtime.MQTT.Broker) // Changed
 	assert.Equal(t, initialEnabled, settings.Realtime.MQTT.Enabled) // Preserved
 	assert.Equal(t, initialTopic, settings.Realtime.MQTT.Topic) // Preserved
@@ -177,21 +172,16 @@ func TestMQTTPartialUpdate(t *testing.T) {
 
 // TestBirdNETCoordinatesUpdate verifies BirdNET settings preserve range filter
 func TestBirdNETCoordinatesUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("birdnet.latitude", 40.7128)
-	viper.Set("birdnet.longitude", -74.0060)
-	viper.Set("birdnet.sensitivity", 1.0)
-	viper.Set("birdnet.threshold", 0.8)
-	viper.Set("birdnet.rangeFilter.model", "latest")
-	viper.Set("birdnet.rangeFilter.threshold", 0.03)
+	// Get initial settings (already has the values we need from getTestSettings)
+	initialSettings := getTestSettings()
 	
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only coordinates
@@ -216,7 +206,7 @@ func TestBirdNETCoordinatesUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify settings were preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.InDelta(t, 51.5074, settings.BirdNET.Latitude, 0.0001) // Changed
 	assert.InDelta(t, -0.1278, settings.BirdNET.Longitude, 0.0001) // Changed
 	assert.InDelta(t, 1.0, settings.BirdNET.Sensitivity, 0.0001) // Preserved
@@ -227,19 +217,16 @@ func TestBirdNETCoordinatesUpdate(t *testing.T) {
 
 // TestNestedRangeFilterUpdate verifies nested updates preserve parent fields
 func TestNestedRangeFilterUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("birdnet.latitude", 40.7128)
-	viper.Set("birdnet.longitude", -74.0060)
-	viper.Set("birdnet.rangeFilter.model", "latest")
-	viper.Set("birdnet.rangeFilter.threshold", 0.03)
+	// Get initial settings (already has the values we need from getTestSettings)
+	initialSettings := getTestSettings()
 	
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only range filter threshold
@@ -265,7 +252,7 @@ func TestNestedRangeFilterUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify settings were preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.InDelta(t, float32(0.05), settings.BirdNET.RangeFilter.Threshold, 0.0001) // Changed
 	assert.InDelta(t, 40.7128, settings.BirdNET.Latitude, 0.0001) // Preserved
 	assert.InDelta(t, -74.0060, settings.BirdNET.Longitude, 0.0001) // Preserved
@@ -274,20 +261,16 @@ func TestNestedRangeFilterUpdate(t *testing.T) {
 
 // TestAudioExportPartialUpdate verifies audio export settings preserve unmodified fields
 func TestAudioExportPartialUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("realtime.audio.source", "default")
-	viper.Set("realtime.audio.export.enabled", true)
-	viper.Set("realtime.audio.export.type", "wav")
-	viper.Set("realtime.audio.export.path", "/clips")
-	viper.Set("realtime.audio.export.bitrate", "192k")
+	// Get initial settings (already has the values we need from getTestSettings)
+	initialSettings := getTestSettings()
 	
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only export type
@@ -313,7 +296,7 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify settings were preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.Equal(t, "mp3", settings.Realtime.Audio.Export.Type) // Changed
 	assert.True(t, settings.Realtime.Audio.Export.Enabled) // Preserved
 	assert.Equal(t, "/clips", settings.Realtime.Audio.Export.Path) // Preserved
@@ -322,26 +305,26 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 
 // TestSpeciesConfigUpdate verifies complex nested species config updates
 func TestSpeciesConfigUpdate(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("realtime.species.include", []string{"American Robin"})
-	viper.Set("realtime.species.config.American Robin.threshold", 0.8)
-	viper.Set("realtime.species.config.American Robin.interval", 30)
-	viper.Set("realtime.species.config.American Robin.actions", []map[string]interface{}{
-		{
-			"type":            "ExecuteCommand",
-			"command":         "/usr/bin/notify",
-			"parameters":      []string{"--species", "American Robin"},
-			"executeDefaults": true,
-		},
-	})
+	// Get initial settings and setup species config
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.Species.Config["American Robin"] = conf.SpeciesConfig{
+		Threshold: 0.8,
+		Interval: 30,
+		Actions: []conf.SpeciesAction{{
+			Type:            "ExecuteCommand",
+			Command:         "/usr/bin/notify",
+			Parameters:      []string{"--species", "American Robin"},
+			ExecuteDefaults: true,
+		}},
+	}
 	
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Update only threshold
@@ -369,7 +352,7 @@ func TestSpeciesConfigUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify settings were preserved
-	settings := conf.Setting()
+	settings := controller.Settings
 	robinConfig := settings.Realtime.Species.Config["American Robin"]
 	assert.InDelta(t, 0.9, robinConfig.Threshold, 0.0001) // Changed
 	assert.Equal(t, 30, robinConfig.Interval) // Preserved
@@ -384,24 +367,21 @@ func TestSpeciesConfigUpdate(t *testing.T) {
 
 // TestEmptyUpdatePreservesEverything verifies empty updates don't change anything
 func TestEmptyUpdatePreservesEverything(t *testing.T) {
-	// Setup viper with initial settings
-	viper.Reset()
-	viper.Set("realtime.dashboard.thumbnails.summary", true)
-	viper.Set("realtime.dashboard.thumbnails.recent", true)
-	viper.Set("realtime.dashboard.thumbnails.imageProvider", "wikimedia")
-	viper.Set("realtime.dashboard.summaryLimit", 100)
+	// Get initial settings and override some values for testing
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia"
 	
 	// Get initial state
-	initialSettings := conf.Setting()
 	initialJSON, err := json.Marshal(initialSettings.Realtime.Dashboard)
 	require.NoError(t, err)
 	
 	// Create controller with settings
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 	
 	// Send empty update
@@ -418,7 +398,7 @@ func TestEmptyUpdatePreservesEverything(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	
 	// Verify nothing changed
-	updatedSettings := conf.Setting()
+	updatedSettings := controller.Settings
 	updatedJSON, err := json.Marshal(updatedSettings.Realtime.Dashboard)
 	require.NoError(t, err)
 	
@@ -478,12 +458,12 @@ func TestValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			
-			viper.Reset()
-			
+					
 			e := echo.New()
 			controller := &Controller{
 				Echo:        e,
 				controlChan: make(chan string, 10),
+				logger:      log.New(os.Stderr, "TEST: ", log.LstdFlags), // Add logger for tests
 			}
 			
 			var body []byte
@@ -518,27 +498,22 @@ func TestValidationErrors(t *testing.T) {
 func TestDeepNestedUpdates(t *testing.T) {
 	t.Parallel()
 
-	// Setup viper with deeply nested initial values
-	viper.Reset()
-	viper.Set("realtime.mqtt.retrySettings.enabled", true)
-	viper.Set("realtime.mqtt.retrySettings.maxRetries", 3)
-	viper.Set("realtime.mqtt.retrySettings.initialDelay", 10)
-	viper.Set("realtime.mqtt.retrySettings.maxDelay", 300)
-	viper.Set("realtime.mqtt.retrySettings.backoffMultiplier", 2.0)
-	viper.Set("realtime.mqtt.tls.enabled", true)
-	viper.Set("realtime.mqtt.tls.insecureSkipVerify", false)
+	// Get initial settings and override some values for testing
+	initialSettings := getTestSettings()
+	initialSettings.Realtime.MQTT.TLS.Enabled = true
+	initialSettings.Realtime.MQTT.TLS.InsecureSkipVerify = false
 
 	// Capture initial values
-	initialSettings := conf.Setting()
 	initialMaxRetries := initialSettings.Realtime.MQTT.RetrySettings.MaxRetries
 	initialBackoff := initialSettings.Realtime.MQTT.RetrySettings.BackoffMultiplier
 	initialTLSEnabled := initialSettings.Realtime.MQTT.TLS.Enabled
 
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    conf.Setting(),
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 
 	// Update only one deeply nested field
@@ -563,7 +538,7 @@ func TestDeepNestedUpdates(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify only the targeted field changed
-	settings := conf.Setting()
+	settings := controller.Settings
 	assert.Equal(t, 30, settings.Realtime.MQTT.RetrySettings.InitialDelay) // Changed
 	assert.Equal(t, initialMaxRetries, settings.Realtime.MQTT.RetrySettings.MaxRetries) // Preserved
 	assert.Equal(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier) // Preserved

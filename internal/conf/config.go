@@ -1058,6 +1058,15 @@ func Setting() *Settings {
 	return GetSettings()
 }
 
+// SetTestSettings allows tests to inject their own settings instance.
+// This must be called before any call to Setting() to be effective.
+// This is intended for testing purposes only.
+func SetTestSettings(settings *Settings) {
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+	settingsInstance = settings
+}
+
 // SaveYAMLConfig updates the YAML configuration file with new settings.
 // It overwrites the existing file, not preserving comments or structure.
 func SaveYAMLConfig(configPath string, settings *Settings) error {

@@ -9,10 +9,8 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestExtremeValues verifies the system handles extreme values appropriately
@@ -180,13 +178,8 @@ func TestExtremeValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
 			e := echo.New()
-			controller := &Controller{
-				Echo:        e,
-				Settings:    conf.Setting(),
-				controlChan: make(chan string, 10),
-			}
+			controller := getTestController(e)
 
 			body, err := json.Marshal(tt.extremeData)
 			require.NoError(t, err)
@@ -316,13 +309,8 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
 			e := echo.New()
-			controller := &Controller{
-				Echo:        e,
-				Settings:    conf.Setting(),
-				controlChan: make(chan string, 10),
-			}
+			controller := getTestController(e)
 
 			largeData := tt.largeData()
 			body, err := json.Marshal(largeData)

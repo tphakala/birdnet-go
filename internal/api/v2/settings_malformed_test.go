@@ -7,10 +7,8 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestMalformedJSONData verifies the system handles malformed JSON gracefully
@@ -90,13 +88,8 @@ func TestMalformedJSONData(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			viper.Reset()
 			e := echo.New()
-			controller := &Controller{
-				Echo:        e,
-				Settings:    conf.Setting(),
-				controlChan: make(chan string, 10),
-			}
+			controller := getTestController(e)
 
 			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
 				strings.NewReader(tt.malformedData))

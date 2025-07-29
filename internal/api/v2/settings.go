@@ -465,9 +465,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	settings := conf.Setting()
+	settings := c.Settings
 	if settings == nil {
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		// Fallback to global settings if controller settings not set
+		settings = conf.Setting()
+		if settings == nil {
+			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		}
 	}
 
 	// Create a backup of current settings for rollback if needed
@@ -502,11 +506,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	// Save settings to disk
-	if err := conf.SaveSettings(); err != nil {
-		// Attempt to rollback changes if saving failed
-		*settings = oldSettings
-		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
+	// Save settings to disk (unless disabled for tests)
+	if !c.DisableSaveSettings {
+		if err := conf.SaveSettings(); err != nil {
+			// Attempt to rollback changes if saving failed
+			*settings = oldSettings
+			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
+		}
 	}
 
 	// Update the cached telemetry state after settings change
@@ -599,7 +605,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
-
+	
 	// Get current values as a map
 	currentJSON, err := json.Marshal(target)
 	if err != nil {
@@ -619,7 +625,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
 	if err != nil {
 		return err
 	}
-
+	
 	return json.Unmarshal(mergedJSON, target)
 }
 
