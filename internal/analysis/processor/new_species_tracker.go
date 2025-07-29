@@ -227,8 +227,22 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
-// SetCurrentYearForTesting sets the current year for testing purposes only
-// This method provides controlled access to the currentYear field for test scenarios
+// SetCurrentYearForTesting sets the current year for testing purposes only.
+// 
+// ⚠️  WARNING: THIS METHOD IS STRICTLY FOR TESTING AND SHOULD NEVER BE USED IN PRODUCTION CODE ⚠️
+//
+// This method bypasses the normal year tracking logic and directly manipulates the internal
+// currentYear field, which can lead to:
+// - Inconsistent tracking data between lifetime, yearly, and seasonal periods
+// - Cache invalidation issues that may cause incorrect species status calculations
+// - Data corruption if the year doesn't match the actual system time
+// - Broken yearly reset logic that relies on time-based transitions
+//
+// Using this method in production code will result in unpredictable behavior and should be
+// avoided at all costs. It exists solely to enable controlled testing scenarios where
+// specific year boundaries need to be simulated.
+//
+// This method provides controlled access to the currentYear field for test scenarios only.
 func (t *NewSpeciesTracker) SetCurrentYearForTesting(year int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -1197,5 +1211,14 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 // Close releases resources associated with the species tracker, including the logger.
 // This should be called during application shutdown or when the tracker is no longer needed.
 func (t *NewSpeciesTracker) Close() error {
-	return Close()
+	// Close the shared logger used by all tracker instances
+	// Note: This is a package-level resource shared across all tracker instances
+	if err := Close(); err != nil {
+		return errors.New(err).
+			Component("new-species-tracker").
+			Category(errors.CategoryResource).
+			Context("operation", "close_logger").
+			Build()
+	}
+	return nil
 }

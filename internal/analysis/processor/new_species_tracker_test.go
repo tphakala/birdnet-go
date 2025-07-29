@@ -630,6 +630,8 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 }
 
 func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
+	t.Parallel()
+	
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
