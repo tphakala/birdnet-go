@@ -1,3 +1,6 @@
+// Package api_test contains tests for timezone handling fixes in search and detection APIs
+// These tests demonstrate and validate the fix for issue #982 where database-stored local
+// time strings were incorrectly parsed as UTC, causing timezone conversion bugs.
 package api
 
 import (
@@ -8,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTimestampParsing_CoreIssue demonstrates the timezone bug in search results
-func TestTimestampParsing_CoreIssue(t *testing.T) {
+// TestTimezoneParsingBug demonstrates the timezone bug in search results
+// This test shows how the current implementation incorrectly handles timezone conversion
+func TestTimezoneParsingBug(t *testing.T) {
 	// This test demonstrates the core problem: 
 	// Database stores "2024-01-15 14:30:00" as local time string
 	// Current code parses this with time.Parse() which assumes UTC
@@ -106,8 +110,9 @@ func TestTimestampParsing_CoreIssue(t *testing.T) {
 	}
 }
 
-// TestProposedFix_LocalTimePreservation tests the proposed fix for timezone handling
-func TestProposedFix_LocalTimePreservation(t *testing.T) {
+// TestTimezoneParsingFix validates the solution for timezone handling
+// This test demonstrates that using ParseInLocation preserves local time correctly
+func TestTimezoneParsingFix(t *testing.T) {
 	// This test shows how to fix the timezone issue
 
 	testCases := []struct {
@@ -176,7 +181,8 @@ func TestProposedFix_LocalTimePreservation(t *testing.T) {
 	}
 }
 
-// TestTimezoneEdgeCases tests edge cases that commonly cause timezone bugs
+// TestTimezoneEdgeCases covers edge cases that commonly cause timezone bugs
+// Including midnight boundaries, noon, and just before midnight
 func TestTimezoneEdgeCases(t *testing.T) {
 	edgeCases := []struct {
 		name         string
