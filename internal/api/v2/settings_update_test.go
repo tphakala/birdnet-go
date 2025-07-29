@@ -3,10 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -462,7 +462,7 @@ func TestValidationErrors(t *testing.T) {
 			controller := &Controller{
 				Echo:        e,
 				controlChan: make(chan string, 10),
-				logger:      log.New(os.Stderr, "TEST: ", log.LstdFlags), // Add logger for tests
+				logger:      log.New(io.Discard, "TEST: ", log.LstdFlags), // Add logger for tests (silent)
 			}
 			
 			var body []byte

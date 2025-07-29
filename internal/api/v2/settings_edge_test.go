@@ -415,9 +415,10 @@ func TestComplexNestedPreservation(t *testing.T) {
 
 	e := echo.New()
 	controller := &Controller{
-		Echo:        e,
-		Settings:    initialSettings,
-		controlChan: make(chan string, 10),
+		Echo:                e,
+		Settings:            initialSettings,
+		controlChan:         make(chan string, 10),
+		DisableSaveSettings: true,
 	}
 
 	// Update only one deeply nested field

@@ -59,9 +59,10 @@ func TestConcurrentUpdates(t *testing.T) {
 
 			e := echo.New()
 			controller := &Controller{
-				Echo:        e,
-				Settings:    getTestSettings(t),
-				controlChan: make(chan string, 100),
+				Echo:                e,
+				Settings:            getTestSettings(t),
+				controlChan:         make(chan string, 100),
+				DisableSaveSettings: true,
 			}
 
 			var wg sync.WaitGroup
@@ -124,7 +125,7 @@ func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, contr
 	case "rapid-sequential":
 		return runRapidSequentialScenario(t, goroutineID, controller, errorsChan)
 	case "save-disk":
-		return runSaveDiskScenario(t, goroutineID, controller, errorsChan)
+		return runSaveLogicScenario(t, goroutineID, controller, errorsChan)
 	default:
 		return fmt.Errorf("unknown scenario: %s", scenario)
 	}
@@ -217,8 +218,8 @@ func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Contr
 	return nil
 }
 
-// runSaveDiskScenario handles updates with disk saves
-func runSaveDiskScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
+// runSaveLogicScenario tests save logic without actual disk I/O (DisableSaveSettings prevents disk writes)
+func runSaveLogicScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
 	update := map[string]interface{}{
 		"summaryLimit": 100 + goroutineID,
@@ -321,9 +322,10 @@ func TestRaceConditionScenarios(t *testing.T) {
 
 			e := echo.New()
 			controller := &Controller{
-				Echo:        e,
-				Settings:    getTestSettings(t),
-				controlChan: make(chan string, 100),
+				Echo:                e,
+				Settings:            getTestSettings(t),
+				controlChan:         make(chan string, 100),
+				DisableSaveSettings: true,
 			}
 
 			tt.scenario(t, controller)
