@@ -102,14 +102,37 @@ func TestDetectHemisphere(t *testing.T) {
 	}
 }
 
+// validateSeasonConfiguration is a helper function that validates season configuration
+// for different hemispheres/regions to eliminate code duplication in tests
+func validateSeasonConfiguration(t *testing.T, latitude float64, expectedSeasons map[string]Season, regionName string) {
+	t.Helper()
+	
+	seasons := GetDefaultSeasons(latitude)
+	assert.Len(t, seasons, 4, "Expected 4 seasons for %s", regionName)
+	
+	// Verify all expected seasons exist with correct start months and days
+	for seasonName, expectedSeason := range expectedSeasons {
+		season, exists := seasons[seasonName]
+		assert.True(t, exists, "Expected season %s to exist in %s", seasonName, regionName)
+		assert.Equal(t, expectedSeason.StartMonth, season.StartMonth,
+			"Expected %s to start in month %d for %s, got %d", 
+			seasonName, expectedSeason.StartMonth, regionName, season.StartMonth)
+		assert.Equal(t, expectedSeason.StartDay, season.StartDay,
+			"Expected %s to start on day %d for %s, got %d", 
+			seasonName, expectedSeason.StartDay, regionName, season.StartDay)
+	}
+	
+	// Verify no unexpected seasons exist
+	for seasonName := range seasons {
+		assert.Contains(t, expectedSeasons, seasonName,
+			"Unexpected season %s found in %s", seasonName, regionName)
+	}
+}
+
 func TestGetDefaultSeasons(t *testing.T) {
 	t.Run("northern hemisphere", func(t *testing.T) {
 		t.Parallel()
 		
-		seasons := GetDefaultSeasons(45.0)
-		assert.Len(t, seasons, 4, "Expected 4 seasons for northern hemisphere")
-		
-		// Verify all four seasons exist with correct start months and days
 		expectedSeasons := map[string]Season{
 			"spring": {StartMonth: 3, StartDay: 20},   // March 20
 			"summer": {StartMonth: 6, StartDay: 21},   // June 21
@@ -117,29 +140,13 @@ func TestGetDefaultSeasons(t *testing.T) {
 			"winter": {StartMonth: 12, StartDay: 21},  // December 21
 		}
 		
-		for seasonName, expectedSeason := range expectedSeasons {
-			season, exists := seasons[seasonName]
-			assert.True(t, exists, "Expected season %s to exist in northern hemisphere", seasonName)
-			assert.Equal(t, expectedSeason.StartMonth, season.StartMonth, 
-				"Expected %s to start in month %d, got %d", seasonName, expectedSeason.StartMonth, season.StartMonth)
-			assert.Equal(t, expectedSeason.StartDay, season.StartDay,
-				"Expected %s to start on day %d, got %d", seasonName, expectedSeason.StartDay, season.StartDay)
-		}
-		
-		// Verify no unexpected seasons exist
-		for seasonName := range seasons {
-			assert.Contains(t, expectedSeasons, seasonName, 
-				"Unexpected season %s found in northern hemisphere", seasonName)
-		}
+		validateSeasonConfiguration(t, 45.0, expectedSeasons, "northern hemisphere")
 	})
 
 	t.Run("southern hemisphere", func(t *testing.T) {
 		t.Parallel()
 		
-		seasons := GetDefaultSeasons(-45.0)
-		assert.Len(t, seasons, 4, "Expected 4 seasons for southern hemisphere")
-		
-		// Verify all four seasons exist with correct start months and days (shifted by 6 months)
+		// Seasons shifted by 6 months for southern hemisphere
 		expectedSeasons := map[string]Season{
 			"spring": {StartMonth: 9, StartDay: 22},   // September 22
 			"summer": {StartMonth: 12, StartDay: 21},  // December 21
@@ -147,31 +154,13 @@ func TestGetDefaultSeasons(t *testing.T) {
 			"winter": {StartMonth: 6, StartDay: 21},   // June 21
 		}
 		
-		for seasonName, expectedSeason := range expectedSeasons {
-			season, exists := seasons[seasonName]
-			assert.True(t, exists, "Expected season %s to exist in southern hemisphere", seasonName)
-			assert.Equal(t, expectedSeason.StartMonth, season.StartMonth,
-				"Expected %s to start in month %d for southern hemisphere, got %d", 
-				seasonName, expectedSeason.StartMonth, season.StartMonth)
-			assert.Equal(t, expectedSeason.StartDay, season.StartDay,
-				"Expected %s to start on day %d for southern hemisphere, got %d", 
-				seasonName, expectedSeason.StartDay, season.StartDay)
-		}
-		
-		// Verify no unexpected seasons exist
-		for seasonName := range seasons {
-			assert.Contains(t, expectedSeasons, seasonName,
-				"Unexpected season %s found in southern hemisphere", seasonName)
-		}
+		validateSeasonConfiguration(t, -45.0, expectedSeasons, "southern hemisphere")
 	})
 
 	t.Run("equatorial region", func(t *testing.T) {
 		t.Parallel()
 		
-		seasons := GetDefaultSeasons(0.0)
-		assert.Len(t, seasons, 4, "Expected 4 seasons (wet/dry cycles) for equatorial region")
-		
-		// Verify wet/dry season cycle with correct start months and days
+		// Wet/dry season cycle for equatorial regions
 		expectedSeasons := map[string]Season{
 			"wet1": {StartMonth: 3, StartDay: 1},   // March-May wet season
 			"dry1": {StartMonth: 6, StartDay: 1},   // June-August dry season
@@ -179,21 +168,6 @@ func TestGetDefaultSeasons(t *testing.T) {
 			"dry2": {StartMonth: 12, StartDay: 1},  // December-February dry season
 		}
 		
-		for seasonName, expectedSeason := range expectedSeasons {
-			season, exists := seasons[seasonName]
-			assert.True(t, exists, "Expected season %s to exist in equatorial region", seasonName)
-			assert.Equal(t, expectedSeason.StartMonth, season.StartMonth,
-				"Expected %s to start in month %d for equatorial region, got %d", 
-				seasonName, expectedSeason.StartMonth, season.StartMonth)
-			assert.Equal(t, expectedSeason.StartDay, season.StartDay,
-				"Expected %s to start on day %d for equatorial region, got %d", 
-				seasonName, expectedSeason.StartDay, season.StartDay)
-		}
-		
-		// Verify no unexpected seasons exist
-		for seasonName := range seasons {
-			assert.Contains(t, expectedSeasons, seasonName,
-				"Unexpected season %s found in equatorial region", seasonName)
-		}
+		validateSeasonConfiguration(t, 0.0, expectedSeasons, "equatorial region")
 	})
 }
