@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -56,39 +58,31 @@ func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 	
 	// Initialize from database
 	err := tracker.InitFromDatabase()
-	if err != nil {
-		t.Fatalf("Failed to initialize tracker: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Test new species (not in database)
 	currentTime := time.Now()
-	status := tracker.GetSpeciesStatus("Cyanistes caeruleus", currentTime)
-	if !status.IsNew {
-		t.Errorf("Expected Cyanistes caeruleus to be a new species")
-	}
-	if status.DaysSinceFirst != 0 {
-		t.Errorf("Expected DaysSinceFirst to be 0 for new species, got %d", status.DaysSinceFirst)
-	}
 
-	// Test old species (outside window)
-	status = tracker.GetSpeciesStatus("Parus major", currentTime)
-	if status.IsNew {
-		t.Errorf("Expected Parus major to not be a new species (%d days old)", oldSpeciesDays)
-	}
-	if status.DaysSinceFirst != oldSpeciesDays {
-		t.Errorf("Expected DaysSinceFirst to be %d, got %d", oldSpeciesDays, status.DaysSinceFirst)
-	}
+	t.Run("new species not in database", func(t *testing.T) {
+		status := tracker.GetSpeciesStatus("Cyanistes caeruleus", currentTime)
+		assert.True(t, status.IsNew, "Expected Cyanistes caeruleus to be a new species")
+		assert.Equal(t, 0, status.DaysSinceFirst, "Expected DaysSinceFirst to be 0 for new species")
+	})
 
-	// Test recent species (within window)
-	status = tracker.GetSpeciesStatus("Turdus merula", currentTime)
-	if !status.IsNew {
-		t.Errorf("Expected Turdus merula to be a new species (%d days old, within %d-day window)", recentSpeciesDays, newSpeciesWindow)
-	}
-	if status.DaysSinceFirst != recentSpeciesDays {
-		t.Errorf("Expected DaysSinceFirst to be %d, got %d", recentSpeciesDays, status.DaysSinceFirst)
-	}
+	t.Run("old species outside window", func(t *testing.T) {
+		status := tracker.GetSpeciesStatus("Parus major", currentTime)
+		assert.False(t, status.IsNew, "Expected Parus major to not be a new species (%d days old)", oldSpeciesDays)
+		assert.Equal(t, oldSpeciesDays, status.DaysSinceFirst, "Expected DaysSinceFirst to be %d", oldSpeciesDays)
+	})
+
+	t.Run("recent species within window", func(t *testing.T) {
+		status := tracker.GetSpeciesStatus("Turdus merula", currentTime)
+		assert.True(t, status.IsNew, "Expected Turdus merula to be a new species (%d days old, within %d-day window)", recentSpeciesDays, newSpeciesWindow)
+		assert.Equal(t, recentSpeciesDays, status.DaysSinceFirst, "Expected DaysSinceFirst to be %d", recentSpeciesDays)
+	})
 }
 
+// TestNewSpeciesTracker_ConcurrentAccess tests thread safety of the species tracker.
+// Run this test with the Go race detector enabled: go test -race
 func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	
@@ -137,6 +131,8 @@ func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 }
 
 func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
+	t.Parallel()
+	
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -153,75 +149,94 @@ func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
 
 	currentTime := time.Now()
 
 	// Track a new species
 	isNew := tracker.UpdateSpecies("Parus major", currentTime)
-	if !isNew {
-		t.Errorf("Expected UpdateSpecies to return true for new species")
-	}
+	assert.True(t, isNew, "Expected UpdateSpecies to return true for new species")
 
 	// Verify it's now tracked
 	status := tracker.GetSpeciesStatus("Parus major", currentTime)
-	if !status.IsNew {
-		t.Errorf("Expected newly tracked species to be marked as new")
-	}
-	if status.DaysSinceFirst != 0 {
-		t.Errorf("Expected DaysSinceFirst to be 0 for just-tracked species")
-	}
+	assert.True(t, status.IsNew, "Expected newly tracked species to be marked as new")
+	assert.Equal(t, 0, status.DaysSinceFirst, "Expected DaysSinceFirst to be 0 for just-tracked species")
 
 	// Update same species again
 	isNew = tracker.UpdateSpecies("Parus major", currentTime.Add(time.Hour))
-	if isNew {
-		t.Errorf("Expected UpdateSpecies to return false for existing species")
-	}
+	assert.False(t, isNew, "Expected UpdateSpecies to return false for existing species")
 }
 
 func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
-	// Create tracker with exactly 14 days old species
-	ds := &MockSpeciesDatastore{}
-	historicalData := []datastore.NewSpeciesData{
-		{
-			ScientificName: "Parus major",
-			FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format("2006-01-02"), // Exactly 14 days ago
-		},
-	}
-	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return(historicalData, nil)
+	t.Parallel()
 
-	settings := &conf.SpeciesTrackingSettings{
-		Enabled:              true,
-		NewSpeciesWindowDays: newSpeciesWindow,
-		SyncIntervalMinutes:  syncIntervalMins,
-		YearlyTracking: conf.YearlyTrackingSettings{
-			Enabled: false,
-		},
-		SeasonalTracking: conf.SeasonalTrackingSettings{
-			Enabled: false,
-		},
-	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	t.Run("species at exact window boundary", func(t *testing.T) {
+		t.Parallel()
+		
+		// Create tracker with exactly 14 days old species
+		ds := &MockSpeciesDatastore{}
+		historicalData := []datastore.NewSpeciesData{
+			{
+				ScientificName: "Parus major",
+				FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format("2006-01-02"), // Exactly 14 days ago
+			},
+		}
+		ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+			Return(historicalData, nil)
 
-	currentTime := time.Now()
+		settings := &conf.SpeciesTrackingSettings{
+			Enabled:              true,
+			NewSpeciesWindowDays: newSpeciesWindow,
+			SyncIntervalMinutes:  syncIntervalMins,
+			YearlyTracking: conf.YearlyTrackingSettings{
+				Enabled: false,
+			},
+			SeasonalTracking: conf.SeasonalTrackingSettings{
+				Enabled: false,
+			},
+		}
+		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		err := tracker.InitFromDatabase()
+		require.NoError(t, err)
 
-	// Test species exactly at the window boundary
-	status := tracker.GetSpeciesStatus("Parus major", currentTime)
-	// Should be considered new since it's within the window (14 days is inclusive)
-	if !status.IsNew {
-		t.Errorf("Expected species at exact window boundary to be considered new")
-	}
+		currentTime := time.Now()
 
-	// Test empty species name
-	status = tracker.GetSpeciesStatus("", currentTime)
-	if !status.IsNew {
-		t.Errorf("Empty species name should be considered new (not in database)")
-	}
-	if status.DaysSinceFirst != 0 {
-		t.Errorf("Expected DaysSinceFirst to be 0 for empty species name")
-	}
+		// Test species exactly at the window boundary
+		status := tracker.GetSpeciesStatus("Parus major", currentTime)
+		// Should be considered new since it's within the window (14 days is inclusive)
+		assert.True(t, status.IsNew, "Expected species at exact window boundary to be considered new")
+	})
+
+	t.Run("empty species name", func(t *testing.T) {
+		t.Parallel()
+		
+		ds := &MockSpeciesDatastore{}
+		ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+			Return([]datastore.NewSpeciesData{}, nil)
+
+		settings := &conf.SpeciesTrackingSettings{
+			Enabled:              true,
+			NewSpeciesWindowDays: newSpeciesWindow,
+			SyncIntervalMinutes:  syncIntervalMins,
+			YearlyTracking: conf.YearlyTrackingSettings{
+				Enabled: false,
+			},
+			SeasonalTracking: conf.SeasonalTrackingSettings{
+				Enabled: false,
+			},
+		}
+		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		err := tracker.InitFromDatabase()
+		require.NoError(t, err)
+
+		currentTime := time.Now()
+
+		// Test empty species name
+		status := tracker.GetSpeciesStatus("", currentTime)
+		assert.True(t, status.IsNew, "Empty species name should be considered new (not in database)")
+		assert.Equal(t, 0, status.DaysSinceFirst, "Expected DaysSinceFirst to be 0 for empty species name")
+	})
 }
 
 func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
@@ -251,29 +266,22 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 		},
 	}
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
 
 	// Initial species count
-	if tracker.GetSpeciesCount() != 2 {
-		t.Errorf("Expected 2 species, got %d", tracker.GetSpeciesCount())
-	}
+	assert.Equal(t, 2, tracker.GetSpeciesCount(), "Expected 2 species initially")
 
 	// Prune old entries (older than 28 days)
 	pruned := tracker.PruneOldEntries()
-	if pruned != 1 {
-		t.Errorf("Expected 1 species to be pruned, got %d", pruned)
-	}
+	assert.Equal(t, 1, pruned, "Expected 1 species to be pruned")
 
 	// Should only have recent species left
-	if tracker.GetSpeciesCount() != 1 {
-		t.Errorf("Expected 1 species after pruning, got %d", tracker.GetSpeciesCount())
-	}
+	assert.Equal(t, 1, tracker.GetSpeciesCount(), "Expected 1 species after pruning")
 
 	// Recent species should still be there
 	status := tracker.GetSpeciesStatus("Recent Species", time.Now())
-	if !status.IsNew {
-		t.Errorf("Recent species should still be marked as new after pruning")
-	}
+	assert.True(t, status.IsNew, "Recent species should still be marked as new after pruning")
 }
 
 // Benchmark tests
@@ -305,6 +313,7 @@ func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		_ = tracker.GetSpeciesStatus(species[i%100], currentTime)
@@ -337,6 +346,7 @@ func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		tracker.UpdateSpecies(species[i], currentTime)
@@ -371,6 +381,7 @@ func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
@@ -405,6 +416,7 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 
 	currentTime := time.Now()
 	b.ResetTimer()
+	b.ReportAllocs()
 
 	// Benchmark memory allocation when adding many species
 	for i := 0; i < b.N; i++ {
