@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
@@ -40,7 +41,7 @@ func TestDetectionEventCreation(t *testing.T) {
 		true,  // isNewSpecies
 		0,     // daysSinceFirstSeen
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.NotNil(t, event)
 	assert.Equal(t, testSpeciesCommonName, event.GetSpeciesName())
@@ -140,7 +141,7 @@ func (c *testDetectionConsumer) GetReceivedEvents() []events.DetectionEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Return a copy to prevent race conditions
-	events := make([]events.DetectionEvent, len(c.receivedEvents))
-	copy(events, c.receivedEvents)
-	return events
+	eventsCopy := make([]events.DetectionEvent, len(c.receivedEvents))
+	copy(eventsCopy, c.receivedEvents)
+	return eventsCopy
 }

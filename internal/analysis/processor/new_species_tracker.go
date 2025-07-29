@@ -749,8 +749,8 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 			timestamp time.Time
 		}
 		entries := make([]cacheEntry, 0, len(t.statusCache))
-		for name, cached := range t.statusCache {
-			entries = append(entries, cacheEntry{name: name, timestamp: cached.timestamp})
+		for name := range t.statusCache {
+			entries = append(entries, cacheEntry{name: name, timestamp: t.statusCache[name].timestamp})
 		}
 		
 		// Sort by timestamp (oldest first)

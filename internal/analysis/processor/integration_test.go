@@ -237,7 +237,6 @@ func TestIntegration_YearTransition(t *testing.T) {
 
 	// Check status on Jan 1, 2024 - should trigger year reset
 	jan1 := time.Date(2024, 1, 1, 0, 30, 0, 0, time.UTC)
-	status = tracker.GetSpeciesStatus("Parus major", jan1)
 	
 	// The database query shows it was detected on Jan 1, but tracker needs to be updated
 	tracker.UpdateSpecies("Parus major", jan1)

@@ -336,7 +336,7 @@ func TestGetNewSpeciesDetections(t *testing.T) {
 
 		// Test invalid date range
 		result, err := ds.GetNewSpeciesDetections("2024-07-31", "2024-07-01", 10, 0)
-		assert.Error(t, err, "Expected error for invalid date range")
+		require.Error(t, err, "Expected error for invalid date range")
 		assert.Contains(t, err.Error(), "start date cannot be after end date")
 		assert.Nil(t, result)
 	})
@@ -414,7 +414,7 @@ func TestGetNewSpeciesDetections(t *testing.T) {
 		require.NoError(t, err)
 
 		// Should not find Motacilla alba as new in 2024
-		assert.Len(t, result, 0, "Species first seen in 2023 should not be new in 2024")
+		assert.Empty(t, result, "Species first seen in 2023 should not be new in 2024")
 	})
 
 	t.Run("seasonal queries", func(t *testing.T) {

@@ -659,7 +659,7 @@ func TestDefaultSeasonInitialization(t *testing.T) {
 	}
 
 	tracker.mu.Lock()
-	assert.Equal(t, len(expectedSeasons), len(tracker.seasons), "Expected 4 default seasons")
+	assert.Len(t, tracker.seasons, len(expectedSeasons), "Expected 4 default seasons")
 	for name, expected := range expectedSeasons {
 		actual, exists := tracker.seasons[name]
 		assert.True(t, exists, "Expected season '%s' to exist", name)
