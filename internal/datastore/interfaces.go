@@ -1881,6 +1881,8 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		// Parse timestamp string to time.Time
 		// IMPORTANT: Database stores local time strings, so parse them as local time
 		// Using time.Parse() assumes UTC, which causes timezone conversion bugs
+		// TODO: Consider creating a helper function like ParseDatabaseTimestamp() to ensure
+		// consistent timezone handling across all database time parsing operations
 		timestamp, err := time.ParseInLocation("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time, time.Local)
 		if err != nil {
 			log.Printf("Warning: Failed to parse timestamp '%s %s' for note ID %d: %v. Using current time.", scanned.Date, scanned.Time, scanned.ID, err)
