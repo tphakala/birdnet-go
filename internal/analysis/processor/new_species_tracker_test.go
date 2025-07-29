@@ -24,6 +24,7 @@ const (
 )
 
 func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
+	t.Parallel()
 	// Create mock datastore with some historical species data
 	ds := &MockSpeciesDatastore{}
 	historicalData := []datastore.NewSpeciesData{
@@ -664,6 +665,7 @@ func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 }
 
 func TestSeasonDetection(t *testing.T) {
+	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -700,6 +702,7 @@ func TestSeasonDetection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			season := tracker.getCurrentSeason(tc.date)
 			assert.Equal(t, tc.expectedSeason, season,
 				"Expected season '%s' for date %s, got '%s'",
@@ -793,7 +796,8 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	}
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	_ = tracker.InitFromDatabase()
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
 
 	speciesName := "Hirundo rustica" // Barn Swallow
 

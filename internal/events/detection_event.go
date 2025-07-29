@@ -4,6 +4,8 @@ package events
 import (
 	"fmt"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // DetectionEvent represents a bird detection event that can be processed asynchronously
@@ -56,16 +58,30 @@ func NewDetectionEvent(
 ) (DetectionEvent, error) {
 	// Validate input parameters to prevent invalid DetectionEvent instances
 	if speciesName == "" {
-		return nil, fmt.Errorf("NewDetectionEvent: speciesName cannot be empty")
+		return nil, errors.Newf("NewDetectionEvent: speciesName cannot be empty").
+			Component("events").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	if scientificName == "" {
-		return nil, fmt.Errorf("NewDetectionEvent: scientificName cannot be empty")
+		return nil, errors.Newf("NewDetectionEvent: scientificName cannot be empty").
+			Component("events").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	if confidence < 0.0 || confidence > 1.0 {
-		return nil, fmt.Errorf("NewDetectionEvent: confidence must be between 0 and 1, got %f", confidence)
+		return nil, errors.Newf("NewDetectionEvent: confidence must be between 0 and 1, got %f", confidence).
+			Component("events").
+			Category(errors.CategoryValidation).
+			Context("confidence", confidence).
+			Build()
 	}
 	if daysSinceFirstSeen < 0 {
-		return nil, fmt.Errorf("NewDetectionEvent: daysSinceFirstSeen cannot be negative, got %d", daysSinceFirstSeen)
+		return nil, errors.Newf("NewDetectionEvent: daysSinceFirstSeen cannot be negative, got %d", daysSinceFirstSeen).
+			Component("events").
+			Category(errors.CategoryValidation).
+			Context("daysSinceFirstSeen", daysSinceFirstSeen).
+			Build()
 	}
 
 	return &detectionEventImpl{

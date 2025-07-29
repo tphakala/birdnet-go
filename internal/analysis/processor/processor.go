@@ -831,7 +831,7 @@ func (p *Processor) Shutdown() error {
 	p.speciesTrackerMu.RUnlock()
 	
 	if tracker != nil {
-		if err := Close(); err != nil {
+		if err := tracker.Close(); err != nil {
 			log.Printf("Warning: failed to close species tracker logger: %v", err)
 		}
 	}

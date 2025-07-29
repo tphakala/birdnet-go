@@ -1156,3 +1156,9 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 
 	t.statusCache = make(map[string]cachedSpeciesStatus)
 }
+
+// Close releases resources associated with the species tracker, including the logger.
+// This should be called during application shutdown or when the tracker is no longer needed.
+func (t *NewSpeciesTracker) Close() error {
+	return Close()
+}
