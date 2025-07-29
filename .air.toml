@@ -35,7 +35,7 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
     export CGO_LDFLAGS="-L/usr/lib -ltensorflowlite_c"
     
     # Build the Go application with version and build date
-    go build -v -x -ldflags "-s -w \
+    go build -v -x -ldflags "-s -w -r /usr/lib -r /usr/local/lib \
       -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' \
       -X 'main.version=$(git describe --tags --always)'" \
       -o ./tmp/main .

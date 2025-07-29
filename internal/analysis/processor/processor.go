@@ -115,17 +115,36 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
-		p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &settings.Realtime.SpeciesTracking)
+		// Validate species tracking configuration
+		if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
+			log.Printf("Invalid species tracking configuration: %v", err)
+			// Continue with defaults or disable tracking
+			settings.Realtime.SpeciesTracking.Enabled = false
+		} else {
+			// Adjust seasonal tracking for hemisphere based on BirdNET latitude
+			hemisphereAwareTracking := settings.Realtime.SpeciesTracking
+			if hemisphereAwareTracking.SeasonalTracking.Enabled {
+				hemisphereAwareTracking.SeasonalTracking = conf.GetSeasonalTrackingWithHemisphere(
+					hemisphereAwareTracking.SeasonalTracking,
+					settings.BirdNET.Latitude,
+				)
+			}
+			
+			p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &hemisphereAwareTracking)
 
-		// Initialize species tracker from database
-		if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
-			log.Printf("Failed to initialize species tracker from database: %v", err)
-			// Continue anyway - tracker will work for new detections
+			// Initialize species tracker from database
+			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
+				log.Printf("Failed to initialize species tracker from database: %v", err)
+				// Continue anyway - tracker will work for new detections
+			}
+
+			hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
+			log.Printf("Species tracking enabled: window=%d days, sync=%d minutes, hemisphere=%s (lat=%.2f)",
+				settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
+				settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
+				hemisphere,
+				settings.BirdNET.Latitude)
 		}
-
-		log.Printf("Species tracking enabled: window=%d days, sync=%d minutes",
-			settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
-			settings.Realtime.SpeciesTracking.SyncIntervalMinutes)
 	}
 
 	// Start the detection processor
