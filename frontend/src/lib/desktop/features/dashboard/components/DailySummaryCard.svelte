@@ -395,9 +395,9 @@
 
 <!-- Progressive loading implementation -->
 {#if loadingPhase === 'skeleton'}
-  <SkeletonDailySummary {showThumbnails} />
+  <SkeletonDailySummary {showThumbnails} speciesCount={dailySummary.length || 8} />
 {:else if loadingPhase === 'spinner'}
-  <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} />
+  <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={dailySummary.length || 8} />
 {:else if loadingPhase === 'error'}
   <section class="card col-span-12 bg-base-100 shadow-sm">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">

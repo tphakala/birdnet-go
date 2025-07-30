@@ -4,13 +4,14 @@
   interface Props {
     showSpinner?: boolean;
     showThumbnails?: boolean;
+    speciesCount?: number;
   }
 
-  let { showSpinner = false, showThumbnails = true }: Props = $props();
+  let { showSpinner = false, showThumbnails = true, speciesCount = 8 }: Props = $props();
   
   // Generate realistic skeleton data using $state.raw for performance
   const skeletonSpecies = $state.raw(
-    Array(8).fill(null).map((_, i) => ({
+    Array(speciesCount).fill(null).map((_, i) => ({
       id: i,
       nameWidth: `${60 + Math.random() * 40}%`, // Vary widths realistically
       detectionCount: Math.floor(Math.random() * 20) + 1,
