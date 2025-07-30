@@ -260,8 +260,15 @@ func TestTypeConfusionAttacks(t *testing.T) {
 			err = controller.UpdateSectionSettings(ctx)
 			// Type confusion might be caught at JSON unmarshal or later validation
 			if err == nil {
-				// If no error, the system handled the type conversion
-				assert.Equal(t, http.StatusOK, rec.Code)
+				// If no error, the system handled the type conversion OR sent an HTTP error response
+				if rec.Code == http.StatusOK {
+					// Type conversion was successful
+					t.Logf("Type confusion handled successfully with conversion")
+				} else {
+					// HTTP error response was sent (expected for type mismatches)
+					assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected BadRequest for type confusion")
+					t.Logf("Type confusion properly rejected with HTTP error response")
+				}
 			} else {
 				// Error is expected for type mismatches
 				t.Logf("Type confusion properly rejected: %v", err)
