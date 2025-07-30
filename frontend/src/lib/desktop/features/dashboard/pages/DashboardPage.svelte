@@ -514,10 +514,20 @@
     recentDetections = recentDetections.slice(0, newLimit);
   }
 
+  // Derived state to check if we're viewing today's data
+  const isViewingToday = $derived(selectedDate === getLocalDateString());
+
   // Queue daily summary updates with debouncing for rapid updates
   function queueDailySummaryUpdate(detection: Detection) {
-    // Only update if detection is for the currently selected date
+    // Only allow SSE updates to daily summary when viewing today's data
+    if (!isViewingToday) {
+      console.debug('Skipping daily summary SSE update - viewing historical data:', selectedDate);
+      return;
+    }
+
+    // Additional safety check: ensure detection is for today
     if (detection.date !== selectedDate) {
+      console.debug('Skipping daily summary update - detection date mismatch:', detection.date, 'vs', selectedDate);
       return;
     }
 
@@ -554,8 +564,15 @@
 
   // Incremental daily summary update when new detection arrives via SSE
   function updateDailySummary(detection: Detection) {
-    // Only update if detection is for the currently selected date
-    if (detection.date !== selectedDate) {
+    // Only allow SSE updates to daily summary when viewing today's data
+    if (!isViewingToday) {
+      console.debug('Skipping daily summary update - viewing historical data:', selectedDate);
+      return;
+    }
+
+    // Additional safety check: ensure detection is for today and matches selected date
+    if (detection.date !== selectedDate || detection.date !== getLocalDateString()) {
+      console.debug('Skipping daily summary update - detection date mismatch:', detection.date, 'vs', selectedDate, 'today:', getLocalDateString());
       return;
     }
 
