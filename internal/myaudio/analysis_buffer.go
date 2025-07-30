@@ -11,7 +11,6 @@ import (
 	"github.com/smallnest/ringbuffer"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -354,8 +353,7 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 			log.Printf("❌ Unexpected error writing to analysis buffer for stream %s: %v", stream, err)
 		}
 
-		// Capture system resource utilization
-		diagnostics.CaptureSystemInfo(fmt.Sprintf("Buffer write error for stream %s", stream))
+		// System resource utilization capture disabled to prevent disk space issues
 
 		if retry < maxRetries-1 {
 			time.Sleep(retryDelay)
