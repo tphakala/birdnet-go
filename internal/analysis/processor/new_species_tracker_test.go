@@ -607,7 +607,7 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 		assert.False(t, isNew, "Expected second detection in same year to not be new")
 
 		status := tracker.GetSpeciesStatus(speciesName, secondDetection)
-		assert.True(t, status.IsNewThisYear, "Expected species to still be new this year within window")
+		assert.False(t, status.IsNewThisYear, "Expected species to NOT be new this year (158 days > 30 day window)")
 		assert.Equal(t, 158, status.DaysThisYear, "Expected correct days since first detection this year")
 	})
 
@@ -719,8 +719,11 @@ func TestSeasonDetection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			// Remove t.Parallel() since getCurrentSeason is not thread-safe for internal methods
+			// It modifies cache fields without holding the mutex
+			tracker.mu.Lock()
 			season := tracker.getCurrentSeason(tc.date)
+			tracker.mu.Unlock()
 			assert.Equal(t, tc.expectedSeason, season,
 				"Expected season '%s' for date %s, got '%s'",
 				tc.expectedSeason, tc.date.Format("2006-01-02"), season)
@@ -759,6 +762,7 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 	}
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -792,16 +796,10 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
-	// Mock yearly data showing species was first detected in spring (April 15)
+	// Mock should return empty data so the test scenario works as expected
+	// The test wants to simulate first detection in spring, then check status in summer
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{
-			{
-				ScientificName: "Hirundo rustica",
-				CommonName:     "Barn Swallow",
-				FirstSeenDate:  "2024-04-15",
-				CountInPeriod:  1,
-			},
-		}, nil)
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -826,6 +824,7 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	}
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -845,6 +844,7 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 
 	// Should not be new this year (91 days > 30 day window)
 	assert.False(t, status.IsNewThisYear, "Expected species to not be new this year (91 days > 30 day window)")
+	assert.Equal(t, 91, status.DaysThisYear, "Expected DaysThisYear to be 91 (days since April 15)")
 
 	// Now detect it in summer
 	tracker.UpdateSpecies(speciesName, summerTime)
