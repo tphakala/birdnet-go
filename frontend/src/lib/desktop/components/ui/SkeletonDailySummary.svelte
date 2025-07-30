@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
 
   interface Props {
     showSpinner?: boolean;
@@ -51,19 +50,19 @@
               <div class="h-4 bg-base-300 rounded w-20 animate-pulse"></div>
             </th>
             <!-- Hourly headers skeleton -->
-            {#each Array(24) as _, hour}
+            {#each Array(24) as _}
               <th class="px-0 hour-header hourly-count text-center">
                 <div class="h-4 bg-base-300 rounded w-6 mx-auto animate-pulse"></div>
               </th>
             {/each}
             <!-- Bi-hourly headers skeleton -->
-            {#each Array(12) as _, i}
+            {#each Array(12) as _}
               <th class="px-0 hour-header bi-hourly-count bi-hourly text-center">
                 <div class="h-4 bg-base-300 rounded w-6 mx-auto animate-pulse"></div>
               </th>
             {/each}
             <!-- Six-hourly headers skeleton -->
-            {#each Array(4) as _, i}
+            {#each Array(4) as _}
               <th class="px-0 hour-header six-hourly-count six-hourly text-center">
                 <div class="h-4 bg-base-300 rounded w-6 mx-auto animate-pulse"></div>
               </th>
@@ -91,7 +90,7 @@
               </td>
 
               <!-- Hourly counts skeleton -->
-              {#each species.hourlyPattern as hasData, hour}
+              {#each species.hourlyPattern as hasData}
                 <td class="hour-data hourly-count text-center py-0 px-0 
                          {hasData ? 'heatmap-color-3' : 'heatmap-color-0'}">
                   {#if hasData}
