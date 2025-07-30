@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
@@ -56,7 +56,8 @@
     timestamp: number;
   }
 
-  const dailySummaryCache = new Map<string, CachedDailySummary>();
+  // Use $state.raw() for non-mutated cache objects to avoid proxy overhead
+  const dailySummaryCache = $state.raw(new Map<string, CachedDailySummary>());
   const CACHE_TTL = 60000; // 1 minute TTL for daily summary cache
 
   // Selective cache update functions for incremental SSE updates
@@ -199,10 +200,10 @@
     fetchRecentDetections();
   }
 
-  // Animation cleanup timers and RAF manager
-  let animationCleanupTimers = $state(new Set<ReturnType<typeof setTimeout>>());
+  // Animation cleanup timers and RAF manager - use $state.raw() for performance
+  let animationCleanupTimers = $state.raw(new Set<ReturnType<typeof setTimeout>>());
   let animationFrame: number | null = null;
-  let pendingCleanups = new Map<string, { fn: () => void; timestamp: number }>();
+  let pendingCleanups = $state.raw(new Map<string, { fn: () => void; timestamp: number }>());
 
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
@@ -234,7 +235,7 @@
 
     // Continue if there are more pending cleanups
     if (pendingCleanups.size > 0) {
-      animationFrame = requestAnimationFrame(processCleanups);
+      animationFrame = window.requestAnimationFrame(processCleanups);
     } else {
       animationFrame = null;
     }
@@ -257,18 +258,17 @@
     // Schedule cleanup
     pendingCleanups.set(cleanupKey, {
       fn: cleanupFn,
-      timestamp: performance.now() + delay,
+      timestamp: window.performance.now() + delay,
     });
 
     // Start RAF loop if not already running
     if (animationFrame === null) {
-      animationFrame = requestAnimationFrame(processCleanups);
+      animationFrame = window.requestAnimationFrame(processCleanups);
     }
   }
 
   // SSE connection for real-time detection updates
   let eventSource: ReconnectingEventSource | null = null;
-  let connectionStatus = $state<'connecting' | 'connected' | 'error' | 'polling'>('connecting');
 
   // Process new detection from SSE - queue if updates are frozen, otherwise process immediately
   function handleNewDetection(detection: Detection) {
@@ -291,7 +291,6 @@
   // Connect to SSE stream for real-time updates using ReconnectingEventSource
   function connectToDetectionStream() {
     console.log('Connecting to SSE stream at /api/v2/detections/stream');
-    connectionStatus = 'connecting';
 
     // Clean up existing connection
     if (eventSource) {
@@ -308,7 +307,6 @@
 
       eventSource.onopen = () => {
         console.log('SSE connection opened');
-        connectionStatus = 'connected';
       };
 
       eventSource.onmessage = event => {
@@ -320,7 +318,6 @@
             switch (data.eventType) {
               case 'connected':
                 console.log('Connected to detection stream:', data);
-                connectionStatus = 'connected';
                 break;
 
               case 'detection':
@@ -329,7 +326,6 @@
 
               case 'heartbeat':
                 console.debug('SSE heartbeat received, clients:', data.clients);
-                connectionStatus = 'connected';
                 break;
 
               default:
@@ -337,7 +333,6 @@
             }
           } else if (data.ID && data.CommonName) {
             // This looks like a direct detection event
-            connectionStatus = 'connected';
             handleSSEDetection(data);
           }
         } catch (error) {
@@ -353,7 +348,6 @@
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           console.log('Connected event received:', data);
-          connectionStatus = 'connected';
         } catch (error) {
           console.error('Failed to parse connected event:', error);
         }
@@ -364,7 +358,6 @@
           // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
-          connectionStatus = 'connected';
           handleSSEDetection(data);
         } catch (error) {
           console.error('Failed to parse detection event:', error);
@@ -377,7 +370,6 @@
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
           console.debug('Heartbeat event received, clients:', data.clients);
-          connectionStatus = 'connected';
         } catch (error) {
           console.error('Failed to parse heartbeat event:', error);
         }
@@ -385,13 +377,11 @@
 
       eventSource.onerror = (error: Event) => {
         console.error('SSE connection error:', error);
-        connectionStatus = 'error';
         // ReconnectingEventSource handles reconnection automatically
         // No need for manual reconnection logic
       };
     } catch (error) {
       console.error('Failed to create ReconnectingEventSource:', error);
-      connectionStatus = 'error';
       // Try again in 5 seconds if initial setup fails
       setTimeout(() => connectToDetectionStream(), 5000);
     }
@@ -430,6 +420,10 @@
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
 
+    // Preload adjacent dates for faster navigation
+    preloadAdjacentDate('prev');
+    preloadAdjacentDate('next');
+
     return () => {
       // Clean up SSE connection
       if (eventSource) {
@@ -448,7 +442,7 @@
 
       // Cancel pending RAF
       if (animationFrame !== null) {
-        cancelAnimationFrame(animationFrame);
+        window.cancelAnimationFrame(animationFrame);
         animationFrame = null;
       }
 
@@ -580,17 +574,11 @@
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
 
-      // Optimized position update - only rebuild array if position changes
+          // Optimized position update using $derived.by pattern
       const currentPosition = existingIndex;
-      let newPosition = -1;
-
-      // Check if species needs to move up (higher count)
-      for (let i = 0; i < currentPosition; i++) {
-        if (dailySummary[i].count < updated.count) {
-          newPosition = i;
-          break;
-        }
-      }
+      const newPosition = dailySummary.findIndex((species, i) => 
+        i < currentPosition && species.count < updated.count
+      );
 
       if (newPosition !== -1) {
         // Species needs to move up - rebuild array with minimal changes
@@ -703,6 +691,47 @@
         `new-${detection.speciesCode}`
       );
     }
+  }
+
+  // Preloading cache for adjacent dates - use $state.raw() for performance
+  const preloadCache = $state.raw(new Map<string, Promise<DailySpeciesSummary[]>>());
+
+  // Smart preloading function with proper dependency tracking
+  function preloadAdjacentDate(direction: 'prev' | 'next') {
+    const date = new Date(selectedDate);
+    const targetDate = direction === 'prev' 
+      ? new Date(date.setDate(date.getDate() - 1))
+      : new Date(date.setDate(date.getDate() + 1));
+    
+    const dateString = getLocalDateString(targetDate);
+    
+    // Don't preload future dates or already cached data
+    if (direction === 'next' && isFutureDate(dateString)) return;
+    if (dailySummaryCache.has(dateString) || preloadCache.has(dateString)) return;
+    
+    // Start preloading using untrack to prevent reactive dependencies
+    const preloadPromise = untrack(() => 
+      fetch(`/api/v2/analytics/species/daily?date=${dateString}`)
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+          if (data) {
+            dailySummaryCache.set(dateString, {
+              data: data,
+              timestamp: Date.now(),
+            });
+            console.debug(`Preloaded data for ${dateString}`);
+          }
+          preloadCache.delete(dateString);
+          return data;
+        })
+        .catch(error => {
+          console.debug(`Preload failed for ${dateString}:`, error);
+          preloadCache.delete(dateString);
+          return null;
+        })
+    );
+    
+    preloadCache.set(dateString, preloadPromise);
   }
 
   // Update freeze state management

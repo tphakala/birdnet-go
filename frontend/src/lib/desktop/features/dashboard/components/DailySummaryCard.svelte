@@ -1,27 +1,26 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
-  import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { alertIconsSvg, navigationIcons, weatherIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+  import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { getLocalDateString } from '$lib/utils/date';
 
-  // Animation duration constants (in milliseconds)
-  const ANIMATION_DURATIONS = {
-    countPop: 600,
-    heartPulse: 1000,
-    newSpeciesSlide: 800,
-    cleanup: 2200, // Slightly longer than longest animation
-  } as const;
+  // Progressive loading timing constants (optimized for Svelte 5)
+  const LOADING_PHASES = $state.raw({
+    instant: 0,      // 0ms - show nothing 
+    skeleton: 150,   // 150ms - show skeleton
+    spinner: 800,    // 800ms - show spinner if still loading
+  });
 
-  // Layout constants
-  const GRADIENT_ANGLE = '-45deg';
+  // Layout constants - use $state.raw for static values
   const PROGRESS_BAR_ROUNDING = 5; // Round to nearest 5%
-  const WIDTH_THRESHOLDS = {
+  const WIDTH_THRESHOLDS = $state.raw({
     minTextDisplay: 45,
     maxTextDisplay: 59,
-  } as const;
+  });
 
   interface SunTimes {
     sunrise: string; // ISO date string
@@ -52,13 +51,45 @@
     onDateChange,
   }: Props = $props();
 
+  // Progressive loading state management
+  let loadingPhase = $state<'instant' | 'skeleton' | 'spinner' | 'loaded' | 'error'>('instant');
+  let showDelayedIndicator = $state(false);
+
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
-  let sunTimesError = $state<string | null>(null);
-  let sunTimesLoading = $state(false);
 
-  // Cache for sun times to avoid repeated API calls
-  const sunTimesCache = new Map<string, SunTimes>();
+  // Cache for sun times to avoid repeated API calls - use $state.raw for performance
+  const sunTimesCache = $state.raw(new Map<string, SunTimes>());
+
+  // Optimize loading state management with proper dependency tracking
+  $effect(() => {
+    if (loading) {
+      loadingPhase = 'instant';
+      showDelayedIndicator = false;
+      
+      // Use untrack to prevent these timers from becoming reactive dependencies
+      const skeletonTimer = setTimeout(() => {
+        if (untrack(() => loading)) {
+          loadingPhase = 'skeleton';
+        }
+      }, LOADING_PHASES.skeleton);
+      
+      const spinnerTimer = setTimeout(() => {
+        if (untrack(() => loading)) {
+          loadingPhase = 'spinner';
+          showDelayedIndicator = true;
+        }
+      }, LOADING_PHASES.spinner);
+      
+      return () => {
+        clearTimeout(skeletonTimer);
+        clearTimeout(spinnerTimer);
+      };
+    } else {
+      loadingPhase = error ? 'error' : 'loaded';
+      showDelayedIndicator = false;
+    }
+  });
 
   // Fetch sun times from weather API with caching
   async function fetchSunTimes(date: string): Promise<SunTimes | null> {
@@ -68,15 +99,12 @@
       return cached;
     }
 
-    sunTimesLoading = true;
-    sunTimesError = null;
 
     try {
       const response = await fetch(`/api/v2/weather/sun/${date}`);
       if (!response.ok) {
         const errorMsg = `Failed to fetch sun times: ${response.status} ${response.statusText}`;
         console.warn(errorMsg);
-        sunTimesError = errorMsg;
         return null;
       }
       const data = await response.json();
@@ -92,10 +120,7 @@
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
       console.warn('Error fetching sun times:', errorMsg);
-      sunTimesError = errorMsg;
       return null;
-    } finally {
-      sunTimesLoading = false;
     }
   }
 
@@ -120,7 +145,7 @@
     }
   };
 
-  // Static column metadata - created once using $state.raw() for performance
+  // Static column metadata - use $state.raw() for performance (no deep reactivity needed)
   const staticColumnDefs = $state.raw([
     {
       key: 'common_name',
@@ -166,9 +191,12 @@
     }),
   ]);
 
-  // Reactive columns with only dynamic headers (95% faster than before)
-  const columns = $derived(
-    staticColumnDefs.map(colDef => ({
+  // Reactive columns with only dynamic headers - use $derived.by for complex logic
+  const columns = $derived.by(() => {
+    // Early return for empty data to prevent unnecessary calculations
+    if (staticColumnDefs.length === 0) return [];
+    
+    return staticColumnDefs.map(colDef => ({
       ...colDef,
       header:
         colDef.type === 'species'
@@ -176,11 +204,11 @@
           : colDef.type === 'progress'
             ? t('dashboard.dailySummary.columns.detections')
             : colDef.header,
-    }))
-  );
+    }));
+  });
 
-  // Pre-computed render functions (outside reactive context for performance)
-  const renderFunctions = {
+  // Pre-computed render functions - use $state.raw for performance (static functions)
+  const renderFunctions = $state.raw({
     hourly: (item: DailySpeciesSummary, hour: number) => item.hourly_counts[hour] || 0,
     'bi-hourly': (item: DailySpeciesSummary, hour: number) =>
       (item.hourly_counts[hour] || 0) + (item.hourly_counts[hour + 1] || 0),
@@ -192,7 +220,7 @@
       return sum;
     },
     progress: (item: DailySpeciesSummary) => item.count,
-  };
+  });
 
   // Simple LRU cache implementation
   class LRUCache<K, V> {
@@ -241,7 +269,7 @@
   }
 
   // Phase 4: Optimized URL building with memoization for 90%+ performance improvement
-  const urlCache = new LRUCache<string, string>(500); // Max 500 URLs cached
+  const urlCache = $state.raw(new LRUCache<string, string>(500)); // Max 500 URLs cached - use $state.raw
   const urlBuilders = $state({
     // Default functions to prevent undefined errors during initial render
     species: () => '#',
@@ -319,15 +347,29 @@
       : false
   );
 
-  // Simple, reliable state management
-  const sortedData = $derived(data.length === 0 ? [] : [...data].sort((a, b) => b.count - a.count));
+  // Optimized data sorting using $derived.by for better performance
+  const sortedData = $derived.by(() => {
+    // Early return for empty data
+    if (data.length === 0) return [];
+    
+    // Use toSorted (immutable) instead of spreading + sort for better performance
+    return data.toSorted((a, b) => b.count - a.count);
+  });
 
-  // Optimized max count calculations with simpler caching
-  const globalMaxHourlyCount = $derived(
-    sortedData.length === 0
-      ? 1
-      : Math.max(...sortedData.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
-  );
+  // Optimized max count calculations using $derived.by for better performance
+  const globalMaxHourlyCount = $derived.by(() => {
+    if (sortedData.length === 0) return 1;
+    
+    let maxCount = 1;
+    for (const species of sortedData) {
+      for (const count of species.hourly_counts) {
+        if (count > maxCount) {
+          maxCount = count;
+        }
+      }
+    }
+    return maxCount;
+  });
 
   const globalMaxBiHourlyCount = $derived.by(() => {
     if (sortedData.length === 0) return 1;
@@ -359,53 +401,92 @@
   });
 </script>
 
-<section class="card col-span-12 bg-base-100 shadow-sm">
-  <!-- Card Header with Date Navigation -->
-  <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-    <div class="flex items-center justify-between mb-4">
-      <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
-      <div class="flex items-center gap-2">
-        <!-- Previous day button -->
-        <button
-          onclick={onPreviousDay}
-          class="btn btn-sm btn-ghost"
-          aria-label={t('dashboard.dailySummary.navigation.previousDay')}
-        >
-          {@html navigationIcons.arrowLeft}
-        </button>
-
-        <!-- Date picker -->
-        <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
-
-        <!-- Next day button -->
-        <button
-          onclick={onNextDay}
-          class="btn btn-sm btn-ghost"
-          disabled={isToday}
-          aria-label={t('dashboard.dailySummary.navigation.nextDay')}
-        >
-          {@html navigationIcons.arrowRight}
-        </button>
-
-        {#if !isToday}
-          <button onclick={onGoToToday} class="btn btn-sm btn-primary"
-            >{t('dashboard.dailySummary.navigation.today')}</button
+<!-- Progressive loading implementation -->
+{#if loadingPhase === 'instant'}
+  <!-- Show nothing for first 150ms - most loads complete in this time -->
+{:else if loadingPhase === 'skeleton'}
+  <SkeletonDailySummary {showThumbnails} />
+{:else if loadingPhase === 'spinner'}
+  <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} />
+{:else if loadingPhase === 'error'}
+  <section class="card col-span-12 bg-base-100 shadow-sm">
+    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+      <div class="flex items-center justify-between mb-4">
+        <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
+        <div class="flex items-center gap-2">
+          <!-- Previous day button -->
+          <button
+            onclick={onPreviousDay}
+            class="btn btn-sm btn-ghost"
+            aria-label={t('dashboard.dailySummary.navigation.previousDay')}
           >
-        {/if}
-      </div>
-    </div>
+            {@html navigationIcons.arrowLeft}
+          </button>
 
-    <!-- Table Content -->
-    {#if loading}
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-md"></span>
+          <!-- Date picker -->
+          <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
+
+          <!-- Next day button -->
+          <button
+            onclick={onNextDay}
+            class="btn btn-sm btn-ghost"
+            disabled={isToday}
+            aria-label={t('dashboard.dailySummary.navigation.nextDay')}
+          >
+            {@html navigationIcons.arrowRight}
+          </button>
+
+          {#if !isToday}
+            <button onclick={onGoToToday} class="btn btn-sm btn-primary"
+              >{t('dashboard.dailySummary.navigation.today')}</button
+            >
+          {/if}
+        </div>
       </div>
-    {:else if error}
       <div class="alert alert-error">
         {@html alertIconsSvg.error}
         <span>{error}</span>
       </div>
-    {:else}
+    </div>
+  </section>
+{:else if loadingPhase === 'loaded'}
+  <section class="card col-span-12 bg-base-100 shadow-sm">
+    <!-- Card Header with Date Navigation -->
+    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+      <div class="flex items-center justify-between mb-4">
+        <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
+        <div class="flex items-center gap-2">
+          <!-- Previous day button -->
+          <button
+            onclick={onPreviousDay}  
+            class="btn btn-sm btn-ghost"
+            aria-label={t('dashboard.dailySummary.navigation.previousDay')}
+          >
+            {@html navigationIcons.arrowLeft}
+          </button>
+
+          <!-- Date picker -->
+          <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
+
+          <!-- Next day button -->
+          <button
+            onclick={onNextDay}
+            class="btn btn-sm btn-ghost"
+            disabled={isToday}
+            aria-label={t('dashboard.dailySummary.navigation.nextDay')}
+          >
+            {@html navigationIcons.arrowRight}
+          </button>
+
+          {#if !isToday}
+            <button onclick={onGoToToday} class="btn btn-sm btn-primary"
+              >{t('dashboard.dailySummary.navigation.today')}</button
+            >
+          {/if}
+        </div>
+      </div>
+
+      <!-- Table Content -->
       <div class="overflow-x-auto">
         <table class="table table-zebra h-full w-full table-auto daily-summary-table">
           <thead class="sticky-header text-xs">
@@ -722,15 +803,15 @@
             {/each}
           </tbody>
         </table>
-        {#if sortedData.length === 0}
-          <div class="text-center py-8 text-base-content/60">
-            {t('dashboard.dailySummary.noSpecies')}
-          </div>
-        {/if}
+          {#if sortedData.length === 0}
+            <div class="text-center py-8 text-base-content/60">
+              {t('dashboard.dailySummary.noSpecies')}
+            </div>
+          {/if}
+        </div>
       </div>
-    {/if}
-  </div>
-</section>
+    </section>
+{/if}
 
 <style>
   /* ========================================================================
