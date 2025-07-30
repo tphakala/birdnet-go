@@ -10,9 +10,8 @@
 
   // Progressive loading timing constants (optimized for Svelte 5)
   const LOADING_PHASES = $state.raw({
-    instant: 0,      // 0ms - show nothing 
-    skeleton: 150,   // 150ms - show skeleton
-    spinner: 800,    // 800ms - show spinner if still loading
+    skeleton: 0,     // 0ms - show skeleton immediately to reserve space
+    spinner: 650,    // 650ms - show spinner if still loading
   });
 
   // Layout constants - use $state.raw for static values
@@ -52,7 +51,7 @@
   }: Props = $props();
 
   // Progressive loading state management
-  let loadingPhase = $state<'instant' | 'skeleton' | 'spinner' | 'loaded' | 'error'>('instant');
+  let loadingPhase = $state<'skeleton' | 'spinner' | 'loaded' | 'error'>('skeleton');
   let showDelayedIndicator = $state(false);
 
   // Sun times state
@@ -64,16 +63,10 @@
   // Optimize loading state management with proper dependency tracking
   $effect(() => {
     if (loading) {
-      loadingPhase = 'instant';
+      loadingPhase = 'skeleton'; // Show skeleton immediately to reserve space
       showDelayedIndicator = false;
       
-      // Use untrack to prevent these timers from becoming reactive dependencies
-      const skeletonTimer = setTimeout(() => {
-        if (untrack(() => loading)) {
-          loadingPhase = 'skeleton';
-        }
-      }, LOADING_PHASES.skeleton);
-      
+      // Use untrack to prevent the timer from becoming a reactive dependency
       const spinnerTimer = setTimeout(() => {
         if (untrack(() => loading)) {
           loadingPhase = 'spinner';
@@ -82,7 +75,6 @@
       }, LOADING_PHASES.spinner);
       
       return () => {
-        clearTimeout(skeletonTimer);
         clearTimeout(spinnerTimer);
       };
     } else {
@@ -402,9 +394,7 @@
 </script>
 
 <!-- Progressive loading implementation -->
-{#if loadingPhase === 'instant'}
-  <!-- Show nothing for first 150ms - most loads complete in this time -->
-{:else if loadingPhase === 'skeleton'}
+{#if loadingPhase === 'skeleton'}
   <SkeletonDailySummary {showThumbnails} />
 {:else if loadingPhase === 'spinner'}
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} />
