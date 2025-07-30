@@ -11,8 +11,7 @@
     realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { api, ApiError } from '$lib/utils/api';
-  import { toastActions } from '$lib/stores/toast';
+  import { api } from '$lib/utils/api';
   import { t } from '$lib/i18n';
 
   // API response interfaces
@@ -67,12 +66,10 @@
         if (data?.species && Array.isArray(data.species)) {
           allowedSpecies = data.species.map((species: any) => species.label);
         }
-      } catch (error) {
+      } catch {
         // Species list loading failure affects form functionality but isn't critical
         // Show minimal feedback rather than intrusive error
-        if (error instanceof ApiError && process.env.NODE_ENV === 'development') {
-          console.warn('Failed to load species list for filtering:', error.message);
-        }
+        // Failed to load species list for filtering - form will work without suggestions
         // Set empty array so form still works, just without suggestions
         allowedSpecies = [];
       }

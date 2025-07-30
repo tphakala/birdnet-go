@@ -144,12 +144,8 @@ export async function fetchWithCSRF<T = unknown>(
   };
 
   try {
-    console.log(`Fetching ${finalOptions.method} ${url}`, {
-      body: finalOptions.body ? JSON.parse(finalOptions.body as string) : undefined,
-    });
     const response = await fetch(url, finalOptions);
     const result = await handleResponse<T>(response);
-    console.log(`Response from ${url}:`, result);
     return result;
   } catch (error) {
     if (error instanceof ApiError) {

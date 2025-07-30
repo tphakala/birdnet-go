@@ -11,9 +11,9 @@
     try {
       await settingsActions.saveSettings();
       // Success notification will be handled by the store/SSE
-    } catch (error) {
+    } catch {
       // Error is already handled in the store
-      console.error('Failed to save settings:', error);
+      // Failed to save settings - error handling is managed by the store
     }
   }
 

@@ -21,7 +21,7 @@
     padding = true,
     className = '',
     contentClassName = '',
-    hasChanges = false,
+    hasChanges: _hasChanges = false,
     header,
     children,
     footer,

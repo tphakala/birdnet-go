@@ -19,8 +19,8 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t, getLocale, setLocale } from '$lib/i18n';
-  import { LOCALES, type Locale } from '$lib/i18n/config';
+  import { t, getLocale } from '$lib/i18n';
+  import { LOCALES } from '$lib/i18n/config';
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -177,7 +177,7 @@
     // Dynamically import Leaflet
     const L = (window as any).L;
     if (!L) {
-      console.error('Leaflet not loaded');
+      // Leaflet library not loaded - map functionality will not be available
       return;
     }
 
@@ -244,8 +244,8 @@
       if (!response.ok) throw new Error('Failed to load range filter count');
       const data = await response.json();
       rangeFilterSpeciesCount = data.count;
-    } catch (error) {
-      console.error('Failed to load range filter count:', error);
+    } catch {
+      // Failed to load range filter count - set error message for user feedback
       rangeFilterError = t('settings.main.errors.rangeFilterCountFailed');
     }
   }
@@ -272,8 +272,8 @@
       if (showRangeFilterModal) {
         rangeFilterSpecies = data.species || [];
       }
-    } catch (error) {
-      console.error('Failed to test range filter:', error);
+    } catch {
+      // Failed to test range filter - set error message for user feedback
       rangeFilterError = t('settings.main.errors.rangeFilterTestFailed');
       // Set count to null on error to show loading state next time
       rangeFilterSpeciesCount = null;
@@ -301,8 +301,8 @@
       );
       rangeFilterSpecies = data.species || [];
       rangeFilterSpeciesCount = data.count;
-    } catch (error) {
-      console.error('Failed to load species list:', error);
+    } catch {
+      // Failed to load species list - set error message for user feedback
       rangeFilterError = t('settings.main.errors.rangeFilterLoadFailed');
     } finally {
       loadingRangeFilter = false;
@@ -314,9 +314,6 @@
     // Track the specific values that should trigger a range filter update
     const lat = settings.birdnet.latitude;
     const lng = settings.birdnet.longitude;
-    const threshold = settings.birdnet.rangeFilter.threshold;
-    const model = settings.birdnet.rangeFilter.model;
-
     // Only test if we have valid coordinates
     if (lat && lng) {
       debouncedTestRangeFilter();

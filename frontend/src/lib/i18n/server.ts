@@ -21,7 +21,6 @@ export async function loadServerMessages(locale: Locale): Promise<Record<string,
       // Use Node.js fs to read from static directory
       const fs = await import('fs');
       const path = await import('path');
-      // eslint-disable-next-line no-undef
       const filePath = path.join(process.cwd(), 'static', 'messages', `${locale}.json`);
       const content = fs.readFileSync(filePath, 'utf-8');
       const messages = JSON.parse(content);

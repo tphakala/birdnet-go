@@ -41,10 +41,10 @@
     data: DetectionsListData | null;
     loading?: boolean;
     error?: string | null;
-    onPageChange?: (page: number) => void;
-    onDetailsClick?: (id: number) => void;
+    onPageChange?: (_page: number) => void;
+    onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
-    onNumResultsChange?: (numResults: number) => void;
+    onNumResultsChange?: (_numResults: number) => void;
     className?: string;
   }
 

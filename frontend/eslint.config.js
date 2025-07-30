@@ -24,6 +24,8 @@ const browserGlobals = {
   KeyboardEvent: 'readonly',
   MouseEvent: 'readonly',
   DragEvent: 'readonly',
+  FocusEvent: 'readonly',
+  TouchEvent: 'readonly',
   HTMLElement: 'readonly',
   HTMLInputElement: 'readonly',
   HTMLSelectElement: 'readonly',
@@ -32,6 +34,8 @@ const browserGlobals = {
   HTMLButtonElement: 'readonly',
   HTMLCanvasElement: 'readonly',
   HTMLAudioElement: 'readonly',
+  HTMLUListElement: 'readonly',
+  HTMLImageElement: 'readonly',
   SVGSVGElement: 'readonly',
   SVGElement: 'readonly',
   MutationObserver: 'readonly',
@@ -45,8 +49,13 @@ const browserGlobals = {
   URL: 'readonly',
   Blob: 'readonly',
   getComputedStyle: 'readonly',
-  TouchEvent: 'readonly',
   crypto: 'readonly',
+  TextDecoder: 'readonly',
+  TextEncoder: 'readonly',
+  // Type-only globals for TypeScript
+  Window: 'readonly',
+  Document: 'readonly',
+  AddEventListenerOptions: 'readonly',
 };
 
 export default [
@@ -64,7 +73,11 @@ export default [
         parser: tsParser,
         extraFileExtensions: ['.svelte'],
       },
-      globals: browserGlobals,
+      globals: {
+        ...browserGlobals,
+        // Add process for development checks in Svelte files
+        process: 'readonly',
+      },
     },
     plugins: {
       svelte,
@@ -84,7 +97,7 @@ export default [
       ...security.configs.recommended.rules,
       // Allow console for now
       'no-console': 'warn',
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   
@@ -98,7 +111,11 @@ export default [
         sourceType: 'module',
         project: './tsconfig.json',
       },
-      globals: browserGlobals,
+      globals: {
+        ...browserGlobals,
+        // Add process for development checks and Node.js environments
+        process: 'readonly',
+      },
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
@@ -109,7 +126,7 @@ export default [
       ...tsPlugin.configs.strict.rules,
       // Security rules
       ...security.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-unused-vars': 'off', // Use TypeScript version instead
       'no-console': 'warn',
       'prefer-const': 'error',
@@ -138,7 +155,7 @@ export default [
       // Security rules
       ...security.configs.recommended.rules,
       // General rules
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-console': 'warn',
       'prefer-const': 'error',
       'no-var': 'error',

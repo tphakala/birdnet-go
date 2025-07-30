@@ -200,7 +200,7 @@
       audioContextAvailable = true;
       audioContextError = null;
       return audioContext;
-    } catch (_e) {
+    } catch {
       // eslint-disable-next-line no-console
       console.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
@@ -460,7 +460,7 @@
         audioNodes.gain.disconnect();
         audioNodes.compressor.disconnect();
         audioNodes.filters.highPass.disconnect();
-      } catch (_e) {
+      } catch {
         // Nodes may already be disconnected, ignore errors
         // eslint-disable-next-line no-console
         console.warn('Error disconnecting audio nodes during cleanup');
@@ -472,7 +472,7 @@
     if (audioContext) {
       try {
         audioContext.close();
-      } catch (_e) {
+      } catch {
         // Context may already be closed, ignore errors
         // eslint-disable-next-line no-console
         console.warn('Error closing audio context during cleanup');

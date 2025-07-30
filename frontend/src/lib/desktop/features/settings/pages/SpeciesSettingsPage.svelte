@@ -99,8 +99,8 @@
         allSpecies = data.species?.map((s: any) => s.commonName || s.label) || [];
         filteredSpecies = [...allSpecies];
       }
-    } catch (error) {
-      console.error('Failed to load species data:', error);
+    } catch {
+      // Failed to load species data - form will work without species suggestions
       allSpecies = [];
       filteredSpecies = [];
     }

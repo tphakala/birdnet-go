@@ -60,8 +60,8 @@
       .then(data => {
         systemId = data.systemID || '';
       })
-      .catch(error => {
-        console.error('Failed to fetch system ID:', error);
+      .catch(() => {
+        // Failed to fetch system ID - show error message to user
         systemId = t('settings.support.systemId.errorLoading');
       });
   });
@@ -79,8 +79,8 @@
     try {
       await navigator.clipboard.writeText(systemId);
       // Could add temporary success feedback here
-    } catch (error) {
-      console.error('Failed to copy system ID:', error);
+    } catch {
+      // Failed to copy system ID - clipboard API not available or blocked
     }
   }
 

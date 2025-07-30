@@ -329,8 +329,8 @@
         fetchTrendData(startDate || '', endDate || ''),
         fetchNewSpeciesData(startDate || '', endDate || ''),
       ]);
-    } catch (err) {
-      console.error('General error fetching analytics data:', err);
+    } catch {
+      // Failed to fetch analytics data, set error state
       error = t('analytics.loadingError');
     }
 
@@ -383,8 +383,8 @@
         mostCommonSpecies,
         mostCommonCount,
       };
-    } catch (err) {
-      console.error('Error fetching summary data:', err);
+    } catch {
+      // Failed to fetch summary data, keeping empty state
     }
   }
 
@@ -400,8 +400,8 @@
 
       const speciesData = await response.json();
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
-    } catch (err) {
-      console.error('Error fetching species summary:', err);
+    } catch {
+      // Failed to fetch species summary, reset to empty array
       chartData.species = [];
     }
   }
@@ -427,8 +427,8 @@
           detection.timeOfDay ||
           calculateTimeOfDay(detection.timestamp || `${detection.date} ${detection.time}`),
       }));
-    } catch (err) {
-      console.error('Error fetching recent detections:', err);
+    } catch {
+      // Failed to fetch recent detections, reset to empty array
       recentDetections = [];
     }
   }
@@ -456,8 +456,8 @@
 
       const timeData = await response.json();
       chartData.timeOfDay = timeData;
-    } catch (err) {
-      console.error('Error fetching time of day data:', err);
+    } catch {
+      // Failed to fetch time of day data, reset to empty array
       chartData.timeOfDay = [];
     }
   }
@@ -474,8 +474,8 @@
 
       const trendData = await response.json();
       chartData.trend = trendData;
-    } catch (err) {
-      console.error('Error fetching trend data:', err);
+    } catch {
+      // Failed to fetch trend data, reset to empty data structure
       chartData.trend = { data: [] };
     }
   }
@@ -493,8 +493,8 @@
       const data = await response.json();
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
-    } catch (err) {
-      console.error('Error fetching new species data:', err);
+    } catch {
+      // Failed to fetch new species data, reset to empty arrays
       newSpeciesData = [];
       chartData.newSpecies = [];
     }
@@ -502,7 +502,7 @@
 
   // Create all charts after data is loaded and DOM is ready
   function createAllCharts() {
-    console.log('Creating all charts...');
+    // Initialize all charts with current data
     createSpeciesChart(chartData.species);
     createTimeOfDayChart(chartData.timeOfDay);
     createTrendChart(chartData.trend);
@@ -515,7 +515,7 @@
   function createSpeciesChart(data: SpeciesData[]) {
     const ctx = (document.getElementById('speciesChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
-      console.error('Species chart canvas not found');
+      // Species chart canvas element not available, skip chart creation
       return;
     }
 
@@ -597,7 +597,7 @@
   function createTimeOfDayChart(data: TimeOfDayData[]) {
     const ctx = (document.getElementById('timeOfDayChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
-      console.error('Time of day chart canvas not found');
+      // Time of day chart canvas element not available, skip chart creation
       return;
     }
 
@@ -710,7 +710,7 @@
   function createTrendChart(responseData: TrendData | null) {
     const ctx = (document.getElementById('trendChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
-      console.error('Trend chart canvas not found');
+      // Trend chart canvas element not available, skip chart creation
       return;
     }
 
@@ -815,7 +815,7 @@
     const canvas = document.getElementById('newSpeciesChart') as HTMLCanvasElement;
     const ctx = canvas?.getContext('2d');
     if (!ctx) {
-      console.error('New species chart canvas not found');
+      // New species chart canvas element not available, skip chart creation
       return;
     }
 
@@ -957,8 +957,8 @@
       if (bodyFont) {
         Chart.defaults.font.family = bodyFont;
       }
-    } catch (e) {
-      console.error('Could not set Chart.js default font family:', e);
+    } catch {
+      // Failed to set Chart.js default font family, continue with defaults
     }
 
     // Set default dates

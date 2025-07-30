@@ -46,9 +46,8 @@ export function setLocale(locale: Locale): void {
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem('birdnet-locale', locale);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('Failed to save locale to localStorage:', error);
+    } catch {
+      // Failed to save locale to localStorage
     }
   }
 }
@@ -93,20 +92,18 @@ async function loadMessages(locale: Locale): Promise<void> {
     } catch {
       // Ignore storage errors
     }
-  } catch (error) {
+  } catch {
     // Check if this response is still the latest request before handling errors
     if (currentSequence !== loadSequence) {
       // This request has been superseded, discard the result
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.error(`Failed to load messages for ${locale}:`, error);
+    // Failed to load messages
 
     // Fallback to English if the requested locale fails
     if (locale !== DEFAULT_LOCALE) {
-      // eslint-disable-next-line no-console
-      console.info(`Falling back to ${DEFAULT_LOCALE} locale`);
+      // Falling back to default locale
       try {
         const fallbackResponse = await fetch(`/ui/assets/messages/${DEFAULT_LOCALE}.json`);
         if (fallbackResponse.ok) {
@@ -130,9 +127,8 @@ async function loadMessages(locale: Locale): Promise<void> {
           }
           return;
         }
-      } catch (fallbackError) {
-        // eslint-disable-next-line no-console
-        console.error(`Failed to load fallback messages:`, fallbackError);
+      } catch {
+        // Failed to load fallback messages
       }
     }
 
@@ -142,10 +138,7 @@ async function loadMessages(locale: Locale): Promise<void> {
       messages = previousMessages;
       previousMessages = {};
     }
-    // eslint-disable-next-line no-console
-    console.warn(
-      'Translation loading failed, restored previous messages to prevent UI degradation'
-    );
+    // Translation loading failed, restored previous messages to prevent UI degradation
   } finally {
     // Only set loading to false if this is still the latest request
     if (currentSequence === loadSequence) {

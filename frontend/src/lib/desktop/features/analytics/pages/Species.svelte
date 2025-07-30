@@ -136,8 +136,8 @@
 
       // Load thumbnails asynchronously after main data is displayed
       loadThumbnailsAsync();
-    } catch (error) {
-      console.error('Error fetching species data:', error);
+    } catch {
+      // Error fetching species data - reset to empty state
       speciesData = [];
       filteredSpecies = [];
     } finally {
@@ -285,9 +285,8 @@
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
-    } catch (error) {
-      console.error('Error loading thumbnails:', error);
-      // Continue without thumbnails - don't break the UI
+    } catch {
+      // Error loading thumbnails - continue without thumbnails to avoid breaking the UI
     }
   }
 

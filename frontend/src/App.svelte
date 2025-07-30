@@ -144,8 +144,7 @@
           }
           break;
       }
-    } catch (error) {
-      console.error(`Failed to load component for route "${route}":`, error);
+    } catch {
       // Fall back to generic error page on component load failure
       currentRoute = 'error-generic';
       currentPage = 'error-generic';
@@ -156,8 +155,8 @@
         try {
           const module = await import('./lib/desktop/views/GenericErrorPage.svelte');
           GenericErrorPage = module.default;
-        } catch (fallbackError) {
-          console.error('Failed to load fallback error component:', fallbackError);
+        } catch {
+          // Failed to load fallback error component
         }
       }
     } finally {

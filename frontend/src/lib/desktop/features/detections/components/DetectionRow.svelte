@@ -27,7 +27,6 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
-  import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
@@ -43,7 +42,7 @@
   interface Props {
     detection: Detection;
     isExcluded?: boolean;
-    onDetailsClick?: (id: number) => void;
+    onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
     className?: string;
   }
@@ -53,7 +52,7 @@
     isExcluded = false,
     onDetailsClick,
     onRefresh,
-    className = '',
+    className: _className = '',
   }: Props = $props();
 
   // Modal states
