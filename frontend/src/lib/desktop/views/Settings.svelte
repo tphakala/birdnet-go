@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settingsStore, settingsActions } from '$lib/stores/settings';
+
+  // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
+  // Change back to true to re-enable spinners for testing
+  const ENABLE_LOADING_SPINNERS = false;
   import MainSettingsSection from '$lib/desktop/features/settings/pages/MainSettingsPage.svelte';
   import AudioSettingsSection from '$lib/desktop/features/settings/pages/AudioSettingsPage.svelte';
   import FilterSettingsSection from '$lib/desktop/features/settings/pages/FilterSettingsPage.svelte';
@@ -85,7 +89,7 @@
   {/if}
 
   <!-- Loading State -->
-  {#if store.isLoading}
+  {#if ENABLE_LOADING_SPINNERS && store.isLoading}
     <div class="flex justify-center items-center py-12">
       <LoadingSpinner size="lg" />
       <span class="ml-3 text-lg">Loading settings...</span>

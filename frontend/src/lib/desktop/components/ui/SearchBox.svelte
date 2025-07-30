@@ -1,13 +1,10 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import {
     parseSearchQuery,
     formatFiltersForAPI,
     getFilterSuggestions,
     formatFilterForDisplay,
-    type SearchFilter,
-    type ParsedSearch,
   } from '$lib/utils/searchParser';
   import { navigationIcons, actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
 
@@ -44,9 +41,17 @@
   // Memory leak prevention
   let blurTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  // Advanced search parsing
-  let parsedSearch = $state<ParsedSearch>({ textQuery: '', filters: [], errors: [] });
-  let showFilterChips = $state(false);
+  // PERFORMANCE OPTIMIZATION: Cache parsed search results with $derived
+  // Avoids re-parsing the same query multiple times during input changes
+  let parsedSearch = $derived.by(() => {
+    const parsed = parseSearchQuery(searchQuery);
+    return {
+      ...parsed,
+      hasFilters: parsed.filters.length > 0 || parsed.errors.length > 0,
+    };
+  });
+
+  let showFilterChips = $derived(parsedSearch.hasFilters);
   let showSyntaxHelp = $state(false);
 
   // Load search history from localStorage
@@ -56,7 +61,7 @@
       if (saved) {
         try {
           searchHistory = JSON.parse(saved).slice(0, 10); // Keep last 10 searches
-        } catch (e) {
+        } catch {
           searchHistory = [];
         }
       }
@@ -77,7 +82,8 @@
   // Check if search should be visible on current page
   const isVisible = $derived(showOnPages.includes(currentPage.toLowerCase()));
 
-  // Get size classes
+  // PERFORMANCE OPTIMIZATION: Cache size classes and input classes with $derived
+  // Prevents repeated string concatenation and conditional logic in template
   const sizeClasses = $derived(() => {
     switch (size) {
       case 'lg':
@@ -100,6 +106,18 @@
         };
     }
   });
+
+  // PERFORMANCE OPTIMIZATION: Cache computed input classes
+  // Avoids repeated cn() calls and conditional logic on every render
+  const inputClasses = $derived(
+    cn(
+      'input rounded-full focus:outline-none w-full font-normal transition-all',
+      sizeClasses.input,
+      sizeClasses.padding,
+      isSearching && 'opacity-75',
+      showDropdown && 'rounded-b-none'
+    )
+  );
 
   // Save search to history
   function saveToHistory(query: string) {
@@ -136,13 +154,10 @@
     }
   }
 
-  // Handle input change
+  // PERFORMANCE OPTIMIZATION: Simplified input handler using cached parsing
+  // parsedSearch is now automatically updated via $derived when searchQuery changes
   function handleInput() {
     selectedIndex = -1;
-
-    // Parse the search query for filters
-    parsedSearch = parseSearchQuery(searchQuery);
-    showFilterChips = parsedSearch.filters.length > 0 || parsedSearch.errors.length > 0;
 
     // Get suggestions - prefer filter suggestions over history when typing filters
     let newSuggestions: string[] = [];
@@ -174,7 +189,8 @@
     suggestions = newSuggestions;
   }
 
-  // Remove a filter chip
+  // PERFORMANCE OPTIMIZATION: Simplified filter removal using cached parsing
+  // parsedSearch will automatically update when searchQuery changes
   function removeFilter(filterIndex: number) {
     const updatedFilters = parsedSearch.filters.filter((_, index) => index !== filterIndex);
 
@@ -183,11 +199,11 @@
     const newQuery = `${parsedSearch.textQuery} ${filtersText}`.trim();
 
     searchQuery = newQuery;
-    parsedSearch = parseSearchQuery(newQuery);
-    showFilterChips = parsedSearch.filters.length > 0 || parsedSearch.errors.length > 0;
+    // parsedSearch will automatically update via $derived
   }
 
-  // Perform the search
+  // PERFORMANCE OPTIMIZATION: Use cached parsed search instead of re-parsing
+  // parsedSearch is already computed and cached via $derived
   async function performSearch() {
     const query = searchQuery.trim();
     if (!query) {
@@ -197,8 +213,8 @@
     showDropdown = false;
     isSearching = true;
 
-    // Parse the query for advanced search
-    const parsed = parseSearchQuery(query);
+    // Use cached parsed search result
+    const parsed = parsedSearch;
 
     // Save to search history
     saveToHistory(query);
@@ -376,12 +392,16 @@
     }
   });
 
-  // Memory leak prevention - cleanup timeout on component destroy
-  onDestroy(() => {
-    if (blurTimeout) {
-      clearTimeout(blurTimeout);
-      blurTimeout = undefined;
-    }
+  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect for cleanup instead of onDestroy
+  // Provides better integration with component lifecycle and reactivity
+  $effect(() => {
+    return () => {
+      // Cleanup timeout on component unmount
+      if (blurTimeout) {
+        clearTimeout(blurTimeout);
+        blurTimeout = undefined;
+      }
+    };
   });
 </script>
 
@@ -404,13 +424,7 @@
           aria-label={placeholder}
           {placeholder}
           autocomplete="off"
-          class={cn(
-            'input rounded-full focus:outline-none w-full font-normal transition-all',
-            sizeClasses().input,
-            sizeClasses().padding,
-            isSearching && 'opacity-75',
-            showDropdown && 'rounded-b-none'
-          )}
+          class={inputClasses}
         />
 
         <!-- Clear button (X) -->

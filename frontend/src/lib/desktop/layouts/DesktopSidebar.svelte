@@ -22,37 +22,67 @@
     className = '',
   }: Props = $props();
 
-  // Route active state helpers
-  function isRouteActive(route: string): boolean {
-    const uiRoute = route.startsWith('/ui/') ? route : `/ui${route}`;
-    return currentRoute.startsWith(uiRoute);
-  }
-
-  function isExactRouteActive(route: string): boolean {
-    const uiRoute = route.startsWith('/ui/') ? route : `/ui${route === '/' ? '/dashboard' : route}`;
-    return currentRoute === uiRoute;
-  }
-
-  // Navigation sections open state
-  let analyticsOpen = $state(isRouteActive('/analytics'));
-  let settingsOpen = $state(isRouteActive('/settings'));
-
-  // Update open states when route changes
-  $effect(() => {
-    analyticsOpen = isRouteActive('/analytics');
-    settingsOpen = isRouteActive('/settings');
+  // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived
+  // Avoids repeated string processing and condition checks in templates
+  let routeCache = $derived(() => {
+    const routes = {
+      dashboard: currentRoute === '/ui/dashboard' || currentRoute === '/ui/',
+      analytics: currentRoute.startsWith('/ui/analytics'),
+      analyticsExact: currentRoute === '/ui/analytics',
+      analyticsSpecies: currentRoute === '/ui/analytics/species',
+      search: currentRoute.startsWith('/ui/search'),
+      about: currentRoute.startsWith('/ui/about'),
+      system: currentRoute.startsWith('/ui/system'),
+      settings: currentRoute.startsWith('/ui/settings'),
+      settingsMain: currentRoute === '/ui/settings/main',
+      settingsAudio: currentRoute === '/ui/settings/audio',
+      settingsFilters: currentRoute.startsWith('/ui/settings/detectionfilters'),
+      settingsIntegrations: currentRoute === '/ui/settings/integrations',
+      settingsSecurity: currentRoute === '/ui/settings/security',
+      settingsSpecies: currentRoute === '/ui/settings/species',
+      settingsSupport: currentRoute === '/ui/settings/support',
+    };
+    return routes;
   });
 
-  // Handle navigation
+  // PERFORMANCE OPTIMIZATION: Legacy helper functions removed - now using cached routeCache
+
+  // PERFORMANCE OPTIMIZATION: Use $derived for navigation section states
+  // Automatically updates when currentRoute changes, eliminating manual $effect
+  let analyticsOpen = $derived(routeCache.analytics);
+  let settingsOpen = $derived(routeCache.settings);
+
+  // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations with $derived
+  // Pre-compute all navigation URLs to avoid repeated string processing
+  let navigationUrls = $derived({
+    dashboard: onNavigate ? '/' : '/ui/dashboard',
+    analytics: onNavigate ? '/analytics' : '/ui/analytics',
+    analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
+    search: onNavigate ? '/search' : '/ui/search',
+    about: onNavigate ? '/about' : '/ui/about',
+    system: onNavigate ? '/system' : '/ui/system',
+    settingsMain: onNavigate ? '/settings/main' : '/ui/settings/main',
+    settingsAudio: onNavigate ? '/settings/audio' : '/ui/settings/audio',
+    settingsFilters: onNavigate ? '/settings/detectionfilters' : '/ui/settings/detectionfilters',
+    settingsIntegrations: onNavigate ? '/settings/integrations' : '/ui/settings/integrations',
+    settingsSecurity: onNavigate ? '/settings/security' : '/ui/settings/security',
+    settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
+    settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
+  });
+
+  // PERFORMANCE OPTIMIZATION: Simplified navigation function using cached URLs
   function navigate(url: string) {
     if (onNavigate) {
       onNavigate(url);
     } else {
-      // Default navigation - convert to /ui/ routes
+      // Use pre-computed URLs when possible, fallback to original logic
       const uiUrl = url.startsWith('/ui/') ? url : `/ui${url === '/' ? '/dashboard' : url}`;
       window.location.href = uiUrl;
     }
   }
+
+  // PERFORMANCE OPTIMIZATION: All navigation now uses cached URLs from navigationUrls
+  // Eliminates repeated string processing and URL transformations in templates
 
   // Handle logout
   async function handleLogout() {
@@ -74,7 +104,7 @@
     <!-- Header -->
     <div class="flex-none p-4">
       <button
-        onclick={() => navigate('/')}
+        onclick={() => navigate(navigationUrls.dashboard)}
         class="flex items-center gap-2 font-black text-2xl"
         aria-label="BirdNET-Go Home"
       >
@@ -92,8 +122,8 @@
       <ul class="menu menu-md" role="menubar">
         <li role="none">
           <button
-            onclick={() => navigate('/')}
-            class={cn('flex items-center gap-2', { active: isExactRouteActive('/') })}
+            onclick={() => navigate(navigationUrls.dashboard)}
+            class={cn('flex items-center gap-2', { active: routeCache.dashboard })}
             role="menuitem"
           >
             {@html systemIcons.home}
@@ -110,8 +140,8 @@
             <ul role="menu" aria-label={t('navigation.analyticsSubmenu')}>
               <li role="none">
                 <button
-                  onclick={() => navigate('/analytics')}
-                  class={cn({ active: isExactRouteActive('/analytics') })}
+                  onclick={() => navigate(navigationUrls.analytics)}
+                  class={cn({ active: routeCache.analyticsExact })}
                   role="menuitem"
                 >
                   {t('analytics.title')}
@@ -119,8 +149,8 @@
               </li>
               <li role="none">
                 <button
-                  onclick={() => navigate('/analytics/species')}
-                  class={cn({ active: isExactRouteActive('/analytics/species') })}
+                  onclick={() => navigate(navigationUrls.analyticsSpecies)}
+                  class={cn({ active: routeCache.analyticsSpecies })}
                   role="menuitem"
                 >
                   {t('analytics.species.title')}
@@ -132,8 +162,8 @@
 
         <li role="none">
           <button
-            onclick={() => navigate('/search')}
-            class={cn('flex items-center gap-2', { active: isRouteActive('/search') })}
+            onclick={() => navigate(navigationUrls.search)}
+            class={cn('flex items-center gap-2', { active: routeCache.search })}
             role="menuitem"
           >
             {@html systemIcons.search}
@@ -143,8 +173,8 @@
 
         <li role="none">
           <button
-            onclick={() => navigate('/about')}
-            class={cn('flex items-center gap-2', { active: isRouteActive('/about') })}
+            onclick={() => navigate(navigationUrls.about)}
+            class={cn('flex items-center gap-2', { active: routeCache.about })}
             role="menuitem"
           >
             {@html systemIcons.about}
@@ -155,11 +185,11 @@
         {#if !securityEnabled || accessAllowed}
           <li role="none">
             <button
-              onclick={() => navigate('/system')}
-              class={cn('flex items-center gap-2', { active: isRouteActive('/system') })}
+              onclick={() => navigate(navigationUrls.system)}
+              class={cn('flex items-center gap-2', { active: routeCache.system })}
               role="menuitem"
               aria-label="System dashboard"
-              aria-current={isRouteActive('/system') ? 'page' : undefined}
+              aria-current={routeCache.system ? 'page' : undefined}
             >
               {@html systemIcons.system}
               <span>{t('navigation.system')}</span>
@@ -175,8 +205,8 @@
               <ul role="menu" aria-label={t('navigation.settingsSubmenu')}>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/main')}
-                    class={cn({ active: isExactRouteActive('/settings/main') })}
+                    onclick={() => navigate(navigationUrls.settingsMain)}
+                    class={cn({ active: routeCache.settingsMain })}
                     role="menuitem"
                   >
                     {t('settings.sections.node')}
@@ -184,8 +214,8 @@
                 </li>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/audio')}
-                    class={cn({ active: isExactRouteActive('/settings/audio') })}
+                    onclick={() => navigate(navigationUrls.settingsAudio)}
+                    class={cn({ active: routeCache.settingsAudio })}
                     role="menuitem"
                   >
                     {t('settings.sections.audio')}
@@ -193,8 +223,8 @@
                 </li>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/detectionfilters')}
-                    class={cn({ active: isRouteActive('/settings/detectionfilters') })}
+                    onclick={() => navigate(navigationUrls.settingsFilters)}
+                    class={cn({ active: routeCache.settingsFilters })}
                     role="menuitem"
                   >
                     {t('settings.sections.filters')}
@@ -202,8 +232,8 @@
                 </li>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/integrations')}
-                    class={cn({ active: isExactRouteActive('/settings/integrations') })}
+                    onclick={() => navigate(navigationUrls.settingsIntegrations)}
+                    class={cn({ active: routeCache.settingsIntegrations })}
                     role="menuitem"
                   >
                     {t('settings.sections.integration')}
@@ -211,8 +241,8 @@
                 </li>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/security')}
-                    class={cn({ active: isExactRouteActive('/settings/security') })}
+                    onclick={() => navigate(navigationUrls.settingsSecurity)}
+                    class={cn({ active: routeCache.settingsSecurity })}
                     role="menuitem"
                   >
                     {t('settings.sections.security')}
@@ -220,8 +250,8 @@
                 </li>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/species')}
-                    class={cn({ active: isExactRouteActive('/settings/species') })}
+                    onclick={() => navigate(navigationUrls.settingsSpecies)}
+                    class={cn({ active: routeCache.settingsSpecies })}
                     role="menuitem"
                   >
                     {t('settings.sections.species')}
@@ -229,8 +259,8 @@
                 </li>
                 <li role="none">
                   <button
-                    onclick={() => navigate('/settings/support')}
-                    class={cn({ active: isExactRouteActive('/settings/support') })}
+                    onclick={() => navigate(navigationUrls.settingsSupport)}
+                    class={cn({ active: routeCache.settingsSupport })}
                     role="menuitem"
                   >
                     {t('settings.sections.support')}

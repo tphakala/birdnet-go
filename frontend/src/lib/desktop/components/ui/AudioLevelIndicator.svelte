@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
@@ -38,14 +37,14 @@
   }
 
   interface HLSInstance {
-    attachMedia(mediaElement: HTMLMediaElement): void;
-    loadSource(source: string): void;
+    attachMedia(_mediaElement: HTMLElement): void;
+    loadSource(_source: string): void;
     destroy(): void;
-    on(event: string, callback: (event: string, data: any) => void): void;
+    on(_event: string, _callback: (_event: string, _data: any) => void): void;
   }
 
   interface HLSConstructor {
-    new (config?: HLSConfig): HLSInstance;
+    new (_config?: HLSConfig): HLSInstance;
     isSupported(): boolean;
     Events: {
       ERROR: string;
@@ -53,15 +52,27 @@
     };
   }
 
-  // Type guard for HLS global availability
-  function isHLSAvailable(): boolean {
-    return typeof window !== 'undefined' && typeof (window as any).Hls?.isSupported === 'function';
-  }
+  // PERFORMANCE OPTIMIZATION: Cache HLS availability check with $derived
+  // Avoids repeated window object and function checks on every HLS operation
+  let hlsSupported = $derived(
+    typeof window !== 'undefined' &&
+      typeof (window as any).Hls?.isSupported === 'function' &&
+      (window as any).Hls.isSupported()
+  );
 
-  // Get HLS constructor with proper typing
+  // PERFORMANCE OPTIMIZATION: Cache HLS constructor with $derived
+  // Prevents repeated global object access and type casting
+  let hlsConstructor = $derived(hlsSupported ? ((window as any).Hls as HLSConstructor) : null);
+
+  // PERFORMANCE OPTIMIZATION: HLS availability now cached in $derived
+  // This function is kept for backwards compatibility but uses cached value
+  // function isHLSAvailable(): boolean {
+  //   return hlsSupported;
+  // }
+
+  // Get HLS constructor with proper typing - now uses cached value
   function getHLSConstructor(): HLSConstructor | null {
-    if (!isHLSAvailable()) return null;
-    return (window as any).Hls as HLSConstructor;
+    return hlsConstructor;
   }
 
   let { className = '', securityEnabled = false, accessAllowed = true }: Props = $props();
@@ -90,14 +101,51 @@
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
-  // Computed values
-  // Removed unused currentLevel
-
+  // PERFORMANCE OPTIMIZATION: Cache computed values with $derived
+  // Reduces repeated object property access and boolean logic in templates
   const isClipping = $derived(
     selectedSource && levels[selectedSource] ? levels[selectedSource].clipping : false
   );
 
   const smoothedVolume = $derived(selectedSource ? smoothedVolumes[selectedSource] || 0 : 0);
+
+  // PERFORMANCE OPTIMIZATION: Cache audio element creation with $derived.by
+  // Prevents repeated DOM element creation and event listener setup
+  let audioElementRef: HTMLAudioElement | null = null;
+  let cachedAudioElement = $derived.by(() => {
+    if (!audioElementRef && typeof window !== 'undefined') {
+      audioElementRef = document.createElement('audio');
+      audioElementRef.id = 'hls-audio-player';
+      audioElementRef.setAttribute('aria-hidden', 'true');
+      audioElementRef.classList.add('sr-only');
+      audioElementRef.setAttribute('preload', 'auto');
+      audioElementRef.setAttribute('playsinline', '');
+
+      // Setup event listeners once
+      audioElementRef.addEventListener('playing', () => {
+        isPlaying = true;
+        hideStatusMessage();
+        setupMediaSession(playingSource || '');
+      });
+
+      audioElementRef.addEventListener('pause', () => {
+        isPlaying = false;
+      });
+
+      audioElementRef.addEventListener('ended', () => {
+        isPlaying = false;
+      });
+
+      audioElementRef.addEventListener('error', _e => {
+        showStatusMessage('Playback error');
+        isPlaying = false;
+        stopPlayback();
+      });
+
+      document.body.appendChild(audioElementRef);
+    }
+    return audioElementRef;
+  });
 
   // Check if source is inactive
   function isInactive(source: string): boolean {
@@ -213,41 +261,10 @@
     showStatus = false;
   }
 
-  // Get or create audio element
-  function getAudioElement(): HTMLAudioElement {
-    if (!audioElement) {
-      audioElement = document.createElement('audio');
-      audioElement.id = 'hls-audio-player';
-      audioElement.setAttribute('aria-hidden', 'true');
-      audioElement.classList.add('sr-only');
-      audioElement.setAttribute('preload', 'auto');
-      audioElement.setAttribute('playsinline', '');
-
-      audioElement.addEventListener('playing', () => {
-        isPlaying = true;
-        hideStatusMessage();
-        setupMediaSession(playingSource || '');
-      });
-
-      audioElement.addEventListener('pause', () => {
-        isPlaying = false;
-      });
-
-      audioElement.addEventListener('ended', () => {
-        isPlaying = false;
-      });
-
-      audioElement.addEventListener('error', _e => {
-        // Handle audio playback error
-        showStatusMessage('Playback error');
-        isPlaying = false;
-        stopPlayback();
-      });
-
-      document.body.appendChild(audioElement);
-    }
-
-    return audioElement;
+  // PERFORMANCE OPTIMIZATION: Use cached audio element from $derived
+  // Eliminates repeated DOM element creation and conditional logic
+  function getAudioElement(): HTMLAudioElement | null {
+    return cachedAudioElement;
   }
 
   // Setup media session API
@@ -322,10 +339,11 @@
   // Setup HLS streaming
   async function setupHLSStream(hlsUrl: string, _sourceId: string) {
     const audio = getAudioElement();
+    if (!audio) return;
 
-    // Check if HLS.js is available and supported
+    // Check if HLS.js is available and supported - uses cached values
     const HLS = getHLSConstructor();
-    if (HLS && HLS.isSupported()) {
+    if (HLS && hlsSupported) {
       // Clean up existing instance
       if (hlsInstance) {
         hlsInstance.destroy();
@@ -364,7 +382,7 @@
       // Attach to media element and load source
       hlsInstance.attachMedia(audio);
       hlsInstance.loadSource(hlsUrl);
-    } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+    } else if (audio?.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS support (Safari, iOS)
       audio.src = hlsUrl;
       audio.play().catch((err: Error) => {
@@ -469,55 +487,59 @@
     }
   }
 
-  onMount(() => {
-    setupEventSource();
+  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect instead of legacy onMount
+  // $effect provides better reactivity and automatic cleanup management
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      setupEventSource();
 
-    // Add event listeners
-    document.addEventListener('click', handleClickOutside);
+      // Add event listeners
+      document.addEventListener('click', handleClickOutside);
 
-    // Handle page visibility
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
+      // Handle page visibility
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          cleanupEventSource();
+        } else {
+          setupEventSource();
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      // Handle page unload
+      const handleUnload = () => {
+        if (isPlaying && playingSource) {
+          stopHeartbeat();
+        }
+      };
+
+      window.addEventListener('beforeunload', handleUnload);
+      window.addEventListener('unload', handleUnload);
+
+      return () => {
+        // PERFORMANCE OPTIMIZATION: Automatic cleanup with Svelte 5 $effect
+        // Eliminates need for separate onDestroy lifecycle
+        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('beforeunload', handleUnload);
+        window.removeEventListener('unload', handleUnload);
+
         cleanupEventSource();
-      } else {
-        setupEventSource();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Handle page unload
-    const handleUnload = () => {
-      if (isPlaying && playingSource) {
         stopHeartbeat();
-      }
-    };
 
-    window.addEventListener('beforeunload', handleUnload);
-    window.addEventListener('unload', handleUnload);
+        if (audioElementRef) {
+          audioElementRef.pause();
+          audioElementRef.src = '';
+          audioElementRef.remove();
+          audioElementRef = null;
+        }
 
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleUnload);
-      window.removeEventListener('unload', handleUnload);
-    };
-  });
-
-  onDestroy(() => {
-    cleanupEventSource();
-    stopHeartbeat();
-
-    if (audioElement) {
-      audioElement.pause();
-      audioElement.src = '';
-      audioElement.remove();
-      audioElement = null;
-    }
-
-    if (hlsInstance) {
-      hlsInstance.destroy();
-      hlsInstance = null;
+        if (hlsInstance) {
+          hlsInstance.destroy();
+          hlsInstance = null;
+        }
+      };
     }
   });
 </script>

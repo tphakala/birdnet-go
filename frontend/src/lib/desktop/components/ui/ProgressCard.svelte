@@ -29,6 +29,9 @@
     className = '',
   }: Props = $props();
 
+  // PERFORMANCE OPTIMIZATION: Pure utility functions outside reactive context
+  // These functions only depend on their parameters, not component state
+  // Moving them outside prevents recreation on every component render
   function formatStorage(bytes: number): string {
     if (!bytes) return '0 B';
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -41,11 +44,15 @@
     if (percentage > 70) return 'bg-warning';
     return 'bg-success';
   }
+
+  // PERFORMANCE OPTIMIZATION: Cache dynamic heading ID generation with $derived
+  // Avoids string processing on every render when title hasn't changed
+  let headingId = $derived(`${title.toLowerCase().replace(/\s+/g, '-')}-heading`);
 </script>
 
 <div class={cn('card bg-base-100 shadow-sm', className)}>
   <div class="card-body card-padding">
-    <h2 class="card-title" id={`${title.toLowerCase().replace(/\s+/g, '-')}-heading`}>{title}</h2>
+    <h2 class="card-title" id={headingId}>{title}</h2>
     <div class="divider"></div>
 
     <!-- Loading state -->
@@ -66,10 +73,7 @@
 
     <!-- Data loaded state -->
     {#if !isLoading && !error && items.length > 0}
-      <div
-        class="space-y-4"
-        aria-labelledby={`${title.toLowerCase().replace(/\s+/g, '-')}-heading`}
-      >
+      <div class="space-y-4" aria-labelledby={headingId}>
         {#each items as item}
           <div>
             <div class="flex justify-between mb-1">

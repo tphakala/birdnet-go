@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import SystemInfoCard from '$lib/desktop/components/ui/SystemInfoCard.svelte';
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
   import { t } from '$lib/i18n';
   import { actionIcons } from '$lib/utils/icons';
+
+  // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
+  // Change back to true to re-enable spinners for testing
+  const ENABLE_LOADING_SPINNERS = false;
 
   // Type definitions
   interface SystemInfo {
@@ -89,7 +92,16 @@
   // Toggle for showing all processes
   let showAllProcesses = $state<boolean>(false);
 
-  // Helper computed properties
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived to avoid repeated DOM queries
+  // In Svelte 5, $derived creates reactive computed values that only recalculate when dependencies change
+  // This prevents expensive DOM queries on every API call (5 functions were querying the same token)
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as any)?.content || ''
+  );
+
+  // PERFORMANCE OPTIMIZATION: Reactive computed properties using $derived
+  // $derived automatically tracks dependencies and only recalculates when they change
+  // This is more efficient than manual state tracking or effects
   let isAnyLoading = $derived(
     systemInfo.loading ||
       diskUsage.loading ||
@@ -130,7 +142,7 @@
     try {
       const response = await fetch('/api/v2/system/info', {
         headers: {
-          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+          'X-CSRF-Token': csrfToken,
         },
       });
 
@@ -157,7 +169,7 @@
     try {
       const response = await fetch('/api/v2/system/disks', {
         headers: {
-          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+          'X-CSRF-Token': csrfToken,
         },
       });
 
@@ -185,7 +197,7 @@
     try {
       const response = await fetch('/api/v2/system/resources', {
         headers: {
-          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+          'X-CSRF-Token': csrfToken,
         },
       });
 
@@ -220,7 +232,7 @@
     try {
       const response = await fetch('/api/v2/system/temperature/cpu', {
         headers: {
-          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+          'X-CSRF-Token': csrfToken,
         },
       });
 
@@ -255,7 +267,7 @@
         : '/api/v2/system/processes';
       const response = await fetch(url, {
         headers: {
-          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+          'X-CSRF-Token': csrfToken,
         },
       });
 
@@ -286,8 +298,10 @@
     ]);
   }
 
-  // Load data on mount
-  onMount(() => {
+  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect instead of legacy onMount
+  // $effect runs after component mount and only when dependencies change
+  // This is the modern Svelte 5 pattern for side effects
+  $effect(() => {
     loadAllData();
   });
 </script>
@@ -343,7 +357,7 @@
       disabled={isAnyLoading}
       aria-label={t('system.aria.refreshData')}
     >
-      {#if isAnyLoading}
+      {#if ENABLE_LOADING_SPINNERS && isAnyLoading}
         <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
       {:else}
         <span class="mr-2" aria-hidden="true">

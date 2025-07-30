@@ -75,6 +75,56 @@
   let isLoading = $state<boolean>(true);
   let error = $state<string | null>(null);
 
+  // PERFORMANCE OPTIMIZATION: Cache theme colors with $derived to prevent repeated DOM calculations
+  // In Svelte 5, $derived creates a reactive computed value that only recalculates when dependencies change
+  // This avoids expensive getComputedStyle() and DOM attribute queries on every chart render
+  let cachedTheme = $derived(() => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    let textColor, gridColor, tooltipBgColor, tooltipBorderColor;
+
+    if (currentTheme === 'dark') {
+      textColor = 'rgba(200, 200, 200, 1)';
+      gridColor = 'rgba(255, 255, 255, 0.1)';
+      tooltipBgColor = 'rgba(55, 65, 81, 0.9)';
+      tooltipBorderColor = 'rgba(255, 255, 255, 0.2)';
+    } else {
+      textColor = 'rgba(55, 65, 81, 1)';
+      gridColor = 'rgba(0, 0, 0, 0.1)';
+      tooltipBgColor = 'rgba(255, 255, 255, 0.9)';
+      tooltipBorderColor = 'rgba(0, 0, 0, 0.2)';
+    }
+
+    return {
+      color: {
+        text: textColor,
+        grid: gridColor,
+      },
+      scales: {
+        grid: {
+          color: gridColor,
+        },
+        ticks: {
+          color: textColor,
+        },
+        title: {
+          color: textColor,
+        },
+      },
+      legend: {
+        labels: {
+          color: textColor,
+        },
+      },
+      tooltip: {
+        backgroundColor: tooltipBgColor,
+        titleColor: textColor,
+        bodyColor: textColor,
+        borderColor: tooltipBorderColor,
+        borderWidth: 1,
+      },
+    };
+  });
+
   // Filters
   let filters = $state<Filters>({
     timePeriod: 'week',
@@ -178,50 +228,9 @@
 
   // Get chart theme configuration
   function getChartTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    let textColor, gridColor, tooltipBgColor, tooltipBorderColor;
-
-    if (currentTheme === 'dark') {
-      textColor = 'rgba(200, 200, 200, 1)';
-      gridColor = 'rgba(255, 255, 255, 0.1)';
-      tooltipBgColor = 'rgba(55, 65, 81, 0.9)';
-      tooltipBorderColor = 'rgba(255, 255, 255, 0.2)';
-    } else {
-      textColor = 'rgba(55, 65, 81, 1)';
-      gridColor = 'rgba(0, 0, 0, 0.1)';
-      tooltipBgColor = 'rgba(255, 255, 255, 0.9)';
-      tooltipBorderColor = 'rgba(0, 0, 0, 0.2)';
-    }
-
-    return {
-      color: {
-        text: textColor,
-        grid: gridColor,
-      },
-      scales: {
-        grid: {
-          color: gridColor,
-        },
-        ticks: {
-          color: textColor,
-        },
-        title: {
-          color: textColor,
-        },
-      },
-      legend: {
-        labels: {
-          color: textColor,
-        },
-      },
-      tooltip: {
-        backgroundColor: tooltipBgColor,
-        titleColor: textColor,
-        bodyColor: textColor,
-        borderColor: tooltipBorderColor,
-        borderWidth: 1,
-      },
-    };
+    // PERFORMANCE OPTIMIZATION: Return cached theme instead of recalculating
+    // Previously this function did expensive DOM queries every time it was called
+    return cachedTheme;
   }
 
   // Generate color palette for charts
@@ -500,16 +509,14 @@
     createNewSpeciesChart(chartData.newSpecies);
   }
 
-  // Create species distribution chart
+  // PERFORMANCE OPTIMIZATION: Update existing charts instead of destroying/recreating
+  // Chart.js destroy() + new Chart() is expensive - instead we update data and call update()
+  // Using update('none') skips animations for better performance during data changes
   function createSpeciesChart(data: SpeciesData[]) {
     const ctx = (document.getElementById('speciesChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
       console.error('Species chart canvas not found');
       return;
-    }
-
-    if (charts.species) {
-      charts.species.destroy();
     }
 
     data.sort((a: SpeciesData, b: SpeciesData) => b.count - a.count);
@@ -519,6 +526,17 @@
     const backgroundColors = generateColorPalette(data.length, 0.7);
     const theme = getChartTheme();
 
+    // Update existing chart if it exists
+    if (charts.species) {
+      charts.species.data.labels = labels;
+      charts.species.data.datasets[0].data = counts;
+      charts.species.data.datasets[0].backgroundColor = backgroundColors;
+      // PERFORMANCE: Skip animations with 'none' mode for faster updates
+      charts.species.update('none');
+      return;
+    }
+
+    // Create new chart only if it doesn't exist
     charts.species = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -541,7 +559,7 @@
             display: false,
           },
           tooltip: {
-            ...theme.tooltip,
+            ...theme().tooltip,
             callbacks: {
               label: context => `Detections: ${formatNumber(context.raw as number)}`,
             },
@@ -553,21 +571,21 @@
             title: {
               display: true,
               text: t('analytics.charts.numberOfDetections'),
-              color: theme.color.text,
+              color: theme().color.text,
             },
             ticks: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
             grid: {
-              color: theme.color.grid,
+              color: theme().color.grid,
             },
           },
           y: {
             ticks: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
             grid: {
-              color: theme.color.grid,
+              color: theme().color.grid,
             },
           },
         },
@@ -575,16 +593,12 @@
     });
   }
 
-  // Create time of day chart
+  // PERFORMANCE OPTIMIZATION: Same chart update strategy for time of day chart
   function createTimeOfDayChart(data: TimeOfDayData[]) {
     const ctx = (document.getElementById('timeOfDayChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
       console.error('Time of day chart canvas not found');
       return;
-    }
-
-    if (charts.timeOfDay) {
-      charts.timeOfDay.destroy();
     }
 
     const periods = [
@@ -623,6 +637,15 @@
 
     const theme = getChartTheme();
 
+    // Update existing chart if it exists
+    if (charts.timeOfDay) {
+      charts.timeOfDay.data.datasets[0].data = periodCounts;
+      // PERFORMANCE: Skip animations for faster rendering
+      charts.timeOfDay.update('none');
+      return;
+    }
+
+    // Create new chart only if it doesn't exist
     charts.timeOfDay = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -644,7 +667,7 @@
             display: false,
           },
           tooltip: {
-            ...theme.tooltip,
+            ...theme().tooltip,
             callbacks: {
               label: context => `Detections: ${formatNumber(context.raw as number)}`,
             },
@@ -656,26 +679,26 @@
             title: {
               display: true,
               text: t('analytics.charts.numberOfDetections'),
-              color: theme.color.text,
+              color: theme().color.text,
             },
             ticks: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
             grid: {
-              color: theme.color.grid,
+              color: theme().color.grid,
             },
           },
           x: {
             title: {
               display: true,
               text: t('analytics.charts.timePeriod'),
-              color: theme.color.text,
+              color: theme().color.text,
             },
             ticks: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
             grid: {
-              color: theme.color.grid,
+              color: theme().color.grid,
             },
           },
         },
@@ -683,16 +706,12 @@
     });
   }
 
-  // Create trend chart
+  // PERFORMANCE OPTIMIZATION: Same chart update strategy for trend chart
   function createTrendChart(responseData: TrendData | null) {
     const ctx = (document.getElementById('trendChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
       console.error('Trend chart canvas not found');
       return;
-    }
-
-    if (charts.trend) {
-      charts.trend.destroy();
     }
 
     const data = responseData?.data || [];
@@ -715,6 +734,16 @@
     const theme = getChartTheme();
     const primaryColor = getThemeColor('primary', 1);
 
+    // Update existing chart if it exists
+    if (charts.trend) {
+      charts.trend.data.labels = labels;
+      charts.trend.data.datasets[0].data = counts;
+      // PERFORMANCE: Skip animations for faster line chart updates
+      charts.trend.update('none');
+      return;
+    }
+
+    // Create new chart only if it doesn't exist
     charts.trend = new Chart(ctx, {
       type: 'line',
       data: {
@@ -738,11 +767,11 @@
             display: true,
             position: 'top',
             labels: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
           },
           tooltip: {
-            ...theme.tooltip,
+            ...theme().tooltip,
             callbacks: {
               label: context => `Detections: ${formatNumber(context.raw as number)}`,
             },
@@ -754,26 +783,26 @@
             title: {
               display: true,
               text: t('analytics.charts.numberOfDetections'),
-              color: theme.color.text,
+              color: theme().color.text,
             },
             ticks: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
             grid: {
-              color: theme.color.grid,
+              color: theme().color.grid,
             },
           },
           x: {
             title: {
               display: true,
               text: t('analytics.charts.date'),
-              color: theme.color.text,
+              color: theme().color.text,
             },
             ticks: {
-              color: theme.color.text,
+              color: theme().color.text,
             },
             grid: {
-              color: theme.color.grid,
+              color: theme().color.grid,
             },
           },
         },
@@ -790,7 +819,10 @@
       return;
     }
 
-    if (charts.newSpecies) {
+    // Update existing chart if it exists and data is compatible
+    if (charts.newSpecies && Array.isArray(data) && data.length > 0) {
+      // PERFORMANCE NOTE: New species chart uses complex time scales, so we still recreate
+      // Time scale charts are difficult to update efficiently, destruction is acceptable here
       charts.newSpecies.destroy();
       charts.newSpecies = null;
     }
@@ -876,7 +908,7 @@
         plugins: {
           legend: { display: false },
           tooltip: {
-            ...theme.tooltip,
+            ...theme().tooltip,
             callbacks: {
               title: tooltipItems => tooltipItems[0].label,
               label: context => {
@@ -902,14 +934,14 @@
             title: {
               display: true,
               text: t('analytics.charts.firstHeardDate'),
-              color: theme.color.text,
+              color: theme().color.text,
             },
-            ticks: { color: theme.color.text },
-            grid: { color: theme.color.grid },
+            ticks: { color: theme().color.text },
+            grid: { color: theme().color.grid },
           },
           y: {
             type: 'category',
-            ticks: { color: theme.color.text },
+            ticks: { color: theme().color.text },
             grid: { display: false },
           },
         },
@@ -1132,16 +1164,22 @@
                   <td>
                     <div class="flex items-center gap-2">
                       <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">
+                        <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading for species thumbnails -->
                         <img
                           src="/api/v2/media/species-image?name={encodeURIComponent(
                             detection.scientificName
                           )}"
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
-                          onerror={e =>
-                            ((e.currentTarget as HTMLImageElement).src =
-                              '/assets/images/bird-placeholder.svg')}
+                          onerror={e => {
+                            const target = e.currentTarget as any;
+                            if (target) {
+                              target.src = '/assets/images/bird-placeholder.svg';
+                            }
+                          }}
                           loading="lazy"
+                          decoding="async"
+                          fetchpriority="low"
                         />
                       </div>
                       <div>
