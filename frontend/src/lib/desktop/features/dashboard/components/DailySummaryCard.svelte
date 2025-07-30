@@ -10,8 +10,8 @@
 
   // Progressive loading timing constants (optimized for Svelte 5)
   const LOADING_PHASES = $state.raw({
-    skeleton: 0,     // 0ms - show skeleton immediately to reserve space
-    spinner: 650,    // 650ms - show spinner if still loading
+    skeleton: 0, // 0ms - show skeleton immediately to reserve space
+    spinner: 650, // 650ms - show spinner if still loading
   });
 
   // Layout constants - use $state.raw for static values
@@ -24,6 +24,56 @@
   interface SunTimes {
     sunrise: string; // ISO date string
     sunset: string; // ISO date string
+  }
+
+  // Column type definitions
+  interface BaseColumn {
+    key: string;
+    header?: string;
+    className?: string;
+    align?: string;
+  }
+
+  interface SpeciesColumn extends BaseColumn {
+    type: 'species';
+    sortable: boolean;
+  }
+
+  interface ProgressColumn extends BaseColumn {
+    type: 'progress';
+    align: string;
+  }
+
+  interface HourlyColumn extends BaseColumn {
+    type: 'hourly';
+    hour: number;
+    align: string;
+  }
+
+  interface BiHourlyColumn extends BaseColumn {
+    type: 'bi-hourly';
+    hour: number;
+    align: string;
+  }
+
+  interface SixHourlyColumn extends BaseColumn {
+    type: 'six-hourly';
+    hour: number;
+    align: string;
+  }
+
+  type ColumnDefinition =
+    | SpeciesColumn
+    | ProgressColumn
+    | HourlyColumn
+    | BiHourlyColumn
+    | SixHourlyColumn;
+
+  // URL builder types
+  interface URLBuilders {
+    species: (species: DailySpeciesSummary) => string;
+    speciesHour: (species: DailySpeciesSummary, hour: number, duration?: number) => string;
+    hourly: (hour: number, duration?: number) => string;
   }
 
   interface Props {
@@ -65,7 +115,7 @@
     if (loading) {
       loadingPhase = 'skeleton'; // Show skeleton immediately to reserve space
       showDelayedIndicator = false;
-      
+
       // Use untrack to prevent the timer from becoming a reactive dependency
       const spinnerTimer = setTimeout(() => {
         if (untrack(() => loading)) {
@@ -73,7 +123,7 @@
           showDelayedIndicator = true;
         }
       }, LOADING_PHASES.spinner);
-      
+
       return () => {
         clearTimeout(spinnerTimer);
       };
@@ -90,7 +140,6 @@
     if (cached) {
       return cached;
     }
-
 
     try {
       const response = await fetch(`/api/v2/weather/sun/${date}`);
@@ -138,22 +187,22 @@
   };
 
   // Static column metadata - use $state.raw() for performance (no deep reactivity needed)
-  const staticColumnDefs = $state.raw([
+  const staticColumnDefs = $state.raw<ColumnDefinition[]>([
     {
       key: 'common_name',
-      type: 'species',
+      type: 'species' as const,
       sortable: true,
       className: 'font-medium w-0 whitespace-nowrap',
     },
     {
       key: 'total_detections',
-      type: 'progress',
+      type: 'progress' as const,
       align: 'center',
       className: 'hidden 2xl:table-cell px-2 sm:px-4 w-100',
     },
     ...Array.from({ length: 24 }, (_, hour) => ({
       key: `hour_${hour}`,
-      type: 'hourly',
+      type: 'hourly' as const,
       hour,
       header: hour.toString().padStart(2, '0'),
       align: 'center',
@@ -163,7 +212,7 @@
       const hour = i * 2;
       return {
         key: `bi_hour_${hour}`,
-        type: 'bi-hourly',
+        type: 'bi-hourly' as const,
         hour,
         header: hour.toString().padStart(2, '0'),
         align: 'center',
@@ -174,7 +223,7 @@
       const hour = i * 6;
       return {
         key: `six_hour_${hour}`,
-        type: 'six-hourly',
+        type: 'six-hourly' as const,
         hour,
         header: hour.toString().padStart(2, '0'),
         align: 'center',
@@ -184,10 +233,10 @@
   ]);
 
   // Reactive columns with only dynamic headers - use $derived.by for complex logic
-  const columns = $derived.by(() => {
+  const columns = $derived.by((): ColumnDefinition[] => {
     // Early return for empty data to prevent unnecessary calculations
     if (staticColumnDefs.length === 0) return [];
-    
+
     return staticColumnDefs.map(colDef => ({
       ...colDef,
       header:
@@ -227,10 +276,13 @@
       if (!this.cache.has(key)) return undefined;
 
       // Move to end (most recently used)
-      const value = this.cache.get(key)!;
-      this.cache.delete(key);
-      this.cache.set(key, value);
-      return value;
+      const value = this.cache.get(key);
+      if (value !== undefined) {
+        this.cache.delete(key);
+        this.cache.set(key, value);
+        return value;
+      }
+      return undefined;
     }
 
     set(key: K, value: V): void {
@@ -239,8 +291,10 @@
         this.cache.delete(key);
       } else if (this.cache.size >= this.maxSize) {
         // Remove least recently used (first item)
-        const firstKey = this.cache.keys().next().value;
-        this.cache.delete(firstKey);
+        const firstKey = this.cache.keys().next().value as K;
+        if (firstKey !== undefined) {
+          this.cache.delete(firstKey);
+        }
       }
 
       // Add to end (most recently used)
@@ -262,11 +316,11 @@
 
   // Phase 4: Optimized URL building with memoization for 90%+ performance improvement
   const urlCache = $state.raw(new LRUCache<string, string>(500)); // Max 500 URLs cached - use $state.raw
-  const urlBuilders = $state({
+  const urlBuilders = $state<URLBuilders>({
     // Default functions to prevent undefined errors during initial render
-    species: () => '#',
-    speciesHour: () => '#',
-    hourly: () => '#',
+    species: (_species: DailySpeciesSummary) => '#',
+    speciesHour: (_species: DailySpeciesSummary, _hour: number, _duration?: number) => '#',
+    hourly: (_hour: number, _duration?: number) => '#',
   });
 
   // Reactive URL builder factory - clears cache when selectedDate changes
@@ -343,15 +397,15 @@
   const sortedData = $derived.by(() => {
     // Early return for empty data
     if (data.length === 0) return [];
-    
-    // Use toSorted (immutable) instead of spreading + sort for better performance
-    return data.toSorted((a, b) => b.count - a.count);
+
+    // Use spread + sort for compatibility
+    return [...data].sort((a: DailySpeciesSummary, b: DailySpeciesSummary) => b.count - a.count);
   });
 
   // Optimized max count calculations using $derived.by for better performance
   const globalMaxHourlyCount = $derived.by(() => {
     if (sortedData.length === 0) return 1;
-    
+
     let maxCount = 1;
     for (const species of sortedData) {
       for (const count of species.hourly_counts) {
@@ -367,7 +421,7 @@
     if (sortedData.length === 0) return 1;
 
     let maxCount = 0;
-    sortedData.forEach(species => {
+    sortedData.forEach((species: DailySpeciesSummary) => {
       for (let hour = 0; hour < 24; hour += 2) {
         const sum = (species.hourly_counts[hour] || 0) + (species.hourly_counts[hour + 1] || 0);
         maxCount = Math.max(maxCount, sum);
@@ -380,7 +434,7 @@
     if (sortedData.length === 0) return 1;
 
     let maxCount = 0;
-    sortedData.forEach(species => {
+    sortedData.forEach((species: DailySpeciesSummary) => {
       for (let hour = 0; hour < 24; hour += 6) {
         let sum = 0;
         for (let h = hour; h < hour + 6 && h < 24; h++) {
@@ -402,7 +456,9 @@
   <section class="card col-span-12 bg-base-100 shadow-sm">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
-        <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
+        <span class="card-title grow text-base sm:text-xl"
+          >{t('dashboard.dailySummary.title')}
+        </span>
         <div class="flex items-center gap-2">
           <!-- Previous day button -->
           <button
@@ -444,11 +500,13 @@
     <!-- Card Header with Date Navigation -->
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
-        <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
+        <span class="card-title grow text-base sm:text-xl"
+          >{t('dashboard.dailySummary.title')}
+        </span>
         <div class="flex items-center gap-2">
           <!-- Previous day button -->
           <button
-            onclick={onPreviousDay}  
+            onclick={onPreviousDay}
             class="btn btn-sm btn-ghost"
             aria-label={t('dashboard.dailySummary.navigation.previousDay')}
           >
@@ -502,7 +560,7 @@
                     {/if}
                   {:else if column.type === 'hourly'}
                     <!-- Hourly columns -->
-                    {@const hour = column.hour}
+                    {@const hour = (column as HourlyColumn).hour}
                     {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                     {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
                     <!-- Sun icon positioned absolutely above hour number -->
@@ -557,7 +615,7 @@
                     </a>
                   {:else if column.type === 'bi-hourly'}
                     <!-- Bi-hourly columns -->
-                    {@const hour = column.hour}
+                    {@const hour = (column as BiHourlyColumn).hour}
                     <a
                       href={urlBuilders.hourly(hour, 2)}
                       class="hover:text-primary cursor-pointer"
@@ -570,7 +628,7 @@
                     </a>
                   {:else if column.type === 'six-hourly'}
                     <!-- Six-hourly columns -->
-                    {@const hour = column.hour}
+                    {@const hour = (column as SixHourlyColumn).hour}
                     <a
                       href={urlBuilders.hourly(hour, 6)}
                       class="hover:text-primary cursor-pointer"
@@ -598,7 +656,7 @@
                       let classes = [];
                       if (column.type === 'hourly') {
                         // Hourly columns
-                        const hour = column.hour;
+                        const hour = (column as HourlyColumn).hour;
                         const count = item.hourly_counts[hour];
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
@@ -614,7 +672,10 @@
                         }
                       } else if (column.type === 'bi-hourly') {
                         // Bi-hourly columns
-                        const count = renderFunctions['bi-hourly'](item, column.hour);
+                        const count = renderFunctions['bi-hourly'](
+                          item,
+                          (column as BiHourlyColumn).hour
+                        );
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
                           const intensity = Math.min(
@@ -627,7 +688,10 @@
                         }
                       } else if (column.type === 'six-hourly') {
                         // Six-hourly columns
-                        const count = renderFunctions['six-hourly'](item, column.hour);
+                        const count = renderFunctions['six-hourly'](
+                          item,
+                          (column as SixHourlyColumn).hour
+                        );
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
                           const intensity = Math.min(
@@ -694,7 +758,9 @@
                       </div>
                     {:else if column.key === 'total_detections'}
                       <!-- Total detections bar -->
-                      {@const maxCount = Math.max(...sortedData.map(d => d.count))}
+                      {@const maxCount = Math.max(
+                        ...sortedData.map((d: DailySpeciesSummary) => d.count)
+                      )}
                       {@const width = (item.count / maxCount) * 100}
                       {@const roundedWidth =
                         Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
@@ -723,7 +789,7 @@
                       </div>
                     {:else if column.type === 'hourly'}
                       <!-- Hourly detections count -->
-                      {@const hour = column.hour}
+                      {@const hour = (column as HourlyColumn).hour}
                       {@const count = item.hourly_counts[hour]}
                       {#if count > 0}
                         <a
@@ -743,7 +809,7 @@
                       {/if}
                     {:else if column.type === 'bi-hourly'}
                       <!-- Bi-hourly detections count -->
-                      {@const hour = column.hour}
+                      {@const hour = (column as BiHourlyColumn).hour}
                       {@const count = renderFunctions['bi-hourly'](item, hour)}
                       {#if count > 0}
                         <!-- Bi-hourly detections count link -->
@@ -763,7 +829,7 @@
                       {/if}
                     {:else if column.type === 'six-hourly'}
                       <!-- Six-hourly detections count -->
-                      {@const hour = column.hour}
+                      {@const hour = (column as SixHourlyColumn).hour}
                       {@const count = renderFunctions['six-hourly'](item, hour)}
                       {#if count > 0}
                         <!-- Six-hourly detections count link -->
@@ -781,8 +847,6 @@
                       {:else}
                         -
                       {/if}
-                    {:else if column.render}
-                      {column.render(item, 0)}
                     {:else}
                       <!-- Default column rendering -->
                       <span class="text-sm">{(item as any)[column.key]}</span>
@@ -793,14 +857,14 @@
             {/each}
           </tbody>
         </table>
-          {#if sortedData.length === 0}
-            <div class="text-center py-8 text-base-content/60">
-              {t('dashboard.dailySummary.noSpecies')}
-            </div>
-          {/if}
-        </div>
+        {#if sortedData.length === 0}
+          <div class="text-center py-8 text-base-content/60">
+            {t('dashboard.dailySummary.noSpecies')}
+          </div>
+        {/if}
       </div>
-    </section>
+    </div>
+  </section>
 {/if}
 
 <style>

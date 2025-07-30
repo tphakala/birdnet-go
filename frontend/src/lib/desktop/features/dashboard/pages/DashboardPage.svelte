@@ -20,7 +20,6 @@
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
-  
 
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
@@ -575,10 +574,10 @@
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
 
-          // Optimized position update using $derived.by pattern
+      // Optimized position update using $derived.by pattern
       const currentPosition = existingIndex;
-      const newPosition = dailySummary.findIndex((species, i) => 
-        i < currentPosition && species.count < updated.count
+      const newPosition = dailySummary.findIndex(
+        (species, i) => i < currentPosition && species.count < updated.count
       );
 
       if (newPosition !== -1) {
@@ -700,20 +699,21 @@
   // Smart preloading function with proper dependency tracking
   function preloadAdjacentDate(direction: 'prev' | 'next') {
     const date = new Date(selectedDate);
-    const targetDate = direction === 'prev' 
-      ? new Date(date.setDate(date.getDate() - 1))
-      : new Date(date.setDate(date.getDate() + 1));
-    
+    const targetDate =
+      direction === 'prev'
+        ? new Date(date.setDate(date.getDate() - 1))
+        : new Date(date.setDate(date.getDate() + 1));
+
     const dateString = getLocalDateString(targetDate);
-    
+
     // Don't preload future dates or already cached data
     if (direction === 'next' && isFutureDate(dateString)) return;
     if (dailySummaryCache.has(dateString) || preloadCache.has(dateString)) return;
-    
+
     // Start preloading using untrack to prevent reactive dependencies
-    const preloadPromise = untrack(() => 
+    const preloadPromise = untrack(() =>
       fetch(`/api/v2/analytics/species/daily?date=${dateString}`)
-        .then(response => response.ok ? response.json() : null)
+        .then(response => (response.ok ? response.json() : null))
         .then(data => {
           if (data) {
             dailySummaryCache.set(dateString, {
@@ -731,7 +731,7 @@
           return null;
         })
     );
-    
+
     preloadCache.set(dateString, preloadPromise);
   }
 
@@ -790,18 +790,18 @@
   />
 
   <!-- Recent Detections Section -->
-    <RecentDetectionsCard
-      data={recentDetections}
-      loading={isLoadingDetections}
-      error={detectionsError}
-      limit={detectionLimit}
-      onLimitChange={handleDetectionLimitChange}
-      onRowClick={handleDetectionClick}
-      onRefresh={handleManualRefresh}
-      {newDetectionIds}
-      {detectionArrivalTimes}
-      onFreezeStart={handleFreezeStart}
-      onFreezeEnd={handleFreezeEnd}
-      updatesAreFrozen={freezeCount > 0}
-    />
+  <RecentDetectionsCard
+    data={recentDetections}
+    loading={isLoadingDetections}
+    error={detectionsError}
+    limit={detectionLimit}
+    onLimitChange={handleDetectionLimitChange}
+    onRowClick={handleDetectionClick}
+    onRefresh={handleManualRefresh}
+    {newDetectionIds}
+    {detectionArrivalTimes}
+    onFreezeStart={handleFreezeStart}
+    onFreezeEnd={handleFreezeEnd}
+    updatesAreFrozen={freezeCount > 0}
+  />
 </div>
