@@ -21,8 +21,6 @@
   let detectionsError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
   
-  // Render coordination to prevent layout shifts
-  let dailySummaryReady = $state(false);
 
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
@@ -77,7 +75,6 @@
   async function fetchDailySummary() {
     isLoadingSummary = true;
     summaryError = null;
-    dailySummaryReady = false; // Reset coordination state
 
     try {
       // Check cache first - if valid entry exists within TTL, return it
@@ -86,7 +83,6 @@
         // Cache hit - use cached data directly
         dailySummary = cached.data;
         isLoadingSummary = false;
-        dailySummaryReady = true; // Mark as ready for coordination
         console.debug(`Daily summary cache hit for ${selectedDate}`);
         return;
       }
@@ -116,7 +112,6 @@
       console.error('Error fetching daily summary:', error);
     } finally {
       isLoadingSummary = false;
-      dailySummaryReady = true; // Mark as ready even on error
     }
   }
 
@@ -794,8 +789,7 @@
     onDateChange={handleDateChange}
   />
 
-  <!-- Recent Detections Section - only render when daily summary is ready -->
-  {#if dailySummaryReady || summaryError}
+  <!-- Recent Detections Section -->
     <RecentDetectionsCard
       data={recentDetections}
       loading={isLoadingDetections}
@@ -810,5 +804,4 @@
       onFreezeEnd={handleFreezeEnd}
       updatesAreFrozen={freezeCount > 0}
     />
-  {/if}
 </div>
