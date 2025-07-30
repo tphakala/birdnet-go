@@ -54,7 +54,7 @@ export function parseSearchQuery(query: string): ParsedSearch {
     return result;
   }
 
-  // Regular expression to match filter patterns like "filter:value" or "filter:>value"
+  // Regular expression to match filter patterns like "filter:value" or "filter:>value"\n  // eslint-disable-next-line security/detect-unsafe-regex
   const filterRegex = /(\w+):((?:[><=]+)?[^\s]+)/g;
   const textParts: string[] = [];
   let lastIndex = 0;

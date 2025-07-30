@@ -41,6 +41,7 @@ class SSENotificationManager {
       });
 
       this.eventSource.onopen = () => {
+        // eslint-disable-next-line no-console
         console.log('SSE notification connection opened');
         this.isConnected = true;
       };
@@ -52,11 +53,13 @@ class SSENotificationManager {
           this.handleNotification(notification);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for backwards compatibility
+          // eslint-disable-next-line no-console
           console.warn('SSE general message parsing error (ignored):', error, 'Data:', event.data);
         }
       };
 
       this.eventSource.onerror = (error: Event) => {
+        // eslint-disable-next-line no-console
         console.error('SSE notification error:', error);
         this.isConnected = false;
         // ReconnectingEventSource handles reconnection automatically
@@ -66,10 +69,12 @@ class SSENotificationManager {
       this.eventSource.addEventListener('connected', (event: Event) => {
         try {
           const messageEvent = event as MessageEvent;
-          const data = JSON.parse(messageEvent.data);
-          console.log('SSE connected:', data);
+          const _data = JSON.parse(messageEvent.data);
+          // Debug logging - can be removed for production
+          // console.log('SSE connected:', data);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for connection events
+          // eslint-disable-next-line no-console
           console.warn('SSE connected event parsing error (ignored):', error);
         }
       });
@@ -81,6 +86,7 @@ class SSENotificationManager {
           const toastData: SSEToastData = JSON.parse(messageEvent.data);
           this.handleToast(toastData);
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.error('Error processing toast event:', error);
         }
       });
@@ -93,10 +99,12 @@ class SSENotificationManager {
           // Heartbeat received successfully - could add connection health tracking here
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for heartbeat
+          // eslint-disable-next-line no-console
           console.warn('SSE heartbeat parsing error (ignored):', error);
         }
       });
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Failed to create SSE connection:', error);
       // Try again in 5 seconds
       setTimeout(() => this.connect(), 5000);
@@ -133,7 +141,8 @@ class SSENotificationManager {
                 window.location.href = toastData.action.url;
               } else if (toastData.action?.handler) {
                 // Handle custom actions if needed
-                console.log('Toast action handler:', toastData.action.handler);
+                // Debug logging - can be removed for production
+                // console.log('Toast action handler:', toastData.action.handler);
               }
             },
           },

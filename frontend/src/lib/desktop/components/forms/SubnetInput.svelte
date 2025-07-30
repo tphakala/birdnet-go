@@ -42,7 +42,7 @@
 
     const trimmed = cidr.trim();
 
-    // Basic CIDR format check
+    // Basic CIDR format check\n    // eslint-disable-next-line security/detect-unsafe-regex
     const cidrPattern = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
     if (!cidrPattern.test(trimmed)) {
       return 'Invalid CIDR format. Use format like 192.168.1.0/24';

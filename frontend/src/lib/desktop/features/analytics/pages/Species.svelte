@@ -3,6 +3,7 @@
   import StatCard from '../components/ui/StatCard.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
+  import { formatNumber } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
 
   // Type definitions
@@ -63,10 +64,6 @@
 
   function formatDateForInput(date: Date): string {
     return date.toISOString().split('T')[0];
-  }
-
-  function formatNumber(number: number): string {
-    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
 
   function formatPercentage(value: number): string {

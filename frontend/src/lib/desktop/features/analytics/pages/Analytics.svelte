@@ -6,6 +6,7 @@
   import ChartCard from '../components/ui/ChartCard.svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
+  import { formatNumber } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
 
   // Type definitions
@@ -160,11 +161,6 @@
     trend: null,
     newSpecies: null,
   };
-
-  // Format number with thousand separators
-  function formatNumber(number: number): string {
-    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  }
 
   // Format percentage
   function formatPercentage(value: number): string {

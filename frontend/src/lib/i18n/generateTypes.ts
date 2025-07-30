@@ -154,10 +154,14 @@ export interface TranslateFunction {
     const outputPath = join(__dirname, 'types.generated.ts');
     writeFileSync(outputPath, tsContent, 'utf-8');
 
+    // eslint-disable-next-line no-console
     console.log(`✅ Generated TypeScript types at: ${outputPath}`);
+    // eslint-disable-next-line no-console
     console.log(`📊 Total translation keys: ${translationKeys.split('\n').length - 1}`);
+    // eslint-disable-next-line no-console
     console.log(`📊 Keys with parameters: ${paramTypes.length}`);
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error('❌ Error generating types:', error);
     process.exit(1);
   }

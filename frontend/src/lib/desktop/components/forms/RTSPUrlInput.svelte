@@ -13,6 +13,7 @@
 
   function isValidRtspUrl(url: string): boolean {
     // RTSP URL validation regex pattern
+
     const rtspPattern =
       /^rtsp:\/\/(?:(?:[a-zA-Z0-9-._~!$&'()*+,;=:]|%[0-9A-Fa-f]{2})*@)?(?:\[(?:[0-9a-fA-F:.]+)\]|(?:[0-9]{1,3}\.){3}[0-9]{1,3}|(?:[a-zA-Z0-9-._~!$&'()*+,;=]|%[0-9A-Fa-f]{2})+)(?::[0-9]+)?(?:\/(?:[a-zA-Z0-9-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[a-zA-Z0-9-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(?:#(?:[a-zA-Z0-9-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?$/i;
     return rtspPattern.test(url);
@@ -26,6 +27,7 @@
       newUrl = '';
     } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
       // URL is not empty but invalid - could add user feedback here
+      // eslint-disable-next-line no-console
       console.warn('Invalid RTSP URL format:', trimmedUrl);
     }
   }
@@ -37,6 +39,7 @@
 
   function updateUrl(index: number, value: string) {
     const updatedUrls = [...urls];
+    // eslint-disable-next-line security/detect-object-injection
     updatedUrls[index] = { ...updatedUrls[index], url: value };
     onUpdate(updatedUrls);
   }

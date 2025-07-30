@@ -112,13 +112,17 @@ describe('Color Contrast Tests', () => {
       const opacity50 = applyOpacity(lightTheme.text, lightTheme.background, 0.5);
       const ratio50 = getContrastRatio(opacity50, lightTheme.background);
 
+      // eslint-disable-next-line no-console
       console.log('Light theme opacity contrast ratios:');
+      // eslint-disable-next-line no-console
       console.log(
         `70% opacity: ${ratio70.toFixed(2)} (${ratio70 >= WCAG_AA_NORMAL ? 'PASS' : 'FAIL'})`
       );
+      // eslint-disable-next-line no-console
       console.log(
         `60% opacity: ${ratio60.toFixed(2)} (${ratio60 >= WCAG_AA_NORMAL ? 'PASS' : 'FAIL'})`
       );
+      // eslint-disable-next-line no-console
       console.log(
         `50% opacity: ${ratio50.toFixed(2)} (${ratio50 >= WCAG_AA_NORMAL ? 'PASS' : 'FAIL'})`
       );
@@ -157,13 +161,17 @@ describe('Color Contrast Tests', () => {
       const opacity50 = applyOpacity(darkTheme.text, darkTheme.background, 0.5);
       const ratio50 = getContrastRatio(opacity50, darkTheme.background);
 
+      // eslint-disable-next-line no-console
       console.log('Dark theme opacity contrast ratios:');
+      // eslint-disable-next-line no-console
       console.log(
         `70% opacity: ${ratio70.toFixed(2)} (${ratio70 >= WCAG_AA_NORMAL ? 'PASS' : 'FAIL'})`
       );
+      // eslint-disable-next-line no-console
       console.log(
         `60% opacity: ${ratio60.toFixed(2)} (${ratio60 >= WCAG_AA_NORMAL ? 'PASS' : 'FAIL'})`
       );
+      // eslint-disable-next-line no-console
       console.log(
         `50% opacity: ${ratio50.toFixed(2)} (${ratio50 >= WCAG_AA_NORMAL ? 'PASS' : 'FAIL'})`
       );
@@ -208,6 +216,7 @@ describe('Color Contrast Tests', () => {
 
       colors.forEach(({ name, color }) => {
         const ratio = getContrastRatio(color, lightTheme.background);
+        // eslint-disable-next-line no-console
         console.log(`${name} color contrast: ${ratio.toFixed(2)}`);
         expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
       });

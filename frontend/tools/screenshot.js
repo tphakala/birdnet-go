@@ -127,7 +127,9 @@ async function takeScreenshot() {
   const outputPath = path.join(outputDir, filename);
 
   // Ensure output directory exists
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!fs.existsSync(outputDir)) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
