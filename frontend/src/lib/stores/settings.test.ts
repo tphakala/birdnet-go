@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
-import type { BirdNetSettings } from './settings';
+import type { BirdNetSettings, RealtimeSettings } from './settings';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -19,7 +19,7 @@ vi.mock('./toast.js', () => ({
   },
 }));
 
-describe('Settings Store - Range Filter Update Bug', () => {
+describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   beforeEach(() => {
     // Reset store to initial state
     settingsStore.set({
@@ -35,13 +35,6 @@ describe('Settings Store - Range Filter Update Bug', () => {
           threads: 4,
           latitude: 40.7128,
           longitude: -74.006,
-          dynamicThreshold: {
-            enabled: false,
-            debug: false,
-            trigger: 0.8,
-            min: 0.3,
-            validHours: 24,
-          },
           rangeFilter: {
             model: 'latest',
             threshold: 0.03,
@@ -56,6 +49,15 @@ describe('Settings Store - Range Filter Update Bug', () => {
             name: '',
             username: '',
             password: '',
+          },
+        },
+        realtime: {
+          dynamicThreshold: {
+            enabled: false,
+            debug: false,
+            trigger: 0.8,
+            min: 0.3,
+            validHours: 24,
           },
         },
       },
@@ -178,5 +180,43 @@ describe('Settings Store - Range Filter Update Bug', () => {
     expect(updatedBirdnet.rangeFilter.model).toBe('latest');
     expect(updatedBirdnet.rangeFilter.speciesCount).toBe(null);
     expect(updatedBirdnet.rangeFilter.species).toEqual([]);
+  });
+
+  it('should update dynamicThreshold settings in realtime section', () => {
+    // Verify initial dynamic threshold state
+    const initialState = get(settingsStore);
+    const initialDynamicThreshold = initialState.formData.realtime?.dynamicThreshold;
+
+    expect(initialDynamicThreshold?.enabled).toBe(false);
+    expect(initialDynamicThreshold?.trigger).toBe(0.8);
+    expect(initialDynamicThreshold?.min).toBe(0.3);
+
+    // Update dynamic threshold enabled state
+    settingsActions.updateSection('realtime', {
+      dynamicThreshold: {
+        ...initialDynamicThreshold!,
+        enabled: true,
+        min: 0.4,
+      },
+    });
+
+    // Get updated state
+    const updatedState = get(settingsStore);
+    const updatedRealtime = updatedState.formData.realtime as RealtimeSettings;
+
+    // Verify dynamic threshold was updated in realtime section
+    expect(updatedRealtime.dynamicThreshold?.enabled).toBe(true);
+    expect(updatedRealtime.dynamicThreshold?.min).toBe(0.4);
+    expect(updatedRealtime.dynamicThreshold?.trigger).toBe(0.8); // Preserved
+    expect(updatedRealtime.dynamicThreshold?.validHours).toBe(24); // Preserved
+  });
+
+  it('should not have dynamicThreshold in birdnet section', () => {
+    // Verify that birdnet section doesn't contain dynamicThreshold
+    const state = get(settingsStore);
+    const birdnetData = state.formData.birdnet as any;
+
+    expect(birdnetData).not.toHaveProperty('dynamicThreshold');
+    expect(state.formData.realtime?.dynamicThreshold).toBeDefined();
   });
 });

@@ -48,6 +48,7 @@ type Controller struct {
 	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
+	DisableSaveSettings bool          // Flag to disable saving settings to disk (for tests)
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
@@ -626,6 +627,17 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 	}
 
 	return ctx.JSON(code, errorResp)
+}
+
+// HandleErrorForTest constructs and returns an echo.HTTPError for testing purposes
+// This method is used in tests where echo.HTTPError is expected for error assertions
+func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message string, code int) error {
+	// Include the original error message for better test assertions
+	fullMessage := message
+	if err != nil {
+		fullMessage = fmt.Sprintf("%s: %v", message, err)
+	}
+	return echo.NewHTTPError(code, fullMessage)
 }
 
 // Debug logs debug messages when debug mode is enabled

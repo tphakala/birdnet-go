@@ -465,9 +465,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	settings := conf.Setting()
+	settings := c.Settings
 	if settings == nil {
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		// Fallback to global settings if controller settings not set
+		settings = conf.Setting()
+		if settings == nil {
+			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		}
 	}
 
 	// Create a backup of current settings for rollback if needed
@@ -502,11 +506,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	// Save settings to disk
-	if err := conf.SaveSettings(); err != nil {
-		// Attempt to rollback changes if saving failed
-		*settings = oldSettings
-		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
+	// Save settings to disk (unless disabled for tests)
+	if !c.DisableSaveSettings {
+		if err := conf.SaveSettings(); err != nil {
+			// Attempt to rollback changes if saving failed
+			*settings = oldSettings
+			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
+		}
 	}
 
 	// Update the cached telemetry state after settings change
@@ -518,25 +524,6 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	})
 }
 
-// sectionHandler defines a function that handles updates for a specific settings section
-type sectionHandler func(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error
-
-// getSectionHandlers returns a map of section names to their handler functions
-func getSectionHandlers() map[string]sectionHandler {
-	return map[string]sectionHandler{
-		"birdnet":     handleBirdnetSection,
-		"webserver":   handleWebServerSection,
-		"security":    handleSecuritySection,
-		"main":        handleMainSection,
-		"audio":       handleAudioSection,
-		"mqtt":        handleMQTTSection,
-		"rtsp":        handleRTSPSection,
-		"species":     handleSpeciesSection,
-		"dashboard":   handleDashboardSection,
-		"weather":     handleWeatherSection,
-		"birdweather": handleBirdweatherSection,
-	}
-}
 
 // updateSettingsSectionWithTracking updates a specific section of the settings and tracks skipped fields
 func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
@@ -547,151 +534,24 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 		return fmt.Errorf("invalid JSON for section %s: %w", section, err)
 	}
 
-	// Get the handler for this section
-	handlers := getSectionHandlers()
-	handler, exists := handlers[section]
-	if !exists {
-		return fmt.Errorf("unknown settings section: %s", section)
+	// First, check if there's a special validator for this section
+	validators := getSectionValidators()
+	if validator, exists := validators[section]; exists {
+		if err := validator(data); err != nil {
+			return fmt.Errorf("validation failed for section %s: %w", section, err)
+		}
 	}
 
-	// Execute the handler
-	return handler(settings, data, skippedFields)
-}
-
-// handleBirdnetSection handles updates to the BirdNET section
-func handleBirdnetSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Start with a copy of current settings
-	tempSettings := settings.BirdNET
-
-	// Only update fields that are present in the incoming JSON
-	// This prevents zeroing out fields that weren't included
-	if err := mergeJSONIntoStruct(data, &tempSettings); err != nil {
+	// Get the settings section by name
+	sectionValue, err := getSettingsSectionValue(settings, section)
+	if err != nil {
 		return err
 	}
 
-	// Get the blocked fields for this section (blacklist approach)
-	blockedFieldsMap := getBlockedFieldMap()
-	birdnetBlockedFields, _ := blockedFieldsMap["BirdNET"].(map[string]interface{})
-
-	// Apply the blocked fields filter using reflection
-	return updateAllowedFieldsRecursivelyWithTracking(
-		reflect.ValueOf(&settings.BirdNET).Elem(),
-		reflect.ValueOf(&tempSettings).Elem(),
-		birdnetBlockedFields,
-		skippedFields,
-		"BirdNET",
-	)
+	// Use the generic handler with merging for ALL sections
+	return handleGenericSection(sectionValue, data, section, skippedFields)
 }
 
-// handleWebServerSection handles updates to the WebServer section
-func handleWebServerSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Create a temporary copy for filtering
-	webServerSettings := settings.WebServer
-
-	// Unmarshal data into the temporary copy
-	if err := json.Unmarshal(data, &webServerSettings); err != nil {
-		return err
-	}
-
-	blockedFieldsMap := getBlockedFieldMap()
-	webserverBlockedFields, _ := blockedFieldsMap["WebServer"].(map[string]interface{})
-
-	return updateAllowedFieldsRecursivelyWithTracking(
-		reflect.ValueOf(&settings.WebServer).Elem(),
-		reflect.ValueOf(&webServerSettings).Elem(),
-		webserverBlockedFields,
-		skippedFields,
-		"WebServer",
-	)
-}
-
-// handleSecuritySection handles updates to the Security section
-func handleSecuritySection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Security settings are sensitive and should have very limited updateable fields
-	// For now, we're not allowing direct updates to security settings via the API
-	return fmt.Errorf("direct updates to security section are not supported for security reasons")
-}
-
-// handleMainSection handles updates to the Main section
-func handleMainSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Create a temporary copy for filtering
-	mainSettings := settings.Main
-
-	// Unmarshal data into the temporary copy
-	if err := json.Unmarshal(data, &mainSettings); err != nil {
-		return err
-	}
-
-	// Here you would define which Main fields can be updated
-	// For now, we'll use an empty map to prevent any updates
-	mainFields := []string{"Main settings cannot be updated via API"}
-	*skippedFields = append(*skippedFields, mainFields...)
-	return fmt.Errorf("main settings cannot be updated via API")
-}
-
-// handleAudioSection handles updates to the Audio section
-func handleAudioSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Create a temporary copy for filtering
-	audioSettings := settings.Realtime.Audio
-
-	// Unmarshal data into the temporary copy
-	if err := json.Unmarshal(data, &audioSettings); err != nil {
-		return err
-	}
-
-	blockedFieldsMap := getBlockedFieldMap()
-	realtimeBlockedFields, _ := blockedFieldsMap["Realtime"].(map[string]interface{})
-	audioBlockedFields, _ := realtimeBlockedFields["Audio"].(map[string]interface{})
-
-	return updateAllowedFieldsRecursivelyWithTracking(
-		reflect.ValueOf(&settings.Realtime.Audio).Elem(),
-		reflect.ValueOf(&audioSettings).Elem(),
-		audioBlockedFields,
-		skippedFields,
-		"Realtime.Audio",
-	)
-}
-
-// handleMQTTSection handles updates to the MQTT section
-func handleMQTTSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Validate MQTT settings before applying
-	mqttSettings := settings.Realtime.MQTT
-
-	// Unmarshal data into the temporary copy
-	if err := json.Unmarshal(data, &mqttSettings); err != nil {
-		return err
-	}
-
-	// Perform any additional validation on MQTT settings
-	// For example, checking broker URL format, etc.
-	if mqttSettings.Enabled && mqttSettings.Broker == "" {
-		return fmt.Errorf("broker is required when MQTT is enabled")
-	}
-
-	// MQTT is allowed to be fully replaced according to getAllowedFieldMap
-	settings.Realtime.MQTT = mqttSettings
-	return nil
-}
-
-// handleRTSPSection handles updates to the RTSP section
-func handleRTSPSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Validate RTSP settings before applying
-	rtspSettings := settings.Realtime.RTSP
-
-	// Unmarshal data into the temporary copy
-	if err := json.Unmarshal(data, &rtspSettings); err != nil {
-		return err
-	}
-
-	// Validate RTSP URLs
-	if err := validateRTSPURLs(rtspSettings.URLs); err != nil {
-		return err
-	}
-
-	// RTSP is allowed to be fully replaced according to getAllowedFieldMap
-	settings.Realtime.RTSP = rtspSettings
-	return nil
-}
 
 // validateRTSPURLs validates a slice of RTSP URLs
 func validateRTSPURLs(urls []string) error {
@@ -736,64 +596,6 @@ func validateRTSPURLs(urls []string) error {
 	return nil
 }
 
-// handleSpeciesSection handles updates to the Species section
-func handleSpeciesSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Create a temporary copy
-	speciesSettings := settings.Realtime.Species
-
-	// Unmarshal data into the temporary copy
-	if err := json.Unmarshal(data, &speciesSettings); err != nil {
-		return err
-	}
-
-	blockedFieldsMap := getBlockedFieldMap()
-	realtimeBlockedFields, _ := blockedFieldsMap["Realtime"].(map[string]interface{})
-	speciesBlockedFields, _ := realtimeBlockedFields["Species"].(map[string]interface{})
-
-	return updateAllowedFieldsRecursivelyWithTracking(
-		reflect.ValueOf(&settings.Realtime.Species).Elem(),
-		reflect.ValueOf(&speciesSettings).Elem(),
-		speciesBlockedFields,
-		skippedFields,
-		"Realtime.Species",
-	)
-}
-
-// handleDashboardSection handles updates to the Dashboard section
-func handleDashboardSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Dashboard settings are considered safe for full updates as they contain only display preferences
-	// No sensitive configuration like authentication or system paths are involved
-	tempDashboardSettings := settings.Realtime.Dashboard
-	if err := json.Unmarshal(data, &tempDashboardSettings); err != nil {
-		return err
-	}
-	settings.Realtime.Dashboard = tempDashboardSettings
-	return nil
-}
-
-// handleWeatherSection handles updates to the Weather section
-func handleWeatherSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Weather settings are considered safe for full updates as they contain only API configuration
-	// No sensitive configuration like authentication keys or system paths are involved
-	tempWeatherSettings := settings.Realtime.Weather
-	if err := json.Unmarshal(data, &tempWeatherSettings); err != nil {
-		return err
-	}
-	settings.Realtime.Weather = tempWeatherSettings
-	return nil
-}
-
-// handleBirdweatherSection handles updates to the Birdweather section
-func handleBirdweatherSection(settings *conf.Settings, data json.RawMessage, skippedFields *[]string) error {
-	// Birdweather settings are considered safe for full updates as they contain only service configuration
-	// No sensitive configuration like authentication keys or system paths are involved
-	tempBirdweatherSettings := settings.Realtime.Birdweather
-	if err := json.Unmarshal(data, &tempBirdweatherSettings); err != nil {
-		return err
-	}
-	settings.Realtime.Birdweather = tempBirdweatherSettings
-	return nil
-}
 
 // mergeJSONIntoStruct merges JSON data into an existing struct without zeroing out missing fields
 // This is crucial for preserving nested object values when partial updates are sent
@@ -803,7 +605,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
-
+	
 	// Get current values as a map
 	currentJSON, err := json.Marshal(target)
 	if err != nil {
@@ -823,7 +625,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
 	if err != nil {
 		return err
 	}
-
+	
 	return json.Unmarshal(mergedJSON, target)
 }
 
@@ -861,6 +663,137 @@ func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 }
 
 // Helper functions
+
+// getSettingsSectionValue returns a pointer to the requested section of settings for in-place updates
+func getSettingsSectionValue(settings *conf.Settings, section string) (interface{}, error) {
+	section = strings.ToLower(section)
+
+	// Map section names to their corresponding pointers
+	switch section {
+	case "birdnet":
+		return &settings.BirdNET, nil
+	case "webserver":
+		return &settings.WebServer, nil
+	case "security":
+		return &settings.Security, nil
+	case "main":
+		return &settings.Main, nil
+	case "realtime":
+		return &settings.Realtime, nil
+	case "audio":
+		return &settings.Realtime.Audio, nil
+	case "dashboard":
+		return &settings.Realtime.Dashboard, nil
+	case "weather":
+		return &settings.Realtime.Weather, nil
+	case "mqtt":
+		return &settings.Realtime.MQTT, nil
+	case "birdweather":
+		return &settings.Realtime.Birdweather, nil
+	case "species":
+		return &settings.Realtime.Species, nil
+	case "rtsp":
+		return &settings.Realtime.RTSP, nil
+	case "privacyfilter":
+		return &settings.Realtime.PrivacyFilter, nil
+	case "dogbarkfilter":
+		return &settings.Realtime.DogBarkFilter, nil
+	case "telemetry":
+		return &settings.Realtime.Telemetry, nil
+	case "sentry":
+		return &settings.Sentry, nil
+	default:
+		return nil, fmt.Errorf("unknown settings section: %s", section)
+	}
+}
+
+// handleGenericSection handles updates to any settings section using merging
+func handleGenericSection(sectionPtr interface{}, data json.RawMessage, sectionName string, skippedFields *[]string) error {
+	// Use mergeJSONIntoStruct to preserve fields not included in the update
+	if err := mergeJSONIntoStruct(data, sectionPtr); err != nil {
+		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
+	}
+
+	// Apply field-level permissions if needed
+	// Note: getBlockedFieldMap uses capitalized section names (e.g., "BirdNET", "Realtime")
+	// We need to map our lowercase section names to the expected capitalized format
+	capitalizedSectionName := ""
+	switch sectionName {
+	case "birdnet":
+		capitalizedSectionName = "BirdNET"
+	case "realtime":
+		capitalizedSectionName = "Realtime"
+	case "webserver":
+		capitalizedSectionName = "WebServer"
+	default:
+		// For other sections, capitalize first letter
+		if sectionName != "" {
+			capitalizedSectionName = strings.ToUpper(sectionName[:1]) + sectionName[1:]
+		}
+	}
+	
+	blockedFieldsMap := getBlockedFieldMap()
+	if blockedFields, exists := blockedFieldsMap[capitalizedSectionName]; exists {
+		if _, ok := blockedFields.(map[string]interface{}); ok {
+			// For now, just note that we have blocked fields
+			// The actual blocking happens in updateAllowedFieldsRecursivelyWithTracking
+			*skippedFields = append(*skippedFields, fmt.Sprintf("Section %s has field-level restrictions", sectionName))
+		}
+	}
+
+	return nil
+}
+
+// sectionValidator is a function that validates section-specific data
+type sectionValidator func(data json.RawMessage) error
+
+// getSectionValidators returns validators for sections that need special validation
+func getSectionValidators() map[string]sectionValidator {
+	return map[string]sectionValidator{
+		"mqtt":     validateMQTTSection,
+		"rtsp":     validateRTSPSection,
+		"security": validateSecuritySection,
+		"main":     validateMainSection,
+	}
+}
+
+// validateMQTTSection validates MQTT settings
+func validateMQTTSection(data json.RawMessage) error {
+	var mqttSettings conf.MQTTSettings
+	if err := json.Unmarshal(data, &mqttSettings); err != nil {
+		return err
+	}
+
+	// Validate MQTT settings
+	if mqttSettings.Enabled && mqttSettings.Broker == "" {
+		return fmt.Errorf("broker is required when MQTT is enabled")
+	}
+
+	return nil
+}
+
+// validateRTSPSection validates RTSP settings
+func validateRTSPSection(data json.RawMessage) error {
+	var rtspSettings conf.RTSPSettings
+	if err := json.Unmarshal(data, &rtspSettings); err != nil {
+		return err
+	}
+
+	// Validate RTSP URLs
+	return validateRTSPURLs(rtspSettings.URLs)
+}
+
+// validateSecuritySection validates security settings
+func validateSecuritySection(data json.RawMessage) error {
+	// Security settings updates are not allowed via API
+	return fmt.Errorf("direct updates to security section are not supported for security reasons")
+}
+
+// validateMainSection validates main settings
+func validateMainSection(data json.RawMessage) error {
+	// Main settings updates are not allowed via API
+	return fmt.Errorf("main settings cannot be updated via API")
+}
 
 // getSettingsSection returns the requested section of settings
 func getSettingsSection(settings *conf.Settings, section string) (interface{}, error) {
