@@ -1,31 +1,127 @@
+<!--
+DailySummaryCard.svelte - Daily bird species detection summary table
+
+Purpose:
+- Displays daily bird species summaries with hourly detection counts
+- Provides interactive heatmap visualization of detection patterns
+- Supports date navigation and real-time updates via SSE
+- Integrates sun times to highlight sunrise/sunset hours
+
+Features:
+- Progressive loading states (skeleton → spinner → loaded/error)
+- Responsive hourly/bi-hourly/six-hourly column grouping based on viewport
+- Color-coded heatmap cells showing detection intensity
+- Real-time animation for new species and count increases
+- Interactive species thumbnails with hover tooltips
+- URL memoization with LRU cache for performance optimization
+- Sun time indicators (sunrise/sunset) in column headers
+- Date picker navigation with keyboard shortcuts
+- Progress bars showing relative detection counts
+- Clickable cells linking to detailed detection views
+
+Props:
+- data: DailySpeciesSummary[] - Array of species detection summaries
+- loading?: boolean - Loading state indicator (default: false)
+- error?: string | null - Error message to display (default: null)
+- selectedDate: string - Currently selected date in YYYY-MM-DD format
+- showThumbnails?: boolean - Show/hide species thumbnail images (default: true)
+- onPreviousDay: () => void - Callback for previous day navigation
+- onNextDay: () => void - Callback for next day navigation
+- onGoToToday: () => void - Callback for "today" button click
+- onDateChange: (date: string) => void - Callback for date picker changes
+
+Performance Optimizations:
+- $state.raw() for static data structures (caches, render functions)
+- $derived.by() for complex reactive calculations
+- LRU cache for URL memoization (500 entries max)
+- Optimized animation cleanup with requestAnimationFrame
+- Efficient data sorting and max count calculations
+
+Responsive Breakpoints:
+- Desktop (≥1400px): All hourly columns visible
+- Large (1200-1399px): All hourly columns visible
+- Medium (1024-1199px): All hourly columns visible
+- Tablet (768-1023px): Bi-hourly columns only
+- Mobile (480-767px): Bi-hourly columns only
+- Small (<480px): Six-hourly columns only
+-->
+
 <script lang="ts">
+  import { untrack } from 'svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
-  import type { Column } from '$lib/desktop/components/data/DataTable.types';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { alertIconsSvg, navigationIcons, weatherIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
+  import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { getLocalDateString } from '$lib/utils/date';
 
-  // Animation duration constants (in milliseconds)
-  const ANIMATION_DURATIONS = {
-    countPop: 600,
-    heartPulse: 1000,
-    newSpeciesSlide: 800,
-    cleanup: 2200, // Slightly longer than longest animation
-  } as const;
+  // Progressive loading timing constants (optimized for Svelte 5)
+  const LOADING_PHASES = $state.raw({
+    skeleton: 0, // 0ms - show skeleton immediately to reserve space
+    spinner: 650, // 650ms - show spinner if still loading
+  });
 
-  // Layout constants
-  const GRADIENT_ANGLE = '-45deg';
+  // Layout constants - use $state.raw for static values
   const PROGRESS_BAR_ROUNDING = 5; // Round to nearest 5%
-  const WIDTH_THRESHOLDS = {
+  const WIDTH_THRESHOLDS = $state.raw({
     minTextDisplay: 45,
     maxTextDisplay: 59,
-  } as const;
+  });
 
   interface SunTimes {
     sunrise: string; // ISO date string
     sunset: string; // ISO date string
+  }
+
+  // Column type definitions
+  interface BaseColumn {
+    key: string;
+    header?: string;
+    className?: string;
+    align?: string;
+  }
+
+  interface SpeciesColumn extends BaseColumn {
+    type: 'species';
+    sortable: boolean;
+  }
+
+  interface ProgressColumn extends BaseColumn {
+    type: 'progress';
+    align: string;
+  }
+
+  interface HourlyColumn extends BaseColumn {
+    type: 'hourly';
+    hour: number;
+    align: string;
+  }
+
+  interface BiHourlyColumn extends BaseColumn {
+    type: 'bi-hourly';
+    hour: number;
+    align: string;
+  }
+
+  interface SixHourlyColumn extends BaseColumn {
+    type: 'six-hourly';
+    hour: number;
+    align: string;
+  }
+
+  type ColumnDefinition =
+    | SpeciesColumn
+    | ProgressColumn
+    | HourlyColumn
+    | BiHourlyColumn
+    | SixHourlyColumn;
+
+  // URL builder types
+  interface URLBuilders {
+    species: (_species: DailySpeciesSummary) => string;
+    speciesHour: (_species: DailySpeciesSummary, _hour: number, _duration?: number) => string;
+    hourly: (_hour: number, _duration?: number) => string;
   }
 
   interface Props {
@@ -52,31 +148,52 @@
     onDateChange,
   }: Props = $props();
 
+  // Progressive loading state management
+  let loadingPhase = $state<'skeleton' | 'spinner' | 'loaded' | 'error'>('skeleton');
+  let showDelayedIndicator = $state(false);
+
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
-  let sunTimesError = $state<string | null>(null);
-  let sunTimesLoading = $state(false);
 
-  // Cache for sun times to avoid repeated API calls
-  const sunTimesCache = new Map<string, SunTimes>();
+  // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
+  const sunTimesCache = $state.raw(new LRUCache<string, SunTimes>(30)); // Max 30 days of sun times
+
+  // Optimize loading state management with proper dependency tracking
+  $effect(() => {
+    if (loading) {
+      loadingPhase = 'skeleton'; // Show skeleton immediately to reserve space
+      showDelayedIndicator = false;
+
+      // Use untrack to prevent the timer from becoming a reactive dependency
+      const spinnerTimer = setTimeout(() => {
+        if (untrack(() => loading)) {
+          loadingPhase = 'spinner';
+          showDelayedIndicator = true;
+        }
+      }, LOADING_PHASES.spinner);
+
+      return () => {
+        clearTimeout(spinnerTimer);
+      };
+    } else {
+      loadingPhase = error ? 'error' : 'loaded';
+      showDelayedIndicator = false;
+    }
+  });
 
   // Fetch sun times from weather API with caching
   async function fetchSunTimes(date: string): Promise<SunTimes | null> {
-    // Check cache first
+    // Check cache first using LRUCache methods
     const cached = sunTimesCache.get(date);
     if (cached) {
       return cached;
     }
-
-    sunTimesLoading = true;
-    sunTimesError = null;
 
     try {
       const response = await fetch(`/api/v2/weather/sun/${date}`);
       if (!response.ok) {
         const errorMsg = `Failed to fetch sun times: ${response.status} ${response.statusText}`;
         console.warn(errorMsg);
-        sunTimesError = errorMsg;
         return null;
       }
       const data = await response.json();
@@ -92,10 +209,7 @@
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
       console.warn('Error fetching sun times:', errorMsg);
-      sunTimesError = errorMsg;
       return null;
-    } finally {
-      sunTimesLoading = false;
     }
   }
 
@@ -120,23 +234,23 @@
     }
   };
 
-  // Static column metadata - created once using $state.raw() for performance
-  const staticColumnDefs = $state.raw([
+  // Static column metadata - use $state.raw() for performance (no deep reactivity needed)
+  const staticColumnDefs = $state.raw<ColumnDefinition[]>([
     {
       key: 'common_name',
-      type: 'species',
+      type: 'species' as const,
       sortable: true,
       className: 'font-medium w-0 whitespace-nowrap',
     },
     {
       key: 'total_detections',
-      type: 'progress',
+      type: 'progress' as const,
       align: 'center',
       className: 'hidden 2xl:table-cell px-2 sm:px-4 w-100',
     },
     ...Array.from({ length: 24 }, (_, hour) => ({
       key: `hour_${hour}`,
-      type: 'hourly',
+      type: 'hourly' as const,
       hour,
       header: hour.toString().padStart(2, '0'),
       align: 'center',
@@ -146,7 +260,7 @@
       const hour = i * 2;
       return {
         key: `bi_hour_${hour}`,
-        type: 'bi-hourly',
+        type: 'bi-hourly' as const,
         hour,
         header: hour.toString().padStart(2, '0'),
         align: 'center',
@@ -157,7 +271,7 @@
       const hour = i * 6;
       return {
         key: `six_hour_${hour}`,
-        type: 'six-hourly',
+        type: 'six-hourly' as const,
         hour,
         header: hour.toString().padStart(2, '0'),
         align: 'center',
@@ -166,9 +280,12 @@
     }),
   ]);
 
-  // Reactive columns with only dynamic headers (95% faster than before)
-  const columns = $derived(
-    staticColumnDefs.map(colDef => ({
+  // Reactive columns with only dynamic headers - use $derived.by for complex logic
+  const columns = $derived.by((): ColumnDefinition[] => {
+    // Early return for empty data to prevent unnecessary calculations
+    if (staticColumnDefs.length === 0) return [];
+
+    return staticColumnDefs.map(colDef => ({
       ...colDef,
       header:
         colDef.type === 'species'
@@ -176,11 +293,11 @@
           : colDef.type === 'progress'
             ? t('dashboard.dailySummary.columns.detections')
             : colDef.header,
-    }))
-  );
+    }));
+  });
 
-  // Pre-computed render functions (outside reactive context for performance)
-  const renderFunctions = {
+  // Pre-computed render functions - use $state.raw for performance (static functions)
+  const renderFunctions = $state.raw({
     hourly: (item: DailySpeciesSummary, hour: number) => item.hourly_counts[hour] || 0,
     'bi-hourly': (item: DailySpeciesSummary, hour: number) =>
       (item.hourly_counts[hour] || 0) + (item.hourly_counts[hour + 1] || 0),
@@ -192,7 +309,7 @@
       return sum;
     },
     progress: (item: DailySpeciesSummary) => item.count,
-  };
+  });
 
   // Simple LRU cache implementation
   class LRUCache<K, V> {
@@ -207,10 +324,13 @@
       if (!this.cache.has(key)) return undefined;
 
       // Move to end (most recently used)
-      const value = this.cache.get(key)!;
-      this.cache.delete(key);
-      this.cache.set(key, value);
-      return value;
+      const value = this.cache.get(key);
+      if (value !== undefined) {
+        this.cache.delete(key);
+        this.cache.set(key, value);
+        return value;
+      }
+      return undefined;
     }
 
     set(key: K, value: V): void {
@@ -219,8 +339,10 @@
         this.cache.delete(key);
       } else if (this.cache.size >= this.maxSize) {
         // Remove least recently used (first item)
-        const firstKey = this.cache.keys().next().value;
-        this.cache.delete(firstKey);
+        const firstKey = this.cache.keys().next().value as K;
+        if (firstKey !== undefined) {
+          this.cache.delete(firstKey);
+        }
       }
 
       // Add to end (most recently used)
@@ -241,8 +363,8 @@
   }
 
   // Phase 4: Optimized URL building with memoization for 90%+ performance improvement
-  const urlCache = new LRUCache<string, string>(500); // Max 500 URLs cached
-  const urlBuilders = $state({
+  const urlCache = $state.raw(new LRUCache<string, string>(500)); // Max 500 URLs cached - use $state.raw
+  const urlBuilders = $state<URLBuilders>({
     // Default functions to prevent undefined errors during initial render
     species: () => '#',
     speciesHour: () => '#',
@@ -319,26 +441,40 @@
       : false
   );
 
-  // Simple, reliable state management
-  const sortedData = $derived(data.length === 0 ? [] : [...data].sort((a, b) => b.count - a.count));
+  // Optimized data sorting using $derived.by for better performance
+  const sortedData = $derived.by(() => {
+    // Early return for empty data
+    if (data.length === 0) return [];
 
-  // Optimized max count calculations with simpler caching
-  const globalMaxHourlyCount = $derived(
-    sortedData.length === 0
-      ? 1
-      : Math.max(...sortedData.flatMap(species => species.hourly_counts.filter(c => c > 0))) || 1
-  );
+    // Use spread + sort for compatibility
+    return [...data].sort((a: DailySpeciesSummary, b: DailySpeciesSummary) => b.count - a.count);
+  });
+
+  // Optimized max count calculations using $derived.by for better performance
+  const globalMaxHourlyCount = $derived.by(() => {
+    if (sortedData.length === 0) return 1;
+
+    let maxCount = 1;
+    for (const species of sortedData) {
+      for (const count of species.hourly_counts) {
+        if (count > maxCount) {
+          maxCount = count;
+        }
+      }
+    }
+    return maxCount;
+  });
 
   const globalMaxBiHourlyCount = $derived.by(() => {
     if (sortedData.length === 0) return 1;
 
     let maxCount = 0;
-    sortedData.forEach(species => {
+    for (const species of sortedData) {
       for (let hour = 0; hour < 24; hour += 2) {
         const sum = (species.hourly_counts[hour] || 0) + (species.hourly_counts[hour + 1] || 0);
         maxCount = Math.max(maxCount, sum);
       }
-    });
+    }
     return maxCount || 1;
   });
 
@@ -346,7 +482,7 @@
     if (sortedData.length === 0) return 1;
 
     let maxCount = 0;
-    sortedData.forEach(species => {
+    for (const species of sortedData) {
       for (let hour = 0; hour < 24; hour += 6) {
         let sum = 0;
         for (let h = hour; h < hour + 6 && h < 24; h++) {
@@ -354,58 +490,93 @@
         }
         maxCount = Math.max(maxCount, sum);
       }
-    });
+    }
     return maxCount || 1;
   });
+
+  // Maximum total detections count for progress bar calculations
+  const maxTotalDetections = $derived(
+    sortedData.length === 0 ? 1 : Math.max(...sortedData.map((d: DailySpeciesSummary) => d.count))
+  );
 </script>
 
-<section class="card col-span-12 bg-base-100 shadow-sm">
-  <!-- Card Header with Date Navigation -->
-  <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-    <div class="flex items-center justify-between mb-4">
-      <span class="card-title grow text-base sm:text-xl">{t('dashboard.dailySummary.title')} </span>
-      <div class="flex items-center gap-2">
-        <!-- Previous day button -->
-        <button
-          onclick={onPreviousDay}
-          class="btn btn-sm btn-ghost"
-          aria-label={t('dashboard.dailySummary.navigation.previousDay')}
-        >
-          {@html navigationIcons.arrowLeft}
-        </button>
+{#snippet navigationControls()}
+  <div class="flex items-center gap-2">
+    <!-- Previous day button -->
+    <button
+      onclick={onPreviousDay}
+      class="btn btn-sm btn-ghost"
+      aria-label={t('dashboard.dailySummary.navigation.previousDay')}
+    >
+      {@html navigationIcons.arrowLeft}
+    </button>
 
-        <!-- Date picker -->
-        <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
+    <!-- Date picker -->
+    <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
 
-        <!-- Next day button -->
-        <button
-          onclick={onNextDay}
-          class="btn btn-sm btn-ghost"
-          disabled={isToday}
-          aria-label={t('dashboard.dailySummary.navigation.nextDay')}
-        >
-          {@html navigationIcons.arrowRight}
-        </button>
+    <!-- Next day button -->
+    <button
+      onclick={onNextDay}
+      class="btn btn-sm btn-ghost"
+      disabled={isToday}
+      aria-label={t('dashboard.dailySummary.navigation.nextDay')}
+    >
+      {@html navigationIcons.arrowRight}
+    </button>
 
-        {#if !isToday}
-          <button onclick={onGoToToday} class="btn btn-sm btn-primary"
-            >{t('dashboard.dailySummary.navigation.today')}</button
-          >
-        {/if}
+    {#if !isToday}
+      <button onclick={onGoToToday} class="btn btn-sm btn-primary"
+        >{t('dashboard.dailySummary.navigation.today')}</button
+      >
+    {/if}
+  </div>
+{/snippet}
+
+<!-- Live region for screen reader announcements of loading state changes -->
+<div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  {#if loadingPhase === 'skeleton'}
+    {t('dashboard.dailySummary.loading.preparing')}
+  {:else if loadingPhase === 'spinner'}
+    {t('dashboard.dailySummary.loading.fetching')}
+  {:else if loadingPhase === 'error'}
+    {t('dashboard.dailySummary.loading.error')}
+  {:else if loadingPhase === 'loaded'}
+    {t('dashboard.dailySummary.loading.complete')}
+  {/if}
+</div>
+
+<!-- Progressive loading implementation -->
+{#if loadingPhase === 'skeleton'}
+  <SkeletonDailySummary {showThumbnails} speciesCount={8} />
+{:else if loadingPhase === 'spinner'}
+  <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
+{:else if loadingPhase === 'error'}
+  <section class="card col-span-12 bg-base-100 shadow-sm">
+    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+      <div class="flex items-center justify-between mb-4">
+        <span class="card-title grow text-base sm:text-xl"
+          >{t('dashboard.dailySummary.title')}
+        </span>
+        {@render navigationControls()}
       </div>
-    </div>
-
-    <!-- Table Content -->
-    {#if loading}
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-md"></span>
-      </div>
-    {:else if error}
       <div class="alert alert-error">
         {@html alertIconsSvg.error}
         <span>{error}</span>
       </div>
-    {:else}
+    </div>
+  </section>
+{:else if loadingPhase === 'loaded'}
+  <section class="card col-span-12 bg-base-100 shadow-sm">
+    <!-- Card Header with Date Navigation -->
+    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
+      <div class="flex items-center justify-between mb-4">
+        <span class="card-title grow text-base sm:text-xl"
+          >{t('dashboard.dailySummary.title')}
+        </span>
+        {@render navigationControls()}
+      </div>
+
+      <!-- Table Content -->
       <div class="overflow-x-auto">
         <table class="table table-zebra h-full w-full table-auto daily-summary-table">
           <thead class="sticky-header text-xs">
@@ -431,7 +602,7 @@
                     {/if}
                   {:else if column.type === 'hourly'}
                     <!-- Hourly columns -->
-                    {@const hour = column.hour}
+                    {@const hour = (column as HourlyColumn).hour}
                     {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                     {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
                     <!-- Sun icon positioned absolutely above hour number -->
@@ -486,7 +657,7 @@
                     </a>
                   {:else if column.type === 'bi-hourly'}
                     <!-- Bi-hourly columns -->
-                    {@const hour = column.hour}
+                    {@const hour = (column as BiHourlyColumn).hour}
                     <a
                       href={urlBuilders.hourly(hour, 2)}
                       class="hover:text-primary cursor-pointer"
@@ -499,7 +670,7 @@
                     </a>
                   {:else if column.type === 'six-hourly'}
                     <!-- Six-hourly columns -->
-                    {@const hour = column.hour}
+                    {@const hour = (column as SixHourlyColumn).hour}
                     <a
                       href={urlBuilders.hourly(hour, 6)}
                       class="hover:text-primary cursor-pointer"
@@ -527,7 +698,7 @@
                       let classes = [];
                       if (column.type === 'hourly') {
                         // Hourly columns
-                        const hour = column.hour;
+                        const hour = (column as HourlyColumn).hour;
                         const count = item.hourly_counts[hour];
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
@@ -543,7 +714,10 @@
                         }
                       } else if (column.type === 'bi-hourly') {
                         // Bi-hourly columns
-                        const count = renderFunctions['bi-hourly'](item, column.hour);
+                        const count = renderFunctions['bi-hourly'](
+                          item,
+                          (column as BiHourlyColumn).hour
+                        );
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
                           const intensity = Math.min(
@@ -556,7 +730,10 @@
                         }
                       } else if (column.type === 'six-hourly') {
                         // Six-hourly columns
-                        const count = renderFunctions['six-hourly'](item, column.hour);
+                        const count = renderFunctions['six-hourly'](
+                          item,
+                          (column as SixHourlyColumn).hour
+                        );
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
                           const intensity = Math.min(
@@ -623,8 +800,7 @@
                       </div>
                     {:else if column.key === 'total_detections'}
                       <!-- Total detections bar -->
-                      {@const maxCount = Math.max(...sortedData.map(d => d.count))}
-                      {@const width = (item.count / maxCount) * 100}
+                      {@const width = (item.count / maxTotalDetections) * 100}
                       {@const roundedWidth =
                         Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
                       <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
@@ -652,7 +828,7 @@
                       </div>
                     {:else if column.type === 'hourly'}
                       <!-- Hourly detections count -->
-                      {@const hour = column.hour}
+                      {@const hour = (column as HourlyColumn).hour}
                       {@const count = item.hourly_counts[hour]}
                       {#if count > 0}
                         <a
@@ -672,7 +848,7 @@
                       {/if}
                     {:else if column.type === 'bi-hourly'}
                       <!-- Bi-hourly detections count -->
-                      {@const hour = column.hour}
+                      {@const hour = (column as BiHourlyColumn).hour}
                       {@const count = renderFunctions['bi-hourly'](item, hour)}
                       {#if count > 0}
                         <!-- Bi-hourly detections count link -->
@@ -692,7 +868,7 @@
                       {/if}
                     {:else if column.type === 'six-hourly'}
                       <!-- Six-hourly detections count -->
-                      {@const hour = column.hour}
+                      {@const hour = (column as SixHourlyColumn).hour}
                       {@const count = renderFunctions['six-hourly'](item, hour)}
                       {#if count > 0}
                         <!-- Six-hourly detections count link -->
@@ -710,11 +886,12 @@
                       {:else}
                         -
                       {/if}
-                    {:else if column.render}
-                      {column.render(item, 0)}
                     {:else}
-                      <!-- Default column rendering -->
-                      <span class="text-sm">{(item as any)[column.key]}</span>
+                      <!-- Default column rendering - log warning in dev mode -->
+                      {#if import.meta.env.DEV}
+                        {console.warn(`Unexpected column key: ${column.key}`)}
+                      {/if}
+                      <span class="text-sm">-</span>
                     {/if}
                   </td>
                 {/each}
@@ -728,9 +905,9 @@
           </div>
         {/if}
       </div>
-    {/if}
-  </div>
-</section>
+    </div>
+  </section>
+{/if}
 
 <style>
   /* ========================================================================
