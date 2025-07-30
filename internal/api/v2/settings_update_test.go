@@ -483,26 +483,8 @@ func TestValidationErrors(t *testing.T) {
 			
 			err = controller.UpdateSectionSettings(ctx)
 			
-			// The controller should handle validation errors and send HTTP responses
-			if err == nil {
-				// Check the HTTP response code and message
-				assert.Equal(t, tt.expectedCode, rec.Code, "Expected HTTP status code for validation error")
-				
-				var response map[string]interface{}
-				jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, jsonErr, "Response should be valid JSON")
-				
-				// Check that the error response contains expected message
-				if message, exists := response["message"]; exists {
-					assert.Contains(t, message, tt.expectedError, "Error message should contain expected text")
-				}
-			} else {
-				// If an error is returned, it should be an HTTP error with expected details
-				var httpErr *echo.HTTPError
-				require.ErrorAs(t, err, &httpErr)
-				assert.Equal(t, tt.expectedCode, httpErr.Code)
-				assert.Contains(t, httpErr.Message, tt.expectedError)
-			}
+			// Use helper function to assert error response
+			assertControllerError(t, err, rec, tt.expectedCode, tt.expectedError)
 		})
 	}
 }

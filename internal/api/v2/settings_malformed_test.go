@@ -1,15 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestMalformedJSONData verifies the system handles malformed JSON gracefully
@@ -101,26 +98,8 @@ func TestMalformedJSONData(t *testing.T) {
 
 			err := controller.UpdateSectionSettings(ctx)
 			
-			// The controller should handle the error and send a JSON response
-			// If there's no error returned, check the response code
-			if err == nil {
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected BadRequest status for malformed JSON")
-				
-				var response map[string]interface{}
-				jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, jsonErr, "Response should be valid JSON")
-				
-				// Check that the error response contains expected message
-				if message, exists := response["message"]; exists {
-					assert.Contains(t, message, tt.expectedError, "Error message should contain expected text")
-				}
-			} else {
-				// If an error is returned, it should be an HTTP error with the expected code
-				var httpErr *echo.HTTPError
-				require.ErrorAs(t, err, &httpErr)
-				assert.Equal(t, http.StatusBadRequest, httpErr.Code)
-				assert.Contains(t, httpErr.Message, tt.expectedError)
-			}
+			// Use helper function to assert error response
+			assertControllerError(t, err, rec, http.StatusBadRequest, tt.expectedError)
 		})
 	}
 }

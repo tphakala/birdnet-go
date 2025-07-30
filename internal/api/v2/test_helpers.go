@@ -1,11 +1,15 @@
 package api
 
 import (
+	"encoding/json"
 	"log"
+	"net/http/httptest"
 	"os"
 	"testing"
 	
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -73,4 +77,34 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.Realtime.MQTT.RetrySettings.BackoffMultiplier = 2.0
 	
 	return settings
+}
+
+// assertControllerError is a helper function that asserts controller error responses
+// It handles both cases: when the controller returns an HTTP error or sends an HTTP response
+func assertControllerError(t *testing.T, err error, rec *httptest.ResponseRecorder, expectedCode int, expectedMessage string) {
+	t.Helper()
+	
+	if err == nil {
+		// Controller handled the error and sent an HTTP response
+		assert.Equal(t, expectedCode, rec.Code, "Expected HTTP status code")
+		
+		var response map[string]any
+		jsonErr := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, jsonErr, "Response should be valid JSON")
+		
+		// Check that the error response contains the expected message (if specified)
+		if expectedMessage != "" {
+			if message, exists := response["message"]; exists {
+				assert.Contains(t, message, expectedMessage, "Error message should contain expected text")
+			}
+		}
+	} else {
+		// Controller returned an error directly
+		var httpErr *echo.HTTPError
+		require.ErrorAs(t, err, &httpErr, "Error should be an echo.HTTPError")
+		assert.Equal(t, expectedCode, httpErr.Code, "Error should have expected HTTP code")
+		if expectedMessage != "" {
+			assert.Contains(t, httpErr.Message, expectedMessage, "Error message should contain expected text")
+		}
+	}
 }
