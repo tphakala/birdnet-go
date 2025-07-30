@@ -1,3 +1,51 @@
+<!--
+DailySummaryCard.svelte - Daily bird species detection summary table
+
+Purpose:
+- Displays daily bird species summaries with hourly detection counts
+- Provides interactive heatmap visualization of detection patterns
+- Supports date navigation and real-time updates via SSE
+- Integrates sun times to highlight sunrise/sunset hours
+
+Features:
+- Progressive loading states (skeleton → spinner → loaded/error)
+- Responsive hourly/bi-hourly/six-hourly column grouping based on viewport
+- Color-coded heatmap cells showing detection intensity
+- Real-time animation for new species and count increases
+- Interactive species thumbnails with hover tooltips
+- URL memoization with LRU cache for performance optimization
+- Sun time indicators (sunrise/sunset) in column headers
+- Date picker navigation with keyboard shortcuts
+- Progress bars showing relative detection counts
+- Clickable cells linking to detailed detection views
+
+Props:
+- data: DailySpeciesSummary[] - Array of species detection summaries
+- loading?: boolean - Loading state indicator (default: false)
+- error?: string | null - Error message to display (default: null)
+- selectedDate: string - Currently selected date in YYYY-MM-DD format
+- showThumbnails?: boolean - Show/hide species thumbnail images (default: true)
+- onPreviousDay: () => void - Callback for previous day navigation
+- onNextDay: () => void - Callback for next day navigation
+- onGoToToday: () => void - Callback for "today" button click
+- onDateChange: (date: string) => void - Callback for date picker changes
+
+Performance Optimizations:
+- $state.raw() for static data structures (caches, render functions)
+- $derived.by() for complex reactive calculations
+- LRU cache for URL memoization (500 entries max)
+- Optimized animation cleanup with requestAnimationFrame
+- Efficient data sorting and max count calculations
+
+Responsive Breakpoints:
+- Desktop (≥1400px): All hourly columns visible
+- Large (1200-1399px): All hourly columns visible
+- Medium (1024-1199px): All hourly columns visible
+- Tablet (768-1023px): Bi-hourly columns only
+- Mobile (480-767px): Bi-hourly columns only
+- Small (<480px): Six-hourly columns only
+-->
+
 <script lang="ts">
   import { untrack } from 'svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
