@@ -420,9 +420,8 @@
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
 
-    // Preload adjacent dates for faster navigation
-    preloadAdjacentDate('prev');
-    preloadAdjacentDate('next');
+    // Initial preload of adjacent dates (reactive effect will handle subsequent preloads)
+    triggerAdjacentPreload(selectedDate);
 
     return () => {
       // Clean up SSE connection
@@ -434,6 +433,12 @@
       // Clean up debounce timer
       if (updateTimer) {
         clearTimeout(updateTimer);
+      }
+
+      // Clean up preload debounce timer
+      if (preloadDebounceTimer) {
+        clearTimeout(preloadDebounceTimer);
+        preloadDebounceTimer = null;
       }
 
       // Clean up animation timers
@@ -451,6 +456,9 @@
 
       // Clean up daily summary cache
       dailySummaryCache.clear();
+
+      // Cancel any pending preload requests
+      preloadCache.clear();
     };
   });
 
@@ -693,47 +701,137 @@
     }
   }
 
-  // Preloading cache for adjacent dates - use $state.raw() for performance
-  const preloadCache = $state.raw(new Map<string, Promise<DailySpeciesSummary[]>>());
+  // Preloading cache for batch requests - use $state.raw() for performance
+  const preloadCache = $state.raw(new Set<string>());
+  let preloadDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Smart preloading function with proper dependency tracking
-  function preloadAdjacentDate(direction: 'prev' | 'next') {
-    const date = new Date(selectedDate);
-    const targetDate =
-      direction === 'prev'
-        ? new Date(date.setDate(date.getDate() - 1))
-        : new Date(date.setDate(date.getDate() + 1));
+  // Generate adjacent dates for preloading
+  function getAdjacentDates(baseDate: string): string[] {
+    const dates: string[] = [];
+    const base = new Date(baseDate);
 
-    const dateString = getLocalDateString(targetDate);
+    // Previous date
+    const prevDate = new Date(base);
+    prevDate.setDate(prevDate.getDate() - 1);
+    dates.push(getLocalDateString(prevDate));
 
-    // Don't preload future dates or already cached data
-    if (direction === 'next' && isFutureDate(dateString)) return;
-    if (dailySummaryCache.has(dateString) || preloadCache.has(dateString)) return;
+    // Next date (only if not future)
+    const nextDate = new Date(base);
+    nextDate.setDate(nextDate.getDate() + 1);
+    const nextDateString = getLocalDateString(nextDate);
+    if (!isFutureDate(nextDateString)) {
+      dates.push(nextDateString);
+    }
 
-    // Start preloading using untrack to prevent reactive dependencies
-    const preloadPromise = untrack(() =>
-      fetch(`/api/v2/analytics/species/daily?date=${dateString}`)
-        .then(response => (response.ok ? response.json() : null))
-        .then(data => {
-          if (data) {
-            dailySummaryCache.set(dateString, {
-              data: data,
-              timestamp: Date.now(),
-            });
-            console.debug(`Preloaded data for ${dateString}`);
-          }
-          preloadCache.delete(dateString);
-          return data;
-        })
-        .catch(error => {
-          console.debug(`Preload failed for ${dateString}:`, error);
-          preloadCache.delete(dateString);
-          return null;
-        })
+    return dates;
+  }
+
+  // Batch preload adjacent dates using the new batch API
+  function batchPreloadAdjacentDates(baseDate: string = selectedDate) {
+    const adjacentDates = getAdjacentDates(baseDate);
+
+    // Filter out dates that are already cached or being preloaded
+    const datesToPreload = adjacentDates.filter(
+      date => !dailySummaryCache.has(date) && !preloadCache.has(date)
     );
 
-    preloadCache.set(dateString, preloadPromise);
+    if (datesToPreload.length === 0) {
+      console.debug(`No adjacent dates need preloading for ${baseDate}`);
+      return;
+    }
+
+    // Mark dates as being preloaded to prevent duplicate requests
+    datesToPreload.forEach(date => preloadCache.add(date));
+
+    // Start batch preloading using untrack to prevent reactive dependencies
+    const batchPreloadPromise = untrack(() => {
+      const datesParam = datesToPreload.join(',');
+      return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Batch preload failed: ${response.statusText}`);
+          }
+          return response.json();
+        })
+        .then((batchData: Record<string, DailySpeciesSummary[]>) => {
+          const timestamp = Date.now();
+          let successCount = 0;
+
+          // Cache all successfully loaded dates
+          for (const [dateString, data] of Object.entries(batchData)) {
+            if (data && Array.isArray(data)) {
+              dailySummaryCache.set(dateString, {
+                data: data,
+                timestamp: timestamp,
+              });
+              successCount++;
+            }
+          }
+
+          console.debug(
+            `Batch preloaded ${successCount}/${datesToPreload.length} adjacent dates for ${baseDate}`
+          );
+          return batchData;
+        })
+        .catch(error => {
+          console.debug(`Batch preload failed for ${baseDate}:`, error);
+
+          // Fall back to individual requests if batch fails
+          console.debug('Falling back to individual preload requests');
+          datesToPreload.forEach(dateString => {
+            fetch(`/api/v2/analytics/species/daily?date=${dateString}`)
+              .then(response => (response.ok ? response.json() : null))
+              .then(data => {
+                if (data) {
+                  dailySummaryCache.set(dateString, {
+                    data: data,
+                    timestamp: Date.now(),
+                  });
+                  console.debug(`Individual fallback preload succeeded for ${dateString}`);
+                }
+              })
+              .catch(fallbackError => {
+                console.debug(
+                  `Individual fallback preload failed for ${dateString}:`,
+                  fallbackError
+                );
+              });
+          });
+        })
+        .finally(() => {
+          // Clean up preload tracking
+          datesToPreload.forEach(date => preloadCache.delete(date));
+        });
+    });
+
+    return batchPreloadPromise;
   }
+
+  // Trigger batch preload of adjacent dates with debouncing
+  function triggerAdjacentPreload(baseDate: string = selectedDate) {
+    // Clear existing debounce timer
+    if (preloadDebounceTimer) {
+      clearTimeout(preloadDebounceTimer);
+    }
+
+    // Debounce preloading to avoid excessive requests during rapid date changes
+    preloadDebounceTimer = setTimeout(() => {
+      console.debug(`Triggering batch adjacent preload for ${baseDate}`);
+
+      // Use batch preloading for better performance
+      batchPreloadAdjacentDates(baseDate);
+
+      preloadDebounceTimer = null;
+    }, 150); // Wait 150ms for settling
+  }
+
+  // Reactive preloading - triggers when selectedDate changes
+  $effect(() => {
+    // Only preload if we have a valid selectedDate and not during initial load
+    if (selectedDate) {
+      triggerAdjacentPreload(selectedDate);
+    }
+  });
 
   // Update freeze state management
   function handleFreezeStart() {

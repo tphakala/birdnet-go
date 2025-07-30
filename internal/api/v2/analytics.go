@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -99,6 +100,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	// Species analytics routes
 	speciesGroup := analyticsGroup.Group("/species")
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
+	speciesGroup.GET("/daily/batch", c.GetBatchDailySpeciesSummary) // Batch daily summaries endpoint
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
 	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
 	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint
@@ -182,6 +184,202 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 
 	// 7. Return JSON
 	return ctx.JSON(http.StatusOK, result)
+}
+
+// GetBatchDailySpeciesSummary handles GET /api/v2/analytics/species/daily/batch
+// Returns daily species summaries for multiple dates in a single request
+func (c *Controller) GetBatchDailySpeciesSummary(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Parse and validate batch parameters
+	dates, minConfidence, limit, err := c.parseBatchDailySummaryParams(ctx)
+	if err != nil {
+		return err
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving batch daily species summary",
+			"date_count", len(dates),
+			"min_confidence", minConfidence,
+			"limit", limit,
+			"ip", ip,
+			"path", path,
+		)
+	}
+
+	// Process each date and collect results
+	batchResults, processingErrors := c.processBatchDates(dates, minConfidence, limit, ip, path)
+
+	// Handle results and errors
+	return c.handleBatchResults(ctx, batchResults, processingErrors, len(dates), ip, path)
+}
+
+// parseBatchDailySummaryParams parses and validates parameters for batch daily summary requests
+func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []string, minConfidence float64, limit int, err error) {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Parse dates parameter
+	datesParam := ctx.QueryParam("dates")
+	if datesParam == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in batch daily summary",
+				"parameter", "dates", "ip", ip, "path", path)
+		}
+		return nil, 0, 0, echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: dates (comma-separated list)")
+	}
+
+	// Parse and validate dates
+	dateStrings := make([]string, 0)
+	for _, dateStr := range strings.Split(datesParam, ",") {
+		trimmed := strings.TrimSpace(dateStr)
+		if trimmed != "" {
+			dateStrings = append(dateStrings, trimmed)
+		}
+	}
+
+	if len(dateStrings) == 0 {
+		return nil, 0, 0, echo.NewHTTPError(http.StatusBadRequest, "No valid dates provided")
+	}
+
+	const maxBatchSize = 10
+	if len(dateStrings) > maxBatchSize {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Batch size exceeded limit",
+				"requested", len(dateStrings), "max", maxBatchSize, "ip", ip, "path", path)
+		}
+		return nil, 0, 0, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many dates requested. Maximum: %d", maxBatchSize))
+	}
+
+	// Validate date formats
+	for _, dateStr := range dateStrings {
+		if _, err := time.Parse("2006-01-02", dateStr); err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date in batch request",
+					"date", dateStr, "error", err.Error(), "ip", ip, "path", path)
+			}
+			return nil, 0, 0, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid date format: %s. Use YYYY-MM-DD", dateStr))
+		}
+	}
+
+	// Parse min_confidence
+	minConfidence = 0.0
+	if minConfidenceStr := ctx.QueryParam("min_confidence"); minConfidenceStr != "" {
+		if parsedConfidence, parseErr := strconv.ParseFloat(minConfidenceStr, 64); parseErr == nil {
+			minConfidence = parsedConfidence / 100.0
+		} else if c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid min_confidence parameter in batch request, using default 0",
+				"value", minConfidenceStr, "error", parseErr.Error(), "ip", ip, "path", path)
+		}
+	}
+
+	// Parse limit
+	limit = 0
+	if limitStr := ctx.QueryParam("limit"); limitStr != "" {
+		if parsedLimit, parseErr := strconv.Atoi(limitStr); parseErr == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		} else if parseErr != nil && c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid limit parameter in batch request, ignoring limit",
+				"value", limitStr, "error", parseErr.Error(), "ip", ip, "path", path)
+		}
+	}
+
+	return dateStrings, minConfidence, limit, nil
+}
+
+// processBatchDates processes multiple dates and returns results and errors
+func (c *Controller) processBatchDates(dates []string, minConfidence float64, limit int, ip, path string) (batchResults map[string][]SpeciesDailySummary, processingErrors []string) {
+	batchResults = make(map[string][]SpeciesDailySummary)
+	processingErrors = make([]string, 0)
+
+	for _, selectedDate := range dates {
+		result, err := c.processSingleDateForBatch(selectedDate, minConfidence, limit, ip, path)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to process date %s: %v", selectedDate, err)
+			processingErrors = append(processingErrors, errorMsg)
+			continue
+		}
+		batchResults[selectedDate] = result
+	}
+
+	return batchResults, processingErrors
+}
+
+// processSingleDateForBatch processes a single date using the same logic as the regular endpoint
+func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidence float64, limit int, ip, path string) ([]SpeciesDailySummary, error) {
+	// Get data for the date
+	notes, err := c.DS.GetTopBirdsData(selectedDate, minConfidence)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to get data for date in batch request",
+				"date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+		}
+		return nil, err
+	}
+
+	// Aggregate data
+	aggregatedData, err := c.aggregateDailySpeciesData(notes, selectedDate, minConfidence)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to aggregate data for date in batch request",
+				"date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+		}
+		return nil, err
+	}
+
+	// Build response
+	result, err := c.buildDailySpeciesSummaryResponse(aggregatedData, selectedDate)
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to build response for date in batch request",
+				"date", selectedDate, "error", err.Error(), "ip", ip, "path", path)
+		}
+		return nil, err
+	}
+
+	// Sort by count
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Count > result[j].Count
+	})
+
+	// Apply limit
+	if limit > 0 && limit < len(result) {
+		result = result[:limit]
+	}
+
+	return result, nil
+}
+
+// handleBatchResults handles the final response and error cases for batch requests
+func (c *Controller) handleBatchResults(ctx echo.Context, batchResults map[string][]SpeciesDailySummary, processingErrors []string, totalRequested int, ip, path string) error {
+	// Log partial failures if any
+	if len(processingErrors) > 0 && len(batchResults) > 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Batch request completed with partial failures",
+				"successful", len(batchResults), "failed", len(processingErrors),
+				"errors", processingErrors, "ip", ip, "path", path)
+		}
+	}
+
+	// Return error if all dates failed
+	if len(batchResults) == 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("All dates in batch request failed",
+				"requested_dates", totalRequested, "errors", processingErrors, "ip", ip, "path", path)
+		}
+		return c.HandleError(ctx, fmt.Errorf("failed to process any requested dates"),
+			"Failed to process batch request", http.StatusInternalServerError)
+	}
+
+	// Log successful completion
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Batch daily species summary retrieved",
+			"requested_dates", totalRequested, "successful_dates", len(batchResults),
+			"failed_dates", len(processingErrors), "ip", ip, "path", path)
+	}
+
+	return ctx.JSON(http.StatusOK, batchResults)
 }
 
 // parseDailySpeciesSummaryParams parses and validates query parameters for the daily summary.
