@@ -527,7 +527,12 @@
 
     // Additional safety check: ensure detection is for today
     if (detection.date !== selectedDate) {
-      console.debug('Skipping daily summary update - detection date mismatch:', detection.date, 'vs', selectedDate);
+      console.debug(
+        'Skipping daily summary update - detection date mismatch:',
+        detection.date,
+        'vs',
+        selectedDate
+      );
       return;
     }
 
@@ -572,7 +577,14 @@
 
     // Additional safety check: ensure detection is for today and matches selected date
     if (detection.date !== selectedDate || detection.date !== getLocalDateString()) {
-      console.debug('Skipping daily summary update - detection date mismatch:', detection.date, 'vs', selectedDate, 'today:', getLocalDateString());
+      console.debug(
+        'Skipping daily summary update - detection date mismatch:',
+        detection.date,
+        'vs',
+        selectedDate,
+        'today:',
+        getLocalDateString()
+      );
       return;
     }
 

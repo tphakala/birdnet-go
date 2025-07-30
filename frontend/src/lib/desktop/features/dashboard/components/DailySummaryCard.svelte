@@ -447,6 +447,51 @@
   });
 </script>
 
+{#snippet navigationControls()}
+  <div class="flex items-center gap-2">
+    <!-- Previous day button -->
+    <button
+      onclick={onPreviousDay}
+      class="btn btn-sm btn-ghost"
+      aria-label={t('dashboard.dailySummary.navigation.previousDay')}
+    >
+      {@html navigationIcons.arrowLeft}
+    </button>
+
+    <!-- Date picker -->
+    <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
+
+    <!-- Next day button -->
+    <button
+      onclick={onNextDay}
+      class="btn btn-sm btn-ghost"
+      disabled={isToday}
+      aria-label={t('dashboard.dailySummary.navigation.nextDay')}
+    >
+      {@html navigationIcons.arrowRight}
+    </button>
+
+    {#if !isToday}
+      <button onclick={onGoToToday} class="btn btn-sm btn-primary"
+        >{t('dashboard.dailySummary.navigation.today')}</button
+      >
+    {/if}
+  </div>
+{/snippet}
+
+<!-- Live region for screen reader announcements of loading state changes -->
+<div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  {#if loadingPhase === 'skeleton'}
+    {t('dashboard.dailySummary.loading.preparing')}
+  {:else if loadingPhase === 'spinner'}
+    {t('dashboard.dailySummary.loading.fetching')}
+  {:else if loadingPhase === 'error'}
+    {t('dashboard.dailySummary.loading.error')}
+  {:else if loadingPhase === 'loaded'}
+    {t('dashboard.dailySummary.loading.complete')}
+  {/if}
+</div>
+
 <!-- Progressive loading implementation -->
 {#if loadingPhase === 'skeleton'}
   <SkeletonDailySummary {showThumbnails} speciesCount={8} />
@@ -459,35 +504,7 @@
         <span class="card-title grow text-base sm:text-xl"
           >{t('dashboard.dailySummary.title')}
         </span>
-        <div class="flex items-center gap-2">
-          <!-- Previous day button -->
-          <button
-            onclick={onPreviousDay}
-            class="btn btn-sm btn-ghost"
-            aria-label={t('dashboard.dailySummary.navigation.previousDay')}
-          >
-            {@html navigationIcons.arrowLeft}
-          </button>
-
-          <!-- Date picker -->
-          <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
-
-          <!-- Next day button -->
-          <button
-            onclick={onNextDay}
-            class="btn btn-sm btn-ghost"
-            disabled={isToday}
-            aria-label={t('dashboard.dailySummary.navigation.nextDay')}
-          >
-            {@html navigationIcons.arrowRight}
-          </button>
-
-          {#if !isToday}
-            <button onclick={onGoToToday} class="btn btn-sm btn-primary"
-              >{t('dashboard.dailySummary.navigation.today')}</button
-            >
-          {/if}
-        </div>
+        {@render navigationControls()}
       </div>
       <div class="alert alert-error">
         {@html alertIconsSvg.error}
@@ -503,35 +520,7 @@
         <span class="card-title grow text-base sm:text-xl"
           >{t('dashboard.dailySummary.title')}
         </span>
-        <div class="flex items-center gap-2">
-          <!-- Previous day button -->
-          <button
-            onclick={onPreviousDay}
-            class="btn btn-sm btn-ghost"
-            aria-label={t('dashboard.dailySummary.navigation.previousDay')}
-          >
-            {@html navigationIcons.arrowLeft}
-          </button>
-
-          <!-- Date picker -->
-          <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
-
-          <!-- Next day button -->
-          <button
-            onclick={onNextDay}
-            class="btn btn-sm btn-ghost"
-            disabled={isToday}
-            aria-label={t('dashboard.dailySummary.navigation.nextDay')}
-          >
-            {@html navigationIcons.arrowRight}
-          </button>
-
-          {#if !isToday}
-            <button onclick={onGoToToday} class="btn btn-sm btn-primary"
-              >{t('dashboard.dailySummary.navigation.today')}</button
-            >
-          {/if}
-        </div>
+        {@render navigationControls()}
       </div>
 
       <!-- Table Content -->
