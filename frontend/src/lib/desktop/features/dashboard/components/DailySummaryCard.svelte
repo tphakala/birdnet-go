@@ -71,9 +71,9 @@
 
   // URL builder types
   interface URLBuilders {
-    species: (species: DailySpeciesSummary) => string;
-    speciesHour: (species: DailySpeciesSummary, hour: number, duration?: number) => string;
-    hourly: (hour: number, duration?: number) => string;
+    species: (_species: DailySpeciesSummary) => string;
+    speciesHour: (_species: DailySpeciesSummary, _hour: number, _duration?: number) => string;
+    hourly: (_hour: number, _duration?: number) => string;
   }
 
   interface Props {
@@ -318,9 +318,9 @@
   const urlCache = $state.raw(new LRUCache<string, string>(500)); // Max 500 URLs cached - use $state.raw
   const urlBuilders = $state<URLBuilders>({
     // Default functions to prevent undefined errors during initial render
-    species: (_species: DailySpeciesSummary) => '#',
-    speciesHour: (_species: DailySpeciesSummary, _hour: number, _duration?: number) => '#',
-    hourly: (_hour: number, _duration?: number) => '#',
+    species: () => '#',
+    speciesHour: () => '#',
+    hourly: () => '#',
   });
 
   // Reactive URL builder factory - clears cache when selectedDate changes
@@ -445,6 +445,11 @@
     }
     return maxCount || 1;
   });
+
+  // Maximum total detections count for progress bar calculations
+  const maxTotalDetections = $derived(
+    sortedData.length === 0 ? 1 : Math.max(...sortedData.map((d: DailySpeciesSummary) => d.count))
+  );
 </script>
 
 {#snippet navigationControls()}
@@ -747,10 +752,7 @@
                       </div>
                     {:else if column.key === 'total_detections'}
                       <!-- Total detections bar -->
-                      {@const maxCount = Math.max(
-                        ...sortedData.map((d: DailySpeciesSummary) => d.count)
-                      )}
-                      {@const width = (item.count / maxCount) * 100}
+                      {@const width = (item.count / maxTotalDetections) * 100}
                       {@const roundedWidth =
                         Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
                       <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
