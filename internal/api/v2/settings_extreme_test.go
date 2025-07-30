@@ -49,8 +49,8 @@ func TestExtremeValues(t *testing.T) {
 				"latitude":  91.0,  // Invalid latitude  
 				"longitude": 181.0, // Invalid longitude
 			},
-			expectedError: false, // Implementation accepts these values
-			description:   "Should handle extreme coordinates",
+			expectedError: true, // Implementation rejects out-of-range coordinates
+			description:   "Should reject invalid coordinates",
 		},
 		{
 			name:    "Very small float values",
@@ -155,8 +155,8 @@ func TestExtremeValues(t *testing.T) {
 			extremeData: map[string]interface{}{
 				"port": "65536", // One above maximum
 			},
-			expectedError: false, // Implementation accepts this value
-			description:   "Should handle invalid port number",
+			expectedError: true, // Implementation rejects invalid port numbers
+			description:   "Should reject invalid port number",
 		},
 		{
 			name:    "Time duration extremes",
