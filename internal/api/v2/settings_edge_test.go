@@ -390,11 +390,13 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 
 // TestComplexNestedPreservation verifies complex nested structures preserve all unmodified data
 func TestComplexNestedPreservation(t *testing.T) {
-	// Get test settings and update them with complex initial state
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
-	initialSettings.Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
-	initialSettings.Realtime.Species.Config["Robin"] = conf.SpeciesConfig{
+	e := echo.New()
+	controller := getTestController(t, e)
+	
+	// Update controller settings with complex initial state
+	controller.Settings.Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
+	controller.Settings.Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
+	controller.Settings.Realtime.Species.Config["Robin"] = conf.SpeciesConfig{
 		Threshold: 0.8,
 		Interval: 30,
 		Actions: []conf.SpeciesAction{{
@@ -402,24 +404,16 @@ func TestComplexNestedPreservation(t *testing.T) {
 			Command: "/usr/bin/notify",
 		}},
 	}
-	initialSettings.Realtime.Species.Config["Eagle"] = conf.SpeciesConfig{
+	controller.Settings.Realtime.Species.Config["Eagle"] = conf.SpeciesConfig{
 		Threshold: 0.9,
 		Interval: 60,
 	}
 	
 	// Capture initial state
-	initialInclude := make([]string, len(initialSettings.Realtime.Species.Include))
-	copy(initialInclude, initialSettings.Realtime.Species.Include)
-	initialExclude := make([]string, len(initialSettings.Realtime.Species.Exclude))
-	copy(initialExclude, initialSettings.Realtime.Species.Exclude)
-
-	e := echo.New()
-	controller := &Controller{
-		Echo:                e,
-		Settings:            initialSettings,
-		controlChan:         make(chan string, 10),
-		DisableSaveSettings: true,
-	}
+	initialInclude := make([]string, len(controller.Settings.Realtime.Species.Include))
+	copy(initialInclude, controller.Settings.Realtime.Species.Include)
+	initialExclude := make([]string, len(controller.Settings.Realtime.Species.Exclude))
+	copy(initialExclude, controller.Settings.Realtime.Species.Exclude)
 
 	// Update only one deeply nested field
 	update := map[string]interface{}{
