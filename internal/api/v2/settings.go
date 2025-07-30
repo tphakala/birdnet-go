@@ -750,10 +750,12 @@ type sectionValidator func(data json.RawMessage) error
 // getSectionValidators returns validators for sections that need special validation
 func getSectionValidators() map[string]sectionValidator {
 	return map[string]sectionValidator{
-		"mqtt":     validateMQTTSection,
-		"rtsp":     validateRTSPSection,
-		"security": validateSecuritySection,
-		"main":     validateMainSection,
+		"mqtt":      validateMQTTSection,
+		"rtsp":      validateRTSPSection,
+		"security":  validateSecuritySection,
+		"main":      validateMainSection,
+		"birdnet":   validateBirdNETSection,
+		"webserver": validateWebServerSection,
 	}
 }
 
@@ -793,6 +795,62 @@ func validateSecuritySection(data json.RawMessage) error {
 func validateMainSection(data json.RawMessage) error {
 	// Main settings updates are not allowed via API
 	return fmt.Errorf("main settings cannot be updated via API")
+}
+
+// validateBirdNETSection validates BirdNET settings
+func validateBirdNETSection(data json.RawMessage) error {
+	var updateMap map[string]interface{}
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	// Validate latitude
+	if lat, exists := updateMap["latitude"]; exists {
+		if latFloat, ok := lat.(float64); ok {
+			if latFloat < -90 || latFloat > 90 {
+				return fmt.Errorf("latitude must be between -90 and 90")
+			}
+		}
+	}
+
+	// Validate longitude
+	if lng, exists := updateMap["longitude"]; exists {
+		if lngFloat, ok := lng.(float64); ok {
+			if lngFloat < -180 || lngFloat > 180 {
+				return fmt.Errorf("longitude must be between -180 and 180")
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateWebServerSection validates WebServer settings
+func validateWebServerSection(data json.RawMessage) error {
+	var updateMap map[string]interface{}
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	// Validate port
+	if portValue, exists := updateMap["port"]; exists {
+		switch port := portValue.(type) {
+		case string:
+			portInt, err := strconv.Atoi(port)
+			if err != nil {
+				return fmt.Errorf("port must be a valid number")
+			}
+			if portInt < 1 || portInt > 65535 {
+				return fmt.Errorf("port must be between 1 and 65535")
+			}
+		case int:
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("port must be between 1 and 65535")
+			}
+		}
+	}
+
+	return nil
 }
 
 // getSettingsSection returns the requested section of settings
@@ -845,21 +903,31 @@ func getSettingsSection(settings *conf.Settings, section string) (interface{}, e
 // Returns nil if validation passes, error otherwise
 func validateField(fieldName string, value interface{}) error {
 	switch fieldName {
-	case "Port":
+	case "port":
 		// Validate port is in valid range
-		if port, ok := value.(int); ok {
+		switch port := value.(type) {
+		case int:
 			if port < 1 || port > 65535 {
 				return fmt.Errorf("port must be between 1 and 65535")
 			}
+		case string:
+			// Handle string ports (convert to int and validate)
+			portInt, err := strconv.Atoi(port)
+			if err != nil {
+				return fmt.Errorf("port must be a valid number")
+			}
+			if portInt < 1 || portInt > 65535 {
+				return fmt.Errorf("port must be between 1 and 65535")
+			}
 		}
-	case "Latitude":
+	case "latitude":
 		// Validate latitude range
 		if lat, ok := value.(float64); ok {
 			if lat < -90 || lat > 90 {
 				return fmt.Errorf("latitude must be between -90 and 90")
 			}
 		}
-	case "Longitude":
+	case "longitude":
 		// Validate longitude range
 		if lng, ok := value.(float64); ok {
 			if lng < -180 || lng > 180 {

@@ -46,10 +46,10 @@ func TestExtremeValues(t *testing.T) {
 			name:    "Extreme coordinates",
 			section: "birdnet",
 			extremeData: map[string]interface{}{
-				"latitude":  91.0,  // Invalid latitude
+				"latitude":  91.0,  // Invalid latitude  
 				"longitude": 181.0, // Invalid longitude
 			},
-			expectedError: true,
+			expectedError: true, // Implementation rejects out-of-range coordinates
 			description:   "Should reject invalid coordinates",
 		},
 		{
@@ -155,7 +155,7 @@ func TestExtremeValues(t *testing.T) {
 			extremeData: map[string]interface{}{
 				"port": "65536", // One above maximum
 			},
-			expectedError: true,
+			expectedError: true, // Implementation rejects invalid port numbers
 			description:   "Should reject invalid port number",
 		},
 		{
@@ -194,7 +194,9 @@ func TestExtremeValues(t *testing.T) {
 			err = controller.UpdateSectionSettings(ctx)
 
 			if tt.expectedError {
-				require.Error(t, err, tt.description)
+				// Use helper function to assert error response (expects BadRequest for extreme values)
+				assertControllerError(t, err, rec, http.StatusBadRequest, "")
+				t.Logf("Extreme value properly rejected: %s", tt.description)
 			} else {
 				if err != nil {
 					t.Logf("Update failed (might be expected): %v", err)

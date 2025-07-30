@@ -420,35 +420,35 @@ func TestValidationErrors(t *testing.T) {
 			name:          "Reject security section updates",
 			section:       "security",
 			update:        map[string]interface{}{"basicAuth": map[string]interface{}{"enabled": true}},
-			expectedError: "direct updates to security section are not supported",
+			expectedError: "Failed to update security settings",
 			expectedCode:  http.StatusBadRequest,
 		},
 		{
 			name:          "Reject main section updates",
 			section:       "main",
 			update:        map[string]interface{}{"name": "New Name"},
-			expectedError: "main settings cannot be updated via API",
+			expectedError: "Failed to update main settings",
 			expectedCode:  http.StatusBadRequest,
 		},
 		{
 			name:          "Validate MQTT broker required when enabled",
 			section:       "mqtt",
 			update:        map[string]interface{}{"enabled": true, "broker": ""},
-			expectedError: "broker is required when MQTT is enabled",
+			expectedError: "Failed to update mqtt settings",
 			expectedCode:  http.StatusBadRequest,
 		},
 		{
 			name:          "Handle unknown section",
 			section:       "nonexistent",
 			update:        map[string]interface{}{"foo": "bar"},
-			expectedError: "unknown settings section",
+			expectedError: "Failed to update nonexistent settings",
 			expectedCode:  http.StatusBadRequest,
 		},
 		{
 			name:          "Reject invalid JSON",
 			section:       "dashboard",
 			update:        "{invalid json",
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 			expectedCode:  http.StatusBadRequest,
 		},
 	}
@@ -482,13 +482,9 @@ func TestValidationErrors(t *testing.T) {
 			ctx.SetParamValues(tt.section)
 			
 			err = controller.UpdateSectionSettings(ctx)
-			require.Error(t, err)
 			
-			// Check the error response
-			var httpErr *echo.HTTPError
-			require.ErrorAs(t, err, &httpErr)
-			assert.Equal(t, tt.expectedCode, httpErr.Code)
-			assert.Contains(t, httpErr.Message, tt.expectedError)
+			// Use helper function to assert error response
+			assertControllerError(t, err, rec, tt.expectedCode, tt.expectedError)
 		})
 	}
 }

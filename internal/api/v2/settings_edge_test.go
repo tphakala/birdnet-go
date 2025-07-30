@@ -345,11 +345,8 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			
 			// Main section should be rejected entirely
 			if tt.section == "main" {
-				require.Error(t, err)
-				var httpErr *echo.HTTPError
-				require.ErrorAs(t, err, &httpErr)
-				assert.Equal(t, http.StatusBadRequest, httpErr.Code)
-				assert.Contains(t, httpErr.Message, "main settings cannot be updated")
+				// Use helper function to assert error response
+				assertControllerError(t, err, rec, http.StatusBadRequest, "main settings")
 				return
 			}
 

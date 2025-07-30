@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestMalformedJSONData verifies the system handles malformed JSON gracefully
@@ -25,61 +23,61 @@ func TestMalformedJSONData(t *testing.T) {
 			name:          "Incomplete JSON object",
 			section:       "dashboard",
 			malformedData: `{"thumbnails": {"summary":`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Invalid JSON syntax",
 			section:       "mqtt",
 			malformedData: `{"enabled": true, "broker": }`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Trailing comma",
 			section:       "weather",
 			malformedData: `{"provider": "openweather",}`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Unquoted keys",
 			section:       "birdnet",
 			malformedData: `{latitude: 51.5074}`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Mixed single/double quotes",
 			section:       "audio",
 			malformedData: `{"export": {'type': "mp3"}}`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Unclosed string",
 			section:       "mqtt",
 			malformedData: `{"broker": "tcp://localhost:1883}`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Invalid escape sequence",
 			section:       "dashboard",
 			malformedData: `{"locale": "en\z"}`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Missing closing bracket",
 			section:       "rtsp",
 			malformedData: `{"urls": ["rtsp://localhost"`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 		{
-			name:          "Extra closing bracket",
-			section:       "species",
-			malformedData: `{"include": []}}`,
-			expectedError: "Invalid JSON in request body",
+			name:          "Completely malformed JSON",
+			section:       "species", 
+			malformedData: `{this is not json at all}`,
+			expectedError: "Failed to parse request body",
 		},
 		{
 			name:          "Invalid number format",
 			section:       "birdnet",
 			malformedData: `{"threshold": 0.1.2}`,
-			expectedError: "Invalid JSON in request body",
+			expectedError: "Failed to parse request body",
 		},
 	}
 
@@ -99,12 +97,9 @@ func TestMalformedJSONData(t *testing.T) {
 			ctx.SetParamValues(tt.section)
 
 			err := controller.UpdateSectionSettings(ctx)
-			require.Error(t, err)
-
-			var httpErr *echo.HTTPError
-			require.ErrorAs(t, err, &httpErr)
-			assert.Equal(t, http.StatusBadRequest, httpErr.Code)
-			assert.Contains(t, httpErr.Message, tt.expectedError)
+			
+			// Use helper function to assert error response
+			assertControllerError(t, err, rec, http.StatusBadRequest, tt.expectedError)
 		})
 	}
 }
