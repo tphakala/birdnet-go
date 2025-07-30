@@ -96,7 +96,7 @@ export function getBrowserPreferredLocale(acceptLanguageHeader: string | null): 
       // Validate that we have a non-empty language code
       return primaryCode ? { code: primaryCode, quality } : null;
     })
-    .filter(Boolean) // Remove null entries from malformed language tags
+    .filter((item): item is { code: string; quality: number } => item !== null) // Remove null entries from malformed language tags
     .sort((a, b) => b.quality - a.quality); // Sort by quality (preference)
 
   // Find first matching supported locale
@@ -118,7 +118,8 @@ export function detectBrowserLocale(): Locale {
   }
 
   // Get browser languages in order of preference
-  const browserLanguages = navigator.languages || [navigator.language || DEFAULT_LOCALE];
+  const browserLanguages =
+    navigator.languages.length > 0 ? navigator.languages : [navigator.language];
 
   // Find first matching supported locale
   for (const lang of browserLanguages) {

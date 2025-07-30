@@ -49,8 +49,8 @@
 
   // PERFORMANCE OPTIMIZATION: Use $derived for navigation section states
   // Automatically updates when currentRoute changes, eliminating manual $effect
-  let analyticsOpen = $derived(routeCache.analytics);
-  let settingsOpen = $derived(routeCache.settings);
+  let analyticsOpen = $derived(routeCache().analytics);
+  let settingsOpen = $derived(routeCache().settings);
 
   // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations with $derived
   // Pre-compute all navigation URLs to avoid repeated string processing
@@ -123,7 +123,7 @@
         <li role="none">
           <button
             onclick={() => navigate(navigationUrls.dashboard)}
-            class={cn('flex items-center gap-2', { active: routeCache.dashboard })}
+            class={cn('flex items-center gap-2', { active: routeCache().dashboard })}
             role="menuitem"
           >
             {@html systemIcons.home}
@@ -141,7 +141,7 @@
               <li role="none">
                 <button
                   onclick={() => navigate(navigationUrls.analytics)}
-                  class={cn({ active: routeCache.analyticsExact })}
+                  class={cn({ active: routeCache().analyticsExact })}
                   role="menuitem"
                 >
                   {t('analytics.title')}
@@ -150,7 +150,7 @@
               <li role="none">
                 <button
                   onclick={() => navigate(navigationUrls.analyticsSpecies)}
-                  class={cn({ active: routeCache.analyticsSpecies })}
+                  class={cn({ active: routeCache().analyticsSpecies })}
                   role="menuitem"
                 >
                   {t('analytics.species.title')}
@@ -163,7 +163,7 @@
         <li role="none">
           <button
             onclick={() => navigate(navigationUrls.search)}
-            class={cn('flex items-center gap-2', { active: routeCache.search })}
+            class={cn('flex items-center gap-2', { active: routeCache().search })}
             role="menuitem"
           >
             {@html systemIcons.search}
@@ -174,7 +174,7 @@
         <li role="none">
           <button
             onclick={() => navigate(navigationUrls.about)}
-            class={cn('flex items-center gap-2', { active: routeCache.about })}
+            class={cn('flex items-center gap-2', { active: routeCache().about })}
             role="menuitem"
           >
             {@html systemIcons.about}
@@ -186,10 +186,10 @@
           <li role="none">
             <button
               onclick={() => navigate(navigationUrls.system)}
-              class={cn('flex items-center gap-2', { active: routeCache.system })}
+              class={cn('flex items-center gap-2', { active: routeCache().system })}
               role="menuitem"
               aria-label="System dashboard"
-              aria-current={routeCache.system ? 'page' : undefined}
+              aria-current={routeCache().system ? 'page' : undefined}
             >
               {@html systemIcons.system}
               <span>{t('navigation.system')}</span>
@@ -206,7 +206,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsMain)}
-                    class={cn({ active: routeCache.settingsMain })}
+                    class={cn({ active: routeCache().settingsMain })}
                     role="menuitem"
                   >
                     {t('settings.sections.node')}
@@ -215,7 +215,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsAudio)}
-                    class={cn({ active: routeCache.settingsAudio })}
+                    class={cn({ active: routeCache().settingsAudio })}
                     role="menuitem"
                   >
                     {t('settings.sections.audio')}
@@ -224,7 +224,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsFilters)}
-                    class={cn({ active: routeCache.settingsFilters })}
+                    class={cn({ active: routeCache().settingsFilters })}
                     role="menuitem"
                   >
                     {t('settings.sections.filters')}
@@ -233,7 +233,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsIntegrations)}
-                    class={cn({ active: routeCache.settingsIntegrations })}
+                    class={cn({ active: routeCache().settingsIntegrations })}
                     role="menuitem"
                   >
                     {t('settings.sections.integration')}
@@ -242,7 +242,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsSecurity)}
-                    class={cn({ active: routeCache.settingsSecurity })}
+                    class={cn({ active: routeCache().settingsSecurity })}
                     role="menuitem"
                   >
                     {t('settings.sections.security')}
@@ -251,7 +251,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsSpecies)}
-                    class={cn({ active: routeCache.settingsSpecies })}
+                    class={cn({ active: routeCache().settingsSpecies })}
                     role="menuitem"
                   >
                     {t('settings.sections.species')}
@@ -260,7 +260,7 @@
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsSupport)}
-                    class={cn({ active: routeCache.settingsSupport })}
+                    class={cn({ active: routeCache().settingsSupport })}
                     role="menuitem"
                   >
                     {t('settings.sections.support')}

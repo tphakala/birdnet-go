@@ -1,23 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
-import type { ComponentType } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import AudioPlayer from './AudioPlayer.svelte';
-
-// Type helper for AudioPlayer component testing
-interface AudioPlayerProps {
-  audioUrl: string;
-  detectionId: string;
-  width?: number | string;
-  height?: number | string;
-  showSpectrogram?: boolean;
-  showDownload?: boolean;
-  className?: string;
-  responsive?: boolean;
-}
-
-type SvelteAudioPlayerComponent = ComponentType<AudioPlayerProps>;
 
 describe('AudioPlayer', () => {
   let mockPlay: ReturnType<typeof vi.fn>;
@@ -80,7 +65,7 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with audio URL', () => {
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -93,7 +78,7 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with spectrogram', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -107,7 +92,7 @@ describe('AudioPlayer', () => {
   });
 
   it('generates spectrogram URL from detectionId', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: '123',
@@ -121,7 +106,7 @@ describe('AudioPlayer', () => {
   });
 
   it('shows loading state initially', () => {
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -134,7 +119,7 @@ describe('AudioPlayer', () => {
   });
 
   it('shows play button when paused', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -147,7 +132,7 @@ describe('AudioPlayer', () => {
   });
 
   it('toggles play/pause on button click', async () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -167,7 +152,7 @@ describe('AudioPlayer', () => {
       get: vi.fn().mockReturnValue(false),
     });
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -188,7 +173,7 @@ describe('AudioPlayer', () => {
   });
 
   it('formats time correctly', async () => {
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -218,7 +203,7 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -249,7 +234,7 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -295,10 +280,11 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        spectrogramRaw: false,
       },
     });
 
@@ -352,7 +338,7 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -390,7 +376,7 @@ describe('AudioPlayer', () => {
   });
 
   it('shows download button by default', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -404,9 +390,10 @@ describe('AudioPlayer', () => {
   });
 
   it('hides download button when disabled', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
+        detectionId: 'test-123',
         showDownload: false,
       },
     });
@@ -415,10 +402,11 @@ describe('AudioPlayer', () => {
   });
 
   it('hides spectrogram when disabled', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        spectrogramRaw: false,
         showSpectrogram: false,
       },
     });
@@ -427,18 +415,15 @@ describe('AudioPlayer', () => {
   });
 
   it('calls event callbacks', async () => {
-    const onPlay = vi.fn();
-    const onPause = vi.fn();
-    const onEnded = vi.fn();
-    const onTimeUpdate = vi.fn();
+    const onPlayStart = vi.fn();
+    const onPlayEnd = vi.fn();
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        onPlay,
-        onPause,
-        onEnded,
-        onTimeUpdate,
+        detectionId: 'test-123',
+        onPlayStart,
+        onPlayEnd,
       },
     });
 
@@ -448,30 +433,24 @@ describe('AudioPlayer', () => {
     if (eventHandlers['play'] && audio) {
       eventHandlers['play'].forEach(handler => handler.call(audio, new Event('play')));
     }
-    expect(onPlay).toHaveBeenCalledTimes(1);
-
-    // Advance timer to trigger time update
-    vi.advanceTimersByTime(100);
-    expect(onTimeUpdate).toHaveBeenCalledWith(0, 120);
+    expect(onPlayStart).toHaveBeenCalledTimes(1);
 
     // Test pause event
     if (eventHandlers['pause'] && audio) {
       eventHandlers['pause'].forEach(handler => handler.call(audio, new Event('pause')));
     }
-    expect(onPause).toHaveBeenCalledTimes(1);
 
-    // Test ended event
-    if (eventHandlers['ended'] && audio) {
-      eventHandlers['ended'].forEach(handler => handler.call(audio, new Event('ended')));
-    }
-    expect(onEnded).toHaveBeenCalledTimes(1);
+    // Wait for the delay timeout before onPlayEnd is called
+    vi.advanceTimersByTime(3000);
+    expect(onPlayEnd).toHaveBeenCalledTimes(1);
   });
 
   it('handles audio error', async () => {
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        spectrogramRaw: false,
       },
     });
 
@@ -490,10 +469,11 @@ describe('AudioPlayer', () => {
   });
 
   it('handles spectrogram error', async () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        spectrogramRaw: false,
       },
     });
 
@@ -505,25 +485,25 @@ describe('AudioPlayer', () => {
     });
   });
 
-  it('autoplays when enabled', () => {
-    render(AudioPlayer as SvelteAudioPlayerComponent, {
+  it('renders correctly', () => {
+    render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        autoPlay: true,
+        detectionId: 'test-123',
       },
     });
 
-    expect(mockPlay).toHaveBeenCalledTimes(1);
+    // Just verify the component renders without errors
+    expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
   });
 
   it('applies custom classes', () => {
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        spectrogramRaw: false,
         className: 'custom-player',
-        spectrogramClassName: 'custom-spectrogram',
-        controlsClassName: 'custom-controls',
       },
     });
 
@@ -540,7 +520,7 @@ describe('AudioPlayer', () => {
   it('cleans up interval on unmount', async () => {
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
-    const { container, unmount } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container, unmount } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -568,10 +548,11 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = render(AudioPlayer as SvelteAudioPlayerComponent, {
+    const { container } = render(AudioPlayer, {
       props: {
         audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
+        detectionId: 'test-123',
+        spectrogramRaw: false,
       },
     });
 

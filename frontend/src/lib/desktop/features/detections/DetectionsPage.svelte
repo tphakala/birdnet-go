@@ -82,9 +82,10 @@
       const data = (await fetchWithCSRF(`/api/v2/detections?${queryString.toString()}`)) as any;
 
       // Validate numResults before using
-      const validatedNumResults = [10, 25, 50, 100].includes(queryParams.numResults)
-        ? queryParams.numResults
-        : getSavedResultsPerPage();
+      const validatedNumResults =
+        queryParams.numResults && [10, 25, 50, 100].includes(queryParams.numResults)
+          ? queryParams.numResults
+          : getSavedResultsPerPage();
 
       // Transform API response to match our expected format
       detectionsData = {
@@ -96,7 +97,7 @@
         species: queryParams.species,
         search: queryParams.search,
         numResults: validatedNumResults,
-        offset: queryParams.offset!,
+        offset: queryParams.offset ?? 0,
         totalResults: data.total || 0,
         itemsPerPage: data.limit || validatedNumResults,
         currentPage: data.current_page || 1,

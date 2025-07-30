@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
-import type { BirdNetSettings, RealtimeSettings } from './settings';
+import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -61,7 +61,47 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
           },
         },
       },
-      originalData: {} as any,
+      // Use a minimal valid SettingsFormData structure for testing
+      originalData: {
+        main: { name: 'TestNode' },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.3,
+          overlap: 0.0,
+          locale: 'en',
+          threads: 4,
+          latitude: 45.0,
+          longitude: -122.0,
+          rangeFilter: {
+            model: 'latest',
+            threshold: 0.03,
+            speciesCount: null,
+            species: [],
+          },
+          database: {
+            type: 'sqlite',
+            path: '/data/birdnet.db',
+            host: 'localhost',
+            port: 3306,
+            name: 'birdnet',
+            username: '',
+            password: '',
+          },
+        },
+        realtime: {
+          interval: 15,
+          processingTime: false,
+          dynamicThreshold: {
+            enabled: false,
+            debug: false,
+            trigger: 0.8,
+            min: 0.3,
+            validHours: 24,
+          },
+        },
+      } satisfies SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -72,11 +112,11 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   it('should preserve rangeFilter when updating coordinates', () => {
     // Get initial state
     const initialState = get(settingsStore);
-    const initialRangeFilter = initialState.formData.birdnet?.rangeFilter;
+    const initialRangeFilter = initialState.formData.birdnet.rangeFilter;
 
     // Verify initial range filter values
-    expect(initialRangeFilter?.model).toBe('latest');
-    expect(initialRangeFilter?.threshold).toBe(0.03);
+    expect(initialRangeFilter.model).toBe('latest');
+    expect(initialRangeFilter.threshold).toBe(0.03);
 
     // Update coordinates (simulating what happens when clicking on the map)
     settingsActions.updateSection('birdnet', {
@@ -101,8 +141,8 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   it('should preserve coordinates when updating rangeFilter threshold', () => {
     // Get initial coordinates
     const initialState = get(settingsStore);
-    const initialLat = initialState.formData.birdnet?.latitude;
-    const initialLng = initialState.formData.birdnet?.longitude;
+    const initialLat = initialState.formData.birdnet.latitude;
+    const initialLng = initialState.formData.birdnet.longitude;
 
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
@@ -162,11 +202,11 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
   it('should merge partial rangeFilter updates correctly', () => {
     // Update only the range filter threshold (partial update)
-    const currentRangeFilter = get(settingsStore).formData.birdnet?.rangeFilter;
+    const currentRangeFilter = get(settingsStore).formData.birdnet.rangeFilter;
 
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        ...currentRangeFilter!,
+        ...currentRangeFilter,
         threshold: 0.07,
       },
     });
@@ -194,7 +234,14 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Update dynamic threshold enabled state
     settingsActions.updateSection('realtime', {
       dynamicThreshold: {
-        ...initialDynamicThreshold!,
+        // Use nullish coalescing and provide default values if undefined
+        ...(initialDynamicThreshold ?? {
+          enabled: false,
+          debug: false,
+          trigger: 0.8,
+          min: 0.3,
+          validHours: 24,
+        }),
         enabled: true,
         min: 0.4,
       },
@@ -214,7 +261,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   it('should not have dynamicThreshold in birdnet section', () => {
     // Verify that birdnet section doesn't contain dynamicThreshold
     const state = get(settingsStore);
-    const birdnetData = state.formData.birdnet as any;
+    const birdnetData = state.formData.birdnet;
 
     expect(birdnetData).not.toHaveProperty('dynamicThreshold');
     expect(state.formData.realtime?.dynamicThreshold).toBeDefined();

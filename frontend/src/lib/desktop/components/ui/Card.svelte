@@ -8,6 +8,7 @@
     description?: string;
     padding?: boolean;
     className?: string;
+    contentClassName?: string;
     hasChanges?: boolean;
     header?: Snippet;
     children?: Snippet;
@@ -19,6 +20,7 @@
     description,
     padding = true,
     className = '',
+    contentClassName = '',
     hasChanges = false,
     header,
     children,
@@ -45,7 +47,7 @@
     </div>
   {/if}
 
-  <div class={cn(padding ? 'px-6 pb-6' : '')}>
+  <div class={cn(padding ? 'px-6 pb-6' : '', contentClassName)}>
     {#if children}
       {@render children()}
     {/if}
