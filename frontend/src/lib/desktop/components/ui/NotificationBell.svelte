@@ -50,7 +50,7 @@
 
   // PERFORMANCE OPTIMIZATION: Cache formatted notification data for display
   // Prevents repeated date formatting and icon class computation
-  // Note: Currently used for caching, can be utilized in template for better performance
+  // Template uses these pre-computed values instead of calling functions repeatedly
   const formattedNotifications = $derived(
     visibleNotifications.map(notification => ({
       ...notification,
@@ -59,9 +59,6 @@
       priorityBadgeClass: getPriorityBadgeClass(notification.priority),
     }))
   );
-
-  // Note: formattedNotifications available for template usage to improve performance
-  // Currently cached for future optimization opportunities
 
   // PERFORMANCE OPTIMIZATION: Pure utility functions for caching
   // These functions only depend on their parameters, not component state
@@ -475,7 +472,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">
         <h3 class="text-lg font-semibold">Notifications</h3>
-        {#if visibleNotifications.length > 0}
+        {#if formattedNotifications.length > 0}
           <button
             onclick={markAllAsRead}
             class="text-sm link link-primary"
@@ -495,7 +492,7 @@
               <span class="sr-only">Loading notifications...</span>
             </div>
           </div>
-        {:else if visibleNotifications.length === 0}
+        {:else if formattedNotifications.length === 0}
           <!-- Empty state -->
           <div class="p-8 text-center text-base-content/60">
             <div class="w-12 h-12 mx-auto mb-2 opacity-50" role="img" aria-label="No notifications">
