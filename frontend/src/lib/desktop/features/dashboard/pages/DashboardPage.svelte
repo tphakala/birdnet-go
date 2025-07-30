@@ -59,6 +59,7 @@
   // Use $state.raw() for non-mutated cache objects to avoid proxy overhead
   const dailySummaryCache = $state.raw(new Map<string, CachedDailySummary>());
   const CACHE_TTL = 60000; // 1 minute TTL for daily summary cache
+  const CACHE_MAX_ENTRIES = 30; // ~1 month of data to prevent memory issues
 
   // Selective cache update functions for incremental SSE updates
   function updateDailySummaryCacheEntry(date: string, updatedSummary: DailySpeciesSummary[]) {
@@ -105,6 +106,11 @@
 
       // Cleanup old cache entries to prevent memory leaks
       cleanupDailySummaryCache();
+      
+      // Enforce maximum cache size limit
+      if (dailySummaryCache.size > CACHE_MAX_ENTRIES) {
+        enforceMaxCacheSize();
+      }
     } catch (error) {
       summaryError =
         error instanceof Error ? error.message : t('dashboard.errors.dailySummaryLoad');
@@ -122,6 +128,23 @@
         dailySummaryCache.delete(date);
       }
     }
+  }
+
+  // Enforce maximum cache size by evicting oldest entries
+  function enforceMaxCacheSize() {
+    if (dailySummaryCache.size <= CACHE_MAX_ENTRIES) return;
+
+    // Convert to array for sorting by timestamp
+    const entries = Array.from(dailySummaryCache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+    // Remove oldest entries until within limit
+    const entriesToRemove = dailySummaryCache.size - CACHE_MAX_ENTRIES;
+    for (let i = 0; i < entriesToRemove; i++) {
+      dailySummaryCache.delete(entries[i][0]);
+    }
+    
+    console.debug(`Cache size enforced: removed ${entriesToRemove} oldest entries`);
   }
 
   async function fetchRecentDetections(applyAnimations = false) {
@@ -576,7 +599,7 @@
     }
 
     // Additional safety check: ensure detection is for today and matches selected date
-    if (detection.date !== selectedDate || detection.date !== getLocalDateString()) {
+    if (detection.date !== selectedDate && detection.date !== getLocalDateString()) {
       console.debug(
         'Skipping daily summary update - detection date mismatch:',
         detection.date,
@@ -756,7 +779,7 @@
   }
 
   // Batch preload adjacent dates using the new batch API
-  function batchPreloadAdjacentDates(baseDate: string = selectedDate) {
+  function batchPreloadAdjacentDates(baseDate: string = selectedDate): void {
     const adjacentDates = getAdjacentDates(baseDate);
 
     // Filter out dates that are already cached or being preloaded

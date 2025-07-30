@@ -107,8 +107,8 @@
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
 
-  // Cache for sun times to avoid repeated API calls - use $state.raw for performance
-  const sunTimesCache = $state.raw(new Map<string, SunTimes>());
+  // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
+  const sunTimesCache = $state.raw(new LRUCache<string, SunTimes>(30)); // Max 30 days of sun times
 
   // Optimize loading state management with proper dependency tracking
   $effect(() => {
@@ -135,7 +135,7 @@
 
   // Fetch sun times from weather API with caching
   async function fetchSunTimes(date: string): Promise<SunTimes | null> {
-    // Check cache first
+    // Check cache first using LRUCache methods
     const cached = sunTimesCache.get(date);
     if (cached) {
       return cached;
@@ -421,12 +421,12 @@
     if (sortedData.length === 0) return 1;
 
     let maxCount = 0;
-    sortedData.forEach((species: DailySpeciesSummary) => {
+    for (const species of sortedData) {
       for (let hour = 0; hour < 24; hour += 2) {
         const sum = (species.hourly_counts[hour] || 0) + (species.hourly_counts[hour + 1] || 0);
         maxCount = Math.max(maxCount, sum);
       }
-    });
+    }
     return maxCount || 1;
   });
 
@@ -434,7 +434,7 @@
     if (sortedData.length === 0) return 1;
 
     let maxCount = 0;
-    sortedData.forEach((species: DailySpeciesSummary) => {
+    for (const species of sortedData) {
       for (let hour = 0; hour < 24; hour += 6) {
         let sum = 0;
         for (let h = hour; h < hour + 6 && h < 24; h++) {
@@ -442,7 +442,7 @@
         }
         maxCount = Math.max(maxCount, sum);
       }
-    });
+    }
     return maxCount || 1;
   });
 </script>
@@ -837,8 +837,11 @@
                         -
                       {/if}
                     {:else}
-                      <!-- Default column rendering -->
-                      <span class="text-sm">{(item as any)[column.key]}</span>
+                      <!-- Default column rendering - log warning in dev mode -->
+                      {#if import.meta.env.DEV}
+                        {console.warn(`Unexpected column key: ${column.key}`)}
+                      {/if}
+                      <span class="text-sm">-</span>
                     {/if}
                   </td>
                 {/each}

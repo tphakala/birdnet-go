@@ -243,7 +243,8 @@ func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []str
 		return nil, 0, 0, echo.NewHTTPError(http.StatusBadRequest, "No valid dates provided")
 	}
 
-	const maxBatchSize = 10
+	// Rate limiting - maximum 7 dates per request
+	const maxBatchSize = 7
 	if len(dateStrings) > maxBatchSize {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Batch size exceeded limit",
