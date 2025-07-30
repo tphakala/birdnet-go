@@ -1648,6 +1648,93 @@ Advanced users interested in extending the sound level monitoring capabilities s
 
 The implementation provides a solid foundation for environmental sound monitoring with robust signal processing and comprehensive error handling. While it cannot provide absolute SPL measurements, it excels at relative sound level monitoring and frequency analysis for research and environmental assessment purposes.
 
+### Species Tracking System
+
+BirdNET-Go includes an intelligent species tracking system that helps you discover and monitor bird activity patterns at your location. This feature automatically tracks when new bird species appear and highlights them with special badges to make discoveries easy to spot.
+
+#### How Species Tracking Works
+
+The species tracking system runs automatically in the background, analyzing each bird detection and comparing it against your historical data. When BirdNET-Go detects a bird species that hasn't been seen recently (or ever), it adds special badges to help you notice these exciting discoveries.
+
+#### Types of Species Tracking
+
+The system tracks three different types of "new" species appearances:
+
+##### 🌟 **New Species** (Lifetime First)
+- **What it means**: A bird species detected for the very first time at your location
+- **Visual indicator**: Animated golden star that gently wiggles to catch your attention
+- **When shown**: For 7 days after the first detection (configurable)
+- **Perfect for**: Discovering birds that have never visited your area before, tracking range expansions, or celebrating truly rare visitors
+
+##### 📅 **New This Year** (Annual First)
+- **What it means**: A bird species detected for the first time this calendar year
+- **Visual indicator**: Blue calendar icon
+- **When shown**: For 7 days after the first detection of the year (configurable)
+- **Resets**: January 1st each year (configurable date)
+- **Perfect for**: Tracking yearly visitors, seasonal patterns, and migration timing
+
+##### 🌿 **New This Season** (Seasonal First)
+- **What it means**: A bird species detected for the first time this season
+- **Visual indicator**: Green leaf icon
+- **When shown**: For 7 days after the first seasonal detection (configurable)
+- **Seasons**: Spring (March 20), Summer (June 21), Fall (September 22), Winter (December 21)
+- **Perfect for**: Monitoring seasonal migrations, breeding arrivals, and wintering species
+
+> **Smart Hemisphere Detection**: The system automatically adjusts seasonal definitions based on your latitude - if you're in the Southern Hemisphere, the seasons are flipped appropriately.
+
+#### Where You'll See the Badges
+
+**Dashboard Summary**: The badges appear next to species names in your daily detection summary on the main dashboard. Simply look for the animated star, calendar, or leaf icons.
+
+**Real-time Updates**: New badges appear immediately when species are detected - no need to refresh the page.
+
+**Tooltips**: Hover over any badge to see detailed information like "New species (first seen 2 days ago)" or "First time this spring (3 days ago)".
+
+#### Badge Priority System
+
+When a species qualifies for multiple badges (for example, a bird that's both new this year AND new this season), the system shows only the most significant badge:
+
+1. **🌟 New Species** (highest priority - truly first-time visitors)
+2. **📅 New This Year** (medium priority - annual firsts)
+3. **🌿 New This Season** (lowest priority - seasonal appearances)
+
+#### Configuration Options
+
+The species tracking system is enabled by default with sensible settings, but you can customize it through the web interface settings:
+
+- **Enable/Disable**: Turn the entire tracking system on or off
+- **Badge Display Duration**: How long badges remain visible (default: 7 days)
+- **Year Reset Date**: When yearly tracking resets (default: January 1st)
+- **Seasonal Dates**: Customize when seasons begin (defaults to astronomical seasons)
+- **Sync Frequency**: How often the system updates tracking data (default: every hour)
+
+#### Practical Benefits
+
+**For Casual Birdwatchers**:
+- Never miss when a new species visits your yard
+- Easily spot seasonal patterns in bird activity
+- Get excited about first-of-the-year sightings
+
+**For Serious Birders**:
+- Track migration timing and patterns
+- Monitor range expansions and climate-related shifts  
+- Document seasonal abundance changes
+- Build comprehensive species lists for your location
+
+**For Researchers**:
+- Collect systematic data on species occurrence patterns
+- Monitor long-term changes in bird communities
+- Track phenological shifts in migration and breeding timing
+
+#### Tips for Best Results
+
+1. **Give it Time**: The system becomes more useful after running for several weeks or months to build up historical data
+2. **Stable Location**: Best results come from monitoring a consistent location over time
+3. **Check Regularly**: Visit your dashboard daily during migration seasons to catch the most exciting discoveries
+4. **Seasonal Awareness**: Pay extra attention during spring and fall migrations when new species are most likely to appear
+
+The species tracking system transforms your BirdNET-Go installation from a simple detector into an intelligent monitoring system that helps you understand the changing patterns of bird life at your location throughout the year.
+
 ### Integration Options
 
 The application offers several integration points:
