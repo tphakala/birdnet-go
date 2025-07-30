@@ -75,9 +75,9 @@
     if (onNavigate) {
       onNavigate(url);
     } else {
-      // Use pre-computed URLs when possible, fallback to original logic
-      const uiUrl = url.startsWith('/ui/') ? url : `/ui${url === '/' ? '/dashboard' : url}`;
-      window.location.href = uiUrl;
+      // All URLs are pre-computed in navigationUrls cache
+      // Direct assignment without string processing since we always pass proper URLs
+      window.location.href = url;
     }
   }
 

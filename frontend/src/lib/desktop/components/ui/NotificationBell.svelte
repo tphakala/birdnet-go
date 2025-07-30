@@ -108,15 +108,17 @@
   function getNotificationIconClass(notification: Notification): string {
     switch (notification.type) {
       case 'error':
-        return 'text-error';
+        return 'bg-error/20 text-error';
       case 'warning':
-        return 'text-warning';
+        return 'bg-warning/20 text-warning';
       case 'detection':
-        return 'text-success';
+        return 'bg-success/20 text-success';
       case 'system':
-        return 'text-info';
+        return 'bg-primary/20 text-primary';
+      case 'info':
+        return 'bg-info/20 text-info';
       default:
-        return 'text-base-content';
+        return 'bg-base-300 text-base-content';
     }
   }
 
@@ -503,7 +505,7 @@
           </div>
         {:else}
           <!-- Notifications -->
-          {#each visibleNotifications as notification (notification.id)}
+          {#each formattedNotifications as notification (notification.id)}
             <div
               role="menuitem"
               class={cn(
@@ -525,7 +527,7 @@
                   <div
                     class={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center',
-                      getNotificationIconClass(notification)
+                      notification.iconClass
                     )}
                   >
                     {#if notification.type === 'error'}
@@ -558,7 +560,7 @@
                       class="text-xs text-base-content/60 whitespace-nowrap"
                       datetime={notification.timestamp}
                     >
-                      {formatTimeAgo(notification.timestamp)}
+                      {notification.timeAgo}
                     </time>
                   </div>
                   <p class="text-sm text-base-content/80 mt-1">{notification.message}</p>
@@ -567,7 +569,7 @@
                       <span class="badge badge-sm badge-ghost">{notification.component}</span>
                     {/if}
                     <span
-                      class={cn('badge badge-sm', getPriorityBadgeClass(notification.priority))}
+                      class={cn('badge badge-sm', notification.priorityBadgeClass)}
                     >
                       {notification.priority}
                     </span>

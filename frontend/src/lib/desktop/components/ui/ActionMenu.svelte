@@ -55,7 +55,7 @@
   let isOpen = $state(false);
   let buttonElement: HTMLButtonElement;
   // svelte-ignore non_reactive_update
-  let menuElement: HTMLElement;
+  let menuElement: HTMLUListElement;
 
   /**
    * Updates the menu position to ensure it stays within the viewport.
