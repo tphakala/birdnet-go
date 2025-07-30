@@ -106,7 +106,7 @@
 
       // Cleanup old cache entries to prevent memory leaks
       cleanupDailySummaryCache();
-      
+
       // Enforce maximum cache size limit
       if (dailySummaryCache.size > CACHE_MAX_ENTRIES) {
         enforceMaxCacheSize();
@@ -143,7 +143,7 @@
     for (let i = 0; i < entriesToRemove; i++) {
       dailySummaryCache.delete(entries[i][0]);
     }
-    
+
     console.debug(`Cache size enforced: removed ${entriesToRemove} oldest entries`);
   }
 
