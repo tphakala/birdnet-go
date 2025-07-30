@@ -456,6 +456,8 @@ func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	// Create comprehensive configuration
 	settings := &conf.SpeciesTrackingSettings{
@@ -524,6 +526,8 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -635,6 +639,8 @@ func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -726,6 +732,8 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
@@ -853,6 +861,8 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
