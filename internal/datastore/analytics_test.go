@@ -260,8 +260,9 @@ func TestGetSpeciesSummaryDataTimeFormat(t *testing.T) {
 	// Check that FirstSeen and LastSeen are parsed correctly
 	summary := summaries[0]
 	expectedTime, _ := time.Parse("2006-01-02 15:04:05", "2024-01-15 14:30:45")
-	assert.Equal(t, expectedTime, summary.FirstSeen)
-	assert.Equal(t, expectedTime, summary.LastSeen)
+	expectedTime = expectedTime.UTC()
+	assert.Equal(t, expectedTime, summary.FirstSeen.UTC())
+	assert.Equal(t, expectedTime, summary.LastSeen.UTC())
 }
 
 // Helper function to find species by scientific name

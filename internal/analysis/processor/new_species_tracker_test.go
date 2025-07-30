@@ -784,6 +784,16 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// Mock yearly data showing species was first detected in spring (April 15)
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{
+			{
+				ScientificName: "Hirundo rustica",
+				CommonName:     "Barn Swallow",
+				FirstSeenDate:  "2024-04-15",
+				CountInPeriod:  1,
+			},
+		}, nil)
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

@@ -133,6 +133,10 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
+	// Initialize tracker to ensure proper setup
+	err := tracker.InitFromDatabase()
+	require.NoError(t, err)
+
 	// Test that even without explicit season config, defaults are initialized
 	testDates := []struct {
 		date           time.Time
@@ -144,10 +148,17 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 		{time.Date(2024, 10, 15, 0, 0, 0, 0, time.UTC), "fall"},
 	}
 
-	for _, test := range testDates {
+	for i, test := range testDates {
 		// This should not panic even if maps aren't initialized
 		isNew := tracker.UpdateSpecies("Parus major", test.date)
-		assert.True(t, isNew, "Expected first detection to be new")
+		// First detection should be new, subsequent detections in new seasons should also be new
+		// but detections in the same season within the window should not be new
+		if i == 0 {
+			assert.True(t, isNew, "Expected first detection to be new")
+		} else {
+			// Each season should be new since dates are months apart (> 21 day window)
+			assert.True(t, isNew, "Expected first detection in new season to be new")
+		}
 
 		status := tracker.GetSpeciesStatus("Parus major", test.date)
 		assert.Equal(t, test.expectedSeason, status.CurrentSeason)
