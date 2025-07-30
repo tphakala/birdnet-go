@@ -33,8 +33,25 @@ chown -R "$APP_UID":"$APP_GID" /config
 chown "$APP_UID":"$APP_GID" /data
 chown "$APP_UID":"$APP_GID" /data/*
 
-# Chown clips directory at background to avoid blocking the main process
-chown -R "$APP_UID":"$APP_GID" /data/clips &
+# Only chown clips directory if any subdirectories have wrong ownership
+NEEDS_CHOWN=false
+if [ -d "/data/clips" ] && [ "$(ls -A /data/clips)" ]; then
+    for subdir in /data/clips/*/; do
+        if [ -d "$subdir" ]; then
+            CURRENT_UID=$(stat -c %u "$subdir" 2>/dev/null || echo "0")
+            CURRENT_GID=$(stat -c %g "$subdir" 2>/dev/null || echo "0") 
+            if [ "$CURRENT_UID" != "$APP_UID" ] || [ "$CURRENT_GID" != "$APP_GID" ]; then
+                NEEDS_CHOWN=true
+                break
+            fi
+        fi
+    done
+fi
+
+if [ "$NEEDS_CHOWN" = true ]; then
+    echo "Fixing ownership of clips directory..."
+    chown -R "$APP_UID":"$APP_GID" /data/clips
+fi
 
 # Create config directory and symlink for the user
 USER_HOME=$(getent passwd "$APP_UID" | cut -d: -f6)
