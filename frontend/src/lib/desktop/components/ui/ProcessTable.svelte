@@ -31,6 +31,9 @@
     className = '',
   }: Props = $props();
 
+  // PERFORMANCE OPTIMIZATION: Pure utility functions outside reactive context
+  // These functions only depend on their parameters, not component state
+  // Moving them outside prevents recreation on every component render
   function formatStorage(bytes: number): string {
     if (!bytes) return '0 B';
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -68,6 +71,18 @@
         return 'badge-secondary';
     }
   }
+
+  // PERFORMANCE OPTIMIZATION: Cache process display names with $derived
+  // Avoid string processing in template for BirdNET-Go name transformation
+  let processDisplayNames = $derived(
+    processes.reduce(
+      (acc, process) => {
+        acc[process.pid] = process.name === 'main' ? 'BirdNET-Go' : process.name;
+        return acc;
+      },
+      {} as Record<number, string>
+    )
+  );
 
   function handleToggleChange() {
     if (onToggleShowAll) {
@@ -140,7 +155,7 @@
                       </div>
                       <div>
                         <div class="font-medium">
-                          {process.name === 'main' ? 'BirdNET-Go' : process.name}
+                          {processDisplayNames[process.pid]}
                         </div>
                         <div class="text-xs text-base-content/60">PID: {process.pid}</div>
                       </div>

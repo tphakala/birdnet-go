@@ -12,6 +12,10 @@
     navigationIcons,
   } from '$lib/utils/icons';
 
+  // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
+  // Change back to true to re-enable spinners for testing
+  const ENABLE_LOADING_SPINNERS = false;
+
   // Type definitions
   interface DateRange {
     start: string;
@@ -56,9 +60,19 @@
   let totalResults = $state(0);
   let sortBy = $state<SortBy>('date_desc');
   let errorMessage = $state('');
-  let expanded = $state<Record<string, boolean>>({});
+  // PERFORMANCE OPTIMIZATION: Use Set instead of object for expandedItems
+  // Set operations (has/add/delete) are faster than object property access
+  // and provide better memory efficiency for tracking expanded table rows
+  let expandedItems = $state(new Set<string>());
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
+
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived to avoid repeated DOM queries
+  // In Svelte 5, $derived creates reactive computed values that only recalculate when dependencies change
+  // This prevents expensive DOM queries on every form submission
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as any)?.content || ''
+  );
 
   // Form validation
   function validateForm() {
@@ -77,7 +91,7 @@
     isLoading = true;
     errorMessage = '';
     currentPage = page;
-    expanded = {}; // Reset expanded state when loading new results
+    expandedItems.clear(); // Reset expanded state when loading new results
 
     try {
       // Build request body
@@ -100,7 +114,7 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-Token': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+          'X-CSRF-Token': csrfToken,
         },
         body: JSON.stringify(requestBody),
       });
@@ -138,7 +152,7 @@
     formSubmitted = false;
     results = [];
     errorMessage = '';
-    expanded = {};
+    expandedItems.clear();
   }
 
   // Format date for display
@@ -162,14 +176,19 @@
 
   // Toggle expand state of a row
   function toggleExpand(recordId: string) {
-    // Toggle expand for record
-
-    expanded = { ...expanded, [recordId]: !expanded[recordId] };
-    // Update expanded state
+    if (expandedItems.has(recordId)) {
+      expandedItems.delete(recordId);
+    } else {
+      expandedItems.add(recordId);
+    }
+    // PERFORMANCE OPTIMIZATION: Create new Set instance to trigger Svelte 5 reactivity
+    // Svelte 5's fine-grained reactivity requires new object references to detect changes
+    // This is more efficient than spreading into object: {...expanded, [id]: !expanded[id]}
+    expandedItems = new Set(expandedItems);
   }
 
   function isExpanded(recordId: string) {
-    return Boolean(expanded[recordId]);
+    return expandedItems.has(recordId);
   }
 </script>
 
@@ -417,7 +436,7 @@
             disabled={isLoading}
             aria-label={t('common.search')}
           >
-            {#if isLoading}
+            {#if ENABLE_LOADING_SPINNERS && isLoading}
               <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
             {:else}
               <span class="mr-2" aria-hidden="true">
@@ -524,7 +543,7 @@
       {/if}
 
       <!-- Loading indicator -->
-      {#if isLoading && formSubmitted}
+      {#if ENABLE_LOADING_SPINNERS && isLoading && formSubmitted}
         <div
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
           aria-live="polite"
@@ -584,6 +603,10 @@
                         role="button"
                         tabindex="0"
                       >
+                        <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading attributes -->
+                        <!-- loading="lazy": Defer loading until image enters viewport -->
+                        <!-- decoding="async": Decode image off-main-thread to prevent UI blocking -->
+                        <!-- fetchpriority="low": Lower network priority for species thumbnails -->
                         <img
                           src="/api/v2/media/species-image?name={encodeURIComponent(
                             result.scientificName
@@ -598,6 +621,8 @@
                             }
                           }}
                           loading="lazy"
+                          decoding="async"
+                          fetchpriority="low"
                         />
                       </div>
                       <div>
@@ -759,6 +784,8 @@
                                   }
                                 }}
                                 loading="lazy"
+                                decoding="async"
+                                fetchpriority="low"
                               />
                             </div>
                           </div>

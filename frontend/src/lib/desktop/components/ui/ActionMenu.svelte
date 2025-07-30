@@ -16,7 +16,6 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { onMount, onDestroy } from 'svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { actionIcons, systemIcons } from '$lib/utils/icons';
 
@@ -96,7 +95,7 @@
     // Call appropriate callback
     if (isOpen) {
       onMenuOpen?.();
-      requestAnimationFrame(updateMenuPosition);
+      globalThis.requestAnimationFrame(updateMenuPosition);
     } else {
       onMenuClose?.();
     }
@@ -134,33 +133,41 @@
     }
   }
 
-  onMount(() => {
-    document.addEventListener('click', handleClickOutside);
-    document.addEventListener('keydown', handleKeydown);
-
-    // Update menu position on window resize and scroll
-    function handleResize() {
-      if (isOpen) {
+  // PERFORMANCE OPTIMIZATION: Use Svelte 5 $effect instead of legacy onMount
+  // $effect provides better reactivity and automatic cleanup management
+  // Only attach event listeners when menu is open to reduce global event overhead
+  $effect(() => {
+    if (isOpen) {
+      // Update menu position on window resize and scroll
+      function handleResize() {
         updateMenuPosition();
       }
+
+      // Attach event listeners only when menu is open
+      document.addEventListener('click', handleClickOutside);
+      document.addEventListener('keydown', handleKeydown);
+      window.addEventListener('resize', handleResize);
+      window.addEventListener('scroll', handleResize, true);
+
+      return () => {
+        // Automatic cleanup when effect re-runs or component unmounts
+        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('keydown', handleKeydown);
+        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('scroll', handleResize, true);
+      };
     }
-
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('scroll', handleResize, true);
-
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-      document.removeEventListener('keydown', handleKeydown);
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', handleResize, true);
-    };
   });
 
-  onDestroy(() => {
-    // If menu is open when component unmounts, call onMenuClose to keep count synchronized
-    if (isOpen && onMenuClose) {
-      onMenuClose();
-    }
+  // PERFORMANCE OPTIMIZATION: Cleanup effect using Svelte 5 pattern
+  // Automatically handles component unmount cleanup
+  $effect(() => {
+    return () => {
+      // If menu is open when component unmounts, call onMenuClose to keep count synchronized
+      if (isOpen && onMenuClose) {
+        onMenuClose();
+      }
+    };
   });
 </script>
 

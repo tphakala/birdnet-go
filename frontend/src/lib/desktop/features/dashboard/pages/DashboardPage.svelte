@@ -69,7 +69,6 @@
     }
   }
 
-
   // Fetch functions
   async function fetchDailySummary() {
     isLoadingSummary = true;

@@ -205,7 +205,7 @@
 
     get(key: K): V | undefined {
       if (!this.cache.has(key)) return undefined;
-      
+
       // Move to end (most recently used)
       const value = this.cache.get(key)!;
       this.cache.delete(key);
@@ -222,7 +222,7 @@
         const firstKey = this.cache.keys().next().value;
         this.cache.delete(firstKey);
       }
-      
+
       // Add to end (most recently used)
       this.cache.set(key, value);
     }

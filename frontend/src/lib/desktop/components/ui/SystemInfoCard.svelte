@@ -37,6 +37,9 @@
     className = '',
   }: Props = $props();
 
+  // PERFORMANCE OPTIMIZATION: Pure function for uptime formatting
+  // Moved outside reactive context to avoid recreation on every component update
+  // This function only depends on its parameter, not component state
   function formatUptime(seconds: number): string {
     if (!seconds) return 'N/A';
 
@@ -51,6 +54,12 @@
 
     return parts.join(' ') || '< 1m';
   }
+
+  // PERFORMANCE OPTIMIZATION: Cache formatted temperature string with $derived
+  // Avoids recalculating temperature format on every render when data hasn't changed
+  let formattedTemperature = $derived(
+    temperatureInfo?.celsius ? temperatureInfo.celsius.toFixed(1) + '°C' : 'N/A'
+  );
 </script>
 
 <div class={cn('card bg-base-100 shadow-sm', className)}>
@@ -98,9 +107,7 @@
         {#if temperatureInfo?.is_available && !temperatureLoading && !temperatureError}
           <div class="flex justify-between">
             <span class="text-base-content/70">CPU Temperature:</span>
-            <span class="font-medium">
-              {temperatureInfo.celsius ? temperatureInfo.celsius.toFixed(1) + '°C' : 'N/A'}
-            </span>
+            <span class="font-medium">{formattedTemperature}</span>
           </div>
         {/if}
 

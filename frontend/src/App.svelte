@@ -271,16 +271,8 @@
   });
 </script>
 
-{#snippet loadingSpinner()}
-  <div class="flex items-center justify-center h-64">
-    <span class="loading loading-spinner loading-lg"></span>
-  </div>
-{/snippet}
-
 {#snippet renderRoute(component: Component | null)}
-  {#if loadingComponent}
-    {@render loadingSpinner()}
-  {:else if component}
+  {#if component}
     {@const Component = component}
     <Component />
   {/if}
@@ -317,8 +309,6 @@
         title="Component Load Error"
         message="Failed to load the requested component"
       />
-    {:else if loadingComponent}
-      {@render loadingSpinner()}
     {/if}
   {/if}
 </RootLayout>

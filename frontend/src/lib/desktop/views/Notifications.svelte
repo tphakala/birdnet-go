@@ -3,6 +3,10 @@
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
+  // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
+  // Change back to true to re-enable spinners for testing
+  const ENABLE_LOADING_SPINNERS = false;
+
   let notifications = $state([]);
   let loading = $state(false);
   let currentPage = $state(1);
@@ -303,7 +307,7 @@
 
   <!-- Notifications List -->
   <div class="space-y-4" role="region" aria-label="Notifications list">
-    {#if loading}
+    {#if ENABLE_LOADING_SPINNERS && loading}
       <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
           <div class="flex justify-center">

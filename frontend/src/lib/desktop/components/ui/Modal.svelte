@@ -66,7 +66,7 @@
 
   let isConfirming = $state(false);
   let modalElement = $state<HTMLDivElement>();
-  let previousActiveElement: Element | null = null;
+  let previousActiveElement: HTMLElement | null = null;
 
   const sizeClasses: Record<ModalSize, string> = {
     sm: 'modal-box max-w-sm',
@@ -128,12 +128,19 @@
     }
   }
 
+  // PERFORMANCE OPTIMIZATION: Cache focusable elements with $derived
+  // Avoids repeated DOM queries during focus management
+  let focusableElements = $derived.by(() => {
+    if (!modalElement) return [];
+    return Array.from(modalElement.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+  });
+
   function trapFocus(event: KeyboardEvent) {
     if (!modalElement) return;
 
-    const focusableElements = modalElement.querySelectorAll(FOCUSABLE_SELECTOR);
-    const firstFocusable = focusableElements[0] as HTMLElement;
-    const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+    const elements = focusableElements;
+    const firstFocusable = elements[0];
+    const lastFocusable = elements[elements.length - 1];
 
     if (event.shiftKey) {
       // Shift + Tab - move focus backwards
@@ -150,14 +157,15 @@
     }
   }
 
+  // PERFORMANCE OPTIMIZATION: Use cached focusable elements
   function setInitialFocus() {
     if (!modalElement) return;
 
-    // Focus the first focusable element, or the modal itself if no focusable elements
-    const focusableElements = modalElement.querySelectorAll(FOCUSABLE_SELECTOR);
+    // Use cached focusable elements instead of querying DOM
+    const elements = focusableElements;
 
-    if (focusableElements.length > 0) {
-      (focusableElements[0] as HTMLElement).focus();
+    if (elements.length > 0) {
+      elements[0].focus();
     } else {
       modalElement.focus();
     }
@@ -172,7 +180,7 @@
   $effect(() => {
     if (isOpen) {
       // Store the currently focused element
-      previousActiveElement = document.activeElement;
+      previousActiveElement = document.activeElement as HTMLElement;
 
       // Set focus to modal when opened
       setTimeout(() => setInitialFocus(), 0);

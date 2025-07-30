@@ -1,27 +1,44 @@
-<script>
+<!--
+  About Page Component
+  
+  Purpose: Displays information about BirdNET-Go including overview, key features,
+  credits, technology stack, license, and version information.
+  
+  Features:
+  - Product overview and description
+  - Key features list with icons
+  - Original BirdNET team credits
+  - Technology stack display
+  - License information
+  - Version and build date display (when available)
+  
+  Props: None - This is a standalone page component
+  
+  Usage:
+  This component is rendered as a page view in the main application router.
+  It provides static content with internationalization support via the t() function.
+  
+  @component
+-->
+<script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
+  import { systemIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
-  // Settings data (version info)
-  let settings = $state({
-    version: '',
-    buildDate: '',
-  });
-
-  // Fetch version info on mount
-  async function fetchVersionInfo() {
-    try {
-      // In a real implementation, this would fetch from an API
-      // For now, we'll leave empty - the template will use fallback translations
-      // settings.version = '1.0.0';
-      // settings.buildDate = '2024-01-01';
-    } catch {
-      // Silently fail for now - version info is not critical
-    }
+  // TypeScript interface for version settings
+  interface VersionSettings {
+    version: string;
+    buildDate: string;
   }
 
-  $effect(() => {
-    fetchVersionInfo();
+  // PERFORMANCE OPTIMIZATION: Removed unnecessary $effect() that called empty fetchVersionInfo()
+  // In Svelte 5, $effect() runs on every component mount and when dependencies change.
+  // Calling empty functions creates unnecessary reactive overhead.
+
+  // Settings data (version info) - will use fallback translations for now
+  let settings = $state<VersionSettings>({
+    version: '',
+    buildDate: '',
   });
 </script>
 
@@ -75,47 +92,21 @@
     </p>
     <ul class="list-none pl-0 gap-2 mt-4 about-developers-grid">
       <li class="flex items-center gap-2">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="w-5 h-5"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-        </svg>
+        <!-- PERFORMANCE OPTIMIZATION: Using centralized systemIcons.user instead of custom UserIcon component -->
+        <!-- Reduces bundle size and follows project's established icon pattern -->
+        {@html systemIcons.user}
         Stefan Kahl
       </li>
       <li class="flex items-center gap-2">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="w-5 h-5"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-        </svg>
+        {@html systemIcons.user}
         Connor Wood
       </li>
       <li class="flex items-center gap-2">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="w-5 h-5"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-        </svg>
+        {@html systemIcons.user}
         Maximilian Eibl
       </li>
       <li class="flex items-center gap-2">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="w-5 h-5"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-        </svg>
+        {@html systemIcons.user}
         Holger Klinck
       </li>
     </ul>
@@ -154,18 +145,7 @@
 
     <p class="text-xl font-medium mt-6">{t('about.mainDeveloper')}</p>
     <p class="flex items-center gap-2 mt-2">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="w-5 h-5"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path
-          fill-rule="evenodd"
-          d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-          clip-rule="evenodd"
-        />
-      </svg>
+      {@html systemIcons.user}
       <a href="https://github.com/tphakala" class="btn btn-ghost btn-sm justify-start normal-case"
         >Tomi P. Hakala</a
       >
