@@ -227,6 +227,13 @@ tasks:
       - npm run build
       - npm run analyze:bundle:size
 
+  frontend-quality-fix:
+    desc: Auto-fix frontend quality issues (CSS/style formatting)
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run lint:css:fix
+
   clean:
     cmds:
       - go clean

@@ -262,6 +262,7 @@
 <style>
   .menu {
     animation: fadeIn 0.2s ease-out;
+
     /* Ensure menu is always on top - fallback for CSS-only scenarios */
     z-index: 9999 !important;
   }

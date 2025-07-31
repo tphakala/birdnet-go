@@ -220,6 +220,7 @@ Features:
     :global(.bi-hourly-count) {
       display: table-cell;
     }
+
     :global(.hourly-count) {
       display: none;
     }
@@ -229,6 +230,7 @@ Features:
     :global(.bi-hourly-count) {
       display: table-cell;
     }
+
     :global(.hourly-count) {
       display: none;
     }
@@ -238,6 +240,7 @@ Features:
     :global(.six-hourly-count) {
       display: table-cell;
     }
+
     :global(.bi-hourly-count) {
       display: none;
     }

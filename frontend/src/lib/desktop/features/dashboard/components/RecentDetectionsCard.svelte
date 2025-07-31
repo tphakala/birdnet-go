@@ -465,6 +465,7 @@
     0% {
       background-position: 200% 0;
     }
+
     100% {
       background-position: -200% 0;
     }
@@ -478,6 +479,7 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+
     /* Hide placeholder when image loads */
     z-index: 1;
     background-color: oklch(var(--b1));
@@ -534,6 +536,7 @@
     height: auto !important;
     width: 100% !important;
     max-width: 400px;
+
     /* Smooth fade-in for spectrogram to prevent flash */
     animation: fadeIn 0.3s ease-out;
   }
@@ -542,6 +545,7 @@
     from {
       opacity: 0;
     }
+
     to {
       opacity: 1;
     }

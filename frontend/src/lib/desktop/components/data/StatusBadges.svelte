@@ -148,30 +148,30 @@
   :global([data-theme='dark']) .status-badge.unverified {
     color: #9ca3af;
     border-color: #9ca3af;
-    background-color: rgba(156, 163, 175, 0.1);
+    background-color: rgb(156, 163, 175, 0.1);
   }
 
   :global([data-theme='dark']) .status-badge.correct {
     color: #34d399;
     border-color: #34d399;
-    background-color: rgba(52, 211, 153, 0.1);
+    background-color: rgb(52, 211, 153, 0.1);
   }
 
   :global([data-theme='dark']) .status-badge.false {
     color: #f87171;
     border-color: #f87171;
-    background-color: rgba(248, 113, 113, 0.1);
+    background-color: rgb(248, 113, 113, 0.1);
   }
 
   :global([data-theme='dark']) .status-badge.locked {
     color: #fbbf24;
     border-color: #fbbf24;
-    background-color: rgba(251, 191, 36, 0.1);
+    background-color: rgb(251, 191, 36, 0.1);
   }
 
   :global([data-theme='dark']) .status-badge.comment {
     color: #60a5fa;
     border-color: #60a5fa;
-    background-color: rgba(96, 165, 250, 0.1);
+    background-color: rgb(96, 165, 250, 0.1);
   }
 </style>

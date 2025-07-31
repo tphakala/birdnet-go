@@ -127,7 +127,7 @@
     border-radius: 50%;
     transform-origin: center;
     transform: rotate(180deg);
-    background: conic-gradient(currentColor var(--progress), transparent 0);
+    background: conic-gradient(currentcolor var(--progress), transparent 0);
     transition: all 0.3s ease;
     z-index: 1;
   }
@@ -138,7 +138,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     font-weight: 600;
-    color: currentColor;
+    color: currentcolor;
     z-index: 3;
     white-space: nowrap;
     display: flex;
@@ -155,35 +155,41 @@
   /* Confidence level color schemes */
   .confidence-circle :global(.confidence-high) {
     color: #059669;
+
     --lighter-color: #ecfdf5;
-    --darker-color: rgba(6, 78, 59, 0.2);
+    --darker-color: rgb(6, 78, 59, 0.2);
   }
 
   .confidence-circle :global(.confidence-medium) {
     color: #d97706;
+
     --lighter-color: #fffbeb;
-    --darker-color: rgba(120, 53, 15, 0.2);
+    --darker-color: rgb(120, 53, 15, 0.2);
   }
 
   .confidence-circle :global(.confidence-low) {
     color: #dc2626;
+
     --lighter-color: #fef2f2;
-    --darker-color: rgba(127, 29, 29, 0.2);
+    --darker-color: rgb(127, 29, 29, 0.2);
   }
 
   /* Dark theme adjustments */
   :global([data-theme='dark']) .confidence-circle :global(.confidence-high) {
     color: #34d399;
+
     --darker-color: rgb(6, 78, 59);
   }
 
   :global([data-theme='dark']) .confidence-circle :global(.confidence-medium) {
     color: #fbbf24;
+
     --darker-color: rgb(120, 53, 15);
   }
 
   :global([data-theme='dark']) .confidence-circle :global(.confidence-low) {
     color: #f87171;
+
     --darker-color: rgb(127, 29, 29);
   }
 </style>
