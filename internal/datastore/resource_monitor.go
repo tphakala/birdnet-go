@@ -389,6 +389,8 @@ func (r *ResourceSnapshot) GetResourceRecommendations() []string {
 	
 	const criticalDiskUsagePercent = 90.0
 	const largeWALSizeMB = 50
+	const criticalHeapAllocMB = 200
+	const criticalGoroutineCount = 1000
 
 	if r.DiskSpace.UsedPercent > criticalDiskUsagePercent {
 		recommendations = append(recommendations, 
@@ -402,13 +404,13 @@ func (r *ResourceSnapshot) GetResourceRecommendations() []string {
 				r.DatabaseFile.WALSize/1024/1024))
 	}
 	
-	if r.ProcessInfo.HeapAllocMB > 200 {
+	if r.ProcessInfo.HeapAllocMB > criticalHeapAllocMB {
 		recommendations = append(recommendations, 
 			fmt.Sprintf("High process memory usage: %dMB heap allocated", 
 				r.ProcessInfo.HeapAllocMB))
 	}
 	
-	if r.ProcessInfo.GoroutineCount > 1000 {
+	if r.ProcessInfo.GoroutineCount > criticalGoroutineCount {
 		recommendations = append(recommendations, 
 			fmt.Sprintf("High goroutine count: %d active", 
 				r.ProcessInfo.GoroutineCount))
