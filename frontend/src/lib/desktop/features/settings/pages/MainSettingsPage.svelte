@@ -188,10 +188,24 @@
     const initialLng = settings.birdnet.longitude || 0;
     const initialZoom = initialLat !== 0 || initialLng !== 0 ? 6 : 2;
 
-    map = L.map(mapElement).setView([initialLat, initialLng], initialZoom);
+    map = L.map(mapElement, {
+      scrollWheelZoom: false, // Disable default scroll wheel zoom
+    }).setView([initialLat, initialLng], initialZoom);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
     }).addTo(map);
+
+    // Enable zoom only when Ctrl/Cmd is pressed
+    mapElement.addEventListener('wheel', e => {
+      if (e.ctrlKey || e.metaKey) {
+        // metaKey is Cmd on Mac
+        e.preventDefault();
+        const zoom = map.getZoom();
+        const delta = e.deltaY > 0 ? -1 : 1;
+        map.setZoom(zoom + delta, { animate: true });
+      }
+    });
 
     // Add marker if coordinates exist
     if (initialLat !== 0 || initialLng !== 0) {
@@ -575,6 +589,11 @@
               <div class="label">
                 <span class="label-text-alt"
                   >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
+                >
+              </div>
+              <div class="label">
+                <span class="label-text-alt text-info"
+                  >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map</span
                 >
               </div>
             </div>
