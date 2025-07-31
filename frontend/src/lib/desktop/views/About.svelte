@@ -66,20 +66,14 @@
   </div>
 
   <!-- Overview Section -->
-  <Card
-    title={t('about.overview')}
-    className="bg-base-100 shadow-sm"
-  >
+  <Card title={t('about.overview')} className="bg-base-100 shadow-sm">
     <p>
       {t('about.overviewText')}
     </p>
   </Card>
 
   <!-- BirdNET Project Section -->
-  <Card
-    title={t('about.birdnetProject')}
-    className="bg-base-100 shadow-sm"
-  >
+  <Card title={t('about.birdnetProject')} className="bg-base-100 shadow-sm">
     <p>
       {t('about.birdnetDescription')}
     </p>
@@ -132,10 +126,7 @@
   </Card>
 
   <!-- Contributors Section -->
-  <Card
-    title={t('about.contributors')}
-    className="bg-base-100 shadow-sm"
-  >
+  <Card title={t('about.contributors')} className="bg-base-100 shadow-sm">
     <p>
       {t('about.contributorsText')}
     </p>
@@ -273,10 +264,7 @@
   </Card>
 
   <!-- Additional Credits Section -->
-  <Card
-    title={t('about.additionalCredits')}
-    className="bg-base-100 shadow-sm"
-  >
+  <Card title={t('about.additionalCredits')} className="bg-base-100 shadow-sm">
     <p class="text-xl font-medium">{t('about.birdnetPiProject')}</p>
     <p class="mt-2">
       {t('about.birdnetPiDescription')}

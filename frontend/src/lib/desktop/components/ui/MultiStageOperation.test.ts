@@ -5,7 +5,9 @@ import type { Stage } from './MultiStageOperation.types';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render MultiStageOperation with proper typing
-const renderMultiStageOperation = (props: Partial<ComponentProps<typeof MultiStageOperation>> & { stages: Stage[] }) => {
+const renderMultiStageOperation = (
+  props: Partial<ComponentProps<typeof MultiStageOperation>> & { stages: Stage[] }
+) => {
   return render(MultiStageOperation, { props });
 };
 

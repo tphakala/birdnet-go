@@ -565,9 +565,7 @@
                     {#if notification.component}
                       <span class="badge badge-sm badge-ghost">{notification.component}</span>
                     {/if}
-                    <span
-                      class={cn('badge badge-sm', notification.priorityBadgeClass)}
-                    >
+                    <span class={cn('badge badge-sm', notification.priorityBadgeClass)}>
                       {notification.priority}
                     </span>
                   </div>

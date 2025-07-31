@@ -156,7 +156,6 @@ Responsive Breakpoints:
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
 
-
   // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
   const sunTimesCache = $state.raw(new LRUCache<string, SunTimes>(30)); // Max 30 days of sun times
 

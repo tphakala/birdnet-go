@@ -113,7 +113,7 @@ npm run test:a11y:watch   # Watch accessibility tests during development
 // ❌ Bad: Type assertion bypasses safety
 const value = map.get(key) as string;
 
-// ❌ Bad: Non-null assertion without verification  
+// ❌ Bad: Non-null assertion without verification
 const value = map.get(key)!;
 
 // ✅ Good: Proper type checking and iterator validation

@@ -36,9 +36,8 @@
     tabindex,
     title,
     onclick,
-    onkeydown
+    onkeydown,
   }: Props = $props();
-
 
   // Calculate time of day from datetime if not provided
   function calculateTimeOfDay(dt: Date | string | number | undefined): TimeOfDay {
@@ -93,9 +92,9 @@
     'aria-label': ariaLabel,
     'aria-hidden': ariaHidden,
     tabindex,
-    title: title || (showTooltip ? (tooltipText[currentTimeOfDay] || 'Unknown time') : undefined),
+    title: title || (showTooltip ? tooltipText[currentTimeOfDay] || 'Unknown time' : undefined),
     onclick,
-    onkeydown
+    onkeydown,
   });
 
   let svgClasses = $derived(cn(sizeClasses[size], colorClasses[currentTimeOfDay], className));
@@ -187,10 +186,7 @@
     </svg>
   {:else}
     <!-- Default clock icon for unknown time -->
-    <div
-      class={cn(sizeClasses[size], 'text-gray-400', className)}
-      {...commonAttrs}
-    >
+    <div class={cn(sizeClasses[size], 'text-gray-400', className)} {...commonAttrs}>
       {@html systemIcons.clock}
     </div>
   {/if}
