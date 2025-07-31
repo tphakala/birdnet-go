@@ -307,11 +307,6 @@ Source: Apache-2.0
 License: https://github.com/sagikazarmark/locafero/blob/v0.7.0/LICENSE
 Source: MIT
 
-### github.com/shirou/gopsutil
-
-License: https://github.com/shirou/gopsutil/blob/v3.21.11/LICENSE
-Source: BSD-3-Clause
-
 ### github.com/shirou/gopsutil/v3
 
 License: https://github.com/shirou/gopsutil/blob/v3.24.5/LICENSE
