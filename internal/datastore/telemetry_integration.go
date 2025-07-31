@@ -74,12 +74,19 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 	enhancedErr := dt.buildEnhancedError(err, operation, context)
 	
 	// Log locally with full context
-	getLogger().Error("Database error with context",
+	logFields := []interface{}{
 		"operation", operation,
 		"error", err.Error(),
 		"severity", severity,
-		"resource_summary", context.ResourceSnapshot.FormatResourceSummary(),
-		"recommendations", context.Recommendations)
+		"recommendations", context.Recommendations,
+	}
+	
+	// Add resource summary only if ResourceSnapshot is available
+	if context.ResourceSnapshot != nil {
+		logFields = append(logFields, "resource_summary", context.ResourceSnapshot.FormatResourceSummary())
+	}
+	
+	getLogger().Error("Database error with context", logFields...)
 
 	// Send to telemetry based on severity
 	if severity == "critical" || severity == "high" {
@@ -92,7 +99,7 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 // gatherErrorContext collects comprehensive context for an error
 func (dt *DatastoreTelemetry) gatherErrorContext(err error, operation string, store StoreInterface) *ErrorContext {
 	context := &ErrorContext{
-		Timestamp: fmt.Sprintf("%d", CurrentTimeMillis()),
+		Timestamp: time.Now().Format(time.RFC3339),
 		Operation: operation,
 		Error:     err.Error(),
 		ErrorType: fmt.Sprintf("%T", err),
@@ -250,16 +257,22 @@ func (dt *DatastoreTelemetry) sendCriticalErrorToTelemetry(err error, context *E
 		}
 
 		// Add breadcrumb with summary
+		breadcrumbData := map[string]interface{}{
+			"operation": context.Operation,
+			"severity":  context.Severity,
+		}
+		
+		// Add resource data only if ResourceSnapshot is not nil
+		if context.ResourceSnapshot != nil {
+			breadcrumbData["disk_free_mb"] = context.ResourceSnapshot.DiskSpace.AvailableBytes / 1024 / 1024
+			breadcrumbData["db_size_mb"] = context.ResourceSnapshot.DatabaseFile.SizeBytes / 1024 / 1024
+		}
+		
 		scope.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "database.error",
 			Message:  fmt.Sprintf("Critical database error: %s", context.Operation),
-			Data: map[string]interface{}{
-				"operation":     context.Operation,
-				"severity":      context.Severity,
-				"disk_free_mb":  context.ResourceSnapshot.DiskSpace.AvailableBytes / 1024 / 1024,
-				"db_size_mb":    context.ResourceSnapshot.DatabaseFile.SizeBytes / 1024 / 1024,
-			},
-			Level: sentry.LevelError,
+			Data:     breadcrumbData,
+			Level:    sentry.LevelError,
 		}, 10)
 
 		telemetry.CaptureError(err, "datastore")
@@ -299,7 +312,3 @@ type StoreInterface interface {
 	GetDBPath() string
 }
 
-// CurrentTimeMillis returns current time in milliseconds since epoch
-func CurrentTimeMillis() int64 {
-	return time.Now().UnixMilli()
-}
