@@ -72,7 +72,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   it('should preserve rangeFilter when updating coordinates', () => {
     // Get initial state
     const initialState = get(settingsStore);
-    const initialRangeFilter = initialState.formData.birdnet ? initialState.formData.birdnet.rangeFilter : undefined;
+    const initialRangeFilter = initialState.formData.birdnet!.rangeFilter;
 
     // Verify initial range filter values
     expect(initialRangeFilter?.model).toBe('latest');
@@ -101,8 +101,8 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   it('should preserve coordinates when updating rangeFilter threshold', () => {
     // Get initial coordinates
     const initialState = get(settingsStore);
-    const initialLat = initialState.formData.birdnet?.latitude;
-    const initialLng = initialState.formData.birdnet?.longitude;
+    const initialLat = initialState.formData.birdnet!.latitude;
+    const initialLng = initialState.formData.birdnet!.longitude;
 
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
@@ -163,17 +163,12 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   it('should merge partial rangeFilter updates correctly', () => {
     // Update only the range filter threshold (partial update)
     const storeState = get(settingsStore);
-    const currentRangeFilter = storeState.formData.birdnet?.rangeFilter;
+    const currentRangeFilter = storeState.formData.birdnet!.rangeFilter;
 
     settingsActions.updateSection('birdnet', {
-      rangeFilter: currentRangeFilter ? {
+      rangeFilter: {
         ...currentRangeFilter,
         threshold: 0.07,
-      } : {
-        model: 'latest' as const,
-        threshold: 0.07,
-        speciesCount: null,
-        species: [],
       },
     });
 
