@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Chart from 'chart.js/auto';
   import 'chartjs-adapter-date-fns';
   import StatCard from '../components/ui/StatCard.svelte';
@@ -156,7 +156,8 @@
     newSpecies: [],
   });
 
-  // Chart instances
+  // Chart instances - using WeakMap for better memory management
+  const chartCanvases = new WeakMap<HTMLCanvasElement, Chart>();
   let charts: Charts = {
     species: null,
     timeOfDay: null,
@@ -323,8 +324,15 @@
         filters.endDate = endDate || '';
       }
 
+      logger.debug('Applying analytics filters:', {
+        timePeriod: filters.timePeriod,
+        startDate,
+        endDate,
+        calculatedRange: startDate && endDate ? `${startDate} to ${endDate}` : 'unlimited',
+      });
+
       // Run all API calls in parallel
-      await Promise.allSettled([
+      const results = await Promise.allSettled([
         fetchSummaryData(startDate || '', endDate || ''),
         fetchSpeciesSummary(startDate || '', endDate || ''),
         fetchRecentDetections(),
@@ -332,6 +340,23 @@
         fetchTrendData(startDate || '', endDate || ''),
         fetchNewSpeciesData(startDate || '', endDate || ''),
       ]);
+
+      // Log any failed API calls (these show up in both dev and prod)
+      const apiNames = ['Summary', 'Species', 'Recent', 'TimeOfDay', 'Trend', 'NewSpecies'];
+      const failures = results
+        .map((result, index) => ({ result, name: apiNames[index] }))
+        .filter(({ result }) => result.status === 'rejected');
+
+      if (failures.length > 0) {
+        failures.forEach(({ result, name }) => {
+          const reason = result.status === 'rejected' ? result.reason : 'Unknown error';
+          logger.error(`${name} API call failed during filter operation`, reason, {
+            timePeriod: filters.timePeriod,
+            startDate,
+            endDate,
+          });
+        });
+      }
     } catch (err) {
       logger.error('General error fetching analytics data:', err);
       error = t('analytics.loadingError');
@@ -341,10 +366,20 @@
     isLoading = false;
     await tick();
 
-    // Now create all charts after DOM is ready
-    setTimeout(() => {
+    // Create charts after DOM update
+    // Small timeout ensures canvas elements have proper dimensions
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    timeoutId = setTimeout(() => {
       createAllCharts();
-    }, 100);
+      timeoutId = null;
+    }, 50);
+
+    // Return cleanup function if component unmounts during timeout
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }
 
   // Fetch summary metrics
@@ -354,11 +389,30 @@
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
 
-      const response = await fetch(`/api/v2/analytics/species/summary?${params}`);
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+      const url = `/api/v2/analytics/species/summary?${params}`;
+      logger.debug('Fetching summary data:', { url, startDate, endDate });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logger.error('Summary API request failed', new Error(`HTTP ${response.status}`), {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          startDate,
+          endDate,
+        });
+        throw new Error(`Server responded with ${response.status}`);
+      }
 
       const speciesData = await response.json();
       const speciesArray = Array.isArray(speciesData) ? speciesData : [];
+
+      logger.debug('Summary API response:', {
+        url,
+        dataType: typeof speciesData,
+        isArray: Array.isArray(speciesData),
+        length: speciesArray.length,
+      });
 
       // Calculate summary metrics
       let totalDetections = 0;
@@ -398,11 +452,30 @@
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
 
-      const response = await fetch(`/api/v2/analytics/species/summary?${params}`);
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+      const url = `/api/v2/analytics/species/summary?${params}`;
+      logger.debug('Fetching species chart data:', { url, startDate, endDate });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logger.error('Species chart API request failed', new Error(`HTTP ${response.status}`), {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          startDate,
+          endDate,
+        });
+        throw new Error(`Server responded with ${response.status}`);
+      }
 
       const speciesData = await response.json();
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
+
+      logger.debug('Species chart API response:', {
+        url,
+        dataType: typeof speciesData,
+        isArray: Array.isArray(speciesData),
+        length: chartData.species.length,
+      });
     } catch (err) {
       logger.error('Error fetching species summary:', err);
       chartData.species = [];
@@ -454,11 +527,30 @@
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
 
-      const response = await fetch(`/api/v2/analytics/time/distribution/hourly?${params}`);
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+      const url = `/api/v2/analytics/time/distribution/hourly?${params}`;
+      logger.debug('Fetching time of day data:', { url, startDate, endDate });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logger.error('Time of day API request failed', new Error(`HTTP ${response.status}`), {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          startDate,
+          endDate,
+        });
+        throw new Error(`Server responded with ${response.status}`);
+      }
 
       const timeData = await response.json();
       chartData.timeOfDay = timeData;
+
+      logger.debug('Time of day API response:', {
+        url,
+        dataType: typeof timeData,
+        isArray: Array.isArray(timeData),
+        length: Array.isArray(timeData) ? timeData.length : 0,
+      });
     } catch (err) {
       logger.error('Error fetching time of day data:', err);
       chartData.timeOfDay = [];
@@ -469,14 +561,43 @@
   async function fetchTrendData(startDate: string, endDate: string) {
     try {
       const params = new URLSearchParams();
-      if (startDate) params.set('start_date', startDate);
+
+      // The daily analytics endpoint requires start_date parameter
+      // If no startDate provided, use a reasonable default (last 30 days)
+      if (startDate) {
+        params.set('start_date', startDate);
+      } else {
+        // Default to last 30 days if no start date specified
+        const defaultStart = new Date();
+        defaultStart.setDate(defaultStart.getDate() - 30);
+        params.set('start_date', formatDateForInput(defaultStart));
+      }
+
       if (endDate) params.set('end_date', endDate);
 
-      const response = await fetch(`/api/v2/analytics/time/daily?${params}`);
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+      const url = `/api/v2/analytics/time/daily?${params}`;
+      logger.debug('Fetching trend data:', { url, startDate, endDate });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logger.error('Trend API request failed', new Error(`HTTP ${response.status}`), {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          startDate,
+          endDate,
+        });
+        throw new Error(`Server responded with ${response.status}`);
+      }
 
       const trendData = await response.json();
       chartData.trend = trendData;
+
+      logger.debug('Trend API response:', {
+        url,
+        dataType: typeof trendData,
+        dataLength: trendData?.data?.length || 0,
+      });
     } catch (err) {
       logger.error('Error fetching trend data:', err);
       chartData.trend = { data: [] };
@@ -490,12 +611,31 @@
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
 
-      const response = await fetch(`/api/v2/analytics/species/detections/new?${params}`);
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+      const url = `/api/v2/analytics/species/detections/new?${params}`;
+      logger.debug('Fetching new species data:', { url, startDate, endDate });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logger.error('New species API request failed', new Error(`HTTP ${response.status}`), {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          startDate,
+          endDate,
+        });
+        throw new Error(`Server responded with ${response.status}`);
+      }
 
       const data = await response.json();
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
+
+      logger.debug('New species API response:', {
+        url,
+        dataType: typeof data,
+        isArray: Array.isArray(data),
+        length: newSpeciesData.length,
+      });
     } catch (err) {
       logger.error('Error fetching new species data:', err);
       newSpeciesData = [];
@@ -505,7 +645,19 @@
 
   // Create all charts after data is loaded and DOM is ready
   function createAllCharts() {
-    logger.debug('Creating all charts...');
+    const chartDataStats = {
+      speciesCount: chartData.species?.length || 0,
+      timeOfDayCount: chartData.timeOfDay?.length || 0,
+      trendDataCount: chartData.trend?.data?.length || 0,
+      newSpeciesCount: chartData.newSpecies?.length || 0,
+      hasSpeciesData: (chartData.species?.length || 0) > 0,
+      hasTimeData: (chartData.timeOfDay?.length || 0) > 0,
+      hasTrendData: (chartData.trend?.data?.length || 0) > 0,
+      hasNewSpeciesData: (chartData.newSpecies?.length || 0) > 0,
+    };
+
+    logger.debug('Creating all charts with data:', chartDataStats);
+
     createSpeciesChart(chartData.species);
     createTimeOfDayChart(chartData.timeOfDay);
     createTrendChart(chartData.trend);
@@ -516,9 +668,27 @@
   // Chart.js destroy() + new Chart() is expensive - instead we update data and call update()
   // Using update('none') skips animations for better performance during data changes
   function createSpeciesChart(data: SpeciesData[]) {
-    const ctx = (document.getElementById('speciesChart') as HTMLCanvasElement)?.getContext('2d');
-    if (!ctx) {
-      logger.error('Species chart canvas not found');
+    const canvas = document.getElementById('speciesChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
+      logger.debug('Species chart canvas not found - component may not be mounted yet');
+      return;
+    }
+
+    // Handle empty data case
+    if (!Array.isArray(data) || data.length === 0) {
+      logger.warn('Species chart has no data to display', null, {
+        dataType: typeof data,
+        isArray: Array.isArray(data),
+        length: data?.length || 0,
+      });
+      if (charts.species) {
+        // Use clean arrays to avoid Chart.js proxy issues
+        charts.species.data.labels = [];
+        charts.species.data.datasets[0].data = [];
+        charts.species.data.datasets[0].backgroundColor = [];
+        charts.species.update('none');
+      }
       return;
     }
 
@@ -531,9 +701,10 @@
 
     // Update existing chart if it exists
     if (charts.species) {
-      charts.species.data.labels = labels;
-      charts.species.data.datasets[0].data = counts;
-      charts.species.data.datasets[0].backgroundColor = backgroundColors;
+      // Create clean copies to avoid Chart.js proxy issues
+      charts.species.data.labels = [...labels];
+      charts.species.data.datasets[0].data = [...counts];
+      charts.species.data.datasets[0].backgroundColor = [...backgroundColors];
       // PERFORMANCE: Skip animations with 'none' mode for faster updates
       charts.species.update('none');
       return;
@@ -594,13 +765,18 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.species) {
+      chartCanvases.set(canvas, charts.species);
+    }
   }
 
   // PERFORMANCE OPTIMIZATION: Same chart update strategy for time of day chart
   function createTimeOfDayChart(data: TimeOfDayData[]) {
-    const ctx = (document.getElementById('timeOfDayChart') as HTMLCanvasElement)?.getContext('2d');
-    if (!ctx) {
-      logger.error('Time of day chart canvas not found');
+    const canvas = document.getElementById('timeOfDayChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
+      logger.debug('Time of day chart canvas not found - component may not be mounted yet');
       return;
     }
 
@@ -642,7 +818,8 @@
 
     // Update existing chart if it exists
     if (charts.timeOfDay) {
-      charts.timeOfDay.data.datasets[0].data = periodCounts;
+      // Create clean copy to avoid Chart.js proxy issues
+      charts.timeOfDay.data.datasets[0].data = [...periodCounts];
       // PERFORMANCE: Skip animations for faster rendering
       charts.timeOfDay.update('none');
       return;
@@ -707,13 +884,18 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.timeOfDay) {
+      chartCanvases.set(canvas, charts.timeOfDay);
+    }
   }
 
   // PERFORMANCE OPTIMIZATION: Same chart update strategy for trend chart
   function createTrendChart(responseData: TrendData | null) {
-    const ctx = (document.getElementById('trendChart') as HTMLCanvasElement)?.getContext('2d');
-    if (!ctx) {
-      logger.error('Trend chart canvas not found');
+    const canvas = document.getElementById('trendChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
+      logger.debug('Trend chart canvas not found - component may not be mounted yet');
       return;
     }
 
@@ -739,8 +921,9 @@
 
     // Update existing chart if it exists
     if (charts.trend) {
-      charts.trend.data.labels = labels;
-      charts.trend.data.datasets[0].data = counts;
+      // Create clean copies to avoid Chart.js proxy issues
+      charts.trend.data.labels = [...labels];
+      charts.trend.data.datasets[0].data = [...counts];
       // PERFORMANCE: Skip animations for faster line chart updates
       charts.trend.update('none');
       return;
@@ -811,6 +994,10 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.trend) {
+      chartCanvases.set(canvas, charts.trend);
+    }
   }
 
   // Create new species chart
@@ -818,19 +1005,26 @@
     const canvas = document.getElementById('newSpeciesChart') as HTMLCanvasElement;
     const ctx = canvas?.getContext('2d');
     if (!ctx) {
-      logger.error('New species chart canvas not found');
+      logger.debug('New species chart canvas not found - component may not be mounted yet');
       return;
     }
 
-    // Update existing chart if it exists and data is compatible
-    if (charts.newSpecies && Array.isArray(data) && data.length > 0) {
+    // Handle empty data case first
+    if (!Array.isArray(data) || data.length === 0) {
+      if (charts.newSpecies) {
+        charts.newSpecies.destroy();
+        charts.newSpecies = null;
+      }
+      return;
+    }
+
+    // Update existing chart if it exists
+    if (charts.newSpecies) {
       // PERFORMANCE NOTE: New species chart uses complex time scales, so we still recreate
       // Time scale charts are difficult to update efficiently, destruction is acceptable here
       charts.newSpecies.destroy();
       charts.newSpecies = null;
     }
-
-    if (!Array.isArray(data) || data.length === 0) return;
 
     // Helper to add one day
     const addOneDay = (dateStr: string) => {
@@ -950,6 +1144,10 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.newSpecies && canvas) {
+      chartCanvases.set(canvas, charts.newSpecies);
+    }
   }
 
   // Initialize on mount
@@ -979,11 +1177,19 @@
     fetchData();
   });
 
-  // Cleanup on destroy
-  onDestroy(() => {
-    Object.values(charts).forEach(chart => {
-      if (chart) chart.destroy();
-    });
+  // Cleanup charts when component unmounts using Svelte 5 $effect
+  $effect(() => {
+    // Effect runs when component mounts
+    return () => {
+      // Cleanup function runs when component unmounts
+      Object.values(charts).forEach(chart => {
+        if (chart) {
+          chart.destroy();
+        }
+      });
+      // Clear any remaining chart references from WeakMap
+      // WeakMap will auto-cleanup when canvas elements are garbage collected
+    };
   });
 </script>
 
