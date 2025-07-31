@@ -96,6 +96,41 @@ npm run test:a11y:watch   # Watch accessibility tests during development
 - Component type mismatches
 - Accessibility violations
 
+## TypeScript Best Practices
+
+**CRITICAL: Never bypass TypeScript's type checking system**
+
+- **❌ FORBIDDEN**: Using `any` type without proper justification and eslint-disable comment
+- **❌ FORBIDDEN**: Using type assertions (`as Type`) to bypass proper type safety
+- **❌ FORBIDDEN**: Using non-null assertions (`!`) without absolute certainty
+- **✅ REQUIRED**: Use proper type guards, conditional checks, and iterator validation
+- **✅ REQUIRED**: Handle undefined/null cases explicitly with proper checks
+- **✅ REQUIRED**: Use TypeScript's strict mode and compiler checks as intended
+
+**Examples:**
+
+```typescript
+// ❌ Bad: Type assertion bypasses safety
+const value = map.get(key) as string;
+
+// ❌ Bad: Non-null assertion without verification  
+const value = map.get(key)!;
+
+// ✅ Good: Proper type checking and iterator validation
+const result = iterator.next();
+if (!result.done && result.value !== undefined) {
+  // Safe to use result.value
+}
+
+// ✅ Good: Explicit null/undefined handling
+const value = map.get(key);
+if (value !== undefined) {
+  // Safe to use value
+}
+```
+
+TypeScript's type system exists to prevent runtime errors. Bypassing it defeats the purpose and introduces potential bugs.
+
 ## Development Tools
 
 ### UI Screenshots & Testing

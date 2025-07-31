@@ -15,7 +15,8 @@ export class LRUCache<K, V> {
     if (!this.cache.has(key)) return undefined;
 
     // Move to end (most recently used)
-    const value = this.cache.get(key) as V;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Key existence already verified above
+    const value = this.cache.get(key)!;
     this.cache.delete(key);
     this.cache.set(key, value);
     return value;
@@ -27,9 +28,9 @@ export class LRUCache<K, V> {
       this.cache.delete(key);
     } else if (this.cache.size >= this.maxSize) {
       // Remove least recently used (first item)
-      const firstKey = this.cache.keys().next().value as K;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
+      const firstKeyResult = this.cache.keys().next();
+      if (!firstKeyResult.done && firstKeyResult.value !== undefined) {
+        this.cache.delete(firstKeyResult.value);
       }
     }
 
