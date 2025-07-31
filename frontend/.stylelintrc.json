@@ -37,8 +37,7 @@
       }
     ],
     "media-feature-range-notation": null,
-    "alpha-value-notation": "number",
-    "color-function-notation": "legacy"
+    "alpha-value-notation": "number"
   },
   "overrides": [
     {
