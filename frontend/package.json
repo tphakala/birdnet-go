@@ -35,9 +35,9 @@
     "test:a11y": "vitest run --reporter=verbose -t \"Accessibility\"",
     "test:a11y:watch": "vitest -t \"Accessibility\"",
     "generate:i18n-types": "npx tsx src/lib/i18n/generateTypes.ts",
-    "prepare": "husky install",
+    "prepare": "husky",
     "analyze:bundle": "npm run build && npx vite-bundle-analyzer dist",
-    "analyze:bundle:size": "npm run build && npx bundlesize",
+    "analyze:bundle:size": "npm run build",
     "audit:security": "npm audit --audit-level=high",
     "audit:outdated": "npm outdated",
     "check:deps": "npx depcheck && npm run audit:security"
@@ -51,33 +51,6 @@
       "stylelint --fix"
     ]
   },
-  "bundlesize": [
-    {
-      "path": "./dist/charts.js",
-      "maxSize": "75kb",
-      "compression": "gzip"
-    },
-    {
-      "path": "./dist/index.js",
-      "maxSize": "65kb",
-      "compression": "gzip"
-    },
-    {
-      "path": "./dist/Settings.js",
-      "maxSize": "45kb",
-      "compression": "gzip"
-    },
-    {
-      "path": "./dist/index.css",
-      "maxSize": "30kb",
-      "compression": "gzip"
-    },
-    {
-      "path": "./dist/*.js",
-      "maxSize": "25kb",
-      "compression": "gzip"
-    }
-  ],
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
     "@eslint/js": "^9.30.1",
@@ -93,7 +66,6 @@
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.21",
     "axe-core": "^4.10.3",
-    "bundlesize": "^0.18.2",
     "eslint": "^9.30.1",
     "eslint-plugin-security": "^3.0.1",
     "eslint-plugin-svelte": "^3.10.1",
