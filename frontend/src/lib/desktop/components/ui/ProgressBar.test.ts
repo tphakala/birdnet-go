@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import ProgressBar from './ProgressBar.svelte';
 
 describe('ProgressBar', () => {
+  const progressTest = createComponentTestFactory(ProgressBar);
   it('renders with default props', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 50,
       },
@@ -23,7 +24,7 @@ describe('ProgressBar', () => {
 
   it('renders with custom max value', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 25,
         max: 50,
@@ -42,7 +43,7 @@ describe('ProgressBar', () => {
 
     sizes.forEach(size => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { container, unmount } = render(ProgressBar as any, {
+      const { container, unmount } = progressTest.render({
         props: { value: 50, size },
       });
 
@@ -72,7 +73,7 @@ describe('ProgressBar', () => {
 
     variants.forEach(variant => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { container, unmount } = render(ProgressBar as any, {
+      const { container, unmount } = progressTest.render({
         props: { value: 50, variant },
       });
 
@@ -84,7 +85,7 @@ describe('ProgressBar', () => {
 
   it('shows label when showLabel is true', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ProgressBar as any, {
+    progressTest.render({
       props: {
         value: 75,
         showLabel: true,
@@ -98,7 +99,7 @@ describe('ProgressBar', () => {
     const labelFormat = vi.fn((value: number, max: number) => `${value} of ${max}`);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ProgressBar as any, {
+    progressTest.render({
       props: {
         value: 30,
         max: 100,
@@ -113,7 +114,7 @@ describe('ProgressBar', () => {
 
   it('applies color thresholds', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container, rerender } = render(ProgressBar as any, {
+    const { container, rerender } = progressTest.render({
       props: {
         value: 20,
         colorThresholds: [
@@ -167,7 +168,7 @@ describe('ProgressBar', () => {
 
   it('clamps value between 0 and max', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 150,
         max: 100,
@@ -178,7 +179,7 @@ describe('ProgressBar', () => {
     expect(bar).toHaveStyle('width: 100%');
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container: container2 } = render(ProgressBar as any, {
+    const { container: container2 } = progressTest.render({
       props: {
         value: -20,
         max: 100,
@@ -191,7 +192,7 @@ describe('ProgressBar', () => {
 
   it('applies striped styles', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 50,
         striped: true,
@@ -205,7 +206,7 @@ describe('ProgressBar', () => {
 
   it('applies animated stripes', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 50,
         striped: true,
@@ -219,7 +220,7 @@ describe('ProgressBar', () => {
 
   it('applies custom classes', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 50,
         className: 'custom-container',
@@ -236,7 +237,7 @@ describe('ProgressBar', () => {
 
   it('spreads additional props', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ProgressBar as any, {
+    progressTest.render({
       props: {
         value: 50,
         id: 'test-progress',
@@ -251,7 +252,7 @@ describe('ProgressBar', () => {
 
   it('sets aria-label when showLabel is true', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ProgressBar as any, {
+    progressTest.render({
       props: {
         value: 75,
         showLabel: true,
@@ -264,7 +265,7 @@ describe('ProgressBar', () => {
 
   it('adjusts label color based on progress', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(ProgressBar as any, {
+    const { container } = progressTest.render({
       props: {
         value: 30,
         showLabel: true,
@@ -275,7 +276,7 @@ describe('ProgressBar', () => {
     expect(label).toBeInTheDocument();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container: container2 } = render(ProgressBar as any, {
+    const { container: container2 } = progressTest.render({
       props: {
         value: 70,
         showLabel: true,
