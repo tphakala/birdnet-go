@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { renderTyped, screen, fireEvent } from '../../../../test/render-helpers';
 import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 import type { ComponentProps } from 'svelte';
@@ -37,7 +37,7 @@ describe('ErrorAlert', () => {
 
   it('renders with custom children', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(ErrorAlertTestWrapper as any, {
+    renderTyped(ErrorAlertTestWrapper, {
       props: {
         showChildren: true,
       },
