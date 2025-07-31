@@ -96,7 +96,7 @@ export function getBrowserPreferredLocale(acceptLanguageHeader: string | null): 
       // Validate that we have a non-empty language code
       return primaryCode ? { code: primaryCode, quality } : null;
     })
-    .filter(Boolean) // Remove null entries from malformed language tags
+    .filter((lang): lang is { code: string; quality: number } => lang !== null) // Remove null entries and narrow type
     .sort((a, b) => b.quality - a.quality); // Sort by quality (preference)
 
   // Find first matching supported locale

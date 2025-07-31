@@ -907,10 +907,10 @@
 
               <!-- prettier-ignore -->
               <Checkbox
-                bind:checked={(settings.mqtt as MQTTSettings).retain}
+                checked={(settings.mqtt as MQTTSettings).retain ?? false}
+                onchange={(checked) => updateMQTTRetain(checked)}
                 label={t('settings.integration.mqtt.messageSettings.retain.label')}
                 disabled={store.isLoading || store.isSaving}
-                onchange={() => updateMQTTRetain((settings.mqtt as MQTTSettings).retain)}
               />
 
               <!-- Note about MQTT Retain for HomeAssistant -->

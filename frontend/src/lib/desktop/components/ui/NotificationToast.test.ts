@@ -1,11 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
-import type { ComponentType } from 'svelte';
 import NotificationToast from './NotificationToast.svelte';
 import NotificationToastTestWrapper from './NotificationToast.test.svelte';
-
-// Type helper for Svelte component testing
-type SvelteTestComponent<T = Record<string, unknown>> = ComponentType<T>;
 
 describe('NotificationToast', () => {
   beforeEach(() => {
@@ -18,7 +14,7 @@ describe('NotificationToast', () => {
   });
 
   it('renders with message', () => {
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Test notification',
       },
@@ -30,7 +26,7 @@ describe('NotificationToast', () => {
   it.each([['info'], ['success'], ['warning'], ['error']] as const)(
     'renders with type %s',
     type => {
-      const { container } = render(NotificationToast as SvelteTestComponent, {
+      const { container } = render(NotificationToast as any, {
         props: {
           type,
           message: `${type} message`,
@@ -45,7 +41,7 @@ describe('NotificationToast', () => {
   it('auto-dismisses after duration', async () => {
     const onClose = vi.fn();
 
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Auto dismiss',
         duration: 3000,
@@ -65,7 +61,7 @@ describe('NotificationToast', () => {
   });
 
   it('does not auto-dismiss when duration is null', () => {
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Persistent notification',
         duration: null,
@@ -84,7 +80,7 @@ describe('NotificationToast', () => {
   it('closes when close button clicked', async () => {
     const onClose = vi.fn();
 
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Close me',
         onClose,
@@ -102,7 +98,7 @@ describe('NotificationToast', () => {
     const action1 = vi.fn();
     const action2 = vi.fn();
 
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Action toast',
         actions: [
@@ -133,7 +129,7 @@ describe('NotificationToast', () => {
     ] as const;
 
     positions.forEach(({ position, class: expectedClass }) => {
-      const { container, unmount } = render(NotificationToast as SvelteTestComponent, {
+      const { container, unmount } = render(NotificationToast as any, {
         props: {
           message: 'Test',
           position,
@@ -147,7 +143,7 @@ describe('NotificationToast', () => {
   });
 
   it('shows icon by default', () => {
-    const { container } = render(NotificationToast as SvelteTestComponent, {
+    const { container } = render(NotificationToast as any, {
       props: {
         message: 'With icon',
         type: 'success',
@@ -159,7 +155,7 @@ describe('NotificationToast', () => {
   });
 
   it('hides icon when showIcon is false', () => {
-    const { container } = render(NotificationToast as SvelteTestComponent, {
+    const { container } = render(NotificationToast as any, {
       props: {
         message: 'No icon',
         showIcon: false,
@@ -172,7 +168,7 @@ describe('NotificationToast', () => {
   });
 
   it('renders with custom children content', () => {
-    render(NotificationToastTestWrapper as SvelteTestComponent, {
+    render(NotificationToastTestWrapper as any, {
       props: {
         showChildren: true,
       },
@@ -183,7 +179,7 @@ describe('NotificationToast', () => {
   });
 
   it('applies custom className', () => {
-    const { container } = render(NotificationToast as SvelteTestComponent, {
+    const { container } = render(NotificationToast as any, {
       props: {
         message: 'Custom class',
         className: 'custom-toast',
@@ -195,7 +191,7 @@ describe('NotificationToast', () => {
   });
 
   it('sets proper ARIA attributes', () => {
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Info toast',
         type: 'info',
@@ -205,7 +201,7 @@ describe('NotificationToast', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveAttribute('aria-live', 'polite');
 
-    const { container } = render(NotificationToast as SvelteTestComponent, {
+    const { container } = render(NotificationToast as any, {
       props: {
         message: 'Error toast',
         type: 'error',
@@ -219,7 +215,7 @@ describe('NotificationToast', () => {
   it('clears timeout when closed manually', async () => {
     const onClose = vi.fn();
 
-    render(NotificationToast as SvelteTestComponent, {
+    render(NotificationToast as any, {
       props: {
         message: 'Manual close',
         duration: 5000,
@@ -238,7 +234,7 @@ describe('NotificationToast', () => {
   });
 
   it('cleans up timeout on unmount', () => {
-    const { unmount } = render(NotificationToast as SvelteTestComponent, {
+    const { unmount } = render(NotificationToast as any, {
       props: {
         message: 'Unmount test',
         duration: 5000,

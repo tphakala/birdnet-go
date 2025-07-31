@@ -112,8 +112,8 @@
   const inputClasses = $derived(
     cn(
       'input rounded-full focus:outline-none w-full font-normal transition-all',
-      sizeClasses.input,
-      sizeClasses.padding,
+      sizeClasses().input,
+      sizeClasses().padding,
       isSearching && 'opacity-75',
       showDropdown && 'rounded-b-none'
     )

@@ -855,8 +855,6 @@
           datesToPreload.forEach(date => preloadCache.delete(date));
         });
     });
-
-    return batchPreloadPromise;
   }
 
   // Trigger batch preload of adjacent dates with debouncing

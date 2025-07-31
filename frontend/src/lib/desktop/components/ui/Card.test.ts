@@ -4,9 +4,8 @@ import Card from './Card.svelte';
 import CardTestWrapper from './Card.test.svelte';
 import type { ComponentProps } from 'svelte';
 
-// Helper function to render Card with proper typing
-const renderCard = (props?: Partial<ComponentProps<Card>>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Helper function to render Card with proper typing  
+const renderCard = (props?: any) => {
   return render(Card as any, props ? { props } : { props: {} });
 };
 

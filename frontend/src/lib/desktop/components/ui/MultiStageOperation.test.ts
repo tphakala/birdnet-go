@@ -5,8 +5,7 @@ import type { Stage } from './MultiStageOperation.types';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render MultiStageOperation with proper typing
-const renderMultiStageOperation = (props: Partial<ComponentProps<MultiStageOperation>>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const renderMultiStageOperation = (props: any) => {
   return render(MultiStageOperation as any, { props });
 };
 

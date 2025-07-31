@@ -6,12 +6,21 @@
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 
-  interface Props extends Omit<HTMLAttributes<SVGSVGElement>, 'size'> {
+  interface Props {
     datetime?: Date | string | number;
     timeOfDay?: TimeOfDay;
     size?: IconSize;
     showTooltip?: boolean;
     className?: string;
+    // Allow common HTML attributes but don't extend from a specific element type
+    id?: string;
+    role?: string;
+    'aria-label'?: string;
+    'aria-hidden'?: boolean;
+    tabindex?: number;
+    title?: string;
+    onclick?: (event: MouseEvent) => void;
+    onkeydown?: (event: KeyboardEvent) => void;
   }
 
   let {
@@ -20,8 +29,16 @@
     size = 'md',
     showTooltip = false,
     className = '',
-    ...rest
+    id,
+    role,
+    'aria-label': ariaLabel,
+    'aria-hidden': ariaHidden,
+    tabindex,
+    title,
+    onclick,
+    onkeydown
   }: Props = $props();
+
 
   // Calculate time of day from datetime if not provided
   function calculateTimeOfDay(dt: Date | string | number | undefined): TimeOfDay {
@@ -69,6 +86,18 @@
     dusk: 'Dusk',
   };
 
+  // Create a reactive common attributes object for spreading
+  let commonAttrs = $derived({
+    id,
+    role,
+    'aria-label': ariaLabel,
+    'aria-hidden': ariaHidden,
+    tabindex,
+    title: title || (showTooltip ? (tooltipText[currentTimeOfDay] || 'Unknown time') : undefined),
+    onclick,
+    onkeydown
+  });
+
   let svgClasses = $derived(cn(sizeClasses[size], colorClasses[currentTimeOfDay], className));
 
   // Normalize dawn to sunrise and dusk to sunset for icon selection
@@ -89,9 +118,7 @@
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
-      aria-hidden="true"
-      title={showTooltip ? tooltipText[currentTimeOfDay] : undefined}
-      {...rest}
+      {...commonAttrs}
     >
       <path
         stroke-linecap="round"
@@ -107,9 +134,7 @@
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
-      aria-hidden="true"
-      title={showTooltip ? tooltipText[currentTimeOfDay] : undefined}
-      {...rest}
+      {...commonAttrs}
     >
       <path
         stroke-linecap="round"
@@ -128,9 +153,7 @@
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
-      aria-hidden="true"
-      title={showTooltip ? tooltipText[currentTimeOfDay] : undefined}
-      {...rest}
+      {...commonAttrs}
     >
       <path d="M17 18a5 5 0 0 0-10 0"></path>
       <line x1="12" y1="2" x2="12" y2="9"></line>
@@ -151,9 +174,7 @@
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
-      aria-hidden="true"
-      title={showTooltip ? tooltipText[currentTimeOfDay] : undefined}
-      {...rest}
+      {...commonAttrs}
     >
       <path d="M17 18a5 5 0 0 0-10 0"></path>
       <line x1="12" y1="9" x2="12" y2="2"></line>
@@ -168,8 +189,7 @@
     <!-- Default clock icon for unknown time -->
     <div
       class={cn(sizeClasses[size], 'text-gray-400', className)}
-      title={showTooltip ? 'Unknown time' : undefined}
-      {...rest}
+      {...commonAttrs}
     >
       {@html systemIcons.clock}
     </div>
