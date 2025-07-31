@@ -126,7 +126,7 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 	defer d.samplesMu.RUnlock()
 
 	if len(d.samples) == 0 {
-		return 0, errors.Newf("no data samples available for rate calculation").
+		return 0, errors.Newf("no data received from RTSP source").
 			Component("ffmpeg-stream").
 			Category(errors.CategorySystem).
 			Context("operation", "calculate_data_rate").
@@ -134,9 +134,9 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 	}
 
 	if len(d.samples) < 2 {
-		return 0, errors.Newf("insufficient data samples for rate calculation: %d samples", len(d.samples)).
+		return 0, errors.Newf("insufficient data received from RTSP source").
 			Component("ffmpeg-stream").
-			Category(errors.CategorySystem).
+			Category(errors.CategoryProcessing).
 			Context("operation", "calculate_data_rate").
 			Context("sample_count", len(d.samples)).
 			Build()
