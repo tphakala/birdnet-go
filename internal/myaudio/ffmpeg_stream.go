@@ -129,7 +129,7 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		return 0, errors.Newf("no data received from RTSP source").
 			Component("ffmpeg-stream").
 			Category(errors.CategoryAudioSource).
-			Priority("medium").
+			Priority(errors.PriorityMedium).
 			Context("operation", "calculate_data_rate").
 			Build()
 	}
@@ -138,7 +138,7 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		return 0, errors.Newf("insufficient data received from RTSP source").
 			Component("ffmpeg-stream").
 			Category(errors.CategoryAudioSource).
-			Priority("low").
+			Priority(errors.PriorityLow).
 			Context("operation", "calculate_data_rate").
 			Context("sample_count", len(d.samples)).
 			Build()
@@ -154,7 +154,7 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		return 0, errors.Newf("invalid duration for rate calculation: %f seconds", duration).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryRTSP).
-			Priority("low").
+			Priority(errors.PriorityLow).
 			Context("operation", "calculate_data_rate").
 			Context("duration_seconds", duration).
 			Build()
@@ -580,7 +580,7 @@ func (s *FFmpegStream) processAudio() error {
 				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
-					Priority("medium").
+					Priority(errors.PriorityMedium).
 					Context("operation", "process_audio").
 					Context("url", privacy.SanitizeRTSPUrl(s.url)).
 					Context("transport", s.transport).
@@ -596,7 +596,7 @@ func (s *FFmpegStream) processAudio() error {
 			return errors.New(fmt.Errorf("error reading from FFmpeg: %w", err)).
 				Category(errors.CategoryRTSP).
 				Component("ffmpeg-stream").
-				Priority("medium").
+				Priority(errors.PriorityMedium).
 				Context("operation", "process_audio").
 				Context("url", privacy.SanitizeRTSPUrl(s.url)).
 				Context("runtime_seconds", time.Since(startTime).Seconds()).
@@ -664,7 +664,7 @@ func (s *FFmpegStream) processAudio() error {
 				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
-					Priority("medium").
+					Priority(errors.PriorityMedium).
 					Context("operation", "silence_timeout").
 					Context("url", privacy.SanitizeRTSPUrl(s.url)).
 					Context("timeout_seconds", silenceTimeout.Seconds()).
@@ -777,7 +777,7 @@ func (s *FFmpegStream) logDroppedData() {
 		errorWithContext := errors.Newf("audio processing channel full, data being dropped").
 			Component("ffmpeg-stream").
 			Category(errors.CategorySystem).
-			Priority("high").
+			Priority(errors.PriorityHigh).
 			Context("operation", "audio_data_drop").
 			Context("url", privacy.SanitizeRTSPUrl(s.url)).
 			Context("channel_capacity", cap(s.audioChan)).

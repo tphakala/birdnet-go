@@ -52,6 +52,14 @@ const (
 	CategoryResource       ErrorCategory = "resource"
 )
 
+// Priority constants for error prioritization
+const (
+	PriorityLow      = "low"
+	PriorityMedium   = "medium"
+	PriorityHigh     = "high"
+	PriorityCritical = "critical"
+)
+
 // EnhancedError wraps an error with additional context and metadata
 type EnhancedError struct {
 	Err       error                  // Original error
@@ -207,7 +215,18 @@ func (eb *ErrorBuilder) Category(category ErrorCategory) *ErrorBuilder {
 
 // Priority sets the explicit priority override for the error
 func (eb *ErrorBuilder) Priority(priority string) *ErrorBuilder {
-	eb.priority = priority
+	// Validate priority value
+	switch priority {
+	case PriorityLow, PriorityMedium, PriorityHigh, PriorityCritical:
+		eb.priority = priority
+	default:
+		// Invalid priority value - use medium as safe default
+		if priority != "" {
+			// Note: We can't use structured logging here to avoid circular dependencies
+			// If an invalid priority is provided, silently fall back to medium
+			eb.priority = PriorityMedium
+		}
+	}
 	return eb
 }
 

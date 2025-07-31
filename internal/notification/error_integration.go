@@ -26,8 +26,8 @@ func errorNotificationHook(ee any) {
 	category := enhancedErr.GetCategory()
 	priority := getNotificationPriority(category, enhancedErr.GetPriority())
 
-	// Only create notifications for high and critical priority errors
-	if priority < PriorityHigh {
+	// Filter out low priority notifications
+	if priority == PriorityLow {
 		return
 	}
 

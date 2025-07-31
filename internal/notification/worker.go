@@ -183,8 +183,8 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 	}
 	priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 	
-	// Only create notifications for high and critical priority errors
-	if priority != PriorityHigh && priority != PriorityCritical {
+	// Filter out low priority notifications
+	if priority == PriorityLow {
 		w.logger.Debug("skipping low priority error notification",
 			"category", event.GetCategory(),
 			"priority", priority,
@@ -284,7 +284,7 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 		priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 		
 		// Skip low priority events
-		if priority != PriorityHigh && priority != PriorityCritical {
+		if priority == PriorityLow {
 			continue
 		}
 		

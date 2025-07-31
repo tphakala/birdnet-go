@@ -65,35 +65,15 @@
 
   // PERFORMANCE OPTIMIZATION: Pure utility functions for caching
   // These functions only depend on their parameters, not component state
-  function shouldShowNotification(notification: Notification): boolean {
-    // In debug mode, show all notifications
+  function shouldShowNotification(_notification: Notification): boolean {
+    // In debug mode, show all notifications including low priority
     if (debugMode) {
       return true;
     }
 
-    // Hide low priority notifications (startup transients, etc.)
-    if (notification.priority === 'low') {
-      return false;
-    }
-
-    // Always show user-facing notifications
-    if (
-      notification.type === 'detection' ||
-      notification.priority === 'critical' ||
-      notification.priority === 'high'
-    ) {
-      return true;
-    }
-
-    // Filter out system/error notifications when not in debug mode
-    if (
-      notification.type === 'error' ||
-      notification.type === 'system' ||
-      notification.type === 'warning'
-    ) {
-      return false;
-    }
-
+    // Backend already filters low priority notifications
+    // Frontend receives only medium, high, and critical priority notifications
+    // No additional filtering needed here
     return true;
   }
 
