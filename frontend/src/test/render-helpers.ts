@@ -12,7 +12,8 @@ import type { ComponentProps, Component } from 'svelte';
  * Type-safe render function for Svelte 5 components
  * Maintains prop type checking while handling internal casting
  */
-export function renderTyped<TComponent extends Component<Record<string, unknown>>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function renderTyped<TComponent extends Component<any>>(
   Component: TComponent,
   options: {
     props?: ComponentProps<TComponent>;
@@ -27,7 +28,8 @@ export function renderTyped<TComponent extends Component<Record<string, unknown>
  * Create a test factory for a specific component with default props
  * Useful for components tested multiple times with similar setups
  */
-export function createComponentTestFactory<TComponent extends Component<Record<string, unknown>>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createComponentTestFactory<TComponent extends Component<any>>(
   Component: TComponent,
   defaultProps: Partial<ComponentProps<TComponent>> = {}
 ) {
@@ -35,11 +37,13 @@ export function createComponentTestFactory<TComponent extends Component<Record<s
     render: (
       propsOrOptions: unknown = {},
       options: Omit<RenderOptions, 'props'> = {}
-    ): RenderResult<ComponentProps<TComponent>> => {
+    ): RenderResult<ComponentProps<TComponent>> & {
+      rerender: (newProps: Partial<ComponentProps<TComponent>>) => Promise<void>;
+    } => {
       // Handle both patterns: direct props or {props: {...}} wrapper
       let props: Partial<ComponentProps<TComponent>>;
       let renderOptions: Omit<RenderOptions, 'props'>;
-      
+
       if (propsOrOptions && typeof propsOrOptions === 'object' && 'props' in propsOrOptions) {
         // Handle {props: {...}, ...otherOptions} pattern
         const { props: extractedProps, ...otherOptions } = propsOrOptions;
@@ -47,14 +51,26 @@ export function createComponentTestFactory<TComponent extends Component<Record<s
         renderOptions = { ...otherOptions, ...options };
       } else {
         // Handle direct props pattern
-        props = (propsOrOptions as Partial<ComponentProps<TComponent>>) ?? {};
+        props = propsOrOptions ? (propsOrOptions as Partial<ComponentProps<TComponent>>) : {};
         renderOptions = options;
       }
-      
-      return renderTyped(Component, {
+
+      const result = renderTyped(Component, {
         props: { ...defaultProps, ...props } as ComponentProps<TComponent>,
         ...renderOptions,
       });
+
+      // Add typed rerender function
+      return {
+        ...result,
+        rerender: async (newProps: Partial<ComponentProps<TComponent>>) => {
+          // Use the original rerender with properly typed props
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (result as any).rerender({
+            props: { ...defaultProps, ...newProps } as ComponentProps<TComponent>,
+          });
+        },
+      };
     },
 
     // Helper for testing with different prop combinations
@@ -85,7 +101,8 @@ export function createMockHandlers<T extends Record<string, (...args: unknown[])
 /**
  * Helper for components with required props - ensures all required props are provided
  */
-export function renderWithRequiredProps<TComponent extends Component<Record<string, unknown>>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function renderWithRequiredProps<TComponent extends Component<any>>(
   Component: TComponent,
   requiredProps: ComponentProps<TComponent>,
   additionalProps: Partial<ComponentProps<TComponent>> = {},

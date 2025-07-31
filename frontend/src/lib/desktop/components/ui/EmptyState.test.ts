@@ -36,6 +36,8 @@ describe('EmptyState', () => {
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,
+        description: 'Test with custom icon',
+        action: { label: 'Test action', onClick: () => {} },
       },
     });
 
@@ -65,6 +67,8 @@ describe('EmptyState', () => {
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showChildren: true,
+        description: 'Test with custom children',
+        action: { label: 'Test action', onClick: () => {} },
       },
     });
 
