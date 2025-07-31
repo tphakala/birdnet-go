@@ -85,7 +85,6 @@ jobs:
       - name: Bundle size check
         working-directory: frontend
         run: npm run analyze:bundle:size
-        continue-on-error: true
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

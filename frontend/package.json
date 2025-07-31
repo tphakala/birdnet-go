@@ -35,7 +35,7 @@
     "test:a11y": "vitest run --reporter=verbose -t \"Accessibility\"",
     "test:a11y:watch": "vitest -t \"Accessibility\"",
     "generate:i18n-types": "npx tsx src/lib/i18n/generateTypes.ts",
-    "prepare": "husky",
+    "prepare": "husky install",
     "analyze:bundle": "npm run build && npx vite-bundle-analyzer dist",
     "analyze:bundle:size": "npm run build && npx bundlesize",
     "audit:security": "npm audit --audit-level=high",
@@ -68,13 +68,13 @@
       "compression": "gzip"
     },
     {
-      "path": "./dist/*.js",
-      "maxSize": "25kb",
+      "path": "./dist/index.css",
+      "maxSize": "30kb",
       "compression": "gzip"
     },
     {
-      "path": "./dist/index.css",
-      "maxSize": "30kb",
+      "path": "./dist/*.js",
+      "maxSize": "25kb",
       "compression": "gzip"
     }
   ],
