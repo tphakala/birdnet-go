@@ -157,21 +157,21 @@
     color: #059669;
 
     --lighter-color: #ecfdf5;
-    --darker-color: rgb(6, 78, 59, 0.2);
+    --darker-color: rgba(6, 78, 59, 0.2);
   }
 
   .confidence-circle :global(.confidence-medium) {
     color: #d97706;
 
     --lighter-color: #fffbeb;
-    --darker-color: rgb(120, 53, 15, 0.2);
+    --darker-color: rgba(120, 53, 15, 0.2);
   }
 
   .confidence-circle :global(.confidence-low) {
     color: #dc2626;
 
     --lighter-color: #fef2f2;
-    --darker-color: rgb(127, 29, 29, 0.2);
+    --darker-color: rgba(127, 29, 29, 0.2);
   }
 
   /* Dark theme adjustments */

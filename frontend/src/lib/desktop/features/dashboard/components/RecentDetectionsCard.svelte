@@ -21,7 +21,8 @@
     onRowClick?: (_detection: Detection) => void;
     onRefresh: () => void;
     limit?: number;
-    onLimitChange?: (_limit: number) => void;
+    // eslint-disable-next-line no-unused-vars
+    onLimitChange?: (limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
     onFreezeStart?: () => void;

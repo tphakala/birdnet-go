@@ -7,6 +7,7 @@
 
 import { render, type RenderOptions, type RenderResult } from '@testing-library/svelte';
 import type { ComponentProps, Component } from 'svelte';
+import { vi } from 'vitest';
 
 /**
  * Type-safe render function for Svelte 5 components
@@ -92,8 +93,7 @@ export function createMockHandlers<T extends Record<string, (...args: unknown[])
 ): T {
   const mocked = {} as T;
   for (const [key, handler] of Object.entries(handlers)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mocked[key as keyof T] = (globalThis as any).vi.fn(handler);
+    mocked[key as keyof T] = vi.fn(handler) as unknown as T[keyof T];
   }
   return mocked;
 }
