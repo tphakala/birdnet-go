@@ -148,8 +148,19 @@ export async function fetchWithCSRF<T = unknown>(
   };
 
   try {
+    // Safely parse body for logging (avoid logging raw body for security)
+    let bodyForLogging: unknown = undefined;
+    if (finalOptions.body) {
+      try {
+        bodyForLogging = JSON.parse(finalOptions.body as string);
+      } catch {
+        // If body is not JSON, just log that we have a body
+        bodyForLogging = '[non-JSON body]';
+      }
+    }
+
     logger.debug(`Fetching ${finalOptions.method} ${url}`, {
-      body: finalOptions.body ? JSON.parse(finalOptions.body as string) : undefined,
+      body: bodyForLogging,
     });
     const response = await fetch(url, finalOptions);
     const result = await handleResponse<T>(response);

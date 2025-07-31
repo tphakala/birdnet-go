@@ -33,7 +33,7 @@
 import { writable } from 'svelte/store';
 import { loggers } from '$lib/utils/logger';
 
-const logger = loggers.store;
+const logger = loggers.auth;
 
 interface AuthState {
   isLoggedIn: boolean;

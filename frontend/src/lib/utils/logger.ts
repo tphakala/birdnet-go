@@ -43,8 +43,19 @@ export interface Logger {
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
 
-// Store for timing measurements
+// Store for timing measurements with automatic cleanup
 const timers = new Map<string, number>();
+const MAX_TIMERS = 100; // Prevent memory leaks from abandoned timers
+
+// Cleanup old timers if we exceed the limit
+function cleanupTimers() {
+  if (timers.size > MAX_TIMERS) {
+    // Remove oldest entries (first half of entries)
+    const entries = Array.from(timers.entries());
+    const toRemove = entries.slice(0, Math.floor(entries.length / 2));
+    toRemove.forEach(([key]) => timers.delete(key));
+  }
+}
 
 /**
  * Creates a logger instance for a specific category
@@ -113,6 +124,7 @@ export function getLogger(category: string): Logger {
     time(label: string): void {
       if (isDev) {
         const key = `${category}:${label}`;
+        cleanupTimers(); // Prevent memory leaks
         timers.set(key, globalThis.performance.now());
       }
     },
@@ -146,5 +158,6 @@ export const loggers = {
   audio: getLogger('audio'),
   ui: getLogger('ui'),
   settings: getLogger('settings'),
+  analytics: getLogger('analytics'),
   performance: getLogger('performance'),
 } as const;

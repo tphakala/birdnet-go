@@ -4,9 +4,9 @@
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
   import { t } from '$lib/i18n';
-  import { getLogger } from '$lib/utils/logger';
+  import { loggers } from '$lib/utils/logger';
 
-  const logger = getLogger('app');
+  const logger = loggers.analytics;
 
   // Type definitions
   interface SpeciesFilters {

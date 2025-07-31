@@ -233,7 +233,7 @@ Responsive Breakpoints:
       const date = new Date(timeStr);
       return date.getHours();
     } catch (error) {
-      logger.error('Error parsing time:', timeStr, error);
+      logger.error('Error parsing time', error, { timeStr });
       return null;
     }
   };
