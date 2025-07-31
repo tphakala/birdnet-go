@@ -21,7 +21,7 @@
     onRowClick?: (_detection: Detection) => void;
     onRefresh: () => void;
     limit?: number;
-    onLimitChange?: (limit: number) => void;
+    onLimitChange?: (_limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
     onFreezeStart?: () => void;
@@ -38,6 +38,7 @@
     limit = 5,
     onLimitChange,
     newDetectionIds = new Set(),
+    // eslint-disable-next-line no-unused-vars
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
     onFreezeStart,
     onFreezeEnd,

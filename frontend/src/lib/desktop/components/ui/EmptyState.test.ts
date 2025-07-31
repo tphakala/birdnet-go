@@ -33,7 +33,6 @@ describe('EmptyState', () => {
   });
 
   it('renders with custom icon', () => {
-     
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,
@@ -63,7 +62,6 @@ describe('EmptyState', () => {
   });
 
   it('renders with custom children', () => {
-     
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showChildren: true,
@@ -86,7 +84,6 @@ describe('EmptyState', () => {
   it('renders complete empty state with all props', () => {
     const onClick = vi.fn();
 
-     
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,

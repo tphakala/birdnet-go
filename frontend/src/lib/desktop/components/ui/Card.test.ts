@@ -40,7 +40,6 @@ describe('Card', () => {
   });
 
   it('renders with slots', () => {
-     
     renderTyped(CardTestWrapper, {
       props: {
         title: 'Card Title',
@@ -55,7 +54,6 @@ describe('Card', () => {
   });
 
   it('prefers header slot over title prop', () => {
-     
     renderTyped(CardTestWrapper, {
       props: {
         title: 'Title Prop',

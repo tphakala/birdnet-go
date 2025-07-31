@@ -19,8 +19,8 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { t, getLocale, setLocale } from '$lib/i18n';
-  import { LOCALES, type Locale } from '$lib/i18n/config';
+  import { t, getLocale } from '$lib/i18n';
+  import { LOCALES } from '$lib/i18n/config';
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -312,9 +312,12 @@
   // Watch for changes that affect range filter
   $effect(() => {
     // Track the specific values that should trigger a range filter update
+    // These variables are used by Svelte's reactivity system to track changes
     const lat = settings.birdnet.latitude;
     const lng = settings.birdnet.longitude;
+    // eslint-disable-next-line no-unused-vars
     const threshold = settings.birdnet.rangeFilter.threshold;
+    // eslint-disable-next-line no-unused-vars
     const model = settings.birdnet.rangeFilter.model;
 
     // Only test if we have valid coordinates

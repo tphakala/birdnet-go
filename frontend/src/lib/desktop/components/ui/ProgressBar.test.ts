@@ -5,7 +5,6 @@ import ProgressBar from './ProgressBar.svelte';
 describe('ProgressBar', () => {
   const progressTest = createComponentTestFactory(ProgressBar);
   it('renders with default props', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 50,
@@ -23,7 +22,6 @@ describe('ProgressBar', () => {
   });
 
   it('renders with custom max value', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 25,
@@ -42,7 +40,6 @@ describe('ProgressBar', () => {
     const sizes = ['xs', 'sm', 'md', 'lg'] as const;
 
     sizes.forEach(size => {
-       
       const { container, unmount } = progressTest.render({
         props: { value: 50, size },
       });
@@ -72,7 +69,6 @@ describe('ProgressBar', () => {
     ] as const;
 
     variants.forEach(variant => {
-       
       const { container, unmount } = progressTest.render({
         props: { value: 50, variant },
       });
@@ -84,7 +80,6 @@ describe('ProgressBar', () => {
   });
 
   it('shows label when showLabel is true', () => {
-     
     progressTest.render({
       props: {
         value: 75,
@@ -98,7 +93,6 @@ describe('ProgressBar', () => {
   it('uses custom label format', () => {
     const labelFormat = vi.fn((value: number, max: number) => `${value} of ${max}`);
 
-     
     progressTest.render({
       props: {
         value: 30,
@@ -113,7 +107,6 @@ describe('ProgressBar', () => {
   });
 
   it('applies color thresholds', async () => {
-     
     const { container, rerender } = progressTest.render({
       props: {
         value: 20,
@@ -167,7 +160,6 @@ describe('ProgressBar', () => {
   });
 
   it('clamps value between 0 and max', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 150,
@@ -178,7 +170,6 @@ describe('ProgressBar', () => {
     const bar = container.querySelector('.bg-primary');
     expect(bar).toHaveStyle('width: 100%');
 
-     
     const { container: container2 } = progressTest.render({
       props: {
         value: -20,
@@ -191,7 +182,6 @@ describe('ProgressBar', () => {
   });
 
   it('applies striped styles', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 50,
@@ -205,7 +195,6 @@ describe('ProgressBar', () => {
   });
 
   it('applies animated stripes', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 50,
@@ -219,7 +208,6 @@ describe('ProgressBar', () => {
   });
 
   it('applies custom classes', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 50,
@@ -236,7 +224,6 @@ describe('ProgressBar', () => {
   });
 
   it('spreads additional props', () => {
-     
     progressTest.render({
       props: {
         value: 50,
@@ -251,7 +238,6 @@ describe('ProgressBar', () => {
   });
 
   it('sets aria-label when showLabel is true', () => {
-     
     progressTest.render({
       props: {
         value: 75,
@@ -264,7 +250,6 @@ describe('ProgressBar', () => {
   });
 
   it('adjusts label color based on progress', () => {
-     
     const { container } = progressTest.render({
       props: {
         value: 30,
@@ -275,7 +260,6 @@ describe('ProgressBar', () => {
     let label = container.querySelector('.text-base-content');
     expect(label).toBeInTheDocument();
 
-     
     const { container: container2 } = progressTest.render({
       props: {
         value: 70,

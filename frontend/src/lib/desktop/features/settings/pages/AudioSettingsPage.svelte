@@ -14,7 +14,6 @@
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
 
   // Localized option arrays - memoized to prevent unnecessary recomputations

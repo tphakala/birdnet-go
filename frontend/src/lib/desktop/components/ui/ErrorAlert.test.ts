@@ -36,7 +36,6 @@ describe('ErrorAlert', () => {
   });
 
   it('renders with custom children', () => {
-     
     renderTyped(ErrorAlertTestWrapper, {
       props: {
         showChildren: true,

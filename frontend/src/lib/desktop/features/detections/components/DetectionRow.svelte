@@ -45,12 +45,7 @@
     onRefresh?: () => void;
   }
 
-  let {
-    detection,
-    isExcluded = false,
-    onDetailsClick,
-    onRefresh,
-  }: Props = $props();
+  let { detection, isExcluded = false, onDetailsClick, onRefresh }: Props = $props();
 
   // Modal states
   let showReviewModal = $state(false);

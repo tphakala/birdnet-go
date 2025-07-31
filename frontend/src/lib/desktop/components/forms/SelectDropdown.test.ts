@@ -39,7 +39,6 @@ describe('SelectDropdown', () => {
 
   describe('Basic Functionality', () => {
     it('renders with placeholder', () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -51,7 +50,6 @@ describe('SelectDropdown', () => {
     });
 
     it('renders with label', () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -63,7 +61,6 @@ describe('SelectDropdown', () => {
     });
 
     it('shows required indicator', () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -76,7 +73,6 @@ describe('SelectDropdown', () => {
     });
 
     it('opens dropdown on click', async () => {
-       
       selectTest.render({
         props: { options: basicOptions },
       });
@@ -91,7 +87,6 @@ describe('SelectDropdown', () => {
     it('closes dropdown on escape', async () => {
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: { options: basicOptions },
       });
@@ -112,7 +107,6 @@ describe('SelectDropdown', () => {
     });
 
     it('closes dropdown on outside click', async () => {
-       
       selectTest.render({
         props: { options: basicOptions },
       });
@@ -134,7 +128,6 @@ describe('SelectDropdown', () => {
     it('selects option on click', async () => {
       const onChange = vi.fn();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -150,7 +143,6 @@ describe('SelectDropdown', () => {
     });
 
     it('displays initial value', () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -162,15 +154,12 @@ describe('SelectDropdown', () => {
     });
 
     it('updates display when value changes', async () => {
-      const {
-        rerender,
-      } =  
-        selectTest.render({
-          props: {
-            options: basicOptions,
-            value: 'apple',
-          },
-        });
+      const { rerender } = selectTest.render({
+        props: {
+          options: basicOptions,
+          value: 'apple',
+        },
+      });
 
       expect(screen.getByRole('button')).toHaveTextContent('Apple');
 
@@ -184,7 +173,6 @@ describe('SelectDropdown', () => {
     it('allows multiple selections', async () => {
       const onChange = vi.fn();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -205,7 +193,6 @@ describe('SelectDropdown', () => {
     it('deselects on second click', async () => {
       const onChange = vi.fn();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -222,7 +209,6 @@ describe('SelectDropdown', () => {
     });
 
     it('shows checkboxes for multiple selection', async () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -239,7 +225,6 @@ describe('SelectDropdown', () => {
     it('respects maxSelections', async () => {
       const onChange = vi.fn();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -260,7 +245,6 @@ describe('SelectDropdown', () => {
 
   describe('Search Functionality', () => {
     it('shows search input when searchable', async () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -276,7 +260,6 @@ describe('SelectDropdown', () => {
     it('filters options based on search', async () => {
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -296,7 +279,6 @@ describe('SelectDropdown', () => {
     it('shows no options message when filtered empty', async () => {
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -316,7 +298,6 @@ describe('SelectDropdown', () => {
       const onSearch = vi.fn();
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -336,7 +317,6 @@ describe('SelectDropdown', () => {
 
   describe('Clear Functionality', () => {
     it('shows clear button when clearable and has value', async () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -352,7 +332,6 @@ describe('SelectDropdown', () => {
       const onChange = vi.fn();
       const onClear = vi.fn();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -372,7 +351,6 @@ describe('SelectDropdown', () => {
     it('clears multiple selections', async () => {
       const onChange = vi.fn();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -391,7 +369,6 @@ describe('SelectDropdown', () => {
 
   describe('Grouped Options', () => {
     it('displays group headers', async () => {
-       
       selectTest.render({
         props: {
           options: groupedOptions,
@@ -406,7 +383,6 @@ describe('SelectDropdown', () => {
     });
 
     it('can disable grouping', async () => {
-       
       selectTest.render({
         props: {
           options: groupedOptions,
@@ -423,7 +399,6 @@ describe('SelectDropdown', () => {
 
   describe('Options with Details', () => {
     it('displays icons and descriptions', async () => {
-       
       selectTest.render({
         props: {
           options: optionsWithDetails,
@@ -439,7 +414,6 @@ describe('SelectDropdown', () => {
     it('searches in descriptions', async () => {
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: {
           options: optionsWithDetails,
@@ -461,7 +435,6 @@ describe('SelectDropdown', () => {
     it('navigates with arrow keys', async () => {
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -494,7 +467,6 @@ describe('SelectDropdown', () => {
     it('opens with Enter or Space', async () => {
       const user = userEvent.setup();
 
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -512,7 +484,6 @@ describe('SelectDropdown', () => {
 
   describe('Disabled State', () => {
     it('disables the dropdown', () => {
-       
       selectTest.render({
         props: {
           options: basicOptions,
@@ -531,7 +502,6 @@ describe('SelectDropdown', () => {
         { value: 'cherry', label: 'Cherry' },
       ];
 
-       
       selectTest.render({
         props: {
           options: optionsWithDisabled,
@@ -547,7 +517,6 @@ describe('SelectDropdown', () => {
   });
 
   it('applies custom classes', () => {
-     
     selectTest.render({
       props: {
         options: basicOptions,
@@ -560,7 +529,6 @@ describe('SelectDropdown', () => {
   });
 
   it('shows help text', () => {
-     
     selectTest.render({
       props: {
         options: basicOptions,
