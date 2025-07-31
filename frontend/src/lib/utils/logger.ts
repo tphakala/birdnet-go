@@ -32,8 +32,8 @@ export interface LogContext {
 export interface Logger {
   debug(...args: unknown[]): void;
   info(...args: unknown[]): void;
-  warn(...args: unknown[]): void;
-  error(message: string, error?: Error | unknown, context?: LogContext): void;
+  warn(message: string, error?: Error | unknown, context?: LogContext, throttleKey?: string): void;
+  error(message: string, error?: Error | unknown, context?: LogContext, throttleKey?: string): void;
   group(label: string): void;
   groupEnd(): void;
   time(label: string): void;
@@ -47,6 +47,10 @@ const isDev = import.meta.env.DEV;
 const timers = new Map<string, number>();
 const MAX_TIMERS = 100; // Prevent memory leaks from abandoned timers
 
+// Rate limiting for high-frequency logs
+const logThrottleMap = new Map<string, number>();
+const THROTTLE_INTERVAL = 1000; // 1 second
+
 // Cleanup old timers if we exceed the limit
 function cleanupTimers() {
   if (timers.size > MAX_TIMERS) {
@@ -55,6 +59,19 @@ function cleanupTimers() {
     const toRemove = entries.slice(0, Math.floor(entries.length / 2));
     toRemove.forEach(([key]) => timers.delete(key));
   }
+}
+
+// Check if a log message should be throttled
+function shouldThrottle(key: string): boolean {
+  const now = Date.now();
+  const lastLogged = logThrottleMap.get(key);
+
+  if (!lastLogged || now - lastLogged > THROTTLE_INTERVAL) {
+    logThrottleMap.set(key, now);
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -78,12 +95,37 @@ export function getLogger(category: string): Logger {
       }
     },
 
-    warn(...args: unknown[]): void {
+    warn(
+      message: string,
+      error?: Error | unknown,
+      context?: LogContext,
+      throttleKey?: string
+    ): void {
+      // Check throttling if throttleKey provided
+      if (throttleKey && shouldThrottle(`${category}:warn:${throttleKey}`)) {
+        return;
+      }
+
       // Warnings are logged in both dev and prod
-      console.warn(prefix, ...args);
+      if (error instanceof Error) {
+        console.warn(prefix, message, error, context);
+      } else if (error) {
+        console.warn(prefix, message, error, context);
+      } else {
+        console.warn(prefix, message, context);
+      }
     },
 
-    error(message: string, error?: Error | unknown, context?: LogContext): void {
+    error(
+      message: string,
+      error?: Error | unknown,
+      context?: LogContext,
+      throttleKey?: string
+    ): void {
+      // Check throttling if throttleKey provided
+      if (throttleKey && shouldThrottle(`${category}:error:${throttleKey}`)) {
+        return;
+      }
       // Errors are always logged
       const errorData = {
         message,
@@ -147,6 +189,18 @@ export function getLogger(category: string): Logger {
  * Default logger for general use
  */
 export const logger = getLogger('app');
+
+// Expose logger utilities in development for debugging
+if (isDev && typeof globalThis.window !== 'undefined') {
+  interface WindowWithLogger extends Window {
+    __birdnetLogger: {
+      getLogger: typeof getLogger;
+      loggers: typeof loggers;
+      logger: typeof logger;
+    };
+  }
+  (globalThis.window as WindowWithLogger).__birdnetLogger = { getLogger, loggers, logger };
+}
 
 /**
  * Common logger categories

@@ -320,14 +320,22 @@
       });
 
       audio.addEventListener('error', e => {
-        logger.warn('Failed to load notification sound:', e);
+        logger.warn('Failed to load notification sound', null, {
+          component: 'NotificationBell',
+          action: 'preloadNotificationSound',
+          errorType: e.type,
+          target: e.target?.constructor?.name || 'HTMLAudioElement',
+        });
         audioReady = false;
         preloadedAudio = null;
       });
 
       audio.load();
     } catch (error) {
-      logger.warn('Failed to preload notification sound:', error);
+      logger.warn('Failed to preload notification sound', error, {
+        component: 'NotificationBell',
+        action: 'preloadNotificationSound',
+      });
       audioReady = false;
       preloadedAudio = null;
     }

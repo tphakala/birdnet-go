@@ -300,6 +300,26 @@ Responsive Breakpoints:
     }));
   });
 
+  // Track and log unexpected column types once (performance optimization)
+  const loggedUnexpectedColumns = new Set<string>();
+  $effect(() => {
+    if (import.meta.env.DEV) {
+      const expectedTypes = new Set(['species', 'progress', 'hourly', 'bi-hourly', 'six-hourly']);
+
+      columns.forEach(column => {
+        if (!expectedTypes.has(column.type) && !loggedUnexpectedColumns.has(column.key)) {
+          logger.warn('Unexpected column type detected', null, {
+            columnKey: column.key,
+            columnType: column.type,
+            component: 'DailySummaryCard',
+            action: 'columnValidation',
+          });
+          loggedUnexpectedColumns.add(column.key);
+        }
+      });
+    }
+  });
+
   // Pre-computed render functions - use $state.raw for performance (static functions)
   const renderFunctions = $state.raw({
     hourly: (item: DailySpeciesSummary, hour: number) => item.hourly_counts[hour] || 0,
@@ -840,15 +860,8 @@ Responsive Breakpoints:
                         -
                       {/if}
                     {:else}
-                      <!-- Default column rendering - log warning for unexpected column -->
+                      <!-- Default column rendering -->
                       <span class="text-sm">-</span>
-                      {#snippet logUnexpectedColumn()}
-                        {logger.warn('Unexpected column key', {
-                          columnKey: column.key,
-                          component: 'DailySummaryCard',
-                        })}
-                      {/snippet}
-                      {@render logUnexpectedColumn()}
                     {/if}
                   </td>
                 {/each}

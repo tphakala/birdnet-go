@@ -205,7 +205,7 @@ Use the centralized logger utility instead of console statements:
 import { getLogger, loggers } from '$lib/utils/logger';
 
 // Option 1: Create a custom logger for your module
-const logger = getLogger('myModule');
+const customLogger = getLogger('myModule');
 
 // Option 2: Use predefined category loggers
 const apiLogger = loggers.api; // For API-related logging
