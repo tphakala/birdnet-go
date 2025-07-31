@@ -32,8 +32,8 @@ export interface LogContext {
 export interface Logger {
   debug(...args: unknown[]): void;
   info(...args: unknown[]): void;
-  warn(message: string, error?: Error | unknown, context?: LogContext, throttleKey?: string): void;
-  error(message: string, error?: Error | unknown, context?: LogContext, throttleKey?: string): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
   group(label: string): void;
   groupEnd(): void;
   time(label: string): void;
@@ -95,12 +95,32 @@ export function getLogger(category: string): Logger {
       }
     },
 
-    warn(
-      message: string,
-      error?: Error | unknown,
-      context?: LogContext,
-      throttleKey?: string
-    ): void {
+    warn(...args: unknown[]): void {
+      if (args.length === 0) return;
+
+      // Handle both new and old calling patterns
+      // Old: logger.warn('message', error, 'extra', 'data')
+      // New: logger.warn('message', error, context, throttleKey)
+
+      // If called with console.warn style (multiple arguments)
+      if (
+        args.length > 1 &&
+        (typeof args[2] === 'string' ||
+          typeof args[2] === 'number' ||
+          typeof args[2] !== 'object' ||
+          args[2] === null)
+      ) {
+        // Console-style logging: just pass all arguments
+        console.warn(prefix, ...args);
+        return;
+      }
+
+      // New structured style
+      const message = String(args[0]);
+      const error = args[1];
+      const context = args[2] as LogContext | undefined;
+      const throttleKey = args[3] as string | undefined;
+
       // Check throttling if throttleKey provided
       if (throttleKey && shouldThrottle(`${category}:warn:${throttleKey}`)) {
         return;
@@ -116,16 +136,37 @@ export function getLogger(category: string): Logger {
       }
     },
 
-    error(
-      message: string,
-      error?: Error | unknown,
-      context?: LogContext,
-      throttleKey?: string
-    ): void {
+    error(...args: unknown[]): void {
+      if (args.length === 0) return;
+
+      // Handle both new and old calling patterns
+      // Old: logger.error('message', error, 'extra', 'data')
+      // New: logger.error('message', error, context, throttleKey)
+
+      // If called with console.error style (multiple arguments)
+      if (
+        args.length > 1 &&
+        (typeof args[2] === 'string' ||
+          typeof args[2] === 'number' ||
+          typeof args[2] !== 'object' ||
+          args[2] === null)
+      ) {
+        // Console-style logging: just pass all arguments
+        console.error(prefix, ...args);
+        return;
+      }
+
+      // New structured style
+      const message = String(args[0]);
+      const error = args[1];
+      const context = args[2] as LogContext | undefined;
+      const throttleKey = args[3] as string | undefined;
+
       // Check throttling if throttleKey provided
       if (throttleKey && shouldThrottle(`${category}:error:${throttleKey}`)) {
         return;
       }
+
       // Errors are always logged
       const errorData = {
         message,
@@ -186,23 +227,6 @@ export function getLogger(category: string): Logger {
 }
 
 /**
- * Default logger for general use
- */
-export const logger = getLogger('app');
-
-// Expose logger utilities in development for debugging
-if (isDev && typeof globalThis.window !== 'undefined') {
-  interface WindowWithLogger extends Window {
-    __birdnetLogger: {
-      getLogger: typeof getLogger;
-      loggers: typeof loggers;
-      logger: typeof logger;
-    };
-  }
-  (globalThis.window as WindowWithLogger).__birdnetLogger = { getLogger, loggers, logger };
-}
-
-/**
  * Common logger categories
  */
 export const loggers = {
@@ -215,3 +239,20 @@ export const loggers = {
   analytics: getLogger('analytics'),
   performance: getLogger('performance'),
 } as const;
+
+/**
+ * Default logger for general use
+ */
+export const logger = getLogger('app');
+
+// Expose logger utilities in development for debugging
+if (isDev && typeof globalThis.window !== 'undefined') {
+  interface WindowWithLogger extends Window {
+    __birdnetLogger?: {
+      getLogger: typeof getLogger;
+      loggers: typeof loggers;
+      logger: typeof logger;
+    };
+  }
+  (globalThis.window as WindowWithLogger).__birdnetLogger = { getLogger, loggers, logger };
+}
