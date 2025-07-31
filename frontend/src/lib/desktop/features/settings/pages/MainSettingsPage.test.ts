@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
@@ -94,8 +95,8 @@ vi.mock('$lib/utils/api', () => ({
   },
   ApiError: class ApiError extends Error {
     status: number;
-    data?: any;
-    constructor(message: string, status: number, data?: any) {
+    data?: unknown;
+    constructor(message: string, status: number, data?: unknown) {
       super(message);
       this.status = status;
       this.data = data;

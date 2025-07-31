@@ -1,7 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { systemIcons } from '$lib/utils/icons';
-  import type { HTMLAttributes } from 'svelte/elements';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -19,8 +18,8 @@
     'aria-hidden'?: boolean;
     tabindex?: number;
     title?: string;
-    onclick?: (event: MouseEvent) => void;
-    onkeydown?: (event: KeyboardEvent) => void;
+    onclick?: (_event: MouseEvent) => void;
+    onkeydown?: (_event: KeyboardEvent) => void;
   }
 
   let {
