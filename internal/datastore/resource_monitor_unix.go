@@ -29,7 +29,7 @@ func getMountInfoPlatform(path string) (*MountInfo, error) {
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
 			// Log but don't override the main error
-			fmt.Printf("Warning: failed to close /proc/mounts: %v\n", closeErr)
+			getLogger().Warn("Failed to close /proc/mounts", "error", closeErr)
 		}
 	}()
 
@@ -86,7 +86,7 @@ func captureMemoryInfo() (MemoryInfo, error) {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close /proc/meminfo: %v\n", closeErr)
+			getLogger().Warn("Failed to close /proc/meminfo", "error", closeErr)
 		}
 	}()
 
@@ -142,7 +142,7 @@ func getProcessMemoryUsage() (*ProcessMemoryUsage, error) {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close process status file: %v\n", closeErr)
+			getLogger().Warn("Failed to close process status file", "error", closeErr)
 		}
 	}()
 

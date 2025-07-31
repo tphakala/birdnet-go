@@ -7,11 +7,43 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// Disk space requirements for different operations (in MB)
+const (
+	MinDiskSpaceVacuum   = 500 // VACUUM can temporarily double database size
+	MinDiskSpaceBackup   = 200 // Backup operations need significant space
+	MinDiskSpaceBulk     = 100 // Bulk operations need extra space
+	MinDiskSpaceDefault  = 50  // Default minimum for normal operations
+)
+
+// Mount info cache for performance
+type mountInfoCache struct {
+	info   *MountInfo
+	path   string
+	expiry time.Time
+}
+
+var (
+	mountCache     *mountInfoCache
+	mountCacheLock sync.RWMutex
+	mountCacheTTL  = 5 * time.Minute // Cache mount info for 5 minutes
+)
+
+// Operation disk requirements map
+var operationDiskRequirements = map[string]uint64{
+	"vacuum":      MinDiskSpaceVacuum,
+	"optimize":    MinDiskSpaceVacuum,
+	"backup":      MinDiskSpaceBackup,
+	"migration":   MinDiskSpaceBackup,
+	"bulk_insert": MinDiskSpaceBulk,
+	"import":      MinDiskSpaceBulk,
+}
 
 // ResourceSnapshot captures system resources at a point in time
 type ResourceSnapshot struct {
@@ -298,16 +330,11 @@ func ValidateResourceAvailability(dbPath, operation string) error {
 
 // getMinimumDiskSpaceForOperation returns minimum disk space required for different operations
 func getMinimumDiskSpaceForOperation(operation string) uint64 {
-	switch strings.ToLower(operation) {
-	case "vacuum", "optimize":
-		return 500 // VACUUM can temporarily double database size
-	case "backup", "migration":
-		return 200 // Backup operations need significant space
-	case "bulk_insert", "import":
-		return 100 // Bulk operations need extra space
-	default:
-		return 50 // Default minimum for normal operations
+	op := strings.ToLower(operation)
+	if minSpace, ok := operationDiskRequirements[op]; ok {
+		return minSpace
 	}
+	return MinDiskSpaceDefault
 }
 
 // isMemoryIntensiveOperation checks if an operation requires significant memory
@@ -360,13 +387,16 @@ func (r *ResourceSnapshot) IsCriticalResourceState() bool {
 func (r *ResourceSnapshot) GetResourceRecommendations() []string {
 	var recommendations []string
 	
-	if r.DiskSpace.UsedPercent > 90.0 {
+	const criticalDiskUsagePercent = 90.0
+	const largeWALSizeMB = 50
+
+	if r.DiskSpace.UsedPercent > criticalDiskUsagePercent {
 		recommendations = append(recommendations, 
 			fmt.Sprintf("Disk space critically low: %.1f%% used (%dMB free)", 
 				r.DiskSpace.UsedPercent, r.DiskSpace.AvailableBytes/1024/1024))
 	}
 	
-	if r.DatabaseFile.WALExists && r.DatabaseFile.WALSize > 50*1024*1024 {
+	if r.DatabaseFile.WALExists && r.DatabaseFile.WALSize > largeWALSizeMB*1024*1024 {
 		recommendations = append(recommendations, 
 			fmt.Sprintf("Large WAL file detected: %dMB - consider checkpoint", 
 				r.DatabaseFile.WALSize/1024/1024))
@@ -403,10 +433,33 @@ type InodeInfo struct {
 	Total uint64
 }
 
-// getMountInfo gets mount point information (implementation varies by platform)
+// getMountInfo gets mount point information with caching
 func getMountInfo(path string) (*MountInfo, error) {
-	// Platform-specific implementation - will be implemented in platform files
-	return getMountInfoPlatform(path)
+	// Check cache first
+	mountCacheLock.RLock()
+	if mountCache != nil && mountCache.path == path && time.Now().Before(mountCache.expiry) {
+		info := mountCache.info
+		mountCacheLock.RUnlock()
+		return info, nil
+	}
+	mountCacheLock.RUnlock()
+
+	// Get fresh mount info
+	info, err := getMountInfoPlatform(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update cache
+	mountCacheLock.Lock()
+	mountCache = &mountInfoCache{
+		info:   info,
+		path:   path,
+		expiry: time.Now().Add(mountCacheTTL),
+	}
+	mountCacheLock.Unlock()
+
+	return info, nil
 }
 
 // getInodeInfo gets inode information (Unix-specific, returns zeros on Windows)
