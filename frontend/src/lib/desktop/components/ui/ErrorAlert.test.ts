@@ -6,7 +6,7 @@ import type { ComponentProps } from 'svelte';
 
 // Helper function to render ErrorAlert with proper typing
 const renderErrorAlert = (props: Partial<ComponentProps<typeof ErrorAlert>>) => {
-  return render(ErrorAlert, { props });
+  return renderTyped(ErrorAlert, { props });
 };
 
 describe('ErrorAlert', () => {

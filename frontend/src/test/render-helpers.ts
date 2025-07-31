@@ -6,18 +6,18 @@
  */
 
 import { render, type RenderOptions, type RenderResult } from '@testing-library/svelte';
-import type { ComponentProps, SvelteComponent } from 'svelte';
+import type { ComponentProps, Component } from 'svelte';
 
 /**
- * Type-safe render function for Svelte components
+ * Type-safe render function for Svelte 5 components
  * Maintains prop type checking while handling internal casting
  */
-export function renderTyped<T extends SvelteComponent>(
-  Component: new (...args: unknown[]) => T,
+export function renderTyped<TComponent extends Component<Record<string, unknown>>>(
+  Component: TComponent,
   options: {
-    props?: ComponentProps<T>;
+    props?: ComponentProps<TComponent>;
   } & Omit<RenderOptions, 'props'> = {}
-): RenderResult {
+): RenderResult<ComponentProps<TComponent>> {
   // Handle the casting internally while maintaining type safety for consumers
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return render(Component as any, options);
@@ -27,26 +27,41 @@ export function renderTyped<T extends SvelteComponent>(
  * Create a test factory for a specific component with default props
  * Useful for components tested multiple times with similar setups
  */
-export function createComponentTestFactory<T extends SvelteComponent>(
-  Component: new (...args: unknown[]) => T,
-  defaultProps: Partial<ComponentProps<T>> = {}
+export function createComponentTestFactory<TComponent extends Component<Record<string, unknown>>>(
+  Component: TComponent,
+  defaultProps: Partial<ComponentProps<TComponent>> = {}
 ) {
   return {
     render: (
-      props: Partial<ComponentProps<T>> = {},
+      propsOrOptions: unknown = {},
       options: Omit<RenderOptions, 'props'> = {}
-    ) => {
+    ): RenderResult<ComponentProps<TComponent>> => {
+      // Handle both patterns: direct props or {props: {...}} wrapper
+      let props: Partial<ComponentProps<TComponent>>;
+      let renderOptions: Omit<RenderOptions, 'props'>;
+      
+      if (propsOrOptions && typeof propsOrOptions === 'object' && 'props' in propsOrOptions) {
+        // Handle {props: {...}, ...otherOptions} pattern
+        const { props: extractedProps, ...otherOptions } = propsOrOptions;
+        props = extractedProps ?? {};
+        renderOptions = { ...otherOptions, ...options };
+      } else {
+        // Handle direct props pattern
+        props = (propsOrOptions as Partial<ComponentProps<TComponent>>) ?? {};
+        renderOptions = options;
+      }
+      
       return renderTyped(Component, {
-        props: { ...defaultProps, ...props } as ComponentProps<T>,
-        ...options,
+        props: { ...defaultProps, ...props } as ComponentProps<TComponent>,
+        ...renderOptions,
       });
     },
 
     // Helper for testing with different prop combinations
-    renderWithProps: (...propVariants: Partial<ComponentProps<T>>[]) => {
+    renderWithProps: (...propVariants: Partial<ComponentProps<TComponent>>[]) => {
       return propVariants.map(props =>
         renderTyped(Component, {
-          props: { ...defaultProps, ...props } as ComponentProps<T>,
+          props: { ...defaultProps, ...props } as ComponentProps<TComponent>,
         })
       );
     },
@@ -70,12 +85,12 @@ export function createMockHandlers<T extends Record<string, (...args: unknown[])
 /**
  * Helper for components with required props - ensures all required props are provided
  */
-export function renderWithRequiredProps<T extends SvelteComponent>(
-  Component: new (...args: unknown[]) => T,
-  requiredProps: ComponentProps<T>,
-  additionalProps: Partial<ComponentProps<T>> = {},
+export function renderWithRequiredProps<TComponent extends Component<Record<string, unknown>>>(
+  Component: TComponent,
+  requiredProps: ComponentProps<TComponent>,
+  additionalProps: Partial<ComponentProps<TComponent>> = {},
   options: Omit<RenderOptions, 'props'> = {}
-): RenderResult {
+): RenderResult<ComponentProps<TComponent>> {
   return renderTyped(Component, {
     props: { ...requiredProps, ...additionalProps },
     ...options,

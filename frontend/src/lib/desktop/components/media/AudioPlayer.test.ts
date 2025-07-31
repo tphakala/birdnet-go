@@ -5,7 +5,7 @@ import {
   screen,
   fireEvent,
   waitFor,
-} from '../../../test/render-helpers';
+} from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import AudioPlayer from './AudioPlayer.svelte';
 
