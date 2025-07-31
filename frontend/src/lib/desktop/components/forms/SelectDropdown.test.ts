@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import {
+  createComponentTestFactory,
+  screen,
+  fireEvent,
+  waitFor,
+} from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import SelectDropdown from './SelectDropdown.svelte';
 import type { SelectOption } from './SelectDropdown.types';
@@ -10,6 +15,8 @@ beforeEach(() => {
 });
 
 describe('SelectDropdown', () => {
+  const selectTest = createComponentTestFactory(SelectDropdown);
+
   const basicOptions: SelectOption[] = [
     { value: 'apple', label: 'Apple' },
     { value: 'banana', label: 'Banana' },
@@ -32,8 +39,7 @@ describe('SelectDropdown', () => {
 
   describe('Basic Functionality', () => {
     it('renders with placeholder', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           placeholder: 'Choose a fruit',
@@ -44,8 +50,7 @@ describe('SelectDropdown', () => {
     });
 
     it('renders with label', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           label: 'Select Fruit',
@@ -56,8 +61,7 @@ describe('SelectDropdown', () => {
     });
 
     it('shows required indicator', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           label: 'Select Fruit',
@@ -69,8 +73,7 @@ describe('SelectDropdown', () => {
     });
 
     it('opens dropdown on click', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: { options: basicOptions },
       });
 
@@ -84,8 +87,7 @@ describe('SelectDropdown', () => {
     it('closes dropdown on escape', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: { options: basicOptions },
       });
 
@@ -105,8 +107,7 @@ describe('SelectDropdown', () => {
     });
 
     it('closes dropdown on outside click', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: { options: basicOptions },
       });
 
@@ -127,8 +128,7 @@ describe('SelectDropdown', () => {
     it('selects option on click', async () => {
       const onChange = vi.fn();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           onChange,
@@ -143,8 +143,7 @@ describe('SelectDropdown', () => {
     });
 
     it('displays initial value', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           value: 'cherry',
@@ -155,15 +154,12 @@ describe('SelectDropdown', () => {
     });
 
     it('updates display when value changes', async () => {
-      const {
-        rerender,
-      } = // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        render(SelectDropdown as any, {
-          props: {
-            options: basicOptions,
-            value: 'apple',
-          },
-        });
+      const { rerender } = selectTest.render({
+        props: {
+          options: basicOptions,
+          value: 'apple',
+        },
+      });
 
       expect(screen.getByRole('button')).toHaveTextContent('Apple');
 
@@ -177,8 +173,7 @@ describe('SelectDropdown', () => {
     it('allows multiple selections', async () => {
       const onChange = vi.fn();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           multiple: true,
@@ -198,8 +193,7 @@ describe('SelectDropdown', () => {
     it('deselects on second click', async () => {
       const onChange = vi.fn();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           multiple: true,
@@ -215,8 +209,7 @@ describe('SelectDropdown', () => {
     });
 
     it('shows checkboxes for multiple selection', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           multiple: true,
@@ -232,8 +225,7 @@ describe('SelectDropdown', () => {
     it('respects maxSelections', async () => {
       const onChange = vi.fn();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           multiple: true,
@@ -253,8 +245,7 @@ describe('SelectDropdown', () => {
 
   describe('Search Functionality', () => {
     it('shows search input when searchable', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           searchable: true,
@@ -269,8 +260,7 @@ describe('SelectDropdown', () => {
     it('filters options based on search', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           searchable: true,
@@ -289,8 +279,7 @@ describe('SelectDropdown', () => {
     it('shows no options message when filtered empty', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           searchable: true,
@@ -309,8 +298,7 @@ describe('SelectDropdown', () => {
       const onSearch = vi.fn();
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           searchable: true,
@@ -329,8 +317,7 @@ describe('SelectDropdown', () => {
 
   describe('Clear Functionality', () => {
     it('shows clear button when clearable and has value', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           value: 'apple',
@@ -345,8 +332,7 @@ describe('SelectDropdown', () => {
       const onChange = vi.fn();
       const onClear = vi.fn();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           value: 'apple',
@@ -365,8 +351,7 @@ describe('SelectDropdown', () => {
     it('clears multiple selections', async () => {
       const onChange = vi.fn();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           value: ['apple', 'banana'],
@@ -384,8 +369,7 @@ describe('SelectDropdown', () => {
 
   describe('Grouped Options', () => {
     it('displays group headers', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: groupedOptions,
           groupBy: true,
@@ -399,8 +383,7 @@ describe('SelectDropdown', () => {
     });
 
     it('can disable grouping', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: groupedOptions,
           groupBy: false,
@@ -416,8 +399,7 @@ describe('SelectDropdown', () => {
 
   describe('Options with Details', () => {
     it('displays icons and descriptions', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: optionsWithDetails,
         },
@@ -432,8 +414,7 @@ describe('SelectDropdown', () => {
     it('searches in descriptions', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: optionsWithDetails,
           searchable: true,
@@ -454,8 +435,7 @@ describe('SelectDropdown', () => {
     it('navigates with arrow keys', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
         },
@@ -487,8 +467,7 @@ describe('SelectDropdown', () => {
     it('opens with Enter or Space', async () => {
       const user = userEvent.setup();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
         },
@@ -505,8 +484,7 @@ describe('SelectDropdown', () => {
 
   describe('Disabled State', () => {
     it('disables the dropdown', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: basicOptions,
           disabled: true,
@@ -524,8 +502,7 @@ describe('SelectDropdown', () => {
         { value: 'cherry', label: 'Cherry' },
       ];
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      render(SelectDropdown as any, {
+      selectTest.render({
         props: {
           options: optionsWithDisabled,
         },
@@ -540,8 +517,7 @@ describe('SelectDropdown', () => {
   });
 
   it('applies custom classes', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SelectDropdown as any, {
+    selectTest.render({
       props: {
         options: basicOptions,
         className: 'custom-select',
@@ -553,8 +529,7 @@ describe('SelectDropdown', () => {
   });
 
   it('shows help text', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(SelectDropdown as any, {
+    selectTest.render({
       props: {
         options: basicOptions,
         helpText: 'Choose your favorite fruit',

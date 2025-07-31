@@ -12,7 +12,6 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
-  import { toastActions } from '$lib/stores/toast';
   import { t } from '$lib/i18n';
 
   // API response interfaces
@@ -70,7 +69,7 @@
       } catch (error) {
         // Species list loading failure affects form functionality but isn't critical
         // Show minimal feedback rather than intrusive error
-        if (error instanceof ApiError && process.env.NODE_ENV === 'development') {
+        if (error instanceof ApiError && import.meta.env.DEV) {
           console.warn('Failed to load species list for filtering:', error.message);
         }
         // Set empty array so form still works, just without suggestions

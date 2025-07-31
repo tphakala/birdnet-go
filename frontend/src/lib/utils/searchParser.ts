@@ -55,7 +55,8 @@ export function parseSearchQuery(query: string): ParsedSearch {
   }
 
   // Regular expression to match filter patterns like "filter:value" or "filter:>value"
-  const filterRegex = /(\w+):((?:[><=]+)?[^\s]+)/g;
+  // Made safer by limiting operator repetition to prevent ReDoS
+  const filterRegex = /(\w+):([><=]{0,3}[^\s]+)/g;
   const textParts: string[] = [];
   let lastIndex = 0;
 

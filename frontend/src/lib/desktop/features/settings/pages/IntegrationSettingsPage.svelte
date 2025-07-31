@@ -16,10 +16,8 @@
     integrationSettings,
     realtimeSettings,
     type SettingsFormData,
-    type BirdWeatherSettings,
     type MQTTSettings,
     type WeatherSettings,
-    type ObservabilitySettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';

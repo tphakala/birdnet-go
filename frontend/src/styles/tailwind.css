@@ -1,5 +1,5 @@
 /* Import custom styles from legacy custom.css that are used by Svelte UI */
-@import './custom.css';
+@import url('./custom.css');
 
 @tailwind base;
 @tailwind components;

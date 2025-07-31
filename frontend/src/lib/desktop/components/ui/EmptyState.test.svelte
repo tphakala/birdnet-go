@@ -5,8 +5,8 @@
     showCustomIcon = false,
     showChildren = false,
     title = 'Test Empty State',
-    description,
-    action,
+    description = 'Test description',
+    action = { label: 'Test action', onClick: () => {} },
     ...rest
   } = $props();
 </script>

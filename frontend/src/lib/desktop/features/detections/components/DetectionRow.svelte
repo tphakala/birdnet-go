@@ -24,10 +24,8 @@
   - isExcluded?: boolean - Whether this detection is excluded
   - onDetailsClick?: (id: number) => void - Handler for detail view
   - onRefresh?: () => void - Handler for data refresh
-  - className?: string - Additional CSS classes
 -->
 <script lang="ts">
-  import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
@@ -43,18 +41,11 @@
   interface Props {
     detection: Detection;
     isExcluded?: boolean;
-    onDetailsClick?: (id: number) => void;
+    onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
-    className?: string;
   }
 
-  let {
-    detection,
-    isExcluded = false,
-    onDetailsClick,
-    onRefresh,
-    className = '',
-  }: Props = $props();
+  let { detection, isExcluded = false, onDetailsClick, onRefresh }: Props = $props();
 
   // Modal states
   let showReviewModal = $state(false);

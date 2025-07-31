@@ -796,6 +796,8 @@
     datesToPreload.forEach(date => preloadCache.add(date));
 
     // Start batch preloading using untrack to prevent reactive dependencies
+    // Fire-and-forget operation for performance optimization
+    // eslint-disable-next-line no-unused-vars
     const batchPreloadPromise = untrack(() => {
       const datesParam = datesToPreload.join(',');
       return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}`)
@@ -827,6 +829,7 @@
         })
         .catch(error => {
           console.debug(`Batch preload failed for ${baseDate}:`, error);
+          // TODO: Add Sentry.io telemetry for batch preload failures to track network issues
 
           // Fall back to individual requests if batch fails
           console.debug('Falling back to individual preload requests');
@@ -847,6 +850,7 @@
                   `Individual fallback preload failed for ${dateString}:`,
                   fallbackError
                 );
+                // TODO: Add Sentry.io telemetry for individual fallback failures
               });
           });
         })

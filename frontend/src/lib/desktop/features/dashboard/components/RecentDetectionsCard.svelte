@@ -21,6 +21,7 @@
     onRowClick?: (_detection: Detection) => void;
     onRefresh: () => void;
     limit?: number;
+    // eslint-disable-next-line no-unused-vars
     onLimitChange?: (limit: number) => void;
     newDetectionIds?: Set<number>;
     detectionArrivalTimes?: Map<number, number>;
@@ -38,6 +39,7 @@
     limit = 5,
     onLimitChange,
     newDetectionIds = new Set(),
+    // eslint-disable-next-line no-unused-vars
     detectionArrivalTimes: _detectionArrivalTimes = new Map(), // Reserved for future staggered animations
     onFreezeStart,
     onFreezeEnd,
@@ -464,6 +466,7 @@
     0% {
       background-position: 200% 0;
     }
+
     100% {
       background-position: -200% 0;
     }
@@ -477,6 +480,7 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+
     /* Hide placeholder when image loads */
     z-index: 1;
     background-color: oklch(var(--b1));
@@ -489,7 +493,7 @@
   .rd-audio-player-container {
     position: relative;
     width: 100%;
-    background: linear-gradient(to bottom, rgb(128, 128, 128, 0.4), rgb(128, 128, 128, 0.1));
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.4), rgb(128 128 128 / 0.1));
     border-radius: 0.5rem;
   }
 
@@ -533,6 +537,7 @@
     height: auto !important;
     width: 100% !important;
     max-width: 400px;
+
     /* Smooth fade-in for spectrogram to prevent flash */
     animation: fadeIn 0.3s ease-out;
   }
@@ -541,6 +546,7 @@
     from {
       opacity: 0;
     }
+
     to {
       opacity: 1;
     }

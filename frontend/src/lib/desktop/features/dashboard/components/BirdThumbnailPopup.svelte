@@ -288,6 +288,7 @@
     0% {
       background-position: 200% 0;
     }
+
     100% {
       background-position: -200% 0;
     }
@@ -305,9 +306,11 @@
     pointer-events: auto;
   }
 
-  /* Smooth entrance animation */
+  /* Smooth entrance animation and theme accessibility */
   #bird-popup {
     animation: popupFadeIn 0.2s ease-out;
+    backdrop-filter: blur(8px);
+    background-color: hsl(var(--b1) / 0.95);
   }
 
   @keyframes popupFadeIn {
@@ -315,16 +318,11 @@
       opacity: 0;
       transform: translateY(-10px) scale(0.95);
     }
+
     to {
       opacity: 1;
       transform: translateY(0) scale(1);
     }
-  }
-
-  /* Ensure popup is accessible on all themes */
-  #bird-popup {
-    backdrop-filter: blur(8px);
-    background-color: hsl(var(--b1) / 0.95);
   }
 
   /* Mobile responsiveness */

@@ -8,7 +8,6 @@
     description?: string;
     padding?: boolean;
     className?: string;
-    hasChanges?: boolean;
     header?: Snippet;
     children?: Snippet;
     footer?: Snippet;
@@ -19,7 +18,6 @@
     description,
     padding = true,
     className = '',
-    hasChanges = false,
     header,
     children,
     footer,

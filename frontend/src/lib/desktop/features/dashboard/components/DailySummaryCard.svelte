@@ -937,6 +937,7 @@ Responsive Breakpoints:
     :global(.hourly-count) {
       display: table-cell;
     }
+
     :global([class*='hidden'][class*='2xl:table-cell']) {
       display: table-cell;
     }
@@ -949,6 +950,7 @@ Responsive Breakpoints:
     :global(.hourly-count) {
       display: table-cell;
     }
+
     :global([class*='hidden'][class*='2xl:table-cell']) {
       display: none !important;
     }
@@ -961,12 +963,14 @@ Responsive Breakpoints:
     :global(.hourly-count) {
       display: table-cell;
     }
+
     :global(.hour-header.hourly-count),
     :global(.hour-data.hourly-count) {
       padding-left: 0;
       padding-right: 0;
       font-size: 0.7rem;
     }
+
     :global([class*='hidden'][class*='2xl:table-cell']) {
       display: none !important;
     }
@@ -979,14 +983,17 @@ Responsive Breakpoints:
     :global(.bi-hourly-count) {
       display: table-cell;
     }
+
     :global(.hour-header.hourly-count),
     :global(.hour-data.hourly-count),
     :global(.hourly-count) {
       display: none;
     }
+
     :global([class*='hidden'][class*='2xl:table-cell']) {
       display: none !important;
     }
+
     :global(.hour-header.bi-hourly),
     :global(.hour-data.bi-hourly) {
       padding-left: 0;
@@ -1002,9 +1009,11 @@ Responsive Breakpoints:
     :global(.bi-hourly-count) {
       display: table-cell;
     }
+
     :global([class*='hidden'][class*='2xl:table-cell']) {
       display: none !important;
     }
+
     :global(.hour-header.bi-hourly),
     :global(.hour-data.bi-hourly) {
       padding-left: 0;
@@ -1019,6 +1028,7 @@ Responsive Breakpoints:
     :global(.bi-hourly-count) {
       display: none;
     }
+
     :global(.hour-header.six-hourly),
     :global(.hour-data.six-hourly),
     :global(.six-hourly-count) {
@@ -1073,11 +1083,11 @@ Responsive Breakpoints:
     --heatmap-color-6: #0099d8;
     --heatmap-color-7: #0077be;
     --heatmap-color-8: #005595;
-    --heatmap-color-9: #003366;
+    --heatmap-color-9: #036;
 
     /* Theme-aware border colors */
-    --theme-border-light: rgba(255, 255, 255, 0.1);
-    --theme-border-dark: rgba(0, 0, 0, 0.1);
+    --theme-border-light: rgb(255 255 255 / 0.1);
+    --theme-border-dark: rgb(0 0 0 / 0.1);
 
     /* Animation durations (for CSS animations) */
     --anim-count-pop: 600ms;
@@ -1085,11 +1095,11 @@ Responsive Breakpoints:
     --anim-new-species: 800ms;
   }
 
-  /* Dark theme heatmap colors */
+  /* Dark theme heatmap colors and text colors */
   :global([data-theme='dark']) {
     --heatmap-color-0: #001a20;
     --heatmap-color-1: #002933;
-    --heatmap-color-2: #004466;
+    --heatmap-color-2: #046;
     --heatmap-color-3: #005c80;
     --heatmap-color-4: #007399;
     --heatmap-color-5: #008bb3;
@@ -1097,10 +1107,6 @@ Responsive Breakpoints:
     --heatmap-color-7: #66b8e2;
     --heatmap-color-8: #99cde9;
     --heatmap-color-9: #cce3f1;
-  }
-
-  /* Dark theme heatmap text colors */
-  :global([data-theme='dark']) {
     --heatmap-text-1: #fff;
     --heatmap-text-2: #fff;
     --heatmap-text-3: #fff;
@@ -1117,34 +1123,42 @@ Responsive Breakpoints:
     background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
     color: var(--heatmap-text-1, #000);
   }
+
   :global([data-theme='light'] .heatmap-color-2) {
     background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
     color: var(--heatmap-text-2, #000);
   }
+
   :global([data-theme='light'] .heatmap-color-3) {
     background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
     color: var(--heatmap-text-3, #000);
   }
+
   :global([data-theme='light'] .heatmap-color-4) {
     background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
     color: var(--heatmap-text-4, #000);
   }
+
   :global([data-theme='light'] .heatmap-color-5) {
     background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
     color: var(--heatmap-text-5, #fff);
   }
+
   :global([data-theme='light'] .heatmap-color-6) {
     background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
     color: var(--heatmap-text-6, #fff);
   }
+
   :global([data-theme='light'] .heatmap-color-7) {
     background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
     color: var(--heatmap-text-7, #fff);
   }
+
   :global([data-theme='light'] .heatmap-color-8) {
     background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
     color: var(--heatmap-text-8, #fff);
   }
+
   :global([data-theme='light'] .heatmap-color-9) {
     background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
     color: var(--heatmap-text-9, #fff);
@@ -1155,34 +1169,42 @@ Responsive Breakpoints:
     background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
     color: var(--heatmap-text-1, #000);
   }
+
   :global([data-theme='dark'] .heatmap-color-2) {
     background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
     color: var(--heatmap-text-2, #000);
   }
+
   :global([data-theme='dark'] .heatmap-color-3) {
     background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
     color: var(--heatmap-text-3, #000);
   }
+
   :global([data-theme='dark'] .heatmap-color-4) {
     background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
     color: var(--heatmap-text-4, #000);
   }
+
   :global([data-theme='dark'] .heatmap-color-5) {
     background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
     color: var(--heatmap-text-5, #fff);
   }
+
   :global([data-theme='dark'] .heatmap-color-6) {
     background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
     color: var(--heatmap-text-6, #fff);
   }
+
   :global([data-theme='dark'] .heatmap-color-7) {
     background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
     color: var(--heatmap-text-7, #fff);
   }
+
   :global([data-theme='dark'] .heatmap-color-8) {
     background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
     color: var(--heatmap-text-8, #fff);
   }
+
   :global([data-theme='dark'] .heatmap-color-9) {
     background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
     color: var(--heatmap-text-9, #fff);
@@ -1237,22 +1259,27 @@ Responsive Breakpoints:
       transform: scale(1);
       box-shadow: 0 0 0 0 oklch(var(--p) / 0.7);
     }
+
     15% {
       transform: scale(1.15);
       box-shadow: 0 0 0 4px oklch(var(--p) / 0.5);
     }
+
     25% {
       transform: scale(1.05);
       box-shadow: 0 0 0 6px oklch(var(--p) / 0.3);
     }
+
     35% {
       transform: scale(1.12);
       box-shadow: 0 0 0 8px oklch(var(--p) / 0.1);
     }
+
     45% {
       transform: scale(1);
       box-shadow: 0 0 0 10px oklch(var(--p) / 0);
     }
+
     100% {
       transform: scale(1);
       box-shadow: 0 0 0 0 oklch(var(--p) / 0);

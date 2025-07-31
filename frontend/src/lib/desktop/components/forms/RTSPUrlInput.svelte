@@ -12,10 +12,22 @@
   let newUrl = $state('');
 
   function isValidRtspUrl(url: string): boolean {
-    // RTSP URL validation regex pattern
-    const rtspPattern =
-      /^rtsp:\/\/(?:(?:[a-zA-Z0-9-._~!$&'()*+,;=:]|%[0-9A-Fa-f]{2})*@)?(?:\[(?:[0-9a-fA-F:.]+)\]|(?:[0-9]{1,3}\.){3}[0-9]{1,3}|(?:[a-zA-Z0-9-._~!$&'()*+,;=]|%[0-9A-Fa-f]{2})+)(?::[0-9]+)?(?:\/(?:[a-zA-Z0-9-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[a-zA-Z0-9-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(?:#(?:[a-zA-Z0-9-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?$/i;
-    return rtspPattern.test(url);
+    // Safer RTSP URL validation - basic format check to prevent ReDoS
+    // Check for basic RTSP URL structure without complex nested quantifiers
+    if (!url.startsWith('rtsp://')) {
+      return false;
+    }
+
+    try {
+      // Use URL constructor for validation where possible
+      const parsed = new URL(url);
+      return parsed.protocol === 'rtsp:';
+    } catch {
+      // Fallback to simpler regex for RTSP-specific validation
+      // This pattern is much simpler and safer from ReDoS attacks
+      const safeRtspPattern = /^rtsp:\/\/[\w.-]+(?::[0-9]{1,5})?(?:\/[\w/.?&=%-]*)?$/i;
+      return safeRtspPattern.test(url);
+    }
   }
 
   function addUrl() {
@@ -26,7 +38,7 @@
       newUrl = '';
     } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
       // URL is not empty but invalid - could add user feedback here
-      console.warn('Invalid RTSP URL format:', trimmedUrl);
+      console.error('Invalid RTSP URL format:', trimmedUrl); // TODO: Replace with Sentry.io logging
     }
   }
 

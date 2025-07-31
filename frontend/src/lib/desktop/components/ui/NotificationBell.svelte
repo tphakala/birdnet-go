@@ -149,7 +149,7 @@
         toastActions.error('Unable to load notifications. Please refresh the page.');
       }
       // Log for developers without cluttering console in production
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.error('Failed to load notifications:', error);
       }
     } finally {
@@ -271,7 +271,7 @@
       if (error instanceof ApiError) {
         toastActions.error('Failed to mark notification as read.');
       }
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.error('Failed to mark notification as read:', error);
       }
     }

@@ -31,22 +31,19 @@
 }
 
 [data-theme='dark'] .confidence-circle {
-  background: var(--darker-color, rgb(17, 24, 39));
+  background: var(--darker-color, rgb(17 24 39));
 }
 
 .confidence-circle-track {
   position: absolute;
-  top: 5px;
-  left: 5px;
-  right: 5px;
-  bottom: 5px;
+  inset: 5px;
   background: var(--lighter-color, #f3f4f6);
   border-radius: 50%;
   z-index: 2;
 }
 
 [data-theme='dark'] .confidence-circle-track {
-  background: var(--darker-color, rgb(17, 24, 39));
+  background: var(--darker-color, rgb(17 24 39));
 }
 
 .confidence-circle-progress {
@@ -55,7 +52,7 @@
   border-radius: 50%;
   transform-origin: center;
   transform: rotate(180deg);
-  background: conic-gradient(currentColor var(--progress), transparent 0);
+  background: conic-gradient(currentcolor var(--progress), transparent 0);
   transition: all 0.3s ease;
   z-index: 1;
 }
@@ -63,20 +60,23 @@
 /* Confidence level color schemes */
 .confidence-high {
   color: #059669;
+
   --lighter-color: #ecfdf5;
-  --darker-color: rgba(6, 78, 59, 0.2);
+  --darker-color: rgb(6 78 59 / 0.2);
 }
 
 .confidence-medium {
   color: #d97706;
+
   --lighter-color: #fffbeb;
-  --darker-color: rgba(120, 53, 15, 0.2);
+  --darker-color: rgb(120 53 15 / 0.2);
 }
 
 .confidence-low {
   color: #dc2626;
+
   --lighter-color: #fef2f2;
-  --darker-color: rgba(127, 29, 29, 0.2);
+  --darker-color: rgb(127 29 29 / 0.2);
 }
 
 .confidence-circle-text {
@@ -86,7 +86,7 @@
   transform: translate(-50%, -50%);
   font-size: 0.75rem;
   font-weight: 600;
-  color: currentColor;
+  color: currentcolor;
   z-index: 3;
   white-space: nowrap;
   display: flex;
@@ -105,17 +105,20 @@
 /* Dark theme adjustments */
 [data-theme='dark'] .confidence-high {
   color: #34d399;
-  --darker-color: rgb(6, 78, 59);
+
+  --darker-color: rgb(6 78 59);
 }
 
 [data-theme='dark'] .confidence-medium {
   color: #fbbf24;
-  --darker-color: rgb(120, 53, 15);
+
+  --darker-color: rgb(120 53 15);
 }
 
 [data-theme='dark'] .confidence-low {
   color: #f87171;
-  --darker-color: rgb(127, 29, 29);
+
+  --darker-color: rgb(127 29 29);
 }
 
 /* ========================================================================
@@ -149,7 +152,7 @@
 .select:focus-visible {
   outline: 1px solid transparent;
   outline-offset: 0;
-  box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+  box-shadow: 0 0 0 2px rgb(164 202 254 / 0.45);
 }
 
 /* Progress minimum height */
@@ -162,15 +165,19 @@
   0% {
     transform: rotate(0deg);
   }
+
   25% {
     transform: rotate(-15deg);
   }
+
   50% {
     transform: rotate(15deg);
   }
+
   75% {
     transform: rotate(-10deg);
   }
+
   100% {
     transform: rotate(0deg);
   }
@@ -190,27 +197,32 @@
 @keyframes star-wiggle {
   0% {
     transform: rotate(0deg) scale(1);
-    filter: drop-shadow(0 0 2px currentColor);
+    filter: drop-shadow(0 0 2px currentcolor);
   }
+
   20% {
     transform: rotate(-15deg) scale(1.3);
-    filter: drop-shadow(0 0 6px currentColor);
+    filter: drop-shadow(0 0 6px currentcolor);
   }
+
   40% {
     transform: rotate(10deg) scale(1.1);
-    filter: drop-shadow(0 0 4px currentColor);
+    filter: drop-shadow(0 0 4px currentcolor);
   }
+
   60% {
     transform: rotate(-8deg) scale(1.25);
-    filter: drop-shadow(0 0 8px currentColor);
+    filter: drop-shadow(0 0 8px currentcolor);
   }
+
   80% {
     transform: rotate(12deg) scale(1.15);
-    filter: drop-shadow(0 0 5px currentColor);
+    filter: drop-shadow(0 0 5px currentcolor);
   }
+
   100% {
     transform: rotate(0deg) scale(1);
-    filter: drop-shadow(0 0 2px currentColor);
+    filter: drop-shadow(0 0 2px currentcolor);
   }
 }
 
@@ -223,7 +235,7 @@
 @media (prefers-reduced-motion: reduce) {
   .star-wiggle {
     animation: none;
-    filter: drop-shadow(0 0 2px currentColor);
+    filter: drop-shadow(0 0 2px currentcolor);
   }
 }
 

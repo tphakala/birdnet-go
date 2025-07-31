@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { renderTyped, screen } from '../../../../test/render-helpers';
 import Card from './Card.svelte';
 import CardTestWrapper from './Card.test.svelte';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render Card with proper typing
 const renderCard = (props?: Partial<ComponentProps<typeof Card>>) => {
-  return render(Card, props ? { props } : { props: {} });
+  return renderTyped(Card, props ? { props } : { props: {} });
 };
 
 describe('Card', () => {
@@ -40,8 +40,7 @@ describe('Card', () => {
   });
 
   it('renders with slots', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(CardTestWrapper as any, {
+    renderTyped(CardTestWrapper, {
       props: {
         title: 'Card Title',
         showHeader: true,
@@ -55,8 +54,7 @@ describe('Card', () => {
   });
 
   it('prefers header slot over title prop', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(CardTestWrapper as any, {
+    renderTyped(CardTestWrapper, {
       props: {
         title: 'Title Prop',
         showHeader: true,
