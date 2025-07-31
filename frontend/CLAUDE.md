@@ -204,16 +204,19 @@ Use the centralized logger utility instead of console statements:
 ```typescript
 import { getLogger, loggers } from '$lib/utils/logger';
 
-// Create a logger for your module
+// Option 1: Create a custom logger for your module
 const logger = getLogger('myModule');
 
-// Or use predefined category loggers
-const logger = loggers.api; // For API-related logging
-const logger = loggers.auth; // For authentication
-const logger = loggers.sse; // For SSE connections
-const logger = loggers.audio; // For audio components
+// Option 2: Use predefined category loggers
+const apiLogger = loggers.api;       // For API-related logging
+const authLogger = loggers.auth;     // For authentication
+const sseLogger = loggers.sse;       // For SSE connections
+const audioLogger = loggers.audio;   // For audio components
+const uiLogger = loggers.ui;         // For UI components
+const settingsLogger = loggers.settings; // For settings
+
+// Most common pattern - choose one logger per file:
 const logger = loggers.ui; // For UI components
-const logger = loggers.settings; // For settings
 ```
 
 ### Logger Methods

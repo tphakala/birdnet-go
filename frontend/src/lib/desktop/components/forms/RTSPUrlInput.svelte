@@ -41,7 +41,7 @@
       newUrl = '';
     } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
       // URL is not empty but invalid - could add user feedback here
-      logger.error('Invalid RTSP URL format:', trimmedUrl); // TODO: Replace with Sentry.io logging
+      logger.error('Invalid RTSP URL format:', trimmedUrl);
     }
   }
 
