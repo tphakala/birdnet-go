@@ -35,7 +35,7 @@
         {emptyMessage}
       </div>
     {:else}
-      <div class="relative">
+      <div class="relative" aria-busy={isLoading}>
         <div class={cn('chart-container', chartHeight, isLoading ? 'invisible' : '')}>
           <canvas id={chartId} class="w-full h-full"></canvas>
         </div>

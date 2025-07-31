@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Chart from 'chart.js/auto';
   import 'chartjs-adapter-date-fns';
   import StatCard from '../components/ui/StatCard.svelte';
@@ -156,7 +156,8 @@
     newSpecies: [],
   });
 
-  // Chart instances
+  // Chart instances - using WeakMap for better memory management
+  const chartCanvases = new WeakMap<HTMLCanvasElement, Chart>();
   let charts: Charts = {
     species: null,
     timeOfDay: null,
@@ -367,9 +368,18 @@
 
     // Create charts after DOM update
     // Small timeout ensures canvas elements have proper dimensions
-    setTimeout(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    timeoutId = setTimeout(() => {
       createAllCharts();
+      timeoutId = null;
     }, 50);
+
+    // Return cleanup function if component unmounts during timeout
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }
 
   // Fetch summary metrics
@@ -658,8 +668,9 @@
   // Chart.js destroy() + new Chart() is expensive - instead we update data and call update()
   // Using update('none') skips animations for better performance during data changes
   function createSpeciesChart(data: SpeciesData[]) {
-    const ctx = (document.getElementById('speciesChart') as HTMLCanvasElement)?.getContext('2d');
-    if (!ctx) {
+    const canvas = document.getElementById('speciesChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
       logger.debug('Species chart canvas not found - component may not be mounted yet');
       return;
     }
@@ -754,12 +765,17 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.species) {
+      chartCanvases.set(canvas, charts.species);
+    }
   }
 
   // PERFORMANCE OPTIMIZATION: Same chart update strategy for time of day chart
   function createTimeOfDayChart(data: TimeOfDayData[]) {
-    const ctx = (document.getElementById('timeOfDayChart') as HTMLCanvasElement)?.getContext('2d');
-    if (!ctx) {
+    const canvas = document.getElementById('timeOfDayChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
       logger.debug('Time of day chart canvas not found - component may not be mounted yet');
       return;
     }
@@ -868,12 +884,17 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.timeOfDay) {
+      chartCanvases.set(canvas, charts.timeOfDay);
+    }
   }
 
   // PERFORMANCE OPTIMIZATION: Same chart update strategy for trend chart
   function createTrendChart(responseData: TrendData | null) {
-    const ctx = (document.getElementById('trendChart') as HTMLCanvasElement)?.getContext('2d');
-    if (!ctx) {
+    const canvas = document.getElementById('trendChart') as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) {
       logger.debug('Trend chart canvas not found - component may not be mounted yet');
       return;
     }
@@ -973,6 +994,10 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.trend) {
+      chartCanvases.set(canvas, charts.trend);
+    }
   }
 
   // Create new species chart
@@ -1119,6 +1144,10 @@
         },
       },
     });
+    // Store reference in WeakMap for memory management
+    if (charts.newSpecies && canvas) {
+      chartCanvases.set(canvas, charts.newSpecies);
+    }
   }
 
   // Initialize on mount
@@ -1148,11 +1177,19 @@
     fetchData();
   });
 
-  // Cleanup on destroy
-  onDestroy(() => {
-    Object.values(charts).forEach(chart => {
-      if (chart) chart.destroy();
-    });
+  // Cleanup charts when component unmounts using Svelte 5 $effect
+  $effect(() => {
+    // Effect runs when component mounts
+    return () => {
+      // Cleanup function runs when component unmounts
+      Object.values(charts).forEach(chart => {
+        if (chart) {
+          chart.destroy();
+        }
+      });
+      // Clear any remaining chart references from WeakMap
+      // WeakMap will auto-cleanup when canvas elements are garbage collected
+    };
   });
 </script>
 
