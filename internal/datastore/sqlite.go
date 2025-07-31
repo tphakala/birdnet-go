@@ -19,7 +19,8 @@ import (
 
 // SQLiteStore implements StoreInterface for SQLite databases
 type SQLiteStore struct {
-	Settings *conf.Settings
+	Settings  *conf.Settings
+	telemetry *DatastoreTelemetry
 	DataStore
 }
 
@@ -172,6 +173,18 @@ func (s *SQLiteStore) Open() error {
 	// Get database path from settings
 	dbPath := s.Settings.Output.SQLite.Path
 	
+	// Initialize telemetry integration
+	telemetryEnabled := s.Settings != nil && s.Settings.Sentry.Enabled
+	s.telemetry = NewDatastoreTelemetry(telemetryEnabled, dbPath)
+	
+	// Validate system resources before opening database
+	if err := ValidateResourceAvailability(dbPath, "open_database"); err != nil {
+		if s.telemetry != nil {
+			s.telemetry.CaptureEnhancedError(err, "open_database", s)
+		}
+		return err
+	}
+	
 	// Log database opening
 	getLogger().Info("Opening SQLite database",
 		"path", dbPath)
@@ -202,12 +215,19 @@ func (s *SQLiteStore) Open() error {
 		Logger: gormLogger,
 	})
 	if err != nil {
-		return errors.New(err).
+		enhancedErr := errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "open_sqlite_database").
 			Context("db_path", dbPath).
 			Build()
+		
+		// Send to telemetry with enhanced context
+		if s.telemetry != nil {
+			s.telemetry.CaptureEnhancedError(enhancedErr, "open_sqlite_database", s)
+		}
+		
+		return enhancedErr
 	}
 
 	// Set SQLite pragmas for better performance
@@ -244,8 +264,20 @@ func (s *SQLiteStore) Open() error {
 		"journal_mode", "WAL",
 		"synchronous", "NORMAL")
 
+	// Validate resources before migration
+	if err := ValidateResourceAvailability(dbPath, "migration"); err != nil {
+		if s.telemetry != nil {
+			s.telemetry.CaptureEnhancedError(err, "pre_migration_validation", s)
+		}
+		return err
+	}
+	
 	// Perform auto-migration
 	if err := performAutoMigration(db, s.Settings.Debug, "SQLite", dbPath); err != nil {
+		// Send migration error to telemetry with enhanced context
+		if s.telemetry != nil {
+			s.telemetry.CaptureEnhancedError(err, "auto_migration", s)
+		}
 		return err
 	}
 
@@ -424,4 +456,12 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 // UpdateNote updates specific fields of a note in SQLite
 func (s *SQLiteStore) UpdateNote(id string, updates map[string]interface{}) error {
 	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// GetDBPath returns the database file path for telemetry integration
+func (s *SQLiteStore) GetDBPath() string {
+	if s.Settings != nil && s.Settings.Output.SQLite.Path != "" {
+		return s.Settings.Output.SQLite.Path
+	}
+	return ""
 }
