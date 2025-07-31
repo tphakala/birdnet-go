@@ -30,6 +30,9 @@
   import { cn } from '$lib/utils/cn.js';
   import { mediaIcons } from '$lib/utils/icons.js';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.audio;
 
   // Web Audio API types - these are built-in browser types
   /* global AudioContext, MediaElementAudioSourceNode, GainNode, DynamicsCompressorNode, BiquadFilterNode, EventListener, ResizeObserver */
@@ -202,8 +205,8 @@
       return audioContext;
       // eslint-disable-next-line no-unused-vars
     } catch (_e) {
-      // eslint-disable-next-line no-console
-      console.warn('Web Audio API is not supported in this browser');
+       
+      logger.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
       audioContextError =
         'Advanced audio features (volume control, filtering) are not available in this browser.';
@@ -264,7 +267,7 @@
         await audioElement.play();
       }
     } catch (err) {
-      console.error('Error playing audio:', err);
+      logger.error('Error playing audio:', err);
       error = 'Failed to play audio';
     }
   };
@@ -464,8 +467,8 @@
         // eslint-disable-next-line no-unused-vars
       } catch (_e) {
         // Nodes may already be disconnected, ignore errors
-        // eslint-disable-next-line no-console
-        console.warn('Error disconnecting audio nodes during cleanup');
+         
+        logger.warn('Error disconnecting audio nodes during cleanup');
       }
       audioNodes = null;
     }
@@ -477,8 +480,8 @@
         // eslint-disable-next-line no-unused-vars
       } catch (_e) {
         // Context may already be closed, ignore errors
-        // eslint-disable-next-line no-console
-        console.warn('Error closing audio context during cleanup');
+         
+        logger.warn('Error closing audio context during cleanup');
       }
       audioContext = null;
     }

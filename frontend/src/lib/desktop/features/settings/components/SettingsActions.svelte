@@ -3,6 +3,9 @@
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { actionIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.settings;
 
   let store = $derived($settingsStore);
   let unsavedChanges = $derived($hasUnsavedChanges);
@@ -13,7 +16,7 @@
       // Success notification will be handled by the store/SSE
     } catch (error) {
       // Error is already handled in the store
-      console.error('Failed to save settings:', error);
+      logger.error('Failed to save settings:', error);
     }
   }
 

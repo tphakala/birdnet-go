@@ -1,6 +1,9 @@
 /* eslint-disable no-undef */
 import { DEFAULT_LOCALE, type Locale, isValidLocale } from './config.js';
 import { detectBrowserLocale } from './utils.js';
+import { getLogger } from '$lib/utils/logger';
+
+const logger = getLogger('app');
 // Note: Type imports will be used when type-safe translation is implemented
 // import type { TranslationKey, GetParams } from './types.generated.js';
 
@@ -47,8 +50,8 @@ export function setLocale(locale: Locale): void {
     try {
       localStorage.setItem('birdnet-locale', locale);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('Failed to save locale to localStorage:', error);
+       
+      logger.warn('Failed to save locale to localStorage:', error);
     }
   }
 }
@@ -100,13 +103,13 @@ async function loadMessages(locale: Locale): Promise<void> {
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.error(`Failed to load messages for ${locale}:`, error);
+     
+    logger.error(`Failed to load messages for ${locale}:`, error);
 
     // Fallback to English if the requested locale fails
     if (locale !== DEFAULT_LOCALE) {
-      // eslint-disable-next-line no-console
-      console.info(`Falling back to ${DEFAULT_LOCALE} locale`);
+       
+      logger.info(`Falling back to ${DEFAULT_LOCALE} locale`);
       try {
         const fallbackResponse = await fetch(`/ui/assets/messages/${DEFAULT_LOCALE}.json`);
         if (fallbackResponse.ok) {
@@ -131,8 +134,8 @@ async function loadMessages(locale: Locale): Promise<void> {
           return;
         }
       } catch (fallbackError) {
-        // eslint-disable-next-line no-console
-        console.error(`Failed to load fallback messages:`, fallbackError);
+         
+        logger.error(`Failed to load fallback messages:`, fallbackError);
       }
     }
 
@@ -142,10 +145,8 @@ async function loadMessages(locale: Locale): Promise<void> {
       messages = previousMessages;
       previousMessages = {};
     }
-    // eslint-disable-next-line no-console
-    console.warn(
-      'Translation loading failed, restored previous messages to prevent UI degradation'
-    );
+     
+    logger.warn('Translation loading failed, restored previous messages to prevent UI degradation');
   } finally {
     // Only set loading to false if this is still the latest request
     if (currentSequence === loadSequence) {

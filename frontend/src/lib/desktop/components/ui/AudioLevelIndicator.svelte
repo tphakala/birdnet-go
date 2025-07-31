@@ -2,6 +2,9 @@
   import { cn } from '$lib/utils/cn';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.audio;
 
   interface AudioLevelData {
     level: number;
@@ -180,7 +183,7 @@
       });
 
       eventSource.onopen = () => {
-        console.log('Audio level SSE connection opened');
+        logger.debug('Audio level SSE connection opened');
       };
 
       eventSource.onmessage = event => {
@@ -226,17 +229,17 @@
             });
           }
         } catch (error) {
-          console.error('Failed to parse audio level data:', error);
+          logger.error('Failed to parse audio level data:', error);
         }
       };
 
       eventSource.onerror = (error: Event) => {
-        console.error('Audio level SSE error:', error);
+        logger.error('Audio level SSE error:', error);
         // ReconnectingEventSource handles reconnection automatically
         // No need for manual reconnection logic
       };
     } catch (error) {
-      console.error('Failed to create ReconnectingEventSource:', error);
+      logger.error('Failed to create ReconnectingEventSource:', error);
       // Try again in 5 seconds if initial setup fails
       globalThis.setTimeout(() => setupEventSource(), 5000);
     }

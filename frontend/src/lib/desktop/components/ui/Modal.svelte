@@ -4,6 +4,9 @@
   import type { HTMLAttributes } from 'svelte/elements';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   // CSS selector for focusable elements used in focus management
   const FOCUSABLE_SELECTOR =
@@ -100,7 +103,7 @@
       await onConfirm();
     } catch (error) {
       // Log error for debugging
-      console.error('Modal onConfirm callback threw an error:', error);
+      logger.error('Modal onConfirm callback threw an error:', error);
       // Rethrow error so parent component can handle it
       throw error;
     } finally {

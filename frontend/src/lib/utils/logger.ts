@@ -1,0 +1,150 @@
+/* eslint-disable no-console */
+/**
+ * Lightweight logger utility for BirdNET-Go frontend
+ *
+ * Features:
+ * - Environment-aware (logs only in development by default)
+ * - Category-based logging for filtering
+ * - Sentry-ready structure for future integration
+ * - Zero configuration required
+ * - TypeScript support
+ *
+ * Usage:
+ * ```typescript
+ * import { getLogger } from '$lib/utils/logger';
+ *
+ * const logger = getLogger('notifications');
+ * logger.debug('Connection established');
+ * logger.error('Failed to connect', error, { userId: '123' });
+ * ```
+ */
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogContext {
+  component?: string;
+  action?: string;
+  userId?: string;
+  sessionId?: string;
+  [key: string]: unknown;
+}
+
+export interface Logger {
+  debug(...args: unknown[]): void;
+  info(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(message: string, error?: Error | unknown, context?: LogContext): void;
+  group(label: string): void;
+  groupEnd(): void;
+  time(label: string): void;
+  timeEnd(label: string): void;
+}
+
+// Check if we're in development mode
+const isDev = import.meta.env.DEV;
+
+// Store for timing measurements
+const timers = new Map<string, number>();
+
+/**
+ * Creates a logger instance for a specific category
+ * @param category - The logging category (e.g., 'api', 'sse', 'auth')
+ * @returns Logger instance
+ */
+export function getLogger(category: string): Logger {
+  const prefix = `[${category}]`;
+
+  return {
+    debug(...args: unknown[]): void {
+      if (isDev) {
+        console.log(prefix, ...args);
+      }
+    },
+
+    info(...args: unknown[]): void {
+      if (isDev) {
+        console.info(prefix, ...args);
+      }
+    },
+
+    warn(...args: unknown[]): void {
+      // Warnings are logged in both dev and prod
+      console.warn(prefix, ...args);
+    },
+
+    error(message: string, error?: Error | unknown, context?: LogContext): void {
+      // Errors are always logged
+      const errorData = {
+        message,
+        category,
+        timestamp: new Date().toISOString(),
+        ...context,
+      };
+
+      if (error instanceof Error) {
+        console.error(prefix, message, error, errorData);
+
+        // Future: This is where Sentry integration would go
+        // if (window.Sentry) {
+        //   window.Sentry.captureException(error, {
+        //     contexts: { logger: errorData },
+        //     tags: { category },
+        //   });
+        // }
+      } else if (error) {
+        console.error(prefix, message, error, errorData);
+      } else {
+        console.error(prefix, message, errorData);
+      }
+    },
+
+    group(label: string): void {
+      if (isDev) {
+        console.group(`${prefix} ${label}`);
+      }
+    },
+
+    groupEnd(): void {
+      if (isDev) {
+        console.groupEnd();
+      }
+    },
+
+    time(label: string): void {
+      if (isDev) {
+        const key = `${category}:${label}`;
+        timers.set(key, globalThis.performance.now());
+      }
+    },
+
+    timeEnd(label: string): void {
+      if (isDev) {
+        const key = `${category}:${label}`;
+        const start = timers.get(key);
+        if (start !== undefined) {
+          const duration = globalThis.performance.now() - start;
+          console.log(`${prefix} ${label}: ${duration.toFixed(2)}ms`);
+          timers.delete(key);
+        }
+      }
+    },
+  };
+}
+
+/**
+ * Default logger for general use
+ */
+export const logger = getLogger('app');
+
+/**
+ * Common logger categories
+ */
+export const loggers = {
+  api: getLogger('api'),
+  auth: getLogger('auth'),
+  sse: getLogger('sse'),
+  audio: getLogger('audio'),
+  ui: getLogger('ui'),
+  settings: getLogger('settings'),
+  performance: getLogger('performance'),
+} as const;

@@ -197,6 +197,84 @@ function getCsrfToken(): string | null {
 headers.set('X-CSRF-Token', getCsrfToken());
 ```
 
+## Logging
+
+Use the centralized logger utility instead of console statements:
+
+```typescript
+import { getLogger, loggers } from '$lib/utils/logger';
+
+// Create a logger for your module
+const logger = getLogger('myModule');
+
+// Or use predefined category loggers
+const logger = loggers.api;    // For API-related logging
+const logger = loggers.auth;   // For authentication
+const logger = loggers.sse;    // For SSE connections
+const logger = loggers.audio;  // For audio components
+const logger = loggers.ui;     // For UI components
+const logger = loggers.settings; // For settings
+```
+
+### Logger Methods
+
+```typescript
+// Debug information (dev only)
+logger.debug('Component initialized', props);
+
+// Informational messages (dev only)
+logger.info('Connection established');
+
+// Warnings (always logged)
+logger.warn('Deprecated method used');
+
+// Errors with context (always logged)
+logger.error('Failed to save', error, {
+  component: 'SettingsPage',
+  action: 'save',
+  userId: user.id
+});
+
+// Performance timing (dev only)
+logger.time('dataLoad');
+// ... expensive operation
+logger.timeEnd('dataLoad'); // Logs: [category] dataLoad: 123.45ms
+
+// Grouping (dev only)
+logger.group('Processing items');
+items.forEach(item => logger.debug('Item:', item));
+logger.groupEnd();
+```
+
+### Key Features
+
+- **Environment-aware**: Debug/info logs only in development
+- **Zero configuration**: Works immediately
+- **Category-based**: Helps identify log sources
+- **Sentry-ready**: Structured for future integration
+- **Type-safe**: Full TypeScript support
+- **No console warnings**: Properly configured for ESLint
+
+### Best Practices
+
+1. Use appropriate log levels:
+   - `debug`: Development details, state changes
+   - `info`: Important flow information
+   - `warn`: Deprecations, fallbacks
+   - `error`: Failures requiring attention
+
+2. Always provide context for errors:
+   ```typescript
+   logger.error('API request failed', error, {
+     component: 'DetectionsPage',
+     action: 'loadDetections',
+     endpoint: '/api/v2/detections'
+   });
+   ```
+
+3. Use categories that match your module's purpose
+4. Keep production logs minimal (warn/error only)
+
 ## Server-Sent Events (SSE)
 
 Use `reconnecting-eventsource` package for real-time updates with automatic reconnection handling.

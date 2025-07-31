@@ -10,6 +10,9 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   // Animation control - set to false to disable all animations
   const ENABLE_NEW_DETECTION_ANIMATIONS = false;
@@ -63,7 +66,7 @@
       try {
         localStorage.setItem('recentDetectionLimit', newLimit.toString());
       } catch (e) {
-        console.error('Failed to save detection limit:', e);
+        logger.error('Failed to save detection limit:', e);
       }
     }
 
@@ -128,7 +131,7 @@
           });
           onRefresh();
         } catch (error) {
-          console.error('Error toggling species exclusion:', error);
+          logger.error('Error toggling species exclusion:', error);
         }
       },
     };
@@ -163,7 +166,7 @@
           });
           onRefresh();
         } catch (error) {
-          console.error('Error toggling lock status:', error);
+          logger.error('Error toggling lock status:', error);
         }
       },
     };
@@ -188,7 +191,7 @@
           });
           onRefresh();
         } catch (error) {
-          console.error('Error deleting detection:', error);
+          logger.error('Error deleting detection:', error);
         }
       },
     };

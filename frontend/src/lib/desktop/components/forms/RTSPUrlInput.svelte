@@ -1,5 +1,8 @@
 <script lang="ts">
   import type { RTSPUrl } from '$lib/stores/settings';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   interface Props {
     urls: RTSPUrl[];
@@ -38,7 +41,7 @@
       newUrl = '';
     } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
       // URL is not empty but invalid - could add user feedback here
-      console.error('Invalid RTSP URL format:', trimmedUrl); // TODO: Replace with Sentry.io logging
+      logger.error('Invalid RTSP URL format:', trimmedUrl); // TODO: Replace with Sentry.io logging
     }
   }
 

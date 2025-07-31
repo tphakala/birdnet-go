@@ -19,6 +19,9 @@
     species?: Array<{ label: string }>;
   }
   import { navigationIcons, actionIcons, alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.settings;
 
   let settings = $derived({
     privacy: $privacyFilterSettings || {
@@ -70,7 +73,7 @@
         // Species list loading failure affects form functionality but isn't critical
         // Show minimal feedback rather than intrusive error
         if (error instanceof ApiError && import.meta.env.DEV) {
-          console.warn('Failed to load species list for filtering:', error.message);
+          logger.warn('Failed to load species list for filtering:', error.message);
         }
         // Set empty array so form still works, just without suggestions
         allowedSpecies = [];

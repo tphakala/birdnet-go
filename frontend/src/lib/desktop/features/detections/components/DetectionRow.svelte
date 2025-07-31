@@ -37,6 +37,9 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   interface Props {
     detection: Detection;
@@ -89,7 +92,7 @@
           });
           onRefresh?.();
         } catch (error) {
-          console.error('Error toggling species exclusion:', error);
+          logger.error('Error toggling species exclusion:', error);
         }
       },
     };
@@ -116,7 +119,7 @@
           });
           onRefresh?.();
         } catch (error) {
-          console.error('Error toggling lock status:', error);
+          logger.error('Error toggling lock status:', error);
         }
       },
     };
@@ -135,7 +138,7 @@
           });
           onRefresh?.();
         } catch (error) {
-          console.error('Error deleting detection:', error);
+          logger.error('Error deleting detection:', error);
         }
       },
     };

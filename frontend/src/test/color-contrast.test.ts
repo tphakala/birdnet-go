@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Color contrast testing for WCAG 2.1 Level AA compliance
  * Tests common color combinations used in the application

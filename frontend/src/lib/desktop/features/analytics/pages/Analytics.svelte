@@ -7,6 +7,9 @@
   import FilterForm from '../components/forms/FilterForm.svelte';
   import { alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import { getLogger } from '$lib/utils/logger';
+
+  const logger = getLogger('app');
 
   // Type definitions
   interface Filters {
@@ -330,7 +333,7 @@
         fetchNewSpeciesData(startDate || '', endDate || ''),
       ]);
     } catch (err) {
-      console.error('General error fetching analytics data:', err);
+      logger.error('General error fetching analytics data:', err);
       error = t('analytics.loadingError');
     }
 
@@ -384,7 +387,7 @@
         mostCommonCount,
       };
     } catch (err) {
-      console.error('Error fetching summary data:', err);
+      logger.error('Error fetching summary data:', err);
     }
   }
 
@@ -401,7 +404,7 @@
       const speciesData = await response.json();
       chartData.species = Array.isArray(speciesData) ? speciesData : [];
     } catch (err) {
-      console.error('Error fetching species summary:', err);
+      logger.error('Error fetching species summary:', err);
       chartData.species = [];
     }
   }
@@ -428,7 +431,7 @@
           calculateTimeOfDay(detection.timestamp || `${detection.date} ${detection.time}`),
       }));
     } catch (err) {
-      console.error('Error fetching recent detections:', err);
+      logger.error('Error fetching recent detections:', err);
       recentDetections = [];
     }
   }
@@ -457,7 +460,7 @@
       const timeData = await response.json();
       chartData.timeOfDay = timeData;
     } catch (err) {
-      console.error('Error fetching time of day data:', err);
+      logger.error('Error fetching time of day data:', err);
       chartData.timeOfDay = [];
     }
   }
@@ -475,7 +478,7 @@
       const trendData = await response.json();
       chartData.trend = trendData;
     } catch (err) {
-      console.error('Error fetching trend data:', err);
+      logger.error('Error fetching trend data:', err);
       chartData.trend = { data: [] };
     }
   }
@@ -494,7 +497,7 @@
       newSpeciesData = Array.isArray(data) ? data : [];
       chartData.newSpecies = newSpeciesData;
     } catch (err) {
-      console.error('Error fetching new species data:', err);
+      logger.error('Error fetching new species data:', err);
       newSpeciesData = [];
       chartData.newSpecies = [];
     }
@@ -502,7 +505,7 @@
 
   // Create all charts after data is loaded and DOM is ready
   function createAllCharts() {
-    console.log('Creating all charts...');
+    logger.debug('Creating all charts...');
     createSpeciesChart(chartData.species);
     createTimeOfDayChart(chartData.timeOfDay);
     createTrendChart(chartData.trend);
@@ -515,7 +518,7 @@
   function createSpeciesChart(data: SpeciesData[]) {
     const ctx = (document.getElementById('speciesChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
-      console.error('Species chart canvas not found');
+      logger.error('Species chart canvas not found');
       return;
     }
 
@@ -597,7 +600,7 @@
   function createTimeOfDayChart(data: TimeOfDayData[]) {
     const ctx = (document.getElementById('timeOfDayChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
-      console.error('Time of day chart canvas not found');
+      logger.error('Time of day chart canvas not found');
       return;
     }
 
@@ -710,7 +713,7 @@
   function createTrendChart(responseData: TrendData | null) {
     const ctx = (document.getElementById('trendChart') as HTMLCanvasElement)?.getContext('2d');
     if (!ctx) {
-      console.error('Trend chart canvas not found');
+      logger.error('Trend chart canvas not found');
       return;
     }
 
@@ -815,7 +818,7 @@
     const canvas = document.getElementById('newSpeciesChart') as HTMLCanvasElement;
     const ctx = canvas?.getContext('2d');
     if (!ctx) {
-      console.error('New species chart canvas not found');
+      logger.error('New species chart canvas not found');
       return;
     }
 
@@ -958,7 +961,7 @@
         Chart.defaults.font.family = bodyFont;
       }
     } catch (e) {
-      console.error('Could not set Chart.js default font family:', e);
+      logger.error('Could not set Chart.js default font family:', e);
     }
 
     // Set default dates
