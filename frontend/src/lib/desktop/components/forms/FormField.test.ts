@@ -1,19 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { createComponentTestFactory, screen, waitFor } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import FormField from './FormField.svelte';
 import { required, email, minLength, range } from '$lib/utils/validators';
 
-// Helper function to render FormField with proper typing
-const renderFormField = (props: Record<string, unknown>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return render(FormField as any, { props });
-};
+// Create typed test factory for FormField
+const formFieldTest = createComponentTestFactory(FormField);
 
 describe('FormField', () => {
   describe('Text Input', () => {
     it('renders text input with label', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         label: 'Username',
@@ -25,7 +22,7 @@ describe('FormField', () => {
     });
 
     it('shows required indicator', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         label: 'Username',
@@ -39,7 +36,7 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         value: '',
@@ -55,7 +52,7 @@ describe('FormField', () => {
     it('shows validation errors after blur', async () => {
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         label: 'Username',
@@ -73,7 +70,7 @@ describe('FormField', () => {
     });
 
     it('shows help text', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         helpText: 'Choose a unique username',
@@ -87,7 +84,7 @@ describe('FormField', () => {
     it('validates email format', async () => {
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'email',
         name: 'email',
         validators: [email()],
@@ -106,7 +103,7 @@ describe('FormField', () => {
 
   describe('Number Input', () => {
     it('renders number input with min/max', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'number',
         name: 'age',
         label: 'Age',
@@ -123,7 +120,7 @@ describe('FormField', () => {
     it('validates number range', async () => {
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'number',
         name: 'age',
         validators: [range(18, 100)],
@@ -143,7 +140,7 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'number',
         name: 'quantity',
         value: 0,
@@ -160,7 +157,7 @@ describe('FormField', () => {
 
   describe('Textarea', () => {
     it('renders textarea with custom rows', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'textarea',
         name: 'description',
         label: 'Description',
@@ -180,7 +177,7 @@ describe('FormField', () => {
     ];
 
     it('renders select with options', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'select',
         name: 'country',
         label: 'Country',
@@ -197,7 +194,7 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'select',
         name: 'country',
         value: '',
@@ -215,7 +212,7 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'select',
         name: 'countries',
         value: [],
@@ -233,7 +230,7 @@ describe('FormField', () => {
 
   describe('Checkbox', () => {
     it('renders checkbox with label', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'checkbox',
         name: 'terms',
         placeholder: 'I agree to the terms',
@@ -247,7 +244,7 @@ describe('FormField', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'checkbox',
         name: 'terms',
         value: false,
@@ -263,7 +260,7 @@ describe('FormField', () => {
 
   describe('Range Input', () => {
     it('renders range with min/max labels', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'range',
         name: 'volume',
         value: 50,
@@ -279,7 +276,7 @@ describe('FormField', () => {
 
   describe('Disabled and Readonly States', () => {
     it('disables input when disabled prop is true', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         disabled: true,
@@ -289,7 +286,7 @@ describe('FormField', () => {
     });
 
     it('makes input readonly when readonly prop is true', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         readonly: true,
@@ -301,7 +298,7 @@ describe('FormField', () => {
 
   describe('Custom Classes', () => {
     it('applies custom classes', () => {
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         className: 'custom-form-control',
@@ -321,7 +318,7 @@ describe('FormField', () => {
       const onBlur = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         onBlur,
@@ -338,7 +335,7 @@ describe('FormField', () => {
       const onFocus = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         onFocus,
@@ -354,7 +351,7 @@ describe('FormField', () => {
       const onInput = vi.fn();
       const user = userEvent.setup();
 
-      renderFormField({
+      formFieldTest.render({
         type: 'text',
         name: 'username',
         onInput,

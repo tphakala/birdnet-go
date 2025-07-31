@@ -75,8 +75,8 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     const initialRangeFilter = initialState.formData.birdnet!.rangeFilter;
 
     // Verify initial range filter values
-    expect(initialRangeFilter?.model).toBe('latest');
-    expect(initialRangeFilter ? initialRangeFilter.threshold : undefined).toBe(0.03);
+    expect(initialRangeFilter.model).toBe('latest');
+    expect(initialRangeFilter.threshold).toBe(0.03);
 
     // Update coordinates (simulating what happens when clicking on the map)
     settingsActions.updateSection('birdnet', {
