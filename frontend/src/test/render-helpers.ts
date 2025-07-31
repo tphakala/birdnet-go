@@ -1,6 +1,6 @@
 /**
  * Typed test rendering utilities for Svelte 5 components
- * 
+ *
  * Provides type-safe alternatives to `render(Component as any)` pattern
  * while maintaining developer experience and compile-time safety.
  */
@@ -32,21 +32,24 @@ export function createComponentTestFactory<T extends SvelteComponent>(
   defaultProps: Partial<ComponentProps<T>> = {}
 ) {
   return {
-    render: (props: Partial<ComponentProps<T>> = {}, options: Omit<RenderOptions, 'props'> = {}) => {
+    render: (
+      props: Partial<ComponentProps<T>> = {},
+      options: Omit<RenderOptions, 'props'> = {}
+    ) => {
       return renderTyped(Component, {
         props: { ...defaultProps, ...props } as ComponentProps<T>,
-        ...options
+        ...options,
       });
     },
-    
+
     // Helper for testing with different prop combinations
     renderWithProps: (...propVariants: Partial<ComponentProps<T>>[]) => {
-      return propVariants.map(props => 
+      return propVariants.map(props =>
         renderTyped(Component, {
-          props: { ...defaultProps, ...props } as ComponentProps<T>
+          props: { ...defaultProps, ...props } as ComponentProps<T>,
         })
       );
-    }
+    },
   };
 }
 
@@ -75,7 +78,7 @@ export function renderWithRequiredProps<T extends SvelteComponent>(
 ): RenderResult {
   return renderTyped(Component, {
     props: { ...requiredProps, ...additionalProps },
-    ...options
+    ...options,
   });
 }
 

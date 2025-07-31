@@ -40,7 +40,7 @@ describe('Card', () => {
   });
 
   it('renders with slots', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(CardTestWrapper, {
       props: {
         title: 'Card Title',
@@ -55,7 +55,7 @@ describe('Card', () => {
   });
 
   it('prefers header slot over title prop', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(CardTestWrapper, {
       props: {
         title: 'Title Prop',

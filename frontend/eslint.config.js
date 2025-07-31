@@ -24,6 +24,7 @@ const browserGlobals = {
   KeyboardEvent: 'readonly',
   MouseEvent: 'readonly',
   DragEvent: 'readonly',
+  FocusEvent: 'readonly',
   HTMLElement: 'readonly',
   HTMLInputElement: 'readonly',
   HTMLSelectElement: 'readonly',
@@ -32,6 +33,8 @@ const browserGlobals = {
   HTMLButtonElement: 'readonly',
   HTMLCanvasElement: 'readonly',
   HTMLAudioElement: 'readonly',
+  HTMLImageElement: 'readonly',
+  HTMLUListElement: 'readonly',
   SVGSVGElement: 'readonly',
   SVGElement: 'readonly',
   MutationObserver: 'readonly',
@@ -47,6 +50,12 @@ const browserGlobals = {
   getComputedStyle: 'readonly',
   TouchEvent: 'readonly',
   crypto: 'readonly',
+  // TypeScript DOM interface types
+  Document: 'readonly',
+  Window: 'readonly',
+  AddEventListenerOptions: 'readonly',
+  TextDecoder: 'readonly',
+  TextEncoder: 'readonly',
 };
 
 export default [
@@ -160,9 +169,11 @@ export default [
     },
     languageOptions: {
       globals: {
+        ...browserGlobals,
         ...vitest.environments.env.globals,
         // Additional test globals if needed
         global: 'readonly',
+        render: 'readonly',
       },
     },
   },

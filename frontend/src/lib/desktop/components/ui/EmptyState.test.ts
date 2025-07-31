@@ -4,7 +4,7 @@ import EmptyState from './EmptyState.svelte';
 import EmptyStateTestWrapper from './EmptyState.test.svelte';
 import type { ComponentProps } from 'svelte';
 
-// Helper function to render EmptyState with proper typing  
+// Helper function to render EmptyState with proper typing
 const renderEmptyState = (props?: Partial<ComponentProps<typeof EmptyState>>) => {
   return renderTyped(EmptyState, props ? { props } : { props: {} });
 };
@@ -33,7 +33,7 @@ describe('EmptyState', () => {
   });
 
   it('renders with custom icon', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,
@@ -63,7 +63,7 @@ describe('EmptyState', () => {
   });
 
   it('renders with custom children', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showChildren: true,
@@ -86,7 +86,7 @@ describe('EmptyState', () => {
   it('renders complete empty state with all props', () => {
     const onClick = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,

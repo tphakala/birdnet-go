@@ -36,7 +36,7 @@ describe('ErrorAlert', () => {
   });
 
   it('renders with custom children', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(ErrorAlertTestWrapper, {
       props: {
         showChildren: true,

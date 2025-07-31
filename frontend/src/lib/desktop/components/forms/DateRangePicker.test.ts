@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createComponentTestFactory, screen, fireEvent, waitFor } from '../../../../test/render-helpers';
+import {
+  createComponentTestFactory,
+  screen,
+  fireEvent,
+  waitFor,
+} from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import DateRangePicker from './DateRangePicker.svelte';
 

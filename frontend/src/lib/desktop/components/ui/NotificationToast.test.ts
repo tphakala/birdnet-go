@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderTyped, createComponentTestFactory, screen, fireEvent, waitFor } from '../../../../test/render-helpers';
+import {
+  renderTyped,
+  createComponentTestFactory,
+  screen,
+  fireEvent,
+  waitFor,
+} from '../../../../test/render-helpers';
 import NotificationToast from './NotificationToast.svelte';
 import NotificationToastTestWrapper from './NotificationToast.test.svelte';
 

@@ -17,7 +17,7 @@
     if (!url.startsWith('rtsp://')) {
       return false;
     }
-    
+
     try {
       // Use URL constructor for validation where possible
       const parsed = new URL(url);

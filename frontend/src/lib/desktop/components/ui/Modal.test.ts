@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderTyped, createComponentTestFactory, screen, fireEvent, waitFor } from '../../../../test/render-helpers';
+import {
+  renderTyped,
+  createComponentTestFactory,
+  screen,
+  fireEvent,
+  waitFor,
+} from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import Modal from './Modal.svelte';
 import ModalTestWrapper from './Modal.test.svelte';
@@ -27,7 +33,7 @@ describe('Modal', () => {
   });
 
   it('does not render when isOpen is false', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { container } = modalTest.render({
       props: {
         isOpen: false,
@@ -41,7 +47,7 @@ describe('Modal', () => {
   });
 
   it('renders with custom content using children snippet', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(ModalTestWrapper, {
       props: {
         isOpen: true,
@@ -56,7 +62,7 @@ describe('Modal', () => {
     const sizes = ['sm', 'md', 'lg', 'xl', 'full'] as const;
 
     sizes.forEach(size => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { container, unmount } = modalTest.render({
         props: {
           isOpen: true,
@@ -72,7 +78,7 @@ describe('Modal', () => {
   });
 
   it('shows close button by default', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -85,7 +91,7 @@ describe('Modal', () => {
   });
 
   it('hides close button when showCloseButton is false', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -100,7 +106,7 @@ describe('Modal', () => {
   it('calls onClose when close button clicked', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -118,7 +124,7 @@ describe('Modal', () => {
   it('calls onClose when backdrop clicked and closeOnBackdrop is true', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { container } = modalTest.render({
       props: {
         isOpen: true,
@@ -139,7 +145,7 @@ describe('Modal', () => {
   it('does not close on backdrop click when closeOnBackdrop is false', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { container } = modalTest.render({
       props: {
         isOpen: true,
@@ -160,7 +166,7 @@ describe('Modal', () => {
   it('closes on Escape key when closeOnEsc is true', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -178,7 +184,7 @@ describe('Modal', () => {
   it('does not close on Escape when closeOnEsc is false', async () => {
     const onClose = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -194,7 +200,7 @@ describe('Modal', () => {
   });
 
   it('renders confirm type modal with action buttons', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -208,7 +214,7 @@ describe('Modal', () => {
   });
 
   it('uses custom button labels', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -225,7 +231,7 @@ describe('Modal', () => {
   it('calls onConfirm when confirm button clicked', async () => {
     const onConfirm = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -243,7 +249,7 @@ describe('Modal', () => {
   it('handles async onConfirm with loading state', async () => {
     const onConfirm = vi.fn(() => new Promise(resolve => setTimeout(resolve, 100)));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -267,7 +273,7 @@ describe('Modal', () => {
   });
 
   it('disables buttons during loading', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -284,7 +290,7 @@ describe('Modal', () => {
   });
 
   it('renders with custom header snippet', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(ModalTestWrapper, {
       props: {
         isOpen: true,
@@ -297,7 +303,7 @@ describe('Modal', () => {
   });
 
   it('renders with custom footer snippet', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     renderTyped(ModalTestWrapper, {
       props: {
         isOpen: true,
@@ -320,7 +326,7 @@ describe('Modal', () => {
     ] as const;
 
     variants.forEach(variant => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { unmount } = modalTest.render({
         props: {
           isOpen: true,
@@ -339,7 +345,7 @@ describe('Modal', () => {
     const onClose = vi.fn();
     const onConfirm = vi.fn(() => new Promise(resolve => setTimeout(resolve, 100)));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
@@ -365,7 +371,7 @@ describe('Modal', () => {
   });
 
   it('applies custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { container } = modalTest.render({
       props: {
         isOpen: true,
@@ -378,7 +384,7 @@ describe('Modal', () => {
   });
 
   it('sets proper ARIA attributes', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     modalTest.render({
       props: {
         isOpen: true,
