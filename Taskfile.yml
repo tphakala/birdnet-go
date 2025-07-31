@@ -215,6 +215,18 @@ tasks:
     cmds:
       - npm run test:coverage
 
+  frontend-quality:
+    desc: Run comprehensive frontend quality checks
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run check:all
+      - npm run test:ci
+      - npm run audit:security
+      - npm run analyze:circular
+      - npm run build
+      - npm run analyze:bundle:size
+
   clean:
     cmds:
       - go clean

@@ -1,0 +1,95 @@
+name: Frontend Quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-quality.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Taskfile.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-quality.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Taskfile.yml'
+
+concurrency:
+  group: frontend-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  quality:
+    name: Frontend Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Type checking
+        working-directory: frontend
+        run: npm run typecheck
+      
+      - name: Format check
+        working-directory: frontend
+        run: npm run format:check
+      
+      - name: Linting (JavaScript/TypeScript)
+        working-directory: frontend
+        run: npm run lint
+      
+      - name: Linting (CSS/Styles)
+        working-directory: frontend
+        run: npm run lint:css
+      
+      - name: Run tests
+        working-directory: frontend
+        run: npm run test:ci
+      
+      - name: Run accessibility tests
+        working-directory: frontend
+        run: npm run test:a11y
+      
+      - name: Security audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      
+      - name: Check for circular dependencies
+        working-directory: frontend
+        run: npm run analyze:circular
+      
+      - name: Build for production
+        working-directory: frontend
+        run: npm run build
+      
+      - name: Bundle size check
+        working-directory: frontend
+        run: npm run analyze:bundle:size
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-build
+          path: frontend/dist/
+          retention-days: 7

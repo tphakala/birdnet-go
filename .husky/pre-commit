@@ -1,0 +1,2 @@
+# Run lint-staged to check staged files
+cd frontend && npx lint-staged
