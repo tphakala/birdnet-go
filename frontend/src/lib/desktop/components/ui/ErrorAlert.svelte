@@ -33,6 +33,7 @@
     warning: 'alert-warning',
     info: 'alert-info',
     success: 'alert-success',
+    check: 'alert-success', // Use success styling for check type
   };
 
   // Use centralized complete SVG icons

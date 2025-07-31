@@ -4,9 +4,8 @@ import LoadingSpinner from './LoadingSpinner.svelte';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render LoadingSpinner with proper typing
-const renderLoadingSpinner = (props?: Partial<ComponentProps<LoadingSpinner>>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return render(LoadingSpinner as any, props ? { props } : undefined);
+const renderLoadingSpinner = (props?: Partial<ComponentProps<typeof LoadingSpinner>>) => {
+  return render(LoadingSpinner, props ? { props } : { props: {} });
 };
 
 describe('LoadingSpinner', () => {

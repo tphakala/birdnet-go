@@ -69,7 +69,6 @@
   <Card
     title={t('about.overview')}
     className="bg-base-100 shadow-sm"
-    contentClassName="prose max-w-none"
   >
     <p>
       {t('about.overviewText')}
@@ -80,7 +79,6 @@
   <Card
     title={t('about.birdnetProject')}
     className="bg-base-100 shadow-sm"
-    contentClassName="prose max-w-none"
   >
     <p>
       {t('about.birdnetDescription')}
@@ -137,7 +135,6 @@
   <Card
     title={t('about.contributors')}
     className="bg-base-100 shadow-sm"
-    contentClassName="prose max-w-none"
   >
     <p>
       {t('about.contributorsText')}
@@ -279,7 +276,6 @@
   <Card
     title={t('about.additionalCredits')}
     className="bg-base-100 shadow-sm"
-    contentClassName="prose max-w-none"
   >
     <p class="text-xl font-medium">{t('about.birdnetPiProject')}</p>
     <p class="mt-2">

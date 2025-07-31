@@ -82,7 +82,7 @@
       const data = (await fetchWithCSRF(`/api/v2/detections?${queryString.toString()}`)) as any;
 
       // Validate numResults before using
-      const validatedNumResults = [10, 25, 50, 100].includes(queryParams.numResults)
+      const validatedNumResults = (queryParams.numResults !== undefined && [10, 25, 50, 100].includes(queryParams.numResults))
         ? queryParams.numResults
         : getSavedResultsPerPage();
 
