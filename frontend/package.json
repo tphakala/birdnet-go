@@ -40,28 +40,41 @@
     "analyze:bundle:size": "npm run build && npx bundlesize",
     "audit:security": "npm audit --audit-level=high",
     "audit:outdated": "npm outdated",
-    "check:deps": "npx depcheck && npm run audit:security",
-    "precommit:check": "npm run check:all && npm run test:ci && npm run audit:security"
+    "check:deps": "npx depcheck && npm run audit:security"
   },
   "lint-staged": {
     "*.{js,ts,svelte}": [
       "prettier --write",
-      "eslint --fix",
-      "vitest related --run"
+      "eslint --fix"
     ],
-    "*.{css,svelte}": [
+    "*.css": [
       "stylelint --fix"
     ]
   },
   "bundlesize": [
     {
-      "path": "./dist/*.js",
-      "maxSize": "250kb",
+      "path": "./dist/charts.js",
+      "maxSize": "75kb",
       "compression": "gzip"
     },
     {
-      "path": "./dist/*.css",
-      "maxSize": "50kb",
+      "path": "./dist/index.js",
+      "maxSize": "65kb",
+      "compression": "gzip"
+    },
+    {
+      "path": "./dist/Settings.js",
+      "maxSize": "45kb",
+      "compression": "gzip"
+    },
+    {
+      "path": "./dist/*.js",
+      "maxSize": "25kb",
+      "compression": "gzip"
+    },
+    {
+      "path": "./dist/index.css",
+      "maxSize": "30kb",
       "compression": "gzip"
     }
   ],

@@ -6,10 +6,16 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-quality.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Taskfile.yml'
   pull_request:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-quality.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Taskfile.yml'
 
 concurrency:
   group: frontend-quality-${{ github.workflow }}-${{ github.ref }}
