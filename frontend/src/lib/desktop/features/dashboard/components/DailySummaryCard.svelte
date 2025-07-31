@@ -55,6 +55,7 @@ Responsive Breakpoints:
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { getLocalDateString } from '$lib/utils/date';
+  import { LRUCache } from '$lib/utils/LRUCache';
 
   // Progressive loading timing constants (optimized for Svelte 5)
   const LOADING_PHASES = $state.raw({
@@ -154,6 +155,7 @@ Responsive Breakpoints:
 
   // Sun times state
   let sunTimes = $state<SunTimes | null>(null);
+
 
   // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
   const sunTimesCache = $state.raw(new LRUCache<string, SunTimes>(30)); // Max 30 days of sun times
@@ -310,57 +312,6 @@ Responsive Breakpoints:
     },
     progress: (item: DailySpeciesSummary) => item.count,
   });
-
-  // Simple LRU cache implementation
-  class LRUCache<K, V> {
-    private cache: Map<K, V> = new Map();
-    private readonly maxSize: number;
-
-    constructor(maxSize: number) {
-      this.maxSize = maxSize;
-    }
-
-    get(key: K): V | undefined {
-      if (!this.cache.has(key)) return undefined;
-
-      // Move to end (most recently used)
-      const value = this.cache.get(key);
-      if (value !== undefined) {
-        this.cache.delete(key);
-        this.cache.set(key, value);
-        return value;
-      }
-      return undefined;
-    }
-
-    set(key: K, value: V): void {
-      // If key exists, delete it to update position
-      if (this.cache.has(key)) {
-        this.cache.delete(key);
-      } else if (this.cache.size >= this.maxSize) {
-        // Remove least recently used (first item)
-        const firstKey = this.cache.keys().next().value as K;
-        if (firstKey !== undefined) {
-          this.cache.delete(firstKey);
-        }
-      }
-
-      // Add to end (most recently used)
-      this.cache.set(key, value);
-    }
-
-    has(key: K): boolean {
-      return this.cache.has(key);
-    }
-
-    clear(): void {
-      this.cache.clear();
-    }
-
-    get size(): number {
-      return this.cache.size;
-    }
-  }
 
   // Phase 4: Optimized URL building with memoization for 90%+ performance improvement
   const urlCache = $state.raw(new LRUCache<string, string>(500)); // Max 500 URLs cached - use $state.raw
