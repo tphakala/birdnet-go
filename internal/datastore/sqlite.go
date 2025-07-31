@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -30,16 +31,13 @@ func validateSQLiteConfig() error {
 	return nil
 }
 
-// getDiskSpace returns available disk space for the given path
+// getDiskSpace returns available disk space for the given path using diskmanager
 func getDiskSpace(path string) (uint64, error) {
-	var availableSpace uint64
-
-	// OS-specific disk space check
+	// Get directory containing the database file
 	dir := filepath.Dir(path)
 
-	// Get directory information using OS-agnostic method
-	var err error
-	availableSpace, err = getDiskFreeSpace(dir)
+	// Use diskmanager for disk space check
+	availableSpace, err := diskmanager.GetAvailableSpace(dir)
 	if err != nil {
 		return 0, errors.New(err).
 			Component("datastore").

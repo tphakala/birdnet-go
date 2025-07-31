@@ -4,10 +4,12 @@ package datastore
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -83,8 +85,8 @@ func CaptureResourceSnapshot(dbPath string) (*ResourceSnapshot, error) {
 		Timestamp: time.Now(),
 	}
 
-	// Capture disk space information
-	if diskInfo, err := captureDiskSpace(dbPath); err == nil {
+	// Capture disk space information using diskmanager
+	if diskInfo, err := captureDiskSpaceWithManager(dbPath); err == nil {
 		snapshot.DiskSpace = diskInfo
 	} else {
 		getLogger().Warn("Failed to capture disk space info", "error", err)
@@ -112,6 +114,64 @@ func CaptureResourceSnapshot(dbPath string) (*ResourceSnapshot, error) {
 	}
 
 	return snapshot, nil
+}
+
+// captureDiskSpaceWithManager gathers disk space information using diskmanager package
+func captureDiskSpaceWithManager(dbPath string) (DiskSpaceInfo, error) {
+	info := DiskSpaceInfo{}
+	
+	// Get directory containing the database file
+	dir := filepath.Dir(dbPath)
+	
+	// Use diskmanager for core disk space data
+	diskData, err := diskmanager.GetDetailedDiskUsage(dir)
+	if err != nil {
+		return info, errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "get_disk_usage").
+			Context("path", dir).
+			Build()
+	}
+	
+	// Get available space using diskmanager  
+	availableBytes, err := diskmanager.GetAvailableSpace(dir)
+	if err != nil {
+		return info, errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "get_available_space").
+			Context("path", dir).
+			Build()
+	}
+	
+	// Populate core disk data from diskmanager
+	info.TotalBytes = diskData.TotalBytes
+	info.UsedBytes = diskData.UsedBytes
+	info.AvailableBytes = availableBytes
+	
+	// Calculate usage percentage
+	if info.TotalBytes > 0 {
+		info.UsedPercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
+	}
+	
+	// Add our value-add fields: mount point, filesystem type, inodes
+	if mountInfo, err := getMountInfo(dir); err == nil {
+		info.MountPoint = mountInfo.MountPoint
+		info.FileSystemType = mountInfo.FileSystemType
+	} else {
+		// Fallback to directory if mount info not available
+		info.MountPoint = dir
+		info.FileSystemType = "unknown"
+	}
+	
+	// Add inode information (Unix-specific, will be 0 on Windows)
+	if inodeInfo, err := getInodeInfo(dir); err == nil {
+		info.InodesFree = inodeInfo.Free
+		info.InodesTotal = inodeInfo.Total
+	}
+	
+	return info, nil
 }
 
 // captureDatabaseFileInfo gathers information about database files
@@ -329,4 +389,28 @@ func (r *ResourceSnapshot) GetResourceRecommendations() []string {
 	}
 	
 	return recommendations
+}
+
+// MountInfo represents mount point information
+type MountInfo struct {
+	MountPoint     string
+	FileSystemType string
+}
+
+// InodeInfo represents inode information
+type InodeInfo struct {
+	Free  uint64
+	Total uint64
+}
+
+// getMountInfo gets mount point information (implementation varies by platform)
+func getMountInfo(path string) (*MountInfo, error) {
+	// Platform-specific implementation - will be implemented in platform files
+	return getMountInfoPlatform(path)
+}
+
+// getInodeInfo gets inode information (Unix-specific, returns zeros on Windows)
+func getInodeInfo(path string) (*InodeInfo, error) {
+	// Platform-specific implementation - will be implemented in platform files
+	return getInodeInfoPlatform(path)
 }

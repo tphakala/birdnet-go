@@ -13,59 +13,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// captureDiskSpace gathers comprehensive disk space information for Unix systems
-func captureDiskSpace(dbPath string) (DiskSpaceInfo, error) {
-	info := DiskSpaceInfo{}
-	
-	// Get the directory containing the database file
-	dir := filepath.Dir(dbPath)
-	
-	// Get filesystem statistics
-	var stat unix.Statfs_t
-	err := unix.Statfs(dir, &stat)
-	if err != nil {
-		return info, fmt.Errorf("failed to get filesystem stats for %s: %w", dir, err)
-	}
-
-	// Validate block size
-	if stat.Bsize <= 0 {
-		return info, fmt.Errorf("invalid block size %d from filesystem", stat.Bsize)
-	}
-
-	bsize := uint64(stat.Bsize)
-	info.TotalBytes = stat.Blocks * bsize
-	info.AvailableBytes = stat.Bavail * bsize
-	info.UsedBytes = info.TotalBytes - (stat.Bfree * bsize)
-	
-	if info.TotalBytes > 0 {
-		info.UsedPercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
-	}
-
-	// Get inode information
-	info.InodesTotal = stat.Files
-	info.InodesFree = stat.Ffree
-
-	// Find mount point and filesystem type
-	if mountInfo, err := findMountInfo(dir); err == nil {
-		info.MountPoint = mountInfo.MountPoint
-		info.FileSystemType = mountInfo.FileSystemType
-	} else {
-		// Fallback to directory if mount info not found
-		info.MountPoint = dir
-		info.FileSystemType = "unknown"
-	}
-
-	return info, nil
-}
-
-// MountInfo represents mount information
-type MountInfo struct {
-	MountPoint     string
-	FileSystemType string
-}
-
-// findMountInfo finds the mount point and filesystem type for a given path
-func findMountInfo(path string) (*MountInfo, error) {
+// getMountInfoPlatform finds the mount point and filesystem type for Unix systems
+func getMountInfoPlatform(path string) (*MountInfo, error) {
 	// Clean and get absolute path
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -110,6 +59,20 @@ func findMountInfo(path string) (*MountInfo, error) {
 	}
 
 	return bestMatch, scanner.Err()
+}
+
+// getInodeInfoPlatform gets inode information for Unix systems
+func getInodeInfoPlatform(path string) (*InodeInfo, error) {
+	var stat unix.Statfs_t
+	err := unix.Statfs(path, &stat)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get filesystem stats for %s: %w", path, err)
+	}
+
+	return &InodeInfo{
+		Free:  stat.Ffree,
+		Total: stat.Files,
+	}, nil
 }
 
 // captureMemoryInfo gathers system memory information for Unix systems

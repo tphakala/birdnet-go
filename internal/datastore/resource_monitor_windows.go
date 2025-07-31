@@ -10,58 +10,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// captureDiskSpace gathers comprehensive disk space information for Windows systems
-func captureDiskSpace(dbPath string) (DiskSpaceInfo, error) {
-	info := DiskSpaceInfo{}
-	
-	// Get the directory containing the database file
-	dir := filepath.Dir(dbPath)
-	
-	// Convert to UTF16 for Windows API
-	pathPtr, err := windows.UTF16PtrFromString(dir)
-	if err != nil {
-		return info, fmt.Errorf("failed to convert path to UTF16: %w", err)
-	}
-
-	// Get disk space information
-	var free, total, totalFree uint64
-	err = windows.GetDiskFreeSpaceEx(pathPtr, &free, &total, &totalFree)
-	if err != nil {
-		return info, fmt.Errorf("failed to get disk space for %s: %w", dir, err)
-	}
-
-	info.TotalBytes = total
-	info.AvailableBytes = free
-	info.UsedBytes = total - free
-	
-	if info.TotalBytes > 0 {
-		info.UsedPercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
-	}
-
-	// Get volume information for filesystem type and mount point
-	if volInfo, err := getVolumeInfo(dir); err == nil {
-		info.MountPoint = volInfo.MountPoint
-		info.FileSystemType = volInfo.FileSystemType
-	} else {
-		// Fallback to directory if volume info not available
-		info.MountPoint = dir
-		info.FileSystemType = "unknown"
-	}
-
-	// Note: Windows doesn't expose inode information as easily as Unix
-	// Leave InodesFree and InodesTotal as 0 for Windows
-
-	return info, nil
-}
-
-// VolumeInfo represents Windows volume information
-type VolumeInfo struct {
-	MountPoint     string
-	FileSystemType string
-}
-
-// getVolumeInfo gets volume information for Windows
-func getVolumeInfo(path string) (*VolumeInfo, error) {
+// getMountInfoPlatform gets mount point information for Windows systems
+func getMountInfoPlatform(path string) (*MountInfo, error) {
 	// Get the volume root path
 	rootPath := filepath.VolumeName(path) + "\\"
 	
@@ -89,9 +39,18 @@ func getVolumeInfo(path string) (*VolumeInfo, error) {
 		return nil, fmt.Errorf("failed to get volume information: %w", err)
 	}
 
-	return &VolumeInfo{
+	return &MountInfo{
 		MountPoint:     rootPath,
 		FileSystemType: windows.UTF16ToString(fsName[:]),
+	}, nil
+}
+
+// getInodeInfoPlatform gets inode information for Windows systems
+// Windows doesn't expose inode information easily, so return zeros
+func getInodeInfoPlatform(path string) (*InodeInfo, error) {
+	return &InodeInfo{
+		Free:  0,
+		Total: 0,
 	}, nil
 }
 
