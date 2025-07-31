@@ -4,5 +4,8 @@
   },
   "dependencies": {
     "puppeteer": "^24.12.1"
+  },
+  "scripts": {
+    "prepare": "husky"
   }
 }

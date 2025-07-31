@@ -154,10 +154,21 @@ tasks:
     generates:
       - node_modules/.package-lock.json
 
-  frontend-build:
-    desc: Build frontend for production
+  frontend-typecheck:
+    desc: Run TypeScript type checking on frontend
     dir: frontend
     deps: [frontend-install]
+    cmds:
+      - npm run typecheck
+    sources:
+      - src/**/*
+      - tsconfig.json
+      - package.json
+
+  frontend-build:
+    desc: Build frontend for production with strict type checking
+    dir: frontend
+    deps: [frontend-install, frontend-typecheck]
     cmds:
       - npm run build
     sources:
@@ -203,6 +214,18 @@ tasks:
     deps: [frontend-install]
     cmds:
       - npm run test:coverage
+
+  frontend-quality:
+    desc: Run comprehensive frontend quality checks
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run check:all
+      - npm run test:ci
+      - npm run audit:security
+      - npm run analyze:circular
+      - npm run build
+      - npm run analyze:bundle:size
 
   clean:
     cmds:
