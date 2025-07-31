@@ -115,13 +115,10 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 	rows, err := ds.DB.Raw(queryStr, args...).Rows()
 	if err != nil {
-		return nil, errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "get_species_summary_data").
-			Context("start_date", startDate).
-			Context("end_date", endDate).
-			Build()
+		return nil, dbError(err, "get_species_summary_data", errors.PriorityMedium,
+			"start_date", startDate,
+			"end_date", endDate,
+			"action", "generate_species_analytics_report")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -153,11 +150,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			&summary.AvgConfidence,
 			&summary.MaxConfidence,
 		); err != nil {
-			return nil, errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "scan_species_summary_data").
-				Build()
+			return nil, dbError(err, "scan_species_summary_data", errors.PriorityLow,
+				"action", "parse_analytics_query_results")
 		}
 
 		// Parse time strings to time.Time

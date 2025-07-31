@@ -243,52 +243,38 @@ func (ds *DataStore) Delete(id string) error {
 	// Convert the id from string to unsigned integer
 	noteID, err := strconv.ParseUint(id, 10, 32)
 	if err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "convert_note_id_for_delete").
-			Context("id", id).
-			Build()
+		return validationError("invalid note ID format for deletion", "id", id)
 	}
 
 	// Check if the note is locked
 	isLocked, err := ds.IsNoteLocked(id)
 	if err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "check_note_lock").
-			Context("note_id", id).
-			Build()
+		return dbError(err, "check_note_lock", errors.PriorityMedium,
+			"note_id", id,
+			"action", "validate_deletion_permissions")
 	}
 	if isLocked {
-		return errors.New(fmt.Errorf("cannot delete note: note is locked")).
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "delete_note").
-			Context("note_id", id).
-			Build()
+		return conflictError(errors.NewStd("cannot delete note: note is locked"), 
+			"delete_note", "note_locked",
+			"note_id", id,
+			"action", "delete_detection_record")
 	}
 
 	// Perform the deletion within a transaction
 	return ds.DB.Transaction(func(tx *gorm.DB) error {
 		// Delete the full results entry associated with the note
 		if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "delete_results").
-				Context("note_id", fmt.Sprintf("%d", noteID)).
-				Build()
+			return dbError(err, "delete_results", errors.PriorityMedium,
+				"note_id", fmt.Sprintf("%d", noteID),
+				"table", "results",
+				"action", "delete_detection_results")
 		}
 		// Delete the note itself
 		if err := tx.Delete(&Note{}, noteID).Error; err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "delete_note").
-				Context("note_id", fmt.Sprintf("%d", noteID)).
-				Build()
+			return dbError(err, "delete_note", errors.PriorityMedium,
+				"note_id", fmt.Sprintf("%d", noteID),
+				"table", "notes",
+				"action", "delete_detection_record")
 		}
 		return nil
 	})
@@ -914,36 +900,21 @@ func (ds *DataStore) GetNoteComments(noteID string) ([]NoteComment, error) {
 func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 	// Validate input
 	if comment == nil {
-		return errors.Newf("comment cannot be nil").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "save_note_comment").
-			Build()
+		return validationError("comment cannot be nil", "comment", nil)
 	}
 	if comment.NoteID == 0 {
-		return errors.Newf("note ID cannot be zero").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "save_note_comment").
-			Build()
+		return validationError("note ID cannot be zero", "note_id", comment.NoteID)
 	}
 	// Entry can be empty as comments are optional, but if provided, check length
 	if len(comment.Entry) > 1000 {
-		return errors.Newf("comment entry exceeds maximum length").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "save_note_comment").
-			Context("entry_length", fmt.Sprintf("%d", len(comment.Entry))).
-			Build()
+		return validationError("comment entry exceeds maximum length", "entry_length", len(comment.Entry))
 	}
 
 	if err := ds.DB.Create(comment).Error; err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_note_comment").
-			Context("note_id", fmt.Sprintf("%d", comment.NoteID)).
-			Build()
+		return dbError(err, "save_note_comment", errors.PriorityMedium,
+			"note_id", fmt.Sprintf("%d", comment.NoteID),
+			"table", "note_comments",
+			"action", "add_user_comment")
 	}
 	return nil
 }
@@ -1147,12 +1118,9 @@ func (ds *DataStore) LockNote(noteID string) error {
 				lastErr = result.Error
 				continue
 			}
-			return errors.New(result.Error).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "lock_note").
-				Context("note_id", noteID).
-				Build()
+			return stateError(result.Error, "lock_note", "note_lock_acquisition",
+				"note_id", noteID,
+				"action", "acquire_edit_lock")
 		}
 
 		// If we get here, the transaction was successful
@@ -1162,26 +1130,18 @@ func (ds *DataStore) LockNote(noteID string) error {
 		return nil
 	}
 
-	return errors.New(lastErr).
-		Component("datastore").
-		Category(errors.CategoryDatabase).
-		Context("operation", "lock_note").
-		Context("note_id", noteID).
-		Context("transaction_id", txID).
-		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
-		Build()
+	return stateError(lastErr, "lock_note", "lock_retry_exhausted",
+		"note_id", noteID,
+		"transaction_id", txID,
+		"max_retries", fmt.Sprintf("%d", maxRetries),
+		"action", "acquire_edit_lock")
 }
 
 // UnlockNote removes a lock from a note
 func (ds *DataStore) UnlockNote(noteID string) error {
 	id, err := strconv.ParseUint(noteID, 10, 32)
 	if err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "unlock_note").
-			Context("note_id", noteID).
-			Build()
+		return validationError("invalid note ID format for unlock", "note_id", noteID)
 	}
 
 	// Generate a unique transaction ID (first 8 chars of UUID)
@@ -1274,27 +1234,13 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 	start := time.Now()
 	
 	if cache.ProviderName == "" {
-		err := errors.Newf("provider name cannot be empty").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "save_image_cache").
-			Build()
-		
-		getLogger().Error("Invalid image cache data: empty provider name",
-			"error", err)
-		
+		err := validationError("provider name cannot be empty", "provider_name", "")
+		getLogger().Error("Invalid image cache data: empty provider name", "error", err)
 		return err
 	}
 	if cache.ScientificName == "" {
-		err := errors.Newf("scientific name cannot be empty").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "save_image_cache").
-			Build()
-			
-		getLogger().Error("Invalid image cache data: empty scientific name",
-			"error", err)
-			
+		err := validationError("scientific name cannot be empty", "scientific_name", "")
+		getLogger().Error("Invalid image cache data: empty scientific name", "error", err)
 		return err
 	}
 
@@ -1311,14 +1257,11 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				"scientific_name", cache.ScientificName,
 				"provider", cache.ProviderName)
 		} else {
-			enhancedErr := errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "save_image_cache").
-				Context("table", "image_caches").
-				Context("scientific_name", cache.ScientificName).
-				Context("provider", cache.ProviderName).
-				Build()
+			enhancedErr := dbError(err, "save_image_cache", errors.PriorityMedium,
+				"table", "image_caches",
+				"scientific_name", cache.ScientificName,
+				"provider", cache.ProviderName,
+				"action", "cache_species_thumbnail")
 			
 			getLogger().Error("Failed to save image cache",
 				"error", enhancedErr)
