@@ -171,13 +171,11 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		// Begin a transaction
 		tx := ds.DB.Begin()
 		if tx.Error != nil {
-			lastErr = errors.New(tx.Error).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "begin_transaction").
-				Context("tx_id", txID).
-				Context("attempt", fmt.Sprintf("%d", attempt+1)).
-				Build()
+			lastErr = dbError(tx.Error, "begin_transaction", errors.PriorityHigh,
+				"tx_id", txID,
+				"attempt", fmt.Sprintf("%d", attempt+1),
+				"action", "save_detection",
+				"table", "notes")
 			
 			txLogger.Error("Failed to begin transaction",
 				"error", lastErr,
@@ -213,12 +211,7 @@ func (ds *DataStore) Get(id string) (Note, error) {
 	// Convert the id from string to integer
 	noteID, err := strconv.Atoi(id)
 	if err != nil {
-		return Note{}, errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "convert_note_id").
-			Context("id", id).
-			Build()
+		return Note{}, validationError("invalid note ID format", "id", id)
 	}
 
 	var note Note
@@ -226,12 +219,12 @@ func (ds *DataStore) Get(id string) (Note, error) {
 	if err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC") // Order comments by creation time, newest first
 	}).First(&note, noteID).Error; err != nil {
-		return Note{}, errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "get_note").
-			Context("note_id", fmt.Sprintf("%d", noteID)).
-			Build()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return Note{}, notFoundError("note", fmt.Sprintf("%d", noteID))
+		}
+		return Note{}, dbError(err, "get_note", errors.PriorityMedium,
+			"note_id", fmt.Sprintf("%d", noteID),
+			"action", "retrieve_detection_record")
 	}
 
 	// Populate virtual Verified field
@@ -2071,13 +2064,16 @@ func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, no
 // commitTransactionWithMetrics commits a transaction and records metrics
 func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, attempt int, txLogger *slog.Logger) error {
 	if err := tx.Commit().Error; err != nil {
-		enhancedErr := errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "commit_transaction").
-			Context("tx_id", txID).
-			Context("attempt", fmt.Sprintf("%d", attempt)).
-			Build()
+		// Commit failures are critical as they can lead to data loss
+		priority := errors.PriorityHigh
+		if isDatabaseCorruption(err) {
+			priority = errors.PriorityCritical
+		}
+		
+		enhancedErr := dbError(err, "commit_transaction", priority,
+			"tx_id", txID,
+			"attempt", fmt.Sprintf("%d", attempt),
+			"action", "finalize_detection_save")
 		
 		txLogger.Error("Failed to commit transaction",
 			"error", enhancedErr)
@@ -2209,13 +2205,11 @@ func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resul
 
 // handleMaxRetriesExhausted handles the case when all retries are exhausted
 func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txStart time.Time, txLogger *slog.Logger) error {
-	enhancedErr := errors.New(lastErr).
-		Component("datastore").
-		Category(errors.CategoryDatabase).
-		Context("operation", "save_transaction").
-		Context("tx_id", txID).
-		Context("max_retries_exhausted", "true").
-		Build()
+	enhancedErr := stateError(lastErr, "save_transaction", "transaction_retry_exhausted",
+		"tx_id", txID,
+		"max_retries_exhausted", "true",
+		"action", "save_detection_data",
+		"total_duration_ms", time.Since(txStart).Milliseconds())
 	
 	txLogger.Error("Transaction failed after max retries",
 		"error", enhancedErr,
