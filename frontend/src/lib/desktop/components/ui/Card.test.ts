@@ -5,8 +5,8 @@ import CardTestWrapper from './Card.test.svelte';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render Card with proper typing  
-const renderCard = (props?: any) => {
-  return render(Card as any, props ? { props } : { props: {} });
+const renderCard = (props?: Partial<ComponentProps<typeof Card>>) => {
+  return render(Card, props ? { props } : { props: {} });
 };
 
 describe('Card', () => {

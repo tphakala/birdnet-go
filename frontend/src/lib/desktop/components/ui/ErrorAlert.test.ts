@@ -5,8 +5,8 @@ import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render ErrorAlert with proper typing
-const renderErrorAlert = (props: any) => {
-  return render(ErrorAlert as any, { props });
+const renderErrorAlert = (props: Partial<ComponentProps<typeof ErrorAlert>>) => {
+  return render(ErrorAlert, { props });
 };
 
 describe('ErrorAlert', () => {

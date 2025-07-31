@@ -5,8 +5,8 @@ import EmptyStateTestWrapper from './EmptyState.test.svelte';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render EmptyState with proper typing
-const renderEmptyState = (props?: any) => {
-  return render(EmptyState as any, props ? { props } : { props: {} });
+const renderEmptyState = (props?: Partial<ComponentProps<typeof EmptyState>>) => {
+  return render(EmptyState, props ? { props } : { props: {} });
 };
 
 describe('EmptyState', () => {

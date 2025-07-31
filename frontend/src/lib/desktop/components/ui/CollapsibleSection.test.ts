@@ -6,8 +6,9 @@ import CollapsibleSectionTestWrapper from './CollapsibleSection.test.svelte';
 import type { ComponentProps } from 'svelte';
 
 // Helper function to render CollapsibleSection with proper typing
-const renderCollapsibleSection = (props?: any) => {
-  return render(CollapsibleSection as any, props ? { props } : { props: {} });
+const renderCollapsibleSection = (props?: Partial<ComponentProps<typeof CollapsibleSection>>) => {
+  const defaultProps = { title: 'Test Section' };
+  return render(CollapsibleSection, { props: { ...defaultProps, ...props } });
 };
 
 describe('CollapsibleSection', () => {
