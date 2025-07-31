@@ -15,13 +15,10 @@ export class LRUCache<K, V> {
     if (!this.cache.has(key)) return undefined;
 
     // Move to end (most recently used)
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      this.cache.delete(key);
-      this.cache.set(key, value);
-      return value;
-    }
-    return undefined;
+    const value = this.cache.get(key) as V;
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
   }
 
   set(key: K, value: V): void {
