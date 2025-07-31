@@ -30,17 +30,20 @@
   <div class="card-body p-4 md:p-6">
     <h2 class="card-title">{title}</h2>
 
-    {#if isLoading}
-      <div class="flex justify-center items-center p-8">
-        <span class="loading loading-spinner loading-lg text-primary"></span>
-      </div>
-    {:else if showEmpty}
+    {#if showEmpty && !isLoading}
       <div class="text-center py-4 text-base-content/50">
         {emptyMessage}
       </div>
     {:else}
-      <div class={cn('chart-container', chartHeight)}>
-        <canvas id={chartId} class="w-full h-full"></canvas>
+      <div class="relative">
+        <div class={cn('chart-container', chartHeight, isLoading ? 'invisible' : '')}>
+          <canvas id={chartId} class="w-full h-full"></canvas>
+        </div>
+        {#if isLoading}
+          <div class="absolute inset-0 flex justify-center items-center">
+            <span class="loading loading-spinner loading-lg text-primary"></span>
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -54,4 +57,7 @@
   .chart-container {
     position: relative;
   }
+
+  /* Canvas is always present in DOM but hidden when loading
+     This prevents Chart.js from losing canvas reference */
 </style>
