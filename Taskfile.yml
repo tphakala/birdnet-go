@@ -333,10 +333,13 @@ tasks:
           echo "TensorFlow Lite C library not found. Downloading..."
           wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}" -P ./
           
-          if [ -w "{{.TFLITE_LIB_DIR}}" ]; then
-            mkdir -p "{{.TFLITE_LIB_DIR}}"
-          else
-            sudo mkdir -p "{{.TFLITE_LIB_DIR}}"
+          # Only create directory if it doesn't exist
+          if [ ! -d "{{.TFLITE_LIB_DIR}}" ]; then
+            if [ -w "$(dirname "{{.TFLITE_LIB_DIR}}")" ] 2>/dev/null; then
+              mkdir -p "{{.TFLITE_LIB_DIR}}"
+            else
+              sudo mkdir -p "{{.TFLITE_LIB_DIR}}"
+            fi
           fi
           
           if [[ "{{.TFLITE_LIB_ARCH}}" == *.zip ]]; then
@@ -364,10 +367,13 @@ tasks:
     internal: true
     cmds:
       - |
-        if [ -w "{{.LIB_DIR}}" ]; then
-          mkdir -p "{{.LIB_DIR}}"
-        else
-          sudo mkdir -p "{{.LIB_DIR}}"
+        # Only create directory if it doesn't exist
+        if [ ! -d "{{.LIB_DIR}}" ]; then
+          if [ -w "$(dirname "{{.LIB_DIR}}")" ] 2>/dev/null; then
+            mkdir -p "{{.LIB_DIR}}"
+          else
+            sudo mkdir -p "{{.LIB_DIR}}"
+          fi
         fi
       - |
         if [[ "{{.LIB_FILENAME}}" == *.dll ]] && [ ! -f "{{.LIB_DIR}}/tensorflowlite_c.dll" ]; then
