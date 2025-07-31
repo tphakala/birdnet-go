@@ -1086,8 +1086,8 @@ Responsive Breakpoints:
     --heatmap-color-9: #036;
 
     /* Theme-aware border colors */
-    --theme-border-light: rgb(255, 255, 255, 0.1);
-    --theme-border-dark: rgb(0, 0, 0, 0.1);
+    --theme-border-light: rgb(255 255 255 / 0.1);
+    --theme-border-dark: rgb(0 0 0 / 0.1);
 
     /* Animation durations (for CSS animations) */
     --anim-count-pop: 600ms;

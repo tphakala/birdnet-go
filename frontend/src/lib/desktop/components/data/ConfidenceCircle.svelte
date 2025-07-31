@@ -107,7 +107,7 @@
   }
 
   :global([data-theme='dark']) .confidence-circle {
-    background: var(--darker-color, rgb(17, 24, 39));
+    background: var(--darker-color, rgb(17 24 39));
   }
 
   .confidence-circle-track {
@@ -118,7 +118,7 @@
   }
 
   :global([data-theme='dark']) .confidence-circle-track {
-    background: var(--darker-color, rgb(17, 24, 39));
+    background: var(--darker-color, rgb(17 24 39));
   }
 
   .confidence-circle-progress {
@@ -178,18 +178,18 @@
   :global([data-theme='dark']) .confidence-circle :global(.confidence-high) {
     color: #34d399;
 
-    --darker-color: rgb(6, 78, 59);
+    --darker-color: rgb(6 78 59);
   }
 
   :global([data-theme='dark']) .confidence-circle :global(.confidence-medium) {
     color: #fbbf24;
 
-    --darker-color: rgb(120, 53, 15);
+    --darker-color: rgb(120 53 15);
   }
 
   :global([data-theme='dark']) .confidence-circle :global(.confidence-low) {
     color: #f87171;
 
-    --darker-color: rgb(127, 29, 29);
+    --darker-color: rgb(127 29 29);
   }
 </style>

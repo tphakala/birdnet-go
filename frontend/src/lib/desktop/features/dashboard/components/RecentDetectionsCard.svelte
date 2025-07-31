@@ -493,7 +493,7 @@
   .rd-audio-player-container {
     position: relative;
     width: 100%;
-    background: linear-gradient(to bottom, rgb(128, 128, 128, 0.4), rgb(128, 128, 128, 0.1));
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.4), rgb(128 128 128 / 0.1));
     border-radius: 0.5rem;
   }
 
