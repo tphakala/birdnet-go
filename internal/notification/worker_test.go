@@ -74,14 +74,15 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 			expectPriority: PriorityHigh,
 		},
 		{
-			name: "medium_priority_error_skipped",
+			name: "medium_priority_error_creates_notification",
 			event: &mockErrorEvent{
 				component: "network",
 				category:  string(errors.CategoryNetwork),
 				message:   "Temporary network issue",
 				timestamp: time.Now(),
 			},
-			expectNotif: false,
+			expectNotif:    true,
+			expectPriority: PriorityMedium,
 		},
 		{
 			name: "low_priority_error_skipped",
@@ -199,7 +200,8 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 	// Process events until circuit opens
 	// Need to exceed rate limit (2) and trigger failures
 	successCount := 0
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
+		_ = i // unused
 		err := worker.ProcessEvent(event)
 		if err == nil {
 			successCount++
