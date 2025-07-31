@@ -27,6 +27,7 @@ const (
 	CategoryFileIO         ErrorCategory = "file-io"
 	CategoryNetwork        ErrorCategory = "network"
 	CategoryAudio          ErrorCategory = "audio-processing"
+	CategoryAudioSource    ErrorCategory = "audio-source"
 	CategoryRTSP           ErrorCategory = "rtsp-connection"
 	CategoryDatabase       ErrorCategory = "database"
 	CategoryHTTP           ErrorCategory = "http-request"
@@ -56,6 +57,7 @@ type EnhancedError struct {
 	Err       error                  // Original error
 	component string                 // Component where error occurred (lazily detected)
 	Category  ErrorCategory          // Error category for better grouping
+	Priority  string                 // Explicit priority override (optional)
 	Context   map[string]interface{} // Additional context data
 	Timestamp time.Time              // When the error occurred
 	reported  bool                   // Whether telemetry has been sent
@@ -114,6 +116,11 @@ func (ee *EnhancedError) GetCategory() string {
 	return string(ee.Category)
 }
 
+// GetPriority returns the explicit priority if set, empty string otherwise
+func (ee *EnhancedError) GetPriority() string {
+	return ee.Priority
+}
+
 // GetContext returns the error context
 func (ee *EnhancedError) GetContext() map[string]interface{} {
 	ee.mu.RLock()
@@ -169,6 +176,7 @@ type ErrorBuilder struct {
 	err       error
 	component string
 	category  ErrorCategory
+	priority  string
 	context   map[string]interface{}
 }
 
@@ -194,6 +202,12 @@ func (eb *ErrorBuilder) Component(component string) *ErrorBuilder {
 // Category sets the error category for better grouping
 func (eb *ErrorBuilder) Category(category ErrorCategory) *ErrorBuilder {
 	eb.category = category
+	return eb
+}
+
+// Priority sets the explicit priority override for the error
+func (eb *ErrorBuilder) Priority(priority string) *ErrorBuilder {
+	eb.priority = priority
 	return eb
 }
 
@@ -276,6 +290,7 @@ func (eb *ErrorBuilder) Build() *EnhancedError {
 			Err:       eb.err,
 			component: eb.component, // Use provided or empty
 			Category:  eb.category,  // Use provided or empty
+			Priority:  eb.priority,  // Use provided or empty
 			Context:   eb.context,
 			Timestamp: time.Now(),
 			detected:  eb.component != "", // Mark as detected if component was provided
@@ -306,6 +321,7 @@ func (eb *ErrorBuilder) Build() *EnhancedError {
 		Err:       eb.err,
 		component: eb.component,
 		Category:  eb.category,
+		Priority:  eb.priority,
 		Context:   eb.context,
 		Timestamp: time.Now(),
 		detected:  true, // Mark as detected since we just detected it

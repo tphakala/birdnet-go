@@ -176,8 +176,12 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		return nil // Don't propagate error when circuit is open
 	}
 	
-	// Determine priority based on category
-	priority := getNotificationPriority(event.GetCategory())
+	// Determine priority based on category and explicit priority if available
+	explicitPriority := ""
+	if enhancedErr, ok := event.(*errors.EnhancedError); ok {
+		explicitPriority = enhancedErr.GetPriority()
+	}
+	priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 	
 	// Only create notifications for high and critical priority errors
 	if priority != PriorityHigh && priority != PriorityCritical {
@@ -272,7 +276,12 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 	
 	// Group events by key
 	for _, event := range errorEvents {
-		priority := getNotificationPriority(event.GetCategory())
+		// Determine priority based on category and explicit priority if available
+		explicitPriority := ""
+		if enhancedErr, ok := event.(*errors.EnhancedError); ok {
+			explicitPriority = enhancedErr.GetPriority()
+		}
+		priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 		
 		// Skip low priority events
 		if priority != PriorityHigh && priority != PriorityCritical {
