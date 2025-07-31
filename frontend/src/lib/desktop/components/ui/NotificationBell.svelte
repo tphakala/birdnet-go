@@ -66,17 +66,22 @@
   // PERFORMANCE OPTIMIZATION: Pure utility functions for caching
   // These functions only depend on their parameters, not component state
   function shouldShowNotification(notification: Notification): boolean {
+    // In debug mode, show all notifications
+    if (debugMode) {
+      return true;
+    }
+
+    // Hide low priority notifications (startup transients, etc.)
+    if (notification.priority === 'low') {
+      return false;
+    }
+
     // Always show user-facing notifications
     if (
       notification.type === 'detection' ||
       notification.priority === 'critical' ||
       notification.priority === 'high'
     ) {
-      return true;
-    }
-
-    // In debug mode, show all notifications
-    if (debugMode) {
       return true;
     }
 
