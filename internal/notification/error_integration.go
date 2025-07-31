@@ -24,10 +24,10 @@ func errorNotificationHook(ee any) {
 
 	// Determine if this error should create a notification
 	category := enhancedErr.GetCategory()
-	priority := getNotificationPriority(category)
+	priority := getNotificationPriority(category, enhancedErr.GetPriority())
 
-	// Only create notifications for high and critical priority errors
-	if priority < PriorityHigh {
+	// Filter out low priority notifications
+	if priority == PriorityLow {
 		return
 	}
 
@@ -35,8 +35,23 @@ func errorNotificationHook(ee any) {
 	_, _ = service.CreateErrorNotification(enhancedErr)
 }
 
-// getNotificationPriority determines the notification priority based on error category
-func getNotificationPriority(category string) Priority {
+// getNotificationPriority determines the notification priority based on error category and explicit priority
+func getNotificationPriority(category, explicitPriority string) Priority {
+	// If explicit priority is set, use it first
+	if explicitPriority != "" {
+		switch explicitPriority {
+		case string(PriorityCritical):
+			return PriorityCritical
+		case string(PriorityHigh):
+			return PriorityHigh
+		case string(PriorityMedium):
+			return PriorityMedium
+		case string(PriorityLow):
+			return PriorityLow
+		}
+	}
+
+	// Fall back to category-based priority
 	switch category {
 	case string(errors.CategoryModelInit), string(errors.CategoryModelLoad):
 		return PriorityCritical // App cannot function without models
@@ -52,7 +67,7 @@ func getNotificationPriority(category string) Priority {
 		return PriorityHigh // Connection/auth failures need immediate attention
 	case string(errors.CategoryNetwork), string(errors.CategoryRTSP):
 		return PriorityMedium // Often transient
-	case string(errors.CategoryFileIO), string(errors.CategoryAudio):
+	case string(errors.CategoryFileIO), string(errors.CategoryAudio), string(errors.CategoryAudioSource):
 		return PriorityMedium // Usually recoverable
 	case string(errors.CategoryValidation):
 		return PriorityLow // User input issues
