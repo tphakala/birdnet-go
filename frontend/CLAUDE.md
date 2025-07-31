@@ -208,11 +208,11 @@ import { getLogger, loggers } from '$lib/utils/logger';
 const logger = getLogger('myModule');
 
 // Or use predefined category loggers
-const logger = loggers.api;    // For API-related logging
-const logger = loggers.auth;   // For authentication
-const logger = loggers.sse;    // For SSE connections
-const logger = loggers.audio;  // For audio components
-const logger = loggers.ui;     // For UI components
+const logger = loggers.api; // For API-related logging
+const logger = loggers.auth; // For authentication
+const logger = loggers.sse; // For SSE connections
+const logger = loggers.audio; // For audio components
+const logger = loggers.ui; // For UI components
 const logger = loggers.settings; // For settings
 ```
 
@@ -232,7 +232,7 @@ logger.warn('Deprecated method used');
 logger.error('Failed to save', error, {
   component: 'SettingsPage',
   action: 'save',
-  userId: user.id
+  userId: user.id,
 });
 
 // Performance timing (dev only)
@@ -264,11 +264,12 @@ logger.groupEnd();
    - `error`: Failures requiring attention
 
 2. Always provide context for errors:
+
    ```typescript
    logger.error('API request failed', error, {
      component: 'DetectionsPage',
      action: 'loadDetections',
-     endpoint: '/api/v2/detections'
+     endpoint: '/api/v2/detections',
    });
    ```
 

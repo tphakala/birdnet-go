@@ -117,7 +117,6 @@ function createAuthStore() {
         // Redirect to login page
         window.location.href = '/login';
       } catch (error) {
-         
         logger.error('Logout error:', error);
         throw error;
       }

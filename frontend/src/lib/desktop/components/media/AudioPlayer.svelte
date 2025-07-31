@@ -205,7 +205,6 @@
       return audioContext;
       // eslint-disable-next-line no-unused-vars
     } catch (_e) {
-       
       logger.warn('Web Audio API is not supported in this browser');
       audioContextAvailable = false;
       audioContextError =
@@ -467,7 +466,7 @@
         // eslint-disable-next-line no-unused-vars
       } catch (_e) {
         // Nodes may already be disconnected, ignore errors
-         
+
         logger.warn('Error disconnecting audio nodes during cleanup');
       }
       audioNodes = null;
@@ -480,7 +479,7 @@
         // eslint-disable-next-line no-unused-vars
       } catch (_e) {
         // Context may already be closed, ignore errors
-         
+
         logger.warn('Error closing audio context during cleanup');
       }
       audioContext = null;

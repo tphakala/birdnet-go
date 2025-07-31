@@ -30,7 +30,6 @@ export async function loadServerMessages(locale: Locale): Promise<Record<string,
       const messages = JSON.parse(content);
       messageCache.set(locale, messages);
     } catch (error) {
-       
       logger.error(`Failed to load messages for ${locale}:`, error);
       messageCache.set(locale, {});
     }

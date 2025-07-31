@@ -50,7 +50,6 @@ export function setLocale(locale: Locale): void {
     try {
       localStorage.setItem('birdnet-locale', locale);
     } catch (error) {
-       
       logger.warn('Failed to save locale to localStorage:', error);
     }
   }
@@ -103,12 +102,10 @@ async function loadMessages(locale: Locale): Promise<void> {
       return;
     }
 
-     
     logger.error(`Failed to load messages for ${locale}:`, error);
 
     // Fallback to English if the requested locale fails
     if (locale !== DEFAULT_LOCALE) {
-       
       logger.info(`Falling back to ${DEFAULT_LOCALE} locale`);
       try {
         const fallbackResponse = await fetch(`/ui/assets/messages/${DEFAULT_LOCALE}.json`);
@@ -134,7 +131,6 @@ async function loadMessages(locale: Locale): Promise<void> {
           return;
         }
       } catch (fallbackError) {
-         
         logger.error(`Failed to load fallback messages:`, fallbackError);
       }
     }
@@ -145,7 +141,7 @@ async function loadMessages(locale: Locale): Promise<void> {
       messages = previousMessages;
       previousMessages = {};
     }
-     
+
     logger.warn('Translation loading failed, restored previous messages to prevent UI degradation');
   } finally {
     // Only set loading to false if this is still the latest request
