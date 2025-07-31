@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { renderTyped, screen, fireEvent } from '../../../../test/render-helpers';
 import EmptyState from './EmptyState.svelte';
 import EmptyStateTestWrapper from './EmptyState.test.svelte';
 import type { ComponentProps } from 'svelte';
 
-// Helper function to render EmptyState with proper typing
+// Helper function to render EmptyState with proper typing  
 const renderEmptyState = (props?: Partial<ComponentProps<typeof EmptyState>>) => {
-  return render(EmptyState, props ? { props } : { props: {} });
+  return renderTyped(EmptyState, props ? { props } : { props: {} });
 };
 
 describe('EmptyState', () => {
@@ -34,7 +34,7 @@ describe('EmptyState', () => {
 
   it('renders with custom icon', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(EmptyStateTestWrapper as any, {
+    renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,
       },
@@ -64,7 +64,7 @@ describe('EmptyState', () => {
 
   it('renders with custom children', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(EmptyStateTestWrapper as any, {
+    renderTyped(EmptyStateTestWrapper, {
       props: {
         showChildren: true,
       },
@@ -87,7 +87,7 @@ describe('EmptyState', () => {
     const onClick = vi.fn();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(EmptyStateTestWrapper as any, {
+    renderTyped(EmptyStateTestWrapper, {
       props: {
         showCustomIcon: true,
         showChildren: true,
