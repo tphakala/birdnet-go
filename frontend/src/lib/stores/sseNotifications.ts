@@ -1,6 +1,9 @@
 import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
+import { loggers } from '$lib/utils/logger';
+
+const logger = loggers.sse;
 
 interface SSENotification {
   message: string;
@@ -41,7 +44,7 @@ class SSENotificationManager {
       });
 
       this.eventSource.onopen = () => {
-        console.log('SSE notification connection opened');
+        logger.info('SSE notification connection opened');
         this.isConnected = true;
       };
 
@@ -52,12 +55,15 @@ class SSENotificationManager {
           this.handleNotification(notification);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for backwards compatibility
-          console.warn('SSE general message parsing error (ignored):', error, 'Data:', event.data);
+          logger.warn('SSE general message parsing error (ignored):', error, 'Data:', event.data);
         }
       };
 
       this.eventSource.onerror = (error: Event) => {
-        console.error('SSE notification error:', error);
+        logger.error('SSE notification error', error, {
+          component: 'sseNotifications',
+          action: 'connection',
+        });
         this.isConnected = false;
         // ReconnectingEventSource handles reconnection automatically
       };
@@ -67,10 +73,10 @@ class SSENotificationManager {
         try {
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
-          console.log('SSE connected:', data);
+          logger.info('SSE connected:', data);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for connection events
-          console.warn('SSE connected event parsing error (ignored):', error);
+          logger.warn('SSE connected event parsing error (ignored):', error);
         }
       });
 
@@ -81,7 +87,10 @@ class SSENotificationManager {
           const toastData: SSEToastData = JSON.parse(messageEvent.data);
           this.handleToast(toastData);
         } catch (error) {
-          console.error('Error processing toast event:', error);
+          logger.error('Error processing toast event', error, {
+            component: 'sseNotifications',
+            action: 'handleToast',
+          });
         }
       });
 
@@ -93,11 +102,14 @@ class SSENotificationManager {
           // Heartbeat received successfully - could add connection health tracking here
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for heartbeat
-          console.warn('SSE heartbeat parsing error (ignored):', error);
+          logger.warn('SSE heartbeat parsing error (ignored):', error);
         }
       });
     } catch (error) {
-      console.error('Failed to create SSE connection:', error);
+      logger.error('Failed to create SSE connection', error, {
+        component: 'sseNotifications',
+        action: 'connect',
+      });
       // Try again in 5 seconds
       setTimeout(() => this.connect(), 5000);
     }
@@ -133,7 +145,7 @@ class SSENotificationManager {
                 window.location.href = toastData.action.url;
               } else if (toastData.action?.handler) {
                 // Handle custom actions if needed
-                console.log('Toast action handler:', toastData.action.handler);
+                logger.debug('Toast action handler:', toastData.action.handler);
               }
             },
           },

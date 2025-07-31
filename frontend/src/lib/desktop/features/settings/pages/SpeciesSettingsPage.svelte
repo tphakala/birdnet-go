@@ -14,6 +14,9 @@
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.settings;
 
   // Derived settings with fallbacks
   let settings = $state({
@@ -100,7 +103,7 @@
         filteredSpecies = [...allSpecies];
       }
     } catch (error) {
-      console.error('Failed to load species data:', error);
+      logger.error('Failed to load species data:', error);
       allSpecies = [];
       filteredSpecies = [];
     }

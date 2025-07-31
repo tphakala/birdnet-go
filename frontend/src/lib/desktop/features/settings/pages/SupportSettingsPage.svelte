@@ -10,6 +10,9 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { actionIcons, alertIconsSvg, systemIcons, mediaIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.settings;
 
   let settings = $derived(
     $supportSettings ||
@@ -61,7 +64,7 @@
         systemId = data.systemID || '';
       })
       .catch(error => {
-        console.error('Failed to fetch system ID:', error);
+        logger.error('Failed to fetch system ID:', error);
         systemId = t('settings.support.systemId.errorLoading');
       });
   });
@@ -80,7 +83,7 @@
       await navigator.clipboard.writeText(systemId);
       // Could add temporary success feedback here
     } catch (error) {
-      console.error('Failed to copy system ID:', error);
+      logger.error('Failed to copy system ID:', error);
     }
   }
 

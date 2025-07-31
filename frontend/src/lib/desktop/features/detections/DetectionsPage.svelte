@@ -3,6 +3,9 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { DetectionsListData, DetectionQueryParams } from '$lib/types/detection.types';
   import DetectionsCard from './components/DetectionsCard.svelte';
+  import { getLogger } from '$lib/utils/logger';
+
+  const logger = getLogger('app');
 
   let detectionsData = $state<DetectionsListData | null>(null);
   let loading = $state(true);
@@ -108,7 +111,7 @@
       };
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to fetch detections';
-      console.error('Error fetching detections:', err);
+      logger.error('Error fetching detections:', err);
     } finally {
       loading = false;
     }

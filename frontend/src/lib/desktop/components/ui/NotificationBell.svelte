@@ -4,6 +4,9 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   interface Notification {
     id: string;
@@ -148,10 +151,11 @@
       if (error instanceof ApiError) {
         toastActions.error('Unable to load notifications. Please refresh the page.');
       }
-      // Log for developers without cluttering console in production
-      if (import.meta.env.DEV) {
-        console.error('Failed to load notifications:', error);
-      }
+      // Log error for debugging - logger already handles dev/prod environment
+      logger.error('Failed to load notifications', error, {
+        component: 'NotificationBell',
+        action: 'loadNotifications',
+      });
     } finally {
       loading = false;
     }
@@ -172,7 +176,7 @@
       });
 
       sseConnection.onopen = () => {
-        console.log('Notification SSE connection opened');
+        logger.debug('Notification SSE connection opened');
       };
 
       sseConnection.onmessage = event => {
@@ -180,12 +184,12 @@
           const data: SSEMessage = JSON.parse(event.data);
           handleSSEMessage(data);
         } catch (error) {
-          console.error('Failed to parse notification SSE message:', error);
+          logger.error('Failed to parse notification SSE message:', error);
         }
       };
 
       sseConnection.onerror = (error: Event) => {
-        console.error('Notification SSE error:', error);
+        logger.error('Notification SSE error:', error);
         // ReconnectingEventSource handles reconnection automatically
         // Don't reconnect if page is being unloaded or offline
         if (!globalThis.window.navigator.onLine || globalThis.document.hidden) {
@@ -193,7 +197,7 @@
         }
       };
     } catch (error) {
-      console.error('Failed to create ReconnectingEventSource:', error);
+      logger.error('Failed to create ReconnectingEventSource:', error);
       // Try again in 5 seconds if initial setup fails
       setTimeout(() => connectSSE(), 5000);
     }
@@ -271,9 +275,11 @@
       if (error instanceof ApiError) {
         toastActions.error('Failed to mark notification as read.');
       }
-      if (import.meta.env.DEV) {
-        console.error('Failed to mark notification as read:', error);
-      }
+      logger.error('Failed to mark notification as read', error, {
+        component: 'NotificationBell',
+        action: 'markAsRead',
+        notificationId,
+      });
     }
   }
 
@@ -314,14 +320,22 @@
       });
 
       audio.addEventListener('error', e => {
-        console.warn('Failed to load notification sound:', e);
+        logger.warn('Failed to load notification sound', null, {
+          component: 'NotificationBell',
+          action: 'preloadNotificationSound',
+          errorType: e.type,
+          target: e.target?.constructor?.name || 'HTMLAudioElement',
+        });
         audioReady = false;
         preloadedAudio = null;
       });
 
       audio.load();
     } catch (error) {
-      console.warn('Failed to preload notification sound:', error);
+      logger.warn('Failed to preload notification sound', error, {
+        component: 'NotificationBell',
+        action: 'preloadNotificationSound',
+      });
       audioReady = false;
       preloadedAudio = null;
     }

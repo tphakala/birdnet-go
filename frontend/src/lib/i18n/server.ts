@@ -1,5 +1,8 @@
 import type { Locale } from './config.js';
 import { DEFAULT_LOCALE } from './config.js';
+import { getLogger } from '$lib/utils/logger';
+
+const logger = getLogger('app');
 
 // Server-side locale storage (replaces overwriteGetLocale)
 let serverLocale: Locale = DEFAULT_LOCALE;
@@ -27,8 +30,7 @@ export async function loadServerMessages(locale: Locale): Promise<Record<string,
       const messages = JSON.parse(content);
       messageCache.set(locale, messages);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(`Failed to load messages for ${locale}:`, error);
+      logger.error(`Failed to load messages for ${locale}:`, error);
       messageCache.set(locale, {});
     }
   }

@@ -2,6 +2,10 @@
  * API utilities for making HTTP requests with CSRF protection
  */
 
+import { loggers } from '$lib/utils/logger';
+
+const logger = loggers.api;
+
 /**
  * Custom error class for API errors
  */
@@ -144,12 +148,23 @@ export async function fetchWithCSRF<T = unknown>(
   };
 
   try {
-    console.log(`Fetching ${finalOptions.method} ${url}`, {
-      body: finalOptions.body ? JSON.parse(finalOptions.body as string) : undefined,
+    // Safely parse body for logging (avoid logging raw body for security)
+    let bodyForLogging: unknown = undefined;
+    if (finalOptions.body) {
+      try {
+        bodyForLogging = JSON.parse(finalOptions.body as string);
+      } catch {
+        // If body is not JSON, just log that we have a body
+        bodyForLogging = '[non-JSON body]';
+      }
+    }
+
+    logger.debug(`Fetching ${finalOptions.method} ${url}`, {
+      body: bodyForLogging,
     });
     const response = await fetch(url, finalOptions);
     const result = await handleResponse<T>(response);
-    console.log(`Response from ${url}:`, result);
+    logger.debug(`Response from ${url}:`, result);
     return result;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -164,7 +179,7 @@ export async function fetchWithCSRF<T = unknown>(
  */
 export function handleApiError(error: Error): void {
   // Log error for debugging - disabled for production
-  // console.error('API Error:', error);
+  // logger.error('API Error:', error);
 
   // Return user-friendly error messages
   if (error instanceof ApiError) {

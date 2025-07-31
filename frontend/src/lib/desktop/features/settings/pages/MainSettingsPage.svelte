@@ -21,6 +21,9 @@
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.settings;
 
   let settings = $derived({
     main: $mainSettings || { name: '' },
@@ -177,7 +180,7 @@
     // Dynamically import Leaflet
     const L = (window as any).L;
     if (!L) {
-      console.error('Leaflet not loaded');
+      logger.error('Leaflet not loaded');
       return;
     }
 
@@ -245,7 +248,7 @@
       const data = await response.json();
       rangeFilterSpeciesCount = data.count;
     } catch (error) {
-      console.error('Failed to load range filter count:', error);
+      logger.error('Failed to load range filter count:', error);
       rangeFilterError = t('settings.main.errors.rangeFilterCountFailed');
     }
   }
@@ -273,7 +276,7 @@
         rangeFilterSpecies = data.species || [];
       }
     } catch (error) {
-      console.error('Failed to test range filter:', error);
+      logger.error('Failed to test range filter:', error);
       rangeFilterError = t('settings.main.errors.rangeFilterTestFailed');
       // Set count to null on error to show loading state next time
       rangeFilterSpeciesCount = null;
@@ -302,7 +305,7 @@
       rangeFilterSpecies = data.species || [];
       rangeFilterSpeciesCount = data.count;
     } catch (error) {
-      console.error('Failed to load species list:', error);
+      logger.error('Failed to load species list:', error);
       rangeFilterError = t('settings.main.errors.rangeFilterLoadFailed');
     } finally {
       loadingRangeFilter = false;

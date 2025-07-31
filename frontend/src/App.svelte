@@ -4,6 +4,9 @@
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
   import type { BirdnetConfig } from './app.d.ts';
+  import { getLogger } from './lib/utils/logger';
+
+  const logger = getLogger('app');
 
   // Dynamic imports for heavy pages - properly typed component references
   let Analytics = $state<Component | null>(null);
@@ -145,7 +148,11 @@
           break;
       }
     } catch (error) {
-      console.error(`Failed to load component for route "${route}":`, error);
+      logger.error(`Failed to load component for route "${route}"`, error, {
+        component: 'App',
+        action: 'loadComponent',
+        route,
+      });
       // Fall back to generic error page on component load failure
       currentRoute = 'error-generic';
       currentPage = 'error-generic';
@@ -157,7 +164,10 @@
           const module = await import('./lib/desktop/views/GenericErrorPage.svelte');
           GenericErrorPage = module.default;
         } catch (fallbackError) {
-          console.error('Failed to load fallback error component:', fallbackError);
+          logger.error('Failed to load fallback error component', fallbackError, {
+            component: 'App',
+            action: 'loadFallbackError',
+          });
         }
       }
     } finally {

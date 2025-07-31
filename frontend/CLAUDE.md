@@ -197,6 +197,198 @@ function getCsrfToken(): string | null {
 headers.set('X-CSRF-Token', getCsrfToken());
 ```
 
+## Logging
+
+Use the centralized logger utility instead of console statements:
+
+```typescript
+import { getLogger, loggers } from '$lib/utils/logger';
+
+// Option 1: Create a custom logger for your module
+const customLogger = getLogger('myModule');
+
+// Option 2: Use predefined category loggers
+const apiLogger = loggers.api; // For API-related logging
+const authLogger = loggers.auth; // For authentication
+const sseLogger = loggers.sse; // For SSE connections
+const audioLogger = loggers.audio; // For audio components
+const uiLogger = loggers.ui; // For UI components
+const settingsLogger = loggers.settings; // For settings
+
+// Most common pattern - choose one logger per file:
+const logger = loggers.ui; // For UI components
+```
+
+**Important**: Call `getLogger()` once when the module loads and reuse the returned logger instance throughout the module. This prevents creating multiple logger instances inside functions, reducing unnecessary object allocation and ensuring consistent category scoping.
+
+### Logger Methods
+
+```typescript
+// Debug information (dev only)
+logger.debug('Component initialized', props);
+
+// Informational messages (dev only)
+logger.info('Connection established');
+
+// Warnings (always logged)
+logger.warn('Deprecated method used');
+
+// Errors with context (always logged)
+logger.error('Failed to save', error, {
+  component: 'SettingsPage',
+  action: 'save',
+  userId: user.id,
+});
+
+// Performance timing (development only - no-op in production)
+logger.time('dataLoad');
+// ... expensive operation
+logger.timeEnd('dataLoad'); // Logs: [category] dataLoad: 123.45ms
+
+// Grouping (development only - no-op in production)
+logger.group('Processing items');
+items.forEach(item => logger.debug('Item:', item));
+logger.groupEnd();
+```
+
+### Key Features
+
+- **Environment-aware**: Debug/info logs only in development
+- **Zero configuration**: Works immediately
+- **Category-based**: Helps identify log sources
+- **Sentry-ready**: Structured for future integration
+- **Type-safe**: Full TypeScript support
+- **No console warnings**: Properly configured for ESLint
+- **Security-aware**: Built-in PII protection guidelines
+
+### Security and PII Protection
+
+**CRITICAL**: Never log personally identifiable information (PII) or sensitive data:
+
+```typescript
+// ❌ Don't log PII or sensitive data
+logger.error('Login failed', error, {
+  username: 'john.doe@example.com', // PII
+  password: 'secret123', // Sensitive
+  sessionToken: 'abc123xyz', // Sensitive
+});
+
+// ✅ Log safe identifiers and context
+logger.error('Login failed', error, {
+  component: 'LoginForm',
+  action: 'authenticate',
+  userId: user.id, // Safe: non-PII identifier
+  attemptCount: 3, // Safe: operational data
+});
+
+// ✅ Sanitize or redact sensitive fields
+logger.debug('API request', {
+  endpoint: '/api/user/profile',
+  method: 'POST',
+  headers: { 'content-type': 'application/json' }, // Safe headers only
+  bodyFields: Object.keys(requestBody), // Field names, not values
+});
+```
+
+**Safe to log**: Component names, action names, non-PII IDs, counts, timestamps, status codes, error types
+**Never log**: Emails, usernames, passwords, tokens, API keys, personal data, request/response bodies with PII
+
+### Log Levels by Build Target
+
+| Log Level | Development | Production | Purpose                                     |
+| --------- | ----------- | ---------- | ------------------------------------------- |
+| `debug`   | ✅ Logged   | ❌ Silent  | Development details, state changes          |
+| `info`    | ✅ Logged   | ❌ Silent  | Important flow information                  |
+| `warn`    | ✅ Logged   | ✅ Logged  | Deprecations, fallbacks, recoverable issues |
+| `error`   | ✅ Logged   | ✅ Logged  | Failures requiring attention                |
+| `time`    | ✅ Logged   | ❌ No-op   | Performance timing measurements             |
+| `group`   | ✅ Logged   | ❌ No-op   | Console grouping for organization           |
+
+**Key Points:**
+
+- Only `warn` and `error` logs appear in production builds
+- Timing and grouping functions are no-op in production (zero overhead)
+- Development logs help with debugging but are stripped from production bundles
+
+### Best Practices
+
+1. Use appropriate log levels:
+   - `debug`: Development details, state changes
+   - `info`: Important flow information
+   - `warn`: Deprecations, fallbacks
+   - `error`: Failures requiring attention
+
+2. Always provide context for errors:
+
+   ```typescript
+   logger.error('API request failed', error, {
+     component: 'DetectionsPage',
+     action: 'loadDetections',
+     endpoint: '/api/v2/detections',
+   });
+   ```
+
+3. Use categories that match your module's purpose
+4. Keep production logs minimal (warn/error only)
+
+### Svelte-Specific Patterns
+
+**Avoid redundant environment checks** - Logger handles dev/prod automatically:
+
+```svelte
+<!-- ✅ Do this - logger handles environment -->
+<script>
+  $effect(() => {
+    logger.debug('Component state updated', { state });
+  });
+</script>
+
+<!-- ❌ Don't do this - redundant check -->
+{#if import.meta.env.DEV}
+  {logger.debug('Component state:', state)}
+{/if}
+```
+
+**Move logging out of templates** - Use functions or effects:
+
+```svelte
+<!-- ✅ Log in reactive statements -->
+<script>
+  $effect(() => {
+    if (someCondition) {
+      logger.warn('Unexpected condition', { component: 'MyComponent' });
+    }
+  });
+</script>
+
+<!-- ❌ Don't log in templates -->
+{#if someCondition}
+  {logger.warn('Unexpected condition')}
+  <div>Content</div>
+{/if}
+```
+
+**Provide component context** - Always include component name and action:
+
+```svelte
+<script>
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
+
+  async function handleSubmit() {
+    try {
+      await submitData();
+    } catch (error) {
+      logger.error('Form submission failed', error, {
+        component: 'MyForm',
+        action: 'handleSubmit',
+      });
+    }
+  }
+</script>
+```
+
 ## Server-Sent Events (SSE)
 
 Use `reconnecting-eventsource` package for real-time updates with automatic reconnection handling.

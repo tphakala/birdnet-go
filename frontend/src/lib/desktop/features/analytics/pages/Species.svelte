@@ -4,6 +4,9 @@
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.analytics;
 
   // Type definitions
   interface SpeciesFilters {
@@ -137,7 +140,7 @@
       // Load thumbnails asynchronously after main data is displayed
       loadThumbnailsAsync();
     } catch (error) {
-      console.error('Error fetching species data:', error);
+      logger.error('Error fetching species data:', error);
       speciesData = [];
       filteredSpecies = [];
     } finally {
@@ -286,7 +289,7 @@
         }
       }
     } catch (error) {
-      console.error('Error loading thumbnails:', error);
+      logger.error('Error loading thumbnails:', error);
       // Continue without thumbnails - don't break the UI
     }
   }

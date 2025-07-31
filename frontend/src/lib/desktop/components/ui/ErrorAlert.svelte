@@ -4,6 +4,9 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { t } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   type AlertType = AlertIconType;
 
@@ -44,7 +47,7 @@
     try {
       onDismiss();
     } catch (error) {
-      console.error('Error occurred in ErrorAlert onDismiss callback:', error);
+      logger.error('Error occurred in ErrorAlert onDismiss callback:', error);
     }
   }
 </script>

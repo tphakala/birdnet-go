@@ -1,5 +1,8 @@
 <script lang="ts">
   import type { RTSPUrl } from '$lib/stores/settings';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   interface Props {
     urls: RTSPUrl[];
@@ -30,6 +33,21 @@
     }
   }
 
+  // Redact credentials from URL for safe logging
+  function redactUrlCredentials(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.username || urlObj.password) {
+        // Replace credentials with [REDACTED]
+        return url.replace(/(rtsp:\/\/)[^@]+(@)/, '$1[REDACTED]$2');
+      }
+      return url;
+    } catch {
+      // If URL parsing fails, redact anything that looks like credentials
+      return url.replace(/(rtsp:\/\/)[^@]+(@)/, '$1[REDACTED]$2');
+    }
+  }
+
   function addUrl() {
     const trimmedUrl = newUrl.trim();
     if (trimmedUrl && isValidRtspUrl(trimmedUrl)) {
@@ -38,7 +56,11 @@
       newUrl = '';
     } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
       // URL is not empty but invalid - could add user feedback here
-      console.error('Invalid RTSP URL format:', trimmedUrl); // TODO: Replace with Sentry.io logging
+      logger.error('Invalid RTSP URL format', null, {
+        url: redactUrlCredentials(trimmedUrl),
+        component: 'RTSPUrlInput',
+        action: 'addUrl',
+      });
     }
   }
 

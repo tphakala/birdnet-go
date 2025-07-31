@@ -6,6 +6,9 @@
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
   import { getLocalDateString, isFutureDate, parseHour } from '$lib/utils/date';
+  import { getLogger } from '$lib/utils/logger';
+
+  const logger = getLogger('app');
 
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
@@ -67,7 +70,7 @@
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       // Update cache with new data, preserve timestamp to maintain TTL
       cached.data = updatedSummary;
-      console.debug(`Daily summary cache updated incrementally for ${date}`);
+      logger.debug(`Daily summary cache updated incrementally for ${date}`);
     }
   }
 
@@ -83,12 +86,12 @@
         // Cache hit - use cached data directly
         dailySummary = cached.data;
         isLoadingSummary = false;
-        console.debug(`Daily summary cache hit for ${selectedDate}`);
+        logger.debug(`Daily summary cache hit for ${selectedDate}`);
         return;
       }
 
       // Cache miss or expired - fetch from API
-      console.debug(`Daily summary cache miss for ${selectedDate}, fetching from API`);
+      logger.debug(`Daily summary cache miss for ${selectedDate}, fetching from API`);
       const response = await fetch(`/api/v2/analytics/species/daily?date=${selectedDate}`);
       if (!response.ok) {
         throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
@@ -114,7 +117,7 @@
     } catch (error) {
       summaryError =
         error instanceof Error ? error.message : t('dashboard.errors.dailySummaryLoad');
-      console.error('Error fetching daily summary:', error);
+      logger.error('Error fetching daily summary:', error);
     } finally {
       isLoadingSummary = false;
     }
@@ -144,7 +147,7 @@
       dailySummaryCache.delete(entries[i][0]);
     }
 
-    console.debug(`Cache size enforced: removed ${entriesToRemove} oldest entries`);
+    logger.debug(`Cache size enforced: removed ${entriesToRemove} oldest entries`);
   }
 
   async function fetchRecentDetections(applyAnimations = false) {
@@ -188,7 +191,7 @@
     } catch (error) {
       detectionsError =
         error instanceof Error ? error.message : t('dashboard.errors.recentDetectionsLoad');
-      console.error('Error fetching recent detections:', error);
+      logger.error('Error fetching recent detections:', error);
     } finally {
       isLoadingDetections = false;
     }
@@ -203,12 +206,12 @@
       const config = await response.json();
       // API returns uppercase field names (e.g., "Summary" not "summary")
       showThumbnails = config.Thumbnails?.Summary ?? true;
-      console.log('Dashboard config loaded:', {
+      logger.debug('Dashboard config loaded:', {
         Summary: config.Thumbnails?.Summary,
         showThumbnails,
       });
     } catch (error) {
-      console.error('Error fetching dashboard config:', error);
+      logger.error('Error fetching dashboard config:', error);
       // Keep default value (true) on error
     }
   }
@@ -271,7 +274,7 @@
 
     // Performance: Limit concurrent animations to prevent overwhelming the UI
     if (pendingCleanups.size > 50) {
-      console.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
+      logger.warn('Too many concurrent animations, clearing oldest to prevent performance issues');
       const oldestKey = pendingCleanups.keys().next().value;
       if (oldestKey) {
         pendingCleanups.delete(oldestKey);
@@ -313,7 +316,7 @@
 
   // Connect to SSE stream for real-time updates using ReconnectingEventSource
   function connectToDetectionStream() {
-    console.log('Connecting to SSE stream at /api/v2/detections/stream');
+    logger.debug('Connecting to SSE stream at /api/v2/detections/stream');
 
     // Clean up existing connection
     if (eventSource) {
@@ -329,7 +332,7 @@
       });
 
       eventSource.onopen = () => {
-        console.log('SSE connection opened');
+        logger.debug('SSE connection opened');
       };
 
       eventSource.onmessage = event => {
@@ -340,7 +343,7 @@
           if (data.eventType) {
             switch (data.eventType) {
               case 'connected':
-                console.log('Connected to detection stream:', data);
+                logger.debug('Connected to detection stream:', data);
                 break;
 
               case 'detection':
@@ -348,18 +351,18 @@
                 break;
 
               case 'heartbeat':
-                console.debug('SSE heartbeat received, clients:', data.clients);
+                logger.debug('SSE heartbeat received, clients:', data.clients);
                 break;
 
               default:
-                console.log('Unknown event type:', data.eventType);
+                logger.debug('Unknown event type:', data.eventType);
             }
           } else if (data.ID && data.CommonName) {
             // This looks like a direct detection event
             handleSSEDetection(data);
           }
         } catch (error) {
-          console.error('Failed to parse SSE message:', error);
+          logger.error('Failed to parse SSE message:', error);
         }
       };
 
@@ -370,9 +373,9 @@
           // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
-          console.log('Connected event received:', data);
+          logger.debug('Connected event received:', data);
         } catch (error) {
-          console.error('Failed to parse connected event:', error);
+          logger.error('Failed to parse connected event:', error);
         }
       });
 
@@ -383,7 +386,7 @@
           const data = JSON.parse(messageEvent.data);
           handleSSEDetection(data);
         } catch (error) {
-          console.error('Failed to parse detection event:', error);
+          logger.error('Failed to parse detection event:', error);
         }
       });
 
@@ -392,19 +395,19 @@
           // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data);
-          console.debug('Heartbeat event received, clients:', data.clients);
+          logger.debug('Heartbeat event received, clients:', data.clients);
         } catch (error) {
-          console.error('Failed to parse heartbeat event:', error);
+          logger.error('Failed to parse heartbeat event:', error);
         }
       });
 
       eventSource.onerror = (error: Event) => {
-        console.error('SSE connection error:', error);
+        logger.error('SSE connection error:', error);
         // ReconnectingEventSource handles reconnection automatically
         // No need for manual reconnection logic
       };
     } catch (error) {
-      console.error('Failed to create ReconnectingEventSource:', error);
+      logger.error('Failed to create ReconnectingEventSource:', error);
       // Try again in 5 seconds if initial setup fails
       setTimeout(() => connectToDetectionStream(), 5000);
     }
@@ -431,7 +434,7 @@
 
       handleNewDetection(detection);
     } catch (error) {
-      console.error('Error processing detection data:', error);
+      logger.error('Error processing detection data:', error);
     }
   }
 
@@ -544,13 +547,13 @@
   function queueDailySummaryUpdate(detection: Detection) {
     // Only allow SSE updates to daily summary when viewing today's data
     if (!isViewingToday) {
-      console.debug('Skipping daily summary SSE update - viewing historical data:', selectedDate);
+      logger.debug('Skipping daily summary SSE update - viewing historical data:', selectedDate);
       return;
     }
 
     // Additional safety check: ensure detection is for today
     if (detection.date !== selectedDate) {
-      console.debug(
+      logger.debug(
         'Skipping daily summary update - detection date mismatch:',
         detection.date,
         'vs',
@@ -561,9 +564,7 @@
 
     // Performance: Skip if too many pending updates to prevent UI freeze
     if (updateQueue.size > 20) {
-      console.warn(
-        'Too many pending daily summary updates, skipping to prevent performance issues'
-      );
+      logger.warn('Too many pending daily summary updates, skipping to prevent performance issues');
       return;
     }
 
@@ -594,13 +595,13 @@
   function updateDailySummary(detection: Detection) {
     // Only allow SSE updates to daily summary when viewing today's data
     if (!isViewingToday) {
-      console.debug('Skipping daily summary update - viewing historical data:', selectedDate);
+      logger.debug('Skipping daily summary update - viewing historical data:', selectedDate);
       return;
     }
 
     // Additional safety check: ensure detection is for today and matches selected date
     if (detection.date !== selectedDate && detection.date !== getLocalDateString()) {
-      console.debug(
+      logger.debug(
         'Skipping daily summary update - detection date mismatch:',
         detection.date,
         'vs',
@@ -616,7 +617,7 @@
     try {
       hour = parseHour(detection.time);
     } catch (error) {
-      console.error(`Failed to parse detection time: ${detection.time}`, error);
+      logger.error(`Failed to parse detection time: ${detection.time}`, error);
       // Default to hour 0 if parsing fails
       hour = 0;
     }
@@ -648,7 +649,7 @@
           ...dailySummary.slice(newPosition, currentPosition),
           ...dailySummary.slice(currentPosition + 1),
         ];
-        console.log(
+        logger.debug(
           `Moved species up: ${detection.commonName} from position ${currentPosition} to ${newPosition} (count: ${updated.count})`
         );
       } else {
@@ -658,7 +659,7 @@
           updated,
           ...dailySummary.slice(currentPosition + 1),
         ];
-        console.log(
+        logger.debug(
           `Updated species in place: ${detection.commonName} at position ${currentPosition} (count: ${updated.count})`
         );
       }
@@ -720,7 +721,7 @@
         ];
       }
 
-      console.log(
+      logger.debug(
         `Added new species: ${detection.commonName} (count: 1, hour: ${hour}) at position ${insertPosition === -1 ? dailySummary.length - 1 : insertPosition}`
       );
 
@@ -788,7 +789,7 @@
     );
 
     if (datesToPreload.length === 0) {
-      console.debug(`No adjacent dates need preloading for ${baseDate}`);
+      logger.debug(`No adjacent dates need preloading for ${baseDate}`);
       return;
     }
 
@@ -822,17 +823,17 @@
             }
           }
 
-          console.debug(
+          logger.debug(
             `Batch preloaded ${successCount}/${datesToPreload.length} adjacent dates for ${baseDate}`
           );
           return batchData;
         })
         .catch(error => {
-          console.debug(`Batch preload failed for ${baseDate}:`, error);
+          logger.debug(`Batch preload failed for ${baseDate}:`, error);
           // TODO: Add Sentry.io telemetry for batch preload failures to track network issues
 
           // Fall back to individual requests if batch fails
-          console.debug('Falling back to individual preload requests');
+          logger.debug('Falling back to individual preload requests');
           datesToPreload.forEach(dateString => {
             fetch(`/api/v2/analytics/species/daily?date=${dateString}`)
               .then(response => (response.ok ? response.json() : null))
@@ -842,11 +843,11 @@
                     data: data,
                     timestamp: Date.now(),
                   });
-                  console.debug(`Individual fallback preload succeeded for ${dateString}`);
+                  logger.debug(`Individual fallback preload succeeded for ${dateString}`);
                 }
               })
               .catch(fallbackError => {
-                console.debug(
+                logger.debug(
                   `Individual fallback preload failed for ${dateString}:`,
                   fallbackError
                 );
@@ -870,7 +871,7 @@
 
     // Debounce preloading to avoid excessive requests during rapid date changes
     preloadDebounceTimer = setTimeout(() => {
-      console.debug(`Triggering batch adjacent preload for ${baseDate}`);
+      logger.debug(`Triggering batch adjacent preload for ${baseDate}`);
 
       // Use batch preloading for better performance
       batchPreloadAdjacentDates(baseDate);
@@ -921,7 +922,7 @@
   // Handle detection click
   function handleDetectionClick(detection: Detection) {
     // Navigate to detection details or open modal
-    console.log('Detection clicked:', detection);
+    logger.debug('Detection clicked:', detection);
     // You can implement navigation to detection details here
     // window.location.href = `/detections/${detection.id}`;
   }

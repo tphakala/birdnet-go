@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /// <reference types="node" />
 /**
  * Script to generate TypeScript types from the English translation file

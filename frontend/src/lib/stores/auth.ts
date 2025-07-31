@@ -31,6 +31,9 @@
  * - security.accessAllowed: boolean - Whether user has access permissions
  */
 import { writable } from 'svelte/store';
+import { loggers } from '$lib/utils/logger';
+
+const logger = loggers.auth;
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -114,8 +117,7 @@ function createAuthStore() {
         // Redirect to login page
         window.location.href = '/login';
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Logout error:', error);
+        logger.error('Logout error:', error);
         throw error;
       }
     },

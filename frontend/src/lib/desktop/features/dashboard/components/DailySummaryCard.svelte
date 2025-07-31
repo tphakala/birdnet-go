@@ -56,6 +56,9 @@ Responsive Breakpoints:
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import { LRUCache } from '$lib/utils/LRUCache';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.ui;
 
   // Progressive loading timing constants (optimized for Svelte 5)
   const LOADING_PHASES = $state.raw({
@@ -194,7 +197,7 @@ Responsive Breakpoints:
       const response = await fetch(`/api/v2/weather/sun/${date}`);
       if (!response.ok) {
         const errorMsg = `Failed to fetch sun times: ${response.status} ${response.statusText}`;
-        console.warn(errorMsg);
+        logger.warn(errorMsg);
         return null;
       }
       const data = await response.json();
@@ -209,7 +212,7 @@ Responsive Breakpoints:
       return sunTimesData;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
-      console.warn('Error fetching sun times:', errorMsg);
+      logger.warn('Error fetching sun times:', errorMsg);
       return null;
     }
   }
@@ -230,7 +233,7 @@ Responsive Breakpoints:
       const date = new Date(timeStr);
       return date.getHours();
     } catch (error) {
-      console.error('Error parsing time:', timeStr, error);
+      logger.error('Error parsing time', error, { timeStr });
       return null;
     }
   };
@@ -295,6 +298,26 @@ Responsive Breakpoints:
             ? t('dashboard.dailySummary.columns.detections')
             : colDef.header,
     }));
+  });
+
+  // Track and log unexpected column types once (performance optimization)
+  const loggedUnexpectedColumns = new Set<string>();
+  $effect(() => {
+    if (import.meta.env.DEV) {
+      const expectedTypes = new Set(['species', 'progress', 'hourly', 'bi-hourly', 'six-hourly']);
+
+      columns.forEach(column => {
+        if (!expectedTypes.has(column.type) && !loggedUnexpectedColumns.has(column.key)) {
+          logger.warn('Unexpected column type detected', null, {
+            columnKey: column.key,
+            columnType: column.type,
+            component: 'DailySummaryCard',
+            action: 'columnValidation',
+          });
+          loggedUnexpectedColumns.add(column.key);
+        }
+      });
+    }
   });
 
   // Pre-computed render functions - use $state.raw for performance (static functions)
@@ -837,10 +860,7 @@ Responsive Breakpoints:
                         -
                       {/if}
                     {:else}
-                      <!-- Default column rendering - log warning in dev mode -->
-                      {#if import.meta.env.DEV}
-                        {console.warn(`Unexpected column key: ${column.key}`)}
-                      {/if}
+                      <!-- Default column rendering -->
                       <span class="text-sm">-</span>
                     {/if}
                   </td>

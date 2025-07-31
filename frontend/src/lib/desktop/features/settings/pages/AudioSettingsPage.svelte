@@ -19,6 +19,9 @@
   // Localized option arrays - memoized to prevent unnecessary recomputations
   // These will only recompute when the locale changes, not on every reactive update
   import { getLocale } from '$lib/i18n';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.audio;
 
   const exportFormatOptions = $derived.by(() => {
     // By accessing getLocale(), this will only recompute when locale changes
@@ -192,7 +195,7 @@
       .then(data => {
         audioDevices = data || [];
       })
-      .catch(error => console.error('Error fetching audio devices:', error));
+      .catch(error => logger.error('Error fetching audio devices:', error));
   });
 
   // Check if ffmpeg is available
