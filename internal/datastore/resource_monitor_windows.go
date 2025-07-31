@@ -4,9 +4,11 @@ package datastore
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
-	"unsafe"
 
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/process"
 	"golang.org/x/sys/windows"
 )
 
@@ -47,7 +49,7 @@ func getMountInfoPlatform(path string) (*MountInfo, error) {
 
 // getInodeInfoPlatform gets inode information for Windows systems
 // Windows doesn't expose inode information easily, so return zeros
-func getInodeInfoPlatform(path string) (*InodeInfo, error) {
+func getInodeInfoPlatform(_ string) (*InodeInfo, error) {
 	return &InodeInfo{
 		Free:  0,
 		Total: 0,
@@ -58,47 +60,50 @@ func getInodeInfoPlatform(path string) (*InodeInfo, error) {
 func captureMemoryInfo() (MemoryInfo, error) {
 	info := MemoryInfo{}
 	
-	// Get global memory status
-	var memStatus windows.MemoryStatusEx
-	memStatus.Length = uint32(unsafe.Sizeof(memStatus))
-	
-	err := windows.GlobalMemoryStatusEx(&memStatus)
+	// Get virtual memory statistics using gopsutil
+	vmStat, err := mem.VirtualMemory()
 	if err != nil {
-		return info, fmt.Errorf("failed to get global memory status: %w", err)
+		return info, fmt.Errorf("failed to get virtual memory stats: %w", err)
 	}
 
-	info.TotalBytes = memStatus.TotalPhys
-	info.AvailableBytes = memStatus.AvailPhys
-	info.UsedBytes = info.TotalBytes - info.AvailableBytes
-	info.UsedPercent = float64(memStatus.MemoryLoad)
+	info.TotalBytes = vmStat.Total
+	info.AvailableBytes = vmStat.Available
+	info.UsedBytes = vmStat.Used
+	info.UsedPercent = vmStat.UsedPercent
 
-	// Virtual memory (swap) information
-	info.SwapTotalBytes = memStatus.TotalVirtual
-	info.SwapUsedBytes = memStatus.TotalVirtual - memStatus.AvailVirtual
+	// Get swap memory statistics
+	swapStat, err := mem.SwapMemory()
+	if err != nil {
+		// Log warning but don't fail - some systems may not have swap
+		info.SwapTotalBytes = 0
+		info.SwapUsedBytes = 0
+	} else {
+		info.SwapTotalBytes = swapStat.Total
+		info.SwapUsedBytes = swapStat.Used
+	}
 
 	return info, nil
 }
 
 // getProcessMemoryUsage gets memory usage for the current process on Windows
 func getProcessMemoryUsage() (*ProcessMemoryUsage, error) {
-	// Get current process handle
-	process := windows.CurrentProcess()
+	// Get current process PID
+	pid := int32(os.Getpid())
 	
-	// Get process memory info
-	var memCounters windows.ProcessMemoryCountersEx
-	memCounters.Size = uint32(unsafe.Sizeof(memCounters))
+	// Get process instance
+	proc, err := process.NewProcess(pid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get process instance: %w", err)
+	}
 	
-	err := windows.GetProcessMemoryInfo(
-		process,
-		(*windows.ProcessMemoryCounters)(unsafe.Pointer(&memCounters)),
-		memCounters.Size,
-	)
+	// Get memory info using gopsutil
+	memInfo, err := proc.MemoryInfo()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get process memory info: %w", err)
 	}
 
 	return &ProcessMemoryUsage{
-		ResidentMB: int64(memCounters.WorkingSetSize / 1024 / 1024),
-		VirtualMB:  int64(memCounters.PrivateUsage / 1024 / 1024),
+		ResidentMB: int64(memInfo.RSS / 1024 / 1024), // RSS = Resident Set Size (Working Set on Windows)
+		VirtualMB:  int64(memInfo.VMS / 1024 / 1024), // VMS = Virtual Memory Size
 	}, nil
 }
