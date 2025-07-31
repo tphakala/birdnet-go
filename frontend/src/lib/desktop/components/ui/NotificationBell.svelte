@@ -151,10 +151,11 @@
       if (error instanceof ApiError) {
         toastActions.error('Unable to load notifications. Please refresh the page.');
       }
-      // Log for developers without cluttering console in production
-      if (import.meta.env.DEV) {
-        logger.error('Failed to load notifications:', error);
-      }
+      // Log error for debugging - logger already handles dev/prod environment
+      logger.error('Failed to load notifications', error, {
+        component: 'NotificationBell',
+        action: 'loadNotifications',
+      });
     } finally {
       loading = false;
     }
@@ -274,9 +275,11 @@
       if (error instanceof ApiError) {
         toastActions.error('Failed to mark notification as read.');
       }
-      if (import.meta.env.DEV) {
-        logger.error('Failed to mark notification as read:', error);
-      }
+      logger.error('Failed to mark notification as read', error, {
+        component: 'NotificationBell',
+        action: 'markAsRead',
+        notificationId,
+      });
     }
   }
 

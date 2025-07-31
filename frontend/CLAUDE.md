@@ -279,6 +279,64 @@ logger.groupEnd();
 3. Use categories that match your module's purpose
 4. Keep production logs minimal (warn/error only)
 
+### Svelte-Specific Patterns
+
+**Avoid redundant environment checks** - Logger handles dev/prod automatically:
+
+```svelte
+<!-- ❌ Don't do this - redundant check -->
+{#if import.meta.env.DEV}
+  {logger.debug('Component state:', state)}
+{/if}
+
+<!-- ✅ Do this - logger handles environment -->
+<script>
+  $effect(() => {
+    logger.debug('Component state updated', { state });
+  });
+</script>
+```
+
+**Move logging out of templates** - Use functions or effects:
+
+```svelte
+<!-- ❌ Don't log in templates -->
+{#if someCondition}
+  {logger.warn('Unexpected condition')}
+  <div>Content</div>
+{/if}
+
+<!-- ✅ Log in reactive statements -->
+<script>
+  $effect(() => {
+    if (someCondition) {
+      logger.warn('Unexpected condition', { component: 'MyComponent' });
+    }
+  });
+</script>
+```
+
+**Provide component context** - Always include component name and action:
+
+```svelte
+<script>
+  import { loggers } from '$lib/utils/logger';
+  
+  const logger = loggers.ui;
+  
+  async function handleSubmit() {
+    try {
+      await submitData();
+    } catch (error) {
+      logger.error('Form submission failed', error, {
+        component: 'MyForm',
+        action: 'handleSubmit'
+      });
+    }
+  }
+</script>
+```
+
 ## Server-Sent Events (SSE)
 
 Use `reconnecting-eventsource` package for real-time updates with automatic reconnection handling.

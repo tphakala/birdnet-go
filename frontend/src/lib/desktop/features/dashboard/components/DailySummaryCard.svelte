@@ -840,11 +840,15 @@ Responsive Breakpoints:
                         -
                       {/if}
                     {:else}
-                      <!-- Default column rendering - log warning in dev mode -->
-                      {#if import.meta.env.DEV}
-                        {logger.warn(`Unexpected column key: ${column.key}`)}
-                      {/if}
+                      <!-- Default column rendering - log warning for unexpected column -->
                       <span class="text-sm">-</span>
+                      {#snippet logUnexpectedColumn()}
+                        {logger.warn('Unexpected column key', {
+                          columnKey: column.key,
+                          component: 'DailySummaryCard',
+                        })}
+                      {/snippet}
+                      {@render logUnexpectedColumn()}
                     {/if}
                   </td>
                 {/each}
