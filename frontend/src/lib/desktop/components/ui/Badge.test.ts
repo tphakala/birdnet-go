@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { renderTyped, createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import Badge from './Badge.svelte';
 import BadgeTestWrapper from './Badge.test.svelte';
 
 describe('Badge', () => {
+  // Create test factory for reusable Badge testing
+  const badgeTest = createComponentTestFactory(Badge);
+
   it('renders with default props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Badge as any, {
-      props: { text: 'Default Badge' },
-    });
+    badgeTest.render({ text: 'Default Badge' });
 
     const badge = screen.getByText('Default Badge');
     expect(badge).toBeInTheDocument();
@@ -30,10 +30,7 @@ describe('Badge', () => {
     ] as const;
 
     variants.forEach(variant => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { unmount } = render(Badge as any, {
-        props: { text: `${variant} badge`, variant },
-      });
+      const { unmount } = badgeTest.render({ text: `${variant} badge`, variant });
 
       const badge = screen.getByText(`${variant} badge`);
       if (variant === 'neutral') {
@@ -50,10 +47,7 @@ describe('Badge', () => {
     const sizes = ['xs', 'sm', 'md', 'lg'] as const;
 
     sizes.forEach(size => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { unmount } = render(Badge as any, {
-        props: { text: `${size} size`, size },
-      });
+      const { unmount } = badgeTest.render({ text: `${size} size`, size });
 
       const badge = screen.getByText(`${size} size`);
       if (size === 'md') {
@@ -69,13 +63,10 @@ describe('Badge', () => {
   });
 
   it('renders with outline style', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Badge as any, {
-      props: {
-        text: 'Outlined',
-        variant: 'primary',
-        outline: true,
-      },
+    badgeTest.render({
+      text: 'Outlined',
+      variant: 'primary',
+      outline: true,
     });
 
     const badge = screen.getByText('Outlined');
@@ -83,12 +74,9 @@ describe('Badge', () => {
   });
 
   it('renders with custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Badge as any, {
-      props: {
-        text: 'Custom',
-        className: 'custom-badge-class',
-      },
+    badgeTest.render({
+      text: 'Custom',
+      className: 'custom-badge-class',
     });
 
     const badge = screen.getByText('Custom');
@@ -96,8 +84,7 @@ describe('Badge', () => {
   });
 
   it('renders with children snippet', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(BadgeTestWrapper as any);
+    renderTyped(BadgeTestWrapper);
 
     const icon = screen.getByTestId('badge-icon');
     expect(icon).toBeInTheDocument();
@@ -105,13 +92,10 @@ describe('Badge', () => {
   });
 
   it('spreads additional props', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Badge as any, {
-      props: {
-        text: 'Badge with ID',
-        id: 'test-badge',
-        'data-testid': 'badge-element',
-      },
+    badgeTest.render({
+      text: 'Badge with ID',
+      id: 'test-badge',
+      'data-testid': 'badge-element',
     });
 
     const badge = screen.getByTestId('badge-element');
@@ -119,15 +103,12 @@ describe('Badge', () => {
   });
 
   it('combines multiple classes correctly', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Badge as any, {
-      props: {
-        text: 'Combined',
-        variant: 'error',
-        size: 'lg',
-        outline: true,
-        className: 'ml-2',
-      },
+    badgeTest.render({
+      text: 'Combined',
+      variant: 'error',
+      size: 'lg',
+      outline: true,
+      className: 'ml-2',
     });
 
     const badge = screen.getByText('Combined');
@@ -135,12 +116,9 @@ describe('Badge', () => {
   });
 
   it('handles ghost variant correctly', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(Badge as any, {
-      props: {
-        text: 'Ghost',
-        variant: 'ghost',
-      },
+    badgeTest.render({
+      text: 'Ghost',
+      variant: 'ghost',
     });
 
     const badge = screen.getByText('Ghost');
