@@ -157,6 +157,7 @@
     color: #059669;
 
     --lighter-color: #ecfdf5;
+    /* stylelint-disable-next-line color-function-notation */
     --darker-color: rgba(6, 78, 59, 0.2);
   }
 
@@ -164,6 +165,7 @@
     color: #d97706;
 
     --lighter-color: #fffbeb;
+    /* stylelint-disable-next-line color-function-notation */
     --darker-color: rgba(120, 53, 15, 0.2);
   }
 
@@ -171,6 +173,7 @@
     color: #dc2626;
 
     --lighter-color: #fef2f2;
+    /* stylelint-disable-next-line color-function-notation */
     --darker-color: rgba(127, 29, 29, 0.2);
   }
 
