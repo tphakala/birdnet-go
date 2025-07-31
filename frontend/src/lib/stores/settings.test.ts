@@ -73,12 +73,14 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Get initial state
     const initialState = get(settingsStore);
     expect(initialState.formData.birdnet).toBeDefined();
-    const initialRangeFilter = initialState.formData.birdnet!.rangeFilter;
+    const birdnetSettings = initialState.formData.birdnet as BirdNetSettings;
+
+    const initialRangeFilter = birdnetSettings.rangeFilter;
     expect(initialRangeFilter).toBeDefined();
 
-    // Verify initial range filter values (safe after assertion above)
-    expect(initialRangeFilter!.model).toBe('latest');
-    expect(initialRangeFilter!.threshold).toBe(0.03);
+    // Verify initial range filter values
+    expect(initialRangeFilter.model).toBe('latest');
+    expect(initialRangeFilter.threshold).toBe(0.03);
 
     // Update coordinates (simulating what happens when clicking on the map)
     settingsActions.updateSection('birdnet', {
@@ -104,8 +106,10 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Get initial coordinates
     const initialState = get(settingsStore);
     expect(initialState.formData.birdnet).toBeDefined();
-    const initialLat = initialState.formData.birdnet!.latitude;
-    const initialLng = initialState.formData.birdnet!.longitude;
+    const birdnetSettings = initialState.formData.birdnet as BirdNetSettings;
+
+    const initialLat = birdnetSettings.latitude;
+    const initialLng = birdnetSettings.longitude;
 
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
@@ -167,12 +171,14 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Update only the range filter threshold (partial update)
     const storeState = get(settingsStore);
     expect(storeState.formData.birdnet).toBeDefined();
-    const currentRangeFilter = storeState.formData.birdnet!.rangeFilter;
+    const birdnetSettings = storeState.formData.birdnet as BirdNetSettings;
+
+    const currentRangeFilter = birdnetSettings.rangeFilter;
     expect(currentRangeFilter).toBeDefined();
 
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        ...currentRangeFilter!,
+        ...currentRangeFilter,
         threshold: 0.07,
       },
     });

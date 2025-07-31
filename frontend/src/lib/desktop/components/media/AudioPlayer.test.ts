@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import {
+  createComponentTestFactory,
+  screen,
+  fireEvent,
+  waitFor,
+} from '../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import AudioPlayer from './AudioPlayer.svelte';
 
@@ -8,6 +13,7 @@ describe('AudioPlayer', () => {
   let mockPlay: ReturnType<typeof vi.fn>;
   let mockPause: ReturnType<typeof vi.fn>;
   const eventHandlers: Record<string, EventListener[]> = {};
+  const audioPlayerTest = createComponentTestFactory(AudioPlayer);
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -65,11 +71,9 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with audio URL', () => {
-    const { container } = render(AudioPlayer as any, {
-      props: {
-        audioUrl: '/audio/test.mp3',
-        detectionId: 'test-123',
-      },
+    const { container } = audioPlayerTest.render({
+      audioUrl: '/audio/test.mp3',
+      detectionId: 'test-123',
     });
 
     const audio = container.querySelector('audio');
@@ -78,7 +82,7 @@ describe('AudioPlayer', () => {
   });
 
   it('renders with spectrogram', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -92,7 +96,7 @@ describe('AudioPlayer', () => {
   });
 
   it('generates spectrogram URL from detectionId', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: '123',
@@ -106,7 +110,7 @@ describe('AudioPlayer', () => {
   });
 
   it('shows loading state initially', () => {
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -119,7 +123,7 @@ describe('AudioPlayer', () => {
   });
 
   it('shows play button when paused', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -132,7 +136,7 @@ describe('AudioPlayer', () => {
   });
 
   it('toggles play/pause on button click', async () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -152,7 +156,7 @@ describe('AudioPlayer', () => {
       get: vi.fn().mockReturnValue(false),
     });
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -173,7 +177,7 @@ describe('AudioPlayer', () => {
   });
 
   it('formats time correctly', async () => {
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -203,7 +207,7 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -234,7 +238,7 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -280,7 +284,7 @@ describe('AudioPlayer', () => {
       set: setCurrentTime,
     });
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -337,7 +341,7 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -375,7 +379,7 @@ describe('AudioPlayer', () => {
   });
 
   it('shows download button by default', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -389,7 +393,7 @@ describe('AudioPlayer', () => {
   });
 
   it('hides download button when disabled', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         showDownload: false,
@@ -400,7 +404,7 @@ describe('AudioPlayer', () => {
   });
 
   it('hides spectrogram when disabled', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -417,7 +421,7 @@ describe('AudioPlayer', () => {
     const onEnded = vi.fn();
     const onTimeUpdate = vi.fn();
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         onPlay,
@@ -453,7 +457,7 @@ describe('AudioPlayer', () => {
   });
 
   it('handles audio error', async () => {
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -475,7 +479,7 @@ describe('AudioPlayer', () => {
   });
 
   it('handles spectrogram error', async () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -491,7 +495,7 @@ describe('AudioPlayer', () => {
   });
 
   it('autoplays when enabled', () => {
-    render(AudioPlayer as any, {
+    audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         autoPlay: true,
@@ -502,7 +506,7 @@ describe('AudioPlayer', () => {
   });
 
   it('applies custom classes', () => {
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
@@ -525,7 +529,7 @@ describe('AudioPlayer', () => {
   it('cleans up interval on unmount', async () => {
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
-    const { container, unmount } = render(AudioPlayer as any, {
+    const { container, unmount } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         detectionId: 'test-123',
@@ -553,7 +557,7 @@ describe('AudioPlayer', () => {
       },
     });
 
-    const { container } = render(AudioPlayer as any, {
+    const { container } = audioPlayerTest.render({
       props: {
         audioUrl: '/audio/test.mp3',
         spectrogramUrl: '/spectrogram/test.png',
