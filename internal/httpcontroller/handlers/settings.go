@@ -233,7 +233,8 @@ func (h *Handlers) updateAuthenticationSettings(settings *conf.Settings) {
 	// Generate secrets if they are empty
 	if basicAuth.Enabled {
 		if basicAuth.ClientID == "" {
-			basicAuth.ClientID = conf.GenerateRandomSecret()
+			// Use the default ClientID that the frontend expects
+			basicAuth.ClientID = "birdnet-client"
 		}
 		if basicAuth.ClientSecret == "" {
 			basicAuth.ClientSecret = conf.GenerateRandomSecret()
