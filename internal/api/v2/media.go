@@ -229,6 +229,35 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 }
 
 
+// parseRawParameter parses the raw query parameter for spectrogram generation.
+// It defaults to true for backward compatibility with existing cached spectrograms.
+// Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
+func parseRawParameter(rawParam string) bool {
+	// Default to true for backward compatibility
+	if rawParam == "" {
+		return true
+	}
+
+	// Normalize the parameter to lowercase for consistent parsing
+	normalizedParam := strings.ToLower(rawParam)
+	
+	// First try strconv.ParseBool for standard values
+	if parsedRaw, err := strconv.ParseBool(normalizedParam); err == nil {
+		return parsedRaw
+	}
+	
+	// Handle additional common boolean representations
+	switch normalizedParam {
+	case "yes", "on":
+		return true
+	case "no", "off":
+		return false
+	default:
+		// Default to true for invalid values
+		return true
+	}
+}
+
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
@@ -383,29 +412,8 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		}
 	}
 
-	// Check for raw spectrogram parameter - DEFAULT TO TRUE (like old HTMX API)
-	// This ensures compatibility with existing cached spectrograms
-	// Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
-	rawParam := ctx.QueryParam("raw")
-	raw := true // Default to true for backward compatibility
-	if rawParam != "" {
-		// Normalize the parameter to lowercase for consistent parsing
-		normalizedParam := strings.ToLower(rawParam)
-		
-		// First try strconv.ParseBool for standard values
-		if parsedRaw, err := strconv.ParseBool(normalizedParam); err == nil {
-			raw = parsedRaw
-		} else {
-			// Handle additional common boolean representations
-			switch normalizedParam {
-			case "yes", "on":
-				raw = true
-			case "no", "off":
-				raw = false
-			// Default case: keep raw = true for invalid values
-			}
-		}
-	}
+	// Parse raw spectrogram parameter
+	raw := parseRawParameter(ctx.QueryParam("raw"))
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width, raw)
@@ -470,29 +478,8 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		}
 	}
 
-	// Check for raw spectrogram parameter - DEFAULT TO TRUE (like old HTMX API)
-	// This ensures compatibility with existing cached spectrograms
-	// Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
-	rawParam := ctx.QueryParam("raw")
-	raw := true // Default to true for backward compatibility
-	if rawParam != "" {
-		// Normalize the parameter to lowercase for consistent parsing
-		normalizedParam := strings.ToLower(rawParam)
-		
-		// First try strconv.ParseBool for standard values
-		if parsedRaw, err := strconv.ParseBool(normalizedParam); err == nil {
-			raw = parsedRaw
-		} else {
-			// Handle additional common boolean representations
-			switch normalizedParam {
-			case "yes", "on":
-				raw = true
-			case "no", "off":
-				raw = false
-			// Default case: keep raw = true for invalid values
-			}
-		}
-	}
+	// Parse raw spectrogram parameter
+	raw := parseRawParameter(ctx.QueryParam("raw"))
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw)
