@@ -1308,7 +1308,25 @@
   "auth": {
     "login": "Login",
     "logout": "Logout",
-    "openLoginModal": "Open login modal"
+    "openLoginModal": "Open login modal",
+    "loginTitle": "Login to BirdNET-Go",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "or": "or",
+    "loginWithGoogle": "Login with Google",
+    "loginWithGithub": "Login with GitHub",
+    "errors": {
+      "loginFailed": "Login failed. Please check your password and try again.",
+      "passwordRequired": "Password is required.",
+      "passwordTooLong": "Password is too long.",
+      "invalidCharacters": "Password contains invalid characters.",
+      "invalidCredentials": "Invalid username or password.",
+      "tooManyAttempts": "Too many login attempts. Please try again later.",
+      "serverError": "Server error occurred. Please try again later.",
+      "rateLimited": "Too many attempts. Please wait {minutes} minutes before trying again.",
+      "configurationError": "Authentication configuration error. Please contact support.",
+      "invalidInput": "Invalid input provided."
+    }
   },
   "dataDisplay": {
     "table": {
