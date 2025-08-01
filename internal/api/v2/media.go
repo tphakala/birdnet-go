@@ -387,8 +387,10 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		}
 	}
 
-	// Check for raw spectrogram parameter
-	raw := ctx.QueryParam("raw") == "true"
+	// Check for raw spectrogram parameter - DEFAULT TO TRUE (like old HTMX API)
+	// This ensures compatibility with existing cached spectrograms
+	rawParam := ctx.QueryParam("raw")
+	raw := rawParam != "false" // Default to true, only false if explicitly set to "false"
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width, raw)
@@ -440,8 +442,10 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 		}
 	}
 
-	// Check for raw spectrogram parameter
-	raw := ctx.QueryParam("raw") == "true"
+	// Check for raw spectrogram parameter - DEFAULT TO TRUE (like old HTMX API)
+	// This ensures compatibility with existing cached spectrograms
+	rawParam := ctx.QueryParam("raw")
+	raw := rawParam != "false" // Default to true, only false if explicitly set to "false"
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw)
@@ -623,12 +627,14 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
 	relAudioDir := filepath.Dir(relAudioPath)
 
-	// Generate spectrogram filename with width and raw suffix (relative path)
+	// Generate spectrogram filename compatible with old HTMX API format
 	var spectrogramFilename string
 	if raw {
-		spectrogramFilename = fmt.Sprintf("%s_%d-r.png", relBaseFilename, width)
+		// Raw spectrograms use old API format: filename_400px.png (for cache compatibility)
+		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
 	} else {
-		spectrogramFilename = fmt.Sprintf("%s_%d.png", relBaseFilename, width)
+		// Spectrograms with legends use new suffix: filename_400px-legend.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
 	}
 
 	// Since we're constructing the spectrogram path from an already-validated audio path
@@ -912,15 +918,18 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 	return nil
 }
 
-// getSoxSpectrogramArgs returns the common SoX arguments.
+// getSoxSpectrogramArgs returns the common SoX arguments compatible with old HTMX API.
 func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw bool) []string {
 	const audioLength = "15"
 	const dynamicRange = "100"
 	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", absSpectrogramPath}
+	
+	// For compatibility with old HTMX API: add -r flag for raw spectrograms (which is now the default)
 	if raw {
-		// Raw mode: no axes, labels, or legends for clean display
+		// Raw mode: no axes, labels, or legends for clean display (old API default behavior)
 		args = append(args, "-r")
 	}
+	// Note: Non-raw spectrograms (with legends) will have axes and legends visible
 	return args
 }
 
@@ -952,10 +961,10 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 
 	var filterStr string
 	if raw {
-		// Raw spectrogram without frequency/time axes and legends for clean display
+		// Raw spectrogram without frequency/time axes and legends for clean display (old API default)
 		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr)
 	} else {
-		// Standard spectrogram with frequency/time axes and legends for analysis
+		// Standard spectrogram with frequency/time axes and legends for detailed analysis
 		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=1:gain=3:drange=100", widthStr, heightStr)
 	}
 
