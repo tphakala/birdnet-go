@@ -350,6 +350,19 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 }
 
 // ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
+// 
+// Route: GET /api/v2/spectrogram/:id
+// 
+// Query Parameters:
+//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+//     Default: "md"
+//   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
+//   - raw: Whether to generate raw spectrogram without axes/legends
+//     Default: true (for backward compatibility with cached spectrograms)
+//     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
+//
+// The raw parameter defaults to true to maintain compatibility with existing cached
+// spectrograms from the old HTMX API which generated raw spectrograms by default.
 func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	noteID := ctx.Param("id")
 	if noteID == "" {
@@ -389,8 +402,15 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 
 	// Check for raw spectrogram parameter - DEFAULT TO TRUE (like old HTMX API)
 	// This ensures compatibility with existing cached spectrograms
+	// Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
 	rawParam := ctx.QueryParam("raw")
-	raw := rawParam != "false" // Default to true, only false if explicitly set to "false"
+	raw := true // Default to true for backward compatibility
+	if rawParam != "" {
+		if parsedRaw, err := strconv.ParseBool(strings.ToLower(rawParam)); err == nil {
+			raw = parsedRaw
+		}
+		// If parsing fails, keep default of true
+	}
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width, raw)
@@ -420,6 +440,19 @@ func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
 }
 
 // ServeSpectrogram serves a spectrogram image by filename using SecureFS
+//
+// Route: GET /api/v2/media/spectrogram/:filename
+//
+// Query Parameters:
+//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+//     Default: "md"
+//   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
+//   - raw: Whether to generate raw spectrogram without axes/legends
+//     Default: true (for backward compatibility with cached spectrograms)
+//     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
+//
+// The raw parameter defaults to true to maintain compatibility with existing cached
+// spectrograms from the old HTMX API which generated raw spectrograms by default.
 func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 
@@ -444,8 +477,15 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 
 	// Check for raw spectrogram parameter - DEFAULT TO TRUE (like old HTMX API)
 	// This ensures compatibility with existing cached spectrograms
+	// Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
 	rawParam := ctx.QueryParam("raw")
-	raw := rawParam != "false" // Default to true, only false if explicitly set to "false"
+	raw := true // Default to true for backward compatibility
+	if rawParam != "" {
+		if parsedRaw, err := strconv.ParseBool(strings.ToLower(rawParam)); err == nil {
+			raw = parsedRaw
+		}
+		// If parsing fails, keep default of true
+	}
 
 	// Pass the request context for cancellation/timeout
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw)

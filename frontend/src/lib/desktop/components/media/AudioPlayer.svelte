@@ -97,8 +97,10 @@
   let progress = $state(0);
   let isLoading = $state(false);
   let spectrogramLoading = $state(false);
+  let spectrogramError = $state(false);
   let error = $state<string | null>(null);
   let updateInterval: ReturnType<typeof setInterval> | undefined;
+  let spectrogramLoadingTimeout: ReturnType<typeof setTimeout> | undefined;
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -145,6 +147,9 @@
   $effect(() => {
     if (spectrogramUrl) {
       spectrogramLoading = true;
+      spectrogramError = false;
+      // Clear any existing timeout
+      clearSpectrogramLoadingTimeout();
     }
   });
 
@@ -360,17 +365,35 @@
     updateFilter(newFreq);
   };
 
+  // Clear spectrogram loading timeout
+  const clearSpectrogramLoadingTimeout = () => {
+    if (spectrogramLoadingTimeout) {
+      clearTimeout(spectrogramLoadingTimeout);
+      spectrogramLoadingTimeout = undefined;
+    }
+  };
+
   // Spectrogram loading handlers
   const handleSpectrogramLoadStart = () => {
     spectrogramLoading = true;
+    // Set a 15 second timeout for spectrogram loading (longer than thumbnails as they need generation)
+    clearSpectrogramLoadingTimeout();
+    spectrogramLoadingTimeout = setTimeout(() => {
+      if (spectrogramLoading) {
+        handleSpectrogramError();
+      }
+    }, 15000);
   };
 
   const handleSpectrogramLoad = () => {
+    clearSpectrogramLoadingTimeout();
     spectrogramLoading = false;
   };
 
   const handleSpectrogramError = () => {
+    clearSpectrogramLoadingTimeout();
     spectrogramLoading = false;
+    spectrogramError = true;
   };
 
   // Lifecycle
@@ -464,6 +487,7 @@
     // Clear any pending timeouts
     clearSliderTimeout();
     clearPlayEndTimeout();
+    clearSpectrogramLoadingTimeout();
 
     // Remove all tracked event listeners
     eventListeners.forEach(({ element, event, handler }) => {
@@ -518,6 +542,11 @@
     : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
 >
   {#if spectrogramUrl}
+    <!-- Screen reader announcement for loading state -->
+    <div class="sr-only" role="status" aria-live="polite">
+      {spectrogramLoading ? 'Loading spectrogram...' : 'Spectrogram loaded'}
+    </div>
+
     <!-- Loading spinner overlay -->
     {#if spectrogramLoading}
       <div
@@ -530,22 +559,50 @@
       </div>
     {/if}
 
-    <img
-      src={spectrogramUrl}
-      alt="Audio spectrogram"
-      loading="lazy"
-      class={responsive
-        ? 'w-full h-auto object-contain rounded-md border border-base-300'
-        : 'w-full h-full object-cover rounded-md border border-base-300'}
-      class:opacity-0={spectrogramLoading}
-      style={responsive
-        ? ''
-        : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
-      width={responsive ? 400 : undefined}
-      onloadstart={handleSpectrogramLoadStart}
-      onload={handleSpectrogramLoad}
-      onerror={handleSpectrogramError}
-    />
+    {#if spectrogramError}
+      <!-- Error placeholder for failed spectrogram -->
+      <div
+        class="flex items-center justify-center bg-base-200 rounded-md border border-base-300"
+        style={responsive
+          ? 'height: 80px;'
+          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+      >
+        <div class="text-center">
+          <svg
+            class="w-8 h-8 mx-auto mb-1 text-base-content/30"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span class="text-xs text-base-content/50">Spectrogram unavailable</span>
+        </div>
+      </div>
+    {:else}
+      <img
+        src={spectrogramUrl}
+        alt="Audio spectrogram"
+        loading="lazy"
+        class={responsive
+          ? 'w-full h-auto object-contain rounded-md border border-base-300'
+          : 'w-full h-full object-cover rounded-md border border-base-300'}
+        class:opacity-0={spectrogramLoading}
+        style={responsive
+          ? ''
+          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+        width={responsive ? 400 : undefined}
+        onloadstart={handleSpectrogramLoadStart}
+        onload={handleSpectrogramLoad}
+        onerror={handleSpectrogramError}
+      />
+    {/if}
   {/if}
 
   <!-- Audio element -->
