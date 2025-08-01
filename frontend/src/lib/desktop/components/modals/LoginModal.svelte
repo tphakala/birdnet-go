@@ -145,10 +145,23 @@
   }
 
   async function handlePasswordLogin() {
-    if (isSubmitting) return;
+    logger.info('[LOGIN_DEBUG] Starting login process', {
+      hasPassword: !!password,
+      passwordLength: password.length,
+      redirectUrl,
+      isSubmitting,
+      attemptCount,
+      isRateLimited,
+    });
+
+    if (isSubmitting) {
+      logger.warn('[LOGIN_DEBUG] Login already in progress, skipping');
+      return;
+    }
 
     // SECURITY: Check rate limiting first
     if (!checkRateLimit()) {
+      logger.warn('[LOGIN_DEBUG] Rate limit exceeded', { attemptCount, lastAttemptTime });
       error = t('auth.errors.rateLimited', { minutes: RATE_LIMIT_MINUTES });
       return;
     }
@@ -156,21 +169,45 @@
     // SECURITY: Validate password
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.isValid) {
+      logger.warn('[LOGIN_DEBUG] Password validation failed', { error: passwordValidation.error });
       error = passwordValidation.error || t('auth.errors.invalidInput');
       return;
     }
 
     // SECURITY: Detect current base path
     const currentBasePath = detectBasePath();
+    logger.info('[LOGIN_DEBUG] Detected base path', {
+      currentBasePath,
+      windowLocation: window.location.href,
+    });
 
     // SECURITY: Validate redirect URL
     const safeRedirectUrl =
       redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : currentBasePath;
+    logger.info('[LOGIN_DEBUG] Redirect URL validation', {
+      originalRedirectUrl: redirectUrl,
+      isValid: redirectUrl ? validateRedirectUrl(redirectUrl) : 'N/A',
+      safeRedirectUrl,
+      currentBasePath,
+    });
 
     error = '';
     isSubmitting = true;
     lastAttemptTime = Date.now();
     attemptCount += 1;
+
+    const loginPayload = {
+      username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
+      password: password.trim(), // Remove whitespace
+      redirectUrl: safeRedirectUrl, // Pass the intended redirect URL
+      basePath: currentBasePath, // Send the detected base path
+    };
+
+    logger.info('[LOGIN_DEBUG] Sending login request', {
+      ...loginPayload,
+      password: '[REDACTED]', // Don't log actual password
+      timestamp: new Date().toISOString(),
+    });
 
     try {
       // SECURITY: Don't update auth state until server confirms success
@@ -179,48 +216,75 @@
         success: boolean;
         message: string;
         redirectUrl?: string;
-      }>('/api/v2/auth/login', {
-        username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
-        password: password.trim(), // Remove whitespace
-        redirectUrl: safeRedirectUrl, // Pass the intended redirect URL
-        basePath: currentBasePath, // Send the detected base path
-      });
+      }>('/api/v2/auth/login', loginPayload);
 
-      logger.info('Login successful', { response });
+      logger.info('[LOGIN_DEBUG] Login response received', {
+        success: response.success,
+        message: response.message,
+        hasRedirectUrl: !!response.redirectUrl,
+        redirectUrl: response.redirectUrl,
+        timestamp: new Date().toISOString(),
+        responseKeys: Object.keys(response),
+        fullResponse: JSON.stringify(response, null, 2),
+      });
 
       // Check if we need to complete OAuth flow
       if (response.redirectUrl) {
         // Backend returned OAuth callback URL to complete authentication
-        logger.info('Redirecting to complete OAuth flow', { redirectUrl: response.redirectUrl });
+        logger.info('[LOGIN_DEBUG] Redirecting to complete OAuth flow', {
+          redirectUrl: response.redirectUrl,
+          currentUrl: window.location.href,
+          timestamp: new Date().toISOString(),
+        });
 
         // SECURITY: Reset rate limiting on successful login attempt
         attemptCount = 0;
         isRateLimited = false;
 
         // Redirect immediately to complete the OAuth flow
+        logger.info('[LOGIN_DEBUG] Performing redirect now');
         window.location.href = response.redirectUrl;
         return; // Exit early - OAuth callback will handle the rest
       }
 
       // If no redirectUrl, the backend might not have generated auth code properly
       // Let's try a simple page refresh to trigger auth state update
-      logger.warn('No redirectUrl in login response - trying page refresh');
+      logger.warn('[LOGIN_DEBUG] No redirectUrl in login response - trying page refresh', {
+        response,
+        currentUrl: window.location.href,
+        timestamp: new Date().toISOString(),
+      });
 
       // SECURITY: Reset rate limiting on successful login attempt
       attemptCount = 0;
       isRateLimited = false;
 
       // Close modal first
+      logger.info('[LOGIN_DEBUG] Closing modal before refresh');
       onClose();
 
       // Give a moment for modal to close, then refresh
+      logger.info('[LOGIN_DEBUG] Scheduling page refresh in 500ms');
       setTimeout(() => {
+        logger.info('[LOGIN_DEBUG] Performing page refresh now', {
+          currentUrl: window.location.href,
+          timestamp: new Date().toISOString(),
+        });
         window.location.reload();
       }, 500);
     } catch (err: unknown) {
-      logger.error('Login failed', err);
+      logger.error('[LOGIN_DEBUG] Login request failed', {
+        error: err,
+        errorMessage: err instanceof Error ? err.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        currentUrl: window.location.href,
+      });
       error = 'Invalid credentials. Please try again.';
     } finally {
+      logger.info('[LOGIN_DEBUG] Login process finished', {
+        isSubmitting: false,
+        timestamp: new Date().toISOString(),
+      });
       isSubmitting = false;
     }
   }

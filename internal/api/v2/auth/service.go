@@ -54,8 +54,8 @@ type Service interface {
 	ValidateToken(token string) error
 
 	// AuthenticateBasic handles basic authentication with username/password.
-	// Returns nil on success, or ErrInvalidCredentials on failure.
-	AuthenticateBasic(c echo.Context, username, password string) error
+	// Returns the auth code on success, or error on failure.
+	AuthenticateBasic(c echo.Context, username, password string) (string, error)
 
 	// Logout invalidates the current session/token.
 	// Returns nil on success, or ErrLogoutFailed on failure.

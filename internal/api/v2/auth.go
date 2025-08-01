@@ -15,7 +15,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/markbates/goth/gothic"
 	auth "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
@@ -172,8 +171,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 		})
 	}
 
-	// Authenticate using basic auth
-	authErr := authService.AuthenticateBasic(ctx, req.Username, req.Password)
+	// Authenticate using basic auth - now returns auth code directly
+	authCode, authErr := authService.AuthenticateBasic(ctx, req.Username, req.Password)
 
 	if authErr != nil {
 		// Add a short, randomized delay to mitigate brute force/timing attacks
@@ -201,38 +200,15 @@ func (c *Controller) Login(ctx echo.Context) error {
 		})
 	}
 
-	// Successful login - auth code has been generated and stored in session
+	// Successful login - auth code has been generated directly (V1 pattern)
+	fmt.Printf("[AUTH_DEBUG] Successful login with auth code: %s, length: %d\n", req.Username, len(authCode))
 	if c.apiLogger != nil {
-		c.apiLogger.Info("Successful login",
+		c.apiLogger.Info("Successful login with auth code",
 			"username", req.Username,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
+			"auth_code_length", len(authCode),
 		)
-	}
-
-	// The AuthenticateBasic method has already:
-	// 1. Generated an auth code
-	// 2. Stored userId in session
-	// 3. Stored auth_code in session
-	// 
-	// The frontend needs to complete the OAuth flow by redirecting to the callback
-	
-	// Retrieve the auth code from session to construct the redirect URL
-	authCode, err := gothic.GetFromSession("auth_code", ctx.Request())
-	if err != nil || authCode == "" {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to retrieve auth code from session after successful auth",
-				"error", err,
-				"username", req.Username,
-			)
-		}
-		// Fallback - still return success but without redirect
-		return ctx.JSON(http.StatusOK, AuthResponse{
-			Success:   true,
-			Message:   "Login successful",
-			Username:  req.Username,
-			Timestamp: time.Now(),
-		})
 	}
 
 	// Extract the base path dynamically
@@ -269,9 +245,18 @@ func (c *Controller) Login(ctx echo.Context) error {
 	// Construct the OAuth callback URL with the validated redirect
 	redirectURL := fmt.Sprintf("/api/v1/oauth2/callback?code=%s&redirect=%s", authCode, finalRedirect)
 
+	if c.apiLogger != nil {
+		c.apiLogger.Info("[AUTH_DEBUG] Returning successful login response with redirect",
+			"username", req.Username,
+			"redirect_url", redirectURL,
+			"final_redirect", finalRedirect,
+			"auth_code_length", len(authCode),
+		)
+	}
+
 	return ctx.JSON(http.StatusOK, AuthResponse{
 		Success:     true,
-		Message:     "Login successful - complete OAuth flow",
+		Message:     "[AUTH_DEBUG] Login successful - complete OAuth flow",
 		Username:    req.Username,
 		Timestamp:   time.Now(),
 		RedirectURL: redirectURL,
