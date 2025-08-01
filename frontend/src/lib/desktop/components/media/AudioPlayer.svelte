@@ -96,6 +96,7 @@
   let audioContextError = $state<string | null>(null);
   let progress = $state(0);
   let isLoading = $state(false);
+  let spectrogramLoading = $state(false);
   let error = $state<string | null>(null);
   let updateInterval: ReturnType<typeof setInterval> | undefined;
 
@@ -139,6 +140,13 @@
       ? `/api/v2/spectrogram/${detectionId}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
       : null
   );
+
+  // Reset loading state when spectrogram URL changes
+  $effect(() => {
+    if (spectrogramUrl) {
+      spectrogramLoading = true;
+    }
+  });
 
   const playPauseId = $derived(`playPause-${detectionId}`);
   const audioId = $derived(`audio-${detectionId}`);
@@ -352,6 +360,19 @@
     updateFilter(newFreq);
   };
 
+  // Spectrogram loading handlers
+  const handleSpectrogramLoadStart = () => {
+    spectrogramLoading = true;
+  };
+
+  const handleSpectrogramLoad = () => {
+    spectrogramLoading = false;
+  };
+
+  const handleSpectrogramError = () => {
+    spectrogramLoading = false;
+  };
+
   // Lifecycle
   onMount(() => {
     // Check if mobile
@@ -497,6 +518,18 @@
     : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
 >
   {#if spectrogramUrl}
+    <!-- Loading spinner overlay -->
+    {#if spectrogramLoading}
+      <div
+        class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
+        style={responsive
+          ? ''
+          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+      >
+        <div class="loading loading-spinner loading-md text-primary"></div>
+      </div>
+    {/if}
+
     <img
       src={spectrogramUrl}
       alt="Audio spectrogram"
@@ -504,10 +537,14 @@
       class={responsive
         ? 'w-full h-auto object-contain rounded-md border border-base-300'
         : 'w-full h-full object-cover rounded-md border border-base-300'}
+      class:opacity-0={spectrogramLoading}
       style={responsive
         ? ''
         : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       width={responsive ? 400 : undefined}
+      onloadstart={handleSpectrogramLoadStart}
+      onload={handleSpectrogramLoad}
+      onerror={handleSpectrogramError}
     />
   {/if}
 

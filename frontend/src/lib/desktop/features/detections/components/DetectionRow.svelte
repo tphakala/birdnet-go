@@ -60,6 +60,9 @@
     onConfirm: () => {},
   });
 
+  // Thumbnail loading state
+  let thumbnailLoading = $state(true); // Start as loading
+
   function handleDetailsClick(e: Event) {
     e.preventDefault();
     onDetailsClick?.(detection.id);
@@ -150,6 +153,26 @@
     // TODO: Replace with actual thumbnail API endpoint
     return `/api/v2/media/species-image?name=${encodeURIComponent(scientificName)}`;
   }
+
+  // Thumbnail loading handlers
+  function handleThumbnailLoadStart() {
+    thumbnailLoading = true;
+  }
+
+  function handleThumbnailLoad() {
+    thumbnailLoading = false;
+  }
+
+  function handleThumbnailError() {
+    thumbnailLoading = false;
+  }
+
+  // Reset loading state when detection changes
+  $effect(() => {
+    if (detection.scientificName) {
+      thumbnailLoading = true;
+    }
+  });
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
@@ -186,12 +209,27 @@
     <!-- Thumbnail -->
     <div class="sp-thumbnail-wrapper">
       <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="0">
+        <!-- Loading spinner overlay -->
+        {#if thumbnailLoading}
+          <div
+            class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md"
+          >
+            <div class="loading loading-spinner loading-sm text-primary"></div>
+          </div>
+        {/if}
+
         <img
           loading="lazy"
           src={getThumbnailUrl(detection.scientificName)}
           alt={detection.commonName}
           class="sp-thumbnail-image"
-          onerror={e => handleBirdImageError(e)}
+          class:opacity-0={thumbnailLoading}
+          onloadstart={handleThumbnailLoadStart}
+          onload={handleThumbnailLoad}
+          onerror={e => {
+            handleThumbnailError();
+            handleBirdImageError(e);
+          }}
         />
       </button>
     </div>
