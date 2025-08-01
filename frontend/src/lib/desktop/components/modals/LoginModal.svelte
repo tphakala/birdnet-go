@@ -10,16 +10,13 @@
 -->
 <script lang="ts">
   import { api } from '$lib/utils/api';
-  import { t } from '$lib/i18n';
 
-  // SECURITY: Define maximum password length to prevent DoS (increased for password managers)
-  const MAX_PASSWORD_LENGTH = 4096;
+  // SECURITY: Define maximum password length to prevent DoS
+  const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
   const MAX_REDIRECT_LENGTH = 2000;
 
-  // SECURITY: Rate limiting for login attempts
-  const MAX_ATTEMPTS = 5;
-  const RATE_LIMIT_MINUTES = 15;
-  const RATE_LIMIT_STORAGE_KEY = 'birdnet_auth_rate_limit';
+  // Loading state type for single state management
+  type LoadingState = 'idle' | 'password' | 'google' | 'github';
 
   interface AuthEndpoints {
     google?: string;
@@ -49,44 +46,18 @@
 
   let password = $state('');
   let error = $state('');
-  let isSubmitting = $state(false);
-  let googleLoading = $state(false);
-  let githubLoading = $state(false);
+  let loadingState = $state<LoadingState>('idle');
 
-  // SECURITY: Rate limiting state with localStorage persistence
-  let attemptCount = $state(0);
-  let lastAttemptTime = $state(0);
-  let isRateLimited = $state(false);
+  // Compute safe redirect URL immediately
+  let safeRedirectUrl = $derived(
+    redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : detectBasePath()
+  );
 
-  // SECURITY: Load rate limiting data from localStorage
-  function loadRateLimitData(): { attempts: number; lastAttempt: number } {
-    try {
-      const data = localStorage.getItem(RATE_LIMIT_STORAGE_KEY);
-      if (data) {
-        const parsed = JSON.parse(data);
-        if (typeof parsed.attempts === 'number' && typeof parsed.lastAttempt === 'number') {
-          return parsed;
-        }
-      }
-    } catch {
-      // Ignore errors, use defaults
-    }
-    return { attempts: 0, lastAttempt: 0 };
-  }
-
-  // SECURITY: Save rate limiting data to localStorage
-  function saveRateLimitData(attempts: number, lastAttempt: number): void {
-    try {
-      localStorage.setItem(RATE_LIMIT_STORAGE_KEY, JSON.stringify({ attempts, lastAttempt }));
-    } catch {
-      // Ignore storage errors
-    }
-  }
-
-  // Initialize rate limiting from localStorage
-  const rateLimitData = loadRateLimitData();
-  attemptCount = rateLimitData.attempts;
-  lastAttemptTime = rateLimitData.lastAttempt;
+  // Computed loading states for UI
+  let isSubmitting = $derived(loadingState === 'password');
+  let googleLoading = $derived(loadingState === 'google');
+  let githubLoading = $derived(loadingState === 'github');
+  let isAnyLoading = $derived(loadingState !== 'idle');
 
   // SECURITY: Validate redirect URL to prevent open redirects
   function validateRedirectUrl(url: string): boolean {
@@ -120,11 +91,11 @@
   // SECURITY: Sanitize and validate password input
   function validatePassword(pwd: string): { isValid: boolean; error?: string } {
     if (!pwd) {
-      return { isValid: false, error: t('auth.errors.passwordRequired') };
+      return { isValid: false, error: 'Password is required' };
     }
 
     if (pwd.length > MAX_PASSWORD_LENGTH) {
-      return { isValid: false, error: t('auth.errors.passwordTooLong') };
+      return { isValid: false, error: 'Password is too long' };
     }
 
     // Check for control characters (ASCII < 32) and other dangerous characters
@@ -132,36 +103,17 @@
       const charCode = pwd.charCodeAt(i);
       if (charCode < 32 && charCode !== 9) {
         // Allow tab (9) but reject other control chars
-        return { isValid: false, error: t('auth.errors.invalidCharacters') };
+        return { isValid: false, error: 'Password contains invalid characters' };
       }
     }
 
     return { isValid: true };
   }
 
-  // SECURITY: Check rate limiting with localStorage persistence
-  function checkRateLimit(): boolean {
-    const now = Date.now();
-    const timeSinceLastAttempt = now - lastAttemptTime;
-
-    // Reset attempts after rate limit period
-    if (timeSinceLastAttempt > RATE_LIMIT_MINUTES * 60 * 1000) {
-      attemptCount = 0;
-      isRateLimited = false;
-      saveRateLimitData(0, 0);
-    }
-
-    if (attemptCount >= MAX_ATTEMPTS) {
-      isRateLimited = true;
-      return false;
-    }
-
-    return true;
-  }
-
   // SECURITY: Extract current base path from window location
   function detectBasePath(): string {
-    const pathname = window.location.pathname;
+    // Ensure we have a valid pathname (for tests and SSR)
+    const pathname = window.location?.pathname || '/';
 
     // Common UI base paths to check
     const commonBasePaths = ['/ui/', '/app/', '/admin/', '/dashboard/'];
@@ -184,40 +136,27 @@
   }
 
   async function handlePasswordLogin() {
-    if (isSubmitting) {
+    if (loadingState !== 'idle') {
       return;
     }
 
-    // SECURITY: Check rate limiting first
-    if (!checkRateLimit()) {
-      error = t('auth.errors.rateLimited', { minutes: RATE_LIMIT_MINUTES });
-      return;
-    }
-
-    // SECURITY: Validate password
-    const passwordValidation = validatePassword(password);
+    // SECURITY: Validate password after trimming (to match what will be sent)
+    const trimmedPassword = password.trim();
+    const passwordValidation = validatePassword(trimmedPassword);
     if (!passwordValidation.isValid) {
-      error = passwordValidation.error || t('auth.errors.invalidInput');
+      error = passwordValidation.error || 'Invalid input';
       return;
     }
 
     // SECURITY: Detect current base path
     const currentBasePath = detectBasePath();
 
-    // SECURITY: Validate redirect URL
-    const safeRedirectUrl =
-      redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : currentBasePath;
-
     error = '';
-    isSubmitting = true;
-    const now = Date.now();
-    lastAttemptTime = now;
-    attemptCount += 1;
-    saveRateLimitData(attemptCount, now);
+    loadingState = 'password';
 
     const loginPayload = {
       username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
-      password: password.trim(), // Remove whitespace
+      password: trimmedPassword, // Use the already trimmed password
       redirectUrl: safeRedirectUrl, // Pass the intended redirect URL
       basePath: currentBasePath, // Send the detected base path
     };
@@ -234,21 +173,12 @@
       // Check if we need to complete OAuth flow
       if (response.redirectUrl) {
         // Backend returned OAuth callback URL to complete authentication
-        // SECURITY: Reset rate limiting on successful login attempt
-        attemptCount = 0;
-        isRateLimited = false;
-        saveRateLimitData(0, 0);
-
         // Redirect immediately to complete the OAuth flow
         window.location.href = response.redirectUrl;
         return; // Exit early - OAuth callback will handle the rest
       }
 
       // If no redirectUrl, try a simple page refresh to trigger auth state update
-      // SECURITY: Reset rate limiting on successful login attempt
-      attemptCount = 0;
-      isRateLimited = false;
-      saveRateLimitData(0, 0);
 
       // Close modal first
       onClose();
@@ -260,7 +190,7 @@
     } catch {
       error = 'Invalid credentials. Please try again.';
     } finally {
-      isSubmitting = false;
+      loadingState = 'idle';
     }
   }
 
@@ -277,15 +207,11 @@
 
     // SECURITY: Basic endpoint validation
     if (!endpoint || !endpoint.startsWith('/api/v1/auth/')) {
-      error = t('auth.errors.configurationError');
+      error = 'Configuration error. Please contact your administrator.';
       return;
     }
 
-    if (provider === 'google') {
-      googleLoading = true;
-    } else {
-      githubLoading = true;
-    }
+    loadingState = provider;
 
     // Redirect to OAuth provider
     window.location.href = endpoint;
@@ -339,10 +265,7 @@
       // Clear all sensitive state when modal closes
       password = '';
       error = '';
-      isSubmitting = false;
-      googleLoading = false;
-      githubLoading = false;
-      // Don't reset rate limiting state when modal closes
+      loadingState = 'idle';
 
       // Clean up focus trap
       if (focusTrap) {
@@ -370,7 +293,7 @@
       aria-labelledby="modal-title"
     >
       <form onsubmit={handleSubmit}>
-        <input type="hidden" name="redirect" value={redirectUrl} />
+        <input type="hidden" name="redirect" value={safeRedirectUrl} />
 
         <div class="flex items-start flex-row">
           <div class="hidden xs:flex flex-initial">
@@ -398,17 +321,16 @@
             <h3 id="modal-title" class="text-xl font-black py-2 px-6">Login to BirdNET-Go</h3>
             {#if authConfig.basicEnabled}
               <div class="form-control p-6 mx-2 xs:ml-0 xs:mx-14">
-                <label class="label" for="password">Password</label>
+                <label class="label" for="loginPassword" id="passwordLabel">Password</label>
                 <input
                   type="password"
                   id="loginPassword"
                   bind:value={password}
                   class="input input-bordered"
                   required
-                  disabled={isSubmitting || isRateLimited}
+                  disabled={isAnyLoading}
                   autocomplete="current-password"
                   aria-required="true"
-                  aria-labelledby="passwordLabel"
                   aria-describedby="loginError"
                 />
                 {#if error}
@@ -423,11 +345,6 @@
                 {/if}
 
                 <!-- SECURITY: Rate limiting notice -->
-                {#if isRateLimited}
-                  <div class="text-orange-600 relative mt-2" role="alert">
-                    Too many login attempts. Please wait {RATE_LIMIT_MINUTES} minutes before trying again.
-                  </div>
-                {/if}
               </div>
             {/if}
           </div>
@@ -439,7 +356,7 @@
               type="button"
               onclick={onClose}
               class="btn btn-outline"
-              disabled={isSubmitting}
+              disabled={isAnyLoading}
               aria-label="Cancel login"
             >
               Cancel
@@ -447,7 +364,7 @@
             <button
               type="submit"
               class="btn btn-primary grow pr-10"
-              disabled={isSubmitting || isRateLimited || !password}
+              disabled={isAnyLoading || !password}
               aria-label="Login with password"
             >
               {#if isSubmitting}
@@ -469,7 +386,7 @@
                 type="button"
                 class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
                 onclick={() => handleOAuthLogin('google')}
-                disabled={googleLoading || isRateLimited}
+                disabled={isAnyLoading}
                 aria-label="Login with Google"
               >
                 {#if googleLoading}
@@ -487,7 +404,7 @@
                 type="button"
                 class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
                 onclick={() => handleOAuthLogin('github')}
-                disabled={githubLoading || isRateLimited}
+                disabled={isAnyLoading}
                 aria-label="Login with GitHub"
               >
                 {#if githubLoading}

@@ -27,6 +27,20 @@ vi.mock('$lib/i18n', () => ({
 }));
 
 describe('LoginModal', () => {
+  // Helper function to mock window.location
+  function mockWindowLocation(pathname = '/ui/') {
+    const mockLocation = {
+      href: '',
+      pathname,
+      reload: vi.fn(),
+    };
+    Object.defineProperty(window, 'location', {
+      value: mockLocation,
+      writable: true,
+    });
+    return mockLocation;
+  }
+
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
@@ -41,6 +55,9 @@ describe('LoginModal', () => {
     Object.defineProperty(window, 'localStorage', {
       value: localStorageMock,
     });
+
+    // Set up default window.location mock
+    mockWindowLocation();
   });
 
   afterEach(() => {
@@ -49,7 +66,7 @@ describe('LoginModal', () => {
 
   describe('Redirect URL Validation', () => {
     it('should accept valid relative URLs', () => {
-      const { component } = render(LoginModal, {
+      render(LoginModal, {
         props: {
           isOpen: true,
           onClose: vi.fn(),
@@ -57,13 +74,15 @@ describe('LoginModal', () => {
         },
       });
 
-      // Access the component's validateRedirectUrl function through the instance
-      // Note: This is testing the internal validation logic
-      expect(component).toBeDefined();
+      // Check that the hidden input contains the valid redirect URL
+      const redirectInput = screen.getByDisplayValue('/ui/dashboard') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/dashboard');
+      expect(redirectInput.name).toBe('redirect');
     });
 
-    it('should reject protocol-relative URLs', () => {
-      const { component } = render(LoginModal, {
+    it('should reject protocol-relative URLs and fallback to base path', () => {
+      render(LoginModal, {
         props: {
           isOpen: true,
           onClose: vi.fn(),
@@ -71,11 +90,14 @@ describe('LoginModal', () => {
         },
       });
 
-      expect(component).toBeDefined();
+      // Should fallback to the detected base path (/ui/)
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/');
     });
 
-    it('should reject javascript: URLs', () => {
-      const { component } = render(LoginModal, {
+    it('should reject javascript: URLs and fallback to base path', () => {
+      render(LoginModal, {
         props: {
           isOpen: true,
           onClose: vi.fn(),
@@ -83,11 +105,14 @@ describe('LoginModal', () => {
         },
       });
 
-      expect(component).toBeDefined();
+      // Should fallback to the detected base path
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/');
     });
 
-    it('should reject data: URLs', () => {
-      const { component } = render(LoginModal, {
+    it('should reject data: URLs and fallback to base path', () => {
+      render(LoginModal, {
         props: {
           isOpen: true,
           onClose: vi.fn(),
@@ -95,12 +120,15 @@ describe('LoginModal', () => {
         },
       });
 
-      expect(component).toBeDefined();
+      // Should fallback to the detected base path
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/');
     });
 
-    it('should reject URLs that are too long', () => {
+    it('should reject URLs that are too long and fallback to base path', () => {
       const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_REDIRECT_LENGTH
-      const { component } = render(LoginModal, {
+      render(LoginModal, {
         props: {
           isOpen: true,
           onClose: vi.fn(),
@@ -108,7 +136,28 @@ describe('LoginModal', () => {
         },
       });
 
-      expect(component).toBeDefined();
+      // Should fallback to the detected base path
+      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/ui/');
+    });
+
+    it('should use different base paths based on current location', () => {
+      // Change the mock location to /app/
+      mockWindowLocation('/app/settings');
+
+      render(LoginModal, {
+        props: {
+          isOpen: true,
+          onClose: vi.fn(),
+          redirectUrl: 'invalid-url', // No leading slash
+        },
+      });
+
+      // Should fallback to /app/ based on current location
+      const redirectInput = screen.getByDisplayValue('/app/') as HTMLInputElement;
+      expect(redirectInput).toBeDefined();
+      expect(redirectInput.value).toBe('/app/');
     });
   });
 
@@ -132,6 +181,11 @@ describe('LoginModal', () => {
     });
 
     it('should reject passwords with control characters', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      // Mock API to reject by default (shouldn't be called anyway)
+      postSpy.mockRejectedValue(new Error('Should not call API'));
+
       render(LoginModal, {
         props: {
           isOpen: true,
@@ -142,21 +196,26 @@ describe('LoginModal', () => {
 
       const passwordInput = screen.getByLabelText('Password');
 
-      // Test various control characters (ASCII < 32, except tab)
-      const controlChars = [
-        '\\0', // null byte
-        '\\r', // carriage return
-        '\\n', // line feed
-        '\\x01', // start of heading
-        '\\x1f', // unit separator
-      ];
+      // Test with null byte (ASCII 0) which won't be trimmed
+      const passwordWithNull = `password${String.fromCharCode(0)}test`;
 
-      for (const controlChar of controlChars) {
-        await fireEvent.input(passwordInput, { target: { value: `password${controlChar}` } });
-        // The validation would show an error, but we can't easily test internal state
-        // This test ensures the component doesn't crash with control characters
-        expect(passwordInput).toBeDefined();
-      }
+      // Input password with control character
+      await fireEvent.input(passwordInput, { target: { value: passwordWithNull } });
+
+      // Attempt to submit
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+      await fireEvent.click(loginButton);
+
+      // Add a small delay to let any async operations complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Check if error is displayed
+      const errorElement = screen.queryByRole('alert');
+      expect(errorElement).toBeInTheDocument();
+      expect(errorElement?.textContent).toBe('Password contains invalid characters');
+
+      // Verify that the API was NOT called (validation should prevent it)
+      expect(postSpy).not.toHaveBeenCalled();
     });
 
     it('should accept tab characters in passwords', async () => {
@@ -169,7 +228,7 @@ describe('LoginModal', () => {
       });
 
       const passwordInput = screen.getByLabelText('Password');
-      await fireEvent.input(passwordInput, { target: { value: 'password\\t' } });
+      await fireEvent.input(passwordInput, { target: { value: `password\t` } });
 
       expect(passwordInput).toBeDefined();
     });
@@ -184,7 +243,7 @@ describe('LoginModal', () => {
       });
 
       const passwordInput = screen.getByLabelText('Password');
-      const longPassword = 'a'.repeat(4097); // Exceeds MAX_PASSWORD_LENGTH
+      const longPassword = 'a'.repeat(513); // Exceeds MAX_PASSWORD_LENGTH (512)
 
       await fireEvent.input(passwordInput, { target: { value: longPassword } });
 
@@ -192,56 +251,7 @@ describe('LoginModal', () => {
     });
   });
 
-  describe('Rate Limiting', () => {
-    beforeEach(() => {
-      // Mock Date.now() for consistent timing tests
-      vi.spyOn(Date, 'now').mockReturnValue(1000000);
-    });
-
-    it('should persist rate limiting data to localStorage', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
-      });
-
-      // The component should load rate limiting data on mount
-      expect(localStorage.getItem).toHaveBeenCalledWith('birdnet_auth_rate_limit');
-    });
-
-    it('should load rate limiting data from localStorage', () => {
-      const getItemSpy = vi.spyOn(localStorage, 'getItem');
-      getItemSpy.mockReturnValue(JSON.stringify({ attempts: 2, lastAttempt: 999000 }));
-
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
-      });
-
-      expect(getItemSpy).toHaveBeenCalledWith('birdnet_auth_rate_limit');
-    });
-
-    it('should handle corrupted localStorage data gracefully', () => {
-      const getItemSpy = vi.spyOn(localStorage, 'getItem');
-      getItemSpy.mockReturnValue('invalid json');
-
-      // Should not throw an error
-      expect(() => {
-        render(LoginModal, {
-          props: {
-            isOpen: true,
-            onClose: vi.fn(),
-            authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-          },
-        });
-      }).not.toThrow();
-    });
-  });
+  // Rate limiting tests removed - rate limiting is now handled server-side only
 
   describe('OAuth Configuration', () => {
     it('should use default endpoints when none are configured', () => {
@@ -288,11 +298,8 @@ describe('LoginModal', () => {
       expect(githubButton).toBeDefined();
     });
 
-    it('should show error for invalid OAuth endpoints', async () => {
-      Object.defineProperty(window, 'location', {
-        value: { href: '/malicious/endpoint' },
-        writable: true,
-      });
+    it('should validate OAuth endpoints', async () => {
+      const mockLocation = mockWindowLocation();
 
       render(LoginModal, {
         props: {
@@ -310,10 +317,15 @@ describe('LoginModal', () => {
       });
 
       const googleButton = screen.getByRole('button', { name: /login with google/i });
+
+      // Click the button
       await fireEvent.click(googleButton);
 
-      // Should show configuration error without redirecting
-      expect(window.location.href).not.toBe('/malicious/endpoint');
+      // Give time for any async operations
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should not redirect to malicious endpoint (validation should block it)
+      expect(mockLocation.href).toBe('');
     });
   });
 
@@ -400,8 +412,9 @@ describe('LoginModal', () => {
         },
       });
 
-      const form = screen.getByRole('form');
-      await fireEvent.submit(form);
+      // Submit form by clicking the submit button since form role may not be recognized
+      const submitButton = screen.getByRole('button', { name: /login with password/i });
+      await fireEvent.click(submitButton);
 
       // Should not call API with empty password
       expect(postSpy).not.toHaveBeenCalled();
@@ -416,15 +429,7 @@ describe('LoginModal', () => {
         redirectUrl: '/api/v1/oauth2/callback?code=123&redirect=/ui/',
       });
 
-      // Mock window.location.href setter
-      const mockLocation = {
-        href: '',
-        reload: vi.fn(),
-      };
-      Object.defineProperty(window, 'location', {
-        value: mockLocation,
-        writable: true,
-      });
+      mockWindowLocation();
 
       render(LoginModal, {
         props: {

@@ -248,7 +248,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 	redirectURL := fmt.Sprintf("/api/v1/oauth2/callback?code=%s&redirect=%s", authCode, finalRedirect)
 
 	if c.apiLogger != nil {
-		c.apiLogger.Info("[AUTH_DEBUG] Returning successful login response with redirect",
+		c.apiLogger.Info("Returning successful login response with redirect",
 			"username", req.Username,
 			"redirect_url", redirectURL,
 			"final_redirect", finalRedirect,
@@ -258,7 +258,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, AuthResponse{
 		Success:     true,
-		Message:     "[AUTH_DEBUG] Login successful - complete OAuth flow",
+		Message:     "Login successful - complete OAuth flow",
 		Username:    req.Username,
 		Timestamp:   time.Now(),
 		RedirectURL: redirectURL,
