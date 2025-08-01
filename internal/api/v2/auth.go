@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	auth "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 )
 
@@ -42,8 +43,51 @@ func (c *Controller) initAuthRoutes() {
 	// Create auth API group
 	authGroup := c.Group.Group("/auth")
 
-	// Routes that don't require authentication
-	authGroup.POST("/login", c.Login)
+	// Create rate limiter for login endpoint to prevent brute force attacks
+	// Allow 5 login attempts per 15 minutes per IP address
+	loginRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper: middleware.DefaultSkipper,
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+			middleware.RateLimiterMemoryStoreConfig{
+				Rate:      5,                // 5 requests
+				Burst:     5,                // Allow burst up to the rate
+				ExpiresIn: 15 * time.Minute, // Per 15 minutes
+			},
+		),
+		IdentifierExtractor: func(ctx echo.Context) (string, error) {
+			// Use IP address as identifier for rate limiting
+			return ctx.RealIP(), nil
+		},
+		ErrorHandler: func(ctx echo.Context, err error) error {
+			// Return a user-friendly error message when rate limit is exceeded
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Login rate limit exceeded",
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+					"user_agent", ctx.Request().Header.Get("User-Agent"),
+				)
+			}
+			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "Too many login attempts. Please try again in 15 minutes.",
+			})
+		},
+		DenyHandler: func(ctx echo.Context, identifier string, err error) error {
+			// This is called when the rate limit is exceeded
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Login attempt denied due to rate limit",
+					"identifier", identifier,
+					"ip", ctx.RealIP(),
+					"path", ctx.Request().URL.Path,
+				)
+			}
+			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "Too many login attempts. Please try again in 15 minutes.",
+			})
+		},
+	})
+
+	// Routes that don't require authentication (but are rate limited)
+	authGroup.POST("/login", c.Login, loginRateLimiter)
 
 	// Routes that require authentication
 	protectedGroup := authGroup.Group("", c.AuthMiddleware)

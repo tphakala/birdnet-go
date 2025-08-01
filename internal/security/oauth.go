@@ -84,10 +84,19 @@ func NewOAuth2Server() *OAuth2Server {
 	// Check Session Secret strength early, regardless of persistence settings
 	if settings.Security.SessionSecret == "" {
 		logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
-		// Consider adding a stricter check for production environments, e.g., panic.
+		// Enforce in production (when debug mode is off)
+		if !settings.WebServer.Debug {
+			panic("CRITICAL: SessionSecret must be set in production. Please configure a strong, unique session secret.")
+		}
 	} else if len(settings.Security.SessionSecret) < 32 {
 		// Check length as a proxy for entropy, 32 bytes is common for session keys
 		logger().Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
+		// Enforce minimum length in production
+		if !settings.WebServer.Debug {
+			logger().Error("CRITICAL: SessionSecret must be at least 32 characters in production.",
+				"current_length", len(settings.Security.SessionSecret))
+			panic("CRITICAL: SessionSecret must be at least 32 characters in production for security. Please configure a stronger session secret.")
+		}
 	}
 
 	// Pre-parse the Basic Auth Redirect URI
