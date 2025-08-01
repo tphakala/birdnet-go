@@ -11,22 +11,26 @@
 <script lang="ts">
   import { api } from '$lib/utils/api';
   import { t } from '$lib/i18n';
-  import { loggers } from '$lib/utils/logger';
 
-  const logger = loggers.auth;
-
-  // SECURITY: Define maximum password length to prevent DoS
-  const MAX_PASSWORD_LENGTH = 1000;
+  // SECURITY: Define maximum password length to prevent DoS (increased for password managers)
+  const MAX_PASSWORD_LENGTH = 4096;
   const MAX_REDIRECT_LENGTH = 2000;
 
   // SECURITY: Rate limiting for login attempts
   const MAX_ATTEMPTS = 5;
   const RATE_LIMIT_MINUTES = 15;
+  const RATE_LIMIT_STORAGE_KEY = 'birdnet_auth_rate_limit';
+
+  interface AuthEndpoints {
+    google?: string;
+    github?: string;
+  }
 
   interface AuthConfig {
     basicEnabled: boolean;
     googleEnabled: boolean;
     githubEnabled: boolean;
+    endpoints?: AuthEndpoints;
   }
 
   interface Props {
@@ -49,10 +53,40 @@
   let googleLoading = $state(false);
   let githubLoading = $state(false);
 
-  // SECURITY: Rate limiting state
+  // SECURITY: Rate limiting state with localStorage persistence
   let attemptCount = $state(0);
   let lastAttemptTime = $state(0);
   let isRateLimited = $state(false);
+
+  // SECURITY: Load rate limiting data from localStorage
+  function loadRateLimitData(): { attempts: number; lastAttempt: number } {
+    try {
+      const data = localStorage.getItem(RATE_LIMIT_STORAGE_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (typeof parsed.attempts === 'number' && typeof parsed.lastAttempt === 'number') {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore errors, use defaults
+    }
+    return { attempts: 0, lastAttempt: 0 };
+  }
+
+  // SECURITY: Save rate limiting data to localStorage
+  function saveRateLimitData(attempts: number, lastAttempt: number): void {
+    try {
+      localStorage.setItem(RATE_LIMIT_STORAGE_KEY, JSON.stringify({ attempts, lastAttempt }));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  // Initialize rate limiting from localStorage
+  const rateLimitData = loadRateLimitData();
+  attemptCount = rateLimitData.attempts;
+  lastAttemptTime = rateLimitData.lastAttempt;
 
   // SECURITY: Validate redirect URL to prevent open redirects
   function validateRedirectUrl(url: string): boolean {
@@ -93,15 +127,19 @@
       return { isValid: false, error: t('auth.errors.passwordTooLong') };
     }
 
-    // Check for null bytes or other dangerous characters
-    if (pwd.includes('\0') || pwd.includes('\r') || pwd.includes('\n')) {
-      return { isValid: false, error: t('auth.errors.invalidCharacters') };
+    // Check for control characters (ASCII < 32) and other dangerous characters
+    for (let i = 0; i < pwd.length; i++) {
+      const charCode = pwd.charCodeAt(i);
+      if (charCode < 32 && charCode !== 9) {
+        // Allow tab (9) but reject other control chars
+        return { isValid: false, error: t('auth.errors.invalidCharacters') };
+      }
     }
 
     return { isValid: true };
   }
 
-  // SECURITY: Check rate limiting
+  // SECURITY: Check rate limiting with localStorage persistence
   function checkRateLimit(): boolean {
     const now = Date.now();
     const timeSinceLastAttempt = now - lastAttemptTime;
@@ -110,6 +148,7 @@
     if (timeSinceLastAttempt > RATE_LIMIT_MINUTES * 60 * 1000) {
       attemptCount = 0;
       isRateLimited = false;
+      saveRateLimitData(0, 0);
     }
 
     if (attemptCount >= MAX_ATTEMPTS) {
@@ -145,23 +184,12 @@
   }
 
   async function handlePasswordLogin() {
-    logger.info('[LOGIN_DEBUG] Starting login process', {
-      hasPassword: !!password,
-      passwordLength: password.length,
-      redirectUrl,
-      isSubmitting,
-      attemptCount,
-      isRateLimited,
-    });
-
     if (isSubmitting) {
-      logger.warn('[LOGIN_DEBUG] Login already in progress, skipping');
       return;
     }
 
     // SECURITY: Check rate limiting first
     if (!checkRateLimit()) {
-      logger.warn('[LOGIN_DEBUG] Rate limit exceeded', { attemptCount, lastAttemptTime });
       error = t('auth.errors.rateLimited', { minutes: RATE_LIMIT_MINUTES });
       return;
     }
@@ -169,32 +197,23 @@
     // SECURITY: Validate password
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.isValid) {
-      logger.warn('[LOGIN_DEBUG] Password validation failed', { error: passwordValidation.error });
       error = passwordValidation.error || t('auth.errors.invalidInput');
       return;
     }
 
     // SECURITY: Detect current base path
     const currentBasePath = detectBasePath();
-    logger.info('[LOGIN_DEBUG] Detected base path', {
-      currentBasePath,
-      windowLocation: window.location.href,
-    });
 
     // SECURITY: Validate redirect URL
     const safeRedirectUrl =
       redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : currentBasePath;
-    logger.info('[LOGIN_DEBUG] Redirect URL validation', {
-      originalRedirectUrl: redirectUrl,
-      isValid: redirectUrl ? validateRedirectUrl(redirectUrl) : 'N/A',
-      safeRedirectUrl,
-      currentBasePath,
-    });
 
     error = '';
     isSubmitting = true;
-    lastAttemptTime = Date.now();
+    const now = Date.now();
+    lastAttemptTime = now;
     attemptCount += 1;
+    saveRateLimitData(attemptCount, now);
 
     const loginPayload = {
       username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
@@ -202,12 +221,6 @@
       redirectUrl: safeRedirectUrl, // Pass the intended redirect URL
       basePath: currentBasePath, // Send the detected base path
     };
-
-    logger.info('[LOGIN_DEBUG] Sending login request', {
-      ...loginPayload,
-      password: '[REDACTED]', // Don't log actual password
-      timestamp: new Date().toISOString(),
-    });
 
     try {
       // SECURITY: Don't update auth state until server confirms success
@@ -218,87 +231,49 @@
         redirectUrl?: string;
       }>('/api/v2/auth/login', loginPayload);
 
-      logger.info('[LOGIN_DEBUG] Login response received', {
-        success: response.success,
-        message: response.message,
-        hasRedirectUrl: !!response.redirectUrl,
-        redirectUrl: response.redirectUrl,
-        timestamp: new Date().toISOString(),
-        responseKeys: Object.keys(response),
-        fullResponse: JSON.stringify(response, null, 2),
-      });
-
       // Check if we need to complete OAuth flow
       if (response.redirectUrl) {
         // Backend returned OAuth callback URL to complete authentication
-        logger.info('[LOGIN_DEBUG] Redirecting to complete OAuth flow', {
-          redirectUrl: response.redirectUrl,
-          currentUrl: window.location.href,
-          timestamp: new Date().toISOString(),
-        });
-
         // SECURITY: Reset rate limiting on successful login attempt
         attemptCount = 0;
         isRateLimited = false;
+        saveRateLimitData(0, 0);
 
         // Redirect immediately to complete the OAuth flow
-        logger.info('[LOGIN_DEBUG] Performing redirect now');
         window.location.href = response.redirectUrl;
         return; // Exit early - OAuth callback will handle the rest
       }
 
-      // If no redirectUrl, the backend might not have generated auth code properly
-      // Let's try a simple page refresh to trigger auth state update
-      logger.warn('[LOGIN_DEBUG] No redirectUrl in login response - trying page refresh', {
-        response,
-        currentUrl: window.location.href,
-        timestamp: new Date().toISOString(),
-      });
-
+      // If no redirectUrl, try a simple page refresh to trigger auth state update
       // SECURITY: Reset rate limiting on successful login attempt
       attemptCount = 0;
       isRateLimited = false;
+      saveRateLimitData(0, 0);
 
       // Close modal first
-      logger.info('[LOGIN_DEBUG] Closing modal before refresh');
       onClose();
 
       // Give a moment for modal to close, then refresh
-      logger.info('[LOGIN_DEBUG] Scheduling page refresh in 500ms');
       setTimeout(() => {
-        logger.info('[LOGIN_DEBUG] Performing page refresh now', {
-          currentUrl: window.location.href,
-          timestamp: new Date().toISOString(),
-        });
         window.location.reload();
       }, 500);
-    } catch (err: unknown) {
-      logger.error('[LOGIN_DEBUG] Login request failed', {
-        error: err,
-        errorMessage: err instanceof Error ? err.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-        currentUrl: window.location.href,
-      });
+    } catch {
       error = 'Invalid credentials. Please try again.';
     } finally {
-      logger.info('[LOGIN_DEBUG] Login process finished', {
-        isSubmitting: false,
-        timestamp: new Date().toISOString(),
-      });
       isSubmitting = false;
     }
   }
 
   // SECURITY: Validate OAuth endpoints before redirect
   function handleOAuthLogin(provider: 'google' | 'github') {
-    // SECURITY: Validate OAuth endpoints are properly configured
-    const oauthEndpoints = {
+    // Use configurable endpoints or fallback to defaults
+    const defaultEndpoints = {
       google: '/api/v1/auth/google',
       github: '/api/v1/auth/github',
     };
 
-    // eslint-disable-next-line security/detect-object-injection
-    const endpoint = oauthEndpoints[provider];
+    const configuredEndpoints = authConfig.endpoints || {};
+    const endpoint = configuredEndpoints[provider] || defaultEndpoints[provider];
 
     // SECURITY: Basic endpoint validation
     if (!endpoint || !endpoint.startsWith('/api/v1/auth/')) {
@@ -321,9 +296,46 @@
     handlePasswordLogin();
   }
 
-  // SECURITY: Secure state cleanup
+  // Focus trap for accessibility
+  let modalElement: HTMLElement;
+  let focusTrap: (() => void) | null = null;
+
+  // SECURITY: Secure state cleanup and focus management
   $effect(() => {
-    if (!isOpen) {
+    if (isOpen && modalElement) {
+      // Create focus trap
+      const focusableElements = modalElement.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const firstElement = focusableElements[0] as HTMLElement;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+      const trapFocus = (e: KeyboardEvent) => {
+        if (e.key === 'Tab') {
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              e.preventDefault();
+              lastElement.focus();
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              e.preventDefault();
+              firstElement.focus();
+            }
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+        }
+      };
+
+      modalElement.addEventListener('keydown', trapFocus);
+      firstElement?.focus();
+
+      focusTrap = () => {
+        modalElement.removeEventListener('keydown', trapFocus);
+      };
+    } else if (!isOpen) {
       // Clear all sensitive state when modal closes
       password = '';
       error = '';
@@ -331,13 +343,32 @@
       googleLoading = false;
       githubLoading = false;
       // Don't reset rate limiting state when modal closes
+
+      // Clean up focus trap
+      if (focusTrap) {
+        focusTrap();
+        focusTrap = null;
+      }
     }
+
+    return () => {
+      if (focusTrap) {
+        focusTrap();
+        focusTrap = null;
+      }
+    };
   });
 </script>
 
 {#if isOpen}
   <div class="modal modal-open">
-    <div class="modal-box sm:p-6 sm:pb-10 p-3 overflow-y-auto" role="dialog">
+    <div
+      bind:this={modalElement}
+      class="modal-box sm:p-6 sm:pb-10 p-3 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
       <form onsubmit={handleSubmit}>
         <input type="hidden" name="redirect" value={redirectUrl} />
 
@@ -364,7 +395,7 @@
           </div>
 
           <div class="flex-1">
-            <h3 class="text-xl font-black py-2 px-6">Login to BirdNET-Go</h3>
+            <h3 id="modal-title" class="text-xl font-black py-2 px-6">Login to BirdNET-Go</h3>
             {#if authConfig.basicEnabled}
               <div class="form-control p-6 mx-2 xs:ml-0 xs:mx-14">
                 <label class="label" for="password">Password</label>

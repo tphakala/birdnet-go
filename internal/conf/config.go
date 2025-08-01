@@ -866,6 +866,14 @@ func Load() (*Settings, error) {
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
 		sessionSecret := GenerateRandomSecret()
+		if sessionSecret == "" {
+			return nil, errors.Newf("failed to generate session secret").
+				Component("conf").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "generate_session_secret").
+				Build()
+		}
+		
 		settings.Security.SessionSecret = sessionSecret
 		
 		// Also set it in viper so it gets saved to config file
@@ -881,6 +889,11 @@ func Load() (*Settings, error) {
 			if err := SaveYAMLConfig(configFile, settings); err != nil {
 				// Log the error but don't fail - the generated secret will work for this session
 				log.Printf("Warning: Failed to save generated SessionSecret to config file: %v", err)
+			} else {
+				// Set secure file permissions after saving
+				if err := os.Chmod(configFile, 0o600); err != nil {
+					log.Printf("Warning: Failed to set secure permissions on config file: %v", err)
+				}
 			}
 		}
 	}
@@ -990,7 +1003,15 @@ func createDefaultConfig() error {
 	// If the session secret is not set, generate a random one
 	// This ensures backward compatibility for existing deployments
 	if viper.GetString("security.sessionsecret") == "" {
-		viper.Set("security.sessionsecret", GenerateRandomSecret())
+		sessionSecret := GenerateRandomSecret()
+		if sessionSecret == "" {
+			return errors.Newf("failed to generate session secret for default config").
+				Component("conf").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "create_default_config").
+				Build()
+		}
+		viper.Set("security.sessionsecret", sessionSecret)
 	}
 
 	// Create directories for config file
@@ -1098,21 +1119,7 @@ func SetTestSettings(settings *Settings) {
 	once = sync.Once{}
 }
 
-// SendValidationWarningsAsNotifications sends any validation warnings as notifications
-// This should be called after the notification service is initialized
-func SendValidationWarningsAsNotifications() {
-	settings := GetSettings()
-	if settings == nil || len(settings.ValidationWarnings) == 0 {
-		return
-	}
-
-	// Only send if notification service is available
-	// We don't import notification package to avoid circular dependencies
-	// The calling code should handle the actual notification sending
-	for _, warning := range settings.ValidationWarnings {
-		log.Printf("Deferred validation warning: %s", warning)
-	}
-}
+// Note: SendValidationWarningsAsNotifications function removed as it was unused
 
 // SaveYAMLConfig updates the YAML configuration file with new settings.
 // It overwrites the existing file, not preserving comments or structure.

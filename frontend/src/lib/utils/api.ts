@@ -46,22 +46,12 @@ export function getCsrfToken(): string | null {
     const metaTag = document.querySelector('meta[name="csrf-token"]');
     if (metaTag) {
       const token = metaTag.getAttribute('content');
-      if (token && token.length > 0 && isValidCsrfToken(token)) {
-        return token;
+      if (token && token.length > 0) {
+        return token; // Trust meta tag content, basic validation removed for compatibility
       }
     }
 
-    // Fallback to cookie (though it's HttpOnly so this won't work in practice)
-    const cookies = document.cookie.split(';');
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'csrf' && value) {
-        const decodedValue = decodeURIComponent(value);
-        if (isValidCsrfToken(decodedValue)) {
-          return decodedValue;
-        }
-      }
-    }
+    // Note: Cookie fallback removed as HttpOnly cookies are inaccessible to JavaScript
   } catch (error) {
     logger.warn('Error retrieving CSRF token:', error);
   }
@@ -69,13 +59,7 @@ export function getCsrfToken(): string | null {
   return null;
 }
 
-/**
- * SECURITY: Validate CSRF token format
- */
-function isValidCsrfToken(token: string): boolean {
-  // Basic validation - adjust based on your CSRF token format
-  return token.length >= 16 && token.length <= 128 && /^[A-Za-z0-9+/=_-]+$/.test(token);
-}
+// Note: CSRF token validation removed for broader compatibility - trusting meta tag content
 
 /**
  * SECURITY: Enhanced default headers with validation
@@ -199,7 +183,7 @@ function validateAndSanitizeBody(body: unknown): string | FormData | undefined {
   if (!body) return undefined;
 
   if (body instanceof FormData) {
-    // SECURITY: Validate FormData size
+    // SECURITY: Validate FormData size with encoding overhead buffer
     let totalSize = 0;
     for (const [, value] of body) {
       if (typeof value === 'string') {
@@ -207,10 +191,12 @@ function validateAndSanitizeBody(body: unknown): string | FormData | undefined {
       } else if (value instanceof File) {
         totalSize += value.size;
       }
+    }
 
-      if (totalSize > MAX_REQUEST_SIZE) {
-        throw new Error('Request body too large');
-      }
+    // Add 25% buffer to account for FormData encoding overhead (boundaries, headers, etc.)
+    const estimatedEncodedSize = Math.floor(totalSize * 1.25);
+    if (estimatedEncodedSize > MAX_REQUEST_SIZE) {
+      throw new Error('Request body too large');
     }
     return body;
   }
@@ -252,9 +238,44 @@ export async function fetchWithCSRF<T = unknown>(
     throw new ApiError('Invalid URL provided', 400, new Response());
   }
 
-  // SECURITY: Prevent SSRF by validating URL format
-  if (url.includes('//') && !url.startsWith('/') && !url.startsWith(window.location.origin)) {
-    throw new ApiError('Invalid URL format', 400, new Response());
+  // SECURITY: Enhanced SSRF protection with comprehensive URL validation
+  if (url.includes('//') && !url.startsWith('/')) {
+    // For absolute URLs, perform strict validation
+    try {
+      const parsedUrl = new URL(url);
+
+      // Only allow http and https protocols
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        throw new ApiError(
+          'Invalid URL protocol - only http and https allowed',
+          400,
+          new Response()
+        );
+      }
+
+      // Ensure URL points to same origin
+      if (parsedUrl.origin !== window.location.origin) {
+        throw new ApiError('Cross-origin requests not allowed', 400, new Response());
+      }
+
+      // Additional hostname validation
+      const hostname = parsedUrl.hostname;
+      if (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('172.')
+      ) {
+        // Only allow if it matches current origin
+        if (parsedUrl.origin !== window.location.origin) {
+          throw new ApiError('Private network access not allowed', 400, new Response());
+        }
+      }
+    } catch (urlError) {
+      if (urlError instanceof ApiError) throw urlError;
+      throw new ApiError('Malformed URL', 400, new Response());
+    }
   }
 
   const timeout = options.timeout ?? DEFAULT_TIMEOUT;

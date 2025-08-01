@@ -19,6 +19,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
+// Compiled regex for path validation (moved outside function for performance)
+var validBasePathRegex = regexp.MustCompile(`^/[a-zA-Z0-9/_-]*/$`)
+
 // AuthRequest represents the login request structure
 type AuthRequest struct {
 	Username    string `json:"username"`
@@ -201,7 +204,6 @@ func (c *Controller) Login(ctx echo.Context) error {
 	}
 
 	// Successful login - auth code has been generated directly (V1 pattern)
-	fmt.Printf("[AUTH_DEBUG] Successful login with auth code: %s, length: %d\n", req.Username, len(authCode))
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Successful login with auth code",
 			"username", req.Username,
@@ -464,9 +466,7 @@ func isValidBasePath(basePath string) bool {
 
 	// Basic path validation - alphanumeric, hyphens, underscores, and slashes
 	// This regex ensures the path contains only safe characters
-	validPathRegex := `^/[a-zA-Z0-9/_-]*/$`
-	matched, _ := regexp.MatchString(validPathRegex, basePath)
-	return matched
+	return validBasePathRegex.MatchString(basePath)
 }
 
 // extractBasePathFromReferer attempts to extract the base path from a Referer URL
