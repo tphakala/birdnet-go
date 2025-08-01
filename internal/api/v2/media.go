@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/securefs"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -537,10 +539,58 @@ var (
 	spectrogramGroup     singleflight.Group // Prevents duplicate generations
 )
 
+// Package-level logger for spectrogram generation
+var (
+	spectrogramLogger   *slog.Logger
+	spectrogramLevelVar = new(slog.LevelVar) // Dynamic level control
+	closeSpectrogramLogger func() error
+)
+
+func init() {
+	// Initialize spectrogram generation logger
+	// This creates a dedicated log file at logs/spectrogram-generation.log
+	var err error
+
+	// Set initial level to Debug for comprehensive logging
+	spectrogramLevelVar.Set(slog.LevelDebug)
+
+	spectrogramLogger, closeSpectrogramLogger, err = logging.NewFileLogger(
+		"logs/spectrogram-generation.log",
+		"spectrogram-generation",
+		spectrogramLevelVar,
+	)
+
+	if err != nil || spectrogramLogger == nil {
+		// Fallback to default logger if file logger creation fails
+		spectrogramLogger = slog.Default().With("service", "spectrogram-generation")
+		closeSpectrogramLogger = func() error { return nil }
+		// Log the error so we know why the file logger failed
+		if err != nil {
+			spectrogramLogger.Error("Failed to initialize spectrogram generation file logger", "error", err)
+		}
+	}
+}
+
+// CloseSpectrogramLogger releases the file logger resources to prevent resource leaks.
+// This should be called during application shutdown.
+func CloseSpectrogramLogger() error {
+	if closeSpectrogramLogger != nil {
+		return closeSpectrogramLogger()
+	}
+	return nil
+}
+
 // generateSpectrogram creates a spectrogram image for the given audio file path (relative to SecureFS root).
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
+// Fixed: Moved semaphore acquisition outside singleflight to eliminate double bottleneck.
 func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool) (string, error) {
+	start := time.Now()
+	spectrogramLogger.Debug("Spectrogram generation requested",
+		"audio_path", audioPath,
+		"width", width,
+		"raw", raw,
+		"request_time", start.Format("2006-01-02 15:04:05"))
 	// The audioPath from the DB is already relative to the baseDir. Validate it.
 	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
 	if err != nil {
@@ -591,23 +641,76 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 
 	// Generate a unique key for this spectrogram generation request
 	// Include both the path and width to ensure uniqueness
-	spectrogramKey := fmt.Sprintf("%s:%d", relSpectrogramPath, width)
+	spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, width, raw)
 
-	// Use singleflight to prevent duplicate generations
+	// PERFORMANCE FIX: Acquire semaphore BEFORE singleflight to eliminate double bottleneck
+	// This prevents the old issue where requests would queue at singleflight AND then at semaphore
+	spectrogramLogger.Debug("Acquiring semaphore slot",
+		"spectrogram_key", spectrogramKey,
+		"available_slots", len(spectrogramSemaphore))
+
+	select {
+	case spectrogramSemaphore <- struct{}{}:
+		// Successfully acquired semaphore slot
+		spectrogramLogger.Debug("Semaphore slot acquired",
+			"spectrogram_key", spectrogramKey,
+			"remaining_slots", maxConcurrentSpectrograms-len(spectrogramSemaphore))
+	case <-ctx.Done():
+		// Context canceled while waiting for semaphore
+		spectrogramLogger.Debug("Context canceled while waiting for semaphore",
+			"spectrogram_key", spectrogramKey,
+			"error", ctx.Err())
+		return "", ctx.Err()
+	}
+
+	defer func() {
+		<-spectrogramSemaphore
+		spectrogramLogger.Debug("Semaphore slot released",
+			"spectrogram_key", spectrogramKey,
+			"total_duration_ms", time.Since(start).Milliseconds())
+	}()
+
+	// Use singleflight to prevent duplicate generations (now with semaphore already acquired)
 	_, err, _ = spectrogramGroup.Do(spectrogramKey, func() (interface{}, error) {
 		// Fast path inside the group – now race-free
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+			spectrogramLogger.Debug("Spectrogram already exists",
+				"spectrogram_path", relSpectrogramPath,
+				"spectrogram_key", spectrogramKey)
 			return spectrogramStatusExists, nil // File exists, no need to generate
 		} else if !os.IsNotExist(err) {
 			// An unexpected error occurred checking for the spectrogram
+			spectrogramLogger.Debug("Error checking existing spectrogram",
+				"spectrogram_path", relSpectrogramPath,
+				"error", err)
 			return nil, fmt.Errorf("error checking for existing spectrogram '%s': %w", relSpectrogramPath, err)
 		}
 
+		spectrogramLogger.Debug("Starting spectrogram generation",
+			"spectrogram_key", spectrogramKey,
+			"abs_audio_path", absAudioPath,
+			"abs_spectrogram_path", absSpectrogramPath)
+
+		generationStart := time.Now()
+
 		// --- Generate Spectrogram ---
 		if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, raw, c.Settings); err != nil {
-			log.Printf("SoX failed for '%s', falling back to FFmpeg: %v", absAudioPath, err)
+			spectrogramLogger.Debug("SoX generation failed, trying FFmpeg fallback",
+				"spectrogram_key", spectrogramKey,
+				"sox_error", err.Error(),
+				"sox_duration_ms", time.Since(generationStart).Milliseconds())
+
+			fallbackStart := time.Now()
 			// Pass the context down to the fallback function as well.
 			if err2 := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, raw, c.Settings); err2 != nil {
+				spectrogramLogger.Debug("Both SoX and FFmpeg generation failed",
+					"spectrogram_key", spectrogramKey,
+					"sox_error", err.Error(),
+					"ffmpeg_error", err2.Error(),
+					"sox_duration_ms", fallbackStart.Sub(generationStart).Milliseconds(),
+					"ffmpeg_duration_ms", time.Since(fallbackStart).Milliseconds(),
+					"total_generation_duration_ms", time.Since(generationStart).Milliseconds())
+
 				// Check for context errors specifically (propagate them up)
 				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err2, context.DeadlineExceeded) {
 					// Return the specific context error to be handled by the caller
@@ -627,16 +730,33 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 				return nil, fmt.Errorf("%w: SoX error: %w, FFmpeg error: %w",
 					ErrSpectrogramGeneration, err, err2)
 			}
-			log.Printf("Successfully generated spectrogram for '%s' using FFmpeg fallback", absAudioPath)
+			spectrogramLogger.Debug("Spectrogram generation successful using FFmpeg fallback",
+				"spectrogram_key", spectrogramKey,
+				"abs_audio_path", absAudioPath,
+				"sox_duration_ms", fallbackStart.Sub(generationStart).Milliseconds(),
+				"ffmpeg_duration_ms", time.Since(fallbackStart).Milliseconds(),
+				"total_generation_duration_ms", time.Since(generationStart).Milliseconds())
 		} else {
-			log.Printf("Successfully generated spectrogram for '%s' using SoX", absAudioPath)
+			spectrogramLogger.Debug("Spectrogram generation successful using SoX",
+				"spectrogram_key", spectrogramKey,
+				"abs_audio_path", absAudioPath,
+				"generation_duration_ms", time.Since(generationStart).Milliseconds())
 		}
 		return spectrogramStatusGenerated, nil // Successfully generated, no error
 	})
 
 	if err != nil {
+		spectrogramLogger.Debug("Spectrogram generation failed",
+			"spectrogram_key", spectrogramKey,
+			"error", err.Error(),
+			"total_duration_ms", time.Since(start).Milliseconds())
 		return "", fmt.Errorf("failed to generate spectrogram: %w", err)
 	}
+
+	spectrogramLogger.Debug("Spectrogram generation completed successfully",
+		"spectrogram_key", spectrogramKey,
+		"relative_spectrogram_path", relSpectrogramPath,
+		"total_duration_ms", time.Since(start).Milliseconds())
 
 	// Return the relative path of the newly created spectrogram
 	return relSpectrogramPath, nil
@@ -648,6 +768,13 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 // Accepts a context for timeout and cancellation.
 // Requires absolute paths for external commands.
 func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, raw bool, settings *conf.Settings) error {
+	start := time.Now()
+	spectrogramLogger.Debug("Starting SoX spectrogram generation",
+		"abs_audio_path", absAudioClipPath,
+		"abs_spectrogram_path", absSpectrogramPath,
+		"width", width,
+		"raw", raw)
+
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
 
@@ -677,8 +804,8 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	spectrogramSemaphore <- struct{}{}
-	defer func() { <-spectrogramSemaphore }()
+	// NOTE: Semaphore is now acquired in generateSpectrogram() to fix double bottleneck
+	// No longer acquiring semaphore here
 
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
@@ -757,6 +884,12 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		}
 		runtime.Gosched()
 	}
+
+	spectrogramLogger.Debug("SoX spectrogram generation completed successfully",
+		"abs_audio_path", absAudioClipPath,
+		"duration_ms", time.Since(start).Milliseconds(),
+		"use_ffmpeg", useFFmpeg)
+
 	return nil
 }
 
@@ -775,6 +908,13 @@ func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw b
 // createSpectrogramWithFFmpeg generates a spectrogram using only ffmpeg.
 // Accepts a context for timeout and cancellation.
 func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, raw bool, settings *conf.Settings) error {
+	start := time.Now()
+	spectrogramLogger.Debug("Starting FFmpeg spectrogram generation",
+		"abs_audio_path", absAudioClipPath,
+		"abs_spectrogram_path", absSpectrogramPath,
+		"width", width,
+		"raw", raw)
+
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	if ffmpegBinary == "" {
 		return ErrFFmpegNotConfigured
@@ -784,8 +924,8 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	spectrogramSemaphore <- struct{}{}
-	defer func() { <-spectrogramSemaphore }()
+	// NOTE: Semaphore is now acquired in generateSpectrogram() to fix double bottleneck
+	// No longer acquiring semaphore here
 
 	height := width / 2
 	heightStr := strconv.Itoa(height)
@@ -823,8 +963,18 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	cmd.Stdout = &output
 
 	if err := cmd.Run(); err != nil {
+		spectrogramLogger.Debug("FFmpeg spectrogram generation failed",
+			"abs_audio_path", absAudioClipPath,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err.Error(),
+			"output", output.String())
 		return fmt.Errorf("%w: %w (output: %s)", ErrSpectrogramGeneration, err, output.String())
 	}
+
+	spectrogramLogger.Debug("FFmpeg spectrogram generation completed successfully",
+		"abs_audio_path", absAudioClipPath,
+		"duration_ms", time.Since(start).Milliseconds())
+
 	return nil
 }
 
