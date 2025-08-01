@@ -391,13 +391,10 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 	case "sqlite":
 		schemaCorrect, err = hasCorrectImageCacheIndexSQLite(db, debug)
 		if err != nil {
-			enhancedErr := errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "schema_validation").
-				Context("db_type", dbType).
-				Context("table", "image_caches").
-				Build()
+			enhancedErr := criticalError(err, "schema_validation", "schema_integrity_check_failed",
+				"db_type", dbType,
+				"table", "image_caches",
+				"action", "database_schema_validation")
 			
 			lgr.Error("Schema validation failed", "error", enhancedErr)
 			return enhancedErr
@@ -411,14 +408,11 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 		} else {
 			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
 			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("datastore").
-					Category(errors.CategoryDatabase).
-					Context("operation", "schema_validation").
-					Context("db_type", dbType).
-					Context("table", "image_caches").
-					Context("database", dbName).
-					Build()
+				enhancedErr := criticalError(err, "schema_validation", "schema_integrity_check_failed",
+					"db_type", dbType,
+					"table", "image_caches",
+					"database", dbName,
+					"action", "database_schema_validation")
 				
 				lgr.Error("Schema validation failed", "error", enhancedErr)
 				return enhancedErr
@@ -499,13 +493,10 @@ func migrateTable(db *gorm.DB, model interface{}, tableName, dbType string, lgr 
 	columnsBefore := getTableColumns(db, model, tableExists)
 	
 	if err := db.AutoMigrate(model); err != nil {
-		enhancedErr := errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "auto_migrate_table").
-			Context("db_type", dbType).
-			Context("table", tableName).
-			Build()
+		enhancedErr := criticalError(err, "auto_migrate_table", "schema_migration_failed",
+			"db_type", dbType,
+			"table", tableName,
+			"action", "database_schema_setup")
 		
 		lgr.Error("Table migration failed",
 			"table", tableName,
