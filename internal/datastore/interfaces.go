@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -1112,8 +1113,11 @@ func (ds *DataStore) LockNote(noteID string) error {
 
 		if result.Error != nil {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
-				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				// Calculate exponential backoff with jitter
+				baseBackoff := baseDelay * time.Duration(attempt+1)
+				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
+				delay := baseBackoff + jitter
+				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d, jitter %v)", txID, delay, attempt+1, maxRetries, jitter)
 				time.Sleep(delay)
 				lastErr = result.Error
 				continue
@@ -1171,8 +1175,11 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
 		if result.Error != nil {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
-				delay := baseDelay * time.Duration(attempt+1)
-				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d)", txID, delay, attempt+1, maxRetries)
+				// Calculate exponential backoff with jitter
+				baseBackoff := baseDelay * time.Duration(attempt+1)
+				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
+				delay := baseBackoff + jitter
+				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d, jitter %v)", txID, delay, attempt+1, maxRetries, jitter)
 				time.Sleep(delay)
 				lastErr = result.Error
 				continue
@@ -2045,11 +2052,17 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 
 // handleDatabaseLockError handles database lock errors with backoff
 func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay time.Duration, txLogger *slog.Logger) {
-	delay := baseDelay * time.Duration(attempt+1)
+	// Calculate exponential backoff with jitter to avoid thundering herd
+	baseBackoff := baseDelay * time.Duration(attempt+1)
+	// Add 0-25% jitter to the base backoff
+	jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
+	delay := baseBackoff + jitter
+	
 	txLogger.Warn("Database locked, scheduling retry",
 		"attempt", attempt+1,
 		"max_attempts", maxRetries,
-		"backoff_ms", delay.Milliseconds())
+		"backoff_ms", delay.Milliseconds(),
+		"jitter_ms", jitter.Milliseconds())
 	
 	// Record retry metric
 	ds.metricsMu.RLock()
@@ -2060,32 +2073,6 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 	}
 	
 	time.Sleep(delay)
-}
-
-// isDatabaseLocked checks if an error is a database lock error for both SQLite and MySQL
-func isDatabaseLocked(err error) bool {
-	if err == nil {
-		return false
-	}
-	
-	errStr := strings.ToLower(err.Error())
-	
-	// Check for SQLite lock errors
-	if strings.Contains(errStr, "database is locked") {
-		return true
-	}
-	
-	// Check for MySQL lock errors
-	if strings.Contains(errStr, "lock wait timeout exceeded") {
-		return true
-	}
-	
-	// Check for MySQL deadlock errors
-	if strings.Contains(errStr, "deadlock found") {
-		return true
-	}
-	
-	return false
 }
 
 // executeTransaction executes the save operations within a transaction

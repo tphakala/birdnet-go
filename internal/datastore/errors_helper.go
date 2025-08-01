@@ -3,10 +3,32 @@ package datastore
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+var (
+	// Compiled regex patterns for performance
+	onceRegex sync.Once
+	diskFullPattern *regexp.Regexp
+	deadlockPattern *regexp.Regexp
+	corruptionPattern *regexp.Regexp
+	lockPattern *regexp.Regexp
+	constraintPattern *regexp.Regexp
+)
+
+func initRegexPatterns() {
+	onceRegex.Do(func() {
+		diskFullPattern = regexp.MustCompile(`(?i)(disk full|no space|out of space)`)
+		deadlockPattern = regexp.MustCompile(`(?i)(deadlock detected|lock wait timeout|deadlock found)`)
+		corruptionPattern = regexp.MustCompile(`(?i)(corrupt|malformed|database disk image is malformed|file is not a database)`)
+		lockPattern = regexp.MustCompile(`(?i)(locked|database is locked|resource busy)`)
+		constraintPattern = regexp.MustCompile(`(?i)(constraint|duplicate|unique constraint|foreign key)`)
+	})
+}
 
 // dbError creates a properly categorized database error with context
 func dbError(err error, operation, priority string, context ...interface{}) error {
@@ -17,6 +39,15 @@ func dbError(err error, operation, priority string, context ...interface{}) erro
 
 	if priority != "" {
 		builder = builder.Priority(priority)
+	}
+
+	// Validate context pairs and add them
+	if len(context)%2 != 0 {
+		getLogger().Warn("Odd number of context parameters in dbError",
+			"operation", operation,
+			"context_length", len(context))
+		// Drop the last unpaired element
+		context = context[:len(context)-1]
 	}
 
 	// Add context pairs
@@ -31,7 +62,9 @@ func dbError(err error, operation, priority string, context ...interface{}) erro
 
 // validationError creates a validation error (not sent to users by default)
 func validationError(message, field string, value interface{}) error {
-	return errors.Newf("%s", message).
+	// Standardize validation error format
+	standardizedMessage := fmt.Sprintf("invalid %s: %v", field, message)
+	return errors.Newf("%s", standardizedMessage).
 		Component("datastore").
 		Category(errors.CategoryValidation).
 		Context("field", field).
@@ -45,10 +78,8 @@ func resourceError(err error, operation, resourceType string) error {
 	category := errors.CategorySystem
 
 	// Escalate priority for critical resources
-	errStr := strings.ToLower(err.Error())
-	if strings.Contains(errStr, "disk full") ||
-		strings.Contains(errStr, "no space") ||
-		strings.Contains(errStr, "out of space") {
+	initRegexPatterns()
+	if diskFullPattern.MatchString(err.Error()) {
 		priority = errors.PriorityCritical
 		category = errors.CategoryDiskUsage
 	}
@@ -65,12 +96,10 @@ func resourceError(err error, operation, resourceType string) error {
 // stateError creates a state management error (locks, transactions)
 func stateError(err error, operation, stateType string, context ...interface{}) error {
 	priority := errors.PriorityMedium
-	errStr := strings.ToLower(err.Error())
 
 	// Escalate priority for critical state errors
-	if strings.Contains(errStr, "deadlock") ||
-		strings.Contains(errStr, "corrupt") ||
-		strings.Contains(errStr, "malformed") {
+	initRegexPatterns()
+	if deadlockPattern.MatchString(err.Error()) || corruptionPattern.MatchString(err.Error()) {
 		priority = errors.PriorityHigh
 	}
 
@@ -80,6 +109,15 @@ func stateError(err error, operation, stateType string, context ...interface{}) 
 		Priority(priority).
 		Context("operation", operation).
 		Context("state_type", stateType)
+
+	// Validate and add additional context pairs
+	if len(context)%2 != 0 {
+		getLogger().Warn("Odd number of context parameters in stateError",
+			"operation", operation,
+			"state_type", stateType,
+			"context_length", len(context))
+		context = context[:len(context)-1]
+	}
 
 	// Add additional context pairs
 	for i := 0; i < len(context)-1; i += 2 {
@@ -99,6 +137,15 @@ func conflictError(err error, operation, conflictType string, context ...interfa
 		Priority(errors.PriorityMedium).
 		Context("operation", operation).
 		Context("conflict_type", conflictType)
+
+	// Validate and add additional context pairs
+	if len(context)%2 != 0 {
+		getLogger().Warn("Odd number of context parameters in conflictError",
+			"operation", operation,
+			"conflict_type", conflictType,
+			"context_length", len(context))
+		context = context[:len(context)-1]
+	}
 
 	// Add additional context pairs
 	for i := 0; i < len(context)-1; i += 2 {
@@ -129,6 +176,15 @@ func criticalError(err error, operation, reason string, context ...interface{}) 
 		Context("operation", operation).
 		Context("critical_reason", reason)
 
+	// Validate and add additional context pairs
+	if len(context)%2 != 0 {
+		getLogger().Warn("Odd number of context parameters in criticalError",
+			"operation", operation,
+			"critical_reason", reason,
+			"context_length", len(context))
+		context = context[:len(context)-1]
+	}
+
 	// Add additional context pairs
 	for i := 0; i < len(context)-1; i += 2 {
 		if key, ok := context[i].(string); ok {
@@ -146,31 +202,53 @@ func isDatabaseCorruption(err error) bool {
 		return false
 	}
 
-	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "malformed") ||
-		strings.Contains(errStr, "corrupt") ||
-		strings.Contains(errStr, "database disk image is malformed") ||
-		strings.Contains(errStr, "file is not a database")
+	initRegexPatterns()
+	return corruptionPattern.MatchString(err.Error())
+}
+
+// isDeadlock checks if an error indicates deadlock conditions
+func isDeadlock(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	initRegexPatterns()
+	return deadlockPattern.MatchString(err.Error())
+}
+
+// isDatabaseLocked checks if an error indicates database lock conditions
+func isDatabaseLocked(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	initRegexPatterns()
+	return lockPattern.MatchString(err.Error())
 }
 
 // Note: isConstraintViolation is already defined in logger_helpers.go
 
+// CategoryState vs CategoryDatabase distinction:
+// - CategoryDatabase: Errors related to database connectivity, corruption, schema issues
+// - CategoryState: Errors related to application state management (locks, transactions, concurrency)
+// This distinction helps with error routing and debugging different failure modes
+
 // getUserFriendlyMessage creates user-friendly error messages for common scenarios
 func getUserFriendlyMessage(operation string, err error) string {
-	errStr := strings.ToLower(err.Error())
+	initRegexPatterns()
 
 	switch {
-	case strings.Contains(errStr, "disk full") || strings.Contains(errStr, "no space"):
+	case diskFullPattern.MatchString(err.Error()):
 		return "Storage space is full. Please free up disk space to continue."
-	case strings.Contains(errStr, "locked") || strings.Contains(errStr, "database is locked"):
+	case lockPattern.MatchString(err.Error()):
 		return "The database is currently busy. Please try again in a moment."
-	case strings.Contains(errStr, "constraint") || strings.Contains(errStr, "duplicate"):
+	case constraintPattern.MatchString(err.Error()):
 		return "This operation conflicts with existing data. Please check for duplicates."
-	case strings.Contains(errStr, "timeout"):
+	case strings.Contains(strings.ToLower(err.Error()), "timeout"):
 		return "The operation took too long. Please try again or contact support if the issue persists."
-	case strings.Contains(errStr, "not found"):
+	case strings.Contains(strings.ToLower(err.Error()), "not found"):
 		return "The requested item could not be found."
-	case strings.Contains(errStr, "corrupt") || strings.Contains(errStr, "malformed"):
+	case corruptionPattern.MatchString(err.Error()):
 		return "Database integrity issue detected. Please contact support immediately."
 	default:
 		return fmt.Sprintf("Failed to %s. Please try again or contact support if the issue persists.", operation)
