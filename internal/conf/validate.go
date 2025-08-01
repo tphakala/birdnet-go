@@ -207,19 +207,12 @@ func validateSecuritySettings(settings *Security) error {
 	// Check if any OAuth provider is enabled (OAuth providers require host for redirect URLs)
 	// Note: BasicAuth doesn't require host as it doesn't use OAuth redirects
 	if (settings.GoogleAuth.Enabled || settings.GithubAuth.Enabled) && settings.Host == "" {
-		// Log warning but don't fail startup - users can fix this in web UI settings
-		logValidationWarning(
-			fmt.Errorf("security.host must be set when using OAuth authentication providers (Google or GitHub)"),
-			"security-oauth-host",
-			"oauth-missing-host")
-		
-		// Store this as a warning to be shown in notifications after startup
-		// This is handled by the calling code which will add it to settings.ValidationWarnings
-		return &ValidationError{
-			Errors: []string{
-				"OAuth authentication warning: security.host must be set when using Google or GitHub authentication. Please configure this in Settings > Security.",
-			},
-		}
+		return errors.New(fmt.Errorf("security.host must be set when using OAuth authentication providers (Google or GitHub)")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-oauth-host").
+			Context("google_enabled", settings.GoogleAuth.Enabled).
+			Context("github_enabled", settings.GithubAuth.Enabled).
+			Build()
 	}
 
 	// AutoTLS validation
