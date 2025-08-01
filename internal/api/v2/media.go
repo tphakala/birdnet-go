@@ -406,10 +406,22 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	rawParam := ctx.QueryParam("raw")
 	raw := true // Default to true for backward compatibility
 	if rawParam != "" {
-		if parsedRaw, err := strconv.ParseBool(strings.ToLower(rawParam)); err == nil {
+		// Normalize the parameter to lowercase for consistent parsing
+		normalizedParam := strings.ToLower(rawParam)
+		
+		// First try strconv.ParseBool for standard values
+		if parsedRaw, err := strconv.ParseBool(normalizedParam); err == nil {
 			raw = parsedRaw
+		} else {
+			// Handle additional common boolean representations
+			switch normalizedParam {
+			case "yes", "on":
+				raw = true
+			case "no", "off":
+				raw = false
+			// Default case: keep raw = true for invalid values
+			}
 		}
-		// If parsing fails, keep default of true
 	}
 
 	// Pass the request context for cancellation/timeout
@@ -481,10 +493,22 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	rawParam := ctx.QueryParam("raw")
 	raw := true // Default to true for backward compatibility
 	if rawParam != "" {
-		if parsedRaw, err := strconv.ParseBool(strings.ToLower(rawParam)); err == nil {
+		// Normalize the parameter to lowercase for consistent parsing
+		normalizedParam := strings.ToLower(rawParam)
+		
+		// First try strconv.ParseBool for standard values
+		if parsedRaw, err := strconv.ParseBool(normalizedParam); err == nil {
 			raw = parsedRaw
+		} else {
+			// Handle additional common boolean representations
+			switch normalizedParam {
+			case "yes", "on":
+				raw = true
+			case "no", "off":
+				raw = false
+			// Default case: keep raw = true for invalid values
+			}
 		}
-		// If parsing fails, keep default of true
 	}
 
 	// Pass the request context for cancellation/timeout
