@@ -228,23 +228,6 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
 }
 
-// getContentType determines the content type based on file extension (can remain as helper)
-func getContentType(filename string) string {
-	ext := strings.ToLower(filepath.Ext(filename))
-	switch ext {
-	case ".mp3":
-		return "audio/mpeg"
-	case ".wav":
-		return "audio/wav"
-	case ".ogg":
-		return "audio/ogg"
-	case ".flac":
-		return "audio/flac"
-	default:
-		// Default to octet-stream if unknown, letting ServeFile handle it
-		return "application/octet-stream"
-	}
-}
 
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
@@ -525,79 +508,6 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	return nil
 }
 
-// httpRange specifies the byte range to be sent to the client
-type httpRange struct {
-	start, length int64
-}
-
-// parseRange parses a Range header string as per RFC 7233
-func parseRange(rangeHeader string, size int64) ([]httpRange, error) {
-	if !strings.HasPrefix(rangeHeader, "bytes=") {
-		return nil, fmt.Errorf("invalid range header format")
-	}
-	rangeHeader = strings.TrimPrefix(rangeHeader, "bytes=")
-
-	// Pre-allocate slice based on comma-separated range count
-	rangeParts := strings.Split(rangeHeader, ",")
-	ranges := make([]httpRange, 0, len(rangeParts))
-	for _, r := range rangeParts {
-		r = strings.TrimSpace(r)
-		if r == "" {
-			continue
-		}
-
-		parts := strings.Split(r, "-")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid range format")
-		}
-
-		var start, end int64
-		var err error
-
-		if parts[0] == "" {
-			// suffix range: -N
-			end, err = strconv.ParseInt(parts[1], 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid range format")
-			}
-			if end > size {
-				end = size
-			}
-			start = size - end
-			end = size - 1
-		} else {
-			// normal range: N-M or N-
-			start, err = strconv.ParseInt(parts[0], 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid range format")
-			}
-
-			if parts[1] == "" {
-				// range: N-
-				end = size - 1
-			} else {
-				// range: N-M
-				end, err = strconv.ParseInt(parts[1], 10, 64)
-				if err != nil {
-					return nil, fmt.Errorf("invalid range format")
-				}
-			}
-		}
-
-		if start > end || start < 0 || end >= size {
-			// Invalid range
-			continue
-		}
-
-		ranges = append(ranges, httpRange{start: start, length: end - start + 1})
-	}
-
-	if len(ranges) == 0 {
-		return nil, fmt.Errorf("no valid ranges found")
-	}
-
-	return ranges, nil
-}
 
 // Limit concurrent spectrogram generations to avoid overloading the system
 const maxConcurrentSpectrograms = 4
