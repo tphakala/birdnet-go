@@ -7,6 +7,7 @@ import (
 	"html"
 	"html/template"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,10 +17,12 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // MaxClipNameLength is the maximum allowed length for a clip name
@@ -332,83 +335,200 @@ func (h *Handlers) ThumbnailAttribution(scientificName string) template.HTML {
 // ServeSpectrogram serves or generates a spectrogram for a given clip.
 // API: GET /api/v1/media/spectrogram
 func (h *Handlers) ServeSpectrogram(c echo.Context) error {
+	startTime := time.Now()
+	
+	// Create structured logger for this operation
+	logger := logging.ForService("htmx_media_handler")
+	if logger == nil {
+		logger = slog.Default().With("service", "htmx_media_handler")
+	}
+	
+	logger.Debug("HTMX API spectrogram request initiated",
+		slog.String("url", c.Request().URL.String()),
+		slog.String("method", c.Request().Method),
+		slog.String("user_agent", c.Request().UserAgent()),
+		slog.String("remote_addr", c.RealIP()),
+	)
+	
 	h.Debug("ServeSpectrogram: Handler called with URL: %s", c.Request().URL.String())
 
 	// Extract clip name from the query parameters
 	clipName := c.QueryParam("clip")
 	h.Debug("ServeSpectrogram: Raw clip name from query: %s", clipName)
+	logger.Debug("Extracted clip name from query parameters",
+		slog.String("raw_clip_name", clipName),
+	)
 
 	// Sanitize the clip name
 	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
+		logger.Debug("Clip name sanitization failed, serving placeholder",
+			slog.String("raw_clip_name", clipName),
+			slog.String("error", err.Error()),
+			slog.Duration("request_duration", time.Since(startTime)),
+		)
 		h.Debug("ServeSpectrogram: Error sanitizing clip name: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
+	logger.Debug("Clip name sanitized successfully",
+		slog.String("raw_clip_name", clipName),
+		slog.String("sanitized_clip_name", sanitizedClipName),
+	)
 	h.Debug("ServeSpectrogram: Sanitized clip name: %s", sanitizedClipName)
 
 	// Get the full path to the audio file using consistent path handling
 	fullPath := getFullPath(sanitizedClipName)
 	h.Debug("ServeSpectrogram: Full audio path: %s", fullPath)
+	logger.Debug("Constructed full audio file path",
+		slog.String("sanitized_clip_name", sanitizedClipName),
+		slog.String("full_path", fullPath),
+	)
 
 	// Verify that the audio file exists
 	exists, err := fileExists(fullPath)
 	if err != nil {
+		logger.Debug("Audio file existence check failed, serving placeholder",
+			slog.String("full_path", fullPath),
+			slog.String("error", err.Error()),
+			slog.Duration("request_duration", time.Since(startTime)),
+		)
 		h.Debug("ServeSpectrogram: Error checking audio file: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
+		logger.Debug("Audio file not found, serving placeholder",
+			slog.String("full_path", fullPath),
+			slog.Duration("request_duration", time.Since(startTime)),
+		)
 		h.Debug("ServeSpectrogram: Audio file not found: %s", fullPath)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
+	logger.Debug("Audio file verified successfully",
+		slog.String("full_path", fullPath),
+	)
 	h.Debug("ServeSpectrogram: Audio file exists at: %s", fullPath)
 
 	// Construct the path to the spectrogram image
-	spectrogramPath, err := h.getSpectrogramPath(fullPath, 400) // Assuming 400px width
+	spectrogramWidth := 400 // Default width for HTMX API
+	spectrogramPath, err := h.getSpectrogramPath(fullPath, spectrogramWidth)
 	if err != nil {
+		logger.Debug("Spectrogram path generation failed, serving placeholder",
+			slog.String("full_path", fullPath),
+			slog.Int("width", spectrogramWidth),
+			slog.String("error", err.Error()),
+			slog.Duration("request_duration", time.Since(startTime)),
+		)
 		h.Debug("ServeSpectrogram: Error getting spectrogram path: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
+	logger.Debug("Spectrogram path generated successfully",
+		slog.String("audio_path", fullPath),
+		slog.String("spectrogram_path", spectrogramPath),
+		slog.Int("width", spectrogramWidth),
+	)
 	h.Debug("ServeSpectrogram: Final spectrogram path: %s", spectrogramPath)
 
 	// Verify the spectrogram exists
 	exists, err = fileExists(spectrogramPath)
 	if err != nil {
+		logger.Debug("Spectrogram existence check failed, serving placeholder",
+			slog.String("spectrogram_path", spectrogramPath),
+			slog.String("error", err.Error()),
+			slog.Duration("request_duration", time.Since(startTime)),
+		)
 		h.Debug("ServeSpectrogram: Error checking spectrogram file: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
+		logger.Debug("Spectrogram not found, initiating generation",
+			slog.String("spectrogram_path", spectrogramPath),
+			slog.String("audio_path", fullPath),
+			slog.Int("width", spectrogramWidth),
+		)
 		h.Debug("ServeSpectrogram: Spectrogram file not found, attempting to create it")
 
 		// Acquire semaphore before generating spectrogram
+		logger.Debug("Acquiring semaphore for spectrogram generation",
+			slog.Int("max_concurrent", MaxConcurrentSpectrograms),
+		)
 		h.Debug("ServeSpectrogram: waiting for available slot for spectrogram generation")
+		semaphoreStartTime := time.Now()
 		spectrogramSemaphore <- struct{}{}
+		semaphoreWaitDuration := time.Since(semaphoreStartTime)
+		
+		logger.Debug("Semaphore acquired for spectrogram generation",
+			slog.Duration("semaphore_wait_duration", semaphoreWaitDuration),
+		)
+		
 		defer func() {
 			<-spectrogramSemaphore
+			logger.Debug("Released semaphore slot for spectrogram generation")
 			h.Debug("ServeSpectrogram: released semaphore slot")
 		}()
 
 		// Try to create the spectrogram
-		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, 400); err != nil {
+		generationStartTime := time.Now()
+		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, spectrogramWidth); err != nil {
+			generationDuration := time.Since(generationStartTime)
+			logger.Debug("Spectrogram generation failed, serving placeholder",
+				slog.String("audio_path", fullPath),
+				slog.String("spectrogram_path", spectrogramPath),
+				slog.Int("width", spectrogramWidth),
+				slog.String("error", err.Error()),
+				slog.Duration("generation_duration", generationDuration),
+				slog.Duration("total_request_duration", time.Since(startTime)),
+			)
 			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
 			c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 			return c.File("assets/images/spectrogram-placeholder.svg")
 		}
+		generationDuration := time.Since(generationStartTime)
+		logger.Debug("Spectrogram generated successfully",
+			slog.String("audio_path", fullPath),
+			slog.String("spectrogram_path", spectrogramPath),
+			slog.Int("width", spectrogramWidth),
+			slog.Duration("generation_duration", generationDuration),
+			slog.Duration("semaphore_wait_duration", semaphoreWaitDuration),
+		)
 		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", spectrogramPath)
+	} else {
+		logger.Debug("Existing spectrogram found, serving cached version",
+			slog.String("spectrogram_path", spectrogramPath),
+		)
 	}
 
 	// Final check if the spectrogram exists after potential creation
 	exists, _ = fileExists(spectrogramPath)
 	if !exists {
+		logger.Debug("Spectrogram still not found after creation attempt, serving placeholder",
+			slog.String("spectrogram_path", spectrogramPath),
+			slog.Duration("total_request_duration", time.Since(startTime)),
+		)
 		h.Debug("ServeSpectrogram: Spectrogram still not found after creation attempt: %s", spectrogramPath)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
 		return c.File("assets/images/spectrogram-placeholder.svg")
 	}
 
+	// Get file size for logging
+	var fileSize int64
+	if fileInfo, err := os.Stat(spectrogramPath); err == nil {
+		fileSize = fileInfo.Size()
+	}
+
+	totalDuration := time.Since(startTime)
+	logger.Debug("Serving spectrogram file successfully",
+		slog.String("spectrogram_path", spectrogramPath),
+		slog.Int64("file_size_bytes", fileSize),
+		slog.Duration("total_request_duration", totalDuration),
+		slog.String("api_handler", "htmx_media_spectrogram"),
+		slog.Int("width", spectrogramWidth),
+	)
+	
 	h.Debug("ServeSpectrogram: Serving spectrogram file: %s", spectrogramPath)
 	// Set the correct Content-Type header for PNG images
 	c.Response().Header().Set(echo.HeaderContentType, "image/png")
@@ -418,6 +538,19 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 
 // getSpectrogramPath generates the path to the spectrogram image file for a given audio file
 func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, error) {
+	startTime := time.Now()
+	
+	// Create structured logger for this operation
+	logger := logging.ForService("htmx_media_handler")
+	if logger == nil {
+		logger = slog.Default().With("service", "htmx_media_handler")
+	}
+	
+	logger.Debug("Generating spectrogram path",
+		slog.String("input_audio_path", audioFileName),
+		slog.Int("width", width),
+	)
+	
 	// Clean the audio file path first
 	audioFileName = filepath.Clean(audioFileName)
 	h.Debug("getSpectrogramPath: Input audio path: %s", audioFileName)
@@ -425,6 +558,9 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 	// Get the export path
 	exportPath := conf.Setting().Realtime.Audio.Export.Path
 	h.Debug("getSpectrogramPath: Export path: %s", exportPath)
+	logger.Debug("Retrieved export path from configuration",
+		slog.String("export_path", exportPath),
+	)
 
 	// Convert both paths to forward slashes for consistent comparison
 	audioFileNameSlash := strings.ReplaceAll(audioFileName, "\\", "/")
@@ -434,6 +570,10 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 	if !strings.HasPrefix(strings.ToLower(audioFileNameSlash), strings.ToLower(exportPathSlash)) {
 		// If the path doesn't already include the export path, add it
 		audioFileName = filepath.Clean(filepath.Join(exportPath, audioFileName))
+		logger.Debug("Added export path to audio filename",
+			slog.String("original_path", audioFileNameSlash),
+			slog.String("full_path", audioFileName),
+		)
 	}
 	h.Debug("getSpectrogramPath: Full audio path: %s", audioFileName)
 
@@ -443,6 +583,10 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 
 	baseNameWithoutExt := strings.TrimSuffix(filepath.Base(audioFileName), filepath.Ext(audioFileName))
 	h.Debug("getSpectrogramPath: Base name without extension: %s", baseNameWithoutExt)
+	logger.Debug("Extracted audio file components",
+		slog.String("directory", dir),
+		slog.String("base_name", baseNameWithoutExt),
+	)
 
 	spectrogramFileName := fmt.Sprintf("%s_%dpx.png", baseNameWithoutExt, width)
 	h.Debug("getSpectrogramPath: Spectrogram filename: %s", spectrogramFileName)
@@ -450,29 +594,59 @@ func (h *Handlers) getSpectrogramPath(audioFileName string, width int) (string, 
 	// Join paths using OS-specific separators and clean the result
 	spectrogramPath := filepath.Clean(filepath.Join(dir, spectrogramFileName))
 	h.Debug("getSpectrogramPath: Final spectrogram path: %s", spectrogramPath)
+	logger.Debug("Generated spectrogram filename and path",
+		slog.String("spectrogram_filename", spectrogramFileName),
+		slog.String("spectrogram_path", spectrogramPath),
+	)
 
 	// Check if the spectrogram already exists
 	exists, err := fileExists(spectrogramPath)
 	if err != nil {
+		logger.Debug("Error checking spectrogram file existence",
+			slog.String("spectrogram_path", spectrogramPath),
+			slog.String("error", err.Error()),
+			slog.Duration("path_generation_duration", time.Since(startTime)),
+		)
 		h.Debug("getSpectrogramPath: Error checking spectrogram existence: %v", err)
 		return "", fmt.Errorf("error checking spectrogram file: %w", err)
 	}
 	if exists {
+		logger.Debug("Existing spectrogram found",
+			slog.String("spectrogram_path", spectrogramPath),
+			slog.Duration("path_generation_duration", time.Since(startTime)),
+		)
 		h.Debug("getSpectrogramPath: Existing spectrogram found at: %s", spectrogramPath)
 		return spectrogramPath, nil
 	}
+	logger.Debug("No existing spectrogram found, checking audio file",
+		slog.String("spectrogram_path", spectrogramPath),
+	)
 	h.Debug("getSpectrogramPath: No existing spectrogram found at: %s", spectrogramPath)
 
 	// Check if the original audio file exists
 	exists, err = fileExists(audioFileName)
 	if err != nil {
+		logger.Debug("Error checking audio file existence",
+			slog.String("audio_path", audioFileName),
+			slog.String("error", err.Error()),
+			slog.Duration("path_generation_duration", time.Since(startTime)),
+		)
 		h.Debug("getSpectrogramPath: Error checking audio file: %v", err)
 		return "", fmt.Errorf("error checking audio file: %w", err)
 	}
 	if !exists {
+		logger.Debug("Audio file does not exist",
+			slog.String("audio_path", audioFileName),
+			slog.Duration("path_generation_duration", time.Since(startTime)),
+		)
 		h.Debug("getSpectrogramPath: Audio file does not exist at: %s", audioFileName)
 		return "", fmt.Errorf("audio file does not exist: %s", audioFileName)
 	}
+	logger.Debug("Audio file verified, spectrogram path ready",
+		slog.String("audio_path", audioFileName),
+		slog.String("spectrogram_path", spectrogramPath),
+		slog.Duration("path_generation_duration", time.Since(startTime)),
+	)
 	h.Debug("getSpectrogramPath: Audio file exists at: %s", audioFileName)
 
 	return spectrogramPath, nil
@@ -493,44 +667,93 @@ func fileExists(filename string) (bool, error) {
 // createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
 // It supports various audio formats by using ffmpeg to pipe the audio to SoX when necessary.
 func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
+	startTime := time.Now()
+	
+	// Create structured logger for this operation
+	logger := logging.ForService("htmx_media_handler")
+	if logger == nil {
+		logger = slog.Default().With("service", "htmx_media_handler")
+	}
+	
+	logger.Debug("Starting spectrogram generation with SoX",
+		slog.String("audio_path", audioClipPath),
+		slog.String("output_path", spectrogramPath),
+		slog.Int("width", width),
+	)
+	
 	// Get ffmpeg and sox paths from settings
 	ffmpegBinary := conf.Setting().Realtime.Audio.FfmpegPath
 	soxBinary := conf.Setting().Realtime.Audio.SoxPath
+	
+	logger.Debug("Retrieved binary paths from configuration",
+		slog.String("ffmpeg_path", ffmpegBinary),
+		slog.String("sox_path", soxBinary),
+	)
 
 	// Verify ffmpeg and SoX paths
 	if ffmpegBinary == "" {
+		logger.Debug("FFmpeg path not configured",
+			slog.Duration("setup_duration", time.Since(startTime)),
+		)
 		return fmt.Errorf("ffmpeg path not set in settings")
 	}
 	if soxBinary == "" {
+		logger.Debug("SoX path not configured",
+			slog.Duration("setup_duration", time.Since(startTime)),
+		)
 		return fmt.Errorf("SoX path not set in settings")
 	}
+	
+	logger.Debug("Binary paths verified successfully")
 
 	// Set height based on width
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
+	height := width / 2
+	
+	logger.Debug("Calculated spectrogram dimensions",
+		slog.Int("width", width),
+		slog.Int("height", height),
+	)
 
 	// Determine if we need to use ffmpeg based on file extension
 	ext := strings.ToLower(filepath.Ext(audioClipPath))
 	// remove prefix dot
 	ext = strings.TrimPrefix(ext, ".")
 	useFFmpeg := true
-	for _, soxType := range conf.Setting().Realtime.Audio.SoxAudioTypes {
+	supportedSoxTypes := conf.Setting().Realtime.Audio.SoxAudioTypes
+	for _, soxType := range supportedSoxTypes {
 		if strings.EqualFold(ext, soxType) {
 			useFFmpeg = false
 			break
 		}
 	}
+	
+	logger.Debug("Determined audio format processing method",
+		slog.String("file_extension", ext),
+		slog.Bool("use_ffmpeg", useFFmpeg),
+		slog.Any("supported_sox_types", supportedSoxTypes),
+	)
 
 	var cmd *exec.Cmd
 	var soxCmd *exec.Cmd
+	
+	commandSetupStart := time.Now()
 
 	// Decode audio using ffmpeg and pipe to sox for spectrogram creation
 	if useFFmpeg {
+		logger.Debug("Preparing FFmpeg + SoX pipeline for audio processing")
+		
 		// Build ffmpeg command arguments
 		ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
 
 		// Build SoX command arguments
 		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+
+		logger.Debug("Built command arguments for FFmpeg + SoX pipeline",
+			slog.Any("ffmpeg_args", ffmpegArgs),
+			slog.Any("sox_args", soxArgs),
+		)
 
 		// Set up commands
 		if runtime.GOOS == "windows" {
@@ -540,11 +763,21 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
 			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)    // #nosec G204 -- soxBinary validated via ValidateToolPath
 		}
+		
+		logger.Debug("Commands created for FFmpeg + SoX pipeline",
+			slog.String("ffmpeg_command", cmd.String()),
+			slog.String("sox_command", soxCmd.String()),
+			slog.String("os", runtime.GOOS),
+		)
 
 		// Set up pipe between ffmpeg and sox
 		var err error
 		soxCmd.Stdin, err = cmd.StdoutPipe()
 		if err != nil {
+			logger.Debug("Failed to create pipe between FFmpeg and SoX",
+				slog.String("error", err.Error()),
+				slog.Duration("setup_duration", time.Since(startTime)),
+			)
 			return fmt.Errorf("error creating pipe: %w", err)
 		}
 
@@ -552,21 +785,40 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		var ffmpegOutput, soxOutput bytes.Buffer
 		cmd.Stderr = &ffmpegOutput
 		soxCmd.Stderr = &soxOutput
+		
+		commandSetupDuration := time.Since(commandSetupStart)
+		logger.Debug("Pipeline setup completed",
+			slog.Duration("command_setup_duration", commandSetupDuration),
+		)
 
 		// Allow other goroutines to run before starting SoX
 		runtime.Gosched()
 
 		// Start sox command
+		soxStartTime := time.Now()
 		if err := soxCmd.Start(); err != nil {
+			logger.Debug("Failed to start SoX command",
+				slog.String("sox_command", soxCmd.String()),
+				slog.String("error", err.Error()),
+				slog.Duration("total_duration", time.Since(startTime)),
+			)
 			log.Printf("SoX cmd: %s", soxCmd.String())
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
+		
+		logger.Debug("SoX command started successfully",
+			slog.Duration("sox_start_duration", time.Since(soxStartTime)),
+		)
 
 		// Define error message template
 		const errFFmpegSoxFailed = "ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s\n%s"
 
 		// Run ffmpeg command
+		ffmpegStartTime := time.Now()
+		logger.Debug("Starting FFmpeg execution")
 		if err := cmd.Run(); err != nil {
+			ffmpegDuration := time.Since(ffmpegStartTime)
+			
 			// Stop the SoX command to clean up resources
 			if killErr := soxCmd.Process.Kill(); killErr != nil {
 				log.Printf("Failed to kill SoX process: %v", killErr)
@@ -581,29 +833,78 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 				additionalInfo = fmt.Sprintf("sox wait error: %v", waitErr)
 			}
 
+			logger.Debug("FFmpeg command failed",
+				slog.String("ffmpeg_command", cmd.String()),
+				slog.String("error", err.Error()),
+				slog.Duration("ffmpeg_duration", ffmpegDuration),
+				slog.Duration("total_duration", time.Since(startTime)),
+				slog.String("ffmpeg_output", ffmpegOutput.String()),
+				slog.String("sox_output", soxOutput.String()),
+			)
+
 			// Use fmt.Errorf with the constant format string
 			return fmt.Errorf(errFFmpegSoxFailed, err, ffmpegOutput.String(), soxOutput.String(), additionalInfo)
 		}
+		
+		ffmpegDuration := time.Since(ffmpegStartTime)
+		logger.Debug("FFmpeg execution completed successfully",
+			slog.Duration("ffmpeg_duration", ffmpegDuration),
+		)
 
 		// Allow other goroutines to run before waiting for SoX to finish
 		runtime.Gosched()
 
 		// Wait for sox command to finish
+		soxWaitStartTime := time.Now()
+		logger.Debug("Waiting for SoX command to complete")
 		if err := soxCmd.Wait(); err != nil {
+			soxWaitDuration := time.Since(soxWaitStartTime)
+			logger.Debug("SoX command failed",
+				slog.String("sox_command", soxCmd.String()),
+				slog.String("error", err.Error()),
+				slog.Duration("sox_wait_duration", soxWaitDuration),
+				slog.Duration("ffmpeg_duration", ffmpegDuration),
+				slog.Duration("total_duration", time.Since(startTime)),
+				slog.String("ffmpeg_output", ffmpegOutput.String()),
+				slog.String("sox_output", soxOutput.String()),
+			)
 			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s", err, ffmpegOutput.String(), soxOutput.String())
 		}
+		
+		soxWaitDuration := time.Since(soxWaitStartTime)
+		totalDuration := time.Since(startTime)
+		
+		logger.Debug("FFmpeg + SoX pipeline completed successfully",
+			slog.Duration("ffmpeg_duration", ffmpegDuration),
+			slog.Duration("sox_wait_duration", soxWaitDuration),
+			slog.Duration("total_duration", totalDuration),
+			slog.String("output_file", spectrogramPath),
+		)
 
 		// Allow other goroutines to run after SoX finishes
 		runtime.Gosched()
 	} else {
 		// Use SoX directly for supported formats
+		logger.Debug("Using SoX directly for supported audio format")
+		
 		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+		
+		logger.Debug("Built SoX-only command arguments",
+			slog.Any("sox_args", soxArgs),
+		)
 
 		if runtime.GOOS == "windows" {
 			soxCmd = exec.Command(soxBinary, soxArgs...) // #nosec G204 -- soxBinary validated via ValidateToolPath
 		} else {
 			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...) // #nosec G204 -- soxBinary validated via ValidateToolPath
 		}
+		
+		commandSetupDuration := time.Since(commandSetupStart)
+		logger.Debug("SoX-only command created",
+			slog.String("sox_command", soxCmd.String()),
+			slog.String("os", runtime.GOOS),
+			slog.Duration("command_setup_duration", commandSetupDuration),
+		)
 
 		// Capture output
 		var soxOutput bytes.Buffer
@@ -614,13 +915,52 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		runtime.Gosched()
 
 		// Run SoX command
+		soxExecutionStartTime := time.Now()
+		logger.Debug("Starting SoX-only execution")
 		if err := soxCmd.Run(); err != nil {
+			soxExecutionDuration := time.Since(soxExecutionStartTime)
+			totalDuration := time.Since(startTime)
+			
+			logger.Debug("SoX-only command failed",
+				slog.String("sox_command", soxCmd.String()),
+				slog.String("error", err.Error()),
+				slog.Duration("sox_execution_duration", soxExecutionDuration),
+				slog.Duration("total_duration", totalDuration),
+				slog.String("sox_output", soxOutput.String()),
+			)
 			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
 		}
+		
+		soxExecutionDuration := time.Since(soxExecutionStartTime)
+		totalDuration := time.Since(startTime)
+		
+		logger.Debug("SoX-only execution completed successfully",
+			slog.Duration("sox_execution_duration", soxExecutionDuration),
+			slog.Duration("total_duration", totalDuration),
+			slog.String("output_file", spectrogramPath),
+		)
 
 		// Allow other goroutines to run after SoX finishes
 		runtime.Gosched()
 	}
+
+	// Add final completion log with file size if possible
+	var fileSize int64
+	if fileInfo, err := os.Stat(spectrogramPath); err == nil {
+		fileSize = fileInfo.Size()
+	}
+	
+	totalDuration := time.Since(startTime)
+	logger.Debug("Spectrogram generation completed successfully",
+		slog.String("input_path", audioClipPath),
+		slog.String("output_path", spectrogramPath),
+		slog.Int("width", width),
+		slog.Int("height", height),
+		slog.Int64("output_file_size_bytes", fileSize),
+		slog.Duration("total_generation_duration", totalDuration),
+		slog.Bool("used_ffmpeg", useFFmpeg),
+		slog.String("api_handler", "htmx_spectrogram_generation"),
+	)
 
 	return nil
 }

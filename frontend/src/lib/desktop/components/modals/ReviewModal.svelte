@@ -107,7 +107,7 @@
   className="modal-bottom sm:modal-middle"
 >
   {#snippet children()}
-    {#if detection}
+    {#if detection && isOpen}
       <!-- Error message display -->
       {#if errorMessage}
         <div class="alert alert-error mb-4">

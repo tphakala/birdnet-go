@@ -195,7 +195,8 @@ func TestServeSpectrogram(t *testing.T) {
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
 	// This allows testing the "file exists" path without running external tools.
-	spectrogramFilename := "audio_800.png"
+	// Default is raw=true, so the filename format is audio_800px.png
+	spectrogramFilename := "audio_800px.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "simulated spectrogram content"
 	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
@@ -325,7 +326,8 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simulate existing spectrogram
-	spectrogramFilename := "test_800.png"
+	// Default is raw=true, so the filename format is test_800px.png
+	spectrogramFilename := "test_800px.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "test spectrogram content"
 	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
@@ -647,6 +649,134 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 	}
 }
 
+// TestServeSpectrogramRawParameter tests the raw parameter parsing functionality
+func TestServeSpectrogramRawParameter(t *testing.T) {
+	// Setup test environment
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	// Create a test audio file within the secure root
+	audioFilename := "rawtest.mp3"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	err := os.WriteFile(audioFilePath, []byte("audio file content"), 0o600)
+	require.NoError(t, err)
+
+	// Simulate raw spectrogram (default behavior)
+	rawSpectrogramFilename := "rawtest_800px.png"
+	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
+	err = os.WriteFile(rawSpectrogramPath, []byte("raw spectrogram"), 0o600)
+	require.NoError(t, err)
+
+	// Simulate spectrogram with legend
+	legendSpectrogramFilename := "rawtest_800px-legend.png"
+	legendSpectrogramPath := filepath.Join(tempDir, legendSpectrogramFilename)
+	err = os.WriteFile(legendSpectrogramPath, []byte("legend spectrogram"), 0o600)
+	require.NoError(t, err)
+
+	// Test cases for different raw parameter values
+	testCases := []struct {
+		name           string
+		rawParam       string
+		expectedStatus int
+		expectedBody   string
+		description    string
+	}{
+		{
+			name:           "Default behavior (no raw param)",
+			rawParam:       "",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "raw spectrogram",
+			description:    "Should default to raw=true",
+		},
+		{
+			name:           "Explicit raw=true",
+			rawParam:       "true",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "raw spectrogram",
+			description:    "Should generate raw spectrogram",
+		},
+		{
+			name:           "Explicit raw=false",
+			rawParam:       "false",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "legend spectrogram",
+			description:    "Should generate spectrogram with legend",
+		},
+		{
+			name:           "Raw=1 (numeric true)",
+			rawParam:       "1",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "raw spectrogram",
+			description:    "Should parse '1' as true",
+		},
+		{
+			name:           "Raw=0 (numeric false)",
+			rawParam:       "0",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "legend spectrogram",
+			description:    "Should parse '0' as false",
+		},
+		{
+			name:           "Raw=yes",
+			rawParam:       "yes",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "raw spectrogram",
+			description:    "Should parse 'yes' as true",
+		},
+		{
+			name:           "Raw=no",
+			rawParam:       "no",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "legend spectrogram",
+			description:    "Should parse 'no' as false",
+		},
+		{
+			name:           "Raw=invalid (defaults to true)",
+			rawParam:       "invalid",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "raw spectrogram",
+			description:    "Invalid values should default to true",
+		},
+		{
+			name:           "Raw=TRUE (case insensitive)",
+			rawParam:       "TRUE",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "raw spectrogram",
+			description:    "Should be case insensitive",
+		},
+		{
+			name:           "Raw=False (mixed case)",
+			rawParam:       "False",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "legend spectrogram",
+			description:    "Should handle mixed case",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create request
+			url := "/api/v2/media/spectrogram/" + audioFilename + "?width=800"
+			if tc.rawParam != "" {
+				url += "&raw=" + tc.rawParam
+			}
+			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("filename")
+			c.SetParamValues(audioFilename)
+
+			// Call handler
+			_ = controller.ServeSpectrogram(c)
+
+			// Check response
+			assert.Equal(t, tc.expectedStatus, rec.Code, tc.description)
+			if tc.expectedStatus == http.StatusOK {
+				assert.Equal(t, tc.expectedBody, rec.Body.String(), tc.description)
+			}
+		})
+	}
+}
+
 // TestServeAudioByID tests the ServeAudioByID handler with Content-Disposition header
 func TestServeAudioByID(t *testing.T) {
 	// Setup test environment
@@ -691,4 +821,162 @@ func TestServeAudioByID(t *testing.T) {
 
 	// Note: Error cases are omitted as they are tested elsewhere and the main
 	// goal of this test is to verify Content-Disposition header functionality
+}
+
+// TestServeSpectrogramByIDRawParameter tests the raw parameter parsing for ID-based spectrogram endpoint
+func TestServeSpectrogramByIDRawParameter(t *testing.T) {
+	// Setup test environment
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	// Create a test audio file
+	testFilename := "test_raw_param.wav"
+	filePath := filepath.Join(tempDir, testFilename)
+	err := os.WriteFile(filePath, []byte("test audio content"), 0o600)
+	require.NoError(t, err)
+
+	// Simulate raw spectrogram (default behavior)
+	rawSpectrogramFilename := "test_raw_param_400px.png"
+	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
+	err = os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
+	require.NoError(t, err)
+
+	// Simulate spectrogram with legend
+	legendSpectrogramFilename := "test_raw_param_400px-legend.png"
+	legendSpectrogramPath := filepath.Join(tempDir, legendSpectrogramFilename)
+	err = os.WriteFile(legendSpectrogramPath, []byte("id legend spectrogram"), 0o600)
+	require.NoError(t, err)
+
+	// Setup mock data store
+	mockDS := &MockDataStore{}
+	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
+	controller.DS = mockDS
+
+	// Test cases
+	testCases := []struct {
+		name           string
+		rawParam       string
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:           "Default (no raw param) - should be raw",
+			rawParam:       "",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Explicit raw=true",
+			rawParam:       "true",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Explicit raw=false",
+			rawParam:       "false",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+		{
+			name:           "Raw=1 (numeric true)",
+			rawParam:       "1",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=0 (numeric false)",
+			rawParam:       "0",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+		{
+			name:           "Raw=t (short true)",
+			rawParam:       "t",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=f (short false)",
+			rawParam:       "f",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+		{
+			name:           "Raw=yes",
+			rawParam:       "yes",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=no",
+			rawParam:       "no",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+		{
+			name:           "Raw=on",
+			rawParam:       "on",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=off",
+			rawParam:       "off",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+		{
+			name:           "Raw=invalid (defaults to true)",
+			rawParam:       "invalid",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=TRUE (case insensitive)",
+			rawParam:       "TRUE",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=False (mixed case)",
+			rawParam:       "False",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+		{
+			name:           "Raw=YES (uppercase)",
+			rawParam:       "YES",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id raw spectrogram",
+		},
+		{
+			name:           "Raw=No (mixed case)",
+			rawParam:       "No",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "id legend spectrogram",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create request
+			url := "/api/v2/spectrogram/123?size=sm"
+			if tc.rawParam != "" {
+				url += "&raw=" + tc.rawParam
+			}
+			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues("123")
+
+			// Call handler
+			_ = controller.ServeSpectrogramByID(c)
+
+			// Check response
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+			if tc.expectedStatus == http.StatusOK {
+				assert.Equal(t, tc.expectedBody, rec.Body.String())
+			}
+		})
+	}
 }

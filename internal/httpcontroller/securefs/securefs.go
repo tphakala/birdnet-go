@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -30,9 +31,10 @@ import (
 // - Prevents access to reserved Windows device names
 // - Handles platform-specific path validation (Windows, Unix, WASI, etc.)
 type SecureFS struct {
-	baseDir  string   // The base directory that all operations are restricted to
-	root     *os.Root // The sandboxed filesystem root
-	pipeName string   // Platform-specific pipe name for named pipes
+	baseDir  string     // The base directory that all operations are restricted to
+	root     *os.Root   // The sandboxed filesystem root
+	pipeName string     // Platform-specific pipe name for named pipes
+	cache    *PathCache // Smart memoization cache for expensive operations
 }
 
 // New creates a new secure filesystem with the specified base directory
@@ -61,20 +63,42 @@ func New(baseDir string) (*SecureFS, error) {
 	return &SecureFS{
 		baseDir: absPath,
 		root:    root,
+		cache:   NewPathCache(),
 	}, nil
 }
 
 // IsPathWithinBase checks if targetPath is within or equal to basePath
 func IsPathWithinBase(basePath, targetPath string) (bool, error) {
-	// Resolve both paths to absolute, clean paths
-	absBase, err := filepath.Abs(basePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to resolve base path: %w", err)
-	}
+	return IsPathWithinBaseWithCache(nil, basePath, targetPath)
+}
 
-	absTarget, err := filepath.Abs(targetPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to resolve target path: %w", err)
+// IsPathWithinBaseWithCache checks if targetPath is within or equal to basePath with optional caching
+func IsPathWithinBaseWithCache(cache *PathCache, basePath, targetPath string) (bool, error) {
+	var absBase, absTarget string
+	var err error
+
+	// Use cache for expensive filepath.Abs() calls if available
+	if cache != nil {
+		absBase, err = cache.GetAbsPath(basePath, filepath.Abs)
+		if err != nil {
+			return false, fmt.Errorf("failed to resolve base path: %w", err)
+		}
+
+		absTarget, err = cache.GetAbsPath(targetPath, filepath.Abs)
+		if err != nil {
+			return false, fmt.Errorf("failed to resolve target path: %w", err)
+		}
+	} else {
+		// Fallback to direct calls when no cache available
+		absBase, err = filepath.Abs(basePath)
+		if err != nil {
+			return false, fmt.Errorf("failed to resolve base path: %w", err)
+		}
+
+		absTarget, err = filepath.Abs(targetPath)
+		if err != nil {
+			return false, fmt.Errorf("failed to resolve target path: %w", err)
+		}
 	}
 
 	// Clean paths to remove any . or .. components
@@ -93,32 +117,60 @@ func IsPathWithinBase(basePath, targetPath string) (bool, error) {
 		return strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) || absTarget == absBase, nil
 	}
 
-	// For paths that exist, try to resolve symlinks
-	// If the base path is accessible, resolve it
-	resolvedBase, err := filepath.EvalSymlinks(absBase)
-	if err == nil {
-		absBase = resolvedBase
-	}
+	// For paths that exist, try to resolve symlinks with caching
+	if cache != nil {
+		// Use cached symlink resolution
+		resolvedBase, err := cache.GetSymlinkResolution(absBase, filepath.EvalSymlinks)
+		if err == nil {
+			absBase = resolvedBase
+		}
 
-	// If the target path is accessible, resolve it
-	resolvedTarget, err := filepath.EvalSymlinks(absTarget)
-	if err == nil {
-		absTarget = resolvedTarget
-	} else {
-		// Handle the case where intermediate components might be symlinks
-		// This is a fallback for paths that don't fully exist yet
-		dir := filepath.Dir(absTarget)
-		// Try to resolve parent directories if possible
-		for dir != "/" && dir != "." && dir != "" {
-			resolvedDir, err := filepath.EvalSymlinks(dir)
-			if err == nil && resolvedDir != dir {
-				// Found a parent directory that's a symlink
-				// Reconstruct the target with the resolved parent
-				base := filepath.Base(absTarget)
-				absTarget = filepath.Join(resolvedDir, base)
-				break
+		resolvedTarget, err := cache.GetSymlinkResolution(absTarget, filepath.EvalSymlinks)
+		if err == nil {
+			absTarget = resolvedTarget
+		} else {
+			// Handle the case where intermediate components might be symlinks
+			// This is a fallback for paths that don't fully exist yet
+			dir := filepath.Dir(absTarget)
+			// Try to resolve parent directories if possible
+			for dir != "/" && dir != "." && dir != "" {
+				resolvedDir, err := cache.GetSymlinkResolution(dir, filepath.EvalSymlinks)
+				if err == nil && resolvedDir != dir {
+					// Found a parent directory that's a symlink
+					// Reconstruct the target with the resolved parent
+					base := filepath.Base(absTarget)
+					absTarget = filepath.Join(resolvedDir, base)
+					break
+				}
+				dir = filepath.Dir(dir)
 			}
-			dir = filepath.Dir(dir)
+		}
+	} else {
+		// Fallback to direct calls when no cache available
+		resolvedBase, err := filepath.EvalSymlinks(absBase)
+		if err == nil {
+			absBase = resolvedBase
+		}
+
+		resolvedTarget, err := filepath.EvalSymlinks(absTarget)
+		if err == nil {
+			absTarget = resolvedTarget
+		} else {
+			// Handle the case where intermediate components might be symlinks
+			// This is a fallback for paths that don't fully exist yet
+			dir := filepath.Dir(absTarget)
+			// Try to resolve parent directories if possible
+			for dir != "/" && dir != "." && dir != "" {
+				resolvedDir, err := filepath.EvalSymlinks(dir)
+				if err == nil && resolvedDir != dir {
+					// Found a parent directory that's a symlink
+					// Reconstruct the target with the resolved parent
+					base := filepath.Base(absTarget)
+					absTarget = filepath.Join(resolvedDir, base)
+					break
+				}
+				dir = filepath.Dir(dir)
+			}
 		}
 	}
 
@@ -174,8 +226,11 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 		return "", fmt.Errorf("security error: path contains invalid components")
 	}
 
-	// Using the updated IsPathWithinBase that handles non-existent paths
-	isWithin, err := IsPathWithinBase(sfs.baseDir, absPath)
+	// Using the cached version of IsPathWithinBase for better performance
+	cacheKey := fmt.Sprintf("%s|%s", sfs.baseDir, absPath)
+	isWithin, err := sfs.cache.GetWithinBase(cacheKey, func() (bool, error) {
+		return IsPathWithinBaseWithCache(sfs.cache, sfs.baseDir, absPath)
+	})
 	if err != nil {
 		return "", fmt.Errorf("path validation error: %w", err)
 	}
@@ -199,27 +254,30 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 // ValidateRelativePath validates a path assumed to be relative to the base directory.
 // It returns a cleaned, validated path or an error if the path is not valid.
 func (sfs *SecureFS) ValidateRelativePath(relPath string) (string, error) {
-	// Clean the path first to resolve . and .. components where possible
-	cleanedPath := filepath.Clean(relPath)
+	// Use cache for path validation as this is expensive and deterministic
+	return sfs.cache.GetValidatePath(relPath, func(path string) (string, error) {
+		// Clean the path first to resolve . and .. components where possible
+		cleanedPath := filepath.Clean(path)
 
-	// Check for absolute paths after cleaning (should not happen if input is truly relative)
-	if filepath.IsAbs(cleanedPath) {
-		return "", fmt.Errorf("%w: path must be relative, but got '%s' after cleaning '%s'",
-			ErrInvalidPath, cleanedPath, relPath)
-	}
+		// Check for absolute paths after cleaning (should not happen if input is truly relative)
+		if filepath.IsAbs(cleanedPath) {
+			return "", fmt.Errorf("%w: path must be relative, but got '%s' after cleaning '%s'",
+				ErrInvalidPath, cleanedPath, path)
+		}
 
-	// Check for attempts to traverse upwards from the root.
-	// After cleaning, paths starting with ".." indicate an attempt to go above the root.
-	if strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) || cleanedPath == ".." {
-		return "", fmt.Errorf("%w: '%s' (cleaned from '%s')",
-			ErrPathTraversal, cleanedPath, relPath)
-	}
+		// Check for attempts to traverse upwards from the root.
+		// After cleaning, paths starting with ".." indicate an attempt to go above the root.
+		if strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) || cleanedPath == ".." {
+			return "", fmt.Errorf("%w: '%s' (cleaned from '%s')",
+				ErrPathTraversal, cleanedPath, path)
+		}
 
-	// Ensure no leading separator after cleaning (should be handled by Clean, but double-check)
-	cleanedPath = strings.TrimPrefix(cleanedPath, string(filepath.Separator))
+		// Ensure no leading separator after cleaning (should be handled by Clean, but double-check)
+		cleanedPath = strings.TrimPrefix(cleanedPath, string(filepath.Separator))
 
-	// The path is considered valid relative to the os.Root sandbox
-	return cleanedPath, nil
+		// The path is considered valid relative to the os.Root sandbox
+		return cleanedPath, nil
+	})
 }
 
 // MkdirAll creates a directory and all necessary parent directories with path validation
@@ -408,14 +466,16 @@ func (sfs *SecureFS) Lstat(path string) (fs.FileInfo, error) {
 // StatRel returns file info for a path assumed to be relative to the base directory.
 // It uses ValidateRelativePath for security checks.
 func (sfs *SecureFS) StatRel(relPath string) (fs.FileInfo, error) {
-	// Validate the provided relative path
+	// Validate the provided relative path (uses cache)
 	validatedRelPath, err := sfs.ValidateRelativePath(relPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use os.Root.Stat with the validated relative path
-	return sfs.root.Stat(validatedRelPath)
+	// Use cache for stat operations as filesystem calls are expensive
+	return sfs.cache.GetStat(validatedRelPath, func(path string) (fs.FileInfo, error) {
+		return sfs.root.Stat(path)
+	})
 }
 
 // Exists checks if a path exists with validation
@@ -615,6 +675,43 @@ func (sfs *SecureFS) Close() error {
 		return sfs.root.Close()
 	}
 	return nil
+}
+
+// ClearExpiredCache removes expired entries from the cache
+// This should be called periodically to prevent memory leaks
+func (sfs *SecureFS) ClearExpiredCache() {
+	if sfs.cache != nil {
+		sfs.cache.ClearExpired()
+	}
+}
+
+// GetCacheStats returns statistics about cache usage for monitoring
+func (sfs *SecureFS) GetCacheStats() CacheStats {
+	if sfs.cache != nil {
+		return sfs.cache.GetCacheStats()
+	}
+	return CacheStats{}
+}
+
+// StartCacheCleanup starts a background goroutine that periodically cleans expired cache entries
+func (sfs *SecureFS) StartCacheCleanup(interval time.Duration) chan<- struct{} {
+	stopCh := make(chan struct{})
+	
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				sfs.ClearExpiredCache()
+			case <-stopCh:
+				return
+			}
+		}
+	}()
+	
+	return stopCh
 }
 
 // ReadDir reads the directory named by path and returns
