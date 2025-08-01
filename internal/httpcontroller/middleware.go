@@ -78,7 +78,8 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 				strings.HasPrefix(path, "/api/v1/audio-stream-hls") || // Skip CSRF for HLS streaming
 				strings.HasPrefix(path, "/api/v1/auth/") ||
 				strings.HasPrefix(path, "/api/v1/oauth2/token") ||
-				path == "/api/v1/oauth2/callback"
+				path == "/api/v1/oauth2/callback" ||
+				path == "/api/v2/auth/login" // Skip CSRF for V2 login endpoint
 		},
 		ErrorHandler: func(err error, c echo.Context) error {
 			// Keep the original debug logging for backward compatibility
@@ -181,6 +182,11 @@ func (s *Server) VaryHeaderMiddleware() echo.MiddlewareFunc {
 func isProtectedRoute(path string) bool {
 	// HLS streaming routes should be protected (require authentication)
 	// but we'll handle them specially in the CSRFMiddleware
+
+	// Exclude auth endpoints from protection (they handle auth themselves)
+	if path == "/api/v2/auth/login" || path == "/api/v2/auth/logout" {
+		return false
+	}
 
 	return strings.HasPrefix(path, "/settings/") ||
 		strings.HasPrefix(path, "/api/v1/settings/") ||

@@ -9,14 +9,9 @@
   - Secure state management
 -->
 <script lang="ts">
-  import Modal from '../ui/Modal.svelte';
-  import PasswordField from '../forms/PasswordField.svelte';
-  import LoadingSpinner from '../ui/LoadingSpinner.svelte';
   import { api } from '$lib/utils/api';
-  import { auth as authStore } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { alertIcons } from '$lib/utils/icons';
 
   const logger = loggers.auth;
 
@@ -44,7 +39,7 @@
   let {
     isOpen = false,
     onClose,
-    redirectUrl = '/',
+    redirectUrl = '/ui/',
     authConfig = { basicEnabled: true, googleEnabled: false, githubEnabled: false },
   }: Props = $props();
 
@@ -125,24 +120,28 @@
     return true;
   }
 
-  // SECURITY: Secure error message mapping
-  function getSecureErrorMessage(err: unknown): string {
-    // Never expose server error details to prevent information leakage
-    if (err instanceof Error) {
-      // Only show generic messages for security
-      if (err.message.includes('401') || err.message.includes('Unauthorized')) {
-        return t('auth.errors.invalidCredentials');
-      }
-      if (err.message.includes('429') || err.message.includes('rate limit')) {
-        return t('auth.errors.tooManyAttempts');
-      }
-      if (err.message.includes('500') || err.message.includes('server')) {
-        return t('auth.errors.serverError');
+  // SECURITY: Extract current base path from window location
+  function detectBasePath(): string {
+    const pathname = window.location.pathname;
+
+    // Common UI base paths to check
+    const commonBasePaths = ['/ui/', '/app/', '/admin/', '/dashboard/'];
+
+    for (const basePath of commonBasePaths) {
+      if (pathname.startsWith(basePath)) {
+        return basePath;
       }
     }
 
-    // Generic fallback - never expose specific error details
-    return t('auth.errors.loginFailed');
+    // If no common base path found, check if we're in a subfolder
+    const pathSegments = pathname.split('/').filter(Boolean);
+    if (pathSegments.length > 0) {
+      // Return the first segment as base path
+      return `/${pathSegments[0]}/`;
+    }
+
+    // Default to root
+    return '/';
   }
 
   async function handlePasswordLogin() {
@@ -161,8 +160,12 @@
       return;
     }
 
+    // SECURITY: Detect current base path
+    const currentBasePath = detectBasePath();
+
     // SECURITY: Validate redirect URL
-    const safeRedirectUrl = redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : '/';
+    const safeRedirectUrl =
+      redirectUrl && validateRedirectUrl(redirectUrl) ? redirectUrl : currentBasePath;
 
     error = '';
     isSubmitting = true;
@@ -172,33 +175,51 @@
     try {
       // SECURITY: Don't update auth state until server confirms success
       // NOTE: Backend expects username to match Security.BasicAuth.ClientID (default: "birdnet-client")
-      await api.post<{ message: string }>('/api/v2/auth/login', {
+      const response = await api.post<{
+        success: boolean;
+        message: string;
+        redirectUrl?: string;
+      }>('/api/v2/auth/login', {
         username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
         password: password.trim(), // Remove whitespace
+        redirectUrl: safeRedirectUrl, // Pass the intended redirect URL
+        basePath: currentBasePath, // Send the detected base path
       });
 
-      logger.info('Login successful');
+      logger.info('Login successful', { response });
 
-      // SECURITY: Only update auth state after confirmed success
-      authStore.setLoggedIn(true);
-      authStore.setSecurity(true, true);
+      // Check if we need to complete OAuth flow
+      if (response.redirectUrl) {
+        // Backend returned OAuth callback URL to complete authentication
+        logger.info('Redirecting to complete OAuth flow', { redirectUrl: response.redirectUrl });
 
-      // SECURITY: Reset rate limiting on successful login
+        // SECURITY: Reset rate limiting on successful login attempt
+        attemptCount = 0;
+        isRateLimited = false;
+
+        // Redirect immediately to complete the OAuth flow
+        window.location.href = response.redirectUrl;
+        return; // Exit early - OAuth callback will handle the rest
+      }
+
+      // If no redirectUrl, the backend might not have generated auth code properly
+      // Let's try a simple page refresh to trigger auth state update
+      logger.warn('No redirectUrl in login response - trying page refresh');
+
+      // SECURITY: Reset rate limiting on successful login attempt
       attemptCount = 0;
       isRateLimited = false;
 
-      // Show success message briefly then close
+      // Close modal first
+      onClose();
+
+      // Give a moment for modal to close, then refresh
       setTimeout(() => {
-        onClose();
-        // SECURITY: Use validated redirect URL
-        if (safeRedirectUrl !== window.location.pathname) {
-          window.location.href = safeRedirectUrl;
-        }
-      }, 1500);
+        window.location.reload();
+      }, 500);
     } catch (err: unknown) {
-      logger.error('Login failed');
-      // SECURITY: Use secure error messaging
-      error = getSecureErrorMessage(err);
+      logger.error('Login failed', err);
+      error = 'Invalid credentials. Please try again.';
     } finally {
       isSubmitting = false;
     }
@@ -212,6 +233,7 @@
       github: '/api/v1/auth/github',
     };
 
+    // eslint-disable-next-line security/detect-object-injection
     const endpoint = oauthEndpoints[provider];
 
     // SECURITY: Basic endpoint validation
@@ -249,111 +271,161 @@
   });
 </script>
 
-<Modal {isOpen} {onClose} size="md" showCloseButton={!isSubmitting && !isRateLimited}>
-  {#snippet header()}
-    <div class="flex items-center gap-4">
-      <div
-        class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary sm:mx-0"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="lucide-lock-open stroke-base-100"
-        >
-          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-        </svg>
-      </div>
-      <h3 class="text-xl font-black">{t('auth.loginTitle')}</h3>
-    </div>
-  {/snippet}
+{#if isOpen}
+  <div class="modal modal-open">
+    <div class="modal-box sm:p-6 sm:pb-10 p-3 overflow-y-auto" role="dialog">
+      <form onsubmit={handleSubmit}>
+        <input type="hidden" name="redirect" value={redirectUrl} />
 
-  {#snippet children()}
-    <!-- SECURITY: Rate limiting notice -->
-    {#if isRateLimited}
-      <div class="alert alert-warning mb-4">
-        <div class="flex items-center gap-2">
-          {@html alertIcons.warning}
-          <span>{t('auth.errors.rateLimited', { minutes: RATE_LIMIT_MINUTES })}</span>
-        </div>
-      </div>
-    {:else}
-      <form onsubmit={handleSubmit} class="space-y-4">
-        {#if authConfig.basicEnabled}
-          <PasswordField
-            label={t('auth.password')}
-            bind:value={password}
-            onUpdate={val => (password = val)}
-            placeholder={t('auth.passwordPlaceholder')}
-            required
-            disabled={isSubmitting || isRateLimited}
-            autocomplete="current-password"
-            allowReveal
-          />
-
-          {#if error}
-            <div class="alert alert-error">
-              <div class="flex items-center gap-2">
-                {@html alertIcons.error}
-                <span>{error}</span>
-              </div>
+        <div class="flex items-start flex-row">
+          <div class="hidden xs:flex flex-initial">
+            <div
+              class="mx-auto flex h-12 w-12 sm:w-12 sm:h-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 sm:mx-0 sm:h-10 sm:w-10"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="lucide-lock-open stroke-white dark:stroke-gray-200"
+              >
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+              </svg>
             </div>
-          {/if}
+          </div>
 
-          <button
-            type="submit"
-            class="btn btn-primary w-full"
-            disabled={isSubmitting || isRateLimited || !password}
-          >
-            {#if isSubmitting}
-              <LoadingSpinner size="sm" />
+          <div class="flex-1">
+            <h3 class="text-xl font-black py-2 px-6">Login to BirdNET-Go</h3>
+            {#if authConfig.basicEnabled}
+              <div class="form-control p-6 mx-2 xs:ml-0 xs:mx-14">
+                <label class="label" for="password">Password</label>
+                <input
+                  type="password"
+                  id="loginPassword"
+                  bind:value={password}
+                  class="input input-bordered"
+                  required
+                  disabled={isSubmitting || isRateLimited}
+                  autocomplete="current-password"
+                  aria-required="true"
+                  aria-labelledby="passwordLabel"
+                  aria-describedby="loginError"
+                />
+                {#if error}
+                  <div
+                    id="loginError"
+                    class="text-red-700 relative mt-2"
+                    role="alert"
+                    aria-live="polite"
+                  >
+                    {error}
+                  </div>
+                {/if}
+
+                <!-- SECURITY: Rate limiting notice -->
+                {#if isRateLimited}
+                  <div class="text-orange-600 relative mt-2" role="alert">
+                    Too many login attempts. Please wait {RATE_LIMIT_MINUTES} minutes before trying again.
+                  </div>
+                {/if}
+              </div>
             {/if}
-            {t('auth.login')}
-          </button>
+          </div>
+        </div>
+
+        {#if authConfig.basicEnabled}
+          <div class="modal-action px-8 xs:px-[4.5rem] flex-row gap-4 justify-between">
+            <button
+              type="button"
+              onclick={onClose}
+              class="btn btn-outline"
+              disabled={isSubmitting}
+              aria-label="Cancel login"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="btn btn-primary grow pr-10"
+              disabled={isSubmitting || isRateLimited || !password}
+              aria-label="Login with password"
+            >
+              {#if isSubmitting}
+                <span class="loading loading-spinner" aria-hidden="true"></span>
+              {/if}
+              Login
+            </button>
+          </div>
         {/if}
 
         {#if authConfig.basicEnabled && (authConfig.googleEnabled || authConfig.githubEnabled)}
-          <div class="divider">{t('auth.or')}</div>
+          <div class="divider">or</div>
         {/if}
 
         {#if authConfig.googleEnabled || authConfig.githubEnabled}
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col sm:flex-row gap-4 flex-wrap px-6 xs:px-16 pb-6">
             {#if authConfig.googleEnabled}
               <button
                 type="button"
-                class="btn btn-outline w-full"
+                class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
                 onclick={() => handleOAuthLogin('google')}
                 disabled={googleLoading || isRateLimited}
+                aria-label="Login with Google"
               >
                 {#if googleLoading}
-                  <LoadingSpinner size="sm" />
+                  <span
+                    class="loading loading-spinner xs:loading xs:loading-spinner"
+                    aria-hidden="true"
+                  ></span>
                 {/if}
-                {t('auth.loginWithGoogle')}
+                Login with Google
               </button>
             {/if}
 
             {#if authConfig.githubEnabled}
               <button
                 type="button"
-                class="btn btn-outline w-full"
+                class="btn btn-primary grow xs:pr-10 text-xs xs:text-sm"
                 onclick={() => handleOAuthLogin('github')}
                 disabled={githubLoading || isRateLimited}
+                aria-label="Login with GitHub"
               >
                 {#if githubLoading}
-                  <LoadingSpinner size="sm" />
+                  <span
+                    class="loading loading-spinner xs:loading xs:loading-spinner"
+                    aria-hidden="true"
+                  ></span>
                 {/if}
-                {t('auth.loginWithGithub')}
+                Login with GitHub
               </button>
             {/if}
           </div>
         {/if}
       </form>
-    {/if}
-  {/snippet}
-</Modal>
+
+      <!-- Close button -->
+      <button
+        class="btn btn-ghost btn-circle btn absolute text-lg right-2 top-2"
+        onclick={onClose}
+        disabled={isSubmitting}
+        aria-label="Close login dialog"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div
+      class="modal-backdrop"
+      onclick={onClose}
+      onkeydown={e => e.key === 'Escape' && onClose()}
+      role="button"
+      tabindex="-1"
+      aria-label="Close modal"
+    ></div>
+  </div>
+{/if}

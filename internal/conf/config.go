@@ -892,8 +892,9 @@ func Load() (*Settings, error) {
 		if errors.As(err, &validationErr) {
 			// Report configuration issues to telemetry for debugging
 			for _, errMsg := range validationErr.Errors {
-				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") {
-					// This is a warning about locale fallback - report to telemetry but don't fail
+				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") || 
+				   strings.Contains(errMsg, "OAuth authentication warning") {
+					// This is a warning - report to telemetry but don't fail
 					log.Printf("Configuration warning: %s", errMsg)
 					// Store the warning for later telemetry reporting
 					settings.ValidationWarnings = append(settings.ValidationWarnings, errMsg)
@@ -1095,6 +1096,22 @@ func SetTestSettings(settings *Settings) {
 	settingsInstance = settings
 	// Reset the sync.Once to allow reinitialization in tests
 	once = sync.Once{}
+}
+
+// SendValidationWarningsAsNotifications sends any validation warnings as notifications
+// This should be called after the notification service is initialized
+func SendValidationWarningsAsNotifications() {
+	settings := GetSettings()
+	if settings == nil || len(settings.ValidationWarnings) == 0 {
+		return
+	}
+
+	// Only send if notification service is available
+	// We don't import notification package to avoid circular dependencies
+	// The calling code should handle the actual notification sending
+	for _, warning := range settings.ValidationWarnings {
+		log.Printf("Deferred validation warning: %s", warning)
+	}
 }
 
 // SaveYAMLConfig updates the YAML configuration file with new settings.

@@ -5,27 +5,36 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/markbates/goth/gothic"
 	auth "github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	"github.com/tphakala/birdnet-go/internal/security"
 )
 
 // AuthRequest represents the login request structure
 type AuthRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	RedirectURL string `json:"redirectUrl,omitempty"` // Optional redirect URL after successful login
+	BasePath    string `json:"basePath,omitempty"`    // Optional base path where UI is hosted (e.g., "/ui", "/app", or "/")
 }
 
 // AuthResponse represents the login response structure
 type AuthResponse struct {
-	Success   bool      `json:"success"`
-	Message   string    `json:"message"`
-	Username  string    `json:"username,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
+	Success     bool      `json:"success"`
+	Message     string    `json:"message"`
+	Username    string    `json:"username,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
+	RedirectURL string    `json:"redirectUrl,omitempty"` // For OAuth callback redirect
 	// In a real token-based auth system, we would return tokens here
 	// Token     string    `json:"token,omitempty"`
 	// ExpiresAt time.Time `json:"expires_at,omitempty"`
@@ -192,7 +201,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 		})
 	}
 
-	// Successful login
+	// Successful login - auth code has been generated and stored in session
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Successful login",
 			"username", req.Username,
@@ -201,14 +210,71 @@ func (c *Controller) Login(ctx echo.Context) error {
 		)
 	}
 
-	// In a token-based auth system, we would generate and return tokens here
-	// For now, we'll rely on the server's session-based auth
+	// The AuthenticateBasic method has already:
+	// 1. Generated an auth code
+	// 2. Stored userId in session
+	// 3. Stored auth_code in session
+	// 
+	// The frontend needs to complete the OAuth flow by redirecting to the callback
+	
+	// Retrieve the auth code from session to construct the redirect URL
+	authCode, err := gothic.GetFromSession("auth_code", ctx.Request())
+	if err != nil || authCode == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to retrieve auth code from session after successful auth",
+				"error", err,
+				"username", req.Username,
+			)
+		}
+		// Fallback - still return success but without redirect
+		return ctx.JSON(http.StatusOK, AuthResponse{
+			Success:   true,
+			Message:   "Login successful",
+			Username:  req.Username,
+			Timestamp: time.Now(),
+		})
+	}
+
+	// Extract the base path dynamically
+	basePath := c.extractBasePath(ctx, req)
+	
+	// Validate and sanitize the redirect URL from the request
+	finalRedirect := basePath // Default to detected base path
+	if req.RedirectURL != "" {
+		// Use the security package's validation
+		if security.IsValidRedirect(req.RedirectURL) {
+			// Ensure the redirect stays within the detected base path
+			finalRedirect = ensurePathWithinBase(req.RedirectURL, basePath)
+			
+			// Log if redirect was adjusted
+			if finalRedirect != req.RedirectURL {
+				if c.apiLogger != nil {
+					c.apiLogger.Debug("Adjusted redirect URL to stay within base path",
+						"requested", req.RedirectURL,
+						"basePath", basePath,
+						"final", finalRedirect,
+					)
+				}
+			}
+		} else if c.apiLogger != nil {
+			// Invalid redirect - log and use default
+			c.apiLogger.Warn("Invalid redirect URL provided, using base path",
+				"requested", req.RedirectURL,
+				"basePath", basePath,
+				"default", finalRedirect,
+			)
+		}
+	}
+	
+	// Construct the OAuth callback URL with the validated redirect
+	redirectURL := fmt.Sprintf("/api/v1/oauth2/callback?code=%s&redirect=%s", authCode, finalRedirect)
 
 	return ctx.JSON(http.StatusOK, AuthResponse{
-		Success:   true,
-		Message:   "Login successful",
-		Username:  req.Username,
-		Timestamp: time.Now(),
+		Success:     true,
+		Message:     "Login successful - complete OAuth flow",
+		Username:    req.Username,
+		Timestamp:   time.Now(),
+		RedirectURL: redirectURL,
 	})
 }
 
@@ -328,6 +394,146 @@ func stringFromCtx(ctx echo.Context, key, defaultValue string) string {
 }
 
 // --- End Context Helper Functions ---
+
+// extractBasePath attempts to determine the base path where the UI is hosted.
+// It tries multiple sources in order of preference:
+// 1. Explicit basePath from request
+// 2. Referer header analysis
+// 3. Default fallback
+func (c *Controller) extractBasePath(ctx echo.Context, req AuthRequest) string {
+	// 1. If explicitly provided and valid, use it
+	if req.BasePath != "" && isValidBasePath(req.BasePath) {
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Using explicit base path from request",
+				"basePath", req.BasePath,
+				"ip", ctx.RealIP(),
+			)
+		}
+		return req.BasePath
+	}
+
+	// 2. Try to extract from Referer header
+	referer := ctx.Request().Header.Get("Referer")
+	if referer != "" {
+		if basePath := extractBasePathFromReferer(referer); basePath != "" {
+			if c.apiLogger != nil {
+				c.apiLogger.Debug("Extracted base path from Referer",
+					"basePath", basePath,
+					"referer", referer,
+					"ip", ctx.RealIP(),
+				)
+			}
+			return basePath
+		}
+	}
+
+	// 3. Default fallback - try to detect common patterns
+	// Check if request is coming from /ui/* path based on API versioning
+	defaultBasePath := "/ui/"
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Using default base path",
+			"basePath", defaultBasePath,
+			"ip", ctx.RealIP(),
+		)
+	}
+	return defaultBasePath
+}
+
+// isValidBasePath validates that a base path is safe to use
+func isValidBasePath(basePath string) bool {
+	// Must start with /
+	if !strings.HasPrefix(basePath, "/") {
+		return false
+	}
+
+	// Must not contain dangerous patterns
+	dangerousPatterns := []string{
+		"..",           // Directory traversal
+		"//",           // Protocol-relative URL
+		"\\",           // Backslash
+		"<",            // HTML injection
+		">",            // HTML injection
+		"javascript:",  // XSS
+		"data:",        // Data URLs
+		"\n",           // Newline injection
+		"\r",           // Carriage return injection
+		"\x00",         // Null byte
+	}
+
+	lowerPath := strings.ToLower(basePath)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(lowerPath, pattern) {
+			return false
+		}
+	}
+
+	// Length check
+	if len(basePath) > 128 {
+		return false
+	}
+
+	// Should end with / for consistency
+	if !strings.HasSuffix(basePath, "/") {
+		return false
+	}
+
+	// Basic path validation - alphanumeric, hyphens, underscores, and slashes
+	// This regex ensures the path contains only safe characters
+	validPathRegex := `^/[a-zA-Z0-9/_-]*/$`
+	matched, _ := regexp.MatchString(validPathRegex, basePath)
+	return matched
+}
+
+// extractBasePathFromReferer attempts to extract the base path from a Referer URL
+func extractBasePathFromReferer(referer string) string {
+	parsedURL, err := url.Parse(referer)
+	if err != nil {
+		return ""
+	}
+
+	// Only process if it's from the same origin (no scheme/host means relative)
+	// In production, you'd want to check against the actual server host
+	path := parsedURL.Path
+
+	// Try to identify common UI base paths
+	// This list should be configurable in the future
+	commonBasePaths := []string{
+		"/ui/",
+		"/app/",
+		"/admin/",
+		"/dashboard/",
+		"/", // Root as last resort
+	}
+
+	for _, basePath := range commonBasePaths {
+		if strings.HasPrefix(path, basePath) {
+			// Validate before returning
+			if isValidBasePath(basePath) {
+				return basePath
+			}
+		}
+	}
+
+	return ""
+}
+
+// ensurePathWithinBase ensures a redirect path stays within the given base path
+func ensurePathWithinBase(redirectPath, basePath string) string {
+	// If redirect is already within base path, return as-is
+	if strings.HasPrefix(redirectPath, basePath) {
+		return redirectPath
+	}
+
+	// If redirect is root-relative, prepend base path
+	if strings.HasPrefix(redirectPath, "/") && !strings.HasPrefix(redirectPath, "//") {
+		// Remove leading slash to avoid double slashes
+		trimmedRedirect := strings.TrimPrefix(redirectPath, "/")
+		return basePath + trimmedRedirect
+	}
+
+	// Otherwise, just use the base path
+	return basePath
+}
 
 // randomDelay introduces a random sleep duration within the specified range [minMs, maxMs).
 // It accepts a context to allow cancellation of the delay.

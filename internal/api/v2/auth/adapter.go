@@ -155,6 +155,14 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 
 	// Log basic auth attempt
 	security.LogInfo("Basic authentication login attempt", "username", username)
+	
+	// Temporary debug logging to diagnose auth issues
+	if a.logger != nil {
+		a.logger.Debug("BasicAuth configuration check", 
+			"provided_username", username,
+			"configured_clientid", storedClientID,
+			"clientid_match", username == storedClientID)
+	}
 
 	// Skip if basic auth is not enabled
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
