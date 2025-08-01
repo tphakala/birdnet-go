@@ -84,24 +84,36 @@ var audioDemuxManager = NewAudioDemuxManager()
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
-	// Initialize core components
-	dataStore, channels, err := initializeCoreComponents(settings)
-	if err != nil {
+	// Initialize BirdNET interpreter
+	if err := initializeBirdNET(settings); err != nil {
 		return err
 	}
-	
-	// Queue is now initialized at package level in birdnet package
-	// Resize the queue based on processing needs BEFORE creating processor
-	// TODO: Make this configurable via settings
-	const defaultQueueSize = 5
-	birdnet.ResizeQueue(defaultQueueSize)
-	
-	// Initialize processing pipeline
-	proc, metrics, err := initializeProcessingPipeline(settings, dataStore)
-	if err != nil {
-		closeDataStore(dataStore)
-		return err
+
+	// Clean up any leftover HLS streaming files from previous runs
+	if err := cleanupHLSStreamingFiles(); err != nil {
+		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+	} else {
+		log.Println("🧹 Cleaned up leftover HLS streaming files")
 	}
+
+	// Initialize occurrence monitor to filter out repeated observations.
+	// TODO FIXME
+	//ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
+
+	// Print system details and configuration
+	printSystemDetails(settings)
+
+	// Initialize database access.
+	dataStore := datastore.New(settings)
+
+	// Initialize the control channel for restart control.
+	controlChan := make(chan string, 1)
+	// Initialize the restart channel for capture restart control.
+	restartChan := make(chan struct{}, 10) // Increased buffer to prevent dropped restart signals
+	// quitChannel is used to signal the goroutines to stop.
+	quitChan := make(chan struct{})
+
+	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
 	// Initialize audio sources
 	sources, err := initializeAudioSources(settings)
@@ -110,13 +122,170 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		log.Printf("⚠️  Audio source initialization warning: %v", err)
 	}
 
-	// Start services and background tasks
-	services, bufferManager, wg := startServicesAndTasks(settings, dataStore, metrics, proc, channels, sources, notificationChan)
+	// Queue is now initialized at package level in birdnet package
+	// Resize the queue based on processing needs
+	// TODO: Make this configurable via settings
+	const defaultQueueSize = 5
+	birdnet.ResizeQueue(defaultQueueSize)
 
-	// Run main event loop
-	runMainEventLoop(channels, services, bufferManager, wg)
+	// Initialize Prometheus metrics manager
+	metrics, err := initializeMetrics()
+	if err != nil {
+		return err
+	}
 	
-	return nil
+	// Update BirdNET model loaded metric now that metrics are available
+	UpdateBirdNETModelLoadedMetric(metrics.BirdNET)
+
+	// Connect metrics to datastore before opening
+	dataStore.SetMetrics(metrics.Datastore)
+	dataStore.SetSunCalcMetrics(metrics.SunCalc)
+	
+	// Open a connection to the database and handle possible errors.
+	if err := dataStore.Open(); err != nil {
+		return err // Return error to stop execution if database connection fails.
+	}
+	// Ensure the database connection is closed when the function returns.
+	defer closeDataStore(dataStore)
+	
+	// Note: datastore monitoring is automatically started when the database is opened
+
+	// Initialize bird image cache if needed
+	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
+
+	// Initialize processor
+	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
+
+	// Initialize Backup system
+	backupLogger := logging.ForService("backup") // Get logger first
+	if backupLogger == nil {
+		log.Println("Error: Backup logger is nil. Logging may not be initialized.")
+		backupLogger = slog.Default() // Use default as fallback
+	}
+	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLogger)
+	if err != nil {
+		// Log the specific error from initialization
+		backupLogger.Error("Failed to initialize backup system", "error", err)
+		// Don't make this fatal - continue without backup system
+		log.Printf("Warning: Backup system initialization failed: %v", err)
+	} else {
+		// Store backup manager and scheduler in the processor for access by control monitor
+		proc.SetBackupManager(backupManager)
+		proc.SetBackupScheduler(backupScheduler)
+	}
+
+	// Initialize async services (event bus, notification workers, telemetry workers)
+	if err := telemetry.InitializeAsyncSystems(); err != nil {
+		log.Printf("Error: Failed to initialize async services: %v", err)
+		return err
+	}
+
+	// Initialize system monitor if monitoring is enabled
+	systemMonitor := initializeSystemMonitor(settings)
+
+	// Initialize and start the HTTP server
+	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
+	httpServer.Start()
+
+	// Initialize the wait group to wait for all goroutines to finish
+	var wg sync.WaitGroup
+
+	// Initialize the buffer manager
+	bufferManager := NewBufferManager(bn, quitChan, &wg)
+
+	// Start buffer monitors for each audio source only if we have active sources
+	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
+		bufferManager.UpdateMonitors(sources)
+	} else {
+		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
+	}
+
+	// start audio capture
+	startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+
+	// Sound level monitoring is now managed by the control monitor for hot reload support.
+	// The control monitor will start sound level monitoring if enabled in settings.
+
+	// RTSP health monitoring is now built into the FFmpeg manager
+	if len(settings.Realtime.RTSP.URLs) > 0 {
+		log.Println("🔍 RTSP streams will be monitored by FFmpeg manager")
+	}
+
+	// start cleanup of clips
+	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
+		startClipCleanupMonitor(&wg, quitChan, dataStore)
+	}
+
+	// start weather polling
+	if settings.Realtime.Weather.Provider != "none" {
+		startWeatherPolling(&wg, settings, dataStore, metrics, quitChan)
+	}
+
+	// Telemetry endpoint initialization is now handled by control monitor for hot reload support.
+	// Unlike other services that start directly here, telemetry is managed by the control monitor
+	// to allow users to dynamically enable/disable metrics and change the listen address without
+	// restarting the application. The control monitor will start the endpoint if enabled.
+	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
+
+	// start control monitor for hot reloads
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
+
+	// start quit signal monitor
+	monitorCtrlC(quitChan)
+
+	// Track the HTTP server, system monitor and control monitor for clean shutdown
+	httpServerRef := httpServer
+	systemMonitorRef := systemMonitor
+	ctrlMonitorRef := ctrlMonitor
+
+	// loop to monitor quit and restart channels
+	for {
+		select {
+		case <-quitChan:
+			// Close controlChan to signal that no restart attempts should be made.
+			close(controlChan)
+			// Stop control monitor first to clean up sound level and telemetry
+			if ctrlMonitorRef != nil {
+				ctrlMonitorRef.Stop()
+			}
+			// Stop all analysis buffer monitors
+			bufferManager.RemoveAllMonitors()
+			// Perform HLS resources cleanup
+			log.Println("🧹 Cleaning up HLS resources before shutdown")
+			if err := cleanupHLSStreamingFiles(); err != nil {
+				log.Printf("⚠️ Warning: Failed to clean up HLS streaming files during shutdown: %v", err)
+			}
+			// Shut down HTTP server and clean up its resources
+			if httpServerRef != nil {
+				log.Println("🔌 Shutting down HTTP server")
+				if err := httpServerRef.Shutdown(); err != nil {
+					log.Printf("⚠️ Warning: Error shutting down HTTP server: %v", err)
+				}
+			}
+			// Wait for all goroutines to finish.
+			wg.Wait()
+			// Stop system monitor if running
+			if systemMonitorRef != nil {
+				systemMonitorRef.Stop()
+			}
+			// Stop notification service
+			if notification.IsInitialized() {
+				logging.Info("Stopping notification service", "component", "notification")
+				if service := notification.GetService(); service != nil {
+					service.Stop()
+				}
+			}
+			// Delete the BirdNET interpreter.
+			bn.Delete()
+			// Return nil to indicate that the program exited successfully.
+			return nil
+
+		case <-restartChan:
+			// Handle the restart signal.
+			fmt.Println("🔄 Restarting audio capture")
+			startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
+		}
+	}
 }
 
 // startAudioCapture initializes and starts the audio capture routine in a new goroutine.
@@ -835,272 +1004,4 @@ func printSystemDetails(settings *conf.Settings) {
 		settings.BirdNET.Overlap,
 		settings.BirdNET.Sensitivity,
 		settings.Realtime.Interval)
-}
-
-// realtimeChannels holds all channels used in realtime analysis
-type realtimeChannels struct {
-	control    chan string
-	restart    chan struct{}
-	quit       chan struct{}
-	audioLevel chan myaudio.AudioLevelData
-	soundLevel chan myaudio.SoundLevelData
-}
-
-// realtimeServices holds all initialized services
-type realtimeServices struct {
-	httpServer    *httpcontroller.Server
-	systemMonitor *monitor.SystemMonitor
-	ctrlMonitor   *ControlMonitor
-}
-
-// initializeCoreComponents initializes database and channels
-func initializeCoreComponents(settings *conf.Settings) (datastore.Interface, *realtimeChannels, error) {
-	// Initialize BirdNET interpreter
-	if err := initializeBirdNET(settings); err != nil {
-		return nil, nil, err
-	}
-
-	// Clean up any leftover HLS streaming files from previous runs
-	if err := cleanupHLSStreamingFiles(); err != nil {
-		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
-	} else {
-		log.Println("🧹 Cleaned up leftover HLS streaming files")
-	}
-
-	// Print system details and configuration
-	printSystemDetails(settings)
-
-	// Initialize database access
-	dataStore := datastore.New(settings)
-
-	// Initialize channels
-	channels := &realtimeChannels{
-		control:    make(chan string, 1),
-		restart:    make(chan struct{}, 10),
-		quit:       make(chan struct{}),
-		audioLevel: audioLevelChan,
-		soundLevel: soundLevelChan,
-	}
-
-	return dataStore, channels, nil
-}
-
-// initializeProcessingPipeline sets up metrics, processor, and related components
-func initializeProcessingPipeline(settings *conf.Settings, dataStore datastore.Interface) (*processor.Processor, *observability.Metrics, error) {
-	// Initialize Prometheus metrics manager
-	metrics, err := initializeMetrics()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Update BirdNET model loaded metric
-	UpdateBirdNETModelLoadedMetric(metrics.BirdNET)
-
-	// Connect metrics to datastore
-	dataStore.SetMetrics(metrics.Datastore)
-	dataStore.SetSunCalcMetrics(metrics.SunCalc)
-
-	// Open database connection
-	if err := dataStore.Open(); err != nil {
-		return nil, nil, err
-	}
-
-	// Initialize bird image cache if needed
-	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
-
-	// Initialize processor
-	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache)
-
-	// Initialize backup system
-	if err := initializeBackupForProcessor(settings, proc); err != nil {
-		// Non-fatal: log and continue
-		log.Printf("Warning: Backup system initialization failed: %v", err)
-	}
-
-	return proc, metrics, nil
-}
-
-// initializeBackupForProcessor initializes and attaches backup system to processor
-func initializeBackupForProcessor(settings *conf.Settings, proc *processor.Processor) error {
-	backupLogger := logging.ForService("backup")
-	if backupLogger == nil {
-		backupLogger = slog.Default()
-	}
-
-	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLogger)
-	if err != nil {
-		backupLogger.Error("Failed to initialize backup system", "error", err)
-		return err
-	}
-
-	proc.SetBackupManager(backupManager)
-	proc.SetBackupScheduler(backupScheduler)
-	return nil
-}
-
-// sendValidationWarnings sends any validation warnings as notifications
-func sendValidationWarnings(settings *conf.Settings) {
-	if !notification.IsInitialized() || len(settings.ValidationWarnings) == 0 {
-		return
-	}
-
-	service := notification.GetService()
-	if service == nil {
-		return
-	}
-
-	for _, warning := range settings.ValidationWarnings {
-		// Parse the warning message to extract component if present
-		var component, message string
-		parts := strings.SplitN(warning, ": ", 2)
-		if len(parts) == 2 {
-			component = parts[0]
-			message = parts[1]
-		} else {
-			component = "configuration"
-			message = warning
-		}
-
-		// Create a warning notification for configuration issues
-		if _, err := service.CreateWithComponent(
-			notification.TypeWarning,
-			notification.PriorityMedium,
-			"Configuration Warning",
-			message,
-			component,
-		); err != nil {
-			log.Printf("Failed to create notification for validation warning: %v", err)
-		}
-	}
-
-	// Clear the warnings after notifying
-	settings.ValidationWarnings = nil
-}
-
-// startServicesAndTasks initializes and starts all services and background tasks
-func startServicesAndTasks(settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics, proc *processor.Processor, channels *realtimeChannels, sources []string, notificationChan chan handlers.Notification) (*realtimeServices, *BufferManager, *sync.WaitGroup) {
-	// Initialize async services
-	if err := telemetry.InitializeAsyncSystems(); err != nil {
-		log.Printf("Error: Failed to initialize async services: %v", err)
-	}
-
-	// Send validation warnings
-	sendValidationWarnings(settings)
-
-	// Initialize system monitor
-	systemMonitor := initializeSystemMonitor(settings)
-
-	// Initialize and start HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, nil, channels.audioLevel, channels.control, proc, metrics)
-	httpServer.Start()
-
-	// Initialize wait group
-	var wg sync.WaitGroup
-
-	// Initialize buffer manager
-	bufferManager := NewBufferManager(bn, channels.quit, &wg)
-
-	// Start buffer monitors for each audio source
-	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
-		bufferManager.UpdateMonitors(sources)
-	} else {
-		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
-	}
-
-	// Start audio capture
-	startAudioCapture(&wg, settings, channels.quit, channels.restart, channels.audioLevel, channels.soundLevel)
-
-	// RTSP health monitoring
-	if len(settings.Realtime.RTSP.URLs) > 0 {
-		log.Println("🔍 RTSP streams will be monitored by FFmpeg manager")
-	}
-
-	// Start cleanup of clips
-	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
-		startClipCleanupMonitor(&wg, channels.quit, dataStore)
-	}
-
-	// Start weather polling
-	if settings.Realtime.Weather.Provider != "none" {
-		startWeatherPolling(&wg, settings, dataStore, metrics, channels.quit)
-	}
-
-	// Start telemetry endpoint if enabled
-	startTelemetryEndpoint(&wg, settings, metrics, channels.quit)
-
-	// Start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, channels.control, channels.quit, channels.restart, notificationChan, bufferManager, proc, httpServer, metrics)
-
-	// Start quit signal monitor
-	monitorCtrlC(channels.quit)
-
-	services := &realtimeServices{
-		httpServer:    httpServer,
-		systemMonitor: systemMonitor,
-		ctrlMonitor:   ctrlMonitor,
-	}
-
-	return services, bufferManager, &wg
-}
-
-// runMainEventLoop runs the main event loop for realtime analysis
-func runMainEventLoop(channels *realtimeChannels, services *realtimeServices, bufferManager *BufferManager, wg *sync.WaitGroup) {
-	for {
-		select {
-		case <-channels.quit:
-			handleShutdown(channels, services, bufferManager, wg)
-			return
-
-		case <-channels.restart:
-			fmt.Println("🔄 Restarting audio capture")
-			startAudioCapture(wg, conf.Setting(), channels.quit, channels.restart, channels.audioLevel, channels.soundLevel)
-		}
-	}
-}
-
-// handleShutdown performs cleanup during shutdown
-func handleShutdown(channels *realtimeChannels, services *realtimeServices, bufferManager *BufferManager, wg *sync.WaitGroup) {
-	// Close controlChan to signal that no restart attempts should be made
-	close(channels.control)
-	
-	// Stop control monitor first to clean up sound level and telemetry
-	if services.ctrlMonitor != nil {
-		services.ctrlMonitor.Stop()
-	}
-	
-	// Stop all analysis buffer monitors
-	bufferManager.RemoveAllMonitors()
-	
-	// Perform HLS resources cleanup
-	log.Println("🧹 Cleaning up HLS resources before shutdown")
-	if err := cleanupHLSStreamingFiles(); err != nil {
-		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files during shutdown: %v", err)
-	}
-	
-	// Shut down HTTP server and clean up its resources
-	if services.httpServer != nil {
-		log.Println("🔌 Shutting down HTTP server")
-		if err := services.httpServer.Shutdown(); err != nil {
-			log.Printf("⚠️ Warning: Error shutting down HTTP server: %v", err)
-		}
-	}
-	
-	// Wait for all goroutines to finish
-	wg.Wait()
-	
-	// Stop system monitor if running
-	if services.systemMonitor != nil {
-		services.systemMonitor.Stop()
-	}
-	
-	// Stop notification service
-	if notification.IsInitialized() {
-		logging.Info("Stopping notification service", "component", "notification")
-		if service := notification.GetService(); service != nil {
-			service.Stop()
-		}
-	}
-	
-	// Delete the BirdNET interpreter
-	bn.Delete()
 }
