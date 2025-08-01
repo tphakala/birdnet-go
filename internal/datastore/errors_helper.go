@@ -20,6 +20,12 @@ var (
 	constraintPattern *regexp.Regexp
 )
 
+// Note: As of Go 1.20, the global rand functions are automatically seeded.
+// The jitter calculation using rand.Float64() is sufficient for retry jitter
+// as we only need basic randomization to prevent thundering herd effect.
+// Cryptographic randomness is not required since the jitter is just used
+// to spread out retry attempts across instances.
+
 func initRegexPatterns() {
 	onceRegex.Do(func() {
 		diskFullPattern = regexp.MustCompile(`(?i)(disk full|no space|out of space)`)
