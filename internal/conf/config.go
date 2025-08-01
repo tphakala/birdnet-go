@@ -862,6 +862,29 @@ func Load() (*Settings, error) {
 			Build()
 	}
 
+	// Auto-generate SessionSecret if not set (for backward compatibility)
+	if settings.Security.SessionSecret == "" {
+		// Generate a new session secret
+		sessionSecret := GenerateRandomSecret()
+		settings.Security.SessionSecret = sessionSecret
+		
+		// Also set it in viper so it gets saved to config file
+		viper.Set("security.sessionsecret", sessionSecret)
+		
+		// Log that we generated a new session secret
+		log.Printf("Generated new SessionSecret for existing configuration")
+		
+		// Save the updated config back to file to persist the generated secret
+		// This ensures the secret remains the same across restarts
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				// Log the error but don't fail - the generated secret will work for this session
+				log.Printf("Warning: Failed to save generated SessionSecret to config file: %v", err)
+			}
+		}
+	}
+
 	// Validate settings
 	if err := ValidateSettings(settings); err != nil {
 		// Check if it's just a validation warning (contains fallback info)
@@ -962,6 +985,11 @@ func createDefaultConfig() error {
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {
 		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
+	}
+	// If the session secret is not set, generate a random one
+	// This ensures backward compatibility for existing deployments
+	if viper.GetString("security.sessionsecret") == "" {
+		viper.Set("security.sessionsecret", GenerateRandomSecret())
 	}
 
 	// Create directories for config file

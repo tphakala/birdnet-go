@@ -26,6 +26,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	intErrors "github.com/tphakala/birdnet-go/internal/errors"
 )
 
 type AuthCode struct {
@@ -83,20 +84,45 @@ func NewOAuth2Server() *OAuth2Server {
 
 	// Check Session Secret strength early, regardless of persistence settings
 	if settings.Security.SessionSecret == "" {
-		logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. Set a strong, unique secret in configuration for production environments.")
-		// Enforce in production (when debug mode is off)
-		if !settings.WebServer.Debug {
-			panic("CRITICAL: SessionSecret must be set in production. Please configure a strong, unique session secret.")
-		}
+		// This should rarely happen now due to auto-generation in config.go
+		// But we still log it as a critical security issue that needs attention
+		logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. A temporary secret will be generated, but this should be fixed in configuration.",
+			"debug_mode", settings.WebServer.Debug,
+			"recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart")
+		
+		// Generate a temporary session secret to allow the application to continue
+		// This ensures backward compatibility while maintaining security
+		tempSecret := conf.GenerateRandomSecret()
+		settings.Security.SessionSecret = tempSecret
+		logger().Info("Generated temporary SessionSecret for this session")
+		
+		// Report to telemetry for monitoring
+		// Creating this error will automatically report it to telemetry
+		_ = intErrors.New(
+			errors.New("session secret is empty")).
+			Component("security").
+			Category(intErrors.CategoryConfiguration).
+			Context("debug_mode", settings.WebServer.Debug).
+			Context("action", "auto_generated_temporary_secret").
+			Build()
 	} else if len(settings.Security.SessionSecret) < 32 {
 		// Check length as a proxy for entropy, 32 bytes is common for session keys
-		logger().Warn("Security Recommendation: SessionSecret is potentially weak (less than 32 bytes). Consider using a longer, randomly generated secret.")
-		// Enforce minimum length in production
-		if !settings.WebServer.Debug {
-			logger().Error("CRITICAL: SessionSecret must be at least 32 characters in production.",
-				"current_length", len(settings.Security.SessionSecret))
-			panic("CRITICAL: SessionSecret must be at least 32 characters in production for security. Please configure a stronger session secret.")
-		}
+		logger().Warn("Security Recommendation: SessionSecret is potentially weak",
+			"current_length", len(settings.Security.SessionSecret),
+			"recommended_length", 32,
+			"debug_mode", settings.WebServer.Debug,
+			"recommendation", "Consider regenerating with a stronger secret")
+		
+		// Report weak session secret to telemetry
+		// Creating this error will automatically report it to telemetry
+		_ = intErrors.New(
+			fmt.Errorf("session secret is potentially weak: %d characters", len(settings.Security.SessionSecret))).
+			Component("security").
+			Category(intErrors.CategoryConfiguration).
+			Context("current_length", len(settings.Security.SessionSecret)).
+			Context("recommended_length", 32).
+			Context("debug_mode", settings.WebServer.Debug).
+			Build()
 	}
 
 	// Pre-parse the Basic Auth Redirect URI
