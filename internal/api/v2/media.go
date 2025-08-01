@@ -643,6 +643,25 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// Include both the path and width to ensure uniqueness
 	spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, width, raw)
 
+	// FAST PATH: Check if spectrogram already exists BEFORE acquiring semaphore
+	// This eliminates unnecessary semaphore contention for existing files
+	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+		spectrogramLogger.Debug("Fast path: spectrogram already exists, returning immediately",
+			"spectrogram_key", spectrogramKey,
+			"relative_spectrogram_path", relSpectrogramPath,
+			"total_duration_ms", time.Since(start).Milliseconds())
+		return relSpectrogramPath, nil
+	} else if !os.IsNotExist(err) {
+		// Unexpected error checking file - let's log it but continue with generation
+		spectrogramLogger.Debug("Fast path: unexpected error checking existing spectrogram, proceeding with generation",
+			"spectrogram_key", spectrogramKey,
+			"error", err.Error())
+	}
+
+	// File doesn't exist, proceed with generation path
+	spectrogramLogger.Debug("Spectrogram does not exist, proceeding with generation",
+		"spectrogram_key", spectrogramKey)
+
 	// PERFORMANCE FIX: Acquire semaphore BEFORE singleflight to eliminate double bottleneck
 	// This prevents the old issue where requests would queue at singleflight AND then at semaphore
 	spectrogramLogger.Debug("Acquiring semaphore slot",
