@@ -153,11 +153,15 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 	storedPassword := a.OAuth2Server.Settings.Security.BasicAuth.Password
 	storedClientID := a.OAuth2Server.Settings.Security.BasicAuth.ClientID // Use ClientID as the username
 
+	// Log basic auth attempt
+	security.LogInfo("Basic authentication login attempt", "username", username)
+
 	// Skip if basic auth is not enabled
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
 		if a.logger != nil {
 			a.logger.Debug("Basic auth is not enabled")
 		}
+		security.LogWarn("Basic authentication failed: Basic auth not enabled", "username", username)
 		return ErrBasicAuthDisabled // Return the specific error for disabled basic auth
 	}
 
@@ -179,6 +183,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 			if a.logger != nil {
 				a.logger.Error("Failed to generate auth code during basic auth", "error", err.Error())
 			}
+			security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code generation failed")
 			// Treat internal errors during login also as invalid credentials from user's perspective
 			return ErrInvalidCredentials
 		}
@@ -188,6 +193,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 			if a.logger != nil {
 				a.logger.Error("Failed to store userId in session during basic auth", "error", err.Error(), "username", username)
 			}
+			security.LogError("Basic authentication failed: Internal error", "username", username, "error", "session storage failed")
 			return ErrInvalidCredentials // Treat internal errors as invalid credentials
 		}
 
@@ -196,13 +202,22 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 			if a.logger != nil {
 				a.logger.Error("Failed to store auth code in session during basic auth", "error", err.Error())
 			}
+			security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code storage failed")
 			// Treat internal errors during login also as invalid credentials from user's perspective
 			return ErrInvalidCredentials
 		}
 
+		// Log successful authentication
+		security.LogInfo("Basic authentication successful", "username", username)
 		return nil // Success
 	}
 
+	// Log failed authentication attempt
+	if !userMatch {
+		security.LogWarn("Basic authentication failed: Invalid username", "username", username)
+	} else {
+		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
+	}
 	return ErrInvalidCredentials // Failure
 }
 

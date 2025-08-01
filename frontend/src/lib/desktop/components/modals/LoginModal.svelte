@@ -171,9 +171,10 @@
 
     try {
       // SECURITY: Don't update auth state until server confirms success
-      await api.post<{ message: string }>('/login', {
+      // NOTE: Backend expects username to match Security.BasicAuth.ClientID (default: "birdnet-client")
+      await api.post<{ message: string }>('/api/v2/auth/login', {
+        username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
         password: password.trim(), // Remove whitespace
-        redirect: safeRedirectUrl, // Use validated redirect
       });
 
       logger.info('Login successful');
