@@ -28,6 +28,7 @@ var publicV2ApiPrefixes = map[string]struct{}{
 	"/api/v2/spectrogram":         {},
 	"/api/v2/audio":               {},
 	"/api/v2/health":              {}, // Health check should always be public
+	"/api/v2/weather":             {}, // Weather endpoints should be public
 }
 
 // configureMiddleware sets up middleware for the server.

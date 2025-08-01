@@ -218,6 +218,7 @@ routeInitializers := []struct {
 | GET | `/weather/hourly/:date/:hour` | `GetHourlyWeatherForHour` | ❌ | Specific hour weather |
 | GET | `/weather/detection/:id` | `GetWeatherForDetection` | ❌ | Weather for detection time |
 | GET | `/weather/latest` | `GetLatestWeather` | ❌ | Latest weather data |
+| GET | `/weather/sun/:date` | `GetSunTimes` | ❌ | Sun times (sunrise/sunset) for date |
 
 ## Legend
 

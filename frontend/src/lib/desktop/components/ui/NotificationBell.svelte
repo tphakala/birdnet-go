@@ -40,6 +40,7 @@
   let loading = $state(true);
   let hasUnread = $state(false);
   let soundEnabled = $state(false);
+  let isAuthenticated = $state(true); // Assume authenticated until proven otherwise
 
   // Internal state
   let sseConnection: ReconnectingEventSource | null = null;
@@ -132,7 +133,16 @@
       );
       updateUnreadCount();
     } catch (error) {
-      // Only show user-facing error for notification loading failures since users expect to see notifications
+      // Handle authentication errors gracefully - expected for non-authenticated users
+      if (error instanceof ApiError && error.status === 401) {
+        // Silently fail for unauthenticated users - this is expected behavior
+        isAuthenticated = false;
+        notifications = [];
+        updateUnreadCount();
+        return;
+      }
+
+      // Only show user-facing error for non-auth notification loading failures
       if (error instanceof ApiError) {
         toastActions.error('Unable to load notifications. Please refresh the page.');
       }
@@ -148,6 +158,11 @@
 
   // Connect to SSE for real-time notifications using ReconnectingEventSource
   function connectSSE() {
+    // Don't attempt SSE connection for non-authenticated users
+    if (!isAuthenticated) {
+      return;
+    }
+
     if (sseConnection) {
       sseConnection.close();
       sseConnection = null;
@@ -174,6 +189,13 @@
       };
 
       sseConnection.onerror = (error: Event) => {
+        // For non-authenticated users, SSE connection errors are expected
+        // Suppress error logging and close the connection gracefully
+        if (!isAuthenticated) {
+          sseConnection?.close();
+          return;
+        }
+
         logger.error('Notification SSE error:', error);
         // ReconnectingEventSource handles reconnection automatically
         // Don't reconnect if page is being unloaded or offline
@@ -182,9 +204,12 @@
         }
       };
     } catch (error) {
-      logger.error('Failed to create ReconnectingEventSource:', error);
-      // Try again in 5 seconds if initial setup fails
-      setTimeout(() => connectSSE(), 5000);
+      // Don't log errors for non-authenticated users
+      if (isAuthenticated) {
+        logger.error('Failed to create ReconnectingEventSource:', error);
+        // Try again in 5 seconds if initial setup fails
+        setTimeout(() => connectSSE(), 5000);
+      }
     }
   }
 
@@ -398,11 +423,13 @@
       // Preload notification sound
       preloadNotificationSound();
 
-      // Load notifications
-      loadNotifications();
-
-      // Connect to SSE
-      connectSSE();
+      // Load notifications first
+      loadNotifications().then(() => {
+        // Only connect to SSE if authenticated
+        if (isAuthenticated) {
+          connectSSE();
+        }
+      });
 
       // Add event listeners
       globalThis.document.addEventListener('click', handleClickOutside);
