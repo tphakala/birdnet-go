@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getCsrfToken, fetchWithCSRF, api, ApiError, handleApiError } from './api';
+import { getCsrfToken, fetchWithCSRF, api } from './api';
 
 describe('API utilities', () => {
   beforeEach(() => {
@@ -239,63 +239,5 @@ describe('API utilities', () => {
     });
   });
 
-  describe('handleApiError', () => {
-    let consoleSpy: ReturnType<typeof vi.spyOn>;
-
-    beforeEach(() => {
-      consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    });
-
-    afterEach(() => {
-      consoleSpy.mockRestore();
-    });
-
-    it('processes errors without logging in production', () => {
-      const error = new Error('Test error');
-      handleApiError(error);
-      // Console error is commented out in production
-      expect(consoleSpy).not.toHaveBeenCalled();
-    });
-
-    it('adds user-friendly message for 401 errors', () => {
-      const error = new ApiError('Unauthorized', 401, {} as Response);
-      handleApiError(error);
-      expect(error.userMessage).toBe('You need to log in to access this resource');
-    });
-
-    it('adds user-friendly message for 403 errors', () => {
-      const error = new ApiError('Forbidden', 403, {} as Response);
-      handleApiError(error);
-      expect(error.userMessage).toBe('You do not have permission to access this resource');
-    });
-
-    it('adds user-friendly message for 404 errors', () => {
-      const error = new ApiError('Not Found', 404, {} as Response);
-      handleApiError(error);
-      expect(error.userMessage).toBe('The requested resource was not found');
-    });
-
-    it('adds user-friendly message for server errors', () => {
-      const error = new ApiError('Server Error', 500, {} as Response);
-      handleApiError(error);
-      expect(error.userMessage).toBe('A server error occurred. Please try again later');
-    });
-
-    it('handles offline errors', () => {
-      // Mock offline state
-      Object.defineProperty(navigator, 'onLine', {
-        writable: true,
-        value: false,
-      });
-
-      const error = new ApiError('Network error', 0, {} as Response);
-      handleApiError(error);
-      expect(error.userMessage).toBe('No internet connection');
-
-      // Restore online state
-      Object.defineProperty(navigator, 'onLine', {
-        value: true,
-      });
-    });
-  });
+  // Note: handleApiError was removed in security hardening - error handling is now integrated into fetchWithCSRF
 });
