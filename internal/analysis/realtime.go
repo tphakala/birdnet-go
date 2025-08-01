@@ -97,7 +97,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	birdnet.ResizeQueue(defaultQueueSize)
 	
 	// Initialize processing pipeline
-	proc, metrics, birdImageCache, err := initializeProcessingPipeline(settings, dataStore)
+	proc, metrics, err := initializeProcessingPipeline(settings, dataStore)
 	if err != nil {
 		closeDataStore(dataStore)
 		return err
@@ -111,7 +111,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	}
 
 	// Start services and background tasks
-	services, bufferManager, wg := startServicesAndTasks(settings, dataStore, metrics, proc, birdImageCache, channels, sources, notificationChan)
+	services, bufferManager, wg := startServicesAndTasks(settings, dataStore, metrics, proc, channels, sources, notificationChan)
 
 	// Run main event loop
 	runMainEventLoop(channels, services, bufferManager, wg)
@@ -886,11 +886,11 @@ func initializeCoreComponents(settings *conf.Settings) (datastore.Interface, *re
 }
 
 // initializeProcessingPipeline sets up metrics, processor, and related components
-func initializeProcessingPipeline(settings *conf.Settings, dataStore datastore.Interface) (*processor.Processor, *observability.Metrics, *imageprovider.BirdImageCache, error) {
+func initializeProcessingPipeline(settings *conf.Settings, dataStore datastore.Interface) (*processor.Processor, *observability.Metrics, error) {
 	// Initialize Prometheus metrics manager
 	metrics, err := initializeMetrics()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Update BirdNET model loaded metric
@@ -902,7 +902,7 @@ func initializeProcessingPipeline(settings *conf.Settings, dataStore datastore.I
 
 	// Open database connection
 	if err := dataStore.Open(); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Initialize bird image cache if needed
@@ -917,7 +917,7 @@ func initializeProcessingPipeline(settings *conf.Settings, dataStore datastore.I
 		log.Printf("Warning: Backup system initialization failed: %v", err)
 	}
 
-	return proc, metrics, birdImageCache, nil
+	return proc, metrics, nil
 }
 
 // initializeBackupForProcessor initializes and attaches backup system to processor
@@ -978,7 +978,7 @@ func sendValidationWarnings(settings *conf.Settings) {
 }
 
 // startServicesAndTasks initializes and starts all services and background tasks
-func startServicesAndTasks(settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics, proc *processor.Processor, birdImageCache *imageprovider.BirdImageCache, channels *realtimeChannels, sources []string, notificationChan chan handlers.Notification) (*realtimeServices, *BufferManager, *sync.WaitGroup) {
+func startServicesAndTasks(settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics, proc *processor.Processor, channels *realtimeChannels, sources []string, notificationChan chan handlers.Notification) (*realtimeServices, *BufferManager, *sync.WaitGroup) {
 	// Initialize async services
 	if err := telemetry.InitializeAsyncSystems(); err != nil {
 		log.Printf("Error: Failed to initialize async services: %v", err)
@@ -991,7 +991,7 @@ func startServicesAndTasks(settings *conf.Settings, dataStore datastore.Interfac
 	systemMonitor := initializeSystemMonitor(settings)
 
 	// Initialize and start HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, channels.audioLevel, channels.control, proc, metrics)
+	httpServer := httpcontroller.New(settings, dataStore, nil, channels.audioLevel, channels.control, proc, metrics)
 	httpServer.Start()
 
 	// Initialize wait group
