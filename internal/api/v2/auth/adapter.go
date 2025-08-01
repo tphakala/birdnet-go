@@ -147,18 +147,30 @@ func (a *SecurityAdapter) ValidateToken(token string) error {
 // Basic authentication relies on a single, fixed username/password combination
 // configured in settings (Security.BasicAuth.ClientID and Security.BasicAuth.Password).
 // The provided username MUST match the configured ClientID.
-// Returns nil if successful, ErrInvalidCredentials otherwise.
-func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) error {
+// Returns auth code on success, error on failure.
+func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) (string, error) {
 	// For basic auth, check against configured ClientID and Password
 	storedPassword := a.OAuth2Server.Settings.Security.BasicAuth.Password
 	storedClientID := a.OAuth2Server.Settings.Security.BasicAuth.ClientID // Use ClientID as the username
+
+	// Log basic auth attempt
+	security.LogInfo("Basic authentication login attempt", "username", username)
+	
+	// Temporary debug logging to diagnose auth issues
+	if a.logger != nil {
+		a.logger.Debug("BasicAuth configuration check", 
+			"provided_username", username,
+			"configured_clientid", storedClientID,
+			"clientid_match", username == storedClientID)
+	}
 
 	// Skip if basic auth is not enabled
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
 		if a.logger != nil {
 			a.logger.Debug("Basic auth is not enabled")
 		}
-		return ErrBasicAuthDisabled // Return the specific error for disabled basic auth
+		security.LogWarn("Basic authentication failed: Basic auth not enabled", "username", username)
+		return "", ErrBasicAuthDisabled // Return the specific error for disabled basic auth
 	}
 
 	// Hash inputs and stored values before comparison to ensure fixed length for ConstantTimeCompare.
@@ -173,37 +185,37 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 	credentialsValid := userMatch && passMatch
 
 	if credentialsValid {
-		// Generate auth code and create session on successful authentication
+		if a.logger != nil {
+			a.logger.Info("Credentials validated successfully", "username", username)
+		}
+
+		// Generate auth code for OAuth callback (V1 pattern - no session storage)
 		authCode, err := a.OAuth2Server.GenerateAuthCode()
 		if err != nil {
 			if a.logger != nil {
 				a.logger.Error("Failed to generate auth code during basic auth", "error", err.Error())
 			}
+			security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code generation failed")
 			// Treat internal errors during login also as invalid credentials from user's perspective
-			return ErrInvalidCredentials
+			return "", ErrInvalidCredentials
 		}
 
-		// Store user identifier in session upon successful basic auth
-		if err := gothic.StoreInSession("userId", username, c.Request(), c.Response()); err != nil {
-			if a.logger != nil {
-				a.logger.Error("Failed to store userId in session during basic auth", "error", err.Error(), "username", username)
-			}
-			return ErrInvalidCredentials // Treat internal errors as invalid credentials
+		if a.logger != nil {
+			a.logger.Info("Auth code generated successfully", "username", username, "auth_code_length", len(authCode))
 		}
 
-		// Store the auth code for callback
-		if err := gothic.StoreInSession("auth_code", authCode, c.Request(), c.Response()); err != nil {
-			if a.logger != nil {
-				a.logger.Error("Failed to store auth code in session during basic auth", "error", err.Error())
-			}
-			// Treat internal errors during login also as invalid credentials from user's perspective
-			return ErrInvalidCredentials
-		}
-
-		return nil // Success
+		// Log successful authentication
+		security.LogInfo("Basic authentication successful", "username", username)
+		return authCode, nil // Return auth code directly (V1 pattern)
 	}
 
-	return ErrInvalidCredentials // Failure
+	// Log failed authentication attempt
+	if !userMatch {
+		security.LogWarn("Basic authentication failed: Invalid username", "username", username)
+	} else {
+		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
+	}
+	return "", ErrInvalidCredentials // Failure
 }
 
 // Logout invalidates the current session/token

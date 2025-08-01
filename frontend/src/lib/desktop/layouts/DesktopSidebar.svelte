@@ -3,6 +3,7 @@
   import { auth as authStore } from '$lib/stores/auth';
   import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import LoginModal from '../components/modals/LoginModal.svelte';
 
   interface Props {
     securityEnabled?: boolean;
@@ -11,6 +12,11 @@
     currentRoute?: string;
     onNavigate?: (_url: string) => void;
     className?: string;
+    authConfig?: {
+      basicEnabled: boolean;
+      googleEnabled: boolean;
+      githubEnabled: boolean;
+    };
   }
 
   let {
@@ -20,7 +26,11 @@
     currentRoute = '/ui/dashboard',
     onNavigate,
     className = '',
+    authConfig = { basicEnabled: true, googleEnabled: false, githubEnabled: false },
   }: Props = $props();
+
+  // State for login modal
+  let showLoginModal = $state(false);
 
   // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived
   // Avoids repeated string processing and condition checks in templates
@@ -91,7 +101,7 @@
 
   // Handle login
   function handleLogin() {
-    // TODO: Open login modal - implement login modal
+    showLoginModal = true;
   }
 </script>
 
@@ -312,3 +322,11 @@
     </div>
   </nav>
 </aside>
+
+<!-- Login Modal -->
+<LoginModal
+  isOpen={showLoginModal}
+  onClose={() => (showLoginModal = false)}
+  redirectUrl={currentRoute}
+  {authConfig}
+/>

@@ -862,6 +862,42 @@ func Load() (*Settings, error) {
 			Build()
 	}
 
+	// Auto-generate SessionSecret if not set (for backward compatibility)
+	if settings.Security.SessionSecret == "" {
+		// Generate a new session secret
+		sessionSecret := GenerateRandomSecret()
+		if sessionSecret == "" {
+			return nil, errors.Newf("failed to generate session secret").
+				Component("conf").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "generate_session_secret").
+				Build()
+		}
+		
+		settings.Security.SessionSecret = sessionSecret
+		
+		// Also set it in viper so it gets saved to config file
+		viper.Set("security.sessionsecret", sessionSecret)
+		
+		// Log that we generated a new session secret
+		log.Printf("Generated new SessionSecret for existing configuration")
+		
+		// Save the updated config back to file to persist the generated secret
+		// This ensures the secret remains the same across restarts
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				// Log the error but don't fail - the generated secret will work for this session
+				log.Printf("Warning: Failed to save generated SessionSecret to config file: %v", err)
+			} else {
+				// Set secure file permissions after saving
+				if err := os.Chmod(configFile, 0o600); err != nil {
+					log.Printf("Warning: Failed to set secure permissions on config file: %v", err)
+				}
+			}
+		}
+	}
+
 	// Validate settings
 	if err := ValidateSettings(settings); err != nil {
 		// Check if it's just a validation warning (contains fallback info)
@@ -869,8 +905,9 @@ func Load() (*Settings, error) {
 		if errors.As(err, &validationErr) {
 			// Report configuration issues to telemetry for debugging
 			for _, errMsg := range validationErr.Errors {
-				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") {
-					// This is a warning about locale fallback - report to telemetry but don't fail
+				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") || 
+				   strings.Contains(errMsg, "OAuth authentication warning") {
+					// This is a warning - report to telemetry but don't fail
 					log.Printf("Configuration warning: %s", errMsg)
 					// Store the warning for later telemetry reporting
 					settings.ValidationWarnings = append(settings.ValidationWarnings, errMsg)
@@ -962,6 +999,19 @@ func createDefaultConfig() error {
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {
 		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
+	}
+	// If the session secret is not set, generate a random one
+	// This ensures backward compatibility for existing deployments
+	if viper.GetString("security.sessionsecret") == "" {
+		sessionSecret := GenerateRandomSecret()
+		if sessionSecret == "" {
+			return errors.Newf("failed to generate session secret for default config").
+				Component("conf").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "create_default_config").
+				Build()
+		}
+		viper.Set("security.sessionsecret", sessionSecret)
 	}
 
 	// Create directories for config file
@@ -1068,6 +1118,8 @@ func SetTestSettings(settings *Settings) {
 	// Reset the sync.Once to allow reinitialization in tests
 	once = sync.Once{}
 }
+
+// Note: SendValidationWarningsAsNotifications function removed as it was unused
 
 // SaveYAMLConfig updates the YAML configuration file with new settings.
 // It overwrites the existing file, not preserving comments or structure.

@@ -96,28 +96,36 @@ function createAuthStore() {
      */
     logout: async (): Promise<void> => {
       try {
-        const response = await fetch('/api/logout', {
-          method: 'POST',
+        // Use the V1 logout endpoint which works with the OAuth session
+        const response = await fetch('/logout', {
+          method: 'GET',
           credentials: 'include',
+          redirect: 'manual', // Don't follow redirects automatically
         });
 
-        if (!response.ok) {
-          throw new Error(`Logout failed: ${response.statusText}`);
+        // The V1 logout endpoint returns a redirect (302) to / on success
+        if (response.type === 'opaqueredirect' || response.status === 302 || response.ok) {
+          // Clear auth state
+          set({
+            isLoggedIn: false,
+            security: {
+              enabled: true,
+              accessAllowed: false,
+            },
+          });
+
+          // Redirect to the Svelte UI root
+          window.location.href = '/ui/';
+        } else {
+          const errorMsg = `Logout failed: ${response.statusText}`;
+          logger.error('Logout failed', {
+            status: response.status,
+            statusText: response.statusText,
+          });
+          throw new Error(errorMsg);
         }
-
-        // Clear auth state
-        set({
-          isLoggedIn: false,
-          security: {
-            enabled: true,
-            accessAllowed: false,
-          },
-        });
-
-        // Redirect to login page
-        window.location.href = '/login';
       } catch (error) {
-        logger.error('Logout error:', error);
+        logger.error('Logout error occurred', error);
         throw error;
       }
     },
