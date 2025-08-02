@@ -12,6 +12,7 @@ vi.mock('$lib/i18n', () => ({
       'dataDisplay.pagination.goToPage': 'Go to page',
       'dataDisplay.pagination.page': 'Page',
     };
+    // eslint-disable-next-line security/detect-object-injection
     return translations[key] ?? key;
   }),
 }));

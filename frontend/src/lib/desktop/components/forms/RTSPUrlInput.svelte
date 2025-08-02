@@ -65,7 +65,7 @@
     onUpdate(updatedUrls);
   }
 
-  function handleKeypress(event: KeyboardEvent) {
+  function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       event.preventDefault();
       addUrl();
@@ -100,7 +100,7 @@
     <input
       type="text"
       bind:value={newUrl}
-      onkeydown={handleKeypress}
+      onkeydown={handleKeydown}
       class="input input-bordered input-sm flex-1"
       placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)"
       {disabled}

@@ -9,6 +9,7 @@ vi.mock('$lib/i18n', () => ({
       'settings.card.changedAriaLabel': 'Settings changed',
       'settings.card.changed': 'Changed',
     };
+    // eslint-disable-next-line security/detect-object-injection
     return translations[key] ?? key;
   }),
 }));
@@ -132,7 +133,7 @@ describe('SettingsSection', () => {
     expect(screen.getByRole('status', { name: 'Settings changed' })).toBeInTheDocument();
   });
 
-  it('passes through other props to CollapsibleCard', () => {
+  it('passes through other props to SettingsCard', () => {
     render(SettingsSection, {
       props: {
         title: 'Test Section',
@@ -144,7 +145,7 @@ describe('SettingsSection', () => {
 
     // These would be tested more thoroughly in integration tests
     // Here we just verify the component renders without errors
-    const container = screen.getByRole('heading', { level: 3 }).closest('.collapse');
+    const container = screen.getByRole('heading', { level: 3 }).closest('.card');
     expect(container).toHaveClass('custom-class');
   });
 });

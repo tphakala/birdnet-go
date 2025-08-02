@@ -133,6 +133,9 @@ describe('CollapsibleSection', () => {
 
     const iconWrapper = container.querySelector('svg')?.parentElement;
 
+    // Ensure iconWrapper exists
+    expect(iconWrapper).not.toBeNull();
+
     // Initially not rotated
     expect(iconWrapper).not.toHaveClass('rotate-180');
 

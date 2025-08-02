@@ -43,40 +43,7 @@
 
     const trimmed = cidr.trim();
 
-    // Basic format check
-    if (!trimmed.includes('/')) {
-      return 'Invalid CIDR format. Use format like 192.168.1.0/24';
-    }
-
-    const [ip, prefix] = trimmed.split('/');
-
-    // Check if we have both IP and prefix
-    if (!ip || !prefix) {
-      return 'Invalid CIDR format. Use format like 192.168.1.0/24';
-    }
-
-    const prefixNum = parseInt(prefix, 10);
-
-    // Validate prefix length
-    if (isNaN(prefixNum) || prefixNum < 0 || prefixNum > 32) {
-      return 'Prefix length must be between 0 and 32';
-    }
-
-    // Validate IP address format
-    const octets = ip.split('.');
-    if (octets.length !== 4) {
-      return 'Invalid IP address. Each octet must be 0-255';
-    }
-
-    // Validate IP address octets
-    for (const octet of octets) {
-      const num = parseInt(octet, 10);
-      if (isNaN(num) || num < 0 || num > 255) {
-        return 'Invalid IP address. Each octet must be 0-255';
-      }
-    }
-
-    // Final security check using the utility
+    // Use only the security utility for validation
     if (!validateCIDR(trimmed)) {
       return 'Invalid CIDR format. Use format like 192.168.1.0/24';
     }

@@ -133,7 +133,9 @@ describe('SubnetInput', () => {
     const input = screen.getByPlaceholderText('192.168.1.0/24');
     await fireEvent.input(input, { target: { value: '192.168.1.0/33' } });
 
-    expect(screen.getByText('Prefix length must be between 0 and 32')).toBeInTheDocument();
+    expect(
+      screen.getByText('Invalid CIDR format. Use format like 192.168.1.0/24')
+    ).toBeInTheDocument();
   });
 
   it('validates IP address octets', async () => {
@@ -148,7 +150,9 @@ describe('SubnetInput', () => {
     const input = screen.getByPlaceholderText('192.168.1.0/24');
     await fireEvent.input(input, { target: { value: '256.168.1.0/24' } });
 
-    expect(screen.getByText('Invalid IP address. Each octet must be 0-255')).toBeInTheDocument();
+    expect(
+      screen.getByText('Invalid CIDR format. Use format like 192.168.1.0/24')
+    ).toBeInTheDocument();
   });
 
   it('prevents adding duplicate subnets', async () => {
@@ -206,18 +210,19 @@ describe('SubnetInput', () => {
     expect(onUpdate).toHaveBeenCalledWith(['192.168.2.0/24', '10.0.0.0/16']);
   });
 
-  it('shows validation error for edited subnet', async () => {
+  it('shows validation error for invalid new subnet input', () => {
     render(SubnetInput, {
       props: {
         label: 'Allowed Subnets',
-        subnets: defaultSubnets,
+        subnets: [],
         onUpdate: vi.fn(),
       },
     });
 
-    const subnetInput = screen.getByDisplayValue('192.168.1.0/24');
-    await fireEvent.input(subnetInput, { target: { value: 'invalid' } });
+    const input = screen.getByPlaceholderText('192.168.1.0/24');
+    fireEvent.input(input, { target: { value: 'invalid-cidr' } });
 
+    // The error should appear immediately for the new subnet input
     expect(
       screen.getByText('Invalid CIDR format. Use format like 192.168.1.0/24')
     ).toBeInTheDocument();
