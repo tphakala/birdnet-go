@@ -349,12 +349,13 @@
 
   // Range filter functions
   let debounceTimer: any;
+  let loadingDelayTimer: any;
 
   function debouncedTestRangeFilter() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       testCurrentRangeFilter();
-    }, 500);
+    }, 150); // Reduced from 500ms to 150ms for faster response
   }
 
   async function loadRangeFilterCount() {
@@ -375,7 +376,15 @@
     if (rangeFilterState.testing || !settings.birdnet.latitude || !settings.birdnet.longitude)
       return;
 
-    rangeFilterState.testing = true;
+    // Clear any existing loading delay timer
+    clearTimeout(loadingDelayTimer);
+
+    // Only show loading state if the request takes longer than 100ms
+    // This prevents flicker for fast responses
+    loadingDelayTimer = setTimeout(() => {
+      rangeFilterState.testing = true;
+    }, 100);
+
     rangeFilterState.error = null;
 
     try {
@@ -399,6 +408,8 @@
       // Set count to null on error to show loading state next time
       rangeFilterState.speciesCount = null;
     } finally {
+      // Clear the loading delay timer and testing state
+      clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
     }
   }
@@ -682,134 +693,136 @@
         <h4 class="text-lg font-medium mt-6 pb-2">
           {t('settings.main.sections.rangeFilter.title')}
         </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
-          <!-- Map container -->
-          <div class="col-span-1 md:col-span-2">
-            <label class="label justify-start" for="location-map">
-              <span class="label-text"
-                >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
+
+        <!-- Coordinates row - 2 columns -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 mb-6">
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.latitude.label')}
+            value={settings.birdnet.latitude}
+            onUpdate={value => updateBirdnetSetting('latitude', value)}
+            min={-90.0}
+            max={90.0}
+            step={0.001}
+            helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.longitude.label')}
+            value={settings.birdnet.longitude}
+            onUpdate={value => updateBirdnetSetting('longitude', value)}
+            min={-180.0}
+            max={180.0}
+            step={0.001}
+            helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+
+        <!-- Map container - full width -->
+        <div class="mb-6">
+          <label class="label justify-start" for="location-map">
+            <span class="label-text"
+              >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
+            >
+          </label>
+          <div class="form-control">
+            <div
+              bind:this={mapElement}
+              id="location-map"
+              class="h-[300px] rounded-lg border border-base-300"
+              role="application"
+              aria-label="Map for selecting station location"
+            >
+              <!-- Map will be initialized here -->
+            </div>
+            <div class="label">
+              <span class="label-text-alt"
+                >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
               >
-            </label>
-            <div class="form-control">
-              <div
-                bind:this={mapElement}
-                id="location-map"
-                class="h-[300px] rounded-lg border border-base-300"
-                role="application"
-                aria-label="Map for selecting station location"
+            </div>
+            <div class="label">
+              <span class="label-text-alt text-info"
+                >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map</span
               >
-                <!-- Map will be initialized here -->
-              </div>
-              <div class="label">
-                <span class="label-text-alt"
-                  >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
-                >
-              </div>
-              <div class="label">
-                <span class="label-text-alt text-info"
-                  >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map</span
-                >
-              </div>
             </div>
           </div>
+        </div>
 
-          <!-- Range Filter Settings -->
-          <div class="col-span-1 flex flex-col justify-start gap-x-6">
-            <NumberField
-              label={t('settings.main.sections.rangeFilter.latitude.label')}
-              value={settings.birdnet.latitude}
-              onUpdate={value => updateBirdnetSetting('latitude', value)}
-              min={-90.0}
-              max={90.0}
-              step={0.001}
-              helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
+        <!-- Threshold and Species row - 2 columns -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.threshold.label')}
+            value={settings.birdnet.rangeFilter.threshold}
+            onUpdate={value =>
+              settingsActions.updateSection('birdnet', {
+                rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
+              })}
+            min={0.0}
+            max={0.99}
+            step={0.01}
+            helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
 
-            <NumberField
-              label={t('settings.main.sections.rangeFilter.longitude.label')}
-              value={settings.birdnet.longitude}
-              onUpdate={value => updateBirdnetSetting('longitude', value)}
-              min={-180.0}
-              max={180.0}
-              step={0.001}
-              helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <NumberField
-              label={t('settings.main.sections.rangeFilter.threshold.label')}
-              value={settings.birdnet.rangeFilter.threshold}
-              onUpdate={value =>
-                settingsActions.updateSection('birdnet', {
-                  rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
-                })}
-              min={0.0}
-              max={0.99}
-              step={0.01}
-              helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <!-- Range Filter Species Count Display -->
-            <div class="form-control">
-              <div class="label justify-start">
-                <span class="label-text"
-                  >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-                >
-              </div>
+          <!-- Range Filter Species Count Display -->
+          <div class="form-control">
+            <div class="label justify-start">
+              <span class="label-text"
+                >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
+              >
+            </div>
+            <div class="flex items-center space-x-2">
               <div class="flex items-center space-x-2">
-                <div class="flex items-center space-x-2">
-                  <div
-                    class="text-lg font-bold text-primary"
-                    class:opacity-60={rangeFilterState.testing}
-                  >
-                    {rangeFilterState.speciesCount !== null
-                      ? rangeFilterState.speciesCount
-                      : t('settings.main.sections.rangeFilter.speciesCount.loading')}
-                  </div>
-                  {#if rangeFilterState.testing}
-                    <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
-                  {/if}
+                <div
+                  class="text-lg font-bold text-primary"
+                  class:opacity-60={rangeFilterState.testing}
+                >
+                  {rangeFilterState.speciesCount !== null
+                    ? rangeFilterState.speciesCount
+                    : t('settings.main.sections.rangeFilter.speciesCount.loading')}
                 </div>
+                {#if rangeFilterState.testing}
+                  <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
+                {/if}
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline"
+                disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
+                onclick={() => {
+                  rangeFilterState.showModal = true;
+                  loadRangeFilterSpecies();
+                }}
+              >
+                {#if rangeFilterState.loading}
+                  <span class="loading loading-spinner loading-xs mr-1"></span>
+                  {t('settings.main.sections.rangeFilter.speciesCount.loading')}
+                {:else}
+                  {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+                {/if}
+              </button>
+            </div>
+            <div class="label">
+              <span class="label-text-alt"
+                >{t('settings.main.sections.rangeFilter.speciesCount.helpText')}</span
+              >
+            </div>
+
+            {#if rangeFilterState.error}
+              <div class="alert alert-error mt-2">
+                {@html alertIconsSvg.error}
+                <span>{rangeFilterState.error}</span>
                 <button
                   type="button"
-                  class="btn btn-sm btn-outline"
-                  disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
-                  onclick={() => {
-                    rangeFilterState.showModal = true;
-                    loadRangeFilterSpecies();
-                  }}
+                  class="btn btn-sm btn-ghost ml-auto"
+                  aria-label="Dismiss error"
+                  onclick={() => (rangeFilterState.error = null)}
                 >
-                  {#if rangeFilterState.loading}
-                    <span class="loading loading-spinner loading-xs mr-1"></span>
-                    {t('settings.main.sections.rangeFilter.speciesCount.loading')}
-                  {:else}
-                    {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-                  {/if}
+                  {@html navigationIcons.close}
                 </button>
               </div>
-              <div class="label">
-                <span class="label-text-alt"
-                  >{t('settings.main.sections.rangeFilter.speciesCount.helpText')}</span
-                >
-              </div>
-
-              {#if rangeFilterState.error}
-                <div class="alert alert-error mt-2">
-                  {@html alertIconsSvg.error}
-                  <span>{rangeFilterState.error}</span>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-ghost ml-auto"
-                    aria-label="Dismiss error"
-                    onclick={() => (rangeFilterState.error = null)}
-                  >
-                    {@html navigationIcons.close}
-                  </button>
-                </div>
-              {/if}
-            </div>
+            {/if}
           </div>
         </div>
       </div>

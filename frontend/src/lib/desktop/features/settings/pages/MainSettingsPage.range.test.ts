@@ -116,21 +116,23 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(updatedState.formData.birdnet.longitude).toBe(-74.006);
   });
 
-  it('should trigger range filter test when model changes', async () => {
-    // Update range filter model
+  it('should preserve range filter settings when species list is updated', async () => {
+    // Update range filter species list
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.03,
-        speciesCount: null,
-        species: [],
+        speciesCount: 150,
+        species: ['species1', 'species2'],
       },
     });
 
-    // Verify model was updated
+    // Verify species list was updated
     const updatedState = get(settingsStore);
 
-    // Verify other settings were preserved
+    // Verify all settings were preserved
     expect(updatedState.formData.birdnet.rangeFilter.threshold).toBe(0.03);
+    expect(updatedState.formData.birdnet.rangeFilter.speciesCount).toBe(150);
+    expect(updatedState.formData.birdnet.rangeFilter.species).toEqual(['species1', 'species2']);
     expect(updatedState.formData.birdnet.latitude).toBe(40.7128);
     expect(updatedState.formData.birdnet.longitude).toBe(-74.006);
   });
@@ -151,12 +153,12 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
       },
     });
 
-    // Update range filter model
+    // Update range filter species count
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
         threshold: 0.04,
-        speciesCount: null,
-        species: [],
+        speciesCount: 200,
+        species: ['bird1', 'bird2'],
       },
     });
 
@@ -167,6 +169,8 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(birdnet.latitude).toBe(48.8566);
     expect(birdnet.longitude).toBe(2.3522);
     expect(birdnet.rangeFilter.threshold).toBe(0.04);
+    expect(birdnet.rangeFilter.speciesCount).toBe(200);
+    expect(birdnet.rangeFilter.species).toEqual(['bird1', 'bird2']);
   });
 
   it('should not lose range filter data during coordinate updates', async () => {
