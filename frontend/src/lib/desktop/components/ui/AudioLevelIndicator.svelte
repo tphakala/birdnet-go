@@ -98,7 +98,6 @@
 
   // Internal state
   let eventSource: ReconnectingEventSource | null = null;
-  let audioElement: HTMLAudioElement | null = null;
   let hlsInstance: HLSInstance | null = null;
   let zeroLevelTime = new Map<string, number>();
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
@@ -290,11 +289,11 @@
       });
 
       navigator.mediaSession.setActionHandler('play', () => {
-        audioElement?.play();
+        cachedAudioElement?.play();
       });
 
       navigator.mediaSession.setActionHandler('pause', () => {
-        audioElement?.pause();
+        cachedAudioElement?.pause();
       });
 
       navigator.mediaSession.playbackState = 'playing';
@@ -446,10 +445,10 @@
     hideStatusMessage();
     stopHeartbeat();
 
-    if (audioElement) {
-      audioElement.pause();
-      audioElement.src = '';
-      audioElement.load();
+    if (cachedAudioElement) {
+      cachedAudioElement.pause();
+      cachedAudioElement.src = '';
+      cachedAudioElement.load();
     }
 
     if (hlsInstance) {
