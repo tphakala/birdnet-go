@@ -134,6 +134,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			name:           "no_fallback_when_policy_none",
 			fallbackPolicy: "none",
 			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
 				// Add image only for wikimedia provider
 				err := store.SaveImageCache(&datastore.ImageCache{
 					ScientificName: "Parus major",
@@ -150,6 +151,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			name:           "fallback_when_policy_all",
 			fallbackPolicy: "all",
 			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
 				// Add image only for wikimedia provider
 				err := store.SaveImageCache(&datastore.ImageCache{
 					ScientificName: "Parus major",
@@ -166,6 +168,7 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 			name:           "primary_provider_has_image",
 			fallbackPolicy: "none",
 			setupStore: func(t *testing.T, store *mockStore) {
+				t.Helper()
 				// Add image for primary provider
 				err := store.SaveImageCache(&datastore.ImageCache{
 					ScientificName: "Parus major",
