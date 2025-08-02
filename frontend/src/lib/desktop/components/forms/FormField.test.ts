@@ -45,6 +45,7 @@ describe('FormField', () => {
 
       const input = screen.getByRole('textbox');
       await user.type(input, 'testuser');
+      await user.tab(); // Trigger blur to fire change event
 
       expect(onChange).toHaveBeenLastCalledWith('testuser');
     });
@@ -150,6 +151,7 @@ describe('FormField', () => {
       const input = screen.getByRole('spinbutton');
       await user.clear(input);
       await user.type(input, '42');
+      await user.tab(); // Trigger blur to fire change event
 
       expect(onChange).toHaveBeenLastCalledWith(42);
     });

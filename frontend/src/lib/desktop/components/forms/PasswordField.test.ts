@@ -54,7 +54,7 @@ describe('PasswordField', () => {
     });
 
     const input = screen.getByLabelText('Password');
-    await fireEvent.input(input, { target: { value: 'newpassword' } });
+    await fireEvent.change(input, { target: { value: 'newpassword' } });
 
     expect(onUpdate).toHaveBeenCalledWith('newpassword');
   });
@@ -287,6 +287,7 @@ describe('PasswordField', () => {
     const { unmount } = render(PasswordField, {
       props: {
         label: 'Password 1',
+        name: 'password1',
         value: '',
         onUpdate: vi.fn(),
       },
@@ -300,6 +301,7 @@ describe('PasswordField', () => {
     render(PasswordField, {
       props: {
         label: 'Password 2',
+        name: 'password2',
         value: '',
         onUpdate: vi.fn(),
       },
