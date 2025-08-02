@@ -1,2 +1,27 @@
-# Run lint-staged to check staged files
-cd frontend && npx lint-staged
+#!/bin/sh
+
+# Frontend checks
+echo "🔍 Running frontend pre-commit checks..."
+cd frontend || exit 1
+
+# Run lint-staged for staged files first (faster feedback)
+echo "🧹 Running lint-staged..."
+npx lint-staged || exit 1
+
+# Run TypeScript/Svelte type checking on staged files only
+echo "📝 Type checking staged files..."
+# Get staged .ts, .svelte files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|svelte)$' | head -20)
+
+if [ -n "$STAGED_FILES" ]; then
+  echo "Checking types for staged files..."
+  npm run typecheck || {
+    echo "❌ TypeScript errors found in staged files."
+    echo "💡 Fix errors or run: git commit --no-verify to bypass"
+    exit 1
+  }
+else
+  echo "ℹ️ No TypeScript/Svelte files staged, skipping typecheck"
+fi
+
+echo "✅ All pre-commit checks passed!"

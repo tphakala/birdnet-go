@@ -821,9 +821,17 @@ describe('Component Accessibility Tests', () => {
 
 ## Pre-Commit Workflow
 
-**REQUIRED STEPS before every `git commit`:**
+**AUTOMATED STEPS (via Husky pre-commit hook):**
+
+- **lint-staged** - Auto-format and lint staged files
+- **svelte-check** - TypeScript/Svelte type checking for staged files
+- Bypass with `git commit --no-verify` only in emergencies
+
+**MANUAL STEPS before every `git commit`:**
 
 1. **Check IDE Problems Panel** - Resolve ALL TypeScript/ESLint errors
 2. **Run `npm run check:all`** - Ensure all static analysis passes
 3. **Test affected functionality** - Verify changes work as expected
 4. **Review accessibility** - Check for a11y warnings and violations
+
+**Note:** The pre-commit hook automatically prevents commits with TypeScript errors in staged files.
