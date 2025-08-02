@@ -1,3 +1,29 @@
+<!--
+  Species Settings Page Component
+  
+  Purpose: Configure species-specific settings for BirdNET-Go including always include/exclude
+  lists and custom configurations with thresholds, intervals, and actions.
+  
+  Features:
+  - Always include species list management
+  - Always exclude species list management
+  - Custom species configurations with threshold and interval settings
+  - Action configuration for species-specific commands
+  - Species autocomplete with API-loaded predictions
+  - Real-time validation and change detection
+  
+  Props: None - This is a page component that uses global settings stores
+  
+  Performance Optimizations:
+  - Removed page-level loading spinner to prevent flickering
+  - Reactive settings with $derived instead of $state + $effect
+  - Cached CSRF token to avoid repeated DOM queries
+  - API state management for species list loading
+  - Reactive change detection with $derived
+  - Efficient prediction filtering
+  
+  @component
+-->
 <script lang="ts">
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
@@ -19,25 +45,42 @@
 
   const logger = loggers.settings;
 
-  // Derived settings with fallbacks
-  let settings = $state({
-    include: [] as string[],
-    exclude: [] as string[],
-    config: {} as Record<string, SpeciesConfig>,
-  });
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      ''
+  );
 
-  // Update settings when store changes
-  $effect(() => {
-    if ($speciesSettings) {
-      settings = $speciesSettings;
+  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
+  let settings = $derived(
+    $speciesSettings || {
+      include: [] as string[],
+      exclude: [] as string[],
+      config: {} as Record<string, SpeciesConfig>,
     }
-  });
+  );
 
   let store = $derived($settingsStore);
 
+  // API State Management
+  interface ApiState<T> {
+    loading: boolean;
+    error: string | null;
+    data: T;
+  }
+
+  // Species list API state
+  let speciesListState = $state<ApiState<string[]>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+
+  // PERFORMANCE OPTIMIZATION: Derived species lists
+  let allSpecies = $derived(speciesListState.data);
+  let filteredSpecies = $derived([...allSpecies]);
+
   // Species predictions state
-  let allSpecies = $state<string[]>([]);
-  let filteredSpecies = $state<string[]>([]);
   let includePredictions = $state<string[]>([]);
   let excludePredictions = $state<string[]>([]);
   let configPredictions = $state<string[]>([]);
@@ -72,7 +115,7 @@
     executeDefaults: true,
   });
 
-  // Change detection
+  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
     hasSettingsChanged(
       (store.originalData as any)?.realtime?.species?.include,
@@ -94,26 +137,40 @@
     )
   );
 
-  // Load species data from API
-  async function loadSpeciesData() {
-    try {
-      const response = await fetch('/api/v2/range/species/list');
-      if (response.ok) {
-        const data = await response.json();
-        allSpecies = data.species?.map((s: any) => s.commonName || s.label) || [];
-        filteredSpecies = [...allSpecies];
-      }
-    } catch (error) {
-      logger.error('Failed to load species data:', error);
-      allSpecies = [];
-      filteredSpecies = [];
-    }
-  }
-
-  // Initialize species data
+  // PERFORMANCE OPTIMIZATION: Load species data with proper state management
   $effect(() => {
     loadSpeciesData();
   });
+
+  async function loadSpeciesData() {
+    speciesListState.loading = true;
+    speciesListState.error = null;
+
+    try {
+      const headers = new Headers();
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
+      }
+
+      const response = await fetch('/api/v2/range/species/list', {
+        headers,
+        credentials: 'same-origin',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load species: ${response.status}`);
+      }
+
+      const data = await response.json();
+      speciesListState.data = data.species?.map((s: any) => s.commonName || s.label) || [];
+    } catch (error) {
+      logger.error('Failed to load species data:', error);
+      speciesListState.error = t('settings.species.errors.speciesLoadFailed');
+      speciesListState.data = [];
+    } finally {
+      speciesListState.loading = false;
+    }
+  }
 
   // Prediction functions
   function updateIncludePredictions(input: string) {
@@ -408,11 +465,8 @@
   }
 </script>
 
-{#if store.isLoading}
-  <div class="flex items-center justify-center py-12">
-    <div class="loading loading-spinner loading-lg"></div>
-  </div>
-{:else}
+<!-- Remove page-level loading spinner to prevent flickering -->
+<div class="space-y-4">
   <!-- Include Species Section -->
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}
@@ -724,7 +778,7 @@
       </div>
     </div>
   </SettingsSection>
-{/if}
+</div>
 
 <!-- Actions Modal -->
 {#if showActionsModal}
