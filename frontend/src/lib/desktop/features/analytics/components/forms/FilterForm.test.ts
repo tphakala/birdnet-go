@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import { createI18nMock, analyticsI18nTranslations } from '../../../../../../test/render-helpers';
 import FilterForm from './FilterForm.svelte';
+
+// Mock i18n translations using shared translation constants
+vi.mock('$lib/i18n', () => ({
+  t: createI18nMock(analyticsI18nTranslations),
+}));
 
 const defaultFilters = {
   timePeriod: 'all' as const,

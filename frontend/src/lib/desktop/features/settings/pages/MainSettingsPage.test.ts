@@ -59,6 +59,39 @@ vi.mock('$lib/stores/settings', () => {
     formData: {},
   });
 
+  // Extract dynamicThreshold from birdnetSettings
+  const mockBirdnetSettingsValue = {
+    sensitivity: 0.5,
+    threshold: 0.3,
+    overlap: 0.0,
+    locale: 'en',
+    threads: 1,
+    latitude: 0.0,
+    longitude: 0.0,
+    modelPath: '',
+    labelPath: '',
+    rangeFilter: {
+      model: 'v2.4',
+      threshold: 0.03,
+    },
+    dynamicThreshold: {
+      enabled: false,
+      debug: false,
+      trigger: 0.8,
+      min: 0.3,
+      validHours: 24,
+    },
+    database: {
+      type: 'sqlite',
+      host: '',
+      port: 5432,
+      user: '',
+      password: '',
+      name: '',
+      sslmode: '',
+    },
+  };
+
   return {
     settingsStore: mockSettingsStore,
     settingsActions: {
@@ -67,6 +100,7 @@ vi.mock('$lib/stores/settings', () => {
     mainSettings: mockMainSettings,
     birdnetSettings: mockBirdnetSettings,
     dashboardSettings: mockDashboardSettings,
+    dynamicThresholdSettings: writable(mockBirdnetSettingsValue.dynamicThreshold),
   };
 });
 

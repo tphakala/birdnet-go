@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { systemIcons } from '$lib/utils/icons';
   import { safeGet } from '$lib/utils/security';
+  import { systemIcons } from '$lib/utils/icons';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -17,6 +17,7 @@
     role?: string;
     'aria-label'?: string;
     'aria-hidden'?: boolean;
+    'data-testid'?: string;
     tabindex?: number;
     title?: string;
     onclick?: (_event: MouseEvent) => void;
@@ -33,6 +34,7 @@
     role,
     'aria-label': ariaLabel,
     'aria-hidden': ariaHidden,
+    'data-testid': dataTestId,
     tabindex,
     title,
     onclick,
@@ -44,6 +46,12 @@
     if (!dt) return 'day';
 
     const date = dt instanceof Date ? dt : new Date(dt);
+
+    // Check if date is invalid and fallback to 'day'
+    if (isNaN(date.getTime())) {
+      return 'day';
+    }
+
     const hours = date.getHours();
     const minutes = date.getMinutes();
     const timeInMinutes = hours * 60 + minutes;
@@ -91,6 +99,7 @@
     role,
     'aria-label': ariaLabel,
     'aria-hidden': ariaHidden,
+    'data-testid': dataTestId,
     tabindex,
     title:
       title || (showTooltip ? safeGet(tooltipText, currentTimeOfDay, 'Unknown time') : undefined),
