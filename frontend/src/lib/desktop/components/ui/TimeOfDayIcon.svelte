@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
+  import { systemIcons } from '$lib/utils/icons';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -45,6 +46,12 @@
     if (!dt) return 'day';
 
     const date = dt instanceof Date ? dt : new Date(dt);
+
+    // Check if date is invalid and fallback to 'day'
+    if (isNaN(date.getTime())) {
+      return 'day';
+    }
+
     const hours = date.getHours();
     const minutes = date.getMinutes();
     const timeInMinutes = hours * 60 + minutes;
@@ -195,23 +202,11 @@
     </svg>
   {:else}
     <!-- Default clock icon for unknown time -->
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      class={cn(
-        safeGet(sizeClasses, size, 'h-6 w-6'),
-        'text-gray-400',
-        'inline-block align-text-bottom',
-        className
-      )}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="2"
+    <div
+      class={cn(safeGet(sizeClasses, size, 'h-6 w-6'), 'text-gray-400', className)}
       {...commonAttrs}
     >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12,6 12,12 16,14" />
-      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
+      {@html systemIcons.clock}
+    </div>
   {/if}
 </div>

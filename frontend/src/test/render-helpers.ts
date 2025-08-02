@@ -233,5 +233,72 @@ export const commonI18nTranslations = {
   'auth.login.success': 'Login successful',
 };
 
+/**
+ * Analytics-specific i18n translations used across analytics components
+ */
+export const analyticsI18nTranslations = {
+  // Filter form labels
+  'analytics.filters.title': 'Filter Data',
+  'analytics.filters.timePeriod': 'Time Period',
+  'analytics.filters.sortBy': 'Sort By',
+  'analytics.filters.searchSpecies': 'Species Name',
+  'analytics.filters.searchPlaceholder': 'Search by name...',
+  'analytics.filters.species': 'species',
+  'analytics.filters.filtered': 'filtered',
+  'analytics.filters.from': 'From',
+  'analytics.filters.to': 'To',
+  'analytics.filters.reset': 'Reset',
+  'analytics.filters.exportCsv': 'Export CSV',
+  'analytics.filters.applyFilters': 'Apply Filters',
+
+  // Time period options
+  'analytics.timePeriodOptions.allTime': 'All Time',
+  'analytics.timePeriodOptions.today': 'Today',
+  'analytics.timePeriodOptions.lastWeek': 'Last Week',
+  'analytics.timePeriodOptions.lastMonth': 'Last Month',
+  'analytics.timePeriodOptions.last90Days': 'Last 90 Days',
+  'analytics.timePeriodOptions.lastYear': 'Last Year',
+  'analytics.timePeriodOptions.customRange': 'Custom Range',
+
+  // Sort options
+  'analytics.sortOptions.mostDetections': 'Most Detections',
+  'analytics.sortOptions.fewestDetections': 'Fewest Detections',
+  'analytics.sortOptions.nameAZ': 'Name A-Z',
+  'analytics.sortOptions.nameZA': 'Name Z-A',
+  'analytics.sortOptions.recentlyFirstSeen': 'Recently First Seen',
+  'analytics.sortOptions.earliestFirstSeen': 'Earliest First Seen',
+  'analytics.sortOptions.recentlyLastSeen': 'Recently Last Seen',
+  'analytics.sortOptions.highestConfidence': 'Highest Confidence',
+};
+
+/**
+ * Combined translations for comprehensive testing
+ */
+export const allCommonTranslations = {
+  ...commonI18nTranslations,
+  ...analyticsI18nTranslations,
+};
+
+/**
+ * Create a complete vi.mock setup for '$lib/i18n' with custom translations
+ * Use this in test files to reduce boilerplate for i18n mocking
+ *
+ * @param additionalTranslations - Additional translations to merge with common ones
+ * @returns Object containing the mock setup and translation function
+ *
+ * @example
+ * // In test file:
+ * import { createI18nModuleMock, analyticsI18nTranslations } from '../../../../test/render-helpers';
+ *
+ * vi.mock('$lib/i18n', createI18nModuleMock(analyticsI18nTranslations));
+ */
+export function createI18nModuleMock(additionalTranslations: Record<string, string> = {}) {
+  const translations = { ...allCommonTranslations, ...additionalTranslations };
+
+  return () => ({
+    t: createI18nMock(translations),
+  });
+}
+
 // Re-export testing library utilities for convenience
 export { screen, fireEvent, waitFor, act } from '@testing-library/svelte';

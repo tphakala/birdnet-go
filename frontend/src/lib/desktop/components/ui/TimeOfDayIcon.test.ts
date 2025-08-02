@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderTyped } from '../../../../test/render-helpers';
+import { fireEvent } from '@testing-library/svelte';
 import TimeOfDayIcon from './TimeOfDayIcon.svelte';
 
 describe('TimeOfDayIcon', () => {
@@ -201,9 +202,131 @@ describe('TimeOfDayIcon', () => {
       },
     });
 
-    const svg = container.querySelector('svg');
-    expect(svg).toHaveClass('text-gray-400');
-    // Check for clock icon path
-    expect(svg?.innerHTML).toContain('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z');
+    // Clock icon is rendered in an inner div wrapper with the text-gray-400 class
+    const clockDiv = container.querySelector('div.text-gray-400');
+    expect(clockDiv).toBeTruthy();
+    expect(clockDiv).toHaveClass('text-gray-400');
+    // Check that it contains the centralized clock icon
+    expect(clockDiv?.innerHTML).toContain('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z');
+  });
+
+  describe('Edge Cases and Security', () => {
+    it('handles invalid Date objects gracefully', () => {
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          datetime: new Date('invalid-date'),
+        },
+      });
+
+      // Should fallback to day icon when date is invalid
+      const svg = container.querySelector('svg');
+      expect(svg).toHaveClass('text-yellow-500');
+    });
+
+    it('handles undefined datetime values', () => {
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          datetime: undefined,
+        },
+      });
+
+      // Should default to day icon
+      expect(container.querySelector('svg')).toHaveClass('text-yellow-500');
+    });
+
+    it('handles extremely large timestamp values', () => {
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          datetime: Number.MAX_SAFE_INTEGER,
+        },
+      });
+
+      // Should still render some icon (may be day as fallback)
+      const icon = container.querySelector('svg, div');
+      expect(icon).toBeTruthy();
+    });
+
+    it('handles malformed string datetime', () => {
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          datetime: 'not-a-date-string',
+        },
+      });
+
+      // Should fallback to day icon for invalid date strings
+      const svg = container.querySelector('svg');
+      expect(svg).toHaveClass('text-yellow-500');
+    });
+
+    it('uses safeGet for size classes with invalid size', () => {
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          timeOfDay: 'day',
+          size: 'invalid-size' as 'sm' | 'md' | 'lg' | 'xl',
+        },
+      });
+
+      // Should fallback to default size (h-6 w-6) via safeGet
+      const svg = container.querySelector('svg');
+      expect(svg).toHaveClass('h-6', 'w-6');
+    });
+
+    it('properly handles data-testid attribute', () => {
+      const testId = 'time-icon-test';
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          timeOfDay: 'day',
+          'data-testid': testId,
+        },
+      });
+
+      const svg = container.querySelector('svg');
+      expect(svg).toHaveAttribute('data-testid', testId);
+    });
+
+    it('handles aria-hidden attribute correctly', () => {
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          timeOfDay: 'night',
+          'aria-hidden': true,
+        },
+      });
+
+      const svg = container.querySelector('svg');
+      expect(svg).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('handles onclick event handler', () => {
+      const handleClick = vi.fn();
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          timeOfDay: 'sunrise',
+          onclick: handleClick,
+        },
+      });
+
+      const svg = container.querySelector('svg');
+      expect(svg).toBeTruthy();
+      if (svg) {
+        fireEvent.click(svg);
+      }
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('applies custom className along with generated classes', () => {
+      const customClass = 'custom-time-icon';
+      const { container } = renderTyped(TimeOfDayIcon, {
+        props: {
+          timeOfDay: 'sunset',
+          className: customClass,
+          size: 'lg',
+        },
+      });
+
+      const svg = container.querySelector('svg');
+      expect(svg).toHaveClass(customClass); // Custom class
+      expect(svg).toHaveClass('text-red-500'); // Sunset color
+      expect(svg).toHaveClass('h-6', 'w-6'); // Large size
+    });
   });
 });

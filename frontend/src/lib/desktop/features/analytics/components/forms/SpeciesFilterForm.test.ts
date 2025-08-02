@@ -1,67 +1,31 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import { createI18nMock, analyticsI18nTranslations } from '../../../../../../test/render-helpers';
 import SpeciesFilterForm from './SpeciesFilterForm.svelte';
 
-// Mock i18n translations
+// Mock i18n translations using shared translation constants
 vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string, params?: Record<string, unknown>) => {
-    const translations: Record<string, string> = {
-      'analytics.filters.title': 'Filter Data',
-      'analytics.filters.timePeriod': 'Time Period',
-      'analytics.filters.sortBy': 'Sort By',
-      'analytics.filters.searchSpecies': 'Species Name',
-      'analytics.filters.searchPlaceholder': 'Search by name...',
-      'analytics.filters.species': 'species',
-      'analytics.filters.filtered': 'filtered',
-      'analytics.filters.reset': 'Reset',
-      'analytics.filters.exportCsv': 'Export CSV',
-      'analytics.filters.applyFilters': 'Apply Filters',
-      'analytics.filters.from': 'From',
-      'analytics.filters.to': 'To',
-      'analytics.timePeriodOptions.allTime': 'All Time',
-      'analytics.timePeriodOptions.today': 'Today',
-      'analytics.timePeriodOptions.lastWeek': 'Last Week',
-      'analytics.timePeriodOptions.lastMonth': 'Last Month',
-      'analytics.timePeriodOptions.last90Days': 'Last 90 Days',
-      'analytics.timePeriodOptions.lastYear': 'Last Year',
-      'analytics.timePeriodOptions.customRange': 'Custom Range',
-      'analytics.sortOptions.mostDetections': 'Most Detections',
-      'analytics.sortOptions.fewestDetections': 'Fewest Detections',
-      'analytics.sortOptions.nameAZ': 'Name A-Z',
-      'analytics.sortOptions.nameZA': 'Name Z-A',
-      'analytics.sortOptions.recentlyFirstSeen': 'Recently First Seen',
-      'analytics.sortOptions.earliestFirstSeen': 'Earliest First Seen',
-      'analytics.sortOptions.recentlyLastSeen': 'Recently Last Seen',
-      'analytics.sortOptions.highestConfidence': 'Highest Confidence',
-    };
-
-    // eslint-disable-next-line security/detect-object-injection
-    let translation = translations[key] ?? key;
-
-    // Handle template variables like {{variable}}
-    if (params && typeof translation === 'string') {
-      Object.entries(params).forEach(([param, value]) => {
-        translation = translation.replace(`{{${param}}}`, String(value));
-      });
-    }
-
-    return translation;
-  }),
+  t: createI18nMock(analyticsI18nTranslations),
 }));
 
-const defaultFilters = {
+const createDefaultFilters = () => ({
   timePeriod: 'all' as const,
   startDate: '',
   endDate: '',
   sortOrder: 'count_desc' as const,
   searchTerm: '',
-};
+});
 
 describe('SpeciesFilterForm', () => {
+  beforeEach(() => {
+    // Clear any DOM state between tests
+    document.body.innerHTML = '';
+  });
+
   it('renders with basic props', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 42,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -71,7 +35,11 @@ describe('SpeciesFilterForm', () => {
     });
 
     expect(screen.getByText('Filter Data')).toBeInTheDocument();
-    expect(screen.getByText('42 species')).toBeInTheDocument();
+    // Check for the count display specifically (should show "42 species" without "filtered")
+    const countElement = screen.getByText('42');
+    expect(countElement).toBeInTheDocument();
+    expect(countElement.parentElement).toHaveTextContent('42 species');
+    expect(countElement.parentElement).not.toHaveTextContent('filtered');
     expect(screen.getByRole('button', { name: 'Apply Filters' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
@@ -80,7 +48,7 @@ describe('SpeciesFilterForm', () => {
   it('displays time period options', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -96,7 +64,7 @@ describe('SpeciesFilterForm', () => {
   it('displays sort order options', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -111,7 +79,7 @@ describe('SpeciesFilterForm', () => {
 
   it('shows custom date fields when custom time period is selected', () => {
     const customFilters = {
-      ...defaultFilters,
+      ...createDefaultFilters(),
       timePeriod: 'custom' as const,
     };
 
@@ -133,7 +101,7 @@ describe('SpeciesFilterForm', () => {
   it('hides custom date fields when other time period is selected', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -149,7 +117,7 @@ describe('SpeciesFilterForm', () => {
   it('displays search input field', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -166,7 +134,7 @@ describe('SpeciesFilterForm', () => {
 
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit,
         onReset: vi.fn(),
@@ -188,7 +156,7 @@ describe('SpeciesFilterForm', () => {
 
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset,
@@ -208,7 +176,7 @@ describe('SpeciesFilterForm', () => {
 
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -228,7 +196,7 @@ describe('SpeciesFilterForm', () => {
 
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -246,7 +214,7 @@ describe('SpeciesFilterForm', () => {
   it('disables buttons when loading', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         isLoading: true,
         onSubmit: vi.fn(),
@@ -264,7 +232,7 @@ describe('SpeciesFilterForm', () => {
   it('shows loading spinner when loading', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         isLoading: true,
         onSubmit: vi.fn(),
@@ -274,13 +242,13 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    const loadingSpinner = document.querySelector('.loading-spinner');
+    const loadingSpinner = document.querySelector('.loading.loading-spinner');
     expect(loadingSpinner).toBeInTheDocument();
   });
 
   it('shows filtered indicator when search term is present', () => {
     const searchFilters = {
-      ...defaultFilters,
+      ...createDefaultFilters(),
       searchTerm: 'robin',
     };
 
@@ -295,7 +263,10 @@ describe('SpeciesFilterForm', () => {
       },
     });
 
-    expect(screen.getByText('5 species (filtered)')).toBeInTheDocument();
+    // Check for the individual components of the filtered text
+    expect(screen.getByText('5')).toBeInTheDocument();
+    const countElement = screen.getByText('5');
+    expect(countElement.parentElement).toHaveTextContent('5 species filtered');
   });
 
   it('prevents default form submission', async () => {
@@ -303,7 +274,7 @@ describe('SpeciesFilterForm', () => {
 
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit,
         onReset: vi.fn(),
@@ -326,7 +297,7 @@ describe('SpeciesFilterForm', () => {
   it('renders with proper form structure and grid layout', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -340,13 +311,14 @@ describe('SpeciesFilterForm', () => {
 
     const filtersGrid = document.querySelector('.filters-grid');
     expect(filtersGrid).toBeInTheDocument();
-    expect(filtersGrid).toHaveStyle('display: grid');
+    // Check for grid layout via style attribute since CSS classes don't apply in test environment
+    expect(filtersGrid).toHaveAttribute('style', expect.stringContaining('display: grid'));
   });
 
   it('has proper accessibility attributes', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -365,7 +337,7 @@ describe('SpeciesFilterForm', () => {
   it('displays export CSV icon', () => {
     render(SpeciesFilterForm, {
       props: {
-        filters: defaultFilters,
+        filters: createDefaultFilters(),
         filteredCount: 0,
         onSubmit: vi.fn(),
         onReset: vi.fn(),
@@ -380,7 +352,7 @@ describe('SpeciesFilterForm', () => {
   });
 
   it('updates filter values correctly', async () => {
-    const filters = { ...defaultFilters };
+    const filters = { ...createDefaultFilters() };
 
     render(SpeciesFilterForm, {
       props: {
