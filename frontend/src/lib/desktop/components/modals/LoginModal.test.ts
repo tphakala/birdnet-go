@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, waitFor, screen } from '@testing-library/svelte';
+import {
+  createComponentTestFactory,
+  fireEvent,
+  waitFor,
+  screen,
+} from '../../../../test/render-helpers';
 import LoginModal from './LoginModal.svelte';
 
 // Mock the api module
@@ -27,6 +32,8 @@ vi.mock('$lib/i18n', () => ({
 }));
 
 describe('LoginModal', () => {
+  const loginModalTest = createComponentTestFactory(LoginModal);
+
   // Helper function to mock window.location
   function mockWindowLocation(pathname = '/ui/') {
     const mockLocation = {
@@ -44,6 +51,22 @@ describe('LoginModal', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
+
+    // Mock getComputedStyle to prevent DOM accessibility API errors
+    Object.defineProperty(window, 'getComputedStyle', {
+      value: vi.fn(() => ({
+        getPropertyValue: vi.fn(() => ''),
+        visibility: 'visible',
+        display: 'block',
+      })),
+      writable: true,
+    });
+
+    // Mock focus trap functions for modal
+    Object.defineProperty(HTMLElement.prototype, 'focus', {
+      value: vi.fn(),
+      writable: true,
+    });
 
     // Mock localStorage
     const localStorageMock = {
@@ -66,12 +89,10 @@ describe('LoginModal', () => {
 
   describe('Redirect URL Validation', () => {
     it('should accept valid relative URLs', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: '/ui/dashboard',
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/dashboard',
       });
 
       // Check that the hidden input contains the valid redirect URL
@@ -82,12 +103,10 @@ describe('LoginModal', () => {
     });
 
     it('should reject protocol-relative URLs and fallback to base path', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: '//evil.com/malicious',
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '//evil.com/malicious',
       });
 
       // Should fallback to the detected base path (/ui/)
@@ -97,12 +116,10 @@ describe('LoginModal', () => {
     });
 
     it('should reject javascript: URLs and fallback to base path', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: 'javascript:alert("xss")',
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: 'javascript:alert("xss")',
       });
 
       // Should fallback to the detected base path
@@ -112,12 +129,10 @@ describe('LoginModal', () => {
     });
 
     it('should reject data: URLs and fallback to base path', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: 'data:text/html,<script>alert("xss")</script>',
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: 'data:text/html,<script>alert("xss")</script>',
       });
 
       // Should fallback to the detected base path
@@ -128,12 +143,10 @@ describe('LoginModal', () => {
 
     it('should reject URLs that are too long and fallback to base path', () => {
       const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_REDIRECT_LENGTH
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: longUrl,
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: longUrl,
       });
 
       // Should fallback to the detected base path
@@ -146,12 +159,10 @@ describe('LoginModal', () => {
       // Change the mock location to /app/
       mockWindowLocation('/app/settings');
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: 'invalid-url', // No leading slash
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: 'invalid-url', // No leading slash
       });
 
       // Should fallback to /app/ based on current location
@@ -163,12 +174,10 @@ describe('LoginModal', () => {
 
   describe('Password Validation', () => {
     it('should reject empty passwords', async () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       const passwordInput = screen.getByLabelText('Password');
@@ -186,12 +195,10 @@ describe('LoginModal', () => {
       // Mock API to reject by default (shouldn't be called anyway)
       postSpy.mockRejectedValue(new Error('Should not call API'));
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       const passwordInput = screen.getByLabelText('Password');
@@ -219,12 +226,10 @@ describe('LoginModal', () => {
     });
 
     it('should accept tab characters in passwords', async () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       const passwordInput = screen.getByLabelText('Password');
@@ -234,12 +239,10 @@ describe('LoginModal', () => {
     });
 
     it('should reject passwords that are too long', async () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       const passwordInput = screen.getByLabelText('Password');
@@ -255,15 +258,13 @@ describe('LoginModal', () => {
 
   describe('OAuth Configuration', () => {
     it('should use default endpoints when none are configured', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: {
-            basicEnabled: false,
-            googleEnabled: true,
-            githubEnabled: true,
-          },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          googleEnabled: true,
+          githubEnabled: true,
         },
       });
 
@@ -275,18 +276,16 @@ describe('LoginModal', () => {
     });
 
     it('should use configured endpoints when provided', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: {
-            basicEnabled: false,
-            googleEnabled: true,
-            githubEnabled: true,
-            endpoints: {
-              google: '/api/v1/auth/custom-google',
-              github: '/api/v1/auth/custom-github',
-            },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          googleEnabled: true,
+          githubEnabled: true,
+          endpoints: {
+            google: '/api/v1/auth/custom-google',
+            github: '/api/v1/auth/custom-github',
           },
         },
       });
@@ -301,17 +300,15 @@ describe('LoginModal', () => {
     it('should validate OAuth endpoints', async () => {
       const mockLocation = mockWindowLocation();
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: {
-            basicEnabled: false,
-            googleEnabled: true,
-            githubEnabled: false,
-            endpoints: {
-              google: '/malicious/endpoint',
-            },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          googleEnabled: true,
+          githubEnabled: false,
+          endpoints: {
+            google: '/malicious/endpoint',
           },
         },
       });
@@ -331,11 +328,9 @@ describe('LoginModal', () => {
 
   describe('Focus Trap and Accessibility', () => {
     it('should render with proper ARIA attributes', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
       });
 
       const dialog = screen.getByRole('dialog');
@@ -344,11 +339,9 @@ describe('LoginModal', () => {
     });
 
     it('should have a proper title for screen readers', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
       });
 
       const title = screen.getByText('Login to BirdNET-Go');
@@ -356,11 +349,9 @@ describe('LoginModal', () => {
     });
 
     it('should not render when isOpen is false', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: false,
-          onClose: vi.fn(),
-        },
+      loginModalTest.render({
+        isOpen: false,
+        onClose: vi.fn(),
       });
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -369,11 +360,9 @@ describe('LoginModal', () => {
     it('should call onClose when Escape key is pressed', async () => {
       const onCloseMock = vi.fn();
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: onCloseMock,
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: onCloseMock,
       });
 
       const dialog = screen.getByRole('dialog');
@@ -385,11 +374,9 @@ describe('LoginModal', () => {
     it('should call onClose when close button is clicked', async () => {
       const onCloseMock = vi.fn();
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: onCloseMock,
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: onCloseMock,
       });
 
       const closeButton = screen.getByRole('button', { name: /close login dialog/i });
@@ -404,12 +391,10 @@ describe('LoginModal', () => {
       const { api } = await import('$lib/utils/api');
       const postSpy = vi.mocked(api.post);
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       // Submit form by clicking the submit button since form role may not be recognized
@@ -431,12 +416,10 @@ describe('LoginModal', () => {
 
       mockWindowLocation();
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       const passwordInput = screen.getByLabelText('Password');
@@ -461,12 +444,10 @@ describe('LoginModal', () => {
       const postSpy = vi.mocked(api.post);
       postSpy.mockRejectedValue(new Error('Invalid credentials'));
 
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
       });
 
       const passwordInput = screen.getByLabelText('Password');
@@ -483,11 +464,9 @@ describe('LoginModal', () => {
 
   describe('Component Props', () => {
     it('should use default props when none are provided', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
       });
 
       // Should render with default auth config (basic auth enabled)
@@ -495,12 +474,10 @@ describe('LoginModal', () => {
     });
 
     it('should respect custom redirectUrl prop', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          redirectUrl: '/custom/redirect',
-        },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/custom/redirect',
       });
 
       const hiddenInput = screen.getByDisplayValue('/custom/redirect');
@@ -508,15 +485,13 @@ describe('LoginModal', () => {
     });
 
     it('should show only enabled auth methods', () => {
-      render(LoginModal, {
-        props: {
-          isOpen: true,
-          onClose: vi.fn(),
-          authConfig: {
-            basicEnabled: false,
-            googleEnabled: true,
-            githubEnabled: false,
-          },
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          googleEnabled: true,
+          githubEnabled: false,
         },
       });
 
