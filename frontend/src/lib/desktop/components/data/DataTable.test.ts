@@ -200,8 +200,10 @@ describe('DataTable', () => {
     });
 
     const headers = container.querySelectorAll('th');
-    expect(headers[0]).toHaveStyle('width: 50px');
-    expect(headers[1]).toHaveStyle('width: 200px');
+    // Svelte style directives may not appear as computed styles in test environment
+    // So we check for the presence of the style attribute instead
+    expect(headers[0]).toHaveAttribute('style', expect.stringContaining('width: 50px'));
+    expect(headers[1]).toHaveAttribute('style', expect.stringContaining('width: 200px'));
   });
 
   it('applies table styling classes', () => {

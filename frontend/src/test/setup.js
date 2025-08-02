@@ -315,6 +315,12 @@ global.fetch = vi.fn().mockImplementation(url => {
           date: 'Select date',
         },
       },
+      dataDisplay: {
+        table: {
+          noData: 'No data available',
+          sortBy: 'Sort by {column}',
+        },
+      },
     };
 
     return Promise.resolve({
