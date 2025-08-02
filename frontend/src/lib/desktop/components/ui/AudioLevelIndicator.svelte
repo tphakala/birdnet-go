@@ -3,7 +3,6 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
-  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.audio;
 
@@ -106,11 +105,7 @@
 
   // PERFORMANCE OPTIMIZATION: Cache computed values with $derived
   // Reduces repeated object property access and boolean logic in templates
-  const isClipping = $derived(
-    selectedSource && safeGet(levels, selectedSource)
-      ? safeGet(levels, selectedSource)?.clipping
-      : false
-  );
+  const isClipping = $derived((selectedSource && levels[selectedSource]?.clipping) || false);
 
   const smoothedVolume = $derived(selectedSource ? (smoothedVolumes.get(selectedSource) ?? 0) : 0);
 
@@ -154,7 +149,7 @@
 
   // Check if source is inactive
   function isInactive(source: string): boolean {
-    const levelData = safeGet(levels, source);
+    const levelData = levels[source];
     if (!levelData) return true;
     if (levelData.level > 0) return false;
 
@@ -169,7 +164,7 @@
 
   // Get display name for source
   function getSourceDisplayName(source: string): string {
-    const levelData = safeGet(levels, source);
+    const levelData = levels[source];
     return levelData?.name || source;
   }
 
