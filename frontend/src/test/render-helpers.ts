@@ -65,11 +65,12 @@ export function createComponentTestFactory<TComponent extends Component<any>>(
       return {
         ...result,
         rerender: async (newProps: Partial<ComponentProps<TComponent>>) => {
-          // Use the original rerender with properly typed props
+          // Use the original rerender with properly typed props (new API - direct props)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (result as any).rerender({
-            props: { ...defaultProps, ...newProps } as ComponentProps<TComponent>,
-          });
+            ...defaultProps,
+            ...newProps,
+          } as ComponentProps<TComponent>);
         },
       };
     },
@@ -113,6 +114,124 @@ export function renderWithRequiredProps<TComponent extends Component<any>>(
     ...options,
   });
 }
+
+/**
+ * Common test mock utilities
+ */
+
+/**
+ * Mock i18n function with template variable support
+ * @param translations - Object mapping translation keys to translated strings
+ * @returns Mock function that handles translation keys and template variables
+ */
+export function createI18nMock(translations: Record<string, string>) {
+  return vi.fn((key: string, params?: Record<string, unknown>) => {
+    // eslint-disable-next-line security/detect-object-injection
+    let translation = translations[key] ?? key;
+
+    // Handle template variables like {{variable}}
+    if (params && typeof translation === 'string') {
+      Object.entries(params).forEach(([param, value]) => {
+        translation = translation.replace(`{{${param}}}`, String(value));
+      });
+    }
+
+    return translation;
+  });
+}
+
+/**
+ * Mock DOM APIs commonly needed in component tests
+ * Sets up ResizeObserver, getComputedStyle, and focus functionality
+ */
+export function mockDOMAPIs() {
+  // Mock ResizeObserver
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(globalThis as any).ResizeObserver) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    }));
+  }
+
+  // Mock getComputedStyle for modal and accessibility tests
+  if (!Object.getOwnPropertyDescriptor(window, 'getComputedStyle')) {
+    Object.defineProperty(window, 'getComputedStyle', {
+      value: vi.fn(() => ({
+        getPropertyValue: vi.fn(() => ''),
+        visibility: 'visible',
+        display: 'block',
+      })),
+      writable: true,
+    });
+  }
+
+  // Mock focus for accessibility tests
+  if (!Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'focus')) {
+    Object.defineProperty(HTMLElement.prototype, 'focus', {
+      value: vi.fn(),
+      writable: true,
+    });
+  }
+}
+
+/**
+ * Mock logger utilities for components that use the centralized logger
+ * @param categories - Array of logger categories to mock (e.g., ['audio', 'ui'])
+ * @returns Object with mocked logger functions
+ */
+export function createLoggerMocks(categories: string[] = ['audio', 'ui', 'api']) {
+  const mockLogger = {
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  };
+
+  const loggers: Record<string, typeof mockLogger> = {};
+  categories.forEach(category => {
+    // eslint-disable-next-line security/detect-object-injection
+    loggers[category] = mockLogger;
+  });
+
+  return { loggers, mockLogger };
+}
+
+/**
+ * Common i18n translations for components that frequently use these keys
+ */
+export const commonI18nTranslations = {
+  // Media controls
+  'media.audio.play': 'Play',
+  'media.audio.pause': 'Pause',
+  'media.audio.download': 'Download audio file',
+  'media.audio.volume': 'Volume control',
+  'media.audio.filterControl': 'Filter control',
+  'media.audio.seekProgress': 'Seek audio progress',
+  'media.audio.volumeGain': 'Volume gain: {{value}} dB',
+  'media.audio.highPassFilter': 'High-pass filter: {{freq}} Hz',
+
+  // Common buttons
+  'common.buttons.clear': 'Clear',
+  'common.buttons.save': 'Save',
+  'common.buttons.cancel': 'Cancel',
+  'common.buttons.delete': 'Delete',
+  'common.buttons.edit': 'Edit',
+
+  // Form labels and validation
+  'forms.validation.required': 'This field is required',
+  'forms.validation.email': 'Please enter a valid email address',
+  'forms.validation.password': 'Password must be at least 8 characters',
+
+  // Authentication
+  'auth.login.title': 'Login',
+  'auth.login.password': 'Password',
+  'auth.login.submit': 'Sign In',
+  'auth.login.failed': 'Login failed',
+  'auth.login.success': 'Login successful',
+};
 
 // Re-export testing library utilities for convenience
 export { screen, fireEvent, waitFor, act } from '@testing-library/svelte';

@@ -8,6 +8,53 @@ import {
 import userEvent from '@testing-library/user-event';
 import DateRangePicker from './DateRangePicker.svelte';
 
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string, params?: Record<string, unknown>) => {
+    const translations: Record<string, string> = {
+      // Form labels
+      'forms.dateRange.labels.startDate': 'Start Date',
+      'forms.dateRange.labels.endDate': 'End Date',
+      'forms.dateRange.labels.quickSelect': 'Quick Select',
+      'forms.dateRange.labels.selected': 'Selected',
+      // Presets
+      'forms.dateRange.presets.today': 'Today',
+      'forms.dateRange.presets.yesterday': 'Yesterday',
+      'forms.dateRange.presets.last7Days': 'Last 7 days',
+      'forms.dateRange.presets.last30Days': 'Last 30 days',
+      'forms.dateRange.presets.thisMonth': 'This month',
+      'forms.dateRange.presets.lastMonth': 'Last month',
+      'forms.dateRange.presets.thisYear': 'This year',
+      'forms.dateRange.presets.clear': 'Clear',
+      // Common buttons
+      'common.buttons.clear': 'Clear',
+      // Messages and validation
+      'forms.dateRange.messages.endBeforeStart': 'End date cannot be before start date',
+      'forms.dateRange.messages.selectedRange': 'Selected date range: {{start}} to {{end}}',
+      'forms.dateRange.messages.selectedPrefix': 'Selected:',
+      'forms.dateRange.validation.endBeforeStart': 'End date cannot be before start date',
+      'forms.dateRange.errors.endBeforeStart': 'End date cannot be before start date',
+      'forms.dateRange.errors.startAfterEnd': 'Start date cannot be after end date',
+      'forms.dateRange.errors.invalidStartDate': 'Invalid start date',
+      'forms.dateRange.errors.invalidEndDate': 'Invalid end date',
+      'validation.dateRange.endBeforeStart': 'End date cannot be before start date',
+      // Custom test translations
+      'Last Week': 'Last Week',
+    };
+    // eslint-disable-next-line security/detect-object-injection
+    let translation = translations[key] || key;
+
+    // Handle template variables
+    if (params && typeof translation === 'string') {
+      Object.entries(params).forEach(([param, value]) => {
+        translation = translation.replace(`{{${param}}}`, String(value));
+      });
+    }
+
+    return translation;
+  }),
+}));
+
 // Create typed test factory for DateRangePicker
 const dateRangeTest = createComponentTestFactory(DateRangePicker);
 
@@ -164,7 +211,7 @@ describe('DateRangePicker', () => {
     it('renders custom presets', () => {
       const customPresets = [
         {
-          label: 'Last Week',
+          key: 'Last Week',
           getValue: () => ({
             startDate: new Date('2024-01-08Z'),
             endDate: new Date('2024-01-14Z'),
@@ -222,7 +269,7 @@ describe('DateRangePicker', () => {
       endDate: new Date('2024-01-31Z'),
     });
 
-    expect(screen.getByText(/Selected:/)).toBeInTheDocument();
+    expect(screen.getByText('Selected')).toBeInTheDocument();
   });
 
   it('disables inputs when disabled prop is true', () => {

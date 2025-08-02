@@ -7,9 +7,7 @@ describe('ProgressBar', () => {
   const progressTest = createComponentTestFactory(ProgressBar);
   it('renders with default props', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 50,
-      },
+      value: 50,
     });
 
     const progressbar = screen.getByRole('progressbar');
@@ -18,23 +16,28 @@ describe('ProgressBar', () => {
     expect(progressbar).toHaveAttribute('aria-valuemin', '0');
     expect(progressbar).toHaveAttribute('aria-valuemax', '100');
 
+    // Check the inner bar element has correct classes and style
     const bar = container.querySelector('.bg-primary');
-    expect(bar).toHaveStyle('width: 50%');
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary', 'h-full', 'transition-all', 'duration-300', 'ease-out');
+    expect(bar).toHaveAttribute('style', 'width: 50%;');
+    expect(bar).not.toHaveClass('bg-stripes');
+    expect(bar).not.toHaveClass('animate-stripes');
   });
 
   it('renders with custom max value', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 25,
-        max: 50,
-      },
+      value: 25,
+      max: 50,
     });
 
     const progressbar = screen.getByRole('progressbar');
     expect(progressbar).toHaveAttribute('aria-valuemax', '50');
 
     const bar = container.querySelector('.bg-primary');
-    expect(bar).toHaveStyle('width: 50%'); // 25/50 = 50%
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary');
+    expect(bar).toHaveAttribute('style', 'width: 50%;'); // 25/50 = 50%
   });
 
   it('renders with different sizes', () => {
@@ -42,7 +45,8 @@ describe('ProgressBar', () => {
 
     sizes.forEach(size => {
       const { container, unmount } = progressTest.render({
-        props: { value: 50, size },
+        value: 50,
+        size,
       });
 
       const progressbar = container.querySelector('[role="progressbar"]');
@@ -72,21 +76,28 @@ describe('ProgressBar', () => {
 
     variants.forEach(variant => {
       const { container, unmount } = progressTest.render({
-        props: { value: 50, variant },
+        value: 50,
+        variant,
       });
 
       const bar = container.querySelector(`.bg-${variant}`);
       expect(bar).toBeInTheDocument();
+      expect(bar).toHaveClass(
+        `bg-${variant}`,
+        'h-full',
+        'transition-all',
+        'duration-300',
+        'ease-out'
+      );
+      expect(bar).toHaveAttribute('style', 'width: 50%;');
       unmount();
     });
   });
 
   it('shows label when showLabel is true', () => {
     progressTest.render({
-      props: {
-        value: 75,
-        showLabel: true,
-      },
+      value: 75,
+      showLabel: true,
     });
 
     expect(screen.getByText('75%')).toBeInTheDocument();
@@ -96,12 +107,10 @@ describe('ProgressBar', () => {
     const labelFormat = vi.fn((value: number, max: number) => `${value} of ${max}`);
 
     progressTest.render({
-      props: {
-        value: 30,
-        max: 100,
-        showLabel: true,
-        labelFormat,
-      },
+      value: 30,
+      max: 100,
+      showLabel: true,
+      labelFormat,
     });
 
     expect(labelFormat).toHaveBeenCalledWith(30, 100);
@@ -110,19 +119,19 @@ describe('ProgressBar', () => {
 
   it('applies color thresholds', async () => {
     const { container, rerender } = progressTest.render({
-      props: {
-        value: 20,
-        colorThresholds: [
-          { value: 25, variant: 'warning' },
-          { value: 50, variant: 'info' },
-          { value: 75, variant: 'success' },
-        ],
-      },
+      value: 20,
+      colorThresholds: [
+        { value: 25, variant: 'warning' },
+        { value: 50, variant: 'info' },
+        { value: 75, variant: 'success' },
+      ],
     });
 
     // Below first threshold - should use default variant
     let bar = container.querySelector('.bg-primary');
     expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary');
+    expect(bar).toHaveAttribute('style', 'width: 20%;');
 
     // Between 25-50 - should be warning
     await rerender({
@@ -135,6 +144,9 @@ describe('ProgressBar', () => {
     });
     bar = container.querySelector('.bg-warning');
     expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-warning');
+    expect(bar).toHaveAttribute('style', 'width: 30%;');
+    expect(bar).not.toHaveClass('bg-primary');
 
     // Between 50-75 - should be info
     await rerender({
@@ -147,6 +159,9 @@ describe('ProgressBar', () => {
     });
     bar = container.querySelector('.bg-info');
     expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-info');
+    expect(bar).toHaveAttribute('style', 'width: 60%;');
+    expect(bar).not.toHaveClass('bg-warning');
 
     // Above 75 - should be success
     await rerender({
@@ -159,79 +174,80 @@ describe('ProgressBar', () => {
     });
     bar = container.querySelector('.bg-success');
     expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-success');
+    expect(bar).toHaveAttribute('style', 'width: 80%;');
+    expect(bar).not.toHaveClass('bg-info');
   });
 
   it('clamps value between 0 and max', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 150,
-        max: 100,
-      },
+      value: 150,
+      max: 100,
     });
 
     const bar = container.querySelector('.bg-primary');
-    expect(bar).toHaveStyle('width: 100%');
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary');
+    expect(bar).toHaveAttribute('style', 'width: 100%;');
 
     const { container: container2 } = progressTest.render({
-      props: {
-        value: -20,
-        max: 100,
-      },
+      value: -20,
+      max: 100,
     });
 
     const bar2 = container2.querySelector('.bg-primary');
-    expect(bar2).toHaveStyle('width: 0%');
+    expect(bar2).toBeInTheDocument();
+    expect(bar2).toHaveClass('bg-primary');
+    expect(bar2).toHaveAttribute('style', 'width: 0%;');
   });
 
   it('applies striped styles', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 50,
-        striped: true,
-      },
+      value: 50,
+      striped: true,
     });
 
-    const bar = container.querySelector('.bg-stripes');
+    const bar = container.querySelector('.bg-primary');
     expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary', 'bg-stripes');
     expect(bar).not.toHaveClass('animate-stripes');
+    expect(bar).toHaveAttribute('style', 'width: 50%;');
   });
 
   it('applies animated stripes', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 50,
-        striped: true,
-        animated: true,
-      },
+      value: 50,
+      striped: true,
+      animated: true,
     });
 
-    const bar = container.querySelector('.animate-stripes');
+    const bar = container.querySelector('.bg-primary');
     expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary', 'bg-stripes', 'animate-stripes');
+    expect(bar).toHaveAttribute('style', 'width: 50%;');
   });
 
   it('applies custom classes', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 50,
-        className: 'custom-container',
-        barClassName: 'custom-bar',
-      },
+      value: 50,
+      className: 'custom-container',
+      barClassName: 'custom-bar',
     });
 
     const progressbar = screen.getByRole('progressbar');
     expect(progressbar).toHaveClass('custom-container');
 
     const bar = container.querySelector('.bg-primary');
-    expect(bar).toHaveClass('custom-bar');
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveClass('bg-primary', 'custom-bar');
+    expect(bar).toHaveAttribute('style', 'width: 50%;');
   });
 
   it('spreads additional props', () => {
     progressTest.render({
-      props: {
-        value: 50,
-        id: 'test-progress',
-        'data-testid': 'progress-bar',
-      },
+      value: 50,
+      id: 'test-progress',
+      'data-testid': 'progress-bar',
     });
 
     const progressbar = screen.getByRole('progressbar');
@@ -241,10 +257,8 @@ describe('ProgressBar', () => {
 
   it('sets aria-label when showLabel is true', () => {
     progressTest.render({
-      props: {
-        value: 75,
-        showLabel: true,
-      },
+      value: 75,
+      showLabel: true,
     });
 
     const progressbar = screen.getByRole('progressbar');
@@ -253,20 +267,16 @@ describe('ProgressBar', () => {
 
   it('adjusts label color based on progress', () => {
     const { container } = progressTest.render({
-      props: {
-        value: 30,
-        showLabel: true,
-      },
+      value: 30,
+      showLabel: true,
     });
 
     let label = container.querySelector('.text-base-content');
     expect(label).toBeInTheDocument();
 
     const { container: container2 } = progressTest.render({
-      props: {
-        value: 70,
-        showLabel: true,
-      },
+      value: 70,
+      showLabel: true,
     });
 
     label = container2.querySelector('.text-white');
