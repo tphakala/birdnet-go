@@ -155,8 +155,7 @@ describe('NotificationToast', () => {
 
       // Verify no position-specific classes are applied to individual toasts
       // These classes should only exist on ToastContainer elements
-      expect(alert).not.toHaveClass('toast-start', 'toast-end', 'toast-center');
-      expect(alert).not.toHaveClass('toast-top', 'toast-bottom');
+      expect(alert?.className).not.toMatch(/toast-(start|end|center|top|bottom)/);
       unmount();
     });
   });
