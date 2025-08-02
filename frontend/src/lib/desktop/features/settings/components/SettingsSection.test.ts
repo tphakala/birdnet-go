@@ -353,17 +353,13 @@ describe('SettingsSection', () => {
       expect(container).toHaveAttribute('aria-label', 'Custom section');
     });
 
-    it('forwards snippet props correctly', () => {
+    it('forwards children snippet correctly', () => {
       wrapperFactory.render({
         title: 'Snippet Test',
-        showCustomHeader: true,
-        headerContent: 'Custom Header Content',
-        showCustomFooter: true,
-        footerContent: 'Custom Footer Content',
+        childContent: 'Custom section content',
       });
 
-      expect(screen.getByTestId('custom-header')).toHaveTextContent('Custom Header Content');
-      expect(screen.getByTestId('custom-footer')).toHaveTextContent('Custom Footer Content');
+      expect(screen.getByTestId('section-content')).toHaveTextContent('Custom section content');
     });
   });
 
