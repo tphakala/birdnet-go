@@ -65,7 +65,6 @@
       modelPath: '',
       labelPath: '',
       rangeFilter: {
-        model: 'latest',
         threshold: 0.01,
       },
     },
@@ -105,6 +104,20 @@
   });
 
   let store = $derived($settingsStore);
+
+  // Database type selection - determine which database is currently enabled
+  let selectedDatabaseType = $state('sqlite');
+
+  // Update selectedDatabaseType when settings change
+  $effect(() => {
+    if (settings.output.mysql.enabled) {
+      selectedDatabaseType = 'mysql';
+    } else if (settings.output.sqlite.enabled) {
+      selectedDatabaseType = 'sqlite';
+    } else {
+      selectedDatabaseType = 'sqlite'; // Default to sqlite
+    }
+  });
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   // Each section tracks its own changes independently for granular updates
@@ -372,7 +385,6 @@
           latitude: settings.birdnet.latitude,
           longitude: settings.birdnet.longitude,
           threshold: settings.birdnet.rangeFilter.threshold,
-          model: settings.birdnet.rangeFilter.model,
         }
       );
 
@@ -402,7 +414,6 @@
         latitude: settings.birdnet.latitude.toString(),
         longitude: settings.birdnet.longitude.toString(),
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
-        model: settings.birdnet.rangeFilter.model,
       });
 
       const data = await api.get<{ count: number; species: any[] }>(
@@ -426,8 +437,6 @@
     const lng = settings.birdnet.longitude;
     // eslint-disable-next-line no-unused-vars
     const threshold = settings.birdnet.rangeFilter.threshold;
-    // eslint-disable-next-line no-unused-vars
-    const model = settings.birdnet.rangeFilter.model;
 
     // Only test if we have valid coordinates
     if (lat && lng) {
@@ -470,6 +479,14 @@
     settingsActions.updateSection('output', {
       ...settings.output,
       mysql: { ...settings.output.mysql, ...updates },
+    });
+  }
+
+  function updateDatabaseType(type: 'sqlite' | 'mysql') {
+    settingsActions.updateSection('output', {
+      ...settings.output,
+      sqlite: { ...settings.output.sqlite, enabled: type === 'sqlite' },
+      mysql: { ...settings.output.mysql, enabled: type === 'mysql' },
     });
   }
 
@@ -720,25 +737,6 @@
               disabled={store.isLoading || store.isSaving}
             />
 
-            <SelectField
-              id="range-filter-model"
-              bind:value={settings.birdnet.rangeFilter.model}
-              label={t('settings.main.sections.rangeFilter.model.label')}
-              options={[
-                { value: 'legacy', label: 'legacy' },
-                { value: 'latest', label: 'latest' },
-              ]}
-              helpText={t('settings.main.sections.rangeFilter.model.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={value =>
-                settingsActions.updateSection('birdnet', {
-                  rangeFilter: {
-                    ...settings.birdnet.rangeFilter,
-                    model: value as 'latest' | 'legacy',
-                  },
-                })}
-            />
-
             <NumberField
               label={t('settings.main.sections.rangeFilter.threshold.label')}
               value={settings.birdnet.rangeFilter.threshold}
@@ -826,24 +824,30 @@
     hasChanges={outputSettingsHasChanges}
   >
     <div class="space-y-6">
+      <!-- Database Type Selection -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+        <SelectField
+          id="database-type"
+          bind:value={selectedDatabaseType}
+          label="Database Type"
+          options={[
+            { value: 'sqlite', label: 'SQLite' },
+            { value: 'mysql', label: 'MySQL' },
+          ]}
+          helpText="Select the database type for storing detections"
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
+        />
+      </div>
+
       <!-- SQLite Settings -->
-      <div class="space-y-4">
-        <div class="flex items-center space-x-3">
-          <Checkbox
-            id="sqlite-enabled"
-            bind:checked={settings.output.sqlite.enabled}
-            onchange={checked => updateSQLiteSettings({ enabled: checked })}
-            disabled={store.isLoading || store.isSaving}
-          />
-          <label for="sqlite-enabled" class="text-sm font-medium">Enable SQLite Output</label>
-        </div>
+      {#if selectedDatabaseType === 'sqlite'}
+        <div class="space-y-4">
+          <SettingsNote>
+            <span>{t('settings.main.sections.database.sqlite.note')}</span>
+          </SettingsNote>
 
-        {#if settings.output.sqlite.enabled}
-          <div class="ml-6 space-y-4">
-            <SettingsNote>
-              <span>{t('settings.main.sections.database.sqlite.note')}</span>
-            </SettingsNote>
-
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
             <TextInput
               id="sqlite-path"
               bind:value={settings.output.sqlite.path}
@@ -854,23 +858,13 @@
               onchange={path => updateSQLiteSettings({ path })}
             />
           </div>
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       <!-- MySQL Settings -->
-      <div class="space-y-4">
-        <div class="flex items-center space-x-3">
-          <Checkbox
-            id="mysql-enabled"
-            bind:checked={settings.output.mysql.enabled}
-            onchange={checked => updateMySQLSettings({ enabled: checked })}
-            disabled={store.isLoading || store.isSaving}
-          />
-          <label for="mysql-enabled" class="text-sm font-medium">Enable MySQL Output</label>
-        </div>
-
-        {#if settings.output.mysql.enabled}
-          <div class="ml-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+      {#if selectedDatabaseType === 'mysql'}
+        <div class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <TextInput
               id="mysql-host"
               bind:value={settings.output.mysql.host}
@@ -921,8 +915,8 @@
               onchange={database => updateMySQLSettings({ database })}
             />
           </div>
-        {/if}
-      </div>
+        </div>
+      {/if}
     </div>
   </SettingsSection>
 

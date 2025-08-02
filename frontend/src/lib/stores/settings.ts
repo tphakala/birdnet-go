@@ -79,7 +79,6 @@ export interface DynamicThresholdSettings {
 }
 
 export interface RangeFilterSettings {
-  model: 'legacy' | 'latest';
   threshold: number;
   speciesCount: number | null;
   species: string[];
@@ -457,7 +456,6 @@ function createEmptySettings(): SettingsFormData {
       latitude: 0,
       longitude: 0,
       rangeFilter: {
-        model: 'latest',
         threshold: 0.03,
         speciesCount: null,
         species: [],
