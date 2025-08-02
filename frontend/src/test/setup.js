@@ -244,6 +244,11 @@ global.fetch = vi.fn().mockImplementation(url => {
         cancel: 'Cancel',
         yes: 'Yes',
         no: 'No',
+        ui: {
+          loading: 'Loading...',
+          noData: 'No data available',
+          error: 'Error',
+        },
         buttons: {
           save: 'Save Changes',
           reset: 'Reset',
@@ -262,6 +267,7 @@ global.fetch = vi.fn().mockImplementation(url => {
         },
         aria: {
           closeModal: 'Close modal',
+          closeNotification: 'Close notification',
           openMenu: 'Open menu',
           closeMenu: 'Close menu',
         },
