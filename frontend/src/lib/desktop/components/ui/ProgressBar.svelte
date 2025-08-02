@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { safeGet } from '$lib/utils/security';
 
   type ProgressSize = 'xs' | 'sm' | 'md' | 'lg';
   type ProgressVariant =
@@ -87,7 +88,7 @@
 
   const containerClasses = cn(
     'w-full bg-base-300 rounded-full overflow-hidden relative',
-    sizeClasses[size],
+    safeGet(sizeClasses, size, 'h-2'),
     className
   );
 

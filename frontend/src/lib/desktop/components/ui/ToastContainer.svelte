@@ -19,16 +19,19 @@
   import { toasts, toastActions } from '$lib/stores/toast';
   import NotificationToast from './NotificationToast.svelte';
   import type { ToastMessage, ToastPosition } from '$lib/stores/toast';
+  import { safeGet } from '$lib/utils/security';
 
   // Group toasts by position
   const toastsByPosition = $derived(
     $toasts.reduce(
       (acc, toast) => {
         const position = toast.position || 'top-right';
-        if (!acc[position]) {
+        const existingToasts = safeGet(acc, position);
+        if (!existingToasts) {
           acc[position] = [];
         }
-        acc[position].push(toast);
+        const toastsArray = safeGet(acc, position, []);
+        toastsArray.push(toast);
         return acc;
       },
       {} as Record<ToastPosition, ToastMessage[]>
@@ -53,7 +56,7 @@
 <!-- Render toast containers for each position that has toasts -->
 {#each Object.entries(toastsByPosition) as [position, positionToasts]}
   <div
-    class="fixed z-50 pointer-events-none {positionClasses[position as ToastPosition]}"
+    class="fixed z-50 pointer-events-none {safeGet(positionClasses, position as ToastPosition, '')}"
     role="region"
     aria-live="polite"
     aria-label="{position} notifications"

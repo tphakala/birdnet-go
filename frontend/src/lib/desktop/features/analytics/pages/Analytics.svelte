@@ -165,9 +165,9 @@
     newSpecies: null,
   };
 
-  // Format number with thousand separators
+  // Format number with thousand separators using safe built-in method
   function formatNumber(number: number): string {
-    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return number.toLocaleString('en-US');
   }
 
   // Format percentage

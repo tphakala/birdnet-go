@@ -4,6 +4,7 @@
   import type { Snippet } from 'svelte';
   import { navigationIcons, alertIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import { safeGet } from '$lib/utils/security';
 
   type ToastType = 'info' | 'success' | 'warning' | 'error';
   type ToastPosition =
@@ -93,9 +94,9 @@
 </script>
 
 {#if isVisible}
-  <div class={cn('w-full max-w-xs', positionClasses[position])}>
+  <div class={cn('w-full max-w-xs', safeGet(positionClasses, position, ''))}>
     <div
-      class={cn('alert', typeClasses[type], className)}
+      class={cn('alert', safeGet(typeClasses, type, 'alert-info'), className)}
       role="alert"
       aria-live={type === 'error' ? 'assertive' : 'polite'}
     >
@@ -111,7 +112,7 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d={alertIcons[type]}
+            d={safeGet(alertIcons, type, '')}
           />
         </svg>
       {/if}
