@@ -52,6 +52,14 @@ vi.mock('$lib/stores/settings', () => {
     locale: 'en',
   });
 
+  const mockDynamicThresholdSettings = writable({
+    enabled: false,
+    debug: false,
+    trigger: 0.8,
+    min: 0.3,
+    validHours: 24,
+  });
+
   const mockSettingsStore = writable({
     isLoading: false,
     isSaving: false,
@@ -67,6 +75,7 @@ vi.mock('$lib/stores/settings', () => {
     mainSettings: mockMainSettings,
     birdnetSettings: mockBirdnetSettings,
     dashboardSettings: mockDashboardSettings,
+    dynamicThresholdSettings: mockDynamicThresholdSettings,
   };
 });
 

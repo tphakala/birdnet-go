@@ -2,6 +2,38 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import FilterForm from './FilterForm.svelte';
 
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string, params?: Record<string, unknown>) => {
+    const translations: Record<string, string> = {
+      'analytics.filters.title': 'Filter Data',
+      'analytics.filters.timePeriod': 'Time Period',
+      'analytics.filters.from': 'From',
+      'analytics.filters.to': 'To',
+      'analytics.filters.reset': 'Reset',
+      'analytics.filters.applyFilters': 'Apply Filters',
+      'analytics.timePeriodOptions.allTime': 'All Time',
+      'analytics.timePeriodOptions.today': 'Today',
+      'analytics.timePeriodOptions.lastWeek': 'Last Week',
+      'analytics.timePeriodOptions.lastMonth': 'Last Month',
+      'analytics.timePeriodOptions.last90Days': 'Last 90 Days',
+      'analytics.timePeriodOptions.lastYear': 'Last Year',
+      'analytics.timePeriodOptions.customRange': 'Custom Range',
+    };
+
+    let translation = translations[key] ?? key;
+
+    // Handle template variables like {{variable}}
+    if (params && typeof translation === 'string') {
+      Object.entries(params).forEach(([param, value]) => {
+        translation = translation.replace(`{{${param}}}`, String(value));
+      });
+    }
+
+    return translation;
+  }),
+}));
+
 const defaultFilters = {
   timePeriod: 'all' as const,
   startDate: '',
