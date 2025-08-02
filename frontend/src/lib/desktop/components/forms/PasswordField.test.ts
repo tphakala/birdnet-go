@@ -54,6 +54,8 @@ describe('PasswordField', () => {
     });
 
     const input = screen.getByLabelText('Password');
+    // Note: Uses 'change' event instead of 'input' to match Svelte's event handling
+    // PasswordField component binds to 'change' event for proper validation timing
     await fireEvent.change(input, { target: { value: 'newpassword' } });
 
     expect(onUpdate).toHaveBeenCalledWith('newpassword');

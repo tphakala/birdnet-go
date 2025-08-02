@@ -144,8 +144,12 @@ describe('NotificationToast', () => {
         },
       });
 
-      // Toast positioning is handled by ToastContainer, not individual toasts
-      // Individual toasts should render with basic alert structure
+      // Architecture Note: Toast positioning is handled by ToastContainer, not individual toasts
+      // The NotificationToast component intentionally has empty position classes because:
+      // 1. ToastContainer manages all fixed positioning, z-index, and layout
+      // 2. Individual toasts only handle their content, styling, and animations
+      // 3. This separation of concerns allows ToastContainer to manage stacking and grouping
+      // Therefore, we only test that the toast renders its alert structure correctly
       const alert = container.querySelector('.alert');
       expect(alert).toBeInTheDocument();
       expect(alert).toHaveClass('alert');

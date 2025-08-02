@@ -44,17 +44,6 @@
     onchange?.(checked);
   }
 
-  function handleKeyDown(event: KeyboardEvent) {
-    // Handle Space and Enter keys for accessibility
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      const target = event.currentTarget as HTMLInputElement;
-      target.checked = !target.checked;
-      checked = target.checked;
-      onchange?.(checked);
-    }
-  }
-
   const sizeClasses = {
     xs: 'checkbox-xs',
     sm: 'checkbox-sm',
@@ -83,7 +72,6 @@
         safeGet(variantClasses, variant, '')
       )}
       onchange={handleChange}
-      onkeydown={handleKeyDown}
       aria-describedby={helpText ? helpTextId : undefined}
     />
 

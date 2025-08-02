@@ -40,6 +40,8 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
+    // Note: Uses 'change' event instead of 'input' to match Svelte's event handling
+    // NumberField component binds to 'change' event for proper validation timing
     await fireEvent.change(input, { target: { value: '123' } });
 
     expect(onUpdate).toHaveBeenCalledWith(123);
