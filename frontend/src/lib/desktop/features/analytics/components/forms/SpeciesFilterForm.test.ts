@@ -35,6 +35,7 @@ vi.mock('$lib/i18n', () => ({
       'analytics.sortOptions.highestConfidence': 'Highest Confidence',
     };
 
+    // eslint-disable-next-line security/detect-object-injection
     let translation = translations[key] ?? key;
 
     // Handle template variables like {{variable}}

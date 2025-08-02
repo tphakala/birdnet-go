@@ -21,6 +21,7 @@ vi.mock('$lib/i18n', () => ({
       'analytics.timePeriodOptions.customRange': 'Custom Range',
     };
 
+    // eslint-disable-next-line security/detect-object-injection
     let translation = translations[key] ?? key;
 
     // Handle template variables like {{variable}}
