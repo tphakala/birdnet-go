@@ -5,7 +5,7 @@
  * Avoids JSON.stringify for better performance and proxy compatibility.
  */
 
-import { safeGet } from './security';
+import { safeGet, safeArrayAccess } from './security';
 
 /**
  * Deep compare two values to detect changes
@@ -52,7 +52,9 @@ export function deepEqual(a: unknown, b: unknown, seen = new WeakSet()): boolean
     if (objA.length !== objB.length) return false;
 
     for (let i = 0; i < objA.length; i++) {
-      if (!deepEqual(objA[i], objB[i], seen)) return false;
+      const valA = safeArrayAccess(objA, i);
+      const valB = safeArrayAccess(objB, i);
+      if (!deepEqual(valA, valB, seen)) return false;
     }
     return true;
   }
@@ -65,7 +67,9 @@ export function deepEqual(a: unknown, b: unknown, seen = new WeakSet()): boolean
 
   for (const key of keysA) {
     if (!keysB.includes(key)) return false;
-    if (!deepEqual(objA[key], objB[key], seen)) return false;
+    const valA = safeGet(objA, key);
+    const valB = safeGet(objB, key);
+    if (!deepEqual(valA, valB, seen)) return false;
   }
 
   return true;
@@ -161,11 +165,19 @@ export function createSnapshot<T>(value: T): T {
     return value.map(item => createSnapshot(item)) as T;
   }
 
-  const snapshot: Record<string, unknown> = {};
-  for (const key in value) {
-    if (Object.prototype.hasOwnProperty.call(value, key)) {
-      snapshot[key] = createSnapshot((value as Record<string, unknown>)[key]);
-    }
+  // Use Object.create(null) to create an object without prototype
+  const snapshot = Object.create(null) as Record<string, unknown>;
+  const keys = Object.keys(value);
+
+  for (const key of keys) {
+    const val = safeGet(value as Record<string, unknown>, key);
+    // Use Object.defineProperty for safe property assignment
+    Object.defineProperty(snapshot, key, {
+      value: createSnapshot(val),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
 
   return snapshot as T;
