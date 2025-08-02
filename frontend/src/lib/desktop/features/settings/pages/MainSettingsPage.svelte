@@ -247,14 +247,26 @@
     }
   }
 
+  // Wait for Leaflet library to be available
+  async function waitForLeaflet(maxAttempts = 20, interval = 100): Promise<any> {
+    for (let i = 0; i < maxAttempts; i++) {
+      const L = (window as any).L;
+      if (L) {
+        return L;
+      }
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+    return null;
+  }
+
   // Initialize Leaflet map
   async function initializeMap() {
     if (!mapElement) return;
 
-    // Dynamically import Leaflet
-    const L = (window as any).L;
+    // Wait for Leaflet to be available
+    const L = await waitForLeaflet();
     if (!L) {
-      logger.error('Leaflet not loaded');
+      logger.error('Leaflet failed to load after timeout');
       return;
     }
 
