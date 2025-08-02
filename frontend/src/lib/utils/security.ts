@@ -4,6 +4,26 @@
  */
 
 /**
+ * PERFORMANCE NOTE: Security utilities should be used judiciously.
+ *
+ * Use these utilities when:
+ * - Keys come from user input or external data
+ * - Accessing properties on objects from API responses
+ * - Keys are computed dynamically at runtime
+ * - Working with untrusted data sources
+ *
+ * DON'T use these utilities when:
+ * - Accessing typed constants (sizeClasses, variantClasses, etc.)
+ * - Keys are string literals or typed enums
+ * - TypeScript already provides compile-time safety
+ * - Performance is critical and keys are known/trusted
+ *
+ * Example:
+ * ✅ Good: safeGet(userInput, dynamicKey)
+ * ❌ Avoid: safeGet(sizeClasses, 'sm') - use direct access instead
+ */
+
+/**
  * Safely access object properties with validation
  * Prevents object injection by using hasOwnProperty check
  */
