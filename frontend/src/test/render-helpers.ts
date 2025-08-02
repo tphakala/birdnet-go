@@ -65,11 +65,12 @@ export function createComponentTestFactory<TComponent extends Component<any>>(
       return {
         ...result,
         rerender: async (newProps: Partial<ComponentProps<TComponent>>) => {
-          // Use the original rerender with properly typed props
+          // Use the original rerender with properly typed props (new API - direct props)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (result as any).rerender({
-            props: { ...defaultProps, ...newProps } as ComponentProps<TComponent>,
-          });
+            ...defaultProps,
+            ...newProps,
+          } as ComponentProps<TComponent>);
         },
       };
     },
