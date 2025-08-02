@@ -8,6 +8,7 @@
   import { alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
+  import { safeArrayAccess, safeGet } from '$lib/utils/security';
 
   const logger = getLogger('app');
 
@@ -344,7 +345,7 @@
       // Log any failed API calls (these show up in both dev and prod)
       const apiNames = ['Summary', 'Species', 'Recent', 'TimeOfDay', 'Trend', 'NewSpecies'];
       const failures = results
-        .map((result, index) => ({ result, name: apiNames[index] }))
+        .map((result, index) => ({ result, name: safeArrayAccess(apiNames, index) ?? 'Unknown' }))
         .filter(({ result }) => result.status === 'rejected');
 
       if (failures.length > 0) {
@@ -801,7 +802,8 @@
         else if (hour >= 17 && hour < 20) periodIndex = 4;
         else periodIndex = 5;
 
-        periodCounts[periodIndex] += entry.count;
+        const currentCount = safeArrayAccess(periodCounts, periodIndex) ?? 0;
+        periodCounts[periodIndex] = currentCount + entry.count;
       });
     }
 
@@ -905,16 +907,14 @@
     if (Array.isArray(data)) {
       data.forEach(entry => {
         const date = entry.date;
-        if (!dailyData[date]) {
-          dailyData[date] = 0;
-        }
-        dailyData[date] += entry.count;
+        const currentCount = safeGet(dailyData, date, 0);
+        dailyData[date] = currentCount + entry.count;
       });
     }
 
     const sortedDates = Object.keys(dailyData).sort();
     const labels = sortedDates;
-    const counts = sortedDates.map(date => dailyData[date]);
+    const counts = sortedDates.map(date => safeGet(dailyData, date, 0));
 
     const theme = getChartTheme();
     const primaryColor = getThemeColor('primary', 1);

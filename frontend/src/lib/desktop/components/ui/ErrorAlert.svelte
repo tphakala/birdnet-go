@@ -5,6 +5,7 @@
   import type { HTMLAttributes } from 'svelte/elements';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
@@ -53,8 +54,12 @@
 </script>
 
 {#if isVisible}
-  <div class={cn('alert', typeClasses[type], className)} role="alert" {...rest}>
-    {@html iconSvgs[type]}
+  <div
+    class={cn('alert', safeGet(typeClasses, type, 'alert-error'), className)}
+    role="alert"
+    {...rest}
+  >
+    {@html safeGet(iconSvgs, type, '')}
 
     <span>
       {#if children}

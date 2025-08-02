@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import ProgressBar from './ProgressBar.svelte';
+import { safeGet } from '$lib/utils/security';
 
 describe('ProgressBar', () => {
   const progressTest = createComponentTestFactory(ProgressBar);
@@ -45,12 +46,13 @@ describe('ProgressBar', () => {
       });
 
       const progressbar = container.querySelector('[role="progressbar"]');
-      const expectedClass = {
+      const sizeClasses = {
         xs: 'h-1',
         sm: 'h-2',
         md: 'h-4',
         lg: 'h-6',
-      }[size];
+      };
+      const expectedClass = safeGet(sizeClasses, size);
 
       expect(progressbar).toHaveClass(expectedClass);
       unmount();

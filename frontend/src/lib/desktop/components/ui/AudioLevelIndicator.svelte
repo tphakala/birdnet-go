@@ -3,6 +3,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
+  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.audio;
 
@@ -107,10 +108,12 @@
   // PERFORMANCE OPTIMIZATION: Cache computed values with $derived
   // Reduces repeated object property access and boolean logic in templates
   const isClipping = $derived(
-    selectedSource && levels[selectedSource] ? levels[selectedSource].clipping : false
+    selectedSource && safeGet(levels, selectedSource)
+      ? safeGet(levels, selectedSource)?.clipping
+      : false
   );
 
-  const smoothedVolume = $derived(selectedSource ? smoothedVolumes[selectedSource] || 0 : 0);
+  const smoothedVolume = $derived(selectedSource ? safeGet(smoothedVolumes, selectedSource, 0) : 0);
 
   // PERFORMANCE OPTIMIZATION: Cache audio element creation with $derived.by
   // Prevents repeated DOM element creation and event listener setup
@@ -152,20 +155,23 @@
 
   // Check if source is inactive
   function isInactive(source: string): boolean {
-    if (!levels[source]) return true;
-    if (levels[source].level > 0) return false;
+    const levelData = safeGet(levels, source);
+    if (!levelData) return true;
+    if (levelData.level > 0) return false;
 
-    if (!zeroLevelTime[source]) {
+    const existingZeroTime = safeGet(zeroLevelTime, source);
+    if (!existingZeroTime) {
       zeroLevelTime[source] = Date.now();
       return false;
     }
 
-    return Date.now() - zeroLevelTime[source] > ZERO_LEVEL_TIMEOUT;
+    return Date.now() - existingZeroTime > ZERO_LEVEL_TIMEOUT;
   }
 
   // Get display name for source
   function getSourceDisplayName(source: string): string {
-    return levels[source]?.name || source;
+    const levelData = safeGet(levels, source);
+    return levelData?.name || source;
   }
 
   // Setup EventSource for audio levels using ReconnectingEventSource
@@ -197,7 +203,8 @@
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
               if (audioData.level === 0) {
-                if (!zeroLevelTime[source]) {
+                const existingZeroTime = safeGet(zeroLevelTime, source);
+                if (!existingZeroTime) {
                   zeroLevelTime[source] = Date.now();
                 }
               } else {
@@ -223,7 +230,7 @@
             // Update smoothed volumes
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
-              const oldVolume = smoothedVolumes[source] || 0;
+              const oldVolume = safeGet(smoothedVolumes, source, 0);
               smoothedVolumes[source] =
                 SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume;
             });

@@ -645,7 +645,10 @@
       updated.countIncreased = true;
       updated.hourly_counts = [...updated.hourly_counts];
       const currentHourCount = safeArrayAccess(updated.hourly_counts, hour, 0) ?? 0;
-      updated.hourly_counts[hour] = currentHourCount + 1;
+      // Use splice to safely assign at dynamic index
+      if (hour >= 0 && hour < 24) {
+        updated.hourly_counts.splice(hour, 1, currentHourCount + 1);
+      }
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
 
@@ -721,9 +724,9 @@
         thumbnail_url: '', // Empty string will trigger fallback in BirdThumbnailPopup
         isNew: true,
       };
-      // Set the hourly count for the specific hour safely
+      // Set the hourly count for the specific hour safely using splice
       if (hour >= 0 && hour < 24) {
-        newSpecies.hourly_counts[hour] = 1;
+        newSpecies.hourly_counts.splice(hour, 1, 1);
       }
 
       // Find insertion position with early termination for performance

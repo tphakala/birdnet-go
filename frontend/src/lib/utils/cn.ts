@@ -3,6 +3,8 @@
  * Similar to clsx/classnames but simpler and type-safe
  */
 
+import { safeGet } from './security';
+
 type ClassValue = string | number | boolean | undefined | null | ClassDictionary | ClassArray;
 type ClassDictionary = Record<string, boolean | undefined | null>;
 type ClassArray = ClassValue[];
@@ -31,7 +33,7 @@ export function cn(...args: ClassValue[]): string {
       // Safe iteration over object properties
       const dict = arg as ClassDictionary;
       for (const key in dict) {
-        if (Object.prototype.hasOwnProperty.call(dict, key) && dict[key]) {
+        if (Object.prototype.hasOwnProperty.call(dict, key) && safeGet(dict, key)) {
           classes.push(key);
         }
       }
