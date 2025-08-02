@@ -3,7 +3,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
-  import { safeGet } from '$lib/utils/security';
+  import { safeGet, createSafeMap } from '$lib/utils/security';
 
   const logger = loggers.audio;
 
@@ -84,7 +84,7 @@
   // State
   let levels = $state<AudioLevels>({});
   let selectedSource = $state<string | null>(null);
-  let smoothedVolumes = $state<{ [key: string]: number }>({});
+  let smoothedVolumes = $state(createSafeMap<string, number>());
   let dropdownOpen = $state(false);
   let isPlaying = $state(false);
   let playingSource = $state<string | null>(null);
@@ -100,7 +100,7 @@
   let eventSource: ReconnectingEventSource | null = null;
   let audioElement: HTMLAudioElement | null = null;
   let hlsInstance: HLSInstance | null = null;
-  let zeroLevelTime: { [key: string]: number } = {};
+  let zeroLevelTime = createSafeMap<string, number>();
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
@@ -113,7 +113,7 @@
       : false
   );
 
-  const smoothedVolume = $derived(selectedSource ? safeGet(smoothedVolumes, selectedSource, 0) : 0);
+  const smoothedVolume = $derived(selectedSource ? (smoothedVolumes.get(selectedSource) ?? 0) : 0);
 
   // PERFORMANCE OPTIMIZATION: Cache audio element creation with $derived.by
   // Prevents repeated DOM element creation and event listener setup
@@ -159,9 +159,9 @@
     if (!levelData) return true;
     if (levelData.level > 0) return false;
 
-    const existingZeroTime = safeGet(zeroLevelTime, source);
+    const existingZeroTime = zeroLevelTime.get(source);
     if (!existingZeroTime) {
-      zeroLevelTime[source] = Date.now();
+      zeroLevelTime.set(source, Date.now());
       return false;
     }
 
@@ -203,19 +203,19 @@
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
               if (audioData.level === 0) {
-                const existingZeroTime = safeGet(zeroLevelTime, source);
+                const existingZeroTime = zeroLevelTime.get(source);
                 if (!existingZeroTime) {
-                  zeroLevelTime[source] = Date.now();
+                  zeroLevelTime.set(source, Date.now());
                 }
               } else {
-                delete zeroLevelTime[source];
+                zeroLevelTime.delete(source);
               }
             });
 
             // Initialize smoothed volumes for new sources
             Object.keys(levels).forEach(source => {
-              if (!(source in smoothedVolumes)) {
-                smoothedVolumes[source] = 0;
+              if (!smoothedVolumes.has(source)) {
+                smoothedVolumes.set(source, 0);
               }
             });
 
@@ -230,9 +230,11 @@
             // Update smoothed volumes
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
-              const oldVolume = safeGet(smoothedVolumes, source, 0);
-              smoothedVolumes[source] =
-                SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume;
+              const oldVolume = smoothedVolumes.get(source) ?? 0;
+              smoothedVolumes.set(
+                source,
+                SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume
+              );
             });
           }
         } catch (error) {

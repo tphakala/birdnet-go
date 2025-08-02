@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import { safeGet } from '$lib/utils/security';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { t } from '$lib/i18n';
 
@@ -284,7 +285,8 @@
 
   // Equalizer functions
   function getEqFilterParameters(filterType: string) {
-    return eqFilterConfig[filterType]?.Parameters || [];
+    const filterConfig = safeGet(eqFilterConfig, filterType);
+    return filterConfig?.Parameters || [];
   }
 
   function addNewFilter() {
@@ -320,7 +322,12 @@
 
   function updateFilterParameter(index: number, paramName: string, value: any) {
     const filters = [...settings.audio.equalizer.filters];
-    filters[index] = { ...filters[index], [paramName.toLowerCase()]: value };
+    const updatedFilter = { ...filters[index] };
+    const normalizedParamName = paramName.toLowerCase();
+
+    // Use Object.assign for safer property assignment
+    Object.assign(updatedFilter, { [normalizedParamName]: value });
+    filters[index] = updatedFilter;
 
     settingsActions.updateSection('realtime', {
       audio: {
@@ -347,8 +354,9 @@
 
     parameters.forEach(param => {
       const paramName = param.Name.toLowerCase() as keyof typeof updatedFilter;
-      if (paramName in updatedFilter && typeof updatedFilter[paramName] === 'number') {
-        (updatedFilter as any)[paramName] = param.Default;
+      const currentValue = safeGet(updatedFilter, paramName);
+      if (currentValue !== undefined && typeof currentValue === 'number') {
+        Object.assign(updatedFilter, { [paramName]: param.Default });
       }
     });
 

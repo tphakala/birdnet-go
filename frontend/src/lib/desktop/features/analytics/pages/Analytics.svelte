@@ -803,7 +803,9 @@
         else periodIndex = 5;
 
         const currentCount = safeArrayAccess(periodCounts, periodIndex) ?? 0;
-        periodCounts[periodIndex] = currentCount + entry.count;
+        if (periodIndex >= 0 && periodIndex < periodCounts.length) {
+          periodCounts.splice(periodIndex, 1, currentCount + entry.count);
+        }
       });
     }
 
@@ -902,14 +904,20 @@
     }
 
     const data = responseData?.data || [];
-    const dailyData: Record<string, number> = {};
+    const dailyDataMap = new Map<string, number>();
 
     if (Array.isArray(data)) {
       data.forEach(entry => {
         const date = entry.date;
-        const currentCount = safeGet(dailyData, date, 0);
-        dailyData[date] = currentCount + entry.count;
+        const currentCount = dailyDataMap.get(date) ?? 0;
+        dailyDataMap.set(date, currentCount + entry.count);
       });
+    }
+
+    // Convert Map back to object for compatibility with chart code
+    const dailyData: Record<string, number> = {};
+    for (const [date, count] of dailyDataMap.entries()) {
+      dailyData[date] = count;
     }
 
     const sortedDates = Object.keys(dailyData).sort();
