@@ -1,12 +1,42 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import {
+  createComponentTestFactory,
+  screen,
+  fireEvent,
+  waitFor,
+} from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import SpeciesManager from './SpeciesManager.svelte';
 
-// Helper function to render SpeciesManager with proper typing
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string, params?: Record<string, unknown>) => {
+    const translations: Record<string, string> = {
+      'forms.species.placeholder': 'Enter species name...',
+      'forms.species.aria.edit': 'Edit species',
+      'forms.species.aria.remove': 'Remove species',
+      'forms.species.maxReached': 'Maximum of {{max}} species reached',
+      'forms.species.empty': 'No species added',
+    };
+    let translation = translations[key] ?? key;
+
+    // Handle template variables like {{max}}
+    if (params && typeof translation === 'string') {
+       
+      Object.entries(params).forEach(([param, value]) => {
+        translation = translation.replace(`{{${param}}}`, String(value));
+      });
+    }
+
+    return translation;
+  }),
+}));
+
+const speciesManagerTest = createComponentTestFactory(SpeciesManager);
+
+// Helper function for consistency with existing tests
 const renderSpeciesManager = (props?: Record<string, unknown>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return render(SpeciesManager as any, props ? { props } : undefined);
+  return speciesManagerTest.render(props ?? {});
 };
 
 describe('SpeciesManager', () => {
