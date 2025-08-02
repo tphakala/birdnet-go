@@ -386,30 +386,38 @@ describe('SettingsButton', () => {
     it('works with form submission pattern', async () => {
       const handleSubmit = vi.fn(async () => {
         // Simulate async operation
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50));
       });
 
-      let isSubmitting = false;
-
+      // Render initially not loading
       const { rerender } = wrapperFactory.render({
-        loading: isSubmitting,
+        loading: false,
         onclick: async () => {
-          isSubmitting = true;
-          await rerender({ loading: true });
-
           await handleSubmit();
-
-          isSubmitting = false;
-          await rerender({
-            loading: false,
-          });
         },
         childContent: 'Submit',
       });
 
       const button = screen.getByRole('button');
-      fireEvent.click(button);
+      expect(button).toHaveTextContent('Submit');
+      expect(button).not.toBeDisabled();
 
+      // Test loading state separately
+      await rerender({ loading: true });
+
+      const loadingButton = screen.getByRole('button');
+      expect(loadingButton).toHaveTextContent('Loading...');
+      expect(loadingButton).toBeDisabled();
+
+      // Test back to normal state
+      await rerender({ loading: false });
+
+      const normalButton = screen.getByRole('button');
+      expect(normalButton).toHaveTextContent('Submit');
+      expect(normalButton).not.toBeDisabled();
+
+      // Test actual click
+      fireEvent.click(normalButton);
       await waitFor(() => {
         expect(handleSubmit).toHaveBeenCalled();
       });
