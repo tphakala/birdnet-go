@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RTSPUrl } from '$lib/stores/settings';
   import { loggers } from '$lib/utils/logger';
+  import { validateProtocolURL } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
@@ -15,22 +16,8 @@
   let newUrl = $state('');
 
   function isValidRtspUrl(url: string): boolean {
-    // Safer RTSP URL validation - basic format check to prevent ReDoS
-    // Check for basic RTSP URL structure without complex nested quantifiers
-    if (!url.startsWith('rtsp://')) {
-      return false;
-    }
-
-    try {
-      // Use URL constructor for validation where possible
-      const parsed = new URL(url);
-      return parsed.protocol === 'rtsp:';
-    } catch {
-      // Fallback to simpler regex for RTSP-specific validation
-      // This pattern is much simpler and safer from ReDoS attacks
-      const safeRtspPattern = /^rtsp:\/\/[\w.-]+(?::[0-9]{1,5})?(?:\/[\w/.?&=%-]*)?$/i;
-      return safeRtspPattern.test(url);
-    }
+    // Use security utility for safe URL validation
+    return validateProtocolURL(url, ['rtsp'], 2048);
   }
 
   // Redact credentials from URL for safe logging

@@ -3,6 +3,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+const { getSafeOutputPath } = require('./security');
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -122,9 +123,9 @@ Examples:
 async function takeScreenshot() {
   const { url, filename, config } = parseArgs();
 
-  // Resolve output path
-  const outputDir = path.resolve(__dirname, config.outputDir);
-  const outputPath = path.join(outputDir, filename);
+  // Resolve output path securely
+  const outputPath = getSafeOutputPath(config.outputDir, filename);
+  const outputDir = path.dirname(outputPath);
 
   // Ensure output directory exists
   if (!fs.existsSync(outputDir)) {

@@ -28,8 +28,10 @@ export function cn(...args: ClassValue[]): string {
         classes.push(innerClasses);
       }
     } else if (type === 'object') {
-      for (const key in arg as ClassDictionary) {
-        if ((arg as ClassDictionary)[key]) {
+      // Safe iteration over object properties
+      const dict = arg as ClassDictionary;
+      for (const key in dict) {
+        if (Object.prototype.hasOwnProperty.call(dict, key) && dict[key]) {
           classes.push(key);
         }
       }

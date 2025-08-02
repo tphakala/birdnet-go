@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { validateCIDR } from '$lib/utils/security';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -35,16 +36,15 @@
   let errors = $state<Record<number, string>>({});
 
   // Validation function for CIDR notation
-  function validateCIDR(cidr: string): string | null {
+  function validateCIDRInput(cidr: string): string | null {
     if (!cidr || cidr.trim().length === 0) {
       return 'Subnet cannot be empty';
     }
 
     const trimmed = cidr.trim();
 
-    // Basic CIDR format check
-    const cidrPattern = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
-    if (!cidrPattern.test(trimmed)) {
+    // Use security utility for safe CIDR validation
+    if (!validateCIDR(trimmed)) {
       return 'Invalid CIDR format. Use format like 192.168.1.0/24';
     }
 
@@ -72,7 +72,7 @@
     const trimmed = newSubnet.trim();
     if (!trimmed) return;
 
-    const validation = validateCIDR(trimmed);
+    const validation = validateCIDRInput(trimmed);
     if (validation) {
       return; // Don't add invalid subnets
     }
@@ -105,9 +105,12 @@
     updated[index] = value;
 
     // Validate the updated subnet
-    const validation = validateCIDR(value);
+    const validation = validateCIDRInput(value);
     if (validation) {
-      errors[index] = validation;
+      // Use safe property assignment
+      const newErrors = { ...errors };
+      newErrors[index] = validation;
+      errors = newErrors;
     } else {
       const newErrors = { ...errors };
       delete newErrors[index];
