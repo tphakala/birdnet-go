@@ -2,6 +2,52 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import SpeciesFilterForm from './SpeciesFilterForm.svelte';
 
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string, params?: Record<string, unknown>) => {
+    const translations: Record<string, string> = {
+      'analytics.filters.title': 'Filter Data',
+      'analytics.filters.timePeriod': 'Time Period',
+      'analytics.filters.sortBy': 'Sort By',
+      'analytics.filters.searchSpecies': 'Species Name',
+      'analytics.filters.searchPlaceholder': 'Search by name...',
+      'analytics.filters.species': 'species',
+      'analytics.filters.filtered': 'filtered',
+      'analytics.filters.reset': 'Reset',
+      'analytics.filters.exportCsv': 'Export CSV',
+      'analytics.filters.applyFilters': 'Apply Filters',
+      'analytics.filters.from': 'From',
+      'analytics.filters.to': 'To',
+      'analytics.timePeriodOptions.allTime': 'All Time',
+      'analytics.timePeriodOptions.today': 'Today',
+      'analytics.timePeriodOptions.lastWeek': 'Last Week',
+      'analytics.timePeriodOptions.lastMonth': 'Last Month',
+      'analytics.timePeriodOptions.last90Days': 'Last 90 Days',
+      'analytics.timePeriodOptions.lastYear': 'Last Year',
+      'analytics.timePeriodOptions.customRange': 'Custom Range',
+      'analytics.sortOptions.mostDetections': 'Most Detections',
+      'analytics.sortOptions.fewestDetections': 'Fewest Detections',
+      'analytics.sortOptions.nameAZ': 'Name A-Z',
+      'analytics.sortOptions.nameZA': 'Name Z-A',
+      'analytics.sortOptions.recentlyFirstSeen': 'Recently First Seen',
+      'analytics.sortOptions.earliestFirstSeen': 'Earliest First Seen',
+      'analytics.sortOptions.recentlyLastSeen': 'Recently Last Seen',
+      'analytics.sortOptions.highestConfidence': 'Highest Confidence',
+    };
+
+    let translation = translations[key] ?? key;
+
+    // Handle template variables like {{variable}}
+    if (params && typeof translation === 'string') {
+      Object.entries(params).forEach(([param, value]) => {
+        translation = translation.replace(`{{${param}}}`, String(value));
+      });
+    }
+
+    return translation;
+  }),
+}));
+
 const defaultFilters = {
   timePeriod: 'all' as const,
   startDate: '',

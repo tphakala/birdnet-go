@@ -1,6 +1,5 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { systemIcons } from '$lib/utils/icons';
   import { safeGet } from '$lib/utils/security';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
@@ -17,6 +16,7 @@
     role?: string;
     'aria-label'?: string;
     'aria-hidden'?: boolean;
+    'data-testid'?: string;
     tabindex?: number;
     title?: string;
     onclick?: (_event: MouseEvent) => void;
@@ -33,6 +33,7 @@
     role,
     'aria-label': ariaLabel,
     'aria-hidden': ariaHidden,
+    'data-testid': dataTestId,
     tabindex,
     title,
     onclick,
@@ -91,6 +92,7 @@
     role,
     'aria-label': ariaLabel,
     'aria-hidden': ariaHidden,
+    'data-testid': dataTestId,
     tabindex,
     title:
       title || (showTooltip ? safeGet(tooltipText, currentTimeOfDay, 'Unknown time') : undefined),
@@ -193,11 +195,23 @@
     </svg>
   {:else}
     <!-- Default clock icon for unknown time -->
-    <div
-      class={cn(safeGet(sizeClasses, size, 'h-6 w-6'), 'text-gray-400', className)}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      class={cn(
+        safeGet(sizeClasses, size, 'h-6 w-6'),
+        'text-gray-400',
+        'inline-block align-text-bottom',
+        className
+      )}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      stroke-width="2"
       {...commonAttrs}
     >
-      {@html systemIcons.clock}
-    </div>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12,6 12,12 16,14" />
+      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
   {/if}
 </div>

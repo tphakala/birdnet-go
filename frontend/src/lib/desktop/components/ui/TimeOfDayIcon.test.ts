@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { renderTyped } from '../../../../test/render-helpers';
 import TimeOfDayIcon from './TimeOfDayIcon.svelte';
 
 describe('TimeOfDayIcon', () => {
   it('renders day icon for daytime hours', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T14:00:00'), // 2 PM
       },
@@ -18,8 +17,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('renders night icon for nighttime hours', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T22:00:00'), // 10 PM
       },
@@ -32,8 +30,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('renders sunrise icon for morning hours', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T07:30:00'), // 7:30 AM
       },
@@ -46,8 +43,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('renders sunset icon for evening hours', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T17:30:00'), // 5:30 PM
       },
@@ -60,8 +56,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('renders dawn icon as sunrise', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T06:30:00'), // 6:30 AM
       },
@@ -74,8 +69,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('renders dusk icon as sunset', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T18:30:00'), // 6:30 PM
       },
@@ -88,8 +82,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('uses provided timeOfDay over calculated value', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T14:00:00'), // Would be day
         timeOfDay: 'night', // Override
@@ -109,8 +102,7 @@ describe('TimeOfDayIcon', () => {
     ] as const;
 
     sizes.forEach(({ size, class: expectedClass }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { container, unmount } = render(TimeOfDayIcon as any, {
+      const { container, unmount } = renderTyped(TimeOfDayIcon, {
         props: {
           timeOfDay: 'day',
           size,
@@ -124,8 +116,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('shows tooltip when showTooltip is true', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         timeOfDay: 'sunrise',
         showTooltip: true,
@@ -137,8 +128,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('does not show tooltip by default', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         timeOfDay: 'day',
       },
@@ -149,8 +139,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('applies custom className', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         timeOfDay: 'day',
         className: 'custom-icon-class',
@@ -162,8 +151,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('spreads additional SVG attributes', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         timeOfDay: 'day',
         'data-testid': 'time-icon',
@@ -177,8 +165,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('handles string datetime', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: '2024-01-01T14:00:00',
       },
@@ -189,8 +176,7 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('handles timestamp datetime', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         datetime: new Date('2024-01-01T22:00:00').getTime(),
       },
@@ -201,15 +187,14 @@ describe('TimeOfDayIcon', () => {
   });
 
   it('defaults to day icon when no datetime or timeOfDay provided', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { container } = render(TimeOfDayIcon as any);
+    const { container } = renderTyped(TimeOfDayIcon);
 
     const svg = container.querySelector('svg');
     expect(svg).toHaveClass('text-yellow-500');
   });
 
   it('renders clock icon for unknown timeOfDay', () => {
-    const { container } = render(TimeOfDayIcon, {
+    const { container } = renderTyped(TimeOfDayIcon, {
       props: {
         // Testing invalid timeOfDay
         timeOfDay: 'unknown' as 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk',
