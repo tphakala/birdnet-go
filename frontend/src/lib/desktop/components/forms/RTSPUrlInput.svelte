@@ -100,7 +100,7 @@
     <input
       type="text"
       bind:value={newUrl}
-      onkeypress={handleKeypress}
+      onkeydown={handleKeypress}
       class="input input-bordered input-sm flex-1"
       placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)"
       {disabled}

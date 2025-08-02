@@ -56,7 +56,6 @@
   function handleChange(newValue: string | number | boolean | string[]) {
     const numValue = typeof newValue === 'number' ? newValue : parseFloat(String(newValue));
     if (!isNaN(numValue)) {
-      value = numValue;
       onUpdate(numValue);
     }
   }
@@ -88,6 +87,7 @@
       {required}
       {disabled}
       onChange={handleChange}
+      onInput={handleChange}
       inputClassName={cn('range range-primary', { 'range-error': !!error })}
     />
   {:else}
@@ -104,6 +104,7 @@
       {required}
       {disabled}
       onChange={handleChange}
+      onInput={handleChange}
       inputClassName={cn('range range-primary', { 'range-error': !!error })}
       labelClassName="label-text font-medium"
     />
