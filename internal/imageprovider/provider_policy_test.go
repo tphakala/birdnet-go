@@ -30,12 +30,15 @@ func TestProviderNameConsistency(t *testing.T) {
 
 	// Initialize cache with the provider (no metrics needed for testing)
 	cache := imageprovider.InitCache("wikimedia", provider, nil, store)
-	defer cache.Close()
+	defer func() {
+		err := cache.Close()
+		assert.NoError(t, err, "Failed to close cache")
+	}()
 
 	// Create registry and register the cache
 	registry := imageprovider.NewImageProviderRegistry()
 	err = registry.Register("wikimedia", cache)
-	assert.NoError(t, err, "Failed to register wikimedia provider")
+	require.NoError(t, err, "Failed to register wikimedia provider")
 
 	// Verify the provider is accessible with "wikimedia" name
 	_, found := registry.GetCache("wikimedia")
@@ -79,12 +82,18 @@ func TestFallbackPolicyEnforcement(t *testing.T) {
 			// Create primary provider that will fail
 			primaryProvider := &mockImageProvider{shouldFail: true}
 			primaryCache := imageprovider.InitCache("avicommons", primaryProvider, nil, store)
-			defer primaryCache.Close()
+			defer func() {
+				err := primaryCache.Close()
+				assert.NoError(t, err, "Failed to close primary cache")
+			}()
 
 			// Create fallback provider that will succeed
 			fallbackProvider := &mockImageProvider{shouldFail: false}
 			fallbackCache := imageprovider.InitCache("wikimedia", fallbackProvider, nil, store)
-			defer fallbackCache.Close()
+			defer func() {
+				err := fallbackCache.Close()
+				assert.NoError(t, err, "Failed to close fallback cache")
+			}()
 
 			// Create and setup registry
 			registry := imageprovider.NewImageProviderRegistry()
@@ -117,21 +126,22 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 	testCases := []struct {
 		name               string
 		fallbackPolicy     string
-		setupStore         func(*mockStore)
+		setupStore         func(t *testing.T, store *mockStore)
 		expectedProviders  map[string]bool
 		expectedImageCount int
 	}{
 		{
 			name:           "no_fallback_when_policy_none",
 			fallbackPolicy: "none",
-			setupStore: func(store *mockStore) {
+			setupStore: func(t *testing.T, store *mockStore) {
 				// Add image only for wikimedia provider
-				store.SaveImageCache(&datastore.ImageCache{
+				err := store.SaveImageCache(&datastore.ImageCache{
 					ScientificName: "Parus major",
 					ProviderName:   "wikimedia",
 					URL:            "http://wiki.example.com/parus.jpg",
 					CachedAt:       time.Now(),
 				})
+				require.NoError(t, err, "Failed to save test image to cache")
 			},
 			expectedProviders:  map[string]bool{"avicommons": true}, // Only avicommons should be checked
 			expectedImageCount: 0, // No images found because avicommons has none
@@ -139,14 +149,15 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "fallback_when_policy_all",
 			fallbackPolicy: "all",
-			setupStore: func(store *mockStore) {
+			setupStore: func(t *testing.T, store *mockStore) {
 				// Add image only for wikimedia provider
-				store.SaveImageCache(&datastore.ImageCache{
+				err := store.SaveImageCache(&datastore.ImageCache{
 					ScientificName: "Parus major",
 					ProviderName:   "wikimedia",
 					URL:            "http://wiki.example.com/parus.jpg",
 					CachedAt:       time.Now(),
 				})
+				require.NoError(t, err, "Failed to save test image to cache")
 			},
 			expectedProviders:  map[string]bool{"avicommons": true, "wikimedia": true},
 			expectedImageCount: 1, // Should find the wikimedia image via fallback
@@ -154,14 +165,15 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 		{
 			name:           "primary_provider_has_image",
 			fallbackPolicy: "none",
-			setupStore: func(store *mockStore) {
+			setupStore: func(t *testing.T, store *mockStore) {
 				// Add image for primary provider
-				store.SaveImageCache(&datastore.ImageCache{
+				err := store.SaveImageCache(&datastore.ImageCache{
 					ScientificName: "Parus major",
 					ProviderName:   "avicommons",
 					URL:            "http://avi.example.com/parus.jpg",
 					CachedAt:       time.Now(),
 				})
+				require.NoError(t, err, "Failed to save test image to cache")
 			},
 			expectedProviders:  map[string]bool{"avicommons": true},
 			expectedImageCount: 1, // Should find avicommons image without fallback
@@ -178,19 +190,22 @@ func TestBatchLoadFromDBFallbackPolicy(t *testing.T) {
 
 			// Create store and set up test data
 			store := newMockStoreWithTracking()
-			tc.setupStore(store.mockStore)
+			tc.setupStore(t, store.mockStore)
 
 			// Create cache for avicommons (primary provider)
 			mockProvider := &mockImageProvider{}
 			cache := imageprovider.InitCache("avicommons", mockProvider, nil, store)
-			defer cache.Close()
+			defer func() {
+				err := cache.Close()
+				assert.NoError(t, err, "Failed to close cache")
+			}()
 
 			// Test GetBatchCachedOnly which internally uses batchLoadFromDB
 			species := []string{"Parus major"}
 			results := cache.GetBatchCachedOnly(species)
 
 			// Verify result count
-			assert.Equal(t, tc.expectedImageCount, len(results),
+			assert.Len(t, results, tc.expectedImageCount,
 				"Expected %d images but got %d", tc.expectedImageCount, len(results))
 
 			// Verify which providers were queried

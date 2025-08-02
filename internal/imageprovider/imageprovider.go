@@ -363,9 +363,15 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 	settings := conf.Setting()
 
 	quit := make(chan struct{})
+	
+	var imageProviderMetrics *metrics.ImageProviderMetrics
+	if t != nil {
+		imageProviderMetrics = t.ImageProvider
+	}
+	
 	cache := &BirdImageCache{
 		providerName: providerName, // Set provider name
-		metrics:      t.ImageProvider,
+		metrics:      imageProviderMetrics,
 		debug:        settings.Realtime.Dashboard.Thumbnails.Debug, // Keep for potential checks
 		store:        store,
 		// logger:       log.Default(), // Replaced by package logger
@@ -495,10 +501,8 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 					break
 				}
 			}
-		} else {
-			if settings.Realtime.Dashboard.Thumbnails.Debug {
-				logger.Debug("No images found with primary provider, but fallback policy is 'none'")
-			}
+		} else if settings.Realtime.Dashboard.Thumbnails.Debug {
+			logger.Debug("No images found with primary provider, but fallback policy is 'none'")
 		}
 	}
 
