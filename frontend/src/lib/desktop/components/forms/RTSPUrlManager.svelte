@@ -318,10 +318,10 @@
                   label="Stream Name"
                   bind:value={rtspUrl.name}
                   {disabled}
-                  inputClassName={errors[`${rtspUrl.id}-name`] ? 'input-error' : ''}
+                  inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
                 />
-                {#if errors[`${rtspUrl.id}-name`]}
-                  <div class="text-error text-sm mt-1">{errors[`${rtspUrl.id}-name`]}</div>
+                {#if errors.get(`${rtspUrl.id}-name`)}
+                  <div class="text-error text-sm mt-1">{errors.get(`${rtspUrl.id}-name`)}</div>
                 {/if}
               </div>
 
@@ -333,10 +333,10 @@
                   label="RTSP URL"
                   bind:value={rtspUrl.url}
                   {disabled}
-                  inputClassName={errors[rtspUrl.id] ? 'input-error' : ''}
+                  inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}
                 />
-                {#if errors[rtspUrl.id]}
-                  <div class="text-error text-sm mt-1">{errors[rtspUrl.id]}</div>
+                {#if errors.get(rtspUrl.id)}
+                  <div class="text-error text-sm mt-1">{errors.get(rtspUrl.id)}</div>
                 {/if}
               </div>
             </div>

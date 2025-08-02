@@ -141,8 +141,8 @@
     // Convert to array for sorting by timestamp
     const entries = Array.from(dailySummaryCache.entries());
     entries.sort((a, b) => {
-      const timestampA = safeArrayAccess(a, 1)?.timestamp ?? 0;
-      const timestampB = safeArrayAccess(b, 1)?.timestamp ?? 0;
+      const timestampA = a[1]?.timestamp ?? 0;
+      const timestampB = b[1]?.timestamp ?? 0;
       return timestampA - timestampB;
     });
 
@@ -151,10 +151,8 @@
     for (let i = 0; i < entriesToRemove; i++) {
       const entry = safeArrayAccess(entries, i);
       if (entry) {
-        const key = safeArrayAccess(entry, 0);
-        if (key !== undefined) {
-          dailySummaryCache.delete(key);
-        }
+        const key = entry[0]; // Map entry key is always a string
+        dailySummaryCache.delete(key);
       }
     }
 

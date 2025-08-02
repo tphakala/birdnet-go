@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { validateCIDR, createSafeMap, safeArrayAccess } from '$lib/utils/security';
+  import { validateCIDR, IndexMap, safeArrayAccess } from '$lib/utils/security';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -33,7 +33,7 @@
 
   let newSubnet = $state('');
   let fieldId = `subnet-${Math.random().toString(36).substring(2, 11)}`;
-  let errors = $state(createSafeMap<number, string>());
+  let errors = $state(new IndexMap<string>());
 
   // Validation function for CIDR notation
   function validateCIDRInput(cidr: string): string | null {
@@ -95,7 +95,7 @@
     onUpdate(updated);
 
     // Clear error for removed item
-    errors.delete(index);
+    errors.deleteByIndex(index);
     // Map is automatically reactive in Svelte 5
   }
 
@@ -109,9 +109,9 @@
     // Validate the updated subnet
     const validation = validateCIDRInput(value);
     if (validation) {
-      errors.set(index, validation);
+      errors.setByIndex(index, validation);
     } else {
-      errors.delete(index);
+      errors.deleteByIndex(index);
     }
     // Map is automatically reactive in Svelte 5
 
@@ -204,7 +204,7 @@
             {disabled}
             class={cn(
               'input input-sm input-bordered flex-1',
-              errors.get(index) ? 'input-error' : ''
+              errors.getByIndex(index) ? 'input-error' : ''
             )}
           />
           <button
@@ -218,8 +218,8 @@
           </button>
         </div>
 
-        {#if errors.get(index)}
-          <div class="text-error text-sm ml-2">{errors.get(index)}</div>
+        {#if errors.getByIndex(index)}
+          <div class="text-error text-sm ml-2">{errors.getByIndex(index)}</div>
         {/if}
       {/each}
     </div>

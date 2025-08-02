@@ -255,7 +255,7 @@
   function startEditConfig(species: string) {
     editingConfig = species;
     editConfigNewName = species;
-    const config = safeGet(settings.config, species, { threshold: 0.5, interval: 0 });
+    const config = safeGet(settings.config, species, { threshold: 0.5, interval: 0, actions: [] });
     editConfigThreshold = config.threshold;
     editConfigInterval = config.interval || 0;
   }
@@ -272,7 +272,11 @@
 
     if (originalSpecies !== newSpecies) {
       // Rename: create new entry and delete old one
-      const originalConfig = safeGet(settings.config, originalSpecies, { actions: [] });
+      const originalConfig = safeGet(settings.config, originalSpecies, {
+        threshold: 0.5,
+        interval: 0,
+        actions: [],
+      });
       const baseConfig = Object.fromEntries(
         Object.entries(settings.config).filter(([key]) => key !== originalSpecies)
       );
@@ -286,7 +290,11 @@
       };
     } else {
       // Just update values
-      const existingConfig = safeGet(settings.config, originalSpecies, {});
+      const existingConfig = safeGet(settings.config, originalSpecies, {
+        threshold: 0.5,
+        interval: 0,
+        actions: [],
+      });
       updatedConfig = {
         ...settings.config,
         [originalSpecies]: {
@@ -318,7 +326,11 @@
   function openActionsModal(species: string) {
     currentSpecies = species;
 
-    const speciesConfig = safeGet(settings.config, species, { actions: [] });
+    const speciesConfig = safeGet(settings.config, species, {
+      threshold: 0.5,
+      interval: 0,
+      actions: [],
+    });
     const existingAction = speciesConfig.actions?.[0];
     if (existingAction) {
       currentAction = {
@@ -355,7 +367,11 @@
     };
 
     const updatedConfig = { ...settings.config };
-    const currentSpeciesConfig = safeGet(settings.config, currentSpecies, {});
+    const currentSpeciesConfig = safeGet(settings.config, currentSpecies, {
+      threshold: 0.5,
+      interval: 0,
+      actions: [],
+    });
     Object.assign(updatedConfig, {
       [currentSpecies]: {
         ...currentSpeciesConfig,

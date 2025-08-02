@@ -53,9 +53,11 @@ function ensureSafeDirectory(dirPath) {
     // 1. safePath is constructed from pre-validated allowedDirs (literal paths)
     // 2. Path traversal is prevented by the allowedDirs whitelist check above
     // 3. This is the secure implementation that other code should use
-    const stats = fs.existsSync(safePath); // Security warning expected here - path is validated above
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const stats = fs.existsSync(safePath); // Security warning suppressed - path is validated above
     if (!stats) {
-      fs.mkdirSync(safePath, { recursive: true }); // Security warning expected here - path is validated above
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      fs.mkdirSync(safePath, { recursive: true }); // Security warning suppressed - path is validated above
     }
     return true;
   } catch (error) {

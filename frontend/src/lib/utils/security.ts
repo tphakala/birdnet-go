@@ -7,6 +7,18 @@
  * Safely access object properties with validation
  * Prevents object injection by using hasOwnProperty check
  */
+
+export function safeGet<T extends object, K extends keyof T>(
+  obj: T,
+  key: string | number | symbol,
+  defaultValue: T[K]
+): T[K];
+// eslint-disable-next-line no-redeclare
+export function safeGet<T extends object, K extends keyof T>(
+  obj: T,
+  key: string | number | symbol
+): T[K] | undefined;
+// eslint-disable-next-line no-redeclare
 export function safeGet<T extends object, K extends keyof T>(
   obj: T,
   key: string | number | symbol,
@@ -39,8 +51,16 @@ export function safeLookup<T>(
  * Create a safe Map from an object for dynamic lookups
  * Maps are inherently safe from prototype pollution
  */
-export function createSafeMap<T>(obj: Record<string, T>): Map<string, T> {
-  return new Map(Object.entries(obj));
+
+export function createSafeMap<T>(obj: Record<string, T>): Map<string, T>;
+// eslint-disable-next-line no-redeclare
+export function createSafeMap<K extends string, V>(): Map<K, V>;
+// eslint-disable-next-line no-redeclare
+export function createSafeMap<K extends string, V>(obj?: Record<K, V>): Map<K, V> {
+  if (obj) {
+    return new Map(Object.entries(obj) as [K, V][]);
+  }
+  return new Map<K, V>();
 }
 
 /**
@@ -156,4 +176,160 @@ export function createEnumLookup<T>(enumObj: Record<string, T>): (key: string) =
  */
 export function safeSwitch<T>(key: string, cases: Record<string, T>, defaultValue: T): T {
   return safeGet(cases, key, defaultValue) ?? defaultValue;
+}
+
+/**
+ * Safe object spreading that handles undefined/null values
+ * Prevents "Spread types may only be created from object types" errors
+ */
+export function safeSpread<T extends object>(...objects: (T | undefined | null)[]): Partial<T> {
+  return objects.reduce((result, obj) => {
+    if (obj != null && typeof obj === 'object') {
+      return { ...result, ...obj };
+    }
+    return result;
+  }, {} as Partial<T>);
+}
+
+/**
+ * Safe array spreading that handles undefined arrays
+ * Prevents spreading undefined in array literals
+ */
+export function safeArraySpread<T>(...arrays: (T[] | undefined)[]): T[] {
+  const result: T[] = [];
+  for (const arr of arrays) {
+    if (Array.isArray(arr)) {
+      result.push(...arr);
+    }
+  }
+  return result;
+}
+
+/**
+ * Map wrapper that provides bracket-like access syntax
+ * Provides type-safe alternative to Map.get() with fallback values
+ */
+export class SafeAccessMap<K, V> extends Map<K, V> {
+  safeGet(key: K, defaultValue?: V): V | undefined {
+    return this.get(key) ?? defaultValue;
+  }
+
+  hasError(key: K): boolean {
+    return this.has(key);
+  }
+
+  getError(key: K): V | undefined {
+    return this.get(key);
+  }
+}
+
+/**
+ * Convert NodeListOf<Element> to typed array for safe array access
+ * Handles DOM API incompatibilities with array methods
+ */
+export function nodeListToArray<T extends Element>(nodeList: NodeListOf<Element>): T[] {
+  return Array.from(nodeList) as T[];
+}
+
+/**
+ * Safe DOM element access with type checking
+ * Returns undefined if element doesn't exist or wrong type
+ */
+export function safeElementAccess<T extends HTMLElement>(
+  elements: NodeListOf<Element> | HTMLElement[],
+  index: number,
+  elementType?: new () => T
+): T | undefined {
+  const arr = Array.isArray(elements) ? elements : Array.from(elements);
+  const element = safeArrayAccess(arr, index);
+
+  if (!element) return undefined;
+  if (elementType && !(element instanceof elementType)) return undefined;
+
+  return element as T;
+}
+
+/**
+ * Safe number to string key conversion for Maps
+ * Ensures consistent key types in Map operations
+ */
+export function numberToStringKey(key: number): string {
+  return key.toString();
+}
+
+/**
+ * Create a Map with number keys converted to strings
+ * Handles index-based Map operations safely
+ */
+export function createIndexMap<V>(): Map<string, V> {
+  return new Map<string, V>();
+}
+
+/**
+ * Safe Map operations with number index conversion
+ * Automatically converts number indices to string keys
+ */
+export class IndexMap<V> extends Map<string, V> {
+  setByIndex(index: number, value: V): this {
+    return this.set(numberToStringKey(index), value);
+  }
+
+  getByIndex(index: number): V | undefined {
+    return this.get(numberToStringKey(index));
+  }
+
+  deleteByIndex(index: number): boolean {
+    return this.delete(numberToStringKey(index));
+  }
+
+  hasByIndex(index: number): boolean {
+    return this.has(numberToStringKey(index));
+  }
+}
+
+/**
+ * Safe property access with type guards
+ * Returns undefined for null/undefined objects, typed result otherwise
+ */
+export function safePropertyAccess<T, K extends keyof T>(
+  obj: T | null | undefined,
+  key: K
+): T[K] | undefined {
+  if (obj == null) return undefined;
+  // eslint-disable-next-line security/detect-object-injection
+  return obj[key];
+}
+
+/**
+ * Safe property access with fallback value
+ * Returns fallback for null/undefined objects or missing properties
+ */
+export function safePropertyAccessWithFallback<T, K extends keyof T>(
+  obj: T | null | undefined,
+  key: K,
+  fallback: T[K]
+): T[K] {
+  if (obj == null) return fallback;
+  // eslint-disable-next-line security/detect-object-injection
+  return obj[key] ?? fallback;
+}
+
+/**
+ * Create type-safe default objects for common patterns
+ * Prevents "missing properties" errors when providing defaults
+ */
+export function createTypedDefault<T>(defaults: T): T {
+  return { ...defaults };
+}
+
+/**
+ * Ensure object has required properties with fallbacks
+ * Merges provided object with defaults, ensuring all required props exist
+ */
+export function ensureRequiredProperties<T extends object>(
+  obj: Partial<T> | undefined | null,
+  defaults: T
+): T {
+  if (obj == null) return { ...defaults };
+  return { ...defaults, ...obj };
 }

@@ -3,7 +3,12 @@
   import type { Snippet } from 'svelte';
   import type { SelectOption } from './SelectDropdown.types';
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { safeGet, safeArrayAccess } from '$lib/utils/security';
+  import {
+    safeGet,
+    safeArrayAccess,
+    safeArraySpread,
+    safeElementAccess,
+  } from '$lib/utils/security';
 
   interface Props {
     options: SelectOption[];
@@ -108,7 +113,7 @@
       (groups, option) => {
         const group = option.group || '';
         const existingGroup = safeGet(groups, group, []);
-        Object.assign(groups, { [group]: [...existingGroup, option] });
+        Object.assign(groups, { [group]: safeArraySpread(existingGroup, [option]) });
         return groups;
       },
       {} as Record<string, SelectOption[]>
@@ -244,7 +249,7 @@
     if (highlightedIndex < 0 || !dropdownElement) return;
 
     const options = dropdownElement.querySelectorAll('[role="option"]');
-    const highlighted = safeArrayAccess(options, highlightedIndex) as HTMLElement;
+    const highlighted = safeElementAccess<HTMLElement>(options, highlightedIndex, HTMLElement);
 
     if (highlighted) {
       highlighted.scrollIntoView({ block: 'nearest' });

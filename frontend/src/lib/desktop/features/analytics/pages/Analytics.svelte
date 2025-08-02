@@ -802,10 +802,8 @@
         else if (hour >= 17 && hour < 20) periodIndex = 4;
         else periodIndex = 5;
 
-        const currentCount = safeArrayAccess(periodCounts, periodIndex) ?? 0;
-        if (periodIndex >= 0 && periodIndex < periodCounts.length) {
-          periodCounts.splice(periodIndex, 1, currentCount + entry.count);
-        }
+        const currentCount = safeArrayAccess(periodCounts, periodIndex, 0);
+        periodCounts.splice(periodIndex, 1, currentCount + entry.count);
       });
     }
 

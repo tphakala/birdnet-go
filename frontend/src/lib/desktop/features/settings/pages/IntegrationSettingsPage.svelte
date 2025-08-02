@@ -24,7 +24,7 @@
   import { getCsrfToken } from '$lib/utils/api.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { safeArrayAccess, safeGet } from '$lib/utils/security';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   const logger = loggers.settings;
 
@@ -298,7 +298,8 @@
             let jsonEnd = -1;
 
             for (let i = 0; i < remaining.length; i++) {
-              const char = safeGet(remaining, i, '');
+              // eslint-disable-next-line security/detect-object-injection
+              const char = remaining[i] || '';
               if (char === '{') braceCount++;
               if (char === '}') braceCount--;
               if (braceCount === 0) {
@@ -514,7 +515,8 @@
             let jsonEnd = -1;
 
             for (let i = 0; i < remaining.length; i++) {
-              const char = safeGet(remaining, i, '');
+              // eslint-disable-next-line security/detect-object-injection
+              const char = remaining[i] || '';
               if (char === '{') braceCount++;
               if (char === '}') braceCount--;
               if (braceCount === 0) {

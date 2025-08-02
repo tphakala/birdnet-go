@@ -42,7 +42,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { toastActions } from './toast.js';
-import { safeGet } from '$lib/utils/security';
+import { safeGet, safeSpread } from '$lib/utils/security';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -734,7 +734,7 @@ export const settingsActions = {
         section as string,
         {} as SettingsFormData[K]
       );
-      const newSectionData = { ...currentSectionData, ...data };
+      const newSectionData = safeSpread(currentSectionData, data) as SettingsFormData[K];
       return {
         ...state,
         formData: {

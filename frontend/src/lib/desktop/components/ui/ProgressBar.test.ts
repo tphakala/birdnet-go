@@ -52,7 +52,7 @@ describe('ProgressBar', () => {
         md: 'h-4',
         lg: 'h-6',
       };
-      const expectedClass = safeGet(sizeClasses, size);
+      const expectedClass = safeGet(sizeClasses, size, 'h-4');
 
       expect(progressbar).toHaveClass(expectedClass);
       unmount();

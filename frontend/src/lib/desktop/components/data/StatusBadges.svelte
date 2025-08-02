@@ -54,9 +54,10 @@
     false_positive: 'status-badge false',
   };
 
-  const statusTextMap: Partial<Record<VerificationStatus, string>> = {
+  const statusTextMap: Record<VerificationStatus, string> = {
     correct: 'correct',
     false_positive: 'false',
+    unverified: 'unverified',
   };
 
   function getStatusBadgeClass(verified: VerificationStatus): string {

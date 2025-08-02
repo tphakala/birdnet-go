@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
   import { api } from '$lib/utils/api';
-  import { safeGet, safeArrayAccess } from '$lib/utils/security';
+  import { safeGet, safeArrayAccess, safeElementAccess } from '$lib/utils/security';
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
@@ -236,14 +236,15 @@
       const focusableElements = modalElement.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
-      const firstElement = safeArrayAccess(focusableElements, 0) as HTMLElement;
-      const lastElement = safeArrayAccess(
+      const firstElement = safeElementAccess<HTMLElement>(focusableElements, 0, HTMLElement);
+      const lastElement = safeElementAccess<HTMLElement>(
         focusableElements,
-        focusableElements.length - 1
-      ) as HTMLElement;
+        focusableElements.length - 1,
+        HTMLElement
+      );
 
       const trapFocus = (e: KeyboardEvent) => {
-        if (e.key === 'Tab') {
+        if (e.key === 'Tab' && firstElement && lastElement) {
           if (e.shiftKey) {
             if (document.activeElement === firstElement) {
               e.preventDefault();
