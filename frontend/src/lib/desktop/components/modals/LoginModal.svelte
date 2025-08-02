@@ -223,6 +223,7 @@
   }
 
   // Focus trap for accessibility
+  // svelte-ignore non_reactive_update
   let modalElement: HTMLElement;
   let focusTrap: (() => void) | null = null;
 
