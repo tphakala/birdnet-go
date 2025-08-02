@@ -65,10 +65,7 @@ describe('WeatherInfo', () => {
   });
 
   it('fetches weather data on mount with detectionId', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(mockWeatherData),
-    });
+    const mockFetch = vi.fn().mockResolvedValue(mockWeatherData);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchWithCSRF as any).mockImplementation(mockFetch);
 
@@ -108,10 +105,7 @@ describe('WeatherInfo', () => {
   });
 
   it('shows error when API returns non-OK response', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-    });
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Weather data not available'));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchWithCSRF as any).mockImplementation(mockFetch);
 
@@ -210,10 +204,7 @@ describe('WeatherInfo', () => {
   });
 
   it('calls onLoad callback when data is fetched', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(mockWeatherData),
-    });
+    const mockFetch = vi.fn().mockResolvedValue(mockWeatherData);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchWithCSRF as any).mockImplementation(mockFetch);
 
@@ -320,16 +311,10 @@ describe('WeatherInfo', () => {
   it('refetches when detectionId changes', async () => {
     const mockFetch = vi
       .fn()
+      .mockResolvedValueOnce(mockWeatherData)
       .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockWeatherData),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          ...mockWeatherData,
-          hourly: { ...mockWeatherData.hourly, temperature: 25 },
-        }),
+        ...mockWeatherData,
+        hourly: { ...mockWeatherData.hourly, temperature: 25 },
       });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.fetchWithCSRF as any).mockImplementation(mockFetch);
