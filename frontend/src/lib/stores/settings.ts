@@ -300,11 +300,6 @@ export interface SupportSettings {
     environment: string;
     includePrivateInfo: boolean;
   };
-  telemetry: {
-    enabled: boolean;
-    includeSystemInfo: boolean;
-    includeAudioInfo: boolean;
-  };
 }
 
 // Realtime settings matching backend structure
@@ -696,7 +691,6 @@ export const integrationSettings = derived(settingsStore, $store => ({
 
 export const supportSettings = derived(settingsStore, $store => ({
   sentry: $store.formData.sentry,
-  telemetry: $store.formData.realtime?.telemetry,
 }));
 
 // Dynamic threshold settings derived store
