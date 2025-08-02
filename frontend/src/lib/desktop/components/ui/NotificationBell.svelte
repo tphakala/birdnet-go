@@ -20,7 +20,7 @@
   }
 
   interface SSEMessage {
-    eventType: 'connected' | 'notification' | 'heartbeat';
+    eventType: 'connected' | 'notification' | 'heartbeat' | 'toast';
     clientId?: string;
     [key: string]: any;
   }
@@ -224,12 +224,19 @@
         addNotification(data as unknown as Notification);
         break;
 
+      case 'toast':
+        // Toast messages should not be added to the notification bell
+        // They are handled separately by the toast system
+        logger.debug('Received toast message, ignoring in notification bell', data);
+        break;
+
       case 'heartbeat':
         // Heartbeat received, connection is alive
         break;
 
       default:
         // Unknown SSE event type
+        logger.debug('Unknown SSE event type:', data.eventType);
         break;
     }
   }

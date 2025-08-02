@@ -6,6 +6,7 @@
   import type { BirdnetConfig } from './app.d.ts';
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
+  import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
 
   const logger = getLogger('app');
 
@@ -275,6 +276,12 @@
     securityEnabled = config?.security?.enabled || false;
     accessAllowed = config?.security?.accessAllowed !== false; // Default to true unless explicitly false
     version = config?.version || 'Development Build';
+
+    // Ensure SSE notifications manager is connected (it auto-connects on import)
+    // This prevents tree-shaking and ensures toast messages work properly
+    if (sseNotifications) {
+      logger.debug('SSE notifications manager initialized');
+    }
 
     // Determine current route from URL path
     const path = window.location.pathname;
