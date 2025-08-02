@@ -1,3 +1,28 @@
+<!--
+  Main Settings Page Component
+  
+  Purpose: Main configuration settings for BirdNET-Go including node settings,
+  BirdNET parameters, database configuration, and user interface options.
+  
+  Features:
+  - Node identification and settings
+  - BirdNET analysis parameters (sensitivity, threshold, overlap)
+  - Dynamic threshold configuration
+  - Range filter with interactive map
+  - Database type selection (SQLite/MySQL)
+  - User interface preferences (language, thumbnails)
+  
+  Props: None - This is a page component that uses global settings stores
+  
+  Performance Optimizations:
+  - Cached CSRF token with $derived to avoid repeated DOM queries
+  - Reactive computed properties for change detection
+  - Async API loading for non-critical data
+  - Map lazy loading and conditional initialization
+  - Removed page-level spinner to prevent flickering
+  
+  @component
+-->
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -15,16 +40,17 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.settings;
 
+  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
+  // Using $derived ensures settings update when stores change without manual subscriptions
   let settings = $derived({
     main: $mainSettings || { name: '' },
     birdnet: $birdnetSettings || {
@@ -68,13 +94,14 @@
         },
         summaryLimit: 100,
       }),
-      locale: $dashboardSettings?.locale || (getLocale() as string), // Ensure locale is always defined
+      locale: $dashboardSettings?.locale || (getLocale() as string),
     },
   });
 
   let store = $derived($settingsStore);
 
-  // Check for changes in each section
+  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
+  // Each section tracks its own changes independently for granular updates
   let mainSettingsHasChanges = $derived(
     hasSettingsChanged((store.originalData as any)?.main, (store.formData as any)?.main)
   );
@@ -101,38 +128,84 @@
     )
   );
 
-  // Locale options for BirdNET
-  let birdnetLocales = $state<Array<{ value: string; label: string }>>([]);
+  // API State Management
+  interface ApiState<T> {
+    loading: boolean;
+    error: string | null;
+    data: T;
+  }
 
-  // UI locale options
-  let uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
+  // Locale options for BirdNET
+  let birdnetLocales = $state<ApiState<Array<{ value: string; label: string }>>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+
+  // PERFORMANCE OPTIMIZATION: Static UI locales computed once
+  // These don't change during the session, so we compute them once
+  const uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
     value: code,
     label: `${info.flag} ${info.name}`,
   }));
 
   // Image provider options
-  let providerOptions = $state<Array<{ value: string; label: string }>>([]);
-  let multipleProvidersAvailable = $state(false);
+  let providerOptions = $state<ApiState<Array<{ value: string; label: string }>>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+  let multipleProvidersAvailable = $derived(providerOptions.data.length > 1);
 
-  // Range filter state
-  let rangeFilterSpeciesCount = $state<number | null>(null);
-  let loadingRangeFilter = $state(false);
-  let testingRangeFilter = $state(false);
-  let rangeFilterError = $state<string | null>(null);
-  let showRangeFilterModal = $state(false);
-  let rangeFilterSpecies = $state<any[]>([]);
+  // Range filter state with proper structure
+  let rangeFilterState = $state<{
+    speciesCount: number | null;
+    loading: boolean;
+    testing: boolean;
+    error: string | null;
+    showModal: boolean;
+    species: any[];
+  }>({
+    speciesCount: null,
+    loading: false,
+    testing: false,
+    error: null,
+    showModal: false,
+    species: [],
+  });
 
   // Map state
   let mapElement: HTMLElement;
   let map: any;
   let marker: any;
 
-  // Fetch initial data
-  onMount(async () => {
-    // Fetch BirdNET locales
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      ''
+  );
+
+  // PERFORMANCE OPTIMIZATION: Load API data concurrently
+  // Use $effect instead of onMount for Svelte 5 pattern
+  $effect(() => {
+    loadInitialData();
+  });
+
+  async function loadInitialData() {
+    // Load all API data in parallel for better performance
+    await Promise.all([loadBirdnetLocales(), loadImageProviders(), loadRangeFilterCount()]);
+
+    // Initialize map after data loads
+    initializeMap();
+  }
+
+  async function loadBirdnetLocales() {
+    birdnetLocales.loading = true;
+    birdnetLocales.error = null;
+
     try {
       const localesData = await api.get<Record<string, string>>('/api/v2/settings/locales');
-      birdnetLocales = Object.entries(localesData || {}).map(([value, label]) => ({
+      birdnetLocales.data = Object.entries(localesData || {}).map(([value, label]) => ({
         value,
         label: label as string,
       }));
@@ -140,38 +213,39 @@
       if (error instanceof ApiError) {
         toastActions.warning(t('settings.main.errors.localesLoadFailed'));
       }
+      birdnetLocales.error = t('settings.main.errors.localesLoadFailed');
       // Fallback to basic locales so form still works
-      birdnetLocales = [{ value: 'en', label: 'English' }];
+      birdnetLocales.data = [{ value: 'en', label: 'English' }];
+    } finally {
+      birdnetLocales.loading = false;
     }
+  }
 
-    // Fetch image providers
+  async function loadImageProviders() {
+    providerOptions.loading = true;
+    providerOptions.error = null;
+
     try {
       const providersData = await api.get<{
         providers?: Array<{ value: string; display: string }>;
       }>('/api/v2/settings/imageproviders');
 
       // Map v2 API response format to client format
-      providerOptions = (providersData?.providers || []).map((provider: any) => ({
+      providerOptions.data = (providersData?.providers || []).map((provider: any) => ({
         value: provider.value,
         label: provider.display,
       }));
-
-      multipleProvidersAvailable = providerOptions.length > 1;
     } catch (error) {
       if (error instanceof ApiError) {
         toastActions.warning(t('settings.main.errors.providersLoadFailed'));
       }
+      providerOptions.error = t('settings.main.errors.providersLoadFailed');
       // Fallback to basic provider so form still works
-      providerOptions = [{ value: 'wikipedia', label: 'Wikipedia' }];
-      multipleProvidersAvailable = false;
+      providerOptions.data = [{ value: 'wikipedia', label: 'Wikipedia' }];
+    } finally {
+      providerOptions.loading = false;
     }
-
-    // Load initial range filter count
-    loadRangeFilterCount();
-
-    // Initialize map after component mounts
-    initializeMap();
-  });
+  }
 
   // Initialize Leaflet map
   async function initializeMap() {
@@ -257,21 +331,24 @@
 
   async function loadRangeFilterCount() {
     try {
-      const response = await fetch('/api/v2/range/species/count');
+      const response = await fetch('/api/v2/range/species/count', {
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
       if (!response.ok) throw new Error('Failed to load range filter count');
       const data = await response.json();
-      rangeFilterSpeciesCount = data.count;
+      rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load range filter count:', error);
-      rangeFilterError = t('settings.main.errors.rangeFilterCountFailed');
+      rangeFilterState.error = t('settings.main.errors.rangeFilterCountFailed');
     }
   }
 
   async function testCurrentRangeFilter() {
-    if (testingRangeFilter || !settings.birdnet.latitude || !settings.birdnet.longitude) return;
+    if (rangeFilterState.testing || !settings.birdnet.latitude || !settings.birdnet.longitude)
+      return;
 
-    testingRangeFilter = true;
-    rangeFilterError = null;
+    rangeFilterState.testing = true;
+    rangeFilterState.error = null;
 
     try {
       const data = await api.post<{ count: number; species?: any[] }>(
@@ -280,49 +357,49 @@
           latitude: settings.birdnet.latitude,
           longitude: settings.birdnet.longitude,
           threshold: settings.birdnet.rangeFilter.threshold,
-          model: settings.birdnet.rangeFilter.model, // Include model in the test
+          model: settings.birdnet.rangeFilter.model,
         }
       );
 
-      rangeFilterSpeciesCount = data.count;
+      rangeFilterState.speciesCount = data.count;
 
-      if (showRangeFilterModal) {
-        rangeFilterSpecies = data.species || [];
+      if (rangeFilterState.showModal) {
+        rangeFilterState.species = data.species || [];
       }
     } catch (error) {
       logger.error('Failed to test range filter:', error);
-      rangeFilterError = t('settings.main.errors.rangeFilterTestFailed');
+      rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       // Set count to null on error to show loading state next time
-      rangeFilterSpeciesCount = null;
+      rangeFilterState.speciesCount = null;
     } finally {
-      testingRangeFilter = false;
+      rangeFilterState.testing = false;
     }
   }
 
   async function loadRangeFilterSpecies() {
-    if (loadingRangeFilter) return;
+    if (rangeFilterState.loading) return;
 
-    loadingRangeFilter = true;
-    rangeFilterError = null;
+    rangeFilterState.loading = true;
+    rangeFilterState.error = null;
 
     try {
       const params = new URLSearchParams({
         latitude: settings.birdnet.latitude.toString(),
         longitude: settings.birdnet.longitude.toString(),
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
-        model: settings.birdnet.rangeFilter.model, // Include model parameter
+        model: settings.birdnet.rangeFilter.model,
       });
 
       const data = await api.get<{ count: number; species: any[] }>(
         `/api/v2/range/species/list?${params}`
       );
-      rangeFilterSpecies = data.species || [];
-      rangeFilterSpeciesCount = data.count;
+      rangeFilterState.species = data.species || [];
+      rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load species list:', error);
-      rangeFilterError = t('settings.main.errors.rangeFilterLoadFailed');
+      rangeFilterState.error = t('settings.main.errors.rangeFilterLoadFailed');
     } finally {
-      loadingRangeFilter = false;
+      rangeFilterState.loading = false;
     }
   }
 
@@ -466,9 +543,9 @@
           id="locale"
           bind:value={settings.birdnet.locale}
           label={t('settings.main.fields.locale.label')}
-          options={birdnetLocales}
+          options={birdnetLocales.data}
           helpText={t('settings.main.fields.locale.helpText')}
-          disabled={store.isLoading || store.isSaving}
+          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
           onchange={value => updateBirdnetSetting('locale', value)}
         />
 
@@ -665,25 +742,28 @@
               </div>
               <div class="flex items-center space-x-2">
                 <div class="flex items-center space-x-2">
-                  <div class="text-lg font-bold text-primary" class:opacity-60={testingRangeFilter}>
-                    {rangeFilterSpeciesCount !== null
-                      ? rangeFilterSpeciesCount
+                  <div
+                    class="text-lg font-bold text-primary"
+                    class:opacity-60={rangeFilterState.testing}
+                  >
+                    {rangeFilterState.speciesCount !== null
+                      ? rangeFilterState.speciesCount
                       : t('settings.main.sections.rangeFilter.speciesCount.loading')}
                   </div>
-                  {#if testingRangeFilter}
+                  {#if rangeFilterState.testing}
                     <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
                   {/if}
                 </div>
                 <button
                   type="button"
                   class="btn btn-sm btn-outline"
-                  disabled={!rangeFilterSpeciesCount || loadingRangeFilter}
+                  disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
                   onclick={() => {
-                    showRangeFilterModal = true;
+                    rangeFilterState.showModal = true;
                     loadRangeFilterSpecies();
                   }}
                 >
-                  {#if loadingRangeFilter}
+                  {#if rangeFilterState.loading}
                     <span class="loading loading-spinner loading-xs mr-1"></span>
                     {t('settings.main.sections.rangeFilter.speciesCount.loading')}
                   {:else}
@@ -697,15 +777,15 @@
                 >
               </div>
 
-              {#if rangeFilterError}
+              {#if rangeFilterState.error}
                 <div class="alert alert-error mt-2">
                   {@html alertIconsSvg.error}
-                  <span>{rangeFilterError}</span>
+                  <span>{rangeFilterState.error}</span>
                   <button
                     type="button"
                     class="btn btn-sm btn-ghost ml-auto"
                     aria-label="Dismiss error"
-                    onclick={() => (rangeFilterError = null)}
+                    onclick={() => (rangeFilterState.error = null)}
                   >
                     {@html navigationIcons.close}
                   </button>
@@ -883,11 +963,14 @@
               label={t(
                 'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
               )}
-              options={providerOptions}
+              options={providerOptions.data}
               helpText={t(
                 'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
               )}
-              disabled={store.isLoading || store.isSaving || !multipleProvidersAvailable}
+              disabled={store.isLoading ||
+                store.isSaving ||
+                !multipleProvidersAvailable ||
+                providerOptions.loading}
               onchange={value => updateThumbnailSetting('imageProvider', value)}
             />
           </div>
@@ -927,7 +1010,7 @@
 </div>
 
 <!-- Range Filter Species Modal -->
-{#if showRangeFilterModal}
+{#if rangeFilterState.showModal}
   <div
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
     style:z-index="9999"
@@ -935,8 +1018,8 @@
     aria-modal="true"
     aria-labelledby="modal-title"
     tabindex="-1"
-    onclick={e => e.target === e.currentTarget && (showRangeFilterModal = false)}
-    onkeydown={e => e.key === 'Escape' && (showRangeFilterModal = false)}
+    onclick={e => e.target === e.currentTarget && (rangeFilterState.showModal = false)}
+    onkeydown={e => e.key === 'Escape' && (rangeFilterState.showModal = false)}
   >
     <div
       class="bg-base-100 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col"
@@ -950,7 +1033,7 @@
           type="button"
           class="btn btn-sm btn-circle btn-ghost"
           aria-label="Close modal"
-          onclick={() => (showRangeFilterModal = false)}
+          onclick={() => (rangeFilterState.showModal = false)}
         >
           {@html navigationIcons.close}
         </button>
@@ -962,7 +1045,7 @@
             <span class="font-medium"
               >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
             >
-            <span> {rangeFilterSpeciesCount}</span>
+            <span> {rangeFilterState.speciesCount}</span>
           </div>
           <div>
             <span class="font-medium"
@@ -984,15 +1067,15 @@
         </div>
       </div>
 
-      {#if rangeFilterError}
+      {#if rangeFilterState.error}
         <div class="alert alert-error mb-4">
           {@html alertIconsSvg.error}
-          <span>{rangeFilterError}</span>
+          <span>{rangeFilterState.error}</span>
           <button
             type="button"
             class="btn btn-sm btn-ghost ml-auto"
             aria-label="Dismiss error"
-            onclick={() => (rangeFilterError = null)}
+            onclick={() => (rangeFilterState.error = null)}
           >
             {@html navigationIcons.close}
           </button>
@@ -1000,14 +1083,14 @@
       {/if}
 
       <div class="flex-1 overflow-auto">
-        {#if loadingRangeFilter}
+        {#if rangeFilterState.loading}
           <div class="text-center py-8">
             <div class="loading loading-spinner loading-lg"></div>
             <p class="mt-2">{t('settings.main.sections.rangeFilter.modal.loadingSpecies')}</p>
           </div>
-        {:else if rangeFilterSpecies.length > 0}
+        {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {#each rangeFilterSpecies as species}
+            {#each rangeFilterState.species as species}
               <div class="p-2 rounded hover:bg-base-200">
                 <div class="font-medium">{species.commonName}</div>
                 <div class="text-sm text-base-content/70">{species.scientificName}</div>
@@ -1025,7 +1108,7 @@
         <button
           type="button"
           class="btn btn-outline"
-          onclick={() => (showRangeFilterModal = false)}
+          onclick={() => (rangeFilterState.showModal = false)}
         >
           {t('settings.main.sections.rangeFilter.modal.close')}
         </button>
