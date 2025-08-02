@@ -123,17 +123,17 @@ func TestDetectionNotificationConsumer_RTSPSanitization(t *testing.T) {
 		{
 			name:             "RTSP URL with credentials",
 			rtspURL:          "rtsp://admin:password123@192.168.1.100:554/stream1",
-			expectedLocation: "rtsp://192.168.1.100:554",
+			expectedLocation: "rtsp://192.168.1.100:554/stream1", // Path is now preserved for debugging
 		},
 		{
 			name:             "RTSP URL without credentials",
 			rtspURL:          "rtsp://192.168.1.100:554/stream1",
-			expectedLocation: "rtsp://192.168.1.100:554",
+			expectedLocation: "rtsp://192.168.1.100:554/stream1", // Path is now preserved for debugging
 		},
 		{
 			name:             "RTSP URL with IPv6 and credentials",
 			rtspURL:          "rtsp://user:pass@[2001:db8::1]:554/live",
-			expectedLocation: "rtsp://[2001:db8::1]:554",
+			expectedLocation: "rtsp://[2001:db8::1]:554/live", // Path is now preserved for debugging
 		},
 		{
 			name:             "Non-RTSP URL (should remain unchanged)",
