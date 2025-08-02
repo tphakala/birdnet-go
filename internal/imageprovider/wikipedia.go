@@ -18,7 +18,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const wikiProviderName = "wikipedia"
+const wikiProviderName = "wikimedia"
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {

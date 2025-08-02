@@ -363,9 +363,15 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 	settings := conf.Setting()
 
 	quit := make(chan struct{})
+	
+	var imageProviderMetrics *metrics.ImageProviderMetrics
+	if t != nil {
+		imageProviderMetrics = t.ImageProvider
+	}
+	
 	cache := &BirdImageCache{
 		providerName: providerName, // Set provider name
-		metrics:      t.ImageProvider,
+		metrics:      imageProviderMetrics,
 		debug:        settings.Realtime.Dashboard.Thumbnails.Debug, // Keep for potential checks
 		store:        store,
 		// logger:       log.Default(), // Replaced by package logger
@@ -473,25 +479,30 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 		logger.Debug("GetImageCacheBatch completed", "provider_name", c.providerName, "found_count", len(dbImages))
 	}
 
-	// If no images found with this provider, try fallback to other providers
+	// If no images found with this provider, check fallback policy
 	if len(dbImages) == 0 && len(scientificNames) > 0 {
-		if settings.Realtime.Dashboard.Thumbnails.Debug {
-			logger.Debug("No images found with primary provider, trying fallback providers")
-		}
-		// Try common provider names as fallback
-		fallbackProviders := []string{"avicommons", "wikimedia", "wikipedia"}
-		for _, fallbackProvider := range fallbackProviders {
-			if fallbackProvider == c.providerName {
-				continue // Skip our own provider name
+		// Only try fallback providers if FallbackPolicy is "all"
+		if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy == "all" {
+			if settings.Realtime.Dashboard.Thumbnails.Debug {
+				logger.Debug("No images found with primary provider, trying fallback providers (policy: all)")
 			}
-			fallbackImages, fallbackErr := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
-			if fallbackErr == nil && len(fallbackImages) > 0 {
-				if settings.Realtime.Dashboard.Thumbnails.Debug {
-					logger.Info("Found images using fallback provider", "fallback_provider", fallbackProvider, "found_count", len(fallbackImages))
+			// Try common provider names as fallback
+			fallbackProviders := []string{"avicommons", "wikimedia"}
+			for _, fallbackProvider := range fallbackProviders {
+				if fallbackProvider == c.providerName {
+					continue // Skip our own provider name
 				}
-				dbImages = fallbackImages
-				break
+				fallbackImages, fallbackErr := c.store.GetImageCacheBatch(fallbackProvider, scientificNames)
+				if fallbackErr == nil && len(fallbackImages) > 0 {
+					if settings.Realtime.Dashboard.Thumbnails.Debug {
+						logger.Info("Found images using fallback provider", "fallback_provider", fallbackProvider, "found_count", len(fallbackImages))
+					}
+					dbImages = fallbackImages
+					break
+				}
 			}
+		} else if settings.Realtime.Dashboard.Thumbnails.Debug {
+			logger.Debug("No images found with primary provider, but fallback policy is 'none'")
 		}
 	}
 
@@ -734,20 +745,26 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 			}
 			logger.Error("Failed to initialize or fetch image (tryInitialize returned error)", "error", enhancedErr)
 		}
-		// Even if initialization failed, maybe a fallback provider has it?
-		// This requires the registry to be set.
-		registry := c.GetRegistry()
-		if registry != nil {
-			triedProviders := map[string]bool{c.providerName: true}
-			logger.Info("Primary provider failed, attempting fallback", "initial_error", err)
-			fallbackImg, found := c.tryFallbackProviders(scientificName, triedProviders)
-			if found {
-				logger.Info("Image found via fallback provider", "fallback_provider", fallbackImg.SourceProvider)
-				// Optionally store the fallback result in this cache's memory map?
-				// c.dataMap.Store(scientificName, &fallbackImg)
-				return fallbackImg, nil
+		// Check if fallback is allowed by policy
+		settings := conf.Setting()
+		if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy == "all" {
+			// Even if initialization failed, maybe a fallback provider has it?
+			// This requires the registry to be set.
+			registry := c.GetRegistry()
+			if registry != nil {
+				triedProviders := map[string]bool{c.providerName: true}
+				logger.Info("Primary provider failed, attempting fallback (policy: all)", "initial_error", err)
+				fallbackImg, found := c.tryFallbackProviders(scientificName, triedProviders)
+				if found {
+					logger.Info("Image found via fallback provider", "fallback_provider", fallbackImg.SourceProvider)
+					// Optionally store the fallback result in this cache's memory map?
+					// c.dataMap.Store(scientificName, &fallbackImg)
+					return fallbackImg, nil
+				}
+				logger.Warn("Image not found via fallback providers either")
 			}
-			logger.Warn("Image not found via fallback providers either")
+		} else {
+			logger.Debug("Primary provider failed but fallback policy is 'none'", "initial_error", err)
 		}
 		// Return the original error if no fallback worked or registry wasn't set
 		return BirdImage{}, err

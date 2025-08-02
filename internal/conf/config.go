@@ -1119,6 +1119,44 @@ func SetTestSettings(settings *Settings) {
 	once = sync.Once{}
 }
 
+// GetTestSettings returns a copy of default settings suitable for testing.
+// This creates isolated settings that won't affect the global configuration.
+func GetTestSettings() *Settings {
+	settings := &Settings{}
+	
+	// Initialize with defaults
+	settings.Debug = false
+	settings.Main.Name = "BirdNET-Go-Test"
+	settings.Main.TimeAs24h = true
+	
+	// Set up minimal test configuration
+	settings.BirdNET.Sensitivity = 1.0
+	settings.BirdNET.Threshold = 0.8
+	settings.BirdNET.Overlap = 0.0
+	settings.BirdNET.Locale = "en"
+	
+	// Dashboard settings with thumbnails
+	settings.Realtime.Dashboard.Thumbnails.Debug = false
+	settings.Realtime.Dashboard.Thumbnails.Summary = false
+	settings.Realtime.Dashboard.Thumbnails.Recent = true
+	settings.Realtime.Dashboard.Thumbnails.ImageProvider = "avicommons"
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "none"
+	
+	// Other realtime settings
+	settings.Realtime.Interval = 15
+	settings.Realtime.ProcessingTime = false
+	
+	// Web server settings
+	settings.WebServer.Enabled = false
+	settings.WebServer.Port = "8080"
+	
+	// Output settings
+	settings.Output.SQLite.Enabled = false
+	settings.Output.SQLite.Path = ":memory:"
+	
+	return settings
+}
+
 // Note: SendValidationWarningsAsNotifications function removed as it was unused
 
 // SaveYAMLConfig updates the YAML configuration file with new settings.
