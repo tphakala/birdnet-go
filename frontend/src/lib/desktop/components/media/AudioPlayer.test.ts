@@ -438,10 +438,9 @@ describe('AudioPlayer', () => {
 
   it('handles audio error', async () => {
     const { container } = audioPlayerTest.render({
-      props: {
-        audioUrl: '/audio/test.mp3',
-        spectrogramUrl: '/spectrogram/test.png',
-      },
+      audioUrl: '/audio/test.mp3',
+      detectionId: 'test-123',
+      showSpectrogram: true,
     });
 
     const audio = container.querySelector('audio');
@@ -509,10 +508,8 @@ describe('AudioPlayer', () => {
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
 
     const { container, unmount } = audioPlayerTest.render({
-      props: {
-        audioUrl: '/audio/test.mp3',
-        detectionId: 'test-123',
-      },
+      audioUrl: '/audio/test.mp3',
+      detectionId: 'test-123',
     });
 
     // Start playing

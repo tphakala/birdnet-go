@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   createComponentTestFactory,
   screen,
@@ -18,6 +18,7 @@ vi.mock('$lib/i18n', () => ({
       'forms.species.maxReached': 'Maximum of {{max}} species reached',
       'forms.species.empty': 'No species added',
     };
+    // eslint-disable-next-line security/detect-object-injection
     let translation = translations[key] ?? key;
 
     // Handle template variables like {{max}}
@@ -39,6 +40,9 @@ const renderSpeciesManager = (props?: Record<string, unknown>) => {
 };
 
 describe('SpeciesManager', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
   it('renders with default props', () => {
     renderSpeciesManager();
 

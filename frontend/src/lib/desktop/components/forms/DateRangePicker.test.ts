@@ -33,8 +33,15 @@ vi.mock('$lib/i18n', () => ({
       'forms.dateRange.messages.selectedRange': 'Selected date range: {{start}} to {{end}}',
       'forms.dateRange.messages.selectedPrefix': 'Selected:',
       'forms.dateRange.validation.endBeforeStart': 'End date cannot be before start date',
+      'forms.dateRange.errors.endBeforeStart': 'End date cannot be before start date',
+      'forms.dateRange.errors.startAfterEnd': 'Start date cannot be after end date',
+      'forms.dateRange.errors.invalidStartDate': 'Invalid start date',
+      'forms.dateRange.errors.invalidEndDate': 'Invalid end date',
       'validation.dateRange.endBeforeStart': 'End date cannot be before start date',
+      // Custom test translations
+      'Last Week': 'Last Week',
     };
+    // eslint-disable-next-line security/detect-object-injection
     let translation = translations[key] || key;
 
     // Handle template variables
@@ -116,7 +123,7 @@ describe('DateRangePicker', () => {
     });
   });
 
-  it.skip('validates date range', async () => {
+  it('validates date range', async () => {
     const user = userEvent.setup({ delay: null });
 
     dateRangeTest.render({
@@ -129,12 +136,9 @@ describe('DateRangePicker', () => {
     await user.type(endInput, '2024-01-05');
 
     // Should show error when end date is before start date
-    await waitFor(
-      () => {
-        expect(screen.getByText('End date cannot be before start date')).toBeInTheDocument();
-      },
-      { timeout: 10000 }
-    );
+    await waitFor(() => {
+      expect(screen.getByText('End date cannot be before start date')).toBeInTheDocument();
+    });
   });
 
   it('enforces min and max dates', () => {
@@ -204,10 +208,10 @@ describe('DateRangePicker', () => {
       expect(todayButton).toHaveClass('btn-primary');
     });
 
-    it.skip('renders custom presets', () => {
+    it('renders custom presets', () => {
       const customPresets = [
         {
-          label: 'Last Week',
+          key: 'Last Week',
           getValue: () => ({
             startDate: new Date('2024-01-08Z'),
             endDate: new Date('2024-01-14Z'),
