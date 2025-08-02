@@ -206,7 +206,7 @@ tasks:
     dir: frontend
     deps: [frontend-install]
     cmds:
-      - npm run test
+      - npm run test -- --run
 
   frontend-test-coverage:
     desc: Run frontend tests with coverage
