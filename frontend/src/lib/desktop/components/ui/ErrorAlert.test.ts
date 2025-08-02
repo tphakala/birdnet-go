@@ -4,6 +4,16 @@ import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 import type { ComponentProps } from 'svelte';
 
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string) => {
+    const translations: Record<string, string> = {
+      'common.aria.dismissAlert': 'Dismiss alert',
+    };
+    return translations[key] ?? key;
+  }),
+}));
+
 // Helper function to render ErrorAlert with proper typing
 const renderErrorAlert = (props: Partial<ComponentProps<typeof ErrorAlert>>) => {
   return renderTyped(ErrorAlert, { props });

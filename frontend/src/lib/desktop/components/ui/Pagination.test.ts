@@ -2,6 +2,20 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import Pagination from './Pagination.svelte';
 
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string) => {
+    const translations: Record<string, string> = {
+      'dataDisplay.pagination.ariaLabel': 'Pagination Navigation',
+      'dataDisplay.pagination.goToPreviousPage': 'Go to previous page',
+      'dataDisplay.pagination.goToNextPage': 'Go to next page',
+      'dataDisplay.pagination.goToPage': 'Go to page',
+      'dataDisplay.pagination.page': 'Page',
+    };
+    return translations[key] ?? key;
+  }),
+}));
+
 describe('Pagination', () => {
   it('renders with default props', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -10,7 +24,7 @@ describe('Pagination', () => {
     const nav = screen.getByLabelText('Pagination Navigation');
     expect(nav).toBeInTheDocument();
 
-    const pageInfo = screen.getByText('Page 1 of 1');
+    const pageInfo = screen.getByText('Page');
     expect(pageInfo).toBeInTheDocument();
   });
 

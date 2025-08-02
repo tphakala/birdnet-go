@@ -1,6 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import SettingsSection from './SettingsSection.svelte';
+
+// Mock i18n translations
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn((key: string) => {
+    const translations: Record<string, string> = {
+      'settings.card.changedAriaLabel': 'Settings changed',
+      'settings.card.changed': 'Changed',
+    };
+    return translations[key] ?? key;
+  }),
+}));
 
 describe('SettingsSection', () => {
   it('renders with basic props', () => {
