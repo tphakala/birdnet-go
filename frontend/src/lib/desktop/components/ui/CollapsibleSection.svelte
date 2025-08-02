@@ -38,6 +38,8 @@
 </script>
 
 <div class={cn('collapse bg-base-100 shadow-sm', className)} {...rest}>
+  <!-- Hidden checkbox for DaisyUI compatibility -->
+  <input type="checkbox" class="sr-only" aria-hidden="true" tabindex="-1" bind:checked={isOpen} />
   <button
     type="button"
     class={cn('collapse-title text-xl font-medium w-full text-left', titleClassName)}

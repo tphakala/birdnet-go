@@ -2,9 +2,6 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
 
-  // Counter for unique ID generation across all ToggleField instances
-  let toggleFieldCounter = 0;
-
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
     description?: string;
@@ -28,8 +25,8 @@
     ...rest
   }: Props = $props();
 
-  // Generate unique ID using counter-based approach
-  const fieldId = `toggle-field-${++toggleFieldCounter}`;
+  // Generate unique ID using crypto.randomUUID() with fallback
+  const fieldId = `toggle-${crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)}`;
 
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement;

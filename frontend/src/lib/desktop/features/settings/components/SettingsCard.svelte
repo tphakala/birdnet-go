@@ -28,7 +28,7 @@
   }: Props = $props();
 </script>
 
-<div class={cn('card bg-base-100 shadow-xs', className)} {...rest}>
+<div class={cn('card bg-base-100 shadow-xs', className)} data-testid="settings-card" {...rest}>
   {#if title || description || header}
     <div class="px-6 py-4">
       {#if header}

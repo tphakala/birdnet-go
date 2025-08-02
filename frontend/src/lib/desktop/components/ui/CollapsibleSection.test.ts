@@ -131,17 +131,20 @@ describe('CollapsibleSection', () => {
       },
     });
 
-    const svg = container.querySelector('svg');
+    const iconWrapper = container.querySelector('svg')?.parentElement;
+
+    // Ensure iconWrapper exists
+    expect(iconWrapper).not.toBeNull();
 
     // Initially not rotated
-    expect(svg).not.toHaveClass('rotate-180');
+    expect(iconWrapper).not.toHaveClass('rotate-180');
 
     // Click to expand
     const button = screen.getByRole('button');
     await fireEvent.click(button);
 
     // Should be rotated
-    expect(svg).toHaveClass('rotate-180');
+    expect(iconWrapper).toHaveClass('rotate-180');
   });
 
   it('applies custom className', () => {

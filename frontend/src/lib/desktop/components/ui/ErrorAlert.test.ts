@@ -1,8 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderTyped, screen, fireEvent } from '../../../../test/render-helpers';
+import { renderTyped, screen, fireEvent, createI18nMock } from '../../../../test/render-helpers';
 import ErrorAlert from './ErrorAlert.svelte';
 import ErrorAlertTestWrapper from './ErrorAlert.test.svelte';
 import type { ComponentProps } from 'svelte';
+
+// Mock i18n translations using the shared helper
+vi.mock('$lib/i18n', () => ({
+  t: createI18nMock({
+    'common.aria.dismissAlert': 'Dismiss alert',
+  }),
+}));
 
 // Helper function to render ErrorAlert with proper typing
 const renderErrorAlert = (props: Partial<ComponentProps<typeof ErrorAlert>>) => {

@@ -170,9 +170,6 @@
         errors.delete(nameKey);
       }
     });
-
-    // Update parent with current URLs
-    onUpdate(urls);
   });
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -317,6 +314,8 @@
                   name="stream-name-{rtspUrl.id}"
                   label="Stream Name"
                   bind:value={rtspUrl.name}
+                  onChange={value => updateUrl(rtspUrl.id, 'name', String(value))}
+                  onInput={value => updateUrl(rtspUrl.id, 'name', String(value))}
                   {disabled}
                   inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
                 />
@@ -332,6 +331,8 @@
                   name="stream-url-{rtspUrl.id}"
                   label="RTSP URL"
                   bind:value={rtspUrl.url}
+                  onChange={value => updateUrl(rtspUrl.id, 'url', String(value))}
+                  onInput={value => updateUrl(rtspUrl.id, 'url', String(value))}
                   {disabled}
                   inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}
                 />

@@ -311,8 +311,8 @@ describe('SliderField', () => {
       },
     });
 
-    const header = screen.getByText('Volume Control').closest('.flex');
-    expect(header).toHaveClass('items-center', 'justify-between');
+    const header = screen.getByText('Volume Control').closest('.label');
+    expect(header).toHaveClass('label');
   });
 
   it('passes through additional HTML attributes', () => {

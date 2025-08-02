@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { createI18nMock } from '../../../../../test/render-helpers';
 import SettingsSection from './SettingsSection.svelte';
+
+// Mock i18n translations using the shared helper
+vi.mock('$lib/i18n', () => ({
+  t: createI18nMock({
+    'settings.card.changedAriaLabel': 'Settings changed',
+    'settings.card.changed': 'Changed',
+  }),
+}));
 
 describe('SettingsSection', () => {
   it('renders with basic props', () => {
@@ -121,7 +130,7 @@ describe('SettingsSection', () => {
     expect(screen.getByRole('status', { name: 'Settings changed' })).toBeInTheDocument();
   });
 
-  it('passes through other props to CollapsibleCard', () => {
+  it('passes through other props to SettingsCard', () => {
     render(SettingsSection, {
       props: {
         title: 'Test Section',
@@ -133,7 +142,7 @@ describe('SettingsSection', () => {
 
     // These would be tested more thoroughly in integration tests
     // Here we just verify the component renders without errors
-    const container = screen.getByRole('heading', { level: 3 }).closest('.collapse');
+    const container = screen.getByTestId('settings-card');
     expect(container).toHaveClass('custom-class');
   });
 });

@@ -57,6 +57,9 @@ npm run lint:css      # CSS/Svelte style validation
 npm run lint:css:fix  # Auto-fix CSS issues
 npm run typecheck     # TypeScript/Svelte validation
 
+# Unit tests:
+npx vitest run --reporter=json
+
 # Code Analysis:
 npm run analyze:all       # Run circular dependency + duplication analysis
 npm run analyze:circular  # Check for circular dependencies (✅ None found)

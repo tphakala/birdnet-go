@@ -5,7 +5,6 @@ import {
   fireEvent,
   waitFor,
 } from '../../../../test/render-helpers';
-import userEvent from '@testing-library/user-event';
 import SpeciesManager from './SpeciesManager.svelte';
 
 // Mock i18n translations
@@ -15,7 +14,7 @@ vi.mock('$lib/i18n', () => ({
       'forms.species.placeholder': 'Enter species name...',
       'forms.species.aria.edit': 'Edit species',
       'forms.species.aria.remove': 'Remove species',
-      'forms.species.maxReached': 'Maximum of {{max}} species reached',
+      'forms.species.maxReached': 'Maximum of {{maxItems}} species reached',
       'forms.species.empty': 'No species added',
     };
     // eslint-disable-next-line security/detect-object-injection
@@ -64,14 +63,13 @@ describe('SpeciesManager', () => {
 
   it('adds species on Enter key', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
 
     renderSpeciesManager({ onChange });
 
     const input = screen.getByPlaceholderText('Enter species name...');
 
-    await user.type(input, 'Robin');
-    await user.keyboard('{Enter}');
+    await fireEvent.input(input, { target: { value: 'Robin' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onChange).toHaveBeenCalledWith(['Robin']);
     expect(input).toHaveValue('');
@@ -89,7 +87,6 @@ describe('SpeciesManager', () => {
 
   it('prevents duplicate species (case-insensitive)', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
 
     renderSpeciesManager({
       species: ['Robin'],
@@ -98,8 +95,8 @@ describe('SpeciesManager', () => {
 
     const input = screen.getByPlaceholderText('Enter species name...');
 
-    await user.type(input, 'ROBIN');
-    await user.keyboard('{Enter}');
+    await fireEvent.input(input, { target: { value: 'ROBIN' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onChange).not.toHaveBeenCalled();
     expect(input).toHaveValue('');
@@ -121,8 +118,6 @@ describe('SpeciesManager', () => {
 
   it('allows editing species', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
-
     renderSpeciesManager({
       species: ['Robin'],
       onChange,
@@ -132,17 +127,14 @@ describe('SpeciesManager', () => {
     await fireEvent.click(editButton);
 
     const editInput = screen.getByDisplayValue('Robin');
-    await user.clear(editInput);
-    await user.type(editInput, 'American Robin');
-    await user.keyboard('{Enter}');
+    await fireEvent.input(editInput, { target: { value: 'American Robin' } });
+    await fireEvent.keyDown(editInput, { key: 'Enter' });
 
     expect(onChange).toHaveBeenCalledWith(['American Robin']);
   });
 
   it('cancels edit on Escape', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
-
     renderSpeciesManager({
       species: ['Robin'],
       onChange,
@@ -152,9 +144,8 @@ describe('SpeciesManager', () => {
     await fireEvent.click(editButton);
 
     const editInput = screen.getByDisplayValue('Robin');
-    await user.clear(editInput);
-    await user.type(editInput, 'American Robin');
-    await user.keyboard('{Escape}');
+    await fireEvent.input(editInput, { target: { value: 'American Robin' } });
+    await fireEvent.keyDown(editInput, { key: 'Escape' });
 
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByText('Robin')).toBeInTheDocument();
@@ -176,8 +167,6 @@ describe('SpeciesManager', () => {
   it('validates against allowed species', async () => {
     const onChange = vi.fn();
     const onValidate = vi.fn().mockReturnValue(false);
-    const user = userEvent.setup();
-
     renderSpeciesManager({
       allowedSpecies: ['Robin', 'Blue Jay'],
       onValidate,
@@ -186,22 +175,20 @@ describe('SpeciesManager', () => {
 
     const input = screen.getByPlaceholderText('Enter species name...');
 
-    await user.type(input, 'Cardinal');
-    await user.keyboard('{Enter}');
+    await fireEvent.input(input, { target: { value: 'Cardinal' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onValidate).toHaveBeenCalledWith('Cardinal');
     expect(onChange).not.toHaveBeenCalled();
   });
 
   it('shows predictions based on allowed species', async () => {
-    const user = userEvent.setup();
-
     renderSpeciesManager({
       allowedSpecies: ['Robin', 'Blue Jay', 'Cardinal', 'Crow'],
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
-    await user.type(input, 'ro');
+    await fireEvent.input(input, { target: { value: 'ro' } });
 
     await waitFor(() => {
       expect(screen.getByText('Robin')).toBeInTheDocument();
@@ -212,7 +199,6 @@ describe('SpeciesManager', () => {
 
   it('selects prediction on click', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
 
     renderSpeciesManager({
       allowedSpecies: ['Robin', 'Blue Jay'],
@@ -220,7 +206,7 @@ describe('SpeciesManager', () => {
     });
 
     const input = screen.getByPlaceholderText('Enter species name...');
-    await user.type(input, 'ro');
+    await fireEvent.input(input, { target: { value: 'ro' } });
 
     await waitFor(() => {
       expect(screen.getByText('Robin')).toBeInTheDocument();
