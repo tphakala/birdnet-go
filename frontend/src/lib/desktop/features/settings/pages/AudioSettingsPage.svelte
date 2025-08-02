@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { t } from '$lib/i18n';
 
@@ -176,7 +177,7 @@
       gain: t('settings.audio.audioFilters.gain'),
       attenuation: t('settings.audio.audioFilters.attenuation'),
     };
-    return labelMap[paramName.toLowerCase()] || paramName;
+    return safeGet(labelMap, paramName.toLowerCase(), paramName);
   }
 
   // New filter state for adding filters
@@ -284,7 +285,8 @@
 
   // Equalizer functions
   function getEqFilterParameters(filterType: string) {
-    return eqFilterConfig[filterType]?.Parameters || [];
+    const filterConfig = safeGet(eqFilterConfig, filterType);
+    return filterConfig?.Parameters || [];
   }
 
   function addNewFilter() {
@@ -320,7 +322,15 @@
 
   function updateFilterParameter(index: number, paramName: string, value: any) {
     const filters = [...settings.audio.equalizer.filters];
-    filters[index] = { ...filters[index], [paramName.toLowerCase()]: value };
+    const currentFilter = safeArrayAccess(filters, index);
+    if (!currentFilter) return;
+
+    const updatedFilter = { ...currentFilter };
+    const normalizedParamName = paramName.toLowerCase();
+
+    // Use Object.assign for safer property assignment
+    Object.assign(updatedFilter, { [normalizedParamName]: value });
+    filters.splice(index, 1, updatedFilter);
 
     settingsActions.updateSection('realtime', {
       audio: {
@@ -347,8 +357,9 @@
 
     parameters.forEach(param => {
       const paramName = param.Name.toLowerCase() as keyof typeof updatedFilter;
-      if (paramName in updatedFilter && typeof updatedFilter[paramName] === 'number') {
-        (updatedFilter as any)[paramName] = param.Default;
+      const currentValue = safeGet(updatedFilter, paramName);
+      if (currentValue !== undefined && typeof currentValue === 'number') {
+        Object.assign(updatedFilter, { [paramName]: param.Default });
       }
     });
 
@@ -476,7 +487,7 @@
                         <!-- Special handling for Attenuation (Passes) -->
                         <SelectField
                           id="filter-{index}-{param.Name}"
-                          value={(filter as any)[param.Name.toLowerCase()]}
+                          value={safeGet(filter as any, param.Name.toLowerCase(), param.Default)}
                           onchange={value =>
                             updateFilterParameter(index, param.Name, parseInt(value))}
                           options={[
@@ -510,7 +521,7 @@
                       {:else}
                         <!-- Regular number input -->
                         <NumberField
-                          value={(filter as any)[param.Name.toLowerCase()] || param.Default}
+                          value={safeGet(filter as any, param.Name.toLowerCase(), param.Default)}
                           onUpdate={value => updateFilterParameter(index, param.Name, value)}
                           min={param.Min}
                           max={param.Max}
@@ -582,9 +593,11 @@
                         <!-- Special handling for Attenuation -->
                         <SelectField
                           id="new-filter-{param.Name}"
-                          value={(newFilter as any)[param.Name.toLowerCase()]}
+                          value={safeGet(newFilter as any, param.Name.toLowerCase(), '')}
                           onchange={value => {
-                            (newFilter as any)[param.Name.toLowerCase()] = parseInt(value);
+                            Object.assign(newFilter, {
+                              [param.Name.toLowerCase()]: parseInt(value),
+                            });
                           }}
                           options={[
                             {
@@ -617,9 +630,9 @@
                       {:else}
                         <!-- Regular number input -->
                         <NumberField
-                          value={(newFilter as any)[param.Name.toLowerCase()]}
+                          value={safeGet(newFilter as any, param.Name.toLowerCase(), 0)}
                           onUpdate={value => {
-                            (newFilter as any)[param.Name.toLowerCase()] = value;
+                            Object.assign(newFilter, { [param.Name.toLowerCase()]: value });
                           }}
                           min={param.Min}
                           max={param.Max}

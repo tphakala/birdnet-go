@@ -42,6 +42,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { toastActions } from './toast.js';
+import { safeGet, safeSpread } from '$lib/utils/security';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -728,7 +729,12 @@ export const settingsActions = {
 
   updateSection<K extends keyof SettingsFormData>(section: K, data: Partial<SettingsFormData[K]>) {
     settingsStore.update(state => {
-      const newSectionData = { ...(state.formData[section] || {}), ...data };
+      const currentSectionData = safeGet(
+        state.formData,
+        section as string,
+        {} as SettingsFormData[K]
+      );
+      const newSectionData = safeSpread(currentSectionData, data) as SettingsFormData[K];
       return {
         ...state,
         formData: {
@@ -782,13 +788,16 @@ export const settingsActions = {
   },
 
   resetSection<K extends keyof SettingsFormData>(section: K) {
-    settingsStore.update(state => ({
-      ...state,
-      formData: {
-        ...state.formData,
-        [section]: JSON.parse(JSON.stringify(state.originalData[section])),
-      },
-    }));
+    settingsStore.update(state => {
+      const originalSectionData = safeGet(state.originalData, section as string);
+      return {
+        ...state,
+        formData: {
+          ...state.formData,
+          [section]: originalSectionData ? JSON.parse(JSON.stringify(originalSectionData)) : {},
+        },
+      };
+    });
   },
 
   resetAllSettings() {

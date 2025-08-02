@@ -30,6 +30,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
+  import { safeGet } from '$lib/utils/security';
 
   type Size = 'sm' | 'md' | 'lg';
   type VerificationStatus = Detection['verified'];
@@ -53,18 +54,19 @@
     false_positive: 'status-badge false',
   };
 
-  const statusTextMap: Partial<Record<VerificationStatus, string>> = {
+  const statusTextMap: Record<VerificationStatus, string> = {
     correct: 'correct',
     false_positive: 'false',
+    unverified: 'unverified',
   };
 
   function getStatusBadgeClass(verified: VerificationStatus): string {
-    const baseClass = statusBadgeClassMap[verified] || 'status-badge unverified';
-    return `${baseClass} ${sizeClasses[size]}`;
+    const baseClass = safeGet(statusBadgeClassMap, verified, 'status-badge unverified');
+    return `${baseClass} ${safeGet(sizeClasses, size, '')}`;
   }
 
   function getStatusText(verified: VerificationStatus): string {
-    return statusTextMap[verified] || 'unverified';
+    return safeGet(statusTextMap, verified, 'unverified');
   }
 </script>
 
@@ -76,12 +78,12 @@
 
   <!-- Locked badge -->
   {#if detection.locked}
-    <div class="status-badge locked {sizeClasses[size]}">locked</div>
+    <div class="status-badge locked {safeGet(sizeClasses, size, '')}">locked</div>
   {/if}
 
   <!-- Comments badge -->
   {#if detection.comments && detection.comments.length > 0}
-    <div class="status-badge comment {sizeClasses[size]}">comment</div>
+    <div class="status-badge comment {safeGet(sizeClasses, size, '')}">comment</div>
   {/if}
 </div>
 

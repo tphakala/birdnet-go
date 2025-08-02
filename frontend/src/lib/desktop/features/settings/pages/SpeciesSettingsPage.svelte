@@ -15,6 +15,7 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.settings;
 
@@ -211,7 +212,7 @@
   // Configuration management
   function addConfig() {
     const species = configInputValue.trim();
-    if (!species || settings.config[species]) return;
+    if (!species || safeGet(settings.config, species)) return;
 
     const threshold = Number(newThreshold);
     if (threshold < 0 || threshold > 1) return;
@@ -239,22 +240,24 @@
   }
 
   function removeConfig(species: string) {
-    const { [species]: _, ...remaining } = settings.config;
+    const newConfig = Object.fromEntries(
+      Object.entries(settings.config).filter(([key]) => key !== species)
+    );
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
       species: {
         ...settings,
-        config: remaining,
+        config: newConfig,
       },
     });
-    void _; // Explicitly indicate variable is intentionally unused
   }
 
   function startEditConfig(species: string) {
     editingConfig = species;
     editConfigNewName = species;
-    editConfigThreshold = settings.config[species].threshold;
-    editConfigInterval = settings.config[species].interval || 0;
+    const config = safeGet(settings.config, species, { threshold: 0.5, interval: 0, actions: [] });
+    editConfigThreshold = config.threshold;
+    editConfigInterval = config.interval || 0;
   }
 
   function saveEditConfig() {
@@ -265,22 +268,40 @@
     const threshold = editConfigThreshold;
     const interval = editConfigInterval || 0;
 
-    const updatedConfig = { ...settings.config };
+    let updatedConfig: typeof settings.config;
 
     if (originalSpecies !== newSpecies) {
       // Rename: create new entry and delete old one
-      updatedConfig[newSpecies] = {
-        threshold,
-        interval,
-        actions: settings.config[originalSpecies].actions || [],
+      const originalConfig = safeGet(settings.config, originalSpecies, {
+        threshold: 0.5,
+        interval: 0,
+        actions: [],
+      });
+      const baseConfig = Object.fromEntries(
+        Object.entries(settings.config).filter(([key]) => key !== originalSpecies)
+      );
+      updatedConfig = {
+        ...baseConfig,
+        [newSpecies]: {
+          threshold,
+          interval,
+          actions: originalConfig.actions || [],
+        },
       };
-      delete updatedConfig[originalSpecies];
     } else {
       // Just update values
-      updatedConfig[originalSpecies] = {
-        ...updatedConfig[originalSpecies],
-        threshold,
-        interval,
+      const existingConfig = safeGet(settings.config, originalSpecies, {
+        threshold: 0.5,
+        interval: 0,
+        actions: [],
+      });
+      updatedConfig = {
+        ...settings.config,
+        [originalSpecies]: {
+          ...existingConfig,
+          threshold,
+          interval,
+        },
       };
     }
 
@@ -305,7 +326,12 @@
   function openActionsModal(species: string) {
     currentSpecies = species;
 
-    const existingAction = settings.config[species]?.actions?.[0];
+    const speciesConfig = safeGet(settings.config, species, {
+      threshold: 0.5,
+      interval: 0,
+      actions: [],
+    });
+    const existingAction = speciesConfig.actions?.[0];
     if (existingAction) {
       currentAction = {
         type: existingAction.type,
@@ -340,13 +366,18 @@
       executeDefaults: currentAction.executeDefaults,
     };
 
-    const updatedConfig = {
-      ...settings.config,
+    const updatedConfig = { ...settings.config };
+    const currentSpeciesConfig = safeGet(settings.config, currentSpecies, {
+      threshold: 0.5,
+      interval: 0,
+      actions: [],
+    });
+    Object.assign(updatedConfig, {
       [currentSpecies]: {
-        ...settings.config[currentSpecies],
+        ...currentSpeciesConfig,
         actions: [newAction],
       },
-    };
+    });
 
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,

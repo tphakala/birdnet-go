@@ -2,6 +2,8 @@
  * Date and time formatting utilities
  */
 
+import { safeArrayAccess } from './security';
+
 /**
  * Format date to locale string
  */
@@ -111,7 +113,7 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${safeArrayAccess(sizes, i) ?? 'Bytes'}`;
 }
 
 /**

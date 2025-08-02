@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { systemIcons } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -91,12 +92,19 @@
     'aria-label': ariaLabel,
     'aria-hidden': ariaHidden,
     tabindex,
-    title: title || (showTooltip ? tooltipText[currentTimeOfDay] || 'Unknown time' : undefined),
+    title:
+      title || (showTooltip ? safeGet(tooltipText, currentTimeOfDay, 'Unknown time') : undefined),
     onclick,
     onkeydown,
   });
 
-  let svgClasses = $derived(cn(sizeClasses[size], colorClasses[currentTimeOfDay], className));
+  let svgClasses = $derived(
+    cn(
+      safeGet(sizeClasses, size, 'h-6 w-6'),
+      safeGet(colorClasses, currentTimeOfDay, 'text-base-content'),
+      className
+    )
+  );
 
   // Normalize dawn to sunrise and dusk to sunset for icon selection
   let iconType = $derived(
@@ -185,7 +193,10 @@
     </svg>
   {:else}
     <!-- Default clock icon for unknown time -->
-    <div class={cn(sizeClasses[size], 'text-gray-400', className)} {...commonAttrs}>
+    <div
+      class={cn(safeGet(sizeClasses, size, 'h-6 w-6'), 'text-gray-400', className)}
+      {...commonAttrs}
+    >
       {@html systemIcons.clock}
     </div>
   {/if}

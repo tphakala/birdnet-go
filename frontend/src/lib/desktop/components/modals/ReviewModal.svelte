@@ -9,6 +9,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { alertIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
     isOpen: boolean;
@@ -41,7 +42,8 @@
       // Initialize lockDetection to false - user intent to lock, not current status
       lockDetection = false;
       ignoreSpecies = isExcluded;
-      comment = detection.comments?.[0]?.entry || '';
+      const firstComment = safeArrayAccess(detection.comments || [], 0);
+      comment = firstComment?.entry || '';
       // Show comment section if there's already a comment
       showCommentSection = !!comment;
     }

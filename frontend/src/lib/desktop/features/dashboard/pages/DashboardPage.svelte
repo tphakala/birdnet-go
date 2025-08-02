@@ -7,6 +7,7 @@
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
   import { getLocalDateString, isFutureDate, parseHour } from '$lib/utils/date';
   import { getLogger } from '$lib/utils/logger';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   const logger = getLogger('app');
 
@@ -139,12 +140,20 @@
 
     // Convert to array for sorting by timestamp
     const entries = Array.from(dailySummaryCache.entries());
-    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+    entries.sort((a, b) => {
+      const timestampA = a[1]?.timestamp ?? 0;
+      const timestampB = b[1]?.timestamp ?? 0;
+      return timestampA - timestampB;
+    });
 
     // Remove oldest entries until within limit
     const entriesToRemove = dailySummaryCache.size - CACHE_MAX_ENTRIES;
     for (let i = 0; i < entriesToRemove; i++) {
-      dailySummaryCache.delete(entries[i][0]);
+      const entry = safeArrayAccess(entries, i);
+      if (entry) {
+        const key = entry[0]; // Map entry key is always a string
+        dailySummaryCache.delete(key);
+      }
     }
 
     logger.debug(`Cache size enforced: removed ${entriesToRemove} oldest entries`);
@@ -626,12 +635,18 @@
 
     if (existingIndex >= 0) {
       // Incremental update for existing species - minimize object creation
-      const updated = { ...dailySummary[existingIndex] };
+      const existing = safeArrayAccess(dailySummary, existingIndex);
+      if (!existing) return;
+      const updated = { ...existing };
       updated.previousCount = updated.count;
       updated.count++;
       updated.countIncreased = true;
       updated.hourly_counts = [...updated.hourly_counts];
-      updated.hourly_counts[hour]++;
+      const currentHourCount = safeArrayAccess(updated.hourly_counts, hour, 0) ?? 0;
+      // Use splice to safely assign at dynamic index
+      if (hour >= 0 && hour < 24) {
+        updated.hourly_counts.splice(hour, 1, currentHourCount + 1);
+      }
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
 
@@ -674,7 +689,9 @@
             s => s.species_code === detection.speciesCode
           );
           if (currentIndex >= 0) {
-            const cleared = { ...dailySummary[currentIndex] };
+            const currentItem = safeArrayAccess(dailySummary, currentIndex);
+            if (!currentItem) return;
+            const cleared = { ...currentItem };
             cleared.countIncreased = false;
             cleared.hourlyUpdated = [];
 
@@ -705,7 +722,10 @@
         thumbnail_url: '', // Empty string will trigger fallback in BirdThumbnailPopup
         isNew: true,
       };
-      newSpecies.hourly_counts[hour] = 1;
+      // Set the hourly count for the specific hour safely using splice
+      if (hour >= 0 && hour < 24) {
+        newSpecies.hourly_counts.splice(hour, 1, 1);
+      }
 
       // Find insertion position with early termination for performance
       const insertPosition = dailySummary.findIndex(s => s.count < newSpecies.count);
@@ -735,7 +755,9 @@
             s => s.species_code === detection.speciesCode
           );
           if (currentIndex >= 0) {
-            const cleared = { ...dailySummary[currentIndex] };
+            const currentItem = safeArrayAccess(dailySummary, currentIndex);
+            if (!currentItem) return;
+            const cleared = { ...currentItem };
             cleared.isNew = false;
 
             dailySummary = [

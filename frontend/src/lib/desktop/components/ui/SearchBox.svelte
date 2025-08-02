@@ -7,6 +7,7 @@
     formatFilterForDisplay,
   } from '$lib/utils/searchParser';
   import { navigationIcons, actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
     className?: string;
@@ -356,14 +357,16 @@
         event.preventDefault();
         selectedIndex = selectedIndex > -1 ? selectedIndex - 1 : suggestions.length - 1;
         break;
-      case 'Enter':
+      case 'Enter': {
         event.preventDefault();
-        if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-          searchQuery = suggestions[selectedIndex];
+        const selectedSuggestion = safeArrayAccess(suggestions, selectedIndex);
+        if (selectedIndex >= 0 && selectedSuggestion) {
+          searchQuery = selectedSuggestion;
         }
         showDropdown = false;
         performSearch();
         break;
+      }
       case 'Escape':
         showDropdown = false;
         selectedIndex = -1;

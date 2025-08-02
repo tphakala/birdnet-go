@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { Snippet } from 'svelte';
   import { systemIcons } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   interface Option {
     value: string;
@@ -89,7 +90,7 @@
     bind:value
     {disabled}
     {required}
-    class={cn('select select-bordered w-full', sizeClasses[size])}
+    class={cn('select select-bordered w-full', safeGet(sizeClasses, size, ''))}
     onchange={handleChange}
   >
     {#if placeholder}

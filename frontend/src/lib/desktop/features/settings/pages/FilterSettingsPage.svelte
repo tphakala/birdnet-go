@@ -13,6 +13,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   // API response interfaces
   interface SpeciesListResponse {
@@ -153,14 +154,16 @@
 
   function startEdit(index: number) {
     editIndex = index;
-    editSpecies = (settings.dogBark as any).species[index];
+    editSpecies = safeArrayAccess((settings.dogBark as any).species, index) || '';
   }
 
   function saveEdit() {
     if (editIndex === null || !editSpecies.trim()) return;
 
     const updatedSpecies = [...(settings.dogBark as any).species];
-    updatedSpecies[editIndex] = editSpecies.trim();
+    if (editIndex >= 0 && editIndex < updatedSpecies.length) {
+      updatedSpecies.splice(editIndex, 1, editSpecies.trim());
+    }
 
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,

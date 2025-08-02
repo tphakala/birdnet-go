@@ -24,6 +24,7 @@
   import { getCsrfToken } from '$lib/utils/api.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   const logger = loggers.settings;
 
@@ -297,8 +298,10 @@
             let jsonEnd = -1;
 
             for (let i = 0; i < remaining.length; i++) {
-              if (remaining[i] === '{') braceCount++;
-              if (remaining[i] === '}') braceCount--;
+              // eslint-disable-next-line security/detect-object-injection
+              const char = remaining[i] || '';
+              if (char === '{') braceCount++;
+              if (char === '}') braceCount--;
               if (braceCount === 0) {
                 jsonEnd = i + 1;
                 break;
@@ -371,11 +374,18 @@
               // Add new stage
               testStates.birdweather.stages.push(stage);
             } else {
-              // Update existing stage
-              testStates.birdweather.stages[existingIndex] = {
-                ...testStates.birdweather.stages[existingIndex],
-                ...stage,
-              };
+              // Update existing stage safely
+              const existingStage = safeArrayAccess(testStates.birdweather.stages, existingIndex);
+              if (
+                existingStage &&
+                existingIndex >= 0 &&
+                existingIndex < testStates.birdweather.stages.length
+              ) {
+                testStates.birdweather.stages.splice(existingIndex, 1, {
+                  ...existingStage,
+                  ...stage,
+                });
+              }
             }
 
             logger.debug('Current BirdWeather stages:', testStates.birdweather.stages);
@@ -397,10 +407,15 @@
         });
       } else {
         // Mark current stage as failed
-        const lastStage = testStates.birdweather.stages[testStates.birdweather.stages.length - 1];
-        if (lastStage.status !== 'completed') {
-          lastStage.status = 'error';
-          lastStage.error = error instanceof Error ? error.message : 'Unknown error occurred';
+        const lastIndex = testStates.birdweather.stages.length - 1;
+        const lastStage = safeArrayAccess(testStates.birdweather.stages, lastIndex);
+        if (lastStage && lastStage.status !== 'completed') {
+          const updatedStage = {
+            ...lastStage,
+            status: 'error' as const,
+            error: error instanceof Error ? error.message : 'Unknown error occurred',
+          };
+          testStates.birdweather.stages.splice(lastIndex, 1, updatedStage);
         }
       }
     } finally {
@@ -500,8 +515,10 @@
             let jsonEnd = -1;
 
             for (let i = 0; i < remaining.length; i++) {
-              if (remaining[i] === '{') braceCount++;
-              if (remaining[i] === '}') braceCount--;
+              // eslint-disable-next-line security/detect-object-injection
+              const char = remaining[i] || '';
+              if (char === '{') braceCount++;
+              if (char === '}') braceCount--;
               if (braceCount === 0) {
                 jsonEnd = i + 1;
                 break;
@@ -562,11 +579,18 @@
               // Add new stage
               testStates.mqtt.stages.push(stage);
             } else {
-              // Update existing stage
-              testStates.mqtt.stages[existingIndex] = {
-                ...testStates.mqtt.stages[existingIndex],
-                ...stage,
-              };
+              // Update existing stage safely
+              const existingStage = safeArrayAccess(testStates.mqtt.stages, existingIndex);
+              if (
+                existingStage &&
+                existingIndex >= 0 &&
+                existingIndex < testStates.mqtt.stages.length
+              ) {
+                testStates.mqtt.stages.splice(existingIndex, 1, {
+                  ...existingStage,
+                  ...stage,
+                });
+              }
             }
 
             logger.debug('Current MQTT stages:', testStates.mqtt.stages);
@@ -588,10 +612,15 @@
         });
       } else {
         // Mark current stage as failed
-        const lastStage = testStates.mqtt.stages[testStates.mqtt.stages.length - 1];
-        if (lastStage.status !== 'completed') {
-          lastStage.status = 'error';
-          lastStage.error = error instanceof Error ? error.message : 'Unknown error occurred';
+        const lastIndex = testStates.mqtt.stages.length - 1;
+        const lastStage = safeArrayAccess(testStates.mqtt.stages, lastIndex);
+        if (lastStage && lastStage.status !== 'completed') {
+          const updatedStage = {
+            ...lastStage,
+            status: 'error' as const,
+            error: error instanceof Error ? error.message : 'Unknown error occurred',
+          };
+          testStates.mqtt.stages.splice(lastIndex, 1, updatedStage);
         }
       }
     } finally {
@@ -687,13 +716,20 @@
                 error: stageResult.error,
               });
             } else {
-              // Update existing stage
-              testStates.weather.stages[existingIndex] = {
-                ...testStates.weather.stages[existingIndex],
-                status: stageResult.status,
-                message: stageResult.message,
-                error: stageResult.error,
-              };
+              // Update existing stage safely
+              const existingStage = safeArrayAccess(testStates.weather.stages, existingIndex);
+              if (
+                existingStage &&
+                existingIndex >= 0 &&
+                existingIndex < testStates.weather.stages.length
+              ) {
+                testStates.weather.stages.splice(existingIndex, 1, {
+                  ...existingStage,
+                  status: stageResult.status,
+                  message: stageResult.message,
+                  error: stageResult.error,
+                });
+              }
             }
           } catch (parseError) {
             logger.error('Failed to parse stage result:', parseError, line);
@@ -713,10 +749,15 @@
         });
       } else {
         // Mark current stage as failed
-        const lastStage = testStates.weather.stages[testStates.weather.stages.length - 1];
-        if (lastStage.status === 'in_progress') {
-          lastStage.status = 'error';
-          lastStage.error = error instanceof Error ? error.message : 'Unknown error occurred';
+        const lastIndex = testStates.weather.stages.length - 1;
+        const lastStage = safeArrayAccess(testStates.weather.stages, lastIndex);
+        if (lastStage && lastStage.status === 'in_progress') {
+          const updatedStage = {
+            ...lastStage,
+            status: 'error' as const,
+            error: error instanceof Error ? error.message : 'Unknown error occurred',
+          };
+          testStates.weather.stages.splice(lastIndex, 1, updatedStage);
         }
       }
     } finally {

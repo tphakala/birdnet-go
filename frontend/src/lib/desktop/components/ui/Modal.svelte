@@ -5,6 +5,7 @@
   import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
@@ -208,7 +209,11 @@
   onclick={handleBackdropClick}
   {...rest}
 >
-  <div bind:this={modalElement} class={cn(sizeClasses[size], className)} tabindex="-1">
+  <div
+    bind:this={modalElement}
+    class={cn(safeGet(sizeClasses, size, 'modal-box'), className)}
+    tabindex="-1"
+  >
     {#if showCloseButton && type === 'default'}
       <button
         type="button"
@@ -249,7 +254,7 @@
         </button>
         <button
           type="button"
-          class={cn('btn', confirmButtonClasses[confirmVariant])}
+          class={cn('btn', safeGet(confirmButtonClasses, confirmVariant, 'btn-primary'))}
           onclick={handleConfirm}
           disabled={loading || isConfirming}
         >

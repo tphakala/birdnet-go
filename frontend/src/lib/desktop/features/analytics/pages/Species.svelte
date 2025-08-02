@@ -69,7 +69,8 @@
   }
 
   function formatNumber(number: number): string {
-    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    // Use built-in toLocaleString for safe number formatting instead of complex regex
+    return number.toLocaleString('en-US');
   }
 
   function formatPercentage(value: number): string {

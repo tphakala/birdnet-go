@@ -33,6 +33,7 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     weatherIcon: string;
@@ -71,7 +72,7 @@
   const isNight = $derived(timeOfDay === 'night' || weatherIcon?.endsWith('n'));
 
   const iconData = $derived(
-    weatherIconMap[iconCode] || { day: '❓', night: '❓', description: 'Unknown' }
+    safeGet(weatherIconMap, iconCode, { day: '❓', night: '❓', description: 'Unknown' })
   );
   const icon = $derived(isNight ? iconData.night : iconData.day);
   const description = $derived(iconData.description);
@@ -85,7 +86,7 @@
 </script>
 
 <span
-  class={cn('inline-block', sizeClasses[size], className)}
+  class={cn('inline-block', safeGet(sizeClasses, size, ''), className)}
   title={description}
   aria-label={description}
 >

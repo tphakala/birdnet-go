@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { Snippet } from 'svelte';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     checked: boolean;
@@ -65,7 +66,11 @@
       {id}
       bind:checked
       {disabled}
-      class={cn('checkbox mr-2', sizeClasses[size], variantClasses[variant])}
+      class={cn(
+        'checkbox mr-2',
+        safeGet(sizeClasses, size, ''),
+        safeGet(variantClasses, variant, '')
+      )}
       onchange={handleChange}
       aria-describedby={helpText ? helpTextId : undefined}
     />

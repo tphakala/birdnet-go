@@ -27,6 +27,8 @@ Features:
 -->
 
 <script lang="ts">
+  import { safeArrayAccess } from '$lib/utils/security';
+
   interface Props {
     showSpinner?: boolean;
     showThumbnails?: boolean;
@@ -158,7 +160,9 @@ Features:
               <!-- Bi-hourly counts skeleton -->
               {#each Array(12) as _, i}
                 {@const hour = i * 2}
-                {@const hasData = species.hourlyPattern[hour] || species.hourlyPattern[hour + 1]}
+                {@const hasData =
+                  safeArrayAccess(species.hourlyPattern, hour) ||
+                  safeArrayAccess(species.hourlyPattern, hour + 1)}
                 <td
                   class="hour-data bi-hourly-count bi-hourly text-center py-0 px-0
                          {hasData ? 'heatmap-color-2' : 'heatmap-color-0'}"

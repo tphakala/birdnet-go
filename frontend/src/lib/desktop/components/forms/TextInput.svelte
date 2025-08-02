@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     value: string;
@@ -125,7 +126,11 @@
     {pattern}
     {minlength}
     {maxlength}
-    class={cn('input input-bordered w-full', sizeClasses[size], !isValid && 'input-error')}
+    class={cn(
+      'input input-bordered w-full',
+      safeGet(sizeClasses, size, ''),
+      !isValid && 'input-error'
+    )}
     onchange={handleChange}
     oninput={handleInput}
     onblur={handleBlur}

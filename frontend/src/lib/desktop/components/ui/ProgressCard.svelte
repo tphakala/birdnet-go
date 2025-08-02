@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   interface ProgressItem {
     label: string;
@@ -36,7 +37,9 @@
     if (!bytes) return '0 B';
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
+    return (
+      Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + (safeArrayAccess(sizes, i) ?? 'B')
+    );
   }
 
   function getProgressColor(percentage: number): string {

@@ -107,9 +107,11 @@
   // PERFORMANCE OPTIMIZATION: Cache computed values with $derived
   // Reduces repeated object property access and boolean logic in templates
   const isClipping = $derived(
+    // eslint-disable-next-line security/detect-object-injection
     selectedSource && levels[selectedSource] ? levels[selectedSource].clipping : false
   );
 
+  // eslint-disable-next-line security/detect-object-injection
   const smoothedVolume = $derived(selectedSource ? smoothedVolumes[selectedSource] || 0 : 0);
 
   // PERFORMANCE OPTIMIZATION: Cache audio element creation with $derived.by
@@ -152,19 +154,25 @@
 
   // Check if source is inactive
   function isInactive(source: string): boolean {
+    // eslint-disable-next-line security/detect-object-injection
     if (!levels[source]) return true;
+    // eslint-disable-next-line security/detect-object-injection
     if (levels[source].level > 0) return false;
 
+    // eslint-disable-next-line security/detect-object-injection
     if (!zeroLevelTime[source]) {
+      // eslint-disable-next-line security/detect-object-injection
       zeroLevelTime[source] = Date.now();
       return false;
     }
 
+    // eslint-disable-next-line security/detect-object-injection
     return Date.now() - zeroLevelTime[source] > ZERO_LEVEL_TIMEOUT;
   }
 
   // Get display name for source
   function getSourceDisplayName(source: string): string {
+    // eslint-disable-next-line security/detect-object-injection
     return levels[source]?.name || source;
   }
 
@@ -197,10 +205,13 @@
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
               if (audioData.level === 0) {
+                // eslint-disable-next-line security/detect-object-injection
                 if (!zeroLevelTime[source]) {
+                  // eslint-disable-next-line security/detect-object-injection
                   zeroLevelTime[source] = Date.now();
                 }
               } else {
+                // eslint-disable-next-line security/detect-object-injection
                 delete zeroLevelTime[source];
               }
             });
@@ -208,6 +219,7 @@
             // Initialize smoothed volumes for new sources
             Object.keys(levels).forEach(source => {
               if (!(source in smoothedVolumes)) {
+                // eslint-disable-next-line security/detect-object-injection
                 smoothedVolumes[source] = 0;
               }
             });
@@ -223,7 +235,9 @@
             // Update smoothed volumes
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
+              // eslint-disable-next-line security/detect-object-injection
               const oldVolume = smoothedVolumes[source] || 0;
+              // eslint-disable-next-line security/detect-object-injection
               smoothedVolumes[source] =
                 SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume;
             });

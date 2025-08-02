@@ -5,6 +5,7 @@
   import type { Component } from 'svelte';
   import type { BirdnetConfig } from './app.d.ts';
   import { getLogger } from './lib/utils/logger';
+  import { createSafeMap } from './lib/utils/security';
 
   const logger = getLogger('app');
 
@@ -180,8 +181,8 @@
     return routeConfigs.find(r => r.route === route);
   }
 
-  // Route path to config mapping
-  const pathToRouteMap: Record<string, RouteConfig | undefined> = {
+  // Route path to config mapping - using Map for safe lookups
+  const pathToRouteMap = createSafeMap<RouteConfig | undefined>({
     '/ui/': findRouteConfig('dashboard'),
     '/ui': findRouteConfig('dashboard'),
     '/ui/dashboard': findRouteConfig('dashboard'),
@@ -193,7 +194,7 @@
     '/ui/about': findRouteConfig('about'),
     '/ui/system': findRouteConfig('system'),
     '/ui/settings': findRouteConfig('settings'),
-  };
+  });
 
   function handleRouting(path: string): void {
     // Special handling for settings subpages
@@ -225,8 +226,8 @@
       return;
     }
 
-    // Normal route lookup
-    const routeConfig = pathToRouteMap[path];
+    // Normal route lookup - using Map.get() for safe access
+    const routeConfig = pathToRouteMap.get(path);
     if (routeConfig) {
       currentRoute = routeConfig.route;
       currentPage = routeConfig.page;

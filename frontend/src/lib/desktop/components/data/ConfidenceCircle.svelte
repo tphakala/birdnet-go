@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
   import { alertIcons } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     confidence: number;
@@ -60,7 +61,7 @@
     xl: { size: 72, track: 8, fontSize: '1rem', iconSize: 24 },
   };
 
-  const config = $derived(sizeConfig[size]);
+  const config = $derived(safeGet(sizeConfig, size, sizeConfig.md));
 </script>
 
 <div

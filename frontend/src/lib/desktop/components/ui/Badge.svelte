@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
+  import { safeGet } from '$lib/utils/security';
 
   type BadgeVariant =
     | 'primary'
@@ -55,7 +56,15 @@
   };
 </script>
 
-<span class={cn('badge', variantClasses[variant], sizeClasses[size], className)} {...rest}>
+<span
+  class={cn(
+    'badge',
+    safeGet(variantClasses, variant, 'badge'),
+    safeGet(sizeClasses, size, ''),
+    className
+  )}
+  {...rest}
+>
   {#if children}
     {@render children()}
   {:else}

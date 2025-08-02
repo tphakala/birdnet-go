@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createComponentTestFactory,
@@ -7,6 +6,7 @@ import {
   waitFor,
 } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
+import { safeGet } from '$lib/utils/security';
 import AudioPlayer from './AudioPlayer.svelte';
 
 describe('AudioPlayer', () => {
@@ -28,19 +28,21 @@ describe('AudioPlayer', () => {
     // Mock addEventListener to store handlers
     window.HTMLMediaElement.prototype.addEventListener = vi.fn(
       (event: string, handler: EventListener) => {
-        if (!eventHandlers[event]) {
-          eventHandlers[event] = [];
+        const handlers = safeGet(eventHandlers, event, []);
+        if (handlers.length === 0) {
+          Object.assign(eventHandlers, { [event]: [] });
         }
-        eventHandlers[event].push(handler);
+        safeGet(eventHandlers, event, []).push(handler);
       }
     );
 
     window.HTMLMediaElement.prototype.removeEventListener = vi.fn(
       (event: string, handler: EventListener) => {
-        if (eventHandlers[event]) {
-          const index = eventHandlers[event].indexOf(handler);
+        const handlers = safeGet(eventHandlers, event, []);
+        if (handlers.length > 0) {
+          const index = handlers.indexOf(handler);
           if (index > -1) {
-            eventHandlers[event].splice(index, 1);
+            handlers.splice(index, 1);
           }
         }
       }
@@ -165,8 +167,9 @@ describe('AudioPlayer', () => {
 
     // Simulate play event
     const audio = container.querySelector('audio');
-    if (eventHandlers['play'] && audio) {
-      eventHandlers['play'].forEach(handler => handler.call(audio, new Event('play')));
+    const playHandlers = safeGet(eventHandlers, 'play', []);
+    if (playHandlers.length > 0 && audio) {
+      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
     }
 
     await waitFor(() => {
@@ -186,10 +189,9 @@ describe('AudioPlayer', () => {
 
     // Simulate loadedmetadata event
     const audio = container.querySelector('audio');
-    if (eventHandlers['loadedmetadata'] && audio) {
-      eventHandlers['loadedmetadata'].forEach(handler =>
-        handler.call(audio, new Event('loadedmetadata'))
-      );
+    const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
+    if (metadataHandlers.length > 0 && audio) {
+      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
     }
 
     await waitFor(() => {
@@ -216,8 +218,9 @@ describe('AudioPlayer', () => {
 
     // Simulate play
     const audio = container.querySelector('audio');
-    if (eventHandlers['play'] && audio) {
-      eventHandlers['play'].forEach(handler => handler.call(audio, new Event('play')));
+    const playHandlers = safeGet(eventHandlers, 'play', []);
+    if (playHandlers.length > 0 && audio) {
+      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
     }
 
     // Simulate time progress
@@ -247,10 +250,9 @@ describe('AudioPlayer', () => {
 
     // Load metadata first
     const audio = container.querySelector('audio');
-    if (eventHandlers['loadedmetadata'] && audio) {
-      eventHandlers['loadedmetadata'].forEach(handler =>
-        handler.call(audio, new Event('loadedmetadata'))
-      );
+    const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
+    if (metadataHandlers.length > 0 && audio) {
+      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
     }
 
     const progressBar = screen.getByRole('slider');
@@ -293,10 +295,9 @@ describe('AudioPlayer', () => {
 
     // Load metadata
     const audio = container.querySelector('audio');
-    if (eventHandlers['loadedmetadata'] && audio) {
-      eventHandlers['loadedmetadata'].forEach(handler =>
-        handler.call(audio, new Event('loadedmetadata'))
-      );
+    const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
+    if (metadataHandlers.length > 0 && audio) {
+      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
     }
 
     await waitFor(() => {
@@ -350,10 +351,9 @@ describe('AudioPlayer', () => {
 
     // Load metadata first so duration is set
     const audio = container.querySelector('audio');
-    if (eventHandlers['loadedmetadata'] && audio) {
-      eventHandlers['loadedmetadata'].forEach(handler =>
-        handler.call(audio, new Event('loadedmetadata'))
-      );
+    const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
+    if (metadataHandlers.length > 0 && audio) {
+      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
     }
 
     await waitFor(() => {
@@ -434,8 +434,9 @@ describe('AudioPlayer', () => {
     const audio = container.querySelector('audio');
 
     // Test play event
-    if (eventHandlers['play'] && audio) {
-      eventHandlers['play'].forEach(handler => handler.call(audio, new Event('play')));
+    const playHandlers = safeGet(eventHandlers, 'play', []);
+    if (playHandlers.length > 0 && audio) {
+      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
     }
     expect(onPlay).toHaveBeenCalledTimes(1);
 
@@ -444,14 +445,16 @@ describe('AudioPlayer', () => {
     expect(onTimeUpdate).toHaveBeenCalledWith(0, 120);
 
     // Test pause event
-    if (eventHandlers['pause'] && audio) {
-      eventHandlers['pause'].forEach(handler => handler.call(audio, new Event('pause')));
+    const pauseHandlers = safeGet(eventHandlers, 'pause', []);
+    if (pauseHandlers.length > 0 && audio) {
+      pauseHandlers.forEach(handler => handler.call(audio, new Event('pause')));
     }
     expect(onPause).toHaveBeenCalledTimes(1);
 
     // Test ended event
-    if (eventHandlers['ended'] && audio) {
-      eventHandlers['ended'].forEach(handler => handler.call(audio, new Event('ended')));
+    const endedHandlers = safeGet(eventHandlers, 'ended', []);
+    if (endedHandlers.length > 0 && audio) {
+      endedHandlers.forEach(handler => handler.call(audio, new Event('ended')));
     }
     expect(onEnded).toHaveBeenCalledTimes(1);
   });
@@ -465,8 +468,9 @@ describe('AudioPlayer', () => {
     });
 
     const audio = container.querySelector('audio');
-    if (eventHandlers['error'] && audio) {
-      eventHandlers['error'].forEach(handler => handler.call(audio, new Event('error')));
+    const errorHandlers = safeGet(eventHandlers, 'error', []);
+    if (errorHandlers.length > 0 && audio) {
+      errorHandlers.forEach(handler => handler.call(audio, new Event('error')));
     }
 
     await waitFor(() => {
@@ -538,8 +542,9 @@ describe('AudioPlayer', () => {
 
     // Start playing
     const audio = container.querySelector('audio');
-    if (eventHandlers['play'] && audio) {
-      eventHandlers['play'].forEach(handler => handler.call(audio, new Event('play')));
+    const playHandlers = safeGet(eventHandlers, 'play', []);
+    if (playHandlers.length > 0 && audio) {
+      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
     }
 
     unmount();
@@ -566,15 +571,15 @@ describe('AudioPlayer', () => {
 
     // Load metadata
     const audio = container.querySelector('audio');
-    if (eventHandlers['loadedmetadata'] && audio) {
-      eventHandlers['loadedmetadata'].forEach(handler =>
-        handler.call(audio, new Event('loadedmetadata'))
-      );
+    const metadataHandlers = safeGet(eventHandlers, 'loadedmetadata', []);
+    if (metadataHandlers.length > 0 && audio) {
+      metadataHandlers.forEach(handler => handler.call(audio, new Event('loadedmetadata')));
     }
 
     // Start playing
-    if (eventHandlers['play'] && audio) {
-      eventHandlers['play'].forEach(handler => handler.call(audio, new Event('play')));
+    const playHandlers = safeGet(eventHandlers, 'play', []);
+    if (playHandlers.length > 0 && audio) {
+      playHandlers.forEach(handler => handler.call(audio, new Event('play')));
     }
 
     // Progress to middle

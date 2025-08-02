@@ -4,6 +4,7 @@
   import ToggleField from './ToggleField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { actionIcons, alertIconsSvg, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { createSafeMap } from '$lib/utils/security';
 
   interface RTSPUrl {
     id: string;
@@ -38,7 +39,7 @@
   let newUrl = $state('');
   let newName = $state('');
   let fieldId = `rtsp-${Math.random().toString(36).substring(2, 11)}`;
-  let errors = $state<Record<string, string>>({});
+  let errors = $state(createSafeMap<string>());
 
   // Validation function for RTSP URLs
   function validateRTSPUrl(url: string): string | null {
@@ -126,51 +127,49 @@
     onUpdate(updated);
 
     // Clear errors for removed item
-    const newErrors = { ...errors };
-    delete newErrors[id];
-    errors = newErrors;
+    errors.delete(id);
   }
 
   function updateUrl(id: string, field: keyof RTSPUrl, value: RTSPUrl[keyof RTSPUrl]) {
-    const updated = urls.map(url => (url.id === id ? { ...url, [field]: value } : url));
+    const updated = urls.map(url => {
+      if (url.id === id) {
+        const updatedUrl = { ...url };
+        Object.assign(updatedUrl, { [field]: value });
+        return updatedUrl;
+      }
+      return url;
+    });
     onUpdate(updated);
   }
 
   // Reactive validation for URLs - runs when urls change due to two-way binding
   $effect(() => {
-    const newErrors = { ...errors };
-    let hasChanges = false;
-
     urls.forEach(url => {
       // Validate URL
       const urlValidation = validateRTSPUrl(url.url);
+      const currentUrlError = errors.get(url.id);
+
       if (urlValidation) {
-        if (newErrors[url.id] !== urlValidation) {
-          newErrors[url.id] = urlValidation;
-          hasChanges = true;
+        if (currentUrlError !== urlValidation) {
+          errors.set(url.id, urlValidation);
         }
-      } else if (newErrors[url.id]) {
-        delete newErrors[url.id];
-        hasChanges = true;
+      } else if (currentUrlError) {
+        errors.delete(url.id);
       }
 
       // Validate name
       const nameValidation = validateName(url.name);
       const nameKey = `${url.id}-name`;
+      const currentNameError = errors.get(nameKey);
+
       if (nameValidation) {
-        if (newErrors[nameKey] !== nameValidation) {
-          newErrors[nameKey] = nameValidation;
-          hasChanges = true;
+        if (currentNameError !== nameValidation) {
+          errors.set(nameKey, nameValidation);
         }
-      } else if (newErrors[nameKey]) {
-        delete newErrors[nameKey];
-        hasChanges = true;
+      } else if (currentNameError) {
+        errors.delete(nameKey);
       }
     });
-
-    if (hasChanges) {
-      errors = newErrors;
-    }
 
     // Update parent with current URLs
     onUpdate(urls);
@@ -319,10 +318,10 @@
                   label="Stream Name"
                   bind:value={rtspUrl.name}
                   {disabled}
-                  inputClassName={errors[`${rtspUrl.id}-name`] ? 'input-error' : ''}
+                  inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
                 />
-                {#if errors[`${rtspUrl.id}-name`]}
-                  <div class="text-error text-sm mt-1">{errors[`${rtspUrl.id}-name`]}</div>
+                {#if errors.get(`${rtspUrl.id}-name`)}
+                  <div class="text-error text-sm mt-1">{errors.get(`${rtspUrl.id}-name`)}</div>
                 {/if}
               </div>
 
@@ -334,10 +333,10 @@
                   label="RTSP URL"
                   bind:value={rtspUrl.url}
                   {disabled}
-                  inputClassName={errors[rtspUrl.id] ? 'input-error' : ''}
+                  inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}
                 />
-                {#if errors[rtspUrl.id]}
-                  <div class="text-error text-sm mt-1">{errors[rtspUrl.id]}</div>
+                {#if errors.get(rtspUrl.id)}
+                  <div class="text-error text-sm mt-1">{errors.get(rtspUrl.id)}</div>
                 {/if}
               </div>
             </div>

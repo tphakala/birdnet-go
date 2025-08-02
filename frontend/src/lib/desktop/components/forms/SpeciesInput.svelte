@@ -24,6 +24,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import { actionIcons } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     value?: string;
@@ -258,7 +259,7 @@
         {required}
         class={cn(
           'input input-bordered join-item flex-1',
-          inputSizeClasses[size],
+          safeGet(inputSizeClasses, size, ''),
           !isValid && 'input-error'
         )}
         oninput={handleInput}
@@ -279,7 +280,7 @@
       />
       <button
         type="button"
-        class={cn('btn btn-primary join-item', buttonSizeClasses[effectiveButtonSize])}
+        class={cn('btn btn-primary join-item', safeGet(buttonSizeClasses, effectiveButtonSize, ''))}
         onclick={handleAdd}
         disabled={disabled || !value.trim()}
         aria-label="Add species"

@@ -29,6 +29,7 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { weatherIcons } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     weatherIcon?: string;
@@ -127,11 +128,11 @@
 
   // Get weather emoji and description
   const weatherInfo = $derived(
-    weatherIconMap[weatherCode()] || {
+    safeGet(weatherIconMap, weatherCode(), {
       day: '❓',
       night: '❓',
       description: weatherDescription || 'Unknown',
-    }
+    })
   );
 
   const weatherEmoji = $derived(isNight ? weatherInfo.night : weatherInfo.day);
@@ -168,10 +169,10 @@
 
   // Get appropriate wind icon based on wind speed
   const getWindIcon = $derived(() => {
-    if (windSpeed === undefined) return weatherIcons.wind;
-    if (windSpeed < 3) return weatherIcons.windLight; // Light wind: 0-3 m/s
-    if (windSpeed < 8) return weatherIcons.windModerate; // Moderate wind: 3-8 m/s
-    return weatherIcons.windStrong; // Strong wind: 8+ m/s
+    if (windSpeed === undefined) return safeGet(weatherIcons, 'wind', '');
+    if (windSpeed < 3) return safeGet(weatherIcons, 'windLight', ''); // Light wind: 0-3 m/s
+    if (windSpeed < 8) return safeGet(weatherIcons, 'windModerate', ''); // Moderate wind: 3-8 m/s
+    return safeGet(weatherIcons, 'windStrong', ''); // Strong wind: 8+ m/s
   });
 
   // Size classes
@@ -204,7 +205,10 @@
     <div class="wm-weather-group flex items-center gap-1 flex-shrink-0">
       <!-- Weather Icon - always visible when showWeatherIcon is true -->
       <span
-        class={cn('wm-weather-icon inline-block flex-shrink-0', emojiSizeClasses[size])}
+        class={cn(
+          'wm-weather-icon inline-block flex-shrink-0',
+          safeGet(emojiSizeClasses, size, '')
+        )}
         aria-label={weatherDesc}
       >
         {weatherEmoji}
@@ -212,7 +216,9 @@
 
       <!-- Weather Description - conditionally visible -->
       {#if showWeatherDescription}
-        <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
+        <span
+          class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
+        >
           {weatherDesc}
         </span>
       {/if}
@@ -227,13 +233,15 @@
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
           <div
-            class={cn(sizeClasses[size], 'flex-shrink-0')}
+            class={cn(safeGet(sizeClasses, size, ''), 'flex-shrink-0')}
             aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
           >
-            {@html weatherIcons.temperature}
+            {@html safeGet(weatherIcons, 'temperature', '')}
           </div>
         {/if}
-        <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
+        <span
+          class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
+        >
           {temperature.toFixed(1)}{temperatureUnit()}
         </span>
       </div>
@@ -245,13 +253,15 @@
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
           <div
-            class={cn(sizeClasses[size], 'flex-shrink-0')}
+            class={cn(safeGet(sizeClasses, size, ''), 'flex-shrink-0')}
             aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
           >
             {@html getWindIcon()}
           </div>
         {/if}
-        <span class={cn(textSizeClasses[size], 'text-base-content/70 whitespace-nowrap')}>
+        <span
+          class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
+        >
           {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
             ? `(${windGust.toFixed(0)})`
             : ''}

@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { validateCIDR, IndexMap, safeArrayAccess } from '$lib/utils/security';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -32,19 +33,18 @@
 
   let newSubnet = $state('');
   let fieldId = `subnet-${Math.random().toString(36).substring(2, 11)}`;
-  let errors = $state<Record<number, string>>({});
+  let errors = $state(new IndexMap<string>());
 
   // Validation function for CIDR notation
-  function validateCIDR(cidr: string): string | null {
+  function validateCIDRInput(cidr: string): string | null {
     if (!cidr || cidr.trim().length === 0) {
       return 'Subnet cannot be empty';
     }
 
     const trimmed = cidr.trim();
 
-    // Basic CIDR format check
-    const cidrPattern = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
-    if (!cidrPattern.test(trimmed)) {
+    // Use security utility for safe CIDR validation
+    if (!validateCIDR(trimmed)) {
       return 'Invalid CIDR format. Use format like 192.168.1.0/24';
     }
 
@@ -72,7 +72,7 @@
     const trimmed = newSubnet.trim();
     if (!trimmed) return;
 
-    const validation = validateCIDR(trimmed);
+    const validation = validateCIDRInput(trimmed);
     if (validation) {
       return; // Don't add invalid subnets
     }
@@ -95,24 +95,25 @@
     onUpdate(updated);
 
     // Clear error for removed item
-    const newErrors = { ...errors };
-    delete newErrors[index];
-    errors = newErrors;
+    errors.deleteByIndex(index);
+    // Map is automatically reactive in Svelte 5
   }
 
   function updateSubnet(index: number, value: string) {
     const updated = [...subnets];
-    updated[index] = value;
+    const existingSubnet = safeArrayAccess(updated, index);
+    if (existingSubnet !== undefined && index >= 0 && index < updated.length) {
+      updated.splice(index, 1, value);
+    }
 
     // Validate the updated subnet
-    const validation = validateCIDR(value);
+    const validation = validateCIDRInput(value);
     if (validation) {
-      errors[index] = validation;
+      errors.setByIndex(index, validation);
     } else {
-      const newErrors = { ...errors };
-      delete newErrors[index];
-      errors = newErrors;
+      errors.deleteByIndex(index);
     }
+    // Map is automatically reactive in Svelte 5
 
     onUpdate(updated);
   }
@@ -201,7 +202,10 @@
             value={subnet}
             oninput={e => updateSubnet(index, (e.target as HTMLInputElement)?.value || '')}
             {disabled}
-            class={cn('input input-sm input-bordered flex-1', errors[index] ? 'input-error' : '')}
+            class={cn(
+              'input input-sm input-bordered flex-1',
+              errors.getByIndex(index) ? 'input-error' : ''
+            )}
           />
           <button
             type="button"
@@ -214,8 +218,8 @@
           </button>
         </div>
 
-        {#if errors[index]}
-          <div class="text-error text-sm ml-2">{errors[index]}</div>
+        {#if errors.getByIndex(index)}
+          <div class="text-error text-sm ml-2">{errors.getByIndex(index)}</div>
         {/if}
       {/each}
     </div>

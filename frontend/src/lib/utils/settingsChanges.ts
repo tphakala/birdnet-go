@@ -2,6 +2,8 @@
  * Utility functions for detecting changes in settings sections
  */
 
+import { safeGet } from './security';
+
 /**
  * Deep compare two objects to detect changes
  */
@@ -26,7 +28,7 @@ export function extractSettingsSection<T>(data: unknown, sectionPath: string): T
 
   for (const key of keys) {
     if (result && typeof result === 'object' && key in result) {
-      result = (result as Record<string, unknown>)[key];
+      result = safeGet(result as Record<string, unknown>, key);
     } else {
       return undefined;
     }
