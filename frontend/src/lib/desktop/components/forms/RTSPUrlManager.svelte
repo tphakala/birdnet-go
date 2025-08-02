@@ -39,7 +39,7 @@
   let newUrl = $state('');
   let newName = $state('');
   let fieldId = `rtsp-${Math.random().toString(36).substring(2, 11)}`;
-  let errors = $state(createSafeMap<string, string>());
+  let errors = $state(createSafeMap<string>());
 
   // Validation function for RTSP URLs
   function validateRTSPUrl(url: string): string | null {

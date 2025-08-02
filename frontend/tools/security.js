@@ -9,11 +9,8 @@ const fs = require('fs');
  * @returns {*} - The value at index or undefined
  */
 function safeArrayAccess(arr, index) {
-  if (index >= 0 && index < arr.length) {
-    // Use at() method which is safer than bracket notation
-    return arr.at(index);
-  }
-  return undefined;
+  // arr.at() already safely handles out-of-bounds and negative indices
+  return arr.at(index);
 }
 
 /**

@@ -3,7 +3,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
-  import { safeGet, createSafeMap } from '$lib/utils/security';
+  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.audio;
 
@@ -84,7 +84,7 @@
   // State
   let levels = $state<AudioLevels>({});
   let selectedSource = $state<string | null>(null);
-  let smoothedVolumes = $state(createSafeMap<string, number>());
+  let smoothedVolumes = $state(new Map<string, number>());
   let dropdownOpen = $state(false);
   let isPlaying = $state(false);
   let playingSource = $state<string | null>(null);
@@ -100,7 +100,7 @@
   let eventSource: ReconnectingEventSource | null = null;
   let audioElement: HTMLAudioElement | null = null;
   let hlsInstance: HLSInstance | null = null;
-  let zeroLevelTime = createSafeMap<string, number>();
+  let zeroLevelTime = new Map<string, number>();
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();

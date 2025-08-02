@@ -54,13 +54,13 @@ export function safeLookup<T>(
 
 export function createSafeMap<T>(obj: Record<string, T>): Map<string, T>;
 // eslint-disable-next-line no-redeclare
-export function createSafeMap<K extends string, V>(): Map<K, V>;
+export function createSafeMap<V>(): Map<string, V>;
 // eslint-disable-next-line no-redeclare
-export function createSafeMap<K extends string, V>(obj?: Record<K, V>): Map<K, V> {
+export function createSafeMap<V>(obj?: Record<string, V>): Map<string, V> {
   if (obj) {
-    return new Map(Object.entries(obj) as [K, V][]);
+    return new Map(Object.entries(obj) as [string, V][]);
   }
-  return new Map<K, V>();
+  return new Map<string, V>();
 }
 
 /**
