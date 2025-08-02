@@ -179,7 +179,7 @@ describe('Security Utilities', () => {
     });
 
     it('should replace unsafe characters', () => {
-      expect(sanitizeFilename('file<>:|?*.txt')).toBe('file_______.txt');
+      expect(sanitizeFilename('file<>:|?*.txt')).toBe('file______.txt');
       expect(sanitizeFilename('file name.txt')).toBe('file_name.txt');
     });
   });
