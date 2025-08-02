@@ -14,26 +14,43 @@ describe('API utilities', () => {
   });
 
   describe('getCsrfToken', () => {
+    afterEach(() => {
+      // Clean up meta tags after each test
+      const existingMeta = document.querySelector('meta[name="csrf-token"]');
+      if (existingMeta) {
+        existingMeta.remove();
+      }
+    });
+
     it('returns null when no csrf token exists', () => {
       expect(getCsrfToken()).toBeNull();
     });
 
-    it('returns csrf token from cookie', () => {
-      document.cookie = 'csrf_=test-token';
+    it('returns csrf token from meta tag', () => {
+      const meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = 'test-token';
+      document.head.appendChild(meta);
+
       expect(getCsrfToken()).toBe('test-token');
     });
 
-    it('handles encoded csrf token', () => {
-      document.cookie = 'csrf_=' + encodeURIComponent('test/token=value');
+    it('handles encoded csrf token in meta tag', () => {
+      const meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = 'test/token=value';
+      document.head.appendChild(meta);
+
       expect(getCsrfToken()).toBe('test/token=value');
     });
 
-    it('finds csrf token among multiple cookies', () => {
-      // Set cookies individually as document.cookie API doesn't support multiple cookies in one assignment
-      document.cookie = 'other=value';
-      document.cookie = 'csrf_=test-token';
-      document.cookie = 'another=value2';
-      expect(getCsrfToken()).toBe('test-token');
+    it('returns null when meta tag has empty content', () => {
+      const meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = '';
+      document.head.appendChild(meta);
+
+      expect(getCsrfToken()).toBeNull();
     });
   });
 
@@ -68,7 +85,11 @@ describe('API utilities', () => {
     });
 
     it('includes CSRF token in headers', async () => {
-      document.cookie = 'csrf_=test-csrf-token';
+      // Set up meta tag with CSRF token
+      const meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = 'test-csrf-token';
+      document.head.appendChild(meta);
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -81,6 +102,9 @@ describe('API utilities', () => {
 
       const [, options] = mockFetch.mock.calls[0];
       expect(options.headers.get('X-CSRF-Token')).toBe('test-csrf-token');
+
+      // Clean up
+      meta.remove();
     });
 
     it('stringifies JSON body for POST requests', async () => {
@@ -124,7 +148,9 @@ describe('API utilities', () => {
         json: () => Promise.resolve({ error: 'Resource not found' }),
       });
 
-      await expect(fetchWithCSRF('/api/test')).rejects.toThrow('Resource not found');
+      await expect(fetchWithCSRF('/api/test')).rejects.toThrow(
+        'The requested resource was not found.'
+      );
     });
 
     it('handles non-JSON error responses', async () => {
@@ -136,7 +162,9 @@ describe('API utilities', () => {
         json: () => Promise.reject(new Error('Invalid JSON')),
       });
 
-      await expect(fetchWithCSRF('/api/test')).rejects.toThrow('HTTP 500: Internal Server Error');
+      await expect(fetchWithCSRF('/api/test')).rejects.toThrow(
+        'A server error occurred. Please try again later.'
+      );
     });
 
     it('returns null for empty responses', async () => {

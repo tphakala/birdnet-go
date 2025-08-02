@@ -40,7 +40,9 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    await fireEvent.input(input, { target: { value: '123' } });
+    // Note: Uses 'change' event instead of 'input' to match Svelte's event handling
+    // NumberField component binds to 'change' event for proper validation timing
+    await fireEvent.change(input, { target: { value: '123' } });
 
     expect(onUpdate).toHaveBeenCalledWith(123);
   });
@@ -57,7 +59,7 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    await fireEvent.input(input, { target: { value: 'abc' } });
+    await fireEvent.change(input, { target: { value: 'abc' } });
 
     // Should not call onUpdate for invalid input
     expect(onUpdate).not.toHaveBeenCalled();
@@ -108,7 +110,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Try to input a value below minimum
-    await fireEvent.input(input, { target: { value: '-5' } });
+    await fireEvent.change(input, { target: { value: '-5' } });
 
     // Should not call onUpdate for values below minimum
     expect(onUpdate).not.toHaveBeenCalledWith(-5);
@@ -129,7 +131,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Try to input a value above maximum
-    await fireEvent.input(input, { target: { value: '15' } });
+    await fireEvent.change(input, { target: { value: '15' } });
 
     // Should not call onUpdate for values above maximum
     expect(onUpdate).not.toHaveBeenCalledWith(15);
@@ -151,7 +153,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Input a valid value within range
-    await fireEvent.input(input, { target: { value: '7' } });
+    await fireEvent.change(input, { target: { value: '7' } });
 
     // Should call onUpdate for valid values
     expect(onUpdate).toHaveBeenCalledWith(7);
@@ -265,7 +267,7 @@ describe('NumberField', () => {
     });
 
     const input = screen.getByRole('spinbutton');
-    await fireEvent.input(input, { target: { value: '3.14' } });
+    await fireEvent.change(input, { target: { value: '3.14' } });
 
     expect(onUpdate).toHaveBeenCalledWith(3.14);
   });
@@ -298,7 +300,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Test very large number
-    await fireEvent.input(input, { target: { value: '9007199254740991' } });
+    await fireEvent.change(input, { target: { value: '9007199254740991' } });
 
     expect(onUpdate).toHaveBeenCalledWith(9007199254740991);
   });
@@ -317,7 +319,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Test scientific notation
-    await fireEvent.input(input, { target: { value: '1e6' } });
+    await fireEvent.change(input, { target: { value: '1e6' } });
 
     expect(onUpdate).toHaveBeenCalledWith(1000000);
   });
@@ -336,7 +338,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Test negative scientific notation
-    await fireEvent.input(input, { target: { value: '-1e-6' } });
+    await fireEvent.change(input, { target: { value: '-1e-6' } });
 
     expect(onUpdate).toHaveBeenCalledWith(-0.000001);
   });
@@ -355,7 +357,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Test high precision decimal
-    await fireEvent.input(input, { target: { value: '0.123456789012345' } });
+    await fireEvent.change(input, { target: { value: '0.123456789012345' } });
 
     expect(onUpdate).toHaveBeenCalledWith(0.123456789012345);
   });
@@ -374,7 +376,7 @@ describe('NumberField', () => {
     const input = screen.getByRole('spinbutton');
 
     // Test infinity - should not call onUpdate
-    await fireEvent.input(input, { target: { value: 'Infinity' } });
+    await fireEvent.change(input, { target: { value: 'Infinity' } });
 
     expect(onUpdate).not.toHaveBeenCalledWith(Number.POSITIVE_INFINITY);
   });

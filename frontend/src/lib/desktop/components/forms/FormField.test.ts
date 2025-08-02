@@ -45,6 +45,9 @@ describe('FormField', () => {
 
       const input = screen.getByRole('textbox');
       await user.type(input, 'testuser');
+      // Note: Uses 'change' event instead of 'input' to match Svelte's event handling
+      // Blur is required to trigger the change event in test environment
+      await user.tab(); // Trigger blur to fire change event
 
       expect(onChange).toHaveBeenLastCalledWith('testuser');
     });
@@ -150,6 +153,9 @@ describe('FormField', () => {
       const input = screen.getByRole('spinbutton');
       await user.clear(input);
       await user.type(input, '42');
+      // Note: Uses 'change' event instead of 'input' to match Svelte's event handling
+      // Blur is required to trigger the change event in test environment
+      await user.tab(); // Trigger blur to fire change event
 
       expect(onChange).toHaveBeenLastCalledWith(42);
     });

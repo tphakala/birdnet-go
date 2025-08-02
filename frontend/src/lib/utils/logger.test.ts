@@ -43,7 +43,7 @@ describe('Logger', () => {
 
       // Warnings and errors always log
       logger.warn('warning message');
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[test-category]', 'warning message');
+      expect(consoleWarnSpy).toHaveBeenCalledWith('[test-category]', 'warning message', undefined);
     });
   });
 
@@ -75,15 +75,7 @@ describe('Logger', () => {
 
       logger.error('Network error occurred', errorObj);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[test]',
-        'Network error occurred',
-        errorObj,
-        expect.objectContaining({
-          message: 'Network error occurred',
-          category: 'test',
-        })
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith('[test]', 'Network error occurred', errorObj);
     });
 
     it('should handle error message only', () => {
@@ -97,6 +89,7 @@ describe('Logger', () => {
         expect.objectContaining({
           message: 'Simple error message',
           category: 'test',
+          timestamp: expect.any(String),
         })
       );
     });

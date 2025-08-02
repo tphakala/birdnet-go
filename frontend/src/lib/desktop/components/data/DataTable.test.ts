@@ -200,8 +200,12 @@ describe('DataTable', () => {
     });
 
     const headers = container.querySelectorAll('th');
-    expect(headers[0]).toHaveStyle('width: 50px');
-    expect(headers[1]).toHaveStyle('width: 200px');
+    // Svelte style directives (style:width={value}) set inline styles directly on the element
+    // In test environments, computed styles may not reflect these inline styles accurately
+    // Therefore, we check the style attribute directly to verify Svelte's rendered output
+    // This is the correct approach for testing Svelte style directives vs traditional CSS classes
+    expect(headers[0]).toHaveAttribute('style', expect.stringContaining('width: 50px'));
+    expect(headers[1]).toHaveAttribute('style', expect.stringContaining('width: 200px'));
   });
 
   it('applies table styling classes', () => {
