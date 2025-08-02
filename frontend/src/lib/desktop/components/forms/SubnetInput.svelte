@@ -43,26 +43,42 @@
 
     const trimmed = cidr.trim();
 
-    // Use security utility for safe CIDR validation
-    if (!validateCIDR(trimmed)) {
+    // Basic format check
+    if (!trimmed.includes('/')) {
       return 'Invalid CIDR format. Use format like 192.168.1.0/24';
     }
 
     const [ip, prefix] = trimmed.split('/');
+
+    // Check if we have both IP and prefix
+    if (!ip || !prefix) {
+      return 'Invalid CIDR format. Use format like 192.168.1.0/24';
+    }
+
     const prefixNum = parseInt(prefix, 10);
 
     // Validate prefix length
-    if (prefixNum < 0 || prefixNum > 32) {
+    if (isNaN(prefixNum) || prefixNum < 0 || prefixNum > 32) {
       return 'Prefix length must be between 0 and 32';
     }
 
-    // Validate IP address octets
+    // Validate IP address format
     const octets = ip.split('.');
+    if (octets.length !== 4) {
+      return 'Invalid IP address. Each octet must be 0-255';
+    }
+
+    // Validate IP address octets
     for (const octet of octets) {
       const num = parseInt(octet, 10);
       if (isNaN(num) || num < 0 || num > 255) {
         return 'Invalid IP address. Each octet must be 0-255';
       }
+    }
+
+    // Final security check using the utility
+    if (!validateCIDR(trimmed)) {
+      return 'Invalid CIDR format. Use format like 192.168.1.0/24';
     }
 
     return null;
@@ -96,7 +112,6 @@
 
     // Clear error for removed item
     errors.deleteByIndex(index);
-    // Map is automatically reactive in Svelte 5
   }
 
   function updateSubnet(index: number, value: string) {
@@ -113,7 +128,6 @@
     } else {
       errors.deleteByIndex(index);
     }
-    // Map is automatically reactive in Svelte 5
 
     onUpdate(updated);
   }
@@ -133,7 +147,7 @@
   // Check if new subnet input is valid
   let newSubnetError = $derived.by(() => {
     if (!newSubnet.trim()) return null;
-    return validateCIDR(newSubnet.trim());
+    return validateCIDRInput(newSubnet.trim());
   });
 
   let canAdd = $derived(
