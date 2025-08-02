@@ -9,6 +9,7 @@
   } from '$lib/utils/speciesUtils';
   import { actionIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
     species?: string[];
@@ -109,7 +110,8 @@
 
   function startEdit(index: number) {
     editingIndex = index;
-    editingValue = species[index];
+    const speciesItem = safeArrayAccess(species, index);
+    editingValue = speciesItem || '';
     // Focus will be set in next tick via $effect
   }
 
@@ -147,7 +149,9 @@
 
     // Update species
     const newSpecies = [...species];
-    newSpecies[editingIndex] = trimmed;
+    if (editingIndex >= 0 && editingIndex < newSpecies.length) {
+      newSpecies.splice(editingIndex, 1, trimmed);
+    }
     species = newSpecies;
 
     // Reset edit state

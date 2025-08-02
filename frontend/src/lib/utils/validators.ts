@@ -2,6 +2,8 @@
  * Form validation utilities
  */
 
+import { safeArrayAccess } from './security';
+
 export type ValidationResult = string | null;
 export type Validator<T = unknown> = (value: T) => ValidationResult;
 
@@ -322,7 +324,9 @@ export function arrayOf<T>(itemValidator: Validator<T>): Validator<T[]> {
     if (!Array.isArray(values)) return null;
 
     for (let i = 0; i < values.length; i++) {
-      const result = itemValidator(values[i]);
+      const item = safeArrayAccess(values, i);
+      if (item === undefined) continue;
+      const result = itemValidator(item);
       if (result !== null) {
         return `Item ${i + 1}: ${result}`;
       }

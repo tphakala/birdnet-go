@@ -33,6 +33,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import { iconPaths } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   type TrendDirection = 'up' | 'down' | 'neutral';
   type CardVariant =
@@ -111,7 +112,7 @@
 
   const cardClasses = cn(
     'card shadow-lg transition-all duration-200',
-    variantClasses[variant],
+    safeGet(variantClasses, variant, ''),
     {
       'hover:shadow-xl hover:scale-105 cursor-pointer': !!(href || onClick),
     },
@@ -179,7 +180,7 @@
         {/if}
       </div>
       {#if icon && !loading}
-        <div class={cn('p-3 rounded-lg', iconVariantClasses[variant])}>
+        <div class={cn('p-3 rounded-lg', safeGet(iconVariantClasses, variant, ''))}>
           {@render icon()}
         </div>
       {/if}

@@ -32,6 +32,7 @@
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { weatherIcons } from '$lib/utils/icons';
+  import { safeGet } from '$lib/utils/security';
 
   interface Props {
     weatherIcon?: string;
@@ -102,11 +103,11 @@
 
   // Get weather emoji and description
   const weatherInfo = $derived(
-    weatherIconMap[weatherCode()] || {
+    safeGet(weatherIconMap, weatherCode(), {
       day: '❓',
       night: '❓',
       description: weatherDescription || 'Unknown',
-    }
+    })
   );
 
   const weatherEmoji = $derived(isNight ? weatherInfo.night : weatherInfo.day);
@@ -143,10 +144,10 @@
 
   // Get appropriate wind icon based on wind speed
   const getWindIcon = $derived(() => {
-    if (windSpeed === undefined) return weatherIcons.wind;
-    if (windSpeed < 3) return weatherIcons.windLight; // Light wind: 0-3 m/s
-    if (windSpeed < 8) return weatherIcons.windModerate; // Moderate wind: 3-8 m/s
-    return weatherIcons.windStrong; // Strong wind: 8+ m/s
+    if (windSpeed === undefined) return safeGet(weatherIcons, 'wind', '');
+    if (windSpeed < 3) return safeGet(weatherIcons, 'windLight', ''); // Light wind: 0-3 m/s
+    if (windSpeed < 8) return safeGet(weatherIcons, 'windModerate', ''); // Moderate wind: 3-8 m/s
+    return safeGet(weatherIcons, 'windStrong', ''); // Strong wind: 8+ m/s
   });
 
   // Size classes
@@ -175,20 +176,20 @@
   };
 </script>
 
-<div class={cn('wd-container flex flex-col', gapClasses[size], className)}>
+<div class={cn('wd-container flex flex-col', safeGet(gapClasses, size, ''), className)}>
   <!-- Loading State -->
   {#if loading}
     <div class="animate-pulse space-y-2">
       <div class="flex items-center gap-2">
-        <div class={cn('rounded-full bg-base-300', iconSizeClasses[size])}></div>
+        <div class={cn('rounded-full bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
         <div class="h-4 bg-base-300 rounded w-24"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class={cn('rounded bg-base-300', iconSizeClasses[size])}></div>
+        <div class={cn('rounded bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
         <div class="h-4 bg-base-300 rounded w-16"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class={cn('rounded bg-base-300', iconSizeClasses[size])}></div>
+        <div class={cn('rounded bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
         <div class="h-4 bg-base-300 rounded w-20"></div>
       </div>
     </div>
@@ -200,10 +201,13 @@
     <!-- Weather Condition with Icon and Description -->
   {:else if weatherIcon}
     <div class="wd-weather-row flex items-center gap-2">
-      <span class={cn('wd-weather-icon', emojiSizeClasses[size])} aria-label={weatherDesc}>
+      <span
+        class={cn('wd-weather-icon', safeGet(emojiSizeClasses, size, ''))}
+        aria-label={weatherDesc}
+      >
         {weatherEmoji}
       </span>
-      <span class={cn(textSizeClasses[size], 'text-base-content font-medium')}>
+      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content font-medium')}>
         {weatherDesc}
       </span>
     </div>
@@ -213,12 +217,12 @@
   {#if temperature !== undefined}
     <div class="wd-temperature-row flex items-center gap-2">
       <div
-        class={cn(iconSizeClasses[size], 'flex-shrink-0')}
+        class={cn(safeGet(iconSizeClasses, size, ''), 'flex-shrink-0')}
         aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit()}`}
       >
-        {@html weatherIcons.temperature}
+        {@html safeGet(weatherIcons, 'temperature', '')}
       </div>
-      <span class={cn(textSizeClasses[size], 'text-base-content')}>
+      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
         {temperature.toFixed(1)}{temperatureUnit()}
       </span>
     </div>
@@ -228,12 +232,12 @@
   {#if windSpeed !== undefined}
     <div class="wd-wind-row flex items-center gap-2">
       <div
-        class={cn(iconSizeClasses[size], 'flex-shrink-0')}
+        class={cn(safeGet(iconSizeClasses, size, ''), 'flex-shrink-0')}
         aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit()}`}
       >
         {@html getWindIcon()}
       </div>
-      <span class={cn(textSizeClasses[size], 'text-base-content')}>
+      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
         {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
           ? `(${windGust.toFixed(0)})`
           : ''}
@@ -242,7 +246,7 @@
     </div>
   {:else}
     <!-- No Data State -->
-    <div class={cn(textSizeClasses[size], 'text-base-content/40 italic')}>
+    <div class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/40 italic')}>
       {t('detections.weather.noData')}
     </div>
   {/if}

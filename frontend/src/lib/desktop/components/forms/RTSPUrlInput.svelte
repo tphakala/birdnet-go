@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { RTSPUrl } from '$lib/stores/settings';
   import { loggers } from '$lib/utils/logger';
-  import { validateProtocolURL } from '$lib/utils/security';
+  import { validateProtocolURL, safeArrayAccess } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
@@ -58,7 +58,10 @@
 
   function updateUrl(index: number, value: string) {
     const updatedUrls = [...urls];
-    updatedUrls[index] = { ...updatedUrls[index], url: value };
+    const existingUrl = safeArrayAccess(updatedUrls, index);
+    if (existingUrl && index >= 0 && index < updatedUrls.length) {
+      updatedUrls.splice(index, 1, { ...existingUrl, url: value });
+    }
     onUpdate(updatedUrls);
   }
 

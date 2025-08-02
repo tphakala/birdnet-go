@@ -917,7 +917,7 @@
     // Convert Map back to object for compatibility with chart code
     const dailyData: Record<string, number> = {};
     for (const [date, count] of dailyDataMap.entries()) {
-      dailyData[date] = count;
+      Object.assign(dailyData, { [date]: count });
     }
 
     const sortedDates = Object.keys(dailyData).sort();

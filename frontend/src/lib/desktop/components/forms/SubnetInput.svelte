@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { validateCIDR } from '$lib/utils/security';
+  import { validateCIDR, createSafeMap, safeArrayAccess } from '$lib/utils/security';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -33,7 +33,7 @@
 
   let newSubnet = $state('');
   let fieldId = `subnet-${Math.random().toString(36).substring(2, 11)}`;
-  let errors = $state<Record<number, string>>({});
+  let errors = $state(createSafeMap<number, string>());
 
   // Validation function for CIDR notation
   function validateCIDRInput(cidr: string): string | null {
@@ -95,27 +95,25 @@
     onUpdate(updated);
 
     // Clear error for removed item
-    const newErrors = { ...errors };
-    delete newErrors[index];
-    errors = newErrors;
+    errors.delete(index);
+    // Map is automatically reactive in Svelte 5
   }
 
   function updateSubnet(index: number, value: string) {
     const updated = [...subnets];
-    updated[index] = value;
+    const existingSubnet = safeArrayAccess(updated, index);
+    if (existingSubnet !== undefined && index >= 0 && index < updated.length) {
+      updated.splice(index, 1, value);
+    }
 
     // Validate the updated subnet
     const validation = validateCIDRInput(value);
     if (validation) {
-      // Use safe property assignment
-      const newErrors = { ...errors };
-      newErrors[index] = validation;
-      errors = newErrors;
+      errors.set(index, validation);
     } else {
-      const newErrors = { ...errors };
-      delete newErrors[index];
-      errors = newErrors;
+      errors.delete(index);
     }
+    // Map is automatically reactive in Svelte 5
 
     onUpdate(updated);
   }
@@ -204,7 +202,10 @@
             value={subnet}
             oninput={e => updateSubnet(index, (e.target as HTMLInputElement)?.value || '')}
             {disabled}
-            class={cn('input input-sm input-bordered flex-1', errors[index] ? 'input-error' : '')}
+            class={cn(
+              'input input-sm input-bordered flex-1',
+              errors.get(index) ? 'input-error' : ''
+            )}
           />
           <button
             type="button"
@@ -217,8 +218,8 @@
           </button>
         </div>
 
-        {#if errors[index]}
-          <div class="text-error text-sm ml-2">{errors[index]}</div>
+        {#if errors.get(index)}
+          <div class="text-error text-sm ml-2">{errors.get(index)}</div>
         {/if}
       {/each}
     </div>

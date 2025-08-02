@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
   import { api } from '$lib/utils/api';
+  import { safeGet, safeArrayAccess } from '$lib/utils/security';
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
@@ -128,7 +129,8 @@
     const pathSegments = pathname.split('/').filter(Boolean);
     if (pathSegments.length > 0) {
       // Return the first segment as base path
-      return `/${pathSegments[0]}/`;
+      const firstSegment = safeArrayAccess(pathSegments, 0);
+      return firstSegment ? `/${firstSegment}/` : '/';
     }
 
     // Default to root
@@ -203,7 +205,7 @@
     };
 
     const configuredEndpoints = authConfig.endpoints || {};
-    const endpoint = configuredEndpoints[provider] || defaultEndpoints[provider];
+    const endpoint = safeGet(configuredEndpoints, provider) || safeGet(defaultEndpoints, provider);
 
     // SECURITY: Basic endpoint validation
     if (!endpoint || !endpoint.startsWith('/api/v1/auth/')) {
@@ -234,8 +236,11 @@
       const focusableElements = modalElement.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
-      const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+      const firstElement = safeArrayAccess(focusableElements, 0) as HTMLElement;
+      const lastElement = safeArrayAccess(
+        focusableElements,
+        focusableElements.length - 1
+      ) as HTMLElement;
 
       const trapFocus = (e: KeyboardEvent) => {
         if (e.key === 'Tab') {

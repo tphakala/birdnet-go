@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settingsStore, settingsActions } from '$lib/stores/settings';
+  import { safeGet } from '$lib/utils/security';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -35,7 +36,7 @@
       support: 'support',
     };
 
-    return sectionMap[lastPart] || 'node';
+    return safeGet(sectionMap, lastPart, 'node');
   }
 
   // Get the current section

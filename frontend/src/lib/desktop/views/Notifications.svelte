@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import { safeGet, safeArrayAccess } from '$lib/utils/security';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -144,7 +145,8 @@
 
         const index = notifications.findIndex(n => n.id === id);
         if (index !== -1) {
-          const wasUnread = !notifications[index].read;
+          const notification = safeArrayAccess(notifications, index);
+          const wasUnread = notification ? !notification.read : false;
           notifications.splice(index, 1);
           hasUnread = notifications.some(n => !n.read);
 
@@ -198,7 +200,7 @@
       detection: 'bg-success/20 text-success',
       system: 'bg-primary/20 text-primary',
     };
-    return `${baseClass} ${typeClasses[notification.type] || 'bg-base-300'}`;
+    return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-base-300')}`;
   }
 
   // Get priority badge class
@@ -209,7 +211,7 @@
       medium: 'badge-info',
       low: 'badge-ghost',
     };
-    return classes[priority] || 'badge-ghost';
+    return safeGet(classes, priority, 'badge-ghost');
   }
 
   // Format timestamp
