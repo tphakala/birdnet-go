@@ -15,14 +15,14 @@ describe('Card', () => {
 
     const card = container.querySelector('.card');
     expect(card).toBeInTheDocument();
-    expect(card).toHaveClass('card', 'bg-base-100', 'shadow-sm');
+    expect(card).toHaveClass('card', 'bg-base-100', 'shadow-xs');
   });
 
   it('renders with title', () => {
     renderCard({ title: 'Test Card' });
 
     expect(screen.getByText('Test Card')).toBeInTheDocument();
-    expect(screen.getByText('Test Card')).toHaveClass('card-title');
+    expect(screen.getByText('Test Card')).toHaveClass('text-xl', 'font-semibold');
   });
 
   it('renders with custom className', () => {
@@ -33,10 +33,12 @@ describe('Card', () => {
   });
 
   it('renders without padding when padding is false', () => {
-    const { container } = renderCard({ padding: false });
+    const { container } = renderCard({ padding: false, title: 'Test' });
 
-    const cardBody = container.querySelector('.card-body');
-    expect(cardBody).toHaveClass('p-0');
+    // The content div should not have padding classes when padding is false
+    const contentDiv = container.querySelector('.card > div:last-child');
+    expect(contentDiv).toBeInTheDocument();
+    expect(contentDiv).not.toHaveClass('px-6', 'pb-6');
   });
 
   it('renders with slots', () => {
