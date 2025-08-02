@@ -22,7 +22,6 @@ vi.mock('$lib/i18n', () => ({
 
     // Handle template variables like {{max}}
     if (params && typeof translation === 'string') {
-       
       Object.entries(params).forEach(([param, value]) => {
         translation = translation.replace(`{{${param}}}`, String(value));
       });

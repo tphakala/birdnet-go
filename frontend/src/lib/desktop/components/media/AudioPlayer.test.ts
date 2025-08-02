@@ -68,7 +68,6 @@ describe('AudioPlayer', () => {
       (event: string, handler: EventListener) => {
         const handlers = safeGet(eventHandlers, event, []);
         if (handlers.length === 0) {
-           
           Object.assign(eventHandlers, { [event]: [] });
         }
         safeGet(eventHandlers, event, []).push(handler);
