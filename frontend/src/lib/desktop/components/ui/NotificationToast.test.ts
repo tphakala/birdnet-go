@@ -128,15 +128,15 @@ describe('NotificationToast', () => {
 
   it('renders at different positions', () => {
     const positions = [
-      { position: 'top-left' },
-      { position: 'top-center' },
-      { position: 'top-right' },
-      { position: 'bottom-left' },
-      { position: 'bottom-center' },
-      { position: 'bottom-right' },
+      'top-left',
+      'top-center',
+      'top-right',
+      'bottom-left',
+      'bottom-center',
+      'bottom-right',
     ] as const;
 
-    positions.forEach(({ position }) => {
+    positions.forEach(position => {
       const { container, unmount } = toastTest.render({
         props: {
           message: 'Test',
@@ -149,10 +149,14 @@ describe('NotificationToast', () => {
       // 1. ToastContainer manages all fixed positioning, z-index, and layout
       // 2. Individual toasts only handle their content, styling, and animations
       // 3. This separation of concerns allows ToastContainer to manage stacking and grouping
-      // Therefore, we only test that the toast renders its alert structure correctly
+      // Therefore, we verify the toast renders without position-specific classes
       const alert = container.querySelector('.alert');
       expect(alert).toBeInTheDocument();
-      expect(alert).toHaveClass('alert');
+
+      // Verify no position-specific classes are applied to individual toasts
+      // These classes should only exist on ToastContainer elements
+      expect(alert).not.toHaveClass('toast-start', 'toast-end', 'toast-center');
+      expect(alert).not.toHaveClass('toast-top', 'toast-bottom');
       unmount();
     });
   });
