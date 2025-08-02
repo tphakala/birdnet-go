@@ -36,6 +36,7 @@
     birdnetSettings,
     dashboardSettings,
     dynamicThresholdSettings,
+    outputSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -75,14 +76,19 @@
       min: 0.3,
       validHours: 24,
     },
-    database: $birdnetSettings?.database || {
-      type: 'sqlite',
-      path: 'birds.db',
-      host: '',
-      port: 3306,
-      name: '',
-      username: '',
-      password: '',
+    output: $outputSettings || {
+      sqlite: {
+        enabled: false,
+        path: 'birdnet.db',
+      },
+      mysql: {
+        enabled: false,
+        username: '',
+        password: '',
+        database: '',
+        host: 'localhost',
+        port: '3306',
+      },
     },
     dashboard: {
       ...($dashboardSettings || {
@@ -114,11 +120,8 @@
       )
   );
 
-  let databaseSettingsHasChanges = $derived(
-    hasSettingsChanged(
-      (store.originalData as any)?.birdnet?.database,
-      (store.formData as any)?.birdnet?.database
-    )
+  let outputSettingsHasChanges = $derived(
+    hasSettingsChanged((store.originalData as any)?.output, (store.formData as any)?.output)
   );
 
   let dashboardSettingsHasChanges = $derived(
@@ -447,21 +450,26 @@
     });
   }
 
-  function updateDatabaseType(type: 'sqlite' | 'mysql') {
-    settingsActions.updateSection('birdnet', {
-      database: { ...settings.database, type },
+  function updateSQLiteSettings(updates: Partial<{ enabled: boolean; path: string }>) {
+    settingsActions.updateSection('output', {
+      ...settings.output,
+      sqlite: { ...settings.output.sqlite, ...updates },
     });
   }
 
-  function updateSQLitePath(path: string) {
-    settingsActions.updateSection('birdnet', {
-      database: { ...settings.database, path },
-    });
-  }
-
-  function updateMySQLSetting(key: string, value: any) {
-    settingsActions.updateSection('birdnet', {
-      database: { ...settings.database, [key]: value },
+  function updateMySQLSettings(
+    updates: Partial<{
+      enabled: boolean;
+      username: string;
+      password: string;
+      database: string;
+      host: string;
+      port: string;
+    }>
+  ) {
+    settingsActions.updateSection('output', {
+      ...settings.output,
+      mysql: { ...settings.output.mysql, ...updates },
     });
   }
 
@@ -810,99 +818,111 @@
     </div>
   </SettingsSection>
 
-  <!-- Database Settings Section -->
+  <!-- Database Output Settings Section -->
   <SettingsSection
     title={t('settings.main.sections.database.title')}
     description={t('settings.main.sections.database.description')}
     defaultOpen={true}
-    hasChanges={databaseSettingsHasChanges}
+    hasChanges={outputSettingsHasChanges}
   >
-    <div class="space-y-4">
-      <SelectField
-        id="database-type"
-        bind:value={settings.database.type}
-        label={t('settings.main.sections.database.type.label')}
-        options={[
-          { value: 'sqlite', label: 'SQLite' },
-          { value: 'mysql', label: 'MySQL' },
-        ]}
-        helpText={t('settings.main.sections.database.type.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
-      />
-
-      {#if settings.database.type === 'sqlite'}
-        <SettingsNote>
-          <span>{t('settings.main.sections.database.sqlite.note')}</span>
-        </SettingsNote>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <TextInput
-            id="sqlite-path"
-            bind:value={settings.database.path}
-            label={t('settings.main.sections.database.sqlite.path.label')}
-            placeholder={t('settings.main.sections.database.sqlite.path.placeholder')}
-            helpText={t('settings.main.sections.database.sqlite.path.helpText')}
+    <div class="space-y-6">
+      <!-- SQLite Settings -->
+      <div class="space-y-4">
+        <div class="flex items-center space-x-3">
+          <Checkbox
+            id="sqlite-enabled"
+            bind:checked={settings.output.sqlite.enabled}
+            onchange={checked => updateSQLiteSettings({ enabled: checked })}
             disabled={store.isLoading || store.isSaving}
-            onchange={updateSQLitePath}
           />
+          <label for="sqlite-enabled" class="text-sm font-medium">Enable SQLite Output</label>
         </div>
-      {/if}
 
-      {#if settings.database.type === 'mysql'}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <TextInput
-            id="mysql-host"
-            bind:value={settings.database.host}
-            label={t('settings.main.sections.database.mysql.host.label')}
-            placeholder={t('settings.main.sections.database.mysql.host.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.host.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateMySQLSetting('host', value)}
-          />
+        {#if settings.output.sqlite.enabled}
+          <div class="ml-6 space-y-4">
+            <SettingsNote>
+              <span>{t('settings.main.sections.database.sqlite.note')}</span>
+            </SettingsNote>
 
-          <NumberField
-            label={t('settings.main.sections.database.mysql.port.label')}
-            value={settings.database.port}
-            onUpdate={value => updateMySQLSetting('port', value)}
-            min={1}
-            max={65535}
-            placeholder="3306"
-            helpText={t('settings.main.sections.database.mysql.port.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+            <TextInput
+              id="sqlite-path"
+              bind:value={settings.output.sqlite.path}
+              label={t('settings.main.sections.database.sqlite.path.label')}
+              placeholder={t('settings.main.sections.database.sqlite.path.placeholder')}
+              helpText={t('settings.main.sections.database.sqlite.path.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={path => updateSQLiteSettings({ path })}
+            />
+          </div>
+        {/if}
+      </div>
 
-          <TextInput
-            id="mysql-username"
-            bind:value={settings.database.username}
-            label={t('settings.main.sections.database.mysql.username.label')}
-            placeholder={t('settings.main.sections.database.mysql.username.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.username.helpText')}
+      <!-- MySQL Settings -->
+      <div class="space-y-4">
+        <div class="flex items-center space-x-3">
+          <Checkbox
+            id="mysql-enabled"
+            bind:checked={settings.output.mysql.enabled}
+            onchange={checked => updateMySQLSettings({ enabled: checked })}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateMySQLSetting('username', value)}
           />
-
-          <PasswordField
-            id="mysql-password"
-            value={settings.database.password}
-            label={t('settings.main.sections.database.mysql.password.label')}
-            placeholder={t('settings.main.sections.database.mysql.password.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.password.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onUpdate={value => updateMySQLSetting('password', value)}
-          />
-
-          <TextInput
-            id="mysql-database"
-            bind:value={settings.database.name}
-            label={t('settings.main.sections.database.mysql.database.label')}
-            placeholder={t('settings.main.sections.database.mysql.database.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.database.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateMySQLSetting('name', value)}
-          />
+          <label for="mysql-enabled" class="text-sm font-medium">Enable MySQL Output</label>
         </div>
-      {/if}
+
+        {#if settings.output.mysql.enabled}
+          <div class="ml-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <TextInput
+              id="mysql-host"
+              bind:value={settings.output.mysql.host}
+              label={t('settings.main.sections.database.mysql.host.label')}
+              placeholder={t('settings.main.sections.database.mysql.host.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.host.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={host => updateMySQLSettings({ host })}
+            />
+
+            <TextInput
+              id="mysql-port"
+              bind:value={settings.output.mysql.port}
+              label={t('settings.main.sections.database.mysql.port.label')}
+              placeholder="3306"
+              helpText={t('settings.main.sections.database.mysql.port.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={port => updateMySQLSettings({ port })}
+            />
+
+            <TextInput
+              id="mysql-username"
+              bind:value={settings.output.mysql.username}
+              label={t('settings.main.sections.database.mysql.username.label')}
+              placeholder={t('settings.main.sections.database.mysql.username.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.username.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={username => updateMySQLSettings({ username })}
+            />
+
+            <PasswordField
+              id="mysql-password"
+              value={settings.output.mysql.password}
+              label={t('settings.main.sections.database.mysql.password.label')}
+              placeholder={t('settings.main.sections.database.mysql.password.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.password.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={password => updateMySQLSettings({ password })}
+            />
+
+            <TextInput
+              id="mysql-database"
+              bind:value={settings.output.mysql.database}
+              label={t('settings.main.sections.database.mysql.database.label')}
+              placeholder={t('settings.main.sections.database.mysql.database.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.database.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={database => updateMySQLSettings({ database })}
+            />
+          </div>
+        {/if}
+      </div>
     </div>
   </SettingsSection>
 

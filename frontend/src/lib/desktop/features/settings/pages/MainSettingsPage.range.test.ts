@@ -51,15 +51,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
           speciesCount: null,
           species: [],
         },
-        database: {
-          type: 'sqlite',
-          path: 'birds.db',
-          host: '',
-          port: 3306,
-          name: '',
-          username: '',
-          password: '',
-        },
       },
       realtime: {
         dynamicThreshold: {

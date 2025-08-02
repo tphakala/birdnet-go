@@ -41,15 +41,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
             speciesCount: null,
             species: [],
           },
-          database: {
-            type: 'sqlite',
-            path: 'birds.db',
-            host: '',
-            port: 3306,
-            name: '',
-            username: '',
-            password: '',
-          },
         },
         realtime: {
           dynamicThreshold: {

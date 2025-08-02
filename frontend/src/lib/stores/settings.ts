@@ -68,7 +68,6 @@ export interface BirdNetSettings {
   latitude: number;
   longitude: number;
   rangeFilter: RangeFilterSettings;
-  database: DatabaseSettings;
 }
 
 export interface DynamicThresholdSettings {
@@ -86,14 +85,23 @@ export interface RangeFilterSettings {
   species: string[];
 }
 
-export interface DatabaseSettings {
-  type: 'sqlite' | 'mysql';
-  path: string; // For SQLite
-  host: string; // For MySQL
-  port: number; // For MySQL
-  name: string; // For MySQL
-  username: string; // For MySQL
-  password: string; // For MySQL
+export interface SQLiteSettings {
+  enabled: boolean;
+  path: string;
+}
+
+export interface MySQLSettings {
+  enabled: boolean;
+  username: string;
+  password: string;
+  database: string;
+  host: string;
+  port: string;
+}
+
+export interface OutputSettings {
+  sqlite: SQLiteSettings;
+  mysql: MySQLSettings;
 }
 
 export interface AudioSettings {
@@ -372,24 +380,12 @@ export interface LiveStreamSettings {
   enabled?: boolean;
 }
 
-// Output settings
-export interface OutputSettings {
+// File output settings (legacy interface)
+export interface FileOutputSettings {
   file?: {
     enabled: boolean;
     path: string;
     type: string;
-  };
-  sqlite?: {
-    enabled: boolean;
-    path: string;
-  };
-  mysql?: {
-    enabled: boolean;
-    username: string;
-    password: string;
-    database: string;
-    host: string;
-    port: string;
   };
 }
 
@@ -470,15 +466,6 @@ function createEmptySettings(): SettingsFormData {
         threshold: 0.03,
         speciesCount: null,
         species: [],
-      },
-      database: {
-        type: 'sqlite',
-        path: '/data/birdnet.db',
-        host: 'localhost',
-        port: 3306,
-        name: 'birdnet',
-        username: '',
-        password: '',
       },
     },
     realtime: {
@@ -610,6 +597,20 @@ function createEmptySettings(): SettingsFormData {
       environment: 'production',
       includePrivateInfo: false,
     },
+    output: {
+      sqlite: {
+        enabled: false,
+        path: 'birdnet.db',
+      },
+      mysql: {
+        enabled: false,
+        username: '',
+        password: '',
+        database: '',
+        host: 'localhost',
+        port: '3306',
+      },
+    },
   };
 }
 
@@ -675,6 +676,8 @@ export const securitySettings = derived(settingsStore, $store => $store.formData
 export const sentrySettings = derived(settingsStore, $store => $store.formData.sentry);
 
 export const rtspSettings = derived(settingsStore, $store => $store.formData.realtime?.rtsp);
+
+export const outputSettings = derived(settingsStore, $store => $store.formData.output);
 
 export const integrationSettings = derived(settingsStore, $store => ({
   birdweather: $store.formData.realtime?.birdweather,
