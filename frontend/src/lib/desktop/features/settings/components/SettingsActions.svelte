@@ -11,6 +11,11 @@
   let unsavedChanges = $derived($hasUnsavedChanges);
 
   async function handleSave() {
+    // Guard against calls when button should be disabled
+    if (!unsavedChanges || store.isSaving) {
+      return;
+    }
+
     try {
       await settingsActions.saveSettings();
       // Success notification will be handled by the store/SSE
@@ -21,6 +26,11 @@
   }
 
   function handleReset() {
+    // Guard against calls when button should be disabled
+    if (store.isSaving) {
+      return;
+    }
+
     settingsActions.resetAllSettings();
   }
 </script>
