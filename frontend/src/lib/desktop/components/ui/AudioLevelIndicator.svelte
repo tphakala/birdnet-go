@@ -83,7 +83,7 @@
   // State
   let levels = $state<AudioLevels>({});
   let selectedSource = $state<string | null>(null);
-  let smoothedVolumes = $state(new Map<string, number>());
+  let smoothedVolumes = $state<{ [key: string]: number }>({});
   let dropdownOpen = $state(false);
   let isPlaying = $state(false);
   let playingSource = $state<string | null>(null);
@@ -97,17 +97,22 @@
 
   // Internal state
   let eventSource: ReconnectingEventSource | null = null;
+  let audioElement: HTMLAudioElement | null = null;
   let hlsInstance: HLSInstance | null = null;
-  let zeroLevelTime = new Map<string, number>();
+  let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
   // PERFORMANCE OPTIMIZATION: Cache computed values with $derived
   // Reduces repeated object property access and boolean logic in templates
-  const isClipping = $derived((selectedSource && levels[selectedSource]?.clipping) || false);
+  const isClipping = $derived(
+    // eslint-disable-next-line security/detect-object-injection
+    selectedSource && levels[selectedSource] ? levels[selectedSource].clipping : false
+  );
 
-  const smoothedVolume = $derived(selectedSource ? (smoothedVolumes.get(selectedSource) ?? 0) : 0);
+  // eslint-disable-next-line security/detect-object-injection
+  const smoothedVolume = $derived(selectedSource ? smoothedVolumes[selectedSource] || 0 : 0);
 
   // PERFORMANCE OPTIMIZATION: Cache audio element creation with $derived.by
   // Prevents repeated DOM element creation and event listener setup
@@ -149,23 +154,26 @@
 
   // Check if source is inactive
   function isInactive(source: string): boolean {
-    const levelData = levels[source];
-    if (!levelData) return true;
-    if (levelData.level > 0) return false;
+    // eslint-disable-next-line security/detect-object-injection
+    if (!levels[source]) return true;
+    // eslint-disable-next-line security/detect-object-injection
+    if (levels[source].level > 0) return false;
 
-    const existingZeroTime = zeroLevelTime.get(source);
-    if (!existingZeroTime) {
-      zeroLevelTime.set(source, Date.now());
+    // eslint-disable-next-line security/detect-object-injection
+    if (!zeroLevelTime[source]) {
+      // eslint-disable-next-line security/detect-object-injection
+      zeroLevelTime[source] = Date.now();
       return false;
     }
 
-    return Date.now() - existingZeroTime > ZERO_LEVEL_TIMEOUT;
+    // eslint-disable-next-line security/detect-object-injection
+    return Date.now() - zeroLevelTime[source] > ZERO_LEVEL_TIMEOUT;
   }
 
   // Get display name for source
   function getSourceDisplayName(source: string): string {
-    const levelData = levels[source];
-    return levelData?.name || source;
+    // eslint-disable-next-line security/detect-object-injection
+    return levels[source]?.name || source;
   }
 
   // Setup EventSource for audio levels using ReconnectingEventSource
@@ -197,19 +205,22 @@
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
               if (audioData.level === 0) {
-                const existingZeroTime = zeroLevelTime.get(source);
-                if (!existingZeroTime) {
-                  zeroLevelTime.set(source, Date.now());
+                // eslint-disable-next-line security/detect-object-injection
+                if (!zeroLevelTime[source]) {
+                  // eslint-disable-next-line security/detect-object-injection
+                  zeroLevelTime[source] = Date.now();
                 }
               } else {
-                zeroLevelTime.delete(source);
+                // eslint-disable-next-line security/detect-object-injection
+                delete zeroLevelTime[source];
               }
             });
 
             // Initialize smoothed volumes for new sources
             Object.keys(levels).forEach(source => {
-              if (!smoothedVolumes.has(source)) {
-                smoothedVolumes.set(source, 0);
+              if (!(source in smoothedVolumes)) {
+                // eslint-disable-next-line security/detect-object-injection
+                smoothedVolumes[source] = 0;
               }
             });
 
@@ -224,11 +235,11 @@
             // Update smoothed volumes
             Object.entries(levels).forEach(([source, levelData]) => {
               const audioData = levelData as AudioLevelData;
-              const oldVolume = smoothedVolumes.get(source) ?? 0;
-              smoothedVolumes.set(
-                source,
-                SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume
-              );
+              // eslint-disable-next-line security/detect-object-injection
+              const oldVolume = smoothedVolumes[source] || 0;
+              // eslint-disable-next-line security/detect-object-injection
+              smoothedVolumes[source] =
+                SMOOTHING_FACTOR * audioData.level + (1 - SMOOTHING_FACTOR) * oldVolume;
             });
           }
         } catch (error) {
@@ -284,11 +295,11 @@
       });
 
       navigator.mediaSession.setActionHandler('play', () => {
-        cachedAudioElement?.play();
+        audioElement?.play();
       });
 
       navigator.mediaSession.setActionHandler('pause', () => {
-        cachedAudioElement?.pause();
+        audioElement?.pause();
       });
 
       navigator.mediaSession.playbackState = 'playing';
@@ -440,10 +451,10 @@
     hideStatusMessage();
     stopHeartbeat();
 
-    if (cachedAudioElement) {
-      cachedAudioElement.pause();
-      cachedAudioElement.src = '';
-      cachedAudioElement.load();
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.src = '';
+      audioElement.load();
     }
 
     if (hlsInstance) {
