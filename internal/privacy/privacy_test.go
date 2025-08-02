@@ -188,12 +188,12 @@ func TestSanitizeRTSPUrl(t *testing.T) {
 		{
 			name:     "RTSP URL with credentials and path",
 			input:    "rtsp://admin:password@192.168.1.100:554/stream1/channel1",
-			expected: "rtsp://192.168.1.100:554",
+			expected: "rtsp://192.168.1.100:554/stream1/channel1",
 		},
 		{
 			name:     "RTSP URL without credentials but with path",
 			input:    "rtsp://192.168.1.100:554/stream1",
-			expected: "rtsp://192.168.1.100:554",
+			expected: "rtsp://192.168.1.100:554/stream1",
 		},
 		{
 			name:     "RTSP URL without credentials and path",
@@ -214,6 +214,11 @@ func TestSanitizeRTSPUrl(t *testing.T) {
 			name:     "Empty string",
 			input:    "",
 			expected: "",
+		},
+		{
+			name:     "RTSP URL with query parameters",
+			input:    "rtsp://user:pass@192.168.1.100:554/stream?resolution=1080p&bitrate=5000",
+			expected: "rtsp://192.168.1.100:554/stream?resolution=1080p&bitrate=5000",
 		},
 	}
 
@@ -240,17 +245,17 @@ func TestSanitizeRTSPUrls(t *testing.T) {
 		{
 			name:     "Text with single RTSP URL with credentials",
 			input:    "Failed to connect to rtsp://admin:password@192.168.1.100:554/stream1",
-			expected: "Failed to connect to rtsp://192.168.1.100:554",
+			expected: "Failed to connect to rtsp://192.168.1.100:554/stream1",
 		},
 		{
 			name:     "Text with multiple RTSP URLs",
 			input:    "Primary: rtsp://user:pass@cam1.local/stream Secondary: rtsp://admin:123@cam2.local:8554/live",
-			expected: "Primary: rtsp://cam1.local Secondary: rtsp://cam2.local:8554",
+			expected: "Primary: rtsp://cam1.local/stream Secondary: rtsp://cam2.local:8554/live",
 		},
 		{
 			name:     "Text with RTSP URL without credentials",
 			input:    "Stream available at rtsp://192.168.1.50:554/stream",
-			expected: "Stream available at rtsp://192.168.1.50:554",
+			expected: "Stream available at rtsp://192.168.1.50:554/stream",
 		},
 		{
 			name:     "Text without RTSP URLs",
@@ -260,12 +265,12 @@ func TestSanitizeRTSPUrls(t *testing.T) {
 		{
 			name:     "RTSP URL with IPv6 address",
 			input:    "Connect to rtsp://user:pass@[2001:db8::1]:554/stream",
-			expected: "Connect to rtsp://[2001:db8::1]:554",
+			expected: "Connect to rtsp://[2001:db8::1]:554/stream",
 		},
 		{
 			name:     "Mixed content with RTSP and HTTP URLs",
 			input:    "RTSP: rtsp://admin:pass@cam.local/live HTTP: http://example.com/test",
-			expected: "RTSP: rtsp://cam.local HTTP: http://example.com/test",
+			expected: "RTSP: rtsp://cam.local/live HTTP: http://example.com/test",
 		},
 	}
 
