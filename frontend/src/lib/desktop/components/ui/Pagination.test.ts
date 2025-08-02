@@ -1,19 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import { createI18nMock } from '../../../../test/render-helpers';
 import Pagination from './Pagination.svelte';
 
-// Mock i18n translations
+// Mock i18n translations using the shared helper
 vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => {
-    const translations: Record<string, string> = {
-      'dataDisplay.pagination.ariaLabel': 'Pagination Navigation',
-      'dataDisplay.pagination.goToPreviousPage': 'Go to previous page',
-      'dataDisplay.pagination.goToNextPage': 'Go to next page',
-      'dataDisplay.pagination.goToPage': 'Go to page',
-      'dataDisplay.pagination.page': 'Page',
-    };
-    // eslint-disable-next-line security/detect-object-injection
-    return translations[key] ?? key;
+  t: createI18nMock({
+    'dataDisplay.pagination.ariaLabel': 'Pagination Navigation',
+    'dataDisplay.pagination.goToPreviousPage': 'Go to previous page',
+    'dataDisplay.pagination.goToNextPage': 'Go to next page',
+    'dataDisplay.pagination.goToPage': 'Go to page',
+    'dataDisplay.pagination.page': 'Page {{current}} of {{total}}',
   }),
 }));
 
@@ -25,7 +22,7 @@ describe('Pagination', () => {
     const nav = screen.getByLabelText('Pagination Navigation');
     expect(nav).toBeInTheDocument();
 
-    const pageInfo = screen.getByText('Page');
+    const pageInfo = screen.getByText(/^Page 1 of 1$/);
     expect(pageInfo).toBeInTheDocument();
   });
 

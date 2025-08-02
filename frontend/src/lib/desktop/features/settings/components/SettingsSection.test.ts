@@ -1,16 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { createI18nMock } from '../../../../../test/render-helpers';
 import SettingsSection from './SettingsSection.svelte';
 
-// Mock i18n translations
+// Mock i18n translations using the shared helper
 vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => {
-    const translations: Record<string, string> = {
-      'settings.card.changedAriaLabel': 'Settings changed',
-      'settings.card.changed': 'Changed',
-    };
-    // eslint-disable-next-line security/detect-object-injection
-    return translations[key] ?? key;
+  t: createI18nMock({
+    'settings.card.changedAriaLabel': 'Settings changed',
+    'settings.card.changed': 'Changed',
   }),
 }));
 
@@ -145,7 +142,7 @@ describe('SettingsSection', () => {
 
     // These would be tested more thoroughly in integration tests
     // Here we just verify the component renders without errors
-    const container = screen.getByRole('heading', { level: 3 }).closest('.card');
+    const container = screen.getByTestId('settings-card');
     expect(container).toHaveClass('custom-class');
   });
 });
