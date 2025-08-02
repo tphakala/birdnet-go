@@ -57,6 +57,7 @@ Responsive Breakpoints:
   import { getLocalDateString } from '$lib/utils/date';
   import { LRUCache } from '$lib/utils/LRUCache';
   import { loggers } from '$lib/utils/logger';
+  import { safeArrayAccess } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
@@ -322,13 +323,15 @@ Responsive Breakpoints:
 
   // Pre-computed render functions - use $state.raw for performance (static functions)
   const renderFunctions = $state.raw({
-    hourly: (item: DailySpeciesSummary, hour: number) => item.hourly_counts[hour] || 0,
+    hourly: (item: DailySpeciesSummary, hour: number) =>
+      safeArrayAccess(item.hourly_counts, hour, 0) ?? 0,
     'bi-hourly': (item: DailySpeciesSummary, hour: number) =>
-      (item.hourly_counts[hour] || 0) + (item.hourly_counts[hour + 1] || 0),
+      (safeArrayAccess(item.hourly_counts, hour, 0) ?? 0) +
+      (safeArrayAccess(item.hourly_counts, hour + 1, 0) ?? 0),
     'six-hourly': (item: DailySpeciesSummary, hour: number) => {
       let sum = 0;
       for (let h = hour; h < hour + 6 && h < 24; h++) {
-        sum += item.hourly_counts[h] || 0;
+        sum += safeArrayAccess(item.hourly_counts, h, 0) ?? 0;
       }
       return sum;
     },
@@ -444,7 +447,9 @@ Responsive Breakpoints:
     let maxCount = 0;
     for (const species of sortedData) {
       for (let hour = 0; hour < 24; hour += 2) {
-        const sum = (species.hourly_counts[hour] || 0) + (species.hourly_counts[hour + 1] || 0);
+        const sum =
+          (safeArrayAccess(species.hourly_counts, hour, 0) ?? 0) +
+          (safeArrayAccess(species.hourly_counts, hour + 1, 0) ?? 0);
         maxCount = Math.max(maxCount, sum);
       }
     }
@@ -459,7 +464,7 @@ Responsive Breakpoints:
       for (let hour = 0; hour < 24; hour += 6) {
         let sum = 0;
         for (let h = hour; h < hour + 6 && h < 24; h++) {
-          sum += species.hourly_counts[h] || 0;
+          sum += safeArrayAccess(species.hourly_counts, h, 0) ?? 0;
         }
         maxCount = Math.max(maxCount, sum);
       }
@@ -672,7 +677,7 @@ Responsive Breakpoints:
                       if (column.type === 'hourly') {
                         // Hourly columns
                         const hour = (column as HourlyColumn).hour;
-                        const count = item.hourly_counts[hour];
+                        const count = safeArrayAccess(item.hourly_counts, hour, 0) ?? 0;
                         classes.push('text-center', 'h-full');
                         if (count > 0) {
                           // Calculate intensity based on count and global max count
@@ -802,7 +807,7 @@ Responsive Breakpoints:
                     {:else if column.type === 'hourly'}
                       <!-- Hourly detections count -->
                       {@const hour = (column as HourlyColumn).hour}
-                      {@const count = item.hourly_counts[hour]}
+                      {@const count = safeArrayAccess(item.hourly_counts, hour, 0) ?? 0}
                       {#if count > 0}
                         <a
                           href={urlBuilders.speciesHour(item, hour, 1)}

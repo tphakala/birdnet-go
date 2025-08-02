@@ -2,8 +2,7 @@
 /* eslint-disable no-undef, no-console */
 const { chromium } = require('playwright');
 const path = require('path');
-const fs = require('fs');
-const { getSafeOutputPath } = require('./security');
+const { safeArrayAccess, ensureSafeDirectory, getSafeOutputPath } = require('./security');
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -23,8 +22,10 @@ function parseArgs() {
   let filename = '';
 
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const nextArg = args[i + 1];
+    const arg = safeArrayAccess(args, i);
+    const nextArg = safeArrayAccess(args, i + 1);
+
+    if (!arg) continue;
 
     switch (arg) {
       case '--url':
@@ -127,9 +128,9 @@ async function takeScreenshot() {
   const outputPath = getSafeOutputPath(config.outputDir, filename);
   const outputDir = path.dirname(outputPath);
 
-  // Ensure output directory exists
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
+  // Ensure output directory exists using safe directory operations
+  if (!ensureSafeDirectory(outputDir)) {
+    throw new Error('Failed to create output directory');
   }
 
   const browser = await chromium.launch();
