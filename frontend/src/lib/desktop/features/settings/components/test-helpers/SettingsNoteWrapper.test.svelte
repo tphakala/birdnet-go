@@ -7,7 +7,6 @@
 
   export let className = '';
   export let showIcon = false;
-  export let iconContent = '';
   export let childContent = '';
 </script>
 
