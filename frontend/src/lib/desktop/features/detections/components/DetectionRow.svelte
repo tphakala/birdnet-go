@@ -68,7 +68,12 @@
 
   function handleDetailsClick(e: Event) {
     e.preventDefault();
-    onDetailsClick?.(detection.id);
+    if (onDetailsClick) {
+      onDetailsClick(detection.id);
+    } else {
+      // Default navigation to detection detail page
+      window.location.href = `/ui/detections/${detection.id}`;
+    }
   }
 
   // Action handlers

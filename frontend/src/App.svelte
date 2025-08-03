@@ -19,6 +19,7 @@
   let Settings = $state<Component | null>(null);
   let Notifications = $state<Component | null>(null);
   let Detections = $state<Component | null>(null);
+  let DetectionDetail = $state<Component | null>(null);
   let ErrorPage = $state<Component | null>(null);
   let ServerErrorPage = $state<Component | null>(null);
   let GenericErrorPage = $state<any>(null);
@@ -28,6 +29,7 @@
   let pageTitle = $state<string>('Dashboard');
   let loadingComponent = $state<boolean>(false);
   let dynamicErrorCode = $state<string | null>(null);
+  let detectionId = $state<string | null>(null);
 
   // Get configuration from server
   let config = $state<BirdnetConfig | null>(null);
@@ -60,6 +62,12 @@
     { route: 'analytics', page: 'analytics', title: 'Analytics', component: 'analytics' },
     { route: 'search', page: 'search', title: 'Search', component: 'search' },
     { route: 'detections', page: 'detections', title: 'Detections', component: 'detections' },
+    {
+      route: 'detection-detail',
+      page: 'detection-detail',
+      title: 'Detection Details',
+      component: 'detection-detail',
+    },
     { route: 'about', page: 'about', title: 'About', component: 'about' },
     { route: 'system', page: 'system', title: 'System', component: 'system' },
     { route: 'settings', page: 'settings', title: 'Settings', component: 'settings' },
@@ -130,6 +138,12 @@
             Detections = module.default;
           }
           break;
+        case 'detection-detail':
+          if (!DetectionDetail) {
+            const module = await import('./lib/desktop/views/DetectionDetail.svelte');
+            DetectionDetail = module.default;
+          }
+          break;
         case 'error-404':
           if (!ErrorPage) {
             const module = await import('./lib/desktop/views/ErrorPage.svelte');
@@ -198,6 +212,20 @@
   });
 
   function handleRouting(path: string): void {
+    // Special handling for detection detail pages
+    if (path.startsWith('/ui/detections/') && path.split('/').length > 3) {
+      const pathParts = path.split('/');
+      const id = pathParts[3];
+      if (id && !isNaN(Number(id))) {
+        detectionId = id;
+        currentRoute = 'detection-detail';
+        currentPage = 'detection-detail';
+        pageTitle = 'Detection Details';
+        loadComponent('detection-detail');
+        return;
+      }
+    }
+
     // Special handling for settings subpages
     if (path.startsWith('/ui/settings/')) {
       const settingsConfig = findRouteConfig('settings');
@@ -315,6 +343,11 @@
     {@render renderRoute(Settings)}
   {:else if currentRoute === 'detections'}
     {@render renderRoute(Detections)}
+  {:else if currentRoute === 'detection-detail'}
+    {#if DetectionDetail}
+      {@const Component = DetectionDetail}
+      <Component {detectionId} />
+    {/if}
   {:else if currentRoute === 'error-404'}
     {@render renderRoute(ErrorPage)}
   {:else if currentRoute === 'error-500'}

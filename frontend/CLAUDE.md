@@ -5,16 +5,17 @@
 Project is based on
 
 - Svelte 5
-- Typescript
-- Tanstack Query
+- Typescript with proper typing
 - Vite build tool
 - Vitest testing framework
 - Tailwind 3 CSS styling
 - daisyUI 4 components
+- Custom i18n implementation, see @i18n
 
 **Techstack reference documentation**
 
-- Svelte 5 https://svelte.dev/docs/svelte/llms-small.txt, read this when working on Svelte code
+- Svelte 5 documentation is available through MCP
+- Always write proper Svelte 5
 
 ## Structure
 
