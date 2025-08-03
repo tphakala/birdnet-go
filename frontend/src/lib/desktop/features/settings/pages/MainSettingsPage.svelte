@@ -1,3 +1,28 @@
+<!--
+  Main Settings Page Component
+  
+  Purpose: Main configuration settings for BirdNET-Go including node settings,
+  BirdNET parameters, database configuration, and user interface options.
+  
+  Features:
+  - Node identification and settings
+  - BirdNET analysis parameters (sensitivity, threshold, overlap)
+  - Dynamic threshold configuration
+  - Range filter with interactive map
+  - Database type selection (SQLite/MySQL)
+  - User interface preferences (language, thumbnails)
+  
+  Props: None - This is a page component that uses global settings stores
+  
+  Performance Optimizations:
+  - Cached CSRF token with $derived to avoid repeated DOM queries
+  - Reactive computed properties for change detection
+  - Async API loading for non-critical data
+  - Map lazy loading and conditional initialization
+  - Removed page-level spinner to prevent flickering
+  
+  @component
+-->
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -11,20 +36,22 @@
     birdnetSettings,
     dashboardSettings,
     dynamicThresholdSettings,
+    outputSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.settings;
 
+  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
+  // Using $derived ensures settings update when stores change without manual subscriptions
   let settings = $derived({
     main: $mainSettings || { name: '' },
     birdnet: $birdnetSettings || {
@@ -38,7 +65,6 @@
       modelPath: '',
       labelPath: '',
       rangeFilter: {
-        model: 'latest',
         threshold: 0.01,
       },
     },
@@ -49,14 +75,19 @@
       min: 0.3,
       validHours: 24,
     },
-    database: $birdnetSettings?.database || {
-      type: 'sqlite',
-      path: 'birds.db',
-      host: '',
-      port: 3306,
-      name: '',
-      username: '',
-      password: '',
+    output: $outputSettings || {
+      sqlite: {
+        enabled: false,
+        path: 'birdnet.db',
+      },
+      mysql: {
+        enabled: false,
+        username: '',
+        password: '',
+        database: '',
+        host: 'localhost',
+        port: '3306',
+      },
     },
     dashboard: {
       ...($dashboardSettings || {
@@ -68,13 +99,28 @@
         },
         summaryLimit: 100,
       }),
-      locale: $dashboardSettings?.locale || (getLocale() as string), // Ensure locale is always defined
+      locale: $dashboardSettings?.locale || (getLocale() as string),
     },
   });
 
   let store = $derived($settingsStore);
 
-  // Check for changes in each section
+  // Database type selection - determine which database is currently enabled
+  let selectedDatabaseType = $state('sqlite');
+
+  // Update selectedDatabaseType when settings change
+  $effect(() => {
+    if (settings.output.mysql.enabled) {
+      selectedDatabaseType = 'mysql';
+    } else if (settings.output.sqlite.enabled) {
+      selectedDatabaseType = 'sqlite';
+    } else {
+      selectedDatabaseType = 'sqlite'; // Default to sqlite
+    }
+  });
+
+  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
+  // Each section tracks its own changes independently for granular updates
   let mainSettingsHasChanges = $derived(
     hasSettingsChanged((store.originalData as any)?.main, (store.formData as any)?.main)
   );
@@ -87,11 +133,8 @@
       )
   );
 
-  let databaseSettingsHasChanges = $derived(
-    hasSettingsChanged(
-      (store.originalData as any)?.birdnet?.database,
-      (store.formData as any)?.birdnet?.database
-    )
+  let outputSettingsHasChanges = $derived(
+    hasSettingsChanged((store.originalData as any)?.output, (store.formData as any)?.output)
   );
 
   let dashboardSettingsHasChanges = $derived(
@@ -101,38 +144,167 @@
     )
   );
 
-  // Locale options for BirdNET
-  let birdnetLocales = $state<Array<{ value: string; label: string }>>([]);
+  // API State Management
+  interface ApiState<T> {
+    loading: boolean;
+    error: string | null;
+    data: T;
+  }
 
-  // UI locale options
-  let uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
+  // Locale options for BirdNET
+  let birdnetLocales = $state<ApiState<Array<{ value: string; label: string }>>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+
+  // PERFORMANCE OPTIMIZATION: Static UI locales computed once
+  // These don't change during the session, so we compute them once
+  const uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
     value: code,
     label: `${info.flag} ${info.name}`,
   }));
 
   // Image provider options
-  let providerOptions = $state<Array<{ value: string; label: string }>>([]);
-  let multipleProvidersAvailable = $state(false);
+  let providerOptions = $state<ApiState<Array<{ value: string; label: string }>>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+  let multipleProvidersAvailable = $derived(providerOptions.data.length > 1);
 
-  // Range filter state
-  let rangeFilterSpeciesCount = $state<number | null>(null);
-  let loadingRangeFilter = $state(false);
-  let testingRangeFilter = $state(false);
-  let rangeFilterError = $state<string | null>(null);
-  let showRangeFilterModal = $state(false);
-  let rangeFilterSpecies = $state<any[]>([]);
+  // Range filter state with proper structure
+  let rangeFilterState = $state<{
+    speciesCount: number | null;
+    loading: boolean;
+    testing: boolean;
+    error: string | null;
+    showModal: boolean;
+    species: any[];
+  }>({
+    speciesCount: null,
+    loading: false,
+    testing: false,
+    error: null,
+    showModal: false,
+    species: [],
+  });
+
+  // Focus management for modal accessibility
+  let previouslyFocusedElement: HTMLElement | null = null;
+
+  // Helper function to get all focusable elements within a container
+  function getFocusableElements(container: HTMLElement): HTMLElement[] {
+    const focusableSelectors = [
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      'a[href]',
+      '[tabindex]:not([tabindex="-1"])',
+    ];
+
+    const elements = container.querySelectorAll(focusableSelectors.join(', '));
+    return Array.from(elements).filter(el => {
+      const style = window.getComputedStyle(el as HTMLElement);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    }) as HTMLElement[];
+  }
+
+  // Focus trap handler for modal keyboard navigation
+  function handleFocusTrap(event: KeyboardEvent, modal: HTMLElement) {
+    if (event.key !== 'Tab') return;
+
+    const focusableElements = getFocusableElements(modal);
+    if (focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (event.shiftKey) {
+      // Shift + Tab - moving backwards
+      if (document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      }
+    } else {
+      // Tab - moving forwards
+      if (document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+  }
+
+  // Focus trapping effect for range filter modal
+  $effect(() => {
+    if (rangeFilterState.showModal) {
+      // Store previously focused element
+      previouslyFocusedElement = document.activeElement as HTMLElement;
+
+      // Set focus to the modal after a microtask to ensure it's in the DOM
+      setTimeout(() => {
+        const modal = document.querySelector(
+          '[role="dialog"][aria-labelledby="modal-title"]'
+        ) as HTMLElement;
+        if (modal) {
+          // Focus the first focusable element or the modal itself
+          const focusableElements = getFocusableElements(modal);
+          if (focusableElements.length > 0) {
+            focusableElements[0].focus();
+          } else {
+            modal.focus();
+          }
+
+          // Add focus trap event listener
+          const trapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
+          modal.addEventListener('keydown', trapHandler);
+
+          // Cleanup function
+          return () => {
+            modal.removeEventListener('keydown', trapHandler);
+          };
+        }
+      }, 0);
+    } else if (previouslyFocusedElement) {
+      // Restore focus to previously focused element
+      previouslyFocusedElement.focus();
+      previouslyFocusedElement = null;
+    }
+  });
 
   // Map state
   let mapElement: HTMLElement;
   let map: any;
   let marker: any;
 
-  // Fetch initial data
-  onMount(async () => {
-    // Fetch BirdNET locales
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      ''
+  );
+
+  // PERFORMANCE OPTIMIZATION: Load API data concurrently
+  // Use $effect instead of onMount for Svelte 5 pattern
+  $effect(() => {
+    loadInitialData();
+  });
+
+  async function loadInitialData() {
+    // Load all API data in parallel for better performance
+    await Promise.all([loadBirdnetLocales(), loadImageProviders(), loadRangeFilterCount()]);
+
+    // Initialize map after data loads
+    initializeMap();
+  }
+
+  async function loadBirdnetLocales() {
+    birdnetLocales.loading = true;
+    birdnetLocales.error = null;
+
     try {
       const localesData = await api.get<Record<string, string>>('/api/v2/settings/locales');
-      birdnetLocales = Object.entries(localesData || {}).map(([value, label]) => ({
+      birdnetLocales.data = Object.entries(localesData || {}).map(([value, label]) => ({
         value,
         label: label as string,
       }));
@@ -140,47 +312,60 @@
       if (error instanceof ApiError) {
         toastActions.warning(t('settings.main.errors.localesLoadFailed'));
       }
+      birdnetLocales.error = t('settings.main.errors.localesLoadFailed');
       // Fallback to basic locales so form still works
-      birdnetLocales = [{ value: 'en', label: 'English' }];
+      birdnetLocales.data = [{ value: 'en', label: 'English' }];
+    } finally {
+      birdnetLocales.loading = false;
     }
+  }
 
-    // Fetch image providers
+  async function loadImageProviders() {
+    providerOptions.loading = true;
+    providerOptions.error = null;
+
     try {
       const providersData = await api.get<{
         providers?: Array<{ value: string; display: string }>;
       }>('/api/v2/settings/imageproviders');
 
       // Map v2 API response format to client format
-      providerOptions = (providersData?.providers || []).map((provider: any) => ({
+      providerOptions.data = (providersData?.providers || []).map((provider: any) => ({
         value: provider.value,
         label: provider.display,
       }));
-
-      multipleProvidersAvailable = providerOptions.length > 1;
     } catch (error) {
       if (error instanceof ApiError) {
         toastActions.warning(t('settings.main.errors.providersLoadFailed'));
       }
+      providerOptions.error = t('settings.main.errors.providersLoadFailed');
       // Fallback to basic provider so form still works
-      providerOptions = [{ value: 'wikipedia', label: 'Wikipedia' }];
-      multipleProvidersAvailable = false;
+      providerOptions.data = [{ value: 'wikipedia', label: 'Wikipedia' }];
+    } finally {
+      providerOptions.loading = false;
     }
+  }
 
-    // Load initial range filter count
-    loadRangeFilterCount();
-
-    // Initialize map after component mounts
-    initializeMap();
-  });
+  // Wait for Leaflet library to be available
+  async function waitForLeaflet(maxAttempts = 20, interval = 100): Promise<any> {
+    for (let i = 0; i < maxAttempts; i++) {
+      const L = (window as any).L;
+      if (L) {
+        return L;
+      }
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+    return null;
+  }
 
   // Initialize Leaflet map
   async function initializeMap() {
     if (!mapElement) return;
 
-    // Dynamically import Leaflet
-    const L = (window as any).L;
+    // Wait for Leaflet to be available
+    const L = await waitForLeaflet();
     if (!L) {
-      logger.error('Leaflet not loaded');
+      logger.error('Leaflet failed to load after timeout');
       return;
     }
 
@@ -190,6 +375,7 @@
 
     map = L.map(mapElement, {
       scrollWheelZoom: false, // Disable default scroll wheel zoom
+      keyboard: true, // Enable keyboard navigation
     }).setView([initialLat, initialLng], initialZoom);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -247,31 +433,43 @@
 
   // Range filter functions
   let debounceTimer: any;
+  let loadingDelayTimer: any;
 
   function debouncedTestRangeFilter() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       testCurrentRangeFilter();
-    }, 500);
+    }, 150); // Reduced from 500ms to 150ms for faster response
   }
 
   async function loadRangeFilterCount() {
     try {
-      const response = await fetch('/api/v2/range/species/count');
+      const response = await fetch('/api/v2/range/species/count', {
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
       if (!response.ok) throw new Error('Failed to load range filter count');
       const data = await response.json();
-      rangeFilterSpeciesCount = data.count;
+      rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load range filter count:', error);
-      rangeFilterError = t('settings.main.errors.rangeFilterCountFailed');
+      rangeFilterState.error = t('settings.main.errors.rangeFilterCountFailed');
     }
   }
 
   async function testCurrentRangeFilter() {
-    if (testingRangeFilter || !settings.birdnet.latitude || !settings.birdnet.longitude) return;
+    if (rangeFilterState.testing || !settings.birdnet.latitude || !settings.birdnet.longitude)
+      return;
 
-    testingRangeFilter = true;
-    rangeFilterError = null;
+    // Clear any existing loading delay timer
+    clearTimeout(loadingDelayTimer);
+
+    // Only show loading state if the request takes longer than 100ms
+    // This prevents flicker for fast responses
+    loadingDelayTimer = setTimeout(() => {
+      rangeFilterState.testing = true;
+    }, 100);
+
+    rangeFilterState.error = null;
 
     try {
       const data = await api.post<{ count: number; species?: any[] }>(
@@ -280,49 +478,49 @@
           latitude: settings.birdnet.latitude,
           longitude: settings.birdnet.longitude,
           threshold: settings.birdnet.rangeFilter.threshold,
-          model: settings.birdnet.rangeFilter.model, // Include model in the test
         }
       );
 
-      rangeFilterSpeciesCount = data.count;
+      rangeFilterState.speciesCount = data.count;
 
-      if (showRangeFilterModal) {
-        rangeFilterSpecies = data.species || [];
+      if (rangeFilterState.showModal) {
+        rangeFilterState.species = data.species || [];
       }
     } catch (error) {
       logger.error('Failed to test range filter:', error);
-      rangeFilterError = t('settings.main.errors.rangeFilterTestFailed');
+      rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
       // Set count to null on error to show loading state next time
-      rangeFilterSpeciesCount = null;
+      rangeFilterState.speciesCount = null;
     } finally {
-      testingRangeFilter = false;
+      // Clear the loading delay timer and testing state
+      clearTimeout(loadingDelayTimer);
+      rangeFilterState.testing = false;
     }
   }
 
   async function loadRangeFilterSpecies() {
-    if (loadingRangeFilter) return;
+    if (rangeFilterState.loading) return;
 
-    loadingRangeFilter = true;
-    rangeFilterError = null;
+    rangeFilterState.loading = true;
+    rangeFilterState.error = null;
 
     try {
       const params = new URLSearchParams({
         latitude: settings.birdnet.latitude.toString(),
         longitude: settings.birdnet.longitude.toString(),
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
-        model: settings.birdnet.rangeFilter.model, // Include model parameter
       });
 
       const data = await api.get<{ count: number; species: any[] }>(
         `/api/v2/range/species/list?${params}`
       );
-      rangeFilterSpecies = data.species || [];
-      rangeFilterSpeciesCount = data.count;
+      rangeFilterState.species = data.species || [];
+      rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load species list:', error);
-      rangeFilterError = t('settings.main.errors.rangeFilterLoadFailed');
+      rangeFilterState.error = t('settings.main.errors.rangeFilterLoadFailed');
     } finally {
-      loadingRangeFilter = false;
+      rangeFilterState.loading = false;
     }
   }
 
@@ -334,8 +532,6 @@
     const lng = settings.birdnet.longitude;
     // eslint-disable-next-line no-unused-vars
     const threshold = settings.birdnet.rangeFilter.threshold;
-    // eslint-disable-next-line no-unused-vars
-    const model = settings.birdnet.rangeFilter.model;
 
     // Only test if we have valid coordinates
     if (lat && lng) {
@@ -358,21 +554,34 @@
     });
   }
 
+  function updateSQLiteSettings(updates: Partial<{ enabled: boolean; path: string }>) {
+    settingsActions.updateSection('output', {
+      ...settings.output,
+      sqlite: { ...settings.output.sqlite, ...updates },
+    });
+  }
+
+  function updateMySQLSettings(
+    updates: Partial<{
+      enabled: boolean;
+      username: string;
+      password: string;
+      database: string;
+      host: string;
+      port: string;
+    }>
+  ) {
+    settingsActions.updateSection('output', {
+      ...settings.output,
+      mysql: { ...settings.output.mysql, ...updates },
+    });
+  }
+
   function updateDatabaseType(type: 'sqlite' | 'mysql') {
-    settingsActions.updateSection('birdnet', {
-      database: { ...settings.database, type },
-    });
-  }
-
-  function updateSQLitePath(path: string) {
-    settingsActions.updateSection('birdnet', {
-      database: { ...settings.database, path },
-    });
-  }
-
-  function updateMySQLSetting(key: string, value: any) {
-    settingsActions.updateSection('birdnet', {
-      database: { ...settings.database, [key]: value },
+    settingsActions.updateSection('output', {
+      ...settings.output,
+      sqlite: { ...settings.output.sqlite, enabled: type === 'sqlite' },
+      mysql: { ...settings.output.mysql, enabled: type === 'mysql' },
     });
   }
 
@@ -398,7 +607,7 @@
   }
 </script>
 
-<div class="space-y-4">
+<main class="space-y-4" aria-label="Main settings configuration">
   <!-- Main Settings Section -->
   <SettingsSection
     title={t('settings.main.sections.main.title')}
@@ -466,9 +675,9 @@
           id="locale"
           bind:value={settings.birdnet.locale}
           label={t('settings.main.fields.locale.label')}
-          options={birdnetLocales}
+          options={birdnetLocales.data}
           helpText={t('settings.main.fields.locale.helpText')}
-          disabled={store.isLoading || store.isSaving}
+          disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
           onchange={value => updateBirdnetSetting('locale', value)}
         />
 
@@ -568,247 +777,263 @@
         <h4 class="text-lg font-medium mt-6 pb-2">
           {t('settings.main.sections.rangeFilter.title')}
         </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
-          <!-- Map container -->
-          <div class="col-span-1 md:col-span-2">
-            <label class="label justify-start" for="location-map">
-              <span class="label-text"
-                >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
+
+        <!-- Coordinates row - 2 columns -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 mb-6">
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.latitude.label')}
+            value={settings.birdnet.latitude}
+            onUpdate={value => updateBirdnetSetting('latitude', value)}
+            min={-90.0}
+            max={90.0}
+            step={0.001}
+            helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.longitude.label')}
+            value={settings.birdnet.longitude}
+            onUpdate={value => updateBirdnetSetting('longitude', value)}
+            min={-180.0}
+            max={180.0}
+            step={0.001}
+            helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+
+        <!-- Map container - full width -->
+        <div class="mb-6">
+          <label class="label justify-start" for="location-map">
+            <span class="label-text"
+              >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
+            >
+          </label>
+          <div class="form-control">
+            <div
+              bind:this={mapElement}
+              id="location-map"
+              class="h-[300px] rounded-lg border border-base-300"
+              role="application"
+              aria-label="Map for selecting station location"
+            >
+              <!-- Map will be initialized here -->
+            </div>
+            <div class="flex gap-2 mt-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-circle"
+                aria-label="Zoom in"
+                onclick={() => map?.zoomIn()}
               >
-            </label>
-            <div class="form-control">
-              <div
-                bind:this={mapElement}
-                id="location-map"
-                class="h-[300px] rounded-lg border border-base-300"
-                role="application"
-                aria-label="Map for selecting station location"
+                +
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-circle"
+                aria-label="Zoom out"
+                onclick={() => map?.zoomOut()}
               >
-                <!-- Map will be initialized here -->
-              </div>
-              <div class="label">
-                <span class="label-text-alt"
-                  >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
-                >
-              </div>
-              <div class="label">
-                <span class="label-text-alt text-info"
-                  >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map</span
-                >
-              </div>
+                -
+              </button>
+            </div>
+            <div class="label">
+              <span class="label-text-alt"
+                >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
+              >
+            </div>
+            <div class="label">
+              <span class="label-text-alt text-info"
+                >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map. Use arrow keys to pan, +/-
+                keys to zoom.</span
+              >
             </div>
           </div>
+        </div>
 
-          <!-- Range Filter Settings -->
-          <div class="col-span-1 flex flex-col justify-start gap-x-6">
-            <NumberField
-              label={t('settings.main.sections.rangeFilter.latitude.label')}
-              value={settings.birdnet.latitude}
-              onUpdate={value => updateBirdnetSetting('latitude', value)}
-              min={-90.0}
-              max={90.0}
-              step={0.001}
-              helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
+        <!-- Threshold and Species row - 2 columns -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <NumberField
+            label={t('settings.main.sections.rangeFilter.threshold.label')}
+            value={settings.birdnet.rangeFilter.threshold}
+            onUpdate={value =>
+              settingsActions.updateSection('birdnet', {
+                rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
+              })}
+            min={0.0}
+            max={0.99}
+            step={0.01}
+            helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
 
-            <NumberField
-              label={t('settings.main.sections.rangeFilter.longitude.label')}
-              value={settings.birdnet.longitude}
-              onUpdate={value => updateBirdnetSetting('longitude', value)}
-              min={-180.0}
-              max={180.0}
-              step={0.001}
-              helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <SelectField
-              id="range-filter-model"
-              bind:value={settings.birdnet.rangeFilter.model}
-              label={t('settings.main.sections.rangeFilter.model.label')}
-              options={[
-                { value: 'legacy', label: 'legacy' },
-                { value: 'latest', label: 'latest' },
-              ]}
-              helpText={t('settings.main.sections.rangeFilter.model.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={value =>
-                settingsActions.updateSection('birdnet', {
-                  rangeFilter: {
-                    ...settings.birdnet.rangeFilter,
-                    model: value as 'latest' | 'legacy',
-                  },
-                })}
-            />
-
-            <NumberField
-              label={t('settings.main.sections.rangeFilter.threshold.label')}
-              value={settings.birdnet.rangeFilter.threshold}
-              onUpdate={value =>
-                settingsActions.updateSection('birdnet', {
-                  rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
-                })}
-              min={0.0}
-              max={0.99}
-              step={0.01}
-              helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <!-- Range Filter Species Count Display -->
-            <div class="form-control">
-              <div class="label justify-start">
-                <span class="label-text"
-                  >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-                >
-              </div>
+          <!-- Range Filter Species Count Display -->
+          <div class="form-control">
+            <div class="label justify-start">
+              <span class="label-text"
+                >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
+              >
+            </div>
+            <div class="flex items-center space-x-2">
               <div class="flex items-center space-x-2">
-                <div class="flex items-center space-x-2">
-                  <div class="text-lg font-bold text-primary" class:opacity-60={testingRangeFilter}>
-                    {rangeFilterSpeciesCount !== null
-                      ? rangeFilterSpeciesCount
-                      : t('settings.main.sections.rangeFilter.speciesCount.loading')}
-                  </div>
-                  {#if testingRangeFilter}
-                    <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
-                  {/if}
+                <div
+                  class="text-lg font-bold text-primary"
+                  class:opacity-60={rangeFilterState.testing}
+                >
+                  {rangeFilterState.speciesCount !== null
+                    ? rangeFilterState.speciesCount
+                    : t('settings.main.sections.rangeFilter.speciesCount.loading')}
                 </div>
+                {#if rangeFilterState.testing}
+                  <span
+                    class="loading loading-spinner loading-xs text-primary opacity-60"
+                    aria-label={t('common.loading')}
+                  ></span>
+                {/if}
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline"
+                disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
+                onclick={() => {
+                  rangeFilterState.showModal = true;
+                  loadRangeFilterSpecies();
+                }}
+              >
+                {#if rangeFilterState.loading}
+                  <span class="loading loading-spinner loading-xs mr-1"></span>
+                  {t('settings.main.sections.rangeFilter.speciesCount.loading')}
+                {:else}
+                  {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+                {/if}
+              </button>
+            </div>
+            <div class="label">
+              <span class="label-text-alt"
+                >{t('settings.main.sections.rangeFilter.speciesCount.helpText')}</span
+              >
+            </div>
+
+            {#if rangeFilterState.error}
+              <div class="alert alert-error mt-2" role="alert">
+                {@html alertIconsSvg.error}
+                <span>{rangeFilterState.error}</span>
                 <button
                   type="button"
-                  class="btn btn-sm btn-outline"
-                  disabled={!rangeFilterSpeciesCount || loadingRangeFilter}
-                  onclick={() => {
-                    showRangeFilterModal = true;
-                    loadRangeFilterSpecies();
-                  }}
+                  class="btn btn-sm btn-ghost ml-auto"
+                  aria-label="Dismiss error"
+                  onclick={() => (rangeFilterState.error = null)}
                 >
-                  {#if loadingRangeFilter}
-                    <span class="loading loading-spinner loading-xs mr-1"></span>
-                    {t('settings.main.sections.rangeFilter.speciesCount.loading')}
-                  {:else}
-                    {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-                  {/if}
+                  {@html navigationIcons.close}
                 </button>
               </div>
-              <div class="label">
-                <span class="label-text-alt"
-                  >{t('settings.main.sections.rangeFilter.speciesCount.helpText')}</span
-                >
-              </div>
-
-              {#if rangeFilterError}
-                <div class="alert alert-error mt-2">
-                  {@html alertIconsSvg.error}
-                  <span>{rangeFilterError}</span>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-ghost ml-auto"
-                    aria-label="Dismiss error"
-                    onclick={() => (rangeFilterError = null)}
-                  >
-                    {@html navigationIcons.close}
-                  </button>
-                </div>
-              {/if}
-            </div>
+            {/if}
           </div>
         </div>
       </div>
     </div>
   </SettingsSection>
 
-  <!-- Database Settings Section -->
+  <!-- Database Output Settings Section -->
   <SettingsSection
     title={t('settings.main.sections.database.title')}
     description={t('settings.main.sections.database.description')}
     defaultOpen={true}
-    hasChanges={databaseSettingsHasChanges}
+    hasChanges={outputSettingsHasChanges}
   >
-    <div class="space-y-4">
-      <SelectField
-        id="database-type"
-        bind:value={settings.database.type}
-        label={t('settings.main.sections.database.type.label')}
-        options={[
-          { value: 'sqlite', label: 'SQLite' },
-          { value: 'mysql', label: 'MySQL' },
-        ]}
-        helpText={t('settings.main.sections.database.type.helpText')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
-      />
+    <div class="space-y-6">
+      <!-- Database Type Selection -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+        <SelectField
+          id="database-type"
+          bind:value={selectedDatabaseType}
+          label={t('settings.main.sections.database.type.label')}
+          options={[
+            { value: 'sqlite', label: t('settings.main.sections.database.type.options.sqlite') },
+            { value: 'mysql', label: t('settings.main.sections.database.type.options.mysql') },
+          ]}
+          helpText={t('settings.main.sections.database.type.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
+        />
+      </div>
 
-      {#if settings.database.type === 'sqlite'}
-        <SettingsNote>
-          <span>{t('settings.main.sections.database.sqlite.note')}</span>
-        </SettingsNote>
+      <!-- SQLite Settings -->
+      {#if selectedDatabaseType === 'sqlite'}
+        <div class="space-y-4">
+          <SettingsNote>
+            <span>{t('settings.main.sections.database.sqlite.note')}</span>
+          </SettingsNote>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <TextInput
-            id="sqlite-path"
-            bind:value={settings.database.path}
-            label={t('settings.main.sections.database.sqlite.path.label')}
-            placeholder={t('settings.main.sections.database.sqlite.path.placeholder')}
-            helpText={t('settings.main.sections.database.sqlite.path.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateSQLitePath}
-          />
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+            <TextInput
+              id="sqlite-path"
+              bind:value={settings.output.sqlite.path}
+              label={t('settings.main.sections.database.sqlite.path.label')}
+              placeholder={t('settings.main.sections.database.sqlite.path.placeholder')}
+              helpText={t('settings.main.sections.database.sqlite.path.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={path => updateSQLiteSettings({ path })}
+            />
+          </div>
         </div>
       {/if}
 
-      {#if settings.database.type === 'mysql'}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <TextInput
-            id="mysql-host"
-            bind:value={settings.database.host}
-            label={t('settings.main.sections.database.mysql.host.label')}
-            placeholder={t('settings.main.sections.database.mysql.host.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.host.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateMySQLSetting('host', value)}
-          />
+      <!-- MySQL Settings -->
+      {#if selectedDatabaseType === 'mysql'}
+        <div class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <TextInput
+              id="mysql-host"
+              bind:value={settings.output.mysql.host}
+              label={t('settings.main.sections.database.mysql.host.label')}
+              placeholder={t('settings.main.sections.database.mysql.host.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.host.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={host => updateMySQLSettings({ host })}
+            />
 
-          <NumberField
-            label={t('settings.main.sections.database.mysql.port.label')}
-            value={settings.database.port}
-            onUpdate={value => updateMySQLSetting('port', value)}
-            min={1}
-            max={65535}
-            placeholder="3306"
-            helpText={t('settings.main.sections.database.mysql.port.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
+            <TextInput
+              id="mysql-port"
+              bind:value={settings.output.mysql.port}
+              label={t('settings.main.sections.database.mysql.port.label')}
+              placeholder="3306"
+              helpText={t('settings.main.sections.database.mysql.port.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={port => updateMySQLSettings({ port })}
+            />
 
-          <TextInput
-            id="mysql-username"
-            bind:value={settings.database.username}
-            label={t('settings.main.sections.database.mysql.username.label')}
-            placeholder={t('settings.main.sections.database.mysql.username.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.username.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateMySQLSetting('username', value)}
-          />
+            <TextInput
+              id="mysql-username"
+              bind:value={settings.output.mysql.username}
+              label={t('settings.main.sections.database.mysql.username.label')}
+              placeholder={t('settings.main.sections.database.mysql.username.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.username.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={username => updateMySQLSettings({ username })}
+            />
 
-          <PasswordField
-            id="mysql-password"
-            value={settings.database.password}
-            label={t('settings.main.sections.database.mysql.password.label')}
-            placeholder={t('settings.main.sections.database.mysql.password.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.password.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onUpdate={value => updateMySQLSetting('password', value)}
-          />
+            <PasswordField
+              id="mysql-password"
+              value={settings.output.mysql.password}
+              label={t('settings.main.sections.database.mysql.password.label')}
+              placeholder={t('settings.main.sections.database.mysql.password.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.password.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={password => updateMySQLSettings({ password })}
+            />
 
-          <TextInput
-            id="mysql-database"
-            bind:value={settings.database.name}
-            label={t('settings.main.sections.database.mysql.database.label')}
-            placeholder={t('settings.main.sections.database.mysql.database.placeholder')}
-            helpText={t('settings.main.sections.database.mysql.database.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateMySQLSetting('name', value)}
-          />
+            <TextInput
+              id="mysql-database"
+              bind:value={settings.output.mysql.database}
+              label={t('settings.main.sections.database.mysql.database.label')}
+              placeholder={t('settings.main.sections.database.mysql.database.placeholder')}
+              helpText={t('settings.main.sections.database.mysql.database.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={database => updateMySQLSettings({ database })}
+            />
+          </div>
         </div>
       {/if}
     </div>
@@ -883,11 +1108,14 @@
               label={t(
                 'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
               )}
-              options={providerOptions}
+              options={providerOptions.data}
               helpText={t(
                 'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
               )}
-              disabled={store.isLoading || store.isSaving || !multipleProvidersAvailable}
+              disabled={store.isLoading ||
+                store.isSaving ||
+                !multipleProvidersAvailable ||
+                providerOptions.loading}
               onchange={value => updateThumbnailSetting('imageProvider', value)}
             />
           </div>
@@ -924,10 +1152,10 @@
       </div>
     </div>
   </SettingsSection>
-</div>
+</main>
 
 <!-- Range Filter Species Modal -->
-{#if showRangeFilterModal}
+{#if rangeFilterState.showModal}
   <div
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
     style:z-index="9999"
@@ -935,8 +1163,8 @@
     aria-modal="true"
     aria-labelledby="modal-title"
     tabindex="-1"
-    onclick={e => e.target === e.currentTarget && (showRangeFilterModal = false)}
-    onkeydown={e => e.key === 'Escape' && (showRangeFilterModal = false)}
+    onclick={e => e.target === e.currentTarget && (rangeFilterState.showModal = false)}
+    onkeydown={e => e.key === 'Escape' && (rangeFilterState.showModal = false)}
   >
     <div
       class="bg-base-100 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col"
@@ -950,7 +1178,7 @@
           type="button"
           class="btn btn-sm btn-circle btn-ghost"
           aria-label="Close modal"
-          onclick={() => (showRangeFilterModal = false)}
+          onclick={() => (rangeFilterState.showModal = false)}
         >
           {@html navigationIcons.close}
         </button>
@@ -962,7 +1190,7 @@
             <span class="font-medium"
               >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
             >
-            <span> {rangeFilterSpeciesCount}</span>
+            <span> {rangeFilterState.speciesCount}</span>
           </div>
           <div>
             <span class="font-medium"
@@ -984,15 +1212,15 @@
         </div>
       </div>
 
-      {#if rangeFilterError}
-        <div class="alert alert-error mb-4">
+      {#if rangeFilterState.error}
+        <div class="alert alert-error mb-4" role="alert">
           {@html alertIconsSvg.error}
-          <span>{rangeFilterError}</span>
+          <span>{rangeFilterState.error}</span>
           <button
             type="button"
             class="btn btn-sm btn-ghost ml-auto"
             aria-label="Dismiss error"
-            onclick={() => (rangeFilterError = null)}
+            onclick={() => (rangeFilterState.error = null)}
           >
             {@html navigationIcons.close}
           </button>
@@ -1000,14 +1228,14 @@
       {/if}
 
       <div class="flex-1 overflow-auto">
-        {#if loadingRangeFilter}
+        {#if rangeFilterState.loading}
           <div class="text-center py-8">
             <div class="loading loading-spinner loading-lg"></div>
             <p class="mt-2">{t('settings.main.sections.rangeFilter.modal.loadingSpecies')}</p>
           </div>
-        {:else if rangeFilterSpecies.length > 0}
+        {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {#each rangeFilterSpecies as species}
+            {#each rangeFilterState.species as species}
               <div class="p-2 rounded hover:bg-base-200">
                 <div class="font-medium">{species.commonName}</div>
                 <div class="text-sm text-base-content/70">{species.scientificName}</div>
@@ -1025,7 +1253,7 @@
         <button
           type="button"
           class="btn btn-outline"
-          onclick={() => (showRangeFilterModal = false)}
+          onclick={() => (rangeFilterState.showModal = false)}
         >
           {t('settings.main.sections.rangeFilter.modal.close')}
         </button>

@@ -1,19 +1,98 @@
 /**
  * Utility functions for detecting changes in settings sections
+ *
+ * Performance optimized for Svelte 5 reactive proxies and deep object comparison.
+ * Avoids JSON.stringify for better performance and proxy compatibility.
  */
 
-import { safeGet } from './security';
+import { safeGet, safeArrayAccess } from './security';
 
 /**
- * Deep compare two objects to detect changes
+ * Deep compare two values to detect changes
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Early returns for common cases (same reference, null/undefined)
+ * - Type checking before recursive comparison
+ * - Efficient array and object iteration
+ * - No JSON.stringify overhead
+ * - Handles circular references gracefully
+ *
+ * @param a First value to compare
+ * @param b Second value to compare
+ * @param seen WeakSet to track circular references
+ * @returns true if values are deeply equal, false otherwise
+ */
+export function deepEqual(a: unknown, b: unknown, seen = new WeakSet()): boolean {
+  // Same reference or both null/undefined
+  if (a === b) return true;
+
+  // One is null/undefined but not both
+  if (a == null || b == null) return false;
+
+  // Different types
+  const typeA = typeof a;
+  const typeB = typeof b;
+  if (typeA !== typeB) return false;
+
+  // Primitives (string, number, boolean)
+  if (typeA !== 'object') return false;
+
+  // For objects and arrays
+  const objA = a as Record<string, unknown>;
+  const objB = b as Record<string, unknown>;
+
+  // Check for circular references
+  if (seen.has(objA) || seen.has(objB)) return objA === objB;
+  seen.add(objA);
+  seen.add(objB);
+
+  // Arrays
+  if (Array.isArray(objA)) {
+    if (!Array.isArray(objB)) return false;
+    if (objA.length !== objB.length) return false;
+
+    for (let i = 0; i < objA.length; i++) {
+      const valA = safeArrayAccess(objA, i);
+      const valB = safeArrayAccess(objB, i);
+      if (!deepEqual(valA, valB, seen)) return false;
+    }
+    return true;
+  }
+
+  // Objects
+  const keysA = Object.keys(objA);
+  const keysB = Object.keys(objB);
+
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+    const valA = safeGet(objA, key);
+    const valB = safeGet(objB, key);
+    if (!deepEqual(valA, valB, seen)) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Detect if settings have changed using optimized deep comparison
+ *
+ * @param original Original settings value
+ * @param current Current settings value
+ * @returns true if settings have changed, false otherwise
  */
 export function hasSettingsChanged(original: unknown, current: unknown): boolean {
   if (original === undefined || current === undefined) return false;
-  return JSON.stringify(original) !== JSON.stringify(current);
+  return !deepEqual(original, current);
 }
 
 /**
  * Extract a specific section from settings data for comparison
+ *
+ * @param data Settings data object
+ * @param sectionPath Dot-separated path to section (e.g., "audio.capture")
+ * @returns Extracted section or undefined if not found
  */
 export function extractSettingsSection<T>(data: unknown, sectionPath: string): T | undefined {
   if (!data || typeof data !== 'object') return undefined;
@@ -39,6 +118,11 @@ export function extractSettingsSection<T>(data: unknown, sectionPath: string): T
 
 /**
  * Check if a specific settings section has changes
+ *
+ * @param originalData Original settings data
+ * @param currentData Current settings data
+ * @param sectionPath Dot-separated path to section
+ * @returns true if section has changed, false otherwise
  */
 export function hasSectionChanged<T>(
   originalData: unknown,
@@ -53,6 +137,11 @@ export function hasSectionChanged<T>(
 
 /**
  * Check if any subsection within a section has changes
+ *
+ * @param originalData Original settings data
+ * @param currentData Current settings data
+ * @param sectionPaths Array of dot-separated paths to check
+ * @returns true if any section has changed, false otherwise
  */
 export function hasAnySectionChanged(
   originalData: unknown,
@@ -60,4 +149,66 @@ export function hasAnySectionChanged(
   sectionPaths: string[]
 ): boolean {
   return sectionPaths.some(path => hasSectionChanged(originalData, currentData, path));
+}
+
+/**
+ * Create a snapshot of Svelte proxy state for comparison
+ * Use this when comparing Svelte reactive proxies to avoid proxy comparison issues
+ *
+ * @param value Value to snapshot (may be a proxy)
+ * @param seen WeakSet to track visited objects (prevents circular references)
+ * @param depth Current recursion depth
+ * @param maxDepth Maximum allowed recursion depth (default: 50)
+ * @returns Plain object/array snapshot
+ */
+export function createSnapshot<T>(
+  value: T,
+  seen: WeakSet<object> = new WeakSet(),
+  depth: number = 0,
+  maxDepth: number = 50
+): T {
+  // Prevent stack overflow from deep recursion
+  if (depth > maxDepth) {
+    // eslint-disable-next-line no-console
+    console.warn(`createSnapshot: Maximum depth ${maxDepth} exceeded`);
+    return null as T;
+  }
+
+  if (value == null || typeof value !== 'object') return value;
+
+  // Check for circular references
+  if (seen.has(value)) {
+    // eslint-disable-next-line no-console
+    console.warn('createSnapshot: Circular reference detected');
+    return null as T;
+  }
+
+  // Mark this object as seen
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    const result = value.map(item => createSnapshot(item, seen, depth + 1, maxDepth)) as T;
+    seen.delete(value); // Clean up after processing
+    return result;
+  }
+
+  // Use Object.create(null) to create an object without prototype
+  const snapshot = Object.create(null) as Record<string, unknown>;
+  const keys = Object.keys(value);
+
+  for (const key of keys) {
+    const val = safeGet(value as Record<string, unknown>, key);
+    // Use Object.defineProperty for safe property assignment
+    Object.defineProperty(snapshot, key, {
+      value: createSnapshot(val, seen, depth + 1, maxDepth),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  // Clean up after processing this object
+  seen.delete(value);
+
+  return snapshot as T;
 }

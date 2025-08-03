@@ -46,19 +46,9 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
         latitude: 40.7128,
         longitude: -74.006,
         rangeFilter: {
-          model: 'latest',
           threshold: 0.03,
           speciesCount: null,
           species: [],
-        },
-        database: {
-          type: 'sqlite',
-          path: 'birds.db',
-          host: '',
-          port: 3306,
-          name: '',
-          username: '',
-          password: '',
         },
       },
       realtime: {
@@ -104,7 +94,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(updatedState.formData.birdnet.longitude).toBe(-0.1278);
 
     // Verify range filter settings were preserved
-    expect(updatedState.formData.birdnet.rangeFilter.model).toBe('latest');
     expect(updatedState.formData.birdnet.rangeFilter.threshold).toBe(0.03);
   });
 
@@ -112,7 +101,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'latest',
         threshold: 0.05,
         speciesCount: null,
         species: [],
@@ -128,23 +116,23 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(updatedState.formData.birdnet.longitude).toBe(-74.006);
   });
 
-  it('should trigger range filter test when model changes', async () => {
-    // Update range filter model
+  it('should preserve range filter settings when species list is updated', async () => {
+    // Update range filter species list
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'legacy',
         threshold: 0.03,
-        speciesCount: null,
-        species: [],
+        speciesCount: 150,
+        species: ['species1', 'species2'],
       },
     });
 
-    // Verify model was updated
+    // Verify species list was updated
     const updatedState = get(settingsStore);
-    expect(updatedState.formData.birdnet.rangeFilter.model).toBe('legacy');
 
-    // Verify other settings were preserved
+    // Verify all settings were preserved
     expect(updatedState.formData.birdnet.rangeFilter.threshold).toBe(0.03);
+    expect(updatedState.formData.birdnet.rangeFilter.speciesCount).toBe(150);
+    expect(updatedState.formData.birdnet.rangeFilter.species).toEqual(['species1', 'species2']);
     expect(updatedState.formData.birdnet.latitude).toBe(40.7128);
     expect(updatedState.formData.birdnet.longitude).toBe(-74.006);
   });
@@ -159,20 +147,18 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'latest',
         threshold: 0.04,
         speciesCount: null,
         species: [],
       },
     });
 
-    // Update range filter model
+    // Update range filter species count
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'legacy',
         threshold: 0.04,
-        speciesCount: null,
-        species: [],
+        speciesCount: 200,
+        species: ['bird1', 'bird2'],
       },
     });
 
@@ -182,15 +168,15 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     expect(birdnet.latitude).toBe(48.8566);
     expect(birdnet.longitude).toBe(2.3522);
-    expect(birdnet.rangeFilter.model).toBe('legacy');
     expect(birdnet.rangeFilter.threshold).toBe(0.04);
+    expect(birdnet.rangeFilter.speciesCount).toBe(200);
+    expect(birdnet.rangeFilter.species).toEqual(['bird1', 'bird2']);
   });
 
   it('should not lose range filter data during coordinate updates', async () => {
     // Set initial range filter with custom values
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'latest' as const, // Testing with a different value
         threshold: 0.1,
         speciesCount: 250,
         species: ['species1', 'species2'],
@@ -199,7 +185,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify initial range filter state
     const initialState = get(settingsStore);
-    expect(initialState.formData.birdnet.rangeFilter.model).toBe('latest');
     expect(initialState.formData.birdnet.rangeFilter.threshold).toBe(0.1);
     expect(initialState.formData.birdnet.rangeFilter.speciesCount).toBe(250);
     expect(initialState.formData.birdnet.rangeFilter.species).toEqual(['species1', 'species2']);
@@ -216,7 +201,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     expect(birdnet.latitude).toBe(35.6762);
     expect(birdnet.longitude).toBe(139.6503);
-    expect(birdnet.rangeFilter.model).toBe('latest');
     expect(birdnet.rangeFilter.threshold).toBe(0.1);
     expect(birdnet.rangeFilter.speciesCount).toBe(250);
     expect(birdnet.rangeFilter.species).toEqual(['species1', 'species2']);
@@ -231,7 +215,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     // Update range filter
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'legacy' as const, // Testing update
         threshold: 0.08,
         speciesCount: null,
         species: [],
@@ -242,7 +225,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     const updatedState = get(settingsStore);
     const birdnet = updatedState.formData.birdnet as BirdNetSettings;
 
-    expect(birdnet.rangeFilter.model).toBe('legacy');
     expect(birdnet.rangeFilter.threshold).toBe(0.08);
     expect(birdnet.sensitivity).toBe(initialSensitivity);
     expect(birdnet.threshold).toBe(initialThreshold);
@@ -256,7 +238,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
       latitude: false,
       longitude: false,
       threshold: false,
-      model: false,
     };
 
     // Update latitude
@@ -264,38 +245,25 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
       latitude: 51.5074,
     });
     changes.latitude = true;
-    expect(changes).toEqual({ latitude: true, longitude: false, threshold: false, model: false });
+    expect(changes).toEqual({ latitude: true, longitude: false, threshold: false });
 
     // Update longitude
     settingsActions.updateSection('birdnet', {
       longitude: -0.1278,
     });
     changes.longitude = true;
-    expect(changes).toEqual({ latitude: true, longitude: true, threshold: false, model: false });
+    expect(changes).toEqual({ latitude: true, longitude: true, threshold: false });
 
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'latest',
         threshold: 0.05,
         speciesCount: null,
         species: [],
       },
     });
     changes.threshold = true;
-    expect(changes).toEqual({ latitude: true, longitude: true, threshold: true, model: false });
-
-    // Update range filter model
-    settingsActions.updateSection('birdnet', {
-      rangeFilter: {
-        model: 'legacy',
-        threshold: 0.05,
-        speciesCount: null,
-        species: [],
-      },
-    });
-    changes.model = true;
-    expect(changes).toEqual({ latitude: true, longitude: true, threshold: true, model: true });
+    expect(changes).toEqual({ latitude: true, longitude: true, threshold: true });
 
     // Verify final state has all changes
     const finalState = get(settingsStore);
@@ -304,6 +272,5 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(birdnet.latitude).toBe(51.5074);
     expect(birdnet.longitude).toBe(-0.1278);
     expect(birdnet.rangeFilter.threshold).toBe(0.05);
-    expect(birdnet.rangeFilter.model).toBe('legacy');
   });
 });

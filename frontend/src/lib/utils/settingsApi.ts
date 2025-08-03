@@ -72,8 +72,8 @@ export const settingsAPI = {
     /**
      * Get species filtered by range/location
      */
-    rangeFilter: (lat: number, lon: number, model: string): Promise<string[]> => {
-      return api.get<string[]>(`/api/v2/species/range?lat=${lat}&lon=${lon}&model=${model}`);
+    rangeFilter: (lat: number, lon: number): Promise<string[]> => {
+      return api.get<string[]>(`/api/v2/species/range?lat=${lat}&lon=${lon}`);
     },
 
     /**

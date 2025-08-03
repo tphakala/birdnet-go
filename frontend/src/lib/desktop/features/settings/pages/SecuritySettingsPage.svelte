@@ -1,3 +1,29 @@
+<!--
+  Security Settings Page Component
+  
+  Purpose: Configure authentication and access control for BirdNET-Go including
+  HTTPS/TLS settings, basic authentication, OAuth2 social login providers, and
+  subnet-based authentication bypass.
+  
+  Features:
+  - Server configuration with automatic TLS via Let's Encrypt
+  - Basic authentication with password protection
+  - OAuth2 integration (Google, GitHub) with user restrictions
+  - Subnet-based authentication bypass for local networks
+  - Dynamic redirect URI generation based on host settings
+  - Real-time validation and change detection
+  
+  Props: None - This is a page component that uses global settings stores
+  
+  Performance Optimizations:
+  - Removed page-level loading spinner to prevent flickering
+  - Reactive settings with $derived instead of $state + $effect
+  - Cached CSRF token to avoid repeated DOM queries
+  - Reactive change detection with $derived
+  - Dynamic redirect URI generation based on current host
+  
+  @component
+-->
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -8,51 +34,44 @@
     settingsStore,
     settingsActions,
     securitySettings,
-    type SecuritySettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
 
-  // Create default settings
-  const defaultSettings: SecuritySettings = {
-    host: '',
-    autoTls: false,
-    basicAuth: {
-      enabled: false,
-      username: '',
-      password: '',
-    },
-    googleAuth: {
-      enabled: false,
-      clientId: '',
-      clientSecret: '',
-      userId: '',
-    },
-    githubAuth: {
-      enabled: false,
-      clientId: '',
-      clientSecret: '',
-      userId: '',
-    },
-    allowSubnetBypass: {
-      enabled: false,
-      subnet: '',
-    },
-  };
 
-  let settings = $state<SecuritySettings>(defaultSettings);
-
-  // Update settings when store changes
-  $effect(() => {
-    if ($securitySettings) {
-      settings = $securitySettings;
+  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
+  let settings = $derived(
+    $securitySettings || {
+      host: '',
+      autoTls: false,
+      basicAuth: {
+        enabled: false,
+        username: '',
+        password: '',
+      },
+      googleAuth: {
+        enabled: false,
+        clientId: '',
+        clientSecret: '',
+        userId: '',
+      },
+      githubAuth: {
+        enabled: false,
+        clientId: '',
+        clientSecret: '',
+        userId: '',
+      },
+      allowSubnetBypass: {
+        enabled: false,
+        subnet: '',
+      },
     }
-  });
+  );
 
   let store = $derived($settingsStore);
 
-  // Track changes for each section separately
+  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let serverConfigHasChanges = $derived(
     hasSettingsChanged(
       {
@@ -93,21 +112,17 @@
     )
   );
 
-  // Generate redirect URIs dynamically
-  let currentHost = $state('https://your-domain.com');
-  let googleRedirectURI = $state('https://your-domain.com/auth/google/callback');
-  let githubRedirectURI = $state('https://your-domain.com/auth/github/callback');
-
-  $effect(() => {
-    if (typeof window !== 'undefined') {
-      currentHost = window.location.origin;
-    } else if (settings?.host) {
-      currentHost = `https://${settings.host}`;
-    }
-    
-    googleRedirectURI = `${currentHost}/auth/google/callback`;
-    githubRedirectURI = `${currentHost}/auth/github/callback`;
-  });
+  // PERFORMANCE OPTIMIZATION: Generate redirect URIs dynamically with $derived
+  let currentHost = $derived(
+    typeof window !== 'undefined' 
+      ? window.location.origin 
+      : settings?.host 
+        ? `https://${settings.host}` 
+        : 'https://your-domain.com'
+  );
+  
+  let googleRedirectURI = $derived(`${currentHost}/auth/google/callback`);
+  let githubRedirectURI = $derived(`${currentHost}/auth/github/callback`);
 
   // Server Configuration update handlers
   function updateAutoTLSEnabled(enabled: boolean) {
@@ -213,12 +228,8 @@
   }
 </script>
 
-{#if store.isLoading}
-  <div class="flex items-center justify-center py-12">
-    <div class="loading loading-spinner loading-lg"></div>
-  </div>
-{:else}
-  <div class="space-y-4">
+<!-- Remove page-level loading spinner to prevent flickering -->
+<div class="space-y-4">
     <!-- Server Configuration -->
     <SettingsSection
       title={t('settings.security.serverConfiguration.title')}
@@ -498,4 +509,3 @@
     </div>
   </SettingsSection>
   </div>
-{/if}

@@ -1,3 +1,29 @@
+<!--
+  Species Settings Page Component
+  
+  Purpose: Configure species-specific settings for BirdNET-Go including always include/exclude
+  lists and custom configurations with thresholds, intervals, and actions.
+  
+  Features:
+  - Always include species list management
+  - Always exclude species list management
+  - Custom species configurations with threshold and interval settings
+  - Action configuration for species-specific commands
+  - Species autocomplete with API-loaded predictions
+  - Real-time validation and change detection
+  
+  Props: None - This is a page component that uses global settings stores
+  
+  Performance Optimizations:
+  - Removed page-level loading spinner to prevent flickering
+  - Reactive settings with $derived instead of $state + $effect
+  - Cached CSRF token to avoid repeated DOM queries
+  - API state management for species list loading
+  - Reactive change detection with $derived
+  - Efficient prediction filtering
+  
+  @component
+-->
 <script lang="ts">
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
@@ -11,7 +37,7 @@
     realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { SpeciesConfig, Action } from '$lib/stores/settings';
+  import type { SpeciesConfig, Action, SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -19,25 +45,43 @@
 
   const logger = loggers.settings;
 
-  // Derived settings with fallbacks
-  let settings = $state({
-    include: [] as string[],
-    exclude: [] as string[],
-    config: {} as Record<string, SpeciesConfig>,
-  });
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      ''
+  );
 
-  // Update settings when store changes
-  $effect(() => {
-    if ($speciesSettings) {
-      settings = $speciesSettings;
-    }
-  });
+  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
+  let settings = $derived(
+    $speciesSettings ||
+      ({
+        include: [] as string[],
+        exclude: [] as string[],
+        config: {} as Record<string, SpeciesConfig>,
+      } as SpeciesSettings)
+  );
 
   let store = $derived($settingsStore);
 
+  // API State Management
+  interface ApiState<T> {
+    loading: boolean;
+    error: string | null;
+    data: T;
+  }
+
+  // Species list API state
+  let speciesListState = $state<ApiState<string[]>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+
+  // PERFORMANCE OPTIMIZATION: Derived species lists
+  let allSpecies = $derived(speciesListState.data);
+  let filteredSpecies = $derived([...allSpecies]);
+
   // Species predictions state
-  let allSpecies = $state<string[]>([]);
-  let filteredSpecies = $state<string[]>([]);
   let includePredictions = $state<string[]>([]);
   let excludePredictions = $state<string[]>([]);
   let configPredictions = $state<string[]>([]);
@@ -72,7 +116,90 @@
     executeDefaults: true,
   });
 
-  // Change detection
+  // Focus management for modal accessibility
+  let previouslyFocusedElement: HTMLElement | null = null;
+
+  // Helper function to get all focusable elements within a container
+  function getFocusableElements(container: HTMLElement): HTMLElement[] {
+    const focusableSelectors = [
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      'a[href]',
+      '[tabindex]:not([tabindex="-1"])',
+    ];
+
+    const elements = container.querySelectorAll(focusableSelectors.join(', '));
+    return Array.from(elements).filter(el => {
+      const style = window.getComputedStyle(el as HTMLElement);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    }) as HTMLElement[];
+  }
+
+  // Focus trap handler for modal keyboard navigation
+  function handleFocusTrap(event: KeyboardEvent, modal: HTMLElement) {
+    if (event.key !== 'Tab') return;
+
+    const focusableElements = getFocusableElements(modal);
+    if (focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (event.shiftKey) {
+      // Shift + Tab - moving backwards
+      if (document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      }
+    } else {
+      // Tab - moving forwards
+      if (document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+  }
+
+  // Focus trapping effect for actions modal
+  $effect(() => {
+    if (showActionsModal) {
+      // Store previously focused element
+      previouslyFocusedElement = document.activeElement as HTMLElement;
+
+      // Set focus to the modal after a microtask to ensure it's in the DOM
+      setTimeout(() => {
+        const modal = document.querySelector(
+          '[role="dialog"][aria-labelledby="actions-modal-title"]'
+        ) as HTMLElement;
+        if (modal) {
+          // Focus the first focusable element or the modal itself
+          const focusableElements = getFocusableElements(modal);
+          if (focusableElements.length > 0) {
+            focusableElements[0].focus();
+          } else {
+            modal.focus();
+          }
+
+          // Add focus trap event listener
+          const trapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
+          modal.addEventListener('keydown', trapHandler);
+
+          // Cleanup function
+          return () => {
+            modal.removeEventListener('keydown', trapHandler);
+          };
+        }
+      }, 0);
+    } else if (previouslyFocusedElement) {
+      // Restore focus to previously focused element
+      previouslyFocusedElement.focus();
+      previouslyFocusedElement = null;
+    }
+  });
+
+  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
     hasSettingsChanged(
       (store.originalData as any)?.realtime?.species?.include,
@@ -94,26 +221,59 @@
     )
   );
 
-  // Load species data from API
-  async function loadSpeciesData() {
-    try {
-      const response = await fetch('/api/v2/range/species/list');
-      if (response.ok) {
-        const data = await response.json();
-        allSpecies = data.species?.map((s: any) => s.commonName || s.label) || [];
-        filteredSpecies = [...allSpecies];
-      }
-    } catch (error) {
-      logger.error('Failed to load species data:', error);
-      allSpecies = [];
-      filteredSpecies = [];
-    }
-  }
-
-  // Initialize species data
+  // PERFORMANCE OPTIMIZATION: Load species data with proper state management
   $effect(() => {
     loadSpeciesData();
   });
+
+  async function loadSpeciesData() {
+    speciesListState.loading = true;
+    speciesListState.error = null;
+
+    try {
+      const headers = new Headers();
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
+      }
+
+      const response = await fetch('/api/v2/range/species/list', {
+        headers,
+        credentials: 'same-origin',
+      });
+
+      if (!response.ok) {
+        let errorMessage = '';
+        switch (response.status) {
+          case 404:
+            errorMessage = 'Species data not found';
+            break;
+          case 500:
+          case 502:
+          case 503:
+            errorMessage = 'Server error occurred while loading species data';
+            break;
+          case 401:
+            errorMessage = 'Unauthorized access to species data';
+            break;
+          case 403:
+            errorMessage = 'Access to species data is forbidden';
+            break;
+          default:
+            errorMessage = `Failed to load species (Error ${response.status})`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      speciesListState.data = data.species?.map((s: any) => s.commonName || s.label) || [];
+    } catch (error) {
+      logger.error('Failed to load species data:', error);
+      speciesListState.error = t('settings.species.errors.speciesLoadFailed');
+      speciesListState.data = [];
+    } finally {
+      speciesListState.loading = false;
+    }
+  }
 
   // Prediction functions
   function updateIncludePredictions(input: string) {
@@ -408,11 +568,8 @@
   }
 </script>
 
-{#if store.isLoading}
-  <div class="flex items-center justify-center py-12">
-    <div class="loading loading-spinner loading-lg"></div>
-  </div>
-{:else}
+<!-- Remove page-level loading spinner to prevent flickering -->
+<main class="space-y-4" aria-label="Species settings configuration">
   <!-- Include Species Section -->
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}
@@ -636,20 +793,35 @@
                 <!-- Actions dropdown -->
                 <div class="col-span-1 text-right">
                   <div class="dropdown dropdown-end">
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-xs">⋮</div>
-                    <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
+                    <div
+                      tabindex="0"
+                      role="button"
+                      aria-haspopup="menu"
+                      aria-label={t('settings.species.customConfiguration.dropdown.actionsMenu')}
+                      class="btn btn-ghost btn-xs"
+                    >
+                      ⋮
+                    </div>
+                    <ul
+                      role="menu"
+                      class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow"
+                    >
                       <li>
-                        <button onclick={() => startEditConfig(species)}
+                        <button role="menuitem" onclick={() => startEditConfig(species)}
                           >{t('settings.species.customConfiguration.dropdown.editConfig')}</button
                         >
                       </li>
                       <li>
-                        <button onclick={() => openActionsModal(species)}
+                        <button role="menuitem" onclick={() => openActionsModal(species)}
                           >{t('settings.species.customConfiguration.dropdown.addAction')}</button
                         >
                       </li>
                       <li>
-                        <button onclick={() => removeConfig(species)} class="text-error">
+                        <button
+                          role="menuitem"
+                          onclick={() => removeConfig(species)}
+                          class="text-error"
+                        >
                           {t('settings.species.customConfiguration.dropdown.remove')}
                         </button>
                       </li>
@@ -724,13 +896,18 @@
       </div>
     </div>
   </SettingsSection>
-{/if}
+</main>
 
 <!-- Actions Modal -->
 {#if showActionsModal}
-  <div class="modal modal-open">
+  <div
+    class="modal modal-open"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="actions-modal-title"
+  >
     <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
-      <h3 class="text-lg font-bold mb-4">
+      <h3 id="actions-modal-title" class="text-lg font-bold mb-4">
         {t('settings.species.actionsModal.title', { species: currentSpecies })}
       </h3>
 

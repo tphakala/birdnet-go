@@ -968,6 +968,7 @@ func getBlockedFieldMap() map[string]interface{} {
 			"Labels": true, // Runtime list populated from label file
 			// Block RangeFilter runtime fields
 			"RangeFilter": map[string]interface{}{
+				"Model":       true, // Model type is configured in config.yaml, frontend should not overwrite
 				"Species":     true, // Runtime species list populated by range filter
 				"LastUpdated": true, // Runtime timestamp of last filter update
 			},

@@ -36,19 +36,9 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
           latitude: 40.7128,
           longitude: -74.006,
           rangeFilter: {
-            model: 'latest',
             threshold: 0.03,
             speciesCount: null,
             species: [],
-          },
-          database: {
-            type: 'sqlite',
-            path: 'birds.db',
-            host: '',
-            port: 3306,
-            name: '',
-            username: '',
-            password: '',
           },
         },
         realtime: {
@@ -79,7 +69,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     expect(initialRangeFilter).toBeDefined();
 
     // Verify initial range filter values
-    expect(initialRangeFilter.model).toBe('latest');
     expect(initialRangeFilter.threshold).toBe(0.03);
 
     // Update coordinates (simulating what happens when clicking on the map)
@@ -97,7 +86,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     expect(updatedBirdnet.longitude).toBe(-0.1278);
 
     // Verify rangeFilter was preserved
-    expect(updatedBirdnet.rangeFilter.model).toBe('latest');
     expect(updatedBirdnet.rangeFilter.threshold).toBe(0.03);
     expect(updatedBirdnet.rangeFilter).toEqual(initialRangeFilter);
   });
@@ -114,7 +102,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Update range filter threshold
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'latest',
         threshold: 0.05,
         speciesCount: null,
         species: [],
@@ -142,7 +129,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     settingsActions.updateSection('birdnet', {
       rangeFilter: {
-        model: 'legacy',
         threshold: 0.01,
         speciesCount: null,
         species: [],
@@ -161,7 +147,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
     // Verify all updates were applied correctly
     expect(finalBirdnet.latitude).toBe(48.8566);
     expect(finalBirdnet.longitude).toBe(2.3522);
-    expect(finalBirdnet.rangeFilter.model).toBe('legacy');
     expect(finalBirdnet.rangeFilter.threshold).toBe(0.01);
     expect(finalBirdnet.sensitivity).toBe(1.2);
     expect(finalBirdnet.threshold).toBe(0.85);
@@ -189,7 +174,6 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
 
     // Verify only threshold was updated, other fields preserved
     expect(updatedBirdnet.rangeFilter.threshold).toBe(0.07);
-    expect(updatedBirdnet.rangeFilter.model).toBe('latest');
     expect(updatedBirdnet.rangeFilter.speciesCount).toBe(null);
     expect(updatedBirdnet.rangeFilter.species).toEqual([]);
   });

@@ -1,3 +1,28 @@
+<!--
+  Integration Settings Page Component
+  
+  Purpose: Configure external service integrations for BirdNET-Go including BirdWeather,
+  MQTT, observability (Prometheus), and weather provider integrations.
+  
+  Features:
+  - BirdWeather integration with threshold settings and connection testing
+  - MQTT broker configuration with authentication and TLS support
+  - Prometheus metrics endpoint configuration
+  - Weather provider selection (YR.no, OpenWeather) with API testing
+  - Multi-stage operation feedback for connection testing
+  - Real-time validation and change detection
+  
+  Props: None - This is a page component that uses global settings stores
+  
+  Performance Optimizations:
+  - Removed page-level loading spinner to prevent flickering
+  - Cached CSRF token to avoid repeated DOM queries
+  - Reactive change detection with $derived
+  - Efficient state management for test operations
+  - Streaming response handling for test endpoints
+  
+  @component
+-->
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -21,13 +46,19 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
-  import { getCsrfToken } from '$lib/utils/api.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
 
   const logger = loggers.settings;
 
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
+  let csrfToken = $derived(
+    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      ''
+  );
+
+  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
     $integrationSettings || {
       birdweather: {
@@ -76,7 +107,7 @@
 
   let store = $derived($settingsStore);
 
-  // Track changes for each section separately using proper typing
+  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let birdweatherHasChanges = $derived(
     hasSettingsChanged(
       (store.originalData as SettingsFormData)?.realtime?.birdweather,
@@ -251,7 +282,6 @@
         'Content-Type': 'application/json',
       });
 
-      const csrfToken = getCsrfToken();
       if (csrfToken) {
         headers.set('X-CSRF-Token', csrfToken);
       }
@@ -468,7 +498,6 @@
         'Content-Type': 'application/json',
       });
 
-      const csrfToken = getCsrfToken();
       if (csrfToken) {
         headers.set('X-CSRF-Token', csrfToken);
       }
@@ -668,7 +697,6 @@
         'Content-Type': 'application/json',
       });
 
-      const csrfToken = getCsrfToken();
       if (csrfToken) {
         headers.set('X-CSRF-Token', csrfToken);
       }
@@ -777,409 +805,404 @@
   }
 </script>
 
-{#if store.isLoading}
-  <div class="flex items-center justify-center py-12">
-    <div class="loading loading-spinner loading-lg"></div>
-  </div>
-{:else}
-  <div class="space-y-4">
-    <!-- BirdWeather Settings -->
-    <SettingsSection
-      title={t('settings.integration.birdweather.title')}
-      description={t('settings.integration.birdweather.description')}
-      defaultOpen={true}
-      hasChanges={birdweatherHasChanges}
-    >
-      <div class="space-y-4">
-        <!-- FFmpeg Warning -->
-        {#if !ffmpegAvailable}
-          <div class="alert alert-warning" role="alert">
-            {@html alertIconsSvg.warning}
-            <div>
-              <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
-              <p class="text-sm">
-                {t('settings.integration.birdweather.ffmpegWarning.message')}
-              </p>
-            </div>
+<!-- Remove page-level loading spinner to prevent flickering -->
+<div class="space-y-4">
+  <!-- BirdWeather Settings -->
+  <SettingsSection
+    title={t('settings.integration.birdweather.title')}
+    description={t('settings.integration.birdweather.description')}
+    defaultOpen={true}
+    hasChanges={birdweatherHasChanges}
+  >
+    <div class="space-y-4">
+      <!-- FFmpeg Warning -->
+      {#if !ffmpegAvailable}
+        <div class="alert alert-warning" role="alert">
+          {@html alertIconsSvg.warning}
+          <div>
+            <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
+            <p class="text-sm">
+              {t('settings.integration.birdweather.ffmpegWarning.message')}
+            </p>
           </div>
-        {/if}
+        </div>
+      {/if}
 
-        <Checkbox
-          bind:checked={settings.birdweather!.enabled}
-          label={t('settings.integration.birdweather.enable')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={() => updateBirdWeatherEnabled(settings.birdweather!.enabled)}
-        />
+      <Checkbox
+        bind:checked={settings.birdweather!.enabled}
+        label={t('settings.integration.birdweather.enable')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={() => updateBirdWeatherEnabled(settings.birdweather!.enabled)}
+      />
 
-        {#if settings.birdweather?.enabled}
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <PasswordField
-              label={t('settings.integration.birdweather.token.label')}
-              value={settings.birdweather!.id}
-              onUpdate={updateBirdWeatherId}
-              placeholder=""
-              helpText={t('settings.integration.birdweather.token.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              allowReveal={true}
-            />
+      {#if settings.birdweather?.enabled}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <PasswordField
+            label={t('settings.integration.birdweather.token.label')}
+            value={settings.birdweather!.id}
+            onUpdate={updateBirdWeatherId}
+            placeholder=""
+            helpText={t('settings.integration.birdweather.token.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            allowReveal={true}
+          />
 
-            <NumberField
-              label={t('settings.integration.birdweather.threshold.label')}
-              value={settings.birdweather!.threshold}
-              onUpdate={updateBirdWeatherThreshold}
-              min={0}
-              max={1}
-              step={0.01}
-              placeholder="0.7"
-              helpText={t('settings.integration.birdweather.threshold.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
+          <NumberField
+            label={t('settings.integration.birdweather.threshold.label')}
+            value={settings.birdweather!.threshold}
+            onUpdate={updateBirdWeatherThreshold}
+            min={0}
+            max={1}
+            step={0.01}
+            placeholder="0.7"
+            helpText={t('settings.integration.birdweather.threshold.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+
+        <!-- Test Connection -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <SettingsButton
+              onclick={testBirdWeather}
+              loading={testStates.birdweather.isRunning}
+              loadingText={t('settings.integration.birdweather.test.loading')}
+              disabled={!(
+                store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled
+              ) ||
+                !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
+                testStates.birdweather.isRunning}
+            >
+              {t('settings.integration.birdweather.test.button')}
+            </SettingsButton>
+            <span class="text-sm text-base-content/70">
+              {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
+                {t('settings.integration.birdweather.test.enabledRequired')}
+              {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
+                {t('settings.integration.birdweather.test.tokenRequired')}
+              {:else if testStates.birdweather.isRunning}
+                {t('settings.integration.birdweather.test.inProgress')}
+              {:else}
+                {t('settings.integration.birdweather.test.description')}
+              {/if}
+            </span>
           </div>
 
-          <!-- Test Connection -->
-          <div class="space-y-4">
-            <div class="flex items-center gap-3">
-              <SettingsButton
-                onclick={testBirdWeather}
-                loading={testStates.birdweather.isRunning}
-                loadingText={t('settings.integration.birdweather.test.loading')}
-                disabled={!(
-                  store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled
-                ) ||
-                  !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
-                  testStates.birdweather.isRunning}
-              >
-                {t('settings.integration.birdweather.test.button')}
-              </SettingsButton>
-              <span class="text-sm text-base-content/70">
-                {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
-                  {t('settings.integration.birdweather.test.enabledRequired')}
-                {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
-                  {t('settings.integration.birdweather.test.tokenRequired')}
-                {:else if testStates.birdweather.isRunning}
-                  {t('settings.integration.birdweather.test.inProgress')}
-                {:else}
-                  {t('settings.integration.birdweather.test.description')}
-                {/if}
-              </span>
-            </div>
+          {#if testStates.birdweather.stages.length > 0}
+            <MultiStageOperation
+              stages={testStates.birdweather.stages}
+              variant="compact"
+              showProgress={false}
+            />
+          {/if}
 
-            {#if testStates.birdweather.stages.length > 0}
-              <MultiStageOperation
-                stages={testStates.birdweather.stages}
-                variant="compact"
-                showProgress={false}
+          <TestSuccessNote show={testStates.birdweather.showSuccessNote} />
+        </div>
+      {/if}
+    </div>
+  </SettingsSection>
+
+  <!-- MQTT Settings -->
+  <SettingsSection
+    title={t('settings.integration.mqtt.title')}
+    description={t('settings.integration.mqtt.description')}
+    defaultOpen={false}
+    hasChanges={mqttHasChanges}
+  >
+    <div class="space-y-4">
+      <Checkbox
+        bind:checked={settings.mqtt!.enabled}
+        label={t('settings.integration.mqtt.enable')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={() => updateMQTTEnabled(settings.mqtt!.enabled)}
+      />
+
+      {#if settings.mqtt?.enabled}
+        <div class="space-y-4">
+          <TextInput
+            id="mqtt-broker"
+            bind:value={settings.mqtt!.broker}
+            label={t('settings.integration.mqtt.broker.label')}
+            placeholder={t('settings.integration.mqtt.broker.placeholder')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateMQTTBroker}
+          />
+
+          <TextInput
+            id="mqtt-topic"
+            bind:value={settings.mqtt!.topic}
+            label={t('settings.integration.mqtt.topic.label')}
+            placeholder={t('settings.integration.mqtt.topic.placeholder')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateMQTTTopic}
+          />
+
+          <!-- Authentication Section -->
+          <div class="border-t border-base-300 pt-4 mt-2">
+            <h3 class="text-sm font-medium mb-3">
+              {t('settings.integration.mqtt.authentication.title')}
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <TextInput
+                id="mqtt-username"
+                value={settings.mqtt!.username || ''}
+                label={t('settings.integration.mqtt.authentication.username.label')}
+                placeholder=""
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateMQTTUsername(value)}
               />
-            {/if}
 
-            <TestSuccessNote show={testStates.birdweather.showSuccessNote} />
-          </div>
-        {/if}
-      </div>
-    </SettingsSection>
-
-    <!-- MQTT Settings -->
-    <SettingsSection
-      title={t('settings.integration.mqtt.title')}
-      description={t('settings.integration.mqtt.description')}
-      defaultOpen={false}
-      hasChanges={mqttHasChanges}
-    >
-      <div class="space-y-4">
-        <Checkbox
-          bind:checked={settings.mqtt!.enabled}
-          label={t('settings.integration.mqtt.enable')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={() => updateMQTTEnabled(settings.mqtt!.enabled)}
-        />
-
-        {#if settings.mqtt?.enabled}
-          <div class="space-y-4">
-            <TextInput
-              id="mqtt-broker"
-              bind:value={settings.mqtt!.broker}
-              label={t('settings.integration.mqtt.broker.label')}
-              placeholder={t('settings.integration.mqtt.broker.placeholder')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateMQTTBroker}
-            />
-
-            <TextInput
-              id="mqtt-topic"
-              bind:value={settings.mqtt!.topic}
-              label={t('settings.integration.mqtt.topic.label')}
-              placeholder={t('settings.integration.mqtt.topic.placeholder')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateMQTTTopic}
-            />
-
-            <!-- Authentication Section -->
-            <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">
-                {t('settings.integration.mqtt.authentication.title')}
-              </h3>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <TextInput
-                  id="mqtt-username"
-                  value={settings.mqtt!.username || ''}
-                  label={t('settings.integration.mqtt.authentication.username.label')}
-                  placeholder=""
-                  disabled={store.isLoading || store.isSaving}
-                  onchange={value => updateMQTTUsername(value)}
-                />
-
-                <PasswordField
-                  label={t('settings.integration.mqtt.authentication.password.label')}
-                  value={settings.mqtt!.password || ''}
-                  onUpdate={updateMQTTPassword}
-                  placeholder=""
-                  helpText={t('settings.integration.mqtt.authentication.password.helpText')}
-                  disabled={store.isLoading || store.isSaving}
-                  allowReveal={true}
-                />
-              </div>
+              <PasswordField
+                label={t('settings.integration.mqtt.authentication.password.label')}
+                value={settings.mqtt!.password || ''}
+                onUpdate={updateMQTTPassword}
+                placeholder=""
+                helpText={t('settings.integration.mqtt.authentication.password.helpText')}
+                disabled={store.isLoading || store.isSaving}
+                allowReveal={true}
+              />
             </div>
+          </div>
 
-            <!-- Message Settings Section -->
-            <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">
-                {t('settings.integration.mqtt.messageSettings.title')}
-              </h3>
+          <!-- Message Settings Section -->
+          <div class="border-t border-base-300 pt-4 mt-2">
+            <h3 class="text-sm font-medium mb-3">
+              {t('settings.integration.mqtt.messageSettings.title')}
+            </h3>
 
-              <!-- prettier-ignore -->
-              <Checkbox
+            <!-- prettier-ignore -->
+            <Checkbox
                 checked={(settings.mqtt as MQTTSettings).retain ?? false}
                 onchange={(checked) => updateMQTTRetain(checked)}
                 label={t('settings.integration.mqtt.messageSettings.retain.label')}
                 disabled={store.isLoading || store.isSaving}
               />
 
-              <!-- Note about MQTT Retain for HomeAssistant -->
-              <SettingsNote>
-                <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
-              </SettingsNote>
-            </div>
+            <!-- Note about MQTT Retain for HomeAssistant -->
+            <SettingsNote>
+              <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
+            </SettingsNote>
+          </div>
 
-            <!-- TLS/SSL Security Section -->
-            <div class="border-t border-base-300 pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
+          <!-- TLS/SSL Security Section -->
+          <div class="border-t border-base-300 pt-4 mt-2">
+            <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
 
+            <Checkbox
+              bind:checked={settings.mqtt!.tls.enabled}
+              label={t('settings.integration.mqtt.tls.enable')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={() => updateMQTTTLSEnabled(settings.mqtt!.tls.enabled)}
+            />
+
+            {#if settings.mqtt?.tls.enabled}
               <Checkbox
-                bind:checked={settings.mqtt!.tls.enabled}
-                label={t('settings.integration.mqtt.tls.enable')}
+                bind:checked={settings.mqtt!.tls.skipVerify}
+                label={t('settings.integration.mqtt.tls.skipVerify')}
                 disabled={store.isLoading || store.isSaving}
-                onchange={() => updateMQTTTLSEnabled(settings.mqtt!.tls.enabled)}
+                onchange={() => updateMQTTTLSSkipVerify(settings.mqtt!.tls.skipVerify)}
               />
 
-              {#if settings.mqtt?.tls.enabled}
-                <Checkbox
-                  bind:checked={settings.mqtt!.tls.skipVerify}
-                  label={t('settings.integration.mqtt.tls.skipVerify')}
-                  disabled={store.isLoading || store.isSaving}
-                  onchange={() => updateMQTTTLSSkipVerify(settings.mqtt!.tls.skipVerify)}
-                />
-
-                <div class="alert alert-info">
-                  {@html alertIconsSvg.info}
-                  <div>
-                    <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
-                  </div>
+              <div class="alert alert-info">
+                {@html alertIconsSvg.info}
+                <div>
+                  <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
                 </div>
-              {/if}
-            </div>
-
-            <!-- Test Connection -->
-            <div class="space-y-4">
-              <div class="flex items-center gap-3">
-                <SettingsButton
-                  onclick={testMQTT}
-                  loading={testStates.mqtt.isRunning}
-                  loadingText={t('settings.integration.mqtt.test.loading')}
-                  disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
-                    !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
-                    testStates.mqtt.isRunning}
-                >
-                  {t('settings.integration.mqtt.test.button')}
-                </SettingsButton>
-                <span class="text-sm text-base-content/70">
-                  {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
-                    {t('settings.integration.mqtt.test.enabledRequired')}
-                  {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
-                    {t('settings.integration.mqtt.test.brokerRequired')}
-                  {:else if testStates.mqtt.isRunning}
-                    {t('settings.integration.mqtt.test.inProgress')}
-                  {:else}
-                    {t('settings.integration.mqtt.test.description')}
-                  {/if}
-                </span>
               </div>
-
-              {#if testStates.mqtt.stages.length > 0}
-                <MultiStageOperation
-                  stages={testStates.mqtt.stages}
-                  variant="compact"
-                  showProgress={false}
-                />
-              {/if}
-
-              <TestSuccessNote show={testStates.mqtt.showSuccessNote} />
-            </div>
+            {/if}
           </div>
-        {/if}
-      </div>
-    </SettingsSection>
 
-    <!-- Observability Settings -->
-    <SettingsSection
-      title={t('settings.integration.observability.title')}
-      description={t('settings.integration.observability.description')}
-      defaultOpen={false}
-      hasChanges={observabilityHasChanges}
-    >
-      <div class="space-y-4">
-        <Checkbox
-          bind:checked={settings.observability!.prometheus.enabled}
-          label={t('settings.integration.observability.enable')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={() => updateObservabilityEnabled(settings.observability!.prometheus.enabled)}
-        />
-
-        {#if settings.observability?.prometheus.enabled}
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <TextInput
-              id="observability-listen"
-              value={`0.0.0.0:${settings.observability!.prometheus.port}`}
-              label={t('settings.integration.observability.listenAddress.label')}
-              placeholder={t('settings.integration.observability.listenAddress.placeholder')}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateObservabilityListen}
-            />
-          </div>
-        {/if}
-      </div>
-    </SettingsSection>
-
-    <!-- Weather Settings -->
-    <SettingsSection
-      title={t('settings.integration.weather.title')}
-      description={t('settings.integration.weather.description')}
-      defaultOpen={false}
-      hasChanges={weatherHasChanges}
-    >
-      <div class="space-y-4">
-        <SelectField
-          id="weather-provider"
-          bind:value={settings.weather!.provider}
-          label={t('settings.integration.weather.provider.label')}
-          options={[
-            { value: 'none', label: t('settings.integration.weather.provider.options.none') },
-            { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
-            {
-              value: 'openweather',
-              label: t('settings.integration.weather.provider.options.openweather'),
-            },
-          ]}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateWeatherProvider}
-        />
-
-        <!-- Provider-specific notes -->
-        {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
-          <SettingsNote>
-            <span>{t('settings.integration.weather.notes.none')}</span>
-          </SettingsNote>
-        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
-          <SettingsNote>
-            <p>
-              {t('settings.integration.weather.notes.yrno.description')}
-            </p>
-            <p class="mt-2">
-              {@html t('settings.integration.weather.notes.yrno.freeService')}
-            </p>
-          </SettingsNote>
-        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
-          <SettingsNote>
-            <span>{@html t('settings.integration.weather.notes.openweather')}</span>
-          </SettingsNote>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <PasswordField
-              label={t('settings.integration.weather.apiKey.label')}
-              value={settings.weather!.openWeather.apiKey || ''}
-              onUpdate={updateWeatherApiKey}
-              placeholder=""
-              helpText={t('settings.integration.weather.apiKey.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              allowReveal={true}
-            />
-
-            <SelectField
-              id="weather-units"
-              value={settings.weather!.openWeather.units || 'metric'}
-              label={t('settings.integration.weather.units.label')}
-              options={[
-                {
-                  value: 'standard',
-                  label: t('settings.integration.weather.units.options.standard'),
-                },
-                { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
-                {
-                  value: 'imperial',
-                  label: t('settings.integration.weather.units.options.imperial'),
-                },
-              ]}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateWeatherUnits}
-            />
-          </div>
-        {/if}
-
-        {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
-          <!-- Test Weather Provider -->
+          <!-- Test Connection -->
           <div class="space-y-4">
             <div class="flex items-center gap-3">
               <SettingsButton
-                onclick={testWeather}
-                loading={testStates.weather.isRunning}
-                loadingText={t('settings.integration.weather.test.loading')}
-                disabled={(store.formData?.realtime?.weather?.provider ??
-                  settings.weather?.provider) === 'none' ||
-                  ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
-                    'openweather' &&
-                    !(
-                      store.formData?.realtime?.weather?.openWeather?.apiKey ??
-                      settings.weather?.openWeather?.apiKey
-                    )) ||
-                  testStates.weather.isRunning}
+                onclick={testMQTT}
+                loading={testStates.mqtt.isRunning}
+                loadingText={t('settings.integration.mqtt.test.loading')}
+                disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
+                  !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
+                  testStates.mqtt.isRunning}
               >
-                {t('settings.integration.weather.test.button')}
+                {t('settings.integration.mqtt.test.button')}
               </SettingsButton>
               <span class="text-sm text-base-content/70">
-                {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
-                  {t('settings.integration.weather.test.noProvider')}
-                {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
-                  {t('settings.integration.weather.test.apiKeyRequired')}
-                {:else if testStates.weather.isRunning}
-                  {t('settings.integration.weather.test.inProgress')}
+                {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
+                  {t('settings.integration.mqtt.test.enabledRequired')}
+                {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
+                  {t('settings.integration.mqtt.test.brokerRequired')}
+                {:else if testStates.mqtt.isRunning}
+                  {t('settings.integration.mqtt.test.inProgress')}
                 {:else}
-                  {t('settings.integration.weather.test.description')}
+                  {t('settings.integration.mqtt.test.description')}
                 {/if}
               </span>
             </div>
 
-            {#if testStates.weather.stages.length > 0}
+            {#if testStates.mqtt.stages.length > 0}
               <MultiStageOperation
-                stages={testStates.weather.stages}
+                stages={testStates.mqtt.stages}
                 variant="compact"
                 showProgress={false}
               />
             {/if}
 
-            <TestSuccessNote show={testStates.weather.showSuccessNote} />
+            <TestSuccessNote show={testStates.mqtt.showSuccessNote} />
           </div>
-        {/if}
-      </div>
-    </SettingsSection>
-  </div>
-{/if}
+        </div>
+      {/if}
+    </div>
+  </SettingsSection>
+
+  <!-- Observability Settings -->
+  <SettingsSection
+    title={t('settings.integration.observability.title')}
+    description={t('settings.integration.observability.description')}
+    defaultOpen={false}
+    hasChanges={observabilityHasChanges}
+  >
+    <div class="space-y-4">
+      <Checkbox
+        bind:checked={settings.observability!.prometheus.enabled}
+        label={t('settings.integration.observability.enable')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={() => updateObservabilityEnabled(settings.observability!.prometheus.enabled)}
+      />
+
+      {#if settings.observability?.prometheus.enabled}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <TextInput
+            id="observability-listen"
+            value={`0.0.0.0:${settings.observability!.prometheus.port}`}
+            label={t('settings.integration.observability.listenAddress.label')}
+            placeholder={t('settings.integration.observability.listenAddress.placeholder')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateObservabilityListen}
+          />
+        </div>
+      {/if}
+    </div>
+  </SettingsSection>
+
+  <!-- Weather Settings -->
+  <SettingsSection
+    title={t('settings.integration.weather.title')}
+    description={t('settings.integration.weather.description')}
+    defaultOpen={false}
+    hasChanges={weatherHasChanges}
+  >
+    <div class="space-y-4">
+      <SelectField
+        id="weather-provider"
+        bind:value={settings.weather!.provider}
+        label={t('settings.integration.weather.provider.label')}
+        options={[
+          { value: 'none', label: t('settings.integration.weather.provider.options.none') },
+          { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
+          {
+            value: 'openweather',
+            label: t('settings.integration.weather.provider.options.openweather'),
+          },
+        ]}
+        disabled={store.isLoading || store.isSaving}
+        onchange={updateWeatherProvider}
+      />
+
+      <!-- Provider-specific notes -->
+      {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
+        <SettingsNote>
+          <span>{t('settings.integration.weather.notes.none')}</span>
+        </SettingsNote>
+      {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
+        <SettingsNote>
+          <p>
+            {t('settings.integration.weather.notes.yrno.description')}
+          </p>
+          <p class="mt-2">
+            {@html t('settings.integration.weather.notes.yrno.freeService')}
+          </p>
+        </SettingsNote>
+      {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
+        <SettingsNote>
+          <span>{@html t('settings.integration.weather.notes.openweather')}</span>
+        </SettingsNote>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <PasswordField
+            label={t('settings.integration.weather.apiKey.label')}
+            value={settings.weather!.openWeather.apiKey || ''}
+            onUpdate={updateWeatherApiKey}
+            placeholder=""
+            helpText={t('settings.integration.weather.apiKey.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            allowReveal={true}
+          />
+
+          <SelectField
+            id="weather-units"
+            value={settings.weather!.openWeather.units || 'metric'}
+            label={t('settings.integration.weather.units.label')}
+            options={[
+              {
+                value: 'standard',
+                label: t('settings.integration.weather.units.options.standard'),
+              },
+              { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
+              {
+                value: 'imperial',
+                label: t('settings.integration.weather.units.options.imperial'),
+              },
+            ]}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateWeatherUnits}
+          />
+        </div>
+      {/if}
+
+      {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
+        <!-- Test Weather Provider -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <SettingsButton
+              onclick={testWeather}
+              loading={testStates.weather.isRunning}
+              loadingText={t('settings.integration.weather.test.loading')}
+              disabled={(store.formData?.realtime?.weather?.provider ??
+                settings.weather?.provider) === 'none' ||
+                ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
+                  'openweather' &&
+                  !(
+                    store.formData?.realtime?.weather?.openWeather?.apiKey ??
+                    settings.weather?.openWeather?.apiKey
+                  )) ||
+                testStates.weather.isRunning}
+            >
+              {t('settings.integration.weather.test.button')}
+            </SettingsButton>
+            <span class="text-sm text-base-content/70">
+              {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
+                {t('settings.integration.weather.test.noProvider')}
+              {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
+                {t('settings.integration.weather.test.apiKeyRequired')}
+              {:else if testStates.weather.isRunning}
+                {t('settings.integration.weather.test.inProgress')}
+              {:else}
+                {t('settings.integration.weather.test.description')}
+              {/if}
+            </span>
+          </div>
+
+          {#if testStates.weather.stages.length > 0}
+            <MultiStageOperation
+              stages={testStates.weather.stages}
+              variant="compact"
+              showProgress={false}
+            />
+          {/if}
+
+          <TestSuccessNote show={testStates.weather.showSuccessNote} />
+        </div>
+      {/if}
+    </div>
+  </SettingsSection>
+</div>
