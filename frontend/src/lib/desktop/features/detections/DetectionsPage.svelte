@@ -164,7 +164,7 @@
   // Handle details click
   function handleDetailsClick(id: number) {
     // Navigate to detection details page
-    window.location.href = `/detections/${id}`;
+    window.location.href = `/ui/detections/${id}`;
   }
 
   // Listen for search updates from SearchBox
