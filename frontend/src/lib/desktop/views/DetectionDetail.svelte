@@ -15,7 +15,6 @@
   - detectionId: string - The ID of the detection to display
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
@@ -23,12 +22,12 @@
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
   import SpeciesThumbnail from '$lib/desktop/components/modals/SpeciesThumbnail.svelte';
   import SpeciesBadges from '$lib/desktop/components/modals/SpeciesBadges.svelte';
-  import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { actionIcons, mediaIcons } from '$lib/utils/icons';
+  import { mediaIcons } from '$lib/utils/icons';
   import type { Detection } from '$lib/types/detection.types';
+  import { hasReviewPermission } from '$lib/utils/auth';
 
   const logger = loggers.ui;
 
@@ -39,8 +38,13 @@
   let { detectionId }: Props = $props();
 
   // State
-  let activeTab = $state<'overview' | 'taxonomy' | 'history' | 'notes'>('overview');
-  let showReviewModal = $state(false);
+  let activeTab = $state<'overview' | 'taxonomy' | 'history' | 'notes' | 'review'>('overview');
+
+  // Dynamic review component loading
+  let ReviewCard: any = $state(null);
+
+  // Use the existing auth store pattern (same as DesktopSidebar)
+  let canReview = $derived(hasReviewPermission());
   let detection = $state<Detection | null>(null);
   let speciesInfo = $state<any>(null);
   let taxonomyInfo = $state<any>(null);
@@ -48,7 +52,7 @@
   let isLoadingTaxonomy = $state(false);
   let detectionError = $state<string | null>(null);
 
-  // Extract detection ID from URL if not provided
+  // Extract detection ID from URL if not provided and fetch data reactively
   $effect(() => {
     if (!detectionId) {
       const pathParts = window.location.pathname.split('/');
@@ -56,6 +60,11 @@
       if (detectionIndex !== -1 && pathParts[detectionIndex + 1]) {
         detectionId = pathParts[detectionIndex + 1];
       }
+    }
+
+    // Fetch detection data when detectionId changes
+    if (detectionId) {
+      fetchDetection();
     }
   });
 
@@ -115,36 +124,28 @@
     }
   }
 
-  // Load data on mount
-  onMount(() => {
-    fetchDetection();
+  // Dynamically load review component when user has review permission
+  $effect(() => {
+    if (canReview && !ReviewCard) {
+      import('$lib/desktop/components/review/ReviewCard.svelte')
+        .then(module => {
+          ReviewCard = module.default;
+          logger.debug('ReviewCard component loaded for authenticated user');
+        })
+        .catch(error => {
+          logger.error('Failed to load ReviewCard component:', error);
+        });
+    }
   });
 
-  // Handle review save
-  async function handleReviewSave(
-    verified: 'correct' | 'false_positive',
-    lockDetection: boolean,
-    ignoreSpecies: boolean,
-    comment: string
-  ): Promise<void> {
-    if (!detection) return;
-
-    await fetchWithCSRF('/api/v2/detections/review', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        id: detection.id,
-        verified: verified,
-        lock_detection: lockDetection,
-        ignore_species: ignoreSpecies ? detection.commonName : null,
-        comment: comment,
-      }),
-    });
-
-    // Refetch detection data
-    await fetchDetection();
+  // Handle review card completion
+  function handleReviewComplete() {
+    // Switch back to overview tab after successful save
+    activeTab = 'overview';
+    // Refetch detection data to show updated status
+    if (detectionId) {
+      fetchDetection();
+    }
   }
 </script>
 
@@ -224,10 +225,6 @@
 
             <!-- Actions below confidence -->
             <div class="flex flex-col gap-2 mt-4">
-              <button class="btn btn-primary btn-sm gap-2" onclick={() => (showReviewModal = true)}>
-                {@html actionIcons.edit}
-                {t('common.actions.review')}
-              </button>
               {#if detection.clipName}
                 <a
                   href="/api/v2/media/audio/{detection.clipName}"
@@ -478,6 +475,15 @@
           >
             {t('detections.tabs.notes')}
           </button>
+          {#if canReview}
+            <button
+              class="tab"
+              class:tab-active={activeTab === 'review'}
+              onclick={() => (activeTab = 'review')}
+            >
+              {t('common.actions.review')}
+            </button>
+          {/if}
         </div>
 
         <!-- Tab Content -->
@@ -490,17 +496,11 @@
             {@render historyTab()}
           {:else if activeTab === 'notes'}
             {@render notesTab(detection)}
+          {:else if activeTab === 'review' && canReview && ReviewCard}
+            <ReviewCard {detection} onSaveComplete={handleReviewComplete} />
           {/if}
         </div>
       </div>
     </div>
-
-    <!-- Review Modal -->
-    <ReviewModal
-      isOpen={showReviewModal}
-      {detection}
-      onClose={() => (showReviewModal = false)}
-      onSave={handleReviewSave}
-    />
   {/if}
 </div>
