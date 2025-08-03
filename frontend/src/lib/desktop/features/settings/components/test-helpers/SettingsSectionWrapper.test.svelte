@@ -5,14 +5,14 @@
 <script lang="ts">
   import SettingsSection from '../SettingsSection.svelte';
 
-  export let title = '';
-  export let description = '';
-  export let hasChanges = undefined;
-  export let originalData = undefined;
-  export let currentData = undefined;
-  export let className = '';
-  export let defaultOpen = undefined;
-  export let childContent = '';
+  export let title: string = '';
+  export let description: string = '';
+  export let hasChanges: boolean | undefined = undefined;
+  export let originalData: unknown | undefined = undefined;
+  export let currentData: unknown | undefined = undefined;
+  export let className: string = '';
+  export let defaultOpen: boolean | undefined = undefined;
+  export let childContent: string = '';
 </script>
 
 <SettingsSection

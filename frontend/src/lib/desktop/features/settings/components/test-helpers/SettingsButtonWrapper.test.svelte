@@ -9,7 +9,7 @@
   export let loadingText = '';
   export let disabled = false;
   export let className = '';
-  export let onclick = undefined;
+  export let onclick: (() => void) | undefined = undefined;
   export let childContent = '';
 </script>
 

@@ -5,16 +5,16 @@
 <script lang="ts">
   import SettingsCard from '../SettingsCard.svelte';
 
-  export let title = '';
-  export let description = '';
-  export let hasChanges = false;
-  export let className = '';
-  export let padding = true;
-  export let showCustomHeader = false;
-  export let showCustomFooter = false;
-  export let childContent = '';
-  export let headerContent = '';
-  export let footerContent = '';
+  export let title: string = '';
+  export let description: string = '';
+  export let hasChanges: boolean = false;
+  export let className: string = '';
+  export let padding: boolean = true;
+  export let showCustomHeader: boolean = false;
+  export let showCustomFooter: boolean = false;
+  export let childContent: string = '';
+  export let headerContent: string = '';
+  export let footerContent: string = '';
 </script>
 
 <SettingsCard {title} {description} {hasChanges} {className} {padding}>

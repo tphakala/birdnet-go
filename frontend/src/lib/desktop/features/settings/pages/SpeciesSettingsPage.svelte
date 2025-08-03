@@ -158,7 +158,26 @@
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to load species: ${response.status}`);
+        let errorMessage = '';
+        switch (response.status) {
+          case 404:
+            errorMessage = 'Species data not found';
+            break;
+          case 500:
+          case 502:
+          case 503:
+            errorMessage = 'Server error occurred while loading species data';
+            break;
+          case 401:
+            errorMessage = 'Unauthorized access to species data';
+            break;
+          case 403:
+            errorMessage = 'Access to species data is forbidden';
+            break;
+          default:
+            errorMessage = `Failed to load species (Error ${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

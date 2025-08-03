@@ -736,6 +736,24 @@
             >
               <!-- Map will be initialized here -->
             </div>
+            <div class="flex gap-2 mt-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-circle"
+                aria-label="Zoom in"
+                onclick={() => map?.zoomIn()}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-circle"
+                aria-label="Zoom out"
+                onclick={() => map?.zoomOut()}
+              >
+                -
+              </button>
+            </div>
             <div class="label">
               <span class="label-text-alt"
                 >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
@@ -783,7 +801,10 @@
                     : t('settings.main.sections.rangeFilter.speciesCount.loading')}
                 </div>
                 {#if rangeFilterState.testing}
-                  <span class="loading loading-spinner loading-xs text-primary opacity-60"></span>
+                  <span
+                    class="loading loading-spinner loading-xs text-primary opacity-60"
+                    aria-label={t('common.loading')}
+                  ></span>
                 {/if}
               </div>
               <button

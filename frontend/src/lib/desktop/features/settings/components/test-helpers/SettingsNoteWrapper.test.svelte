@@ -4,10 +4,11 @@
 -->
 <script lang="ts">
   import SettingsNote from '../SettingsNote.svelte';
+  import { alertIconsSvg } from '$lib/utils/icons';
 
-  export let className = '';
-  export let showIcon = false;
-  export let childContent = '';
+  export let className: string = '';
+  export let showIcon: boolean = false;
+  export let childContent: string = '';
 </script>
 
 <SettingsNote {className}>
@@ -19,9 +20,9 @@
 
   {#snippet icon()}
     {#if showIcon}
-      <svg data-testid="note-icon" class="w-5 h-5">
-        <circle cx="12" cy="12" r="10" fill="currentColor" />
-      </svg>
+      <div data-testid="note-icon" class="w-5 h-5">
+        {@html alertIconsSvg.info}
+      </div>
     {/if}
   {/snippet}
 </SettingsNote>

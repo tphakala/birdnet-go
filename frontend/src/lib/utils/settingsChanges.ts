@@ -156,13 +156,40 @@ export function hasAnySectionChanged(
  * Use this when comparing Svelte reactive proxies to avoid proxy comparison issues
  *
  * @param value Value to snapshot (may be a proxy)
+ * @param seen WeakSet to track visited objects (prevents circular references)
+ * @param depth Current recursion depth
+ * @param maxDepth Maximum allowed recursion depth (default: 50)
  * @returns Plain object/array snapshot
  */
-export function createSnapshot<T>(value: T): T {
+export function createSnapshot<T>(
+  value: T,
+  seen: WeakSet<object> = new WeakSet(),
+  depth: number = 0,
+  maxDepth: number = 50
+): T {
+  // Prevent stack overflow from deep recursion
+  if (depth > maxDepth) {
+    // eslint-disable-next-line no-console
+    console.warn(`createSnapshot: Maximum depth ${maxDepth} exceeded`);
+    return null as T;
+  }
+
   if (value == null || typeof value !== 'object') return value;
 
+  // Check for circular references
+  if (seen.has(value)) {
+    // eslint-disable-next-line no-console
+    console.warn('createSnapshot: Circular reference detected');
+    return null as T;
+  }
+
+  // Mark this object as seen
+  seen.add(value);
+
   if (Array.isArray(value)) {
-    return value.map(item => createSnapshot(item)) as T;
+    const result = value.map(item => createSnapshot(item, seen, depth + 1, maxDepth)) as T;
+    seen.delete(value); // Clean up after processing
+    return result;
   }
 
   // Use Object.create(null) to create an object without prototype
@@ -173,12 +200,15 @@ export function createSnapshot<T>(value: T): T {
     const val = safeGet(value as Record<string, unknown>, key);
     // Use Object.defineProperty for safe property assignment
     Object.defineProperty(snapshot, key, {
-      value: createSnapshot(val),
+      value: createSnapshot(val, seen, depth + 1, maxDepth),
       writable: true,
       enumerable: true,
       configurable: true,
     });
   }
+
+  // Clean up after processing this object
+  seen.delete(value);
 
   return snapshot as T;
 }
