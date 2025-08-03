@@ -95,6 +95,7 @@
           {securityEnabled}
           {accessAllowed}
           showSidebarToggle={true}
+          showSearch={currentPage === 'dashboard' || currentPage === 'detections'}
           onSidebarToggle={handleSidebarToggle}
           onSearch={handleSearch}
           onNavigate={handleNavigate}

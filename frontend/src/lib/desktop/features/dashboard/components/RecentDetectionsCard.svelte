@@ -11,6 +11,7 @@
   import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { cn } from '$lib/utils/cn';
 
   const logger = loggers.ui;
 
@@ -31,6 +32,7 @@
     onFreezeStart?: () => void;
     onFreezeEnd?: () => void;
     updatesAreFrozen?: boolean;
+    className?: string;
   }
 
   let {
@@ -47,6 +49,7 @@
     onFreezeStart,
     onFreezeEnd,
     updatesAreFrozen = false,
+    className = '',
   }: Props = $props();
 
   // State for number of detections to show
@@ -200,7 +203,7 @@
   }
 </script>
 
-<section class="card col-span-12 bg-base-100 shadow-sm">
+<section class={cn('card col-span-12 bg-base-100 shadow-sm', className)}>
   <!-- Card Header -->
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">

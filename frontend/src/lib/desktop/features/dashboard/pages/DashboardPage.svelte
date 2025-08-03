@@ -950,7 +950,7 @@
   }
 </script>
 
-<div class="col-span-12 space-y-6">
+<div class="col-span-12">
   <!-- Daily Summary Section -->
   <DailySummaryCard
     data={dailySummary}
@@ -978,5 +978,6 @@
     onFreezeStart={handleFreezeStart}
     onFreezeEnd={handleFreezeEnd}
     updatesAreFrozen={freezeCount > 0}
+    className="mt-4"
   />
 </div>
