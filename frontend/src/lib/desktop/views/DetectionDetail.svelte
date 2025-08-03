@@ -16,7 +16,6 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Card from '$lib/desktop/components/ui/Card.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
@@ -28,7 +27,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { navigationIcons, actionIcons, mediaIcons } from '$lib/utils/icons';
+  import { actionIcons, mediaIcons } from '$lib/utils/icons';
   import type { Detection } from '$lib/types/detection.types';
 
   const logger = loggers.ui;
@@ -147,73 +146,104 @@
     // Refetch detection data
     await fetchDetection();
   }
-
-  // Navigate back
-  function goBack() {
-    window.history.back();
-  }
 </script>
 
 <!-- Snippets for better organization -->
 {#snippet heroSection(detection: Detection)}
-  <Card>
-    <div class="flex flex-col lg:flex-row gap-6">
-      <!-- Species Info -->
-      <div class="flex gap-4 flex-1">
-        <SpeciesThumbnail
-          scientificName={detection.scientificName}
-          commonName={detection.commonName}
-          size="lg"
-        />
-        <div class="flex-1">
-          <h1 class="text-3xl font-bold text-base-content mb-2">
-            {detection.commonName}
-          </h1>
-          <p class="text-lg text-base-content/60 italic mb-3">
-            {detection.scientificName}
-          </p>
-          <SpeciesBadges {detection} size="lg" />
-        </div>
-      </div>
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <!-- Species info container - similar to ReviewModal -->
+      <div class="bg-base-200/50 rounded-lg p-4">
+        <!-- Single Row Layout: All 4 segments in one row using flex -->
+        <div class="flex gap-4 items-start">
+          <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
+          <div class="flex gap-4 items-center flex-1 min-w-0">
+            <SpeciesThumbnail
+              scientificName={detection.scientificName}
+              commonName={detection.commonName}
+              size="lg"
+            />
+            <div class="flex-1 min-w-0">
+              <h1 class="text-3xl font-semibold text-base-content mb-1 truncate">
+                {detection.commonName}
+              </h1>
+              <p class="text-lg text-base-content/60 italic truncate">
+                {detection.scientificName}
+              </p>
+              <div class="mt-3">
+                <SpeciesBadges {detection} size="lg" />
+              </div>
+            </div>
+          </div>
 
-      <!-- Key Metrics -->
-      <div class="flex gap-6 items-center">
-        <!-- Confidence -->
-        <div class="text-center">
-          <div class="text-sm text-base-content/60 mb-2">{t('common.labels.confidence')}</div>
-          <ConfidenceCircle confidence={detection.confidence} size="xl" />
-        </div>
+          <!-- Section 2: Date & Time (fixed width) -->
+          <div class="flex-shrink-0 text-center" style:min-width="120px">
+            <div class="text-sm text-base-content/60 mb-2">
+              {t('detections.headers.dateTime')}
+            </div>
+            <div class="text-base text-base-content">{detection.date}</div>
+            <div class="text-base text-base-content">{detection.time}</div>
+            {#if detection.timeOfDay}
+              <div class="text-sm text-base-content/60 mt-1 capitalize">
+                {detection.timeOfDay}
+              </div>
+            {/if}
+          </div>
 
-        <!-- Date/Time -->
-        <div class="text-center">
-          <div class="text-sm text-base-content/60 mb-2">{t('detections.headers.dateTime')}</div>
-          <div class="text-base font-medium">{detection.date}</div>
-          <div class="text-base">{detection.time}</div>
-          {#if detection.timeOfDay}
-            <div class="text-sm text-base-content/60 mt-1 capitalize">{detection.timeOfDay}</div>
-          {/if}
-        </div>
+          <!-- Section 3: Weather Conditions (fixed width) -->
+          <div class="flex-shrink-0 text-center" style:min-width="180px">
+            <div class="text-sm text-base-content/60 mb-2">
+              {t('detections.headers.weather')}
+            </div>
+            {#if detection.weather}
+              <div class="flex justify-center">
+                <WeatherDetails
+                  weatherIcon={detection.weather.weatherIcon}
+                  weatherDescription={detection.weather.description}
+                  temperature={detection.weather.temperature}
+                  windSpeed={detection.weather.windSpeed}
+                  windGust={detection.weather.windGust}
+                  units={detection.weather.units}
+                  size="md"
+                  className="text-center"
+                />
+              </div>
+            {:else}
+              <div class="text-sm text-base-content/40 italic">
+                {t('detections.weather.noData')}
+              </div>
+            {/if}
+          </div>
 
-        <!-- Actions -->
-        <div class="flex flex-col gap-2">
-          <button class="btn btn-primary btn-sm gap-2" onclick={() => (showReviewModal = true)}>
-            {@html actionIcons.edit}
-            {t('common.actions.review')}
-          </button>
-          {#if detection.clipName}
-            <a
-              href="/api/v2/media/audio/{detection.clipName}"
-              download
-              class="btn btn-ghost btn-sm gap-2"
-            >
-              {@html mediaIcons.download}
-              {t('common.actions.download')}
-            </a>
-          {/if}
+          <!-- Section 4: Confidence + Actions (fixed width) -->
+          <div class="flex-shrink-0 flex flex-col items-center" style:min-width="120px">
+            <div class="text-sm text-base-content/60 mb-2">
+              {t('common.labels.confidence')}
+            </div>
+            <ConfidenceCircle confidence={detection.confidence} size="xl" />
+
+            <!-- Actions below confidence -->
+            <div class="flex flex-col gap-2 mt-4">
+              <button class="btn btn-primary btn-sm gap-2" onclick={() => (showReviewModal = true)}>
+                {@html actionIcons.edit}
+                {t('common.actions.review')}
+              </button>
+              {#if detection.clipName}
+                <a
+                  href="/api/v2/media/audio/{detection.clipName}"
+                  download
+                  class="btn btn-ghost btn-sm gap-2"
+                >
+                  {@html mediaIcons.download}
+                  {t('common.actions.download')}
+                </a>
+              {/if}
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </Card>
+  </div>
 {/snippet}
 
 {#snippet overviewTab(detection: Detection)}
@@ -380,90 +410,90 @@
 {/snippet}
 
 <!-- Main component -->
-<div class="col-span-12 space-y-6">
+<div class="col-span-12 space-y-4">
   {#if isLoadingDetection}
-    <Card>
-      <div class="flex justify-center items-center h-64">
-        <LoadingSpinner size="lg" />
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <div class="flex justify-center items-center h-64">
+          <LoadingSpinner size="lg" />
+        </div>
       </div>
-    </Card>
+    </div>
   {:else if detectionError}
-    <Card>
-      <ErrorAlert message={detectionError} />
-    </Card>
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <ErrorAlert message={detectionError} />
+      </div>
+    </div>
   {:else if detection}
-    <!-- Header with back button -->
-    <Card>
-      <button class="btn btn-ghost btn-sm gap-2" onclick={goBack}>
-        {@html navigationIcons.chevronLeft}
-        <span>{t('common.actions.back')}</span>
-      </button>
-    </Card>
-
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
     <!-- Media Section -->
-    <Card>
-      <h2 class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
-      <AudioPlayer
-        audioUrl="/api/v2/audio/{detection.id}"
-        detectionId={detection.id.toString()}
-        showSpectrogram={true}
-        spectrogramSize="xl"
-        spectrogramRaw={false}
-        responsive={true}
-        className="w-full"
-      />
-    </Card>
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
+        <AudioPlayer
+          audioUrl="/api/v2/audio/{detection.id}"
+          detectionId={detection.id.toString()}
+          showSpectrogram={true}
+          spectrogramSize="xl"
+          spectrogramRaw={false}
+          responsive={true}
+          className="w-full"
+        />
+      </div>
+    </div>
 
     <!-- Tabbed Content -->
-    <Card>
-      <!-- Tab Navigation -->
-      <div class="tabs tabs-boxed mb-6">
-        <button
-          class="tab"
-          class:tab-active={activeTab === 'overview'}
-          onclick={() => (activeTab = 'overview')}
-        >
-          {t('detections.tabs.overview')}
-        </button>
-        <button
-          class="tab"
-          class:tab-active={activeTab === 'taxonomy'}
-          onclick={() => (activeTab = 'taxonomy')}
-        >
-          {t('detections.tabs.taxonomy')}
-        </button>
-        <button
-          class="tab"
-          class:tab-active={activeTab === 'history'}
-          onclick={() => (activeTab = 'history')}
-        >
-          {t('detections.tabs.history')}
-        </button>
-        <button
-          class="tab"
-          class:tab-active={activeTab === 'notes'}
-          onclick={() => (activeTab = 'notes')}
-        >
-          {t('detections.tabs.notes')}
-        </button>
-      </div>
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <!-- Tab Navigation -->
+        <div class="tabs tabs-boxed mb-6">
+          <button
+            class="tab"
+            class:tab-active={activeTab === 'overview'}
+            onclick={() => (activeTab = 'overview')}
+          >
+            {t('detections.tabs.overview')}
+          </button>
+          <button
+            class="tab"
+            class:tab-active={activeTab === 'taxonomy'}
+            onclick={() => (activeTab = 'taxonomy')}
+          >
+            {t('detections.tabs.taxonomy')}
+          </button>
+          <button
+            class="tab"
+            class:tab-active={activeTab === 'history'}
+            onclick={() => (activeTab = 'history')}
+          >
+            {t('detections.tabs.history')}
+          </button>
+          <button
+            class="tab"
+            class:tab-active={activeTab === 'notes'}
+            onclick={() => (activeTab = 'notes')}
+          >
+            {t('detections.tabs.notes')}
+          </button>
+        </div>
 
-      <!-- Tab Content -->
-      <div class="p-4">
-        {#if activeTab === 'overview'}
-          {@render overviewTab(detection)}
-        {:else if activeTab === 'taxonomy'}
-          {@render taxonomyTab()}
-        {:else if activeTab === 'history'}
-          {@render historyTab()}
-        {:else if activeTab === 'notes'}
-          {@render notesTab(detection)}
-        {/if}
+        <!-- Tab Content -->
+        <div>
+          {#if activeTab === 'overview'}
+            {@render overviewTab(detection)}
+          {:else if activeTab === 'taxonomy'}
+            {@render taxonomyTab()}
+          {:else if activeTab === 'history'}
+            {@render historyTab()}
+          {:else if activeTab === 'notes'}
+            {@render notesTab(detection)}
+          {/if}
+        </div>
       </div>
-    </Card>
+    </div>
 
     <!-- Review Modal -->
     <ReviewModal
