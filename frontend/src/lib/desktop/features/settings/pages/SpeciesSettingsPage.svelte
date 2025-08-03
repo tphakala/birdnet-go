@@ -119,6 +119,49 @@
   // Focus management for modal accessibility
   let previouslyFocusedElement: HTMLElement | null = null;
 
+  // Helper function to get all focusable elements within a container
+  function getFocusableElements(container: HTMLElement): HTMLElement[] {
+    const focusableSelectors = [
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      'a[href]',
+      '[tabindex]:not([tabindex="-1"])',
+    ];
+
+    const elements = container.querySelectorAll(focusableSelectors.join(', '));
+    return Array.from(elements).filter(el => {
+      const style = window.getComputedStyle(el as HTMLElement);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    }) as HTMLElement[];
+  }
+
+  // Focus trap handler for modal keyboard navigation
+  function handleFocusTrap(event: KeyboardEvent, modal: HTMLElement) {
+    if (event.key !== 'Tab') return;
+
+    const focusableElements = getFocusableElements(modal);
+    if (focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (event.shiftKey) {
+      // Shift + Tab - moving backwards
+      if (document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      }
+    } else {
+      // Tab - moving forwards
+      if (document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+  }
+
   // Focus trapping effect for actions modal
   $effect(() => {
     if (showActionsModal) {
@@ -131,7 +174,22 @@
           '[role="dialog"][aria-labelledby="actions-modal-title"]'
         ) as HTMLElement;
         if (modal) {
-          modal.focus();
+          // Focus the first focusable element or the modal itself
+          const focusableElements = getFocusableElements(modal);
+          if (focusableElements.length > 0) {
+            focusableElements[0].focus();
+          } else {
+            modal.focus();
+          }
+
+          // Add focus trap event listener
+          const trapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
+          modal.addEventListener('keydown', trapHandler);
+
+          // Cleanup function
+          return () => {
+            modal.removeEventListener('keydown', trapHandler);
+          };
         }
       }, 0);
     } else if (previouslyFocusedElement) {
