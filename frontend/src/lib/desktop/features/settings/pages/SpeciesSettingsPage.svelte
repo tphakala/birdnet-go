@@ -116,6 +116,31 @@
     executeDefaults: true,
   });
 
+  // Focus management for modal accessibility
+  let previouslyFocusedElement: HTMLElement | null = null;
+
+  // Focus trapping effect for actions modal
+  $effect(() => {
+    if (showActionsModal) {
+      // Store previously focused element
+      previouslyFocusedElement = document.activeElement as HTMLElement;
+
+      // Set focus to the modal after a microtask to ensure it's in the DOM
+      setTimeout(() => {
+        const modal = document.querySelector(
+          '[role="dialog"][aria-labelledby="actions-modal-title"]'
+        ) as HTMLElement;
+        if (modal) {
+          modal.focus();
+        }
+      }, 0);
+    } else if (previouslyFocusedElement) {
+      // Restore focus to previously focused element
+      previouslyFocusedElement.focus();
+      previouslyFocusedElement = null;
+    }
+  });
+
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
     hasSettingsChanged(
@@ -486,7 +511,7 @@
 </script>
 
 <!-- Remove page-level loading spinner to prevent flickering -->
-<div class="space-y-4">
+<main class="space-y-4" aria-label="Species settings configuration">
   <!-- Include Species Section -->
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}
@@ -710,20 +735,35 @@
                 <!-- Actions dropdown -->
                 <div class="col-span-1 text-right">
                   <div class="dropdown dropdown-end">
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-xs">⋮</div>
-                    <ul class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
+                    <div
+                      tabindex="0"
+                      role="button"
+                      aria-haspopup="menu"
+                      aria-label={t('settings.species.customConfiguration.dropdown.actionsMenu')}
+                      class="btn btn-ghost btn-xs"
+                    >
+                      ⋮
+                    </div>
+                    <ul
+                      role="menu"
+                      class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow"
+                    >
                       <li>
-                        <button onclick={() => startEditConfig(species)}
+                        <button role="menuitem" onclick={() => startEditConfig(species)}
                           >{t('settings.species.customConfiguration.dropdown.editConfig')}</button
                         >
                       </li>
                       <li>
-                        <button onclick={() => openActionsModal(species)}
+                        <button role="menuitem" onclick={() => openActionsModal(species)}
                           >{t('settings.species.customConfiguration.dropdown.addAction')}</button
                         >
                       </li>
                       <li>
-                        <button onclick={() => removeConfig(species)} class="text-error">
+                        <button
+                          role="menuitem"
+                          onclick={() => removeConfig(species)}
+                          class="text-error"
+                        >
                           {t('settings.species.customConfiguration.dropdown.remove')}
                         </button>
                       </li>
@@ -798,13 +838,18 @@
       </div>
     </div>
   </SettingsSection>
-</div>
+</main>
 
 <!-- Actions Modal -->
 {#if showActionsModal}
-  <div class="modal modal-open">
+  <div
+    class="modal modal-open"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="actions-modal-title"
+  >
     <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
-      <h3 class="text-lg font-bold mb-4">
+      <h3 id="actions-modal-title" class="text-lg font-bold mb-4">
         {t('settings.species.actionsModal.title', { species: currentSpecies })}
       </h3>
 

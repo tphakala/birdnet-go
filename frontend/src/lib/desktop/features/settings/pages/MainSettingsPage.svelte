@@ -190,6 +190,31 @@
     species: [],
   });
 
+  // Focus management for modal accessibility
+  let previouslyFocusedElement: HTMLElement | null = null;
+
+  // Focus trapping effect for range filter modal
+  $effect(() => {
+    if (rangeFilterState.showModal) {
+      // Store previously focused element
+      previouslyFocusedElement = document.activeElement as HTMLElement;
+
+      // Set focus to the modal after a microtask to ensure it's in the DOM
+      setTimeout(() => {
+        const modal = document.querySelector(
+          '[role="dialog"][aria-labelledby="modal-title"]'
+        ) as HTMLElement;
+        if (modal) {
+          modal.focus();
+        }
+      }, 0);
+    } else if (previouslyFocusedElement) {
+      // Restore focus to previously focused element
+      previouslyFocusedElement.focus();
+      previouslyFocusedElement = null;
+    }
+  });
+
   // Map state
   let mapElement: HTMLElement;
   let map: any;
@@ -292,6 +317,7 @@
 
     map = L.map(mapElement, {
       scrollWheelZoom: false, // Disable default scroll wheel zoom
+      keyboard: true, // Enable keyboard navigation
     }).setView([initialLat, initialLng], initialZoom);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -523,7 +549,7 @@
   }
 </script>
 
-<div class="space-y-4">
+<main class="space-y-4" aria-label="Main settings configuration">
   <!-- Main Settings Section -->
   <SettingsSection
     title={t('settings.main.sections.main.title')}
@@ -761,7 +787,8 @@
             </div>
             <div class="label">
               <span class="label-text-alt text-info"
-                >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map</span
+                >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map. Use arrow keys to pan, +/-
+                keys to zoom.</span
               >
             </div>
           </div>
@@ -831,7 +858,7 @@
             </div>
 
             {#if rangeFilterState.error}
-              <div class="alert alert-error mt-2">
+              <div class="alert alert-error mt-2" role="alert">
                 {@html alertIconsSvg.error}
                 <span>{rangeFilterState.error}</span>
                 <button
@@ -1067,7 +1094,7 @@
       </div>
     </div>
   </SettingsSection>
-</div>
+</main>
 
 <!-- Range Filter Species Modal -->
 {#if rangeFilterState.showModal}
@@ -1128,7 +1155,7 @@
       </div>
 
       {#if rangeFilterState.error}
-        <div class="alert alert-error mb-4">
+        <div class="alert alert-error mb-4" role="alert">
           {@html alertIconsSvg.error}
           <span>{rangeFilterState.error}</span>
           <button
