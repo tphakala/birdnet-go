@@ -156,7 +156,7 @@
 
 <!-- Snippets for better organization -->
 {#snippet heroSection(detection: Detection)}
-  <Card className="mb-6">
+  <Card>
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Species Info -->
       <div class="flex gap-4 flex-1">
@@ -380,27 +380,31 @@
 {/snippet}
 
 <!-- Main component -->
-<div class="min-h-screen bg-base-200 p-4">
+<div class="col-span-12 space-y-6">
   {#if isLoadingDetection}
-    <div class="flex justify-center items-center h-64">
-      <LoadingSpinner size="lg" />
-    </div>
+    <Card>
+      <div class="flex justify-center items-center h-64">
+        <LoadingSpinner size="lg" />
+      </div>
+    </Card>
   {:else if detectionError}
-    <ErrorAlert message={detectionError} />
+    <Card>
+      <ErrorAlert message={detectionError} />
+    </Card>
   {:else if detection}
     <!-- Header with back button -->
-    <div class="mb-6">
+    <Card>
       <button class="btn btn-ghost btn-sm gap-2" onclick={goBack}>
         {@html navigationIcons.chevronLeft}
         <span>{t('common.actions.back')}</span>
       </button>
-    </div>
+    </Card>
 
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
     <!-- Media Section -->
-    <Card className="mb-6">
+    <Card>
       <h2 class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
       <AudioPlayer
         audioUrl="/api/v2/audio/{detection.id}"
@@ -448,15 +452,17 @@
       </div>
 
       <!-- Tab Content -->
-      {#if activeTab === 'overview'}
-        {@render overviewTab(detection)}
-      {:else if activeTab === 'taxonomy'}
-        {@render taxonomyTab()}
-      {:else if activeTab === 'history'}
-        {@render historyTab()}
-      {:else if activeTab === 'notes'}
-        {@render notesTab(detection)}
-      {/if}
+      <div class="p-4">
+        {#if activeTab === 'overview'}
+          {@render overviewTab(detection)}
+        {:else if activeTab === 'taxonomy'}
+          {@render taxonomyTab()}
+        {:else if activeTab === 'history'}
+          {@render historyTab()}
+        {:else if activeTab === 'notes'}
+          {@render notesTab(detection)}
+        {/if}
+      </div>
     </Card>
 
     <!-- Review Modal -->
