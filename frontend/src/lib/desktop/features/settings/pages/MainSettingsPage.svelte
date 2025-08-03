@@ -863,12 +863,12 @@
         <SelectField
           id="database-type"
           bind:value={selectedDatabaseType}
-          label="Database Type"
+          label={t('settings.main.sections.database.type.label')}
           options={[
-            { value: 'sqlite', label: 'SQLite' },
-            { value: 'mysql', label: 'MySQL' },
+            { value: 'sqlite', label: t('settings.main.sections.database.type.options.sqlite') },
+            { value: 'mysql', label: t('settings.main.sections.database.type.options.mysql') },
           ]}
-          helpText="Select the database type for storing detections"
+          helpText={t('settings.main.sections.database.type.helpText')}
           disabled={store.isLoading || store.isSaving}
           onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
         />

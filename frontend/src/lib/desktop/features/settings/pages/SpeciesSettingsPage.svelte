@@ -37,7 +37,7 @@
     realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { SpeciesConfig, Action } from '$lib/stores/settings';
+  import type { SpeciesConfig, Action, SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -53,11 +53,12 @@
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
-    $speciesSettings || {
-      include: [] as string[],
-      exclude: [] as string[],
-      config: {} as Record<string, SpeciesConfig>,
-    }
+    $speciesSettings ||
+      ({
+        include: [] as string[],
+        exclude: [] as string[],
+        config: {} as Record<string, SpeciesConfig>,
+      } as SpeciesSettings)
   );
 
   let store = $derived($settingsStore);
