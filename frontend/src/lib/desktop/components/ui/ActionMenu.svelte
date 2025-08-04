@@ -88,7 +88,10 @@
   }
 
   /** Toggles the menu open/closed state and updates position when opening */
-  function handleOpen() {
+  function handleOpen(event: MouseEvent) {
+    // Prevent event from bubbling to parent elements (like detection row click handlers)
+    event.stopPropagation();
+
     // Toggle menu open/closed
     isOpen = !isOpen;
 
@@ -175,7 +178,7 @@
   <button
     bind:this={buttonElement}
     onclick={handleOpen}
-    class="btn btn-ghost btn-xs"
+    class="btn btn-ghost btn-sm min-h-8 h-8 w-8 p-1"
     aria-label="Actions menu"
     aria-haspopup="true"
     aria-expanded={isOpen}

@@ -3,7 +3,6 @@
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
-  import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
@@ -89,7 +88,6 @@
   }
 
   // Modal states
-  let showReviewModal = $state(false);
   let showConfirmModal = $state(false);
   let selectedDetection = $state<Detection | null>(null);
   let confirmModalConfig = $state({
@@ -100,10 +98,9 @@
   });
 
   // Action handlers
-  // Opens the review modal for manual verification of a detection
+  // Navigate to detection detail page for review
   function handleReview(detection: Detection) {
-    selectedDetection = detection;
-    showReviewModal = true;
+    window.location.href = `/ui/detections/${detection.id}?tab=review`;
   }
 
   // Toggles whether a species should be ignored in future detections
@@ -352,7 +349,7 @@
               </div>
 
               <!-- Action Menu -->
-              <div>
+              <div onclick={e => e.stopPropagation()}>
                 <ActionMenu
                   {detection}
                   isExcluded={false}
@@ -380,35 +377,6 @@
 
 <!-- Modals -->
 {#if selectedDetection}
-  <ReviewModal
-    isOpen={showReviewModal}
-    detection={selectedDetection}
-    isExcluded={false}
-    onClose={() => {
-      showReviewModal = false;
-      selectedDetection = null;
-    }}
-    onSave={async (verified, lockDetection, ignoreSpecies, comment) => {
-      if (!selectedDetection) return;
-
-      await fetchWithCSRF(`/api/v2/detections/${selectedDetection.id}/review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          verified,
-          lock_detection: lockDetection,
-          ignore_species: ignoreSpecies ? selectedDetection.commonName : null,
-          comment,
-        }),
-      });
-      onRefresh();
-      showReviewModal = false;
-      selectedDetection = null;
-    }}
-  />
-
   <ConfirmModal
     isOpen={showConfirmModal}
     title={confirmModalConfig.title}

@@ -61,6 +61,13 @@
       }
     }
 
+    // Check for tab query parameter to set initial active tab
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam && ['overview', 'taxonomy', 'history', 'notes', 'review'].includes(tabParam)) {
+      activeTab = tabParam as typeof activeTab;
+    }
+
     // Fetch detection data when detectionId changes
     if (detectionId) {
       fetchDetection();
