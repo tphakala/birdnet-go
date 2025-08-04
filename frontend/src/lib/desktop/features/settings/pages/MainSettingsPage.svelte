@@ -670,6 +670,10 @@
   }
 
   // Initialize modal map when modal is opened
+  // Note: This implementation includes full bidirectional sync:
+  // - Modal map inherits current coordinates and zoom from main map when opened
+  // - User interactions (click/drag) in modal update settings and sync back to main map
+  // - Both maps stay synchronized through the shared settings state
   async function initializeModalMap() {
     if (!modalMapElement || modalMap || !maplibregl) return;
 
