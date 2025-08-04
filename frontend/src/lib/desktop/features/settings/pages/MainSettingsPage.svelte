@@ -289,6 +289,7 @@
   let modalMarker: import('maplibre-gl').Marker | null = null;
   let mapModalOpen = $state(false);
   let mapInitialized = $state(false);
+  let mapLibraryLoading = $state(false);
 
   // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
@@ -432,13 +433,16 @@
     try {
       // Dynamically import MapLibre GL JS and CSS when needed
       if (!maplibregl) {
+        mapLibraryLoading = true;
         try {
           const [maplibreModule] = await Promise.all([
             import('maplibre-gl'),
             import('maplibre-gl/dist/maplibre-gl.css'),
           ]);
           maplibregl = maplibreModule;
+          mapLibraryLoading = false;
         } catch (importError) {
+          mapLibraryLoading = false;
           logger.error('Failed to load MapLibre GL JS:', importError, {
             component: 'MainSettingsPage',
             action: 'dynamic import',
@@ -1274,11 +1278,21 @@
             <div
               bind:this={mapElement}
               id="location-map"
-              class="h-[300px] rounded-lg border border-base-300"
+              class="h-[300px] rounded-lg border border-base-300 relative"
               role="application"
               aria-label="Map for selecting station location"
             >
               <!-- Map will be initialized here -->
+              {#if mapLibraryLoading}
+                <div
+                  class="absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-75 rounded-lg"
+                >
+                  <div class="flex flex-col items-center gap-2">
+                    <span class="loading loading-spinner loading-lg"></span>
+                    <span class="text-sm text-base-content">Loading map...</span>
+                  </div>
+                </div>
+              {/if}
             </div>
             <div class="flex gap-2 mt-2">
               <button
@@ -1671,11 +1685,21 @@
       <div class="flex-1 min-h-0">
         <div
           bind:this={modalMapElement}
-          class="w-full h-full rounded-lg border border-base-300"
+          class="w-full h-full rounded-lg border border-base-300 relative"
           role="application"
           aria-label="Full screen map for selecting station location"
         >
           <!-- Map will be initialized here when modal opens -->
+          {#if mapLibraryLoading}
+            <div
+              class="absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-75 rounded-lg"
+            >
+              <div class="flex flex-col items-center gap-2">
+                <span class="loading loading-spinner loading-lg"></span>
+                <span class="text-sm text-base-content">Loading map...</span>
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
 
