@@ -298,16 +298,28 @@
 
   // Initialize map when settings are actually loaded from server
   $effect(() => {
-    // Wait for store to load AND for actual coordinate data (not just fallbacks)
-    const hasCoordinates = settings.birdnet.latitude !== 0 || settings.birdnet.longitude !== 0;
-    if (!store.isLoading && settings.birdnet && mapElement && !map && hasCoordinates) {
+    if (!store.isLoading && settings.birdnet && mapElement && !map) {
       logger.debug('Initializing map with coordinates:', {
         latitude: settings.birdnet.latitude,
         longitude: settings.birdnet.longitude,
         loadingComplete: !store.isLoading,
-        hasActualCoordinates: hasCoordinates,
       });
       initializeMap();
+    }
+  });
+
+  // Watch for coordinate changes and update map view
+  $effect(() => {
+    if (
+      map &&
+      settings.birdnet.latitude !== undefined &&
+      settings.birdnet.longitude !== undefined
+    ) {
+      const lat = settings.birdnet.latitude;
+      const lng = settings.birdnet.longitude;
+
+      logger.debug('Coordinates changed, updating map view:', { lat, lng });
+      updateMapView(lat, lng);
     }
   });
 
@@ -435,9 +447,16 @@
     };
     mapElement.addEventListener('wheel', handleWheel);
 
-    // Add marker if coordinates exist
+    // Add marker if coordinates exist (direct creation to avoid reactive loops)
     if (initialLat !== 0 || initialLng !== 0) {
-      updateMapView(initialLat, initialLng);
+      marker = new maplibregl.Marker({ draggable: true })
+        .setLngLat([initialLng, initialLat])
+        .addTo(map);
+
+      marker.on('dragend', () => {
+        const lngLat = marker!.getLngLat();
+        updateMarker(lngLat.lat, lngLat.lng);
+      });
     }
 
     // Handle map clicks
