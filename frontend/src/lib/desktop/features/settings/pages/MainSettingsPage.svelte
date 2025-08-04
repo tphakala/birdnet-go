@@ -1281,6 +1281,7 @@
               class="h-[300px] rounded-lg border border-base-300 relative"
               role="application"
               aria-label="Map for selecting station location"
+              aria-describedby="map-help-text"
             >
               <!-- Map will be initialized here -->
               {#if mapLibraryLoading}
@@ -1288,8 +1289,10 @@
                   class="absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-75 rounded-lg"
                 >
                   <div class="flex flex-col items-center gap-2">
-                    <span class="loading loading-spinner loading-lg"></span>
-                    <span class="text-sm text-base-content">Loading map...</span>
+                    <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+                    <span class="text-sm text-base-content" role="status" aria-live="assertive"
+                      >Loading map...</span
+                    >
                   </div>
                 </div>
               {/if}
@@ -1299,6 +1302,8 @@
                 type="button"
                 class="btn btn-sm btn-circle"
                 aria-label="Zoom in"
+                aria-disabled={!map || mapLibraryLoading}
+                disabled={!map || mapLibraryLoading}
                 onclick={() => map?.zoomIn({ duration: 300 })}
               >
                 +
@@ -1307,6 +1312,8 @@
                 type="button"
                 class="btn btn-sm btn-circle"
                 aria-label="Zoom out"
+                aria-disabled={!map || mapLibraryLoading}
+                disabled={!map || mapLibraryLoading}
                 onclick={() => map?.zoomOut({ duration: 300 })}
               >
                 -
@@ -1315,13 +1322,24 @@
                 type="button"
                 class="btn btn-sm btn-circle"
                 aria-label="Expand map to full screen"
+                aria-disabled={!map || mapLibraryLoading}
+                disabled={!map || mapLibraryLoading}
                 onclick={openMapModal}
               >
                 {@html navigationIcons.expand}
               </button>
             </div>
+
+            <!-- Screen reader announcements for coordinate changes -->
+            <div class="sr-only" aria-live="polite" aria-atomic="true" role="status">
+              {#if settings.birdnet.latitude && settings.birdnet.longitude}
+                Current location: Latitude {settings.birdnet.latitude.toFixed(3)}, Longitude {settings.birdnet.longitude.toFixed(
+                  3
+                )}
+              {/if}
+            </div>
             <div class="label">
-              <span class="label-text-alt"
+              <span id="map-help-text" class="label-text-alt"
                 >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
               >
             </div>
@@ -1695,8 +1713,10 @@
               class="absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-75 rounded-lg"
             >
               <div class="flex flex-col items-center gap-2">
-                <span class="loading loading-spinner loading-lg"></span>
-                <span class="text-sm text-base-content">Loading map...</span>
+                <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+                <span class="text-sm text-base-content" role="status" aria-live="assertive"
+                  >Loading map...</span
+                >
               </div>
             </div>
           {/if}
@@ -1709,6 +1729,8 @@
             type="button"
             class="btn btn-sm btn-circle"
             aria-label="Zoom in"
+            aria-disabled={!modalMap || mapLibraryLoading}
+            disabled={!modalMap || mapLibraryLoading}
             onclick={() => modalMap?.zoomIn({ duration: 300 })}
           >
             +
@@ -1717,6 +1739,8 @@
             type="button"
             class="btn btn-sm btn-circle"
             aria-label="Zoom out"
+            aria-disabled={!modalMap || mapLibraryLoading}
+            disabled={!modalMap || mapLibraryLoading}
             onclick={() => modalMap?.zoomOut({ duration: 300 })}
           >
             -
