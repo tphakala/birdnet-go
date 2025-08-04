@@ -805,8 +805,7 @@
   }
 </script>
 
-<!-- Remove page-level loading spinner to prevent flickering -->
-<div class="space-y-4">
+<div class="space-y-4 mb-16">
   <!-- BirdWeather Settings -->
   <SettingsSection
     title={t('settings.integration.birdweather.title')}

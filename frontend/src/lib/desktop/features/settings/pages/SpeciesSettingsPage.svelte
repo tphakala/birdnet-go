@@ -568,8 +568,7 @@
   }
 </script>
 
-<!-- Remove page-level loading spinner to prevent flickering -->
-<main class="space-y-4" aria-label="Species settings configuration">
+<main class="space-y-4 mb-16" aria-label="Species settings configuration">
   <!-- Include Species Section -->
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}

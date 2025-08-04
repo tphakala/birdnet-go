@@ -121,10 +121,27 @@
         </div>
       {/if}
     </div>
-
-    <!-- Settings Actions (Save/Reset) -->
-    <div class="mt-8">
-      <SettingsActions />
-    </div>
   {/if}
 </main>
+
+<!-- Floating Settings Actions Bar -->
+{#if !ENABLE_LOADING_SPINNERS || !store.isLoading}
+  <!-- Fixed positioning for floating behavior, but constrained to main content area -->
+  <div class="fixed bottom-0 left-0 right-0 z-50 lg:left-64">
+    <!-- Replicate the exact same container structure as main content -->
+    <div class="mx-auto max-w-7xl">
+      <div class="grid grid-cols-12 p-3 lg:px-8">
+        <div class="col-span-12 container mx-auto">
+          <!-- Background with transparency matching settings cards -->
+          <div
+            class="bg-base-100/90 backdrop-blur-sm border-t border-base-300 rounded-lg shadow-sm"
+          >
+            <div class="px-4 py-3">
+              <SettingsActions />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
