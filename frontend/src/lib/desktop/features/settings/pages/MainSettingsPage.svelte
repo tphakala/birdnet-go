@@ -284,6 +284,7 @@
   let modalMarker: maplibregl.Marker | null = null;
   let mapModalOpen = $state(false);
   let mapInitialized = $state(false);
+  let initialMapCoordinates = $state<{ lat: number; lng: number } | null>(null);
 
   // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
@@ -299,12 +300,32 @@
 
   // Initialize map when settings are actually loaded from server
   $effect(() => {
-    if (!store.isLoading && mapElement && !mapInitialized) {
-      logger.debug('Initializing map with coordinates:', {
-        latitude: settings.birdnet.latitude,
-        longitude: settings.birdnet.longitude,
+    logger.info('Map initialization effect triggered:', {
+      storeLoading: store.isLoading,
+      mapElementExists: !!mapElement,
+      mapInitialized,
+      birdnetSettings: $birdnetSettings,
+      derivedSettings: settings.birdnet,
+      hasActualCoordinates:
+        $birdnetSettings &&
+        $birdnetSettings.latitude !== undefined &&
+        $birdnetSettings.longitude !== undefined,
+    });
+
+    // Wait for actual coordinates to be loaded (not just fallbacks)
+    const hasActualCoordinates =
+      $birdnetSettings &&
+      $birdnetSettings.latitude !== undefined &&
+      $birdnetSettings.longitude !== undefined;
+
+    if (!store.isLoading && mapElement && !mapInitialized && hasActualCoordinates) {
+      logger.info('Initializing map with actual coordinates:', {
+        latitude: $birdnetSettings.latitude,
+        longitude: $birdnetSettings.longitude,
         loadingComplete: !store.isLoading,
+        hasActualSettings: !!$birdnetSettings,
       });
+      initialMapCoordinates = { lat: $birdnetSettings.latitude, lng: $birdnetSettings.longitude };
       initializeMap();
       mapInitialized = true;
     }
@@ -314,14 +335,34 @@
   $effect(() => {
     if (
       map &&
-      settings.birdnet.latitude !== undefined &&
-      settings.birdnet.longitude !== undefined
+      mapInitialized &&
+      initialMapCoordinates &&
+      $birdnetSettings?.latitude !== undefined &&
+      $birdnetSettings?.longitude !== undefined
     ) {
-      const lat = settings.birdnet.latitude;
-      const lng = settings.birdnet.longitude;
+      const lat = $birdnetSettings.latitude;
+      const lng = $birdnetSettings.longitude;
 
-      logger.debug('Coordinates changed, updating map view:', { lat, lng });
-      updateMapView(lat, lng);
+      // Only update if coordinates actually changed from initial ones
+      const coordsChanged = lat !== initialMapCoordinates.lat || lng !== initialMapCoordinates.lng;
+
+      logger.info('Coordinate change effect triggered:', {
+        mapExists: !!map,
+        mapInitialized,
+        initialCoords: initialMapCoordinates,
+        currentCoords: { lat, lng },
+        coordsChanged,
+        coordinatesValid: true,
+      });
+
+      if (coordsChanged) {
+        logger.info('Coordinates actually changed, updating map view:', {
+          from: initialMapCoordinates,
+          to: { lat, lng },
+        });
+        updateMapView(lat, lng);
+        initialMapCoordinates = { lat, lng }; // Update stored coordinates
+      }
     }
   });
 
@@ -333,6 +374,7 @@
         map = null;
         marker = null;
         mapInitialized = false;
+        initialMapCoordinates = null;
       }
     };
   });
@@ -426,14 +468,16 @@
   function initializeMap() {
     if (!mapElement) return;
 
-    const initialLat = settings.birdnet.latitude || 0;
-    const initialLng = settings.birdnet.longitude || 0;
+    // Use actual coordinates from $birdnetSettings, not derived fallbacks
+    const initialLat = $birdnetSettings?.latitude ?? 0;
+    const initialLng = $birdnetSettings?.longitude ?? 0;
     const initialZoom = initialLat !== 0 || initialLng !== 0 ? 12 : 5;
 
-    logger.debug('Map initialization values:', {
+    logger.info('Map initialization values:', {
       initialLat,
       initialLng,
       initialZoom,
+      actualBirdnetSettings: $birdnetSettings,
       derivedBirdnetSettings: settings.birdnet,
     });
 
@@ -444,6 +488,10 @@
       zoom: initialZoom,
       scrollZoom: false, // Disable default scroll wheel zoom
       keyboard: true, // Enable keyboard navigation
+      // Disable animations during initialization
+      fadeDuration: 0,
+      pitchWithRotate: false,
+      touchZoomRotate: false,
     });
 
     // Enable zoom only when Ctrl/Cmd is pressed
@@ -505,8 +553,8 @@
   function updateMapView(lat: number, lng: number) {
     if (!map) return;
 
-    // Update map center with smooth animation
-    map.easeTo({ center: [lng, lat], duration: 500 }); // MapLibre uses [lng, lat] order
+    // Update map center with NO animation to prevent jump
+    map.easeTo({ center: [lng, lat], duration: 0 }); // MapLibre uses [lng, lat] order
 
     // Update or create marker
     if (marker) {
@@ -542,9 +590,16 @@
   function initializeModalMap() {
     if (!modalMapElement || modalMap) return;
 
-    const currentLat = settings.birdnet.latitude || 0;
-    const currentLng = settings.birdnet.longitude || 0;
+    const currentLat = $birdnetSettings?.latitude ?? 0;
+    const currentLng = $birdnetSettings?.longitude ?? 0;
     const currentZoom = map?.getZoom() || (currentLat !== 0 || currentLng !== 0 ? 12 : 5);
+
+    logger.info('Modal map initialization values:', {
+      currentLat,
+      currentLng,
+      currentZoom,
+      actualBirdnetSettings: $birdnetSettings,
+    });
 
     modalMap = new maplibregl.Map({
       container: modalMapElement,

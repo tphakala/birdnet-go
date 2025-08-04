@@ -261,11 +261,11 @@ describe('MainSettingsPage - Map Functionality', () => {
 
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Should call easeTo for smooth animation
+      // Should call easeTo with no animation to prevent jump
       expect(mockMap.easeTo).toHaveBeenCalledWith(
         expect.objectContaining({
           center: [-0.1278, 51.5074], // MapLibre [lng, lat] order
-          duration: 500,
+          duration: 0,
         })
       );
     });
@@ -324,7 +324,7 @@ describe('MainSettingsPage - Map Functionality', () => {
       expect(mockMap.easeTo).toHaveBeenCalledWith(
         expect.objectContaining({
           center: [139.6503, 35.6762],
-          duration: 500,
+          duration: 0,
         })
       );
     });
