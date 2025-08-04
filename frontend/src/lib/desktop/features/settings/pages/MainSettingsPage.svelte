@@ -283,6 +283,7 @@
   let marker: maplibregl.Marker | null = null;
   let modalMarker: maplibregl.Marker | null = null;
   let mapModalOpen = $state(false);
+  let mapInitialized = $state(false);
 
   // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
@@ -298,13 +299,14 @@
 
   // Initialize map when settings are actually loaded from server
   $effect(() => {
-    if (!store.isLoading && settings.birdnet && mapElement && !map) {
+    if (!store.isLoading && mapElement && !mapInitialized) {
       logger.debug('Initializing map with coordinates:', {
         latitude: settings.birdnet.latitude,
         longitude: settings.birdnet.longitude,
         loadingComplete: !store.isLoading,
       });
-      return initializeMap();
+      initializeMap();
+      mapInitialized = true;
     }
   });
 
@@ -321,6 +323,18 @@
       logger.debug('Coordinates changed, updating map view:', { lat, lng });
       updateMapView(lat, lng);
     }
+  });
+
+  // Cleanup map on component unmount
+  $effect(() => {
+    return () => {
+      if (map) {
+        map.remove();
+        map = null;
+        marker = null;
+        mapInitialized = false;
+      }
+    };
   });
 
   // Manage modal map lifecycle with proper Svelte 5 pattern
@@ -465,14 +479,6 @@
       updateMarker(lngLat.lat, lngLat.lng);
       map?.easeTo({ center: [lngLat.lng, lngLat.lat], duration: 500 });
     });
-
-    // Return cleanup function
-    return () => {
-      mapElement?.removeEventListener('wheel', handleWheel);
-      map?.remove();
-      map = null;
-      marker = null;
-    };
   }
 
   // Update marker position and settings (called when coordinates change)
