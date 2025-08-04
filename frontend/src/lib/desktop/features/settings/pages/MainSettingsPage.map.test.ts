@@ -34,7 +34,7 @@ vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 // Mock map config
 vi.mock('../utils/mapConfig', () => ({
   MAP_CONFIG: {
-    DEFAULT_ZOOM: 12,
+    DEFAULT_ZOOM: 10,
     WORLD_VIEW_ZOOM: 5,
     ANIMATION_DURATION: 0,
     FADE_DURATION: 0,
@@ -48,7 +48,7 @@ vi.mock('../utils/mapConfig', () => ({
     BACKGROUND_COLOR: '#f0f0f0',
   },
   createMapStyle: vi.fn(() => ({ version: 8, sources: {}, layers: [] })),
-  getInitialZoom: vi.fn((lat: number, lng: number) => (lat !== 0 || lng !== 0 ? 12 : 5)),
+  getInitialZoom: vi.fn((lat: number, lng: number) => (lat !== 0 || lng !== 0 ? 10 : 5)),
 }));
 
 // Mock API module
@@ -185,7 +185,7 @@ describe('MainSettingsPage - Map Functionality', () => {
       expect(MapLibre.Map).toHaveBeenCalledWith(
         expect.objectContaining({
           center: [-74.006, 40.7128], // MapLibre uses [lng, lat] order
-          zoom: 12, // Should be 12 for non-zero coordinates
+          zoom: 10, // Should be 10 for non-zero coordinates (city-level view)
         })
       );
     });
@@ -226,7 +226,7 @@ describe('MainSettingsPage - Map Functionality', () => {
       expect(MapLibre.Map).not.toHaveBeenCalled();
     });
 
-    it('should not initialize map without actual coordinates', async () => {
+    it('should initialize map with world view zoom when coordinates are zero', async () => {
       // Update settings to have fallback coordinates (0, 0)
       settingsActions.updateSection('birdnet', {
         latitude: 0,
@@ -267,24 +267,16 @@ describe('MainSettingsPage - Map Functionality', () => {
   });
 
   describe('Coordinate Updates', () => {
-    it('should update map view when coordinates change', async () => {
+    it('should NOT update map view automatically when coordinates change in settings', async () => {
       render(MainSettingsPage);
 
       // Wait for initial map setup
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Update coordinates
-      settingsActions.updateSection('birdnet', {
-        latitude: 51.5074, // London
-        longitude: -0.1278,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Clear any initial calls and reset
+      // Clear any initial calls from map initialization
       mockMap.easeTo.mockClear();
 
-      // Make another coordinate change to ensure update is working
+      // Update coordinates via settings
       settingsActions.updateSection('birdnet', {
         latitude: 52.52, // Berlin
         longitude: 13.405,
@@ -292,32 +284,19 @@ describe('MainSettingsPage - Map Functionality', () => {
 
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Should call easeTo with no animation to prevent jump
-      expect(mockMap.easeTo).toHaveBeenCalledWith(
-        expect.objectContaining({
-          center: [13.405, 52.52], // MapLibre [lng, lat] order
-          duration: 0,
-        })
-      );
+      // Map should NOT update automatically - this prevents zoom issues on page reload
+      expect(mockMap.easeTo).not.toHaveBeenCalled();
     });
 
-    it('should update marker position when coordinates change', async () => {
+    it('should NOT update marker automatically when coordinates change in settings', async () => {
       render(MainSettingsPage);
 
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Update coordinates
-      settingsActions.updateSection('birdnet', {
-        latitude: 48.8566, // Paris
-        longitude: 2.3522,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Clear initial marker position call
+      // Clear initial marker position call from initialization
       mockMarker.setLngLat.mockClear();
 
-      // Make another coordinate change
+      // Update coordinates via settings
       settingsActions.updateSection('birdnet', {
         latitude: 35.6762, // Tokyo
         longitude: 139.6503,
@@ -325,8 +304,8 @@ describe('MainSettingsPage - Map Functionality', () => {
 
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Should update marker position
-      expect(mockMarker.setLngLat).toHaveBeenCalledWith([139.6503, 35.6762]);
+      // Marker should NOT update automatically - this prevents unwanted map updates
+      expect(mockMarker.setLngLat).not.toHaveBeenCalled();
     });
   });
 
@@ -348,7 +327,7 @@ describe('MainSettingsPage - Map Functionality', () => {
       expect(MapLibre.Map).toHaveBeenCalledTimes(2);
     });
 
-    it('should sync coordinates between main and modal maps', async () => {
+    it('should NOT automatically sync coordinates between main and modal maps via settings', async () => {
       render(MainSettingsPage);
 
       // Wait for initial map
@@ -356,22 +335,14 @@ describe('MainSettingsPage - Map Functionality', () => {
 
       // Open modal
       const expandButton = screen.getByRole('button', { name: /expand map to full screen/i });
-      await expandButton.click();
+      expandButton.click();
 
       await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Update coordinates while modal is open
-      settingsActions.updateSection('birdnet', {
-        latitude: 35.6762, // Tokyo
-        longitude: 139.6503,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Clear any calls from initialization
       mockMap.easeTo.mockClear();
 
-      // Make coordinate change to test sync
+      // Update coordinates via settings while modal is open
       settingsActions.updateSection('birdnet', {
         latitude: 40.7128, // NYC
         longitude: -74.006,
@@ -379,13 +350,8 @@ describe('MainSettingsPage - Map Functionality', () => {
 
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Both maps should be updated
-      expect(mockMap.easeTo).toHaveBeenCalledWith(
-        expect.objectContaining({
-          center: [-74.006, 40.7128],
-          duration: 0,
-        })
-      );
+      // Maps should NOT update automatically - prevents zoom issues
+      expect(mockMap.easeTo).not.toHaveBeenCalled();
     });
   });
 
@@ -427,15 +393,26 @@ describe('MainSettingsPage - Map Functionality', () => {
 
   describe('Error Handling', () => {
     it('should handle missing map element gracefully', async () => {
-      // Mock scenario where mapElement is not available
+      const MapLibre = await import('maplibre-gl');
+
+      // Clear the store to simulate missing/loading state
+      settingsStore.set({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formData: {} as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        originalData: {} as any,
+        isLoading: true, // This will prevent map initialization
+        isSaving: false,
+        activeSection: 'main',
+        error: null,
+      });
+
       render(MainSettingsPage);
 
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Should not throw errors even if map element binding fails
-      expect(() => {
-        // This tests that initializeMap handles missing mapElement
-      }).not.toThrow();
+      // Map should not be initialized when store is loading
+      expect(MapLibre.Map).not.toHaveBeenCalled();
     });
 
     it('should cleanup map instances properly', async () => {
@@ -469,12 +446,15 @@ describe('MainSettingsPage - Map Functionality', () => {
       expect(MapLibre.Map).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle multiple coordinate updates', async () => {
+    it('should handle multiple coordinate updates without triggering map changes', async () => {
       render(MainSettingsPage);
 
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Make coordinate changes
+      // Clear any initial calls
+      mockMap.easeTo.mockClear();
+
+      // Make rapid coordinate changes via settings
       settingsActions.updateSection('birdnet', { latitude: 40.1 });
       await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -484,8 +464,8 @@ describe('MainSettingsPage - Map Functionality', () => {
       settingsActions.updateSection('birdnet', { latitude: 40.3 });
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Should handle multiple updates without errors
-      expect(mockMap.easeTo).toHaveBeenCalled();
+      // Should handle multiple settings updates without triggering map updates
+      expect(mockMap.easeTo).not.toHaveBeenCalled();
     });
   });
 });

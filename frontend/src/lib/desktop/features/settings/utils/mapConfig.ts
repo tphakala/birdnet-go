@@ -7,7 +7,7 @@
 
 export const MAP_CONFIG = {
   // Zoom levels
-  DEFAULT_ZOOM: 12, // Standard zoom for known coordinates
+  DEFAULT_ZOOM: 11, // Standard zoom for known coordinates (city-level view)
   WORLD_VIEW_ZOOM: 5, // Zoom level for 0,0 coordinates
 
   // Animation settings (disabled to prevent jump)
@@ -68,5 +68,11 @@ export function getInitialZoom(lat: number, lng: number): number {
  * Type guard to check if MapLibre is loaded
  */
 export function isMapLibreLoaded(maplibregl: unknown): maplibregl is typeof import('maplibre-gl') {
-  return maplibregl !== null && typeof maplibregl === 'object';
+  return (
+    maplibregl !== null &&
+    typeof maplibregl === 'object' &&
+    'Map' in maplibregl &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    typeof (maplibregl as any).Map === 'function'
+  );
 }

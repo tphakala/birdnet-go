@@ -289,7 +289,6 @@
   let modalMarker: import('maplibre-gl').Marker | null = null;
   let mapModalOpen = $state(false);
   let mapInitialized = $state(false);
-  let initialMapCoordinates = $state<{ lat: number; lng: number } | null>(null);
 
   // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
@@ -330,45 +329,14 @@
         loadingComplete: !store.isLoading,
         hasActualSettings: !!$birdnetSettings,
       });
-      initialMapCoordinates = { lat: $birdnetSettings.latitude, lng: $birdnetSettings.longitude };
       initializeMap();
       mapInitialized = true;
     }
   });
 
-  // Watch for coordinate changes and update map view
-  $effect(() => {
-    // Track coordinate changes from settings
-    const lat = $birdnetSettings?.latitude;
-    const lng = $birdnetSettings?.longitude;
-
-    // Only proceed if we have a map and valid coordinates
-    if (map && mapInitialized && lat !== undefined && lng !== undefined) {
-      // Check if coordinates changed from what we last stored
-      const coordsChanged =
-        !initialMapCoordinates ||
-        lat !== initialMapCoordinates.lat ||
-        lng !== initialMapCoordinates.lng;
-
-      logger.debug('Coordinate change effect triggered:', {
-        mapExists: !!map,
-        mapInitialized,
-        initialCoords: initialMapCoordinates,
-        currentCoords: { lat, lng },
-        coordsChanged,
-        coordinatesValid: true,
-      });
-
-      if (coordsChanged) {
-        logger.debug('Coordinates actually changed, updating map view:', {
-          from: initialMapCoordinates,
-          to: { lat, lng },
-        });
-        updateMapView(lat, lng);
-        initialMapCoordinates = { lat, lng }; // Update stored coordinates
-      }
-    }
-  });
+  // Note: Removed coordinate change effect - it was causing zoom issues on page reload
+  // Map updates should only happen through user interactions (click, drag) not reactive effects
+  // This follows Svelte 5 best practices to avoid using $effect for state synchronization
 
   // Cleanup map on component unmount
   $effect(() => {
@@ -378,7 +346,6 @@
         map = null;
         marker = null;
         mapInitialized = false;
-        initialMapCoordinates = null;
       }
     };
   });
@@ -483,6 +450,9 @@
         initialZoom,
         actualBirdnetSettings: $birdnetSettings,
         derivedBirdnetSettings: settings.birdnet,
+        mapElementSize: mapElement
+          ? { width: mapElement.offsetWidth, height: mapElement.offsetHeight }
+          : null,
       });
 
       map = new maplibregl.Map({
@@ -498,18 +468,20 @@
         touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
       });
 
-      // Enable zoom only when Ctrl/Cmd is pressed
-      const handleWheel = (
-        e: Event & {
-          deltaY: number;
-          ctrlKey: boolean;
-          metaKey: boolean;
-          preventDefault: () => void;
+      // Force MapLibre to recalculate container size after initialization
+      // This prevents coordinate calculation issues like 2x drag distance
+      map.on('load', () => {
+        if (map) {
+          map.resize();
         }
-      ) => {
-        if ((e.ctrlKey || e.metaKey) && map) {
-          e.preventDefault();
-          if (e.deltaY > 0) {
+      });
+
+      // Enable zoom only when Ctrl/Cmd is pressed
+      const handleWheel = (e: Event) => {
+        const wheelEvent = e as Event & { deltaY: number; ctrlKey: boolean; metaKey: boolean };
+        if ((wheelEvent.ctrlKey || wheelEvent.metaKey) && map) {
+          wheelEvent.preventDefault();
+          if (wheelEvent.deltaY > 0) {
             map.zoomOut({ duration: 300 }); // Smooth zoom
           } else {
             map.zoomIn({ duration: 300 }); // Smooth zoom
@@ -535,8 +507,11 @@
         map.on('click', (e: import('maplibre-gl').MapMouseEvent) => {
           const lngLat = e.lngLat;
           updateMarker(lngLat.lat, lngLat.lng);
+          // Preserve zoom level when centering on clicked location
+          const currentZoom = map?.getZoom();
           map?.easeTo({
             center: [lngLat.lng, lngLat.lat],
+            zoom: currentZoom, // Preserve current zoom level
             duration: MAP_CONFIG.ANIMATION_DURATION,
           });
         });
@@ -571,8 +546,13 @@
   function updateMapView(lat: number, lng: number) {
     if (!map) return;
 
-    // Update map center with NO animation to prevent jump
-    map.easeTo({ center: [lng, lat], duration: MAP_CONFIG.ANIMATION_DURATION }); // MapLibre uses [lng, lat] order
+    // Update map center while preserving current zoom level
+    const currentZoom = map.getZoom();
+    map.easeTo({
+      center: [lng, lat],
+      zoom: currentZoom, // Preserve current zoom level
+      duration: MAP_CONFIG.ANIMATION_DURATION,
+    }); // MapLibre uses [lng, lat] order
 
     // Update or create marker
     if (marker) {
@@ -588,7 +568,12 @@
 
     // Sync modal map if it exists
     if (modalMap) {
-      modalMap.easeTo({ center: [lng, lat], duration: MAP_CONFIG.ANIMATION_DURATION });
+      const modalCurrentZoom = modalMap.getZoom();
+      modalMap.easeTo({
+        center: [lng, lat],
+        zoom: modalCurrentZoom, // Preserve current zoom level
+        duration: MAP_CONFIG.ANIMATION_DURATION,
+      });
       if (modalMarker) {
         modalMarker.setLngLat([lng, lat]);
       } else if (maplibregl) {
@@ -598,7 +583,30 @@
 
         modalMarker.on('dragend', () => {
           const lngLat = modalMarker!.getLngLat();
-          updateMarker(lngLat.lat, lngLat.lng);
+          // Update settings only, don't trigger map view updates that could change zoom
+          const roundedLat = parseFloat(lngLat.lat.toFixed(3));
+          const roundedLng = parseFloat(lngLat.lng.toFixed(3));
+
+          settingsActions.updateSection('birdnet', {
+            latitude: roundedLat,
+            longitude: roundedLng,
+          });
+
+          // Sync main map position without zoom changes
+          if (map) {
+            const mainCurrentZoom = map.getZoom();
+            map.easeTo({
+              center: [roundedLng, roundedLat],
+              zoom: mainCurrentZoom, // Preserve current zoom level
+              duration: MAP_CONFIG.ANIMATION_DURATION,
+            });
+            if (marker) {
+              marker.setLngLat([roundedLng, roundedLat]);
+            }
+          }
+
+          // Test range filter with new coordinates
+          debouncedTestRangeFilter();
         });
       }
     }
@@ -665,7 +673,30 @@
 
         modalMarker.on('dragend', () => {
           const lngLat = modalMarker!.getLngLat();
-          updateMarker(lngLat.lat, lngLat.lng);
+          // Update settings only, don't trigger map view updates that could change zoom
+          const roundedLat = parseFloat(lngLat.lat.toFixed(3));
+          const roundedLng = parseFloat(lngLat.lng.toFixed(3));
+
+          settingsActions.updateSection('birdnet', {
+            latitude: roundedLat,
+            longitude: roundedLng,
+          });
+
+          // Sync main map position without zoom changes
+          if (map) {
+            const mainCurrentZoom = map.getZoom();
+            map.easeTo({
+              center: [roundedLng, roundedLat],
+              zoom: mainCurrentZoom, // Preserve current zoom level
+              duration: MAP_CONFIG.ANIMATION_DURATION,
+            });
+            if (marker) {
+              marker.setLngLat([roundedLng, roundedLat]);
+            }
+          }
+
+          // Test range filter with new coordinates
+          debouncedTestRangeFilter();
         });
       }
 
@@ -673,11 +704,35 @@
       if (modalMap) {
         modalMap.on('click', (e: import('maplibre-gl').MapMouseEvent) => {
           const lngLat = e.lngLat;
-          updateMarker(lngLat.lat, lngLat.lng);
-          modalMap?.easeTo({
-            center: [lngLat.lng, lngLat.lat],
-            duration: MAP_CONFIG.ANIMATION_DURATION,
+          // Update settings only, don't trigger map view updates that could change zoom
+          const roundedLat = parseFloat(lngLat.lat.toFixed(3));
+          const roundedLng = parseFloat(lngLat.lng.toFixed(3));
+
+          settingsActions.updateSection('birdnet', {
+            latitude: roundedLat,
+            longitude: roundedLng,
           });
+
+          // Update modal marker position
+          if (modalMarker) {
+            modalMarker.setLngLat([roundedLng, roundedLat]);
+          }
+
+          // Sync main map position without zoom changes
+          if (map) {
+            const mainCurrentZoom = map.getZoom();
+            map.easeTo({
+              center: [roundedLng, roundedLat],
+              zoom: mainCurrentZoom, // Preserve current zoom level
+              duration: MAP_CONFIG.ANIMATION_DURATION,
+            });
+            if (marker) {
+              marker.setLngLat([roundedLng, roundedLat]);
+            }
+          }
+
+          // Test range filter with new coordinates
+          debouncedTestRangeFilter();
         });
       }
     } catch (error) {
@@ -1114,20 +1169,7 @@
                 aria-label="Expand map to full screen"
                 onclick={openMapModal}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                  />
-                </svg>
+                {@html navigationIcons.expand}
               </button>
             </div>
             <div class="label">
