@@ -276,8 +276,8 @@
   });
 
   // Map state
-  let mapElement: HTMLElement;
-  let modalMapElement: HTMLElement;
+  let mapElement: HTMLElement | undefined = $state();
+  let modalMapElement: HTMLElement | undefined = $state();
   let map: maplibregl.Map | null = null;
   let modalMap: maplibregl.Map | null = null;
   let marker: maplibregl.Marker | null = null;
@@ -304,7 +304,7 @@
         longitude: settings.birdnet.longitude,
         loadingComplete: !store.isLoading,
       });
-      initializeMap();
+      return initializeMap();
     }
   });
 
@@ -468,7 +468,7 @@
 
     // Return cleanup function
     return () => {
-      mapElement.removeEventListener('wheel', handleWheel);
+      mapElement?.removeEventListener('wheel', handleWheel);
       map?.remove();
       map = null;
       marker = null;
@@ -585,7 +585,7 @@
 
     // Return cleanup function
     return () => {
-      modalMapElement.removeEventListener('wheel', handleModalWheel);
+      modalMapElement?.removeEventListener('wheel', handleModalWheel);
       modalMap?.remove();
       modalMap = null;
       modalMarker = null;
