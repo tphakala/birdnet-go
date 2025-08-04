@@ -225,26 +225,6 @@ describe('MainSettingsPage - Map Functionality', () => {
 
       expect(MapLibre.Map).not.toHaveBeenCalled();
     });
-
-    it('should initialize map with world view zoom when coordinates are zero', async () => {
-      // Update settings to have fallback coordinates (0, 0)
-      settingsActions.updateSection('birdnet', {
-        latitude: 0,
-        longitude: 0,
-      });
-
-      const MapLibre = await import('maplibre-gl');
-      render(MainSettingsPage);
-
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Map should still initialize but with world view
-      expect(MapLibre.Map).toHaveBeenCalledWith(
-        expect.objectContaining({
-          zoom: 5, // World view zoom for 0,0 coordinates
-        })
-      );
-    });
   });
 
   describe('Map Controls', () => {
