@@ -366,6 +366,12 @@
       if (cleanup) {
         cleanup();
       }
+      // Ensure reactive state is properly reset when effect cleanup runs
+      if (!mapModalOpen && modalMap) {
+        logger.debug('Cleaning up modal map reactive state');
+        modalMap = null;
+        modalMarker = null;
+      }
     };
   });
 
@@ -832,9 +838,10 @@
     // Return cleanup function
     return () => {
       modalMapElement?.removeEventListener('wheel', handleModalWheel);
-      modalMap?.remove();
-      modalMap = null;
-      modalMarker = null;
+      if (modalMap) {
+        modalMap.remove();
+        // Don't set modalMap = null here, it's handled by the reactive state in the effect
+      }
     };
   }
 
