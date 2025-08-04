@@ -338,18 +338,17 @@
 
   // Watch for coordinate changes and update map view
   $effect(() => {
-    if (
-      map &&
-      mapInitialized &&
-      initialMapCoordinates &&
-      $birdnetSettings?.latitude !== undefined &&
-      $birdnetSettings?.longitude !== undefined
-    ) {
-      const lat = $birdnetSettings.latitude;
-      const lng = $birdnetSettings.longitude;
+    // Track coordinate changes from settings
+    const lat = $birdnetSettings?.latitude;
+    const lng = $birdnetSettings?.longitude;
 
-      // Only update if coordinates actually changed from initial ones
-      const coordsChanged = lat !== initialMapCoordinates.lat || lng !== initialMapCoordinates.lng;
+    // Only proceed if we have a map and valid coordinates
+    if (map && mapInitialized && lat !== undefined && lng !== undefined) {
+      // Check if coordinates changed from what we last stored
+      const coordsChanged =
+        !initialMapCoordinates ||
+        lat !== initialMapCoordinates.lat ||
+        lng !== initialMapCoordinates.lng;
 
       logger.debug('Coordinate change effect triggered:', {
         mapExists: !!map,
