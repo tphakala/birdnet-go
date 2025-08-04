@@ -349,7 +349,7 @@
               </div>
 
               <!-- Action Menu -->
-              <div onclick={e => e.stopPropagation()}>
+              <div onclick={e => e.stopPropagation()} role="presentation">
                 <ActionMenu
                   {detection}
                   isExcluded={false}

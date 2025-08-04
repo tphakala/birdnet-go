@@ -15,7 +15,7 @@
 <script lang="ts">
   import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
-  import { alertIcons } from '$lib/utils/icons';
+  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
@@ -79,11 +79,11 @@
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('lock status')) {
-          reviewErrorMessage = 'Failed to update lock status. Please try again.';
+          reviewErrorMessage = t('common.review.errors.lockStatusFailed');
         } else if (error.message.includes('verification')) {
-          reviewErrorMessage = 'Failed to update verification status. Please try again.';
+          reviewErrorMessage = t('common.review.errors.verificationFailed');
         } else if (error.message.includes('comment')) {
-          reviewErrorMessage = 'Failed to save comment. Please try again.';
+          reviewErrorMessage = t('common.review.errors.commentFailed');
         } else {
           reviewErrorMessage = error.message;
         }
@@ -105,19 +105,9 @@
     <!-- Error message display -->
     {#if reviewErrorMessage}
       <div class="alert alert-error mb-4">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="stroke-current shrink-0 h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d={alertIcons.error}
-          />
-        </svg>
+        <div class="h-6 w-6">
+          {@html alertIconsSvg.error}
+        </div>
         <span>{reviewErrorMessage}</span>
       </div>
     {/if}
@@ -128,7 +118,7 @@
       <div class="space-y-4">
         <!-- Review Status Form -->
         <div class="bg-base-200 rounded-lg p-4">
-          <h4 class="font-medium mb-3">Detection Status</h4>
+          <h4 class="font-medium mb-3">{t('common.review.form.detectionStatusTitle')}</h4>
 
           <label class="label cursor-pointer justify-start gap-4">
             <input
@@ -153,20 +143,9 @@
 
           {#if detection.locked}
             <div class="text-sm text-base-content/70 mt-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="inline-block w-4 h-4 mr-1"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d={alertIcons.warning}
-                />
-              </svg>
+              <span class="inline-block w-4 h-4 mr-1">
+                {@html alertIconsSvg.warning}
+              </span>
               {t('common.review.form.detectionLocked')}
             </div>
           {/if}
@@ -232,24 +211,20 @@
             class="btn btn-ghost btn-sm justify-start gap-2 p-2"
             onclick={() => (showCommentSection = !showCommentSection)}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
+            <span
               class="w-4 h-4 transition-transform duration-200"
               class:rotate-90={showCommentSection}
             >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
+              {@html navigationIcons.chevronRight}
+            </span>
             <span class="text-sm">
               {showCommentSection
                 ? t('common.review.form.hideComment')
                 : t('common.review.form.addComment')}
               {#if comment && !showCommentSection}
                 <span class="text-xs text-base-content/60">
-                  ({comment.length} chars)
+                  ({comment.length}
+                  {t('common.review.form.chars')})
                 </span>
               {/if}
             </span>
@@ -272,10 +247,10 @@
 
         <!-- Current Status Summary -->
         <div class="bg-base-300 rounded-lg p-4">
-          <h4 class="font-medium mb-3">Current Status</h4>
+          <h4 class="font-medium mb-3">{t('common.review.form.currentStatusTitle')}</h4>
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
-              <span class="text-base-content/70">Review:</span>
+              <span class="text-base-content/70">{t('common.review.form.reviewLabel')}:</span>
               <span>
                 {#if detection.review?.verified && detection.review.verified !== 'unverified'}
                   <span
@@ -283,26 +258,32 @@
                     class:badge-success={detection.review.verified === 'correct'}
                     class:badge-error={detection.review.verified === 'false_positive'}
                   >
-                    {detection.review.verified === 'correct' ? 'Verified' : 'False Positive'}
+                    {detection.review.verified === 'correct'
+                      ? t('common.review.status.verifiedCorrect')
+                      : t('common.review.status.falsePositive')}
                   </span>
                 {:else}
-                  <span class="badge badge-neutral badge-xs">Unreviewed</span>
+                  <span class="badge badge-neutral badge-xs"
+                    >{t('common.review.status.notReviewed')}</span
+                  >
                 {/if}
               </span>
             </div>
             <div class="flex justify-between">
-              <span class="text-base-content/70">Lock:</span>
+              <span class="text-base-content/70">{t('common.review.form.lockLabel')}:</span>
               <span>
                 {#if detection.locked}
-                  <span class="badge badge-warning badge-xs">Locked</span>
+                  <span class="badge badge-warning badge-xs">{t('search.statusBadges.locked')}</span
+                  >
                 {:else}
-                  <span class="badge badge-ghost badge-xs">Unlocked</span>
+                  <span class="badge badge-ghost badge-xs">{t('search.statusBadges.unlocked')}</span
+                  >
                 {/if}
               </span>
             </div>
             {#if detection.comments && detection.comments.length > 0}
               <div class="flex justify-between">
-                <span class="text-base-content/70">Comments:</span>
+                <span class="text-base-content/70">{t('common.review.form.commentsLabel')}:</span>
                 <span>{detection.comments.length}</span>
               </div>
             {/if}
@@ -322,7 +303,7 @@
         {#if isLoadingReview}
           <span class="loading loading-spinner loading-sm"></span>
         {/if}
-        Save Review
+        {t('common.review.form.saveReview')}
       </button>
     </div>
   </div>
