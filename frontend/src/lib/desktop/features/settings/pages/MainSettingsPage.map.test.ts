@@ -11,8 +11,15 @@ const mockMap = {
   zoomIn: vi.fn(),
   zoomOut: vi.fn(),
   getZoom: vi.fn(() => 10),
-  on: vi.fn(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on: vi.fn((event: string, handler: (e?: any) => void) => {
+    // Simulate immediate 'load' event to trigger map initialization completion
+    if (event === 'load') {
+      setTimeout(() => handler(), 0);
+    }
+  }),
   remove: vi.fn(),
+  resize: vi.fn(),
 };
 
 const mockMarker = {
@@ -102,6 +109,48 @@ vi.mock('$lib/i18n/config', () => ({
 }));
 
 describe('MainSettingsPage - Map Functionality', () => {
+  // Mock getComputedStyle to fix 'Cannot read properties of undefined' errors
+  beforeAll(() => {
+    // Create a mock CSSStyleDeclaration
+    const mockStyleDeclaration = {
+      getPropertyValue: vi.fn().mockReturnValue(''),
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+    };
+
+    // Mock getComputedStyle globally
+    Object.defineProperty(window, 'getComputedStyle', {
+      value: vi.fn().mockReturnValue(mockStyleDeclaration),
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  afterAll(() => {
+    // Restore original getComputedStyle
+    vi.unstubAllGlobals();
+  });
+
+  // Helper to simulate initial load completion
+  async function waitForInitialLoad() {
+    // Wait for initial mount and effects
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Ensure store is marked as not loading
+    settingsStore.update(state => ({
+      ...state,
+      isLoading: false,
+    }));
+
+    // Wait for effects to react to the change
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Additional wait for initialLoadComplete effect to trigger
+    // This depends on both !isLoading and mapInitialized being true
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -171,7 +220,13 @@ describe('MainSettingsPage - Map Functionality', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
     vi.useRealTimers();
+    // Reset the mock map to ensure clean state between tests
+    mockMap.easeTo.mockClear();
+    mockMap.on.mockClear();
+    mockMap.remove.mockClear();
+    mockMarker.setLngLat.mockClear();
   });
 
   describe('Map Initialization', () => {
@@ -231,8 +286,12 @@ describe('MainSettingsPage - Map Functionality', () => {
     it('should render zoom in and zoom out buttons', async () => {
       render(MainSettingsPage);
 
-      const zoomInButton = screen.getByRole('button', { name: /zoom in/i });
-      const zoomOutButton = screen.getByRole('button', { name: /zoom out/i });
+      // Wait for component to render
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Use aria-label selector instead of getByRole to avoid accessibility API issues
+      const zoomInButton = screen.getByLabelText(/zoom in/i);
+      const zoomOutButton = screen.getByLabelText(/zoom out/i);
 
       expect(zoomInButton).toBeInTheDocument();
       expect(zoomOutButton).toBeInTheDocument();
@@ -241,13 +300,17 @@ describe('MainSettingsPage - Map Functionality', () => {
     it('should render expand to modal button', async () => {
       render(MainSettingsPage);
 
-      const expandButton = screen.getByRole('button', { name: /expand map to full screen/i });
+      // Wait for component to render
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Use aria-label selector instead of getByRole to avoid accessibility API issues
+      const expandButton = screen.getByLabelText(/expand map to full screen/i);
       expect(expandButton).toBeInTheDocument();
     });
   });
 
   describe('Coordinate Updates', () => {
-    it('should NOT update map view automatically when coordinates change in settings', async () => {
+    it('should NOT update map during initial load when coordinates change', async () => {
       render(MainSettingsPage);
 
       // Wait for initial map setup
@@ -256,24 +319,52 @@ describe('MainSettingsPage - Map Functionality', () => {
       // Clear any initial calls from map initialization
       mockMap.easeTo.mockClear();
 
-      // Update coordinates via settings
+      // Update coordinates immediately (simulating initial load)
       settingsActions.updateSection('birdnet', {
         latitude: 52.52, // Berlin
         longitude: 13.405,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Map should NOT update automatically - this prevents zoom issues on page reload
+      // Map should NOT update during initial load phase
       expect(mockMap.easeTo).not.toHaveBeenCalled();
     });
 
-    it('should NOT update marker automatically when coordinates change in settings', async () => {
+    it('should update map view when coordinates change after initial load', async () => {
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait for initial setup to complete
+      await waitForInitialLoad();
 
-      // Clear initial marker position call from initialization
+      // Clear any initial calls
+      mockMap.easeTo.mockClear();
+      mockMap.getZoom.mockReturnValue(12);
+
+      // Update coordinates via settings (after initial load)
+      settingsActions.updateSection('birdnet', {
+        latitude: 52.52, // Berlin
+        longitude: 13.405,
+      });
+
+      // Wait for debounced update (500ms)
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Map should update with preserved zoom
+      expect(mockMap.easeTo).toHaveBeenCalledWith({
+        center: [13.405, 52.52],
+        zoom: 12, // Preserved zoom level
+        duration: 300,
+      });
+    });
+
+    it('should update marker when coordinates change after initial load', async () => {
+      render(MainSettingsPage);
+
+      // Wait for initial setup to complete
+      await waitForInitialLoad();
+
+      // Clear initial marker position call
       mockMarker.setLngLat.mockClear();
 
       // Update coordinates via settings
@@ -282,10 +373,121 @@ describe('MainSettingsPage - Map Functionality', () => {
         longitude: 139.6503,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait for debounced update
+      await new Promise(resolve => setTimeout(resolve, 600));
 
-      // Marker should NOT update automatically - this prevents unwanted map updates
-      expect(mockMarker.setLngLat).not.toHaveBeenCalled();
+      // Marker should update
+      expect(mockMarker.setLngLat).toHaveBeenCalledWith([139.6503, 35.6762]);
+    });
+
+    it('should NOT update map when modal is open', async () => {
+      // Create a second mock map for the modal
+      const mockModalMap = {
+        easeTo: vi.fn(),
+        zoomIn: vi.fn(),
+        zoomOut: vi.fn(),
+        getZoom: vi.fn(() => 10),
+        on: vi.fn(),
+        remove: vi.fn(),
+        scrollZoom: { enable: vi.fn() },
+      };
+
+      // Mock MapLibre to return different instances for main and modal maps
+      let mapInstanceCount = 0;
+      const MapLibre = await import('maplibre-gl');
+      const MapConstructor = MapLibre.Map as ReturnType<typeof vi.fn>;
+      MapConstructor.mockImplementation(() => {
+        mapInstanceCount++;
+        return mapInstanceCount === 1 ? mockMap : mockModalMap;
+      });
+
+      render(MainSettingsPage);
+
+      // Wait for initial setup to complete
+      await waitForInitialLoad();
+
+      // Clear any initial calls before opening modal
+      mockMap.easeTo.mockClear();
+      mockMap.getZoom.mockReturnValue(10);
+
+      // Open modal - use aria-label selector to avoid accessibility API issues
+      const expandButton = screen.getByLabelText(/expand map to full screen/i);
+      await expandButton.click();
+
+      // Wait for modal to initialize
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Clear any calls from modal initialization
+      mockMap.easeTo.mockClear();
+      mockModalMap.easeTo.mockClear();
+
+      // Update coordinates while modal is open
+      settingsActions.updateSection('birdnet', {
+        latitude: 48.8566, // Paris
+        longitude: 2.3522,
+      });
+
+      // Wait for potential update
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Main map should NOT update while modal is open
+      expect(mockMap.easeTo).not.toHaveBeenCalled();
+      // Modal map might update, but we're not testing that here
+    });
+
+    it('should debounce rapid coordinate changes', async () => {
+      // Use fake timers for this test to control debounce timing
+      vi.useFakeTimers();
+
+      render(MainSettingsPage);
+
+      // Advance through initial setup
+      await vi.runOnlyPendingTimersAsync();
+
+      // Ensure store is not loading and wait for effects
+      settingsStore.update(state => ({
+        ...state,
+        isLoading: false,
+      }));
+
+      await vi.advanceTimersByTimeAsync(500);
+
+      // Clear any initial calls
+      mockMap.easeTo.mockClear();
+      mockMap.getZoom.mockReturnValue(10);
+
+      // Make rapid coordinate changes
+      settingsActions.updateSection('birdnet', {
+        latitude: 51.5074, // London
+        longitude: -0.1278,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      settingsActions.updateSection('birdnet', {
+        latitude: 48.8566, // Paris
+        longitude: 2.3522,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      settingsActions.updateSection('birdnet', {
+        latitude: 41.9028, // Rome
+        longitude: 12.4964,
+      });
+
+      // Advance past the debounce timeout (500ms)
+      await vi.advanceTimersByTimeAsync(600);
+
+      // Should only update once with the final coordinates
+      expect(mockMap.easeTo).toHaveBeenCalledTimes(1);
+      expect(mockMap.easeTo).toHaveBeenCalledWith({
+        center: [12.4964, 41.9028], // Rome (final update)
+        zoom: 10,
+        duration: 300,
+      });
+
+      vi.useRealTimers();
     });
   });
 
@@ -297,8 +499,8 @@ describe('MainSettingsPage - Map Functionality', () => {
       // Wait for initial map
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Open modal by clicking expand button
-      const expandButton = screen.getByRole('button', { name: /expand map to full screen/i });
+      // Open modal by clicking expand button - use aria-label selector
+      const expandButton = screen.getByLabelText(/expand map to full screen/i);
       await expandButton.click();
 
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -313,8 +515,8 @@ describe('MainSettingsPage - Map Functionality', () => {
       // Wait for initial map
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Open modal
-      const expandButton = screen.getByRole('button', { name: /expand map to full screen/i });
+      // Open modal - use aria-label selector
+      const expandButton = screen.getByLabelText(/expand map to full screen/i);
       expandButton.click();
 
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -398,12 +600,27 @@ describe('MainSettingsPage - Map Functionality', () => {
     it('should cleanup map instances properly', async () => {
       const { unmount } = render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait for initial setup to complete
+      await waitForInitialLoad();
+
+      // Verify map was created
+      const MapLibre = await import('maplibre-gl');
+      expect(MapLibre.Map).toHaveBeenCalled();
+
+      // Track map removal
+      let mapRemoved = false;
+      mockMap.remove.mockImplementation(() => {
+        mapRemoved = true;
+      });
 
       // Unmount component
       unmount();
 
-      // Should call remove on map cleanup
+      // Give Svelte time to run cleanup effects
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // The cleanup effect should have called remove
+      expect(mapRemoved).toBe(true);
       expect(mockMap.remove).toHaveBeenCalled();
     });
   });

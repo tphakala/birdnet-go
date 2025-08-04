@@ -335,9 +335,64 @@
     }
   });
 
-  // Note: Removed coordinate change effect - it was causing zoom issues on page reload
-  // Map updates should only happen through user interactions (click, drag) not reactive effects
-  // This follows Svelte 5 best practices to avoid using $effect for state synchronization
+  // Track if initial load is complete to prevent map jumps on page load
+  let initialLoadComplete = $state(false);
+
+  // Mark initial load as complete after map initialization
+  $effect(() => {
+    if (!store.isLoading && mapInitialized && !initialLoadComplete) {
+      logger.debug('Map initial load complete, enabling coordinate reactive updates');
+      initialLoadComplete = true;
+    }
+  });
+
+  // Update map when coordinates change via input fields (after initial load)
+  let coordinateUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+
+  $effect(() => {
+    // Only update if:
+    // 1. Initial load is complete (prevents jumps on page load)
+    // 2. Map is initialized
+    // 3. Modal is not open (don't interfere with modal interaction)
+    if (initialLoadComplete && map && !mapModalOpen) {
+      const lat = settings.birdnet.latitude;
+      const lng = settings.birdnet.longitude;
+
+      // Debounce updates to avoid too many map movements while typing
+      clearTimeout(coordinateUpdateTimer);
+      coordinateUpdateTimer = setTimeout(() => {
+        if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+          logger.debug('Updating map from coordinate inputs', { lat, lng });
+
+          // Preserve current zoom level
+          const currentZoom = map!.getZoom();
+          map!.easeTo({
+            center: [lng, lat],
+            zoom: currentZoom,
+            duration: 300, // Smooth transition
+          });
+
+          // Update or create marker
+          if (marker) {
+            marker.setLngLat([lng, lat]);
+          } else if (maplibregl && (lat !== 0 || lng !== 0)) {
+            // Create marker if it doesn't exist and coords are non-zero
+            marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map!);
+
+            marker.on('dragend', () => {
+              const lngLat = marker!.getLngLat();
+              updateMarker(lngLat.lat, lngLat.lng);
+            });
+          }
+        }
+      }, 500); // 500ms debounce for typing
+    }
+
+    // Cleanup timer on effect re-run or unmount
+    return () => {
+      clearTimeout(coordinateUpdateTimer);
+    };
+  });
 
   // Cleanup map on component unmount
   $effect(() => {
@@ -355,7 +410,7 @@
   $effect(() => {
     let cleanup: (() => void) | undefined;
 
-    if (mapModalOpen && modalMapElement) {
+    if (mapModalOpen && modalMapElement && initialLoadComplete) {
       logger.debug('Opening map modal, initializing modal map');
       initializeModalMap().then(cleanupFn => {
         cleanup = cleanupFn;
