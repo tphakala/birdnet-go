@@ -298,12 +298,14 @@
 
   // Initialize map when settings are actually loaded from server
   $effect(() => {
-    if (!store.isLoading && $birdnetSettings && mapElement && !map) {
+    // Wait for store to load AND for actual coordinate data (not just fallbacks)
+    const hasCoordinates = settings.birdnet.latitude !== 0 || settings.birdnet.longitude !== 0;
+    if (!store.isLoading && settings.birdnet && mapElement && !map && hasCoordinates) {
       logger.debug('Initializing map with coordinates:', {
-        latitude: $birdnetSettings.latitude,
-        longitude: $birdnetSettings.longitude,
+        latitude: settings.birdnet.latitude,
+        longitude: settings.birdnet.longitude,
         loadingComplete: !store.isLoading,
-        actualSettings: $birdnetSettings,
+        hasActualCoordinates: hasCoordinates,
       });
       initializeMap();
     }
@@ -396,17 +398,17 @@
 
   // Initialize MapLibre GL JS map
   function initializeMap() {
-    if (!mapElement || !$birdnetSettings) return;
+    if (!mapElement) return;
 
-    const initialLat = $birdnetSettings.latitude || 0;
-    const initialLng = $birdnetSettings.longitude || 0;
+    const initialLat = settings.birdnet.latitude || 0;
+    const initialLng = settings.birdnet.longitude || 0;
     const initialZoom = initialLat !== 0 || initialLng !== 0 ? 12 : 5;
 
     logger.debug('Map initialization values:', {
       initialLat,
       initialLng,
       initialZoom,
-      actualBirdnetSettings: $birdnetSettings,
+      derivedBirdnetSettings: settings.birdnet,
     });
 
     map = new maplibregl.Map({
