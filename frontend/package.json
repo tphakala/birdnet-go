@@ -96,6 +96,7 @@
     "daisyui": "~4.12.24",
     "eventsource": "^4.0.0",
     "hls.js": "^1.6.7",
+    "maplibre-gl": "^5.6.1",
     "reconnecting-eventsource": "^1.6.4",
     "svelte-portal": "^2.2.1"
   }

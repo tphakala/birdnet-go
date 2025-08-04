@@ -47,6 +47,8 @@
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
   import { loggers } from '$lib/utils/logger';
+  import maplibregl from 'maplibre-gl';
+  import 'maplibre-gl/dist/maplibre-gl.css';
 
   const logger = loggers.settings;
 
@@ -275,8 +277,12 @@
 
   // Map state
   let mapElement: HTMLElement;
-  let map: any;
-  let marker: any;
+  let modalMapElement: HTMLElement;
+  let map: maplibregl.Map | null = null;
+  let modalMap: maplibregl.Map | null = null;
+  let marker: maplibregl.Marker | null = null;
+  let modalMarker: maplibregl.Marker | null = null;
+  let mapModalOpen = $state(false);
 
   // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
@@ -290,12 +296,29 @@
     loadInitialData();
   });
 
+  // Initialize map when settings are actually loaded from server
+  $effect(() => {
+    if (!store.isLoading && settings.birdnet && mapElement && !map) {
+      logger.debug('Initializing map with coordinates:', {
+        latitude: settings.birdnet.latitude,
+        longitude: settings.birdnet.longitude,
+        loadingComplete: !store.isLoading,
+      });
+      initializeMap();
+    }
+  });
+
+  // Manage modal map lifecycle with proper Svelte 5 pattern
+  $effect(() => {
+    if (mapModalOpen && modalMapElement) {
+      logger.debug('Opening map modal, initializing modal map');
+      return initializeModalMap();
+    }
+  });
+
   async function loadInitialData() {
     // Load all API data in parallel for better performance
     await Promise.all([loadBirdnetLocales(), loadImageProviders(), loadRangeFilterCount()]);
-
-    // Initialize map after data loads
-    initializeMap();
   }
 
   async function loadBirdnetLocales() {
@@ -346,68 +369,93 @@
     }
   }
 
-  // Wait for Leaflet library to be available
-  async function waitForLeaflet(maxAttempts = 20, interval = 100): Promise<any> {
-    for (let i = 0; i < maxAttempts; i++) {
-      const L = (window as any).L;
-      if (L) {
-        return L;
-      }
-      await new Promise(resolve => setTimeout(resolve, interval));
-    }
-    return null;
+  // Create map style configuration
+  function createMapStyle() {
+    return {
+      version: 8 as const,
+      sources: {
+        'raster-tiles': {
+          type: 'raster' as const,
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '© OpenStreetMap contributors',
+        },
+      },
+      layers: [
+        {
+          id: 'simple-tiles',
+          type: 'raster' as const,
+          source: 'raster-tiles',
+          minzoom: 0,
+          maxzoom: 22,
+        },
+      ],
+    };
   }
 
-  // Initialize Leaflet map
-  async function initializeMap() {
+  // Initialize MapLibre GL JS map
+  function initializeMap() {
     if (!mapElement) return;
-
-    // Wait for Leaflet to be available
-    const L = await waitForLeaflet();
-    if (!L) {
-      logger.error('Leaflet failed to load after timeout');
-      return;
-    }
 
     const initialLat = settings.birdnet.latitude || 0;
     const initialLng = settings.birdnet.longitude || 0;
-    const initialZoom = initialLat !== 0 || initialLng !== 0 ? 6 : 2;
+    const initialZoom = initialLat !== 0 || initialLng !== 0 ? 12 : 5;
 
-    map = L.map(mapElement, {
-      scrollWheelZoom: false, // Disable default scroll wheel zoom
+    logger.debug('Map initialization values:', {
+      initialLat,
+      initialLng,
+      initialZoom,
+      rawBirdnetSettings: settings.birdnet,
+    });
+
+    map = new maplibregl.Map({
+      container: mapElement,
+      style: createMapStyle(),
+      center: [initialLng, initialLat], // MapLibre uses [lng, lat] order
+      zoom: initialZoom,
+      scrollZoom: false, // Disable default scroll wheel zoom
       keyboard: true, // Enable keyboard navigation
-    }).setView([initialLat, initialLng], initialZoom);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-    }).addTo(map);
+    });
 
     // Enable zoom only when Ctrl/Cmd is pressed
-    mapElement.addEventListener('wheel', e => {
-      if (e.ctrlKey || e.metaKey) {
-        // metaKey is Cmd on Mac
+    const handleWheel = (
+      e: Event & { deltaY: number; ctrlKey: boolean; metaKey: boolean; preventDefault: () => void }
+    ) => {
+      if ((e.ctrlKey || e.metaKey) && map) {
         e.preventDefault();
-        const zoom = map.getZoom();
-        const delta = e.deltaY > 0 ? -1 : 1;
-        map.setZoom(zoom + delta, { animate: true });
+        if (e.deltaY > 0) {
+          map.zoomOut({ duration: 300 }); // Smooth zoom
+        } else {
+          map.zoomIn({ duration: 300 }); // Smooth zoom
+        }
       }
-    });
+    };
+    mapElement.addEventListener('wheel', handleWheel);
 
     // Add marker if coordinates exist
     if (initialLat !== 0 || initialLng !== 0) {
-      updateMarker(initialLat, initialLng);
+      updateMapView(initialLat, initialLng);
     }
 
     // Handle map clicks
-    map.on('click', (e: any) => {
-      updateMarker(e.latlng.lat, e.latlng.lng);
-      map.setView(e.latlng);
+    map.on('click', (e: maplibregl.MapMouseEvent) => {
+      const lngLat = e.lngLat;
+      updateMarker(lngLat.lat, lngLat.lng);
+      map?.easeTo({ center: [lngLat.lng, lngLat.lat], duration: 500 });
     });
+
+    // Return cleanup function
+    return () => {
+      mapElement.removeEventListener('wheel', handleWheel);
+      map?.remove();
+      map = null;
+      marker = null;
+    };
   }
 
+  // Update marker position and settings (called when coordinates change)
   function updateMarker(lat: number, lng: number) {
-    const L = (window as any).L;
-    if (!L || !map) return;
+    if (!map) return;
 
     const roundedLat = parseFloat(lat.toFixed(3));
     const roundedLng = parseFloat(lng.toFixed(3));
@@ -418,17 +466,118 @@
       longitude: roundedLng,
     });
 
-    if (marker) {
-      marker.setLatLng([lat, lng]);
-    } else {
-      marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-      marker.on('dragend', (event: any) => {
-        updateMarker(event.target.getLatLng().lat, event.target.getLatLng().lng);
-      });
-    }
+    // Update both maps
+    updateMapView(roundedLat, roundedLng);
 
     // Test range filter with new coordinates
     debouncedTestRangeFilter();
+  }
+
+  // Update map view and marker position (visual only, no settings update)
+  function updateMapView(lat: number, lng: number) {
+    if (!map) return;
+
+    // Update map center with smooth animation
+    map.easeTo({ center: [lng, lat], duration: 500 }); // MapLibre uses [lng, lat] order
+
+    // Update or create marker
+    if (marker) {
+      marker.setLngLat([lng, lat]);
+    } else {
+      marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map);
+
+      marker.on('dragend', () => {
+        const lngLat = marker!.getLngLat();
+        updateMarker(lngLat.lat, lngLat.lng);
+      });
+    }
+
+    // Sync modal map if it exists
+    if (modalMap) {
+      modalMap.easeTo({ center: [lng, lat], duration: 500 });
+      if (modalMarker) {
+        modalMarker.setLngLat([lng, lat]);
+      } else {
+        modalMarker = new maplibregl.Marker({ draggable: true })
+          .setLngLat([lng, lat])
+          .addTo(modalMap);
+
+        modalMarker.on('dragend', () => {
+          const lngLat = modalMarker!.getLngLat();
+          updateMarker(lngLat.lat, lngLat.lng);
+        });
+      }
+    }
+  }
+
+  // Initialize modal map when modal is opened
+  function initializeModalMap() {
+    if (!modalMapElement || modalMap) return;
+
+    const currentLat = settings.birdnet.latitude || 0;
+    const currentLng = settings.birdnet.longitude || 0;
+    const currentZoom = map?.getZoom() || (currentLat !== 0 || currentLng !== 0 ? 12 : 5);
+
+    modalMap = new maplibregl.Map({
+      container: modalMapElement,
+      style: createMapStyle(),
+      center: [currentLng, currentLat],
+      zoom: currentZoom,
+      scrollZoom: false,
+      keyboard: true,
+    });
+
+    // Enable mouse wheel zooming in modal (no Ctrl requirement)
+    const handleModalWheel = (
+      e: Event & { deltaY: number; ctrlKey: boolean; metaKey: boolean; preventDefault: () => void }
+    ) => {
+      if (modalMap) {
+        e.preventDefault();
+        if (e.deltaY > 0) {
+          modalMap.zoomOut({ duration: 300 }); // Smooth zoom
+        } else {
+          modalMap.zoomIn({ duration: 300 }); // Smooth zoom
+        }
+      }
+    };
+    modalMapElement.addEventListener('wheel', handleModalWheel);
+
+    // Add marker if coordinates exist
+    if (currentLat !== 0 || currentLng !== 0) {
+      modalMarker = new maplibregl.Marker({ draggable: true })
+        .setLngLat([currentLng, currentLat])
+        .addTo(modalMap);
+
+      modalMarker.on('dragend', () => {
+        const lngLat = modalMarker!.getLngLat();
+        updateMarker(lngLat.lat, lngLat.lng);
+      });
+    }
+
+    // Handle modal map clicks
+    modalMap.on('click', (e: maplibregl.MapMouseEvent) => {
+      const lngLat = e.lngLat;
+      updateMarker(lngLat.lat, lngLat.lng);
+      modalMap?.easeTo({ center: [lngLat.lng, lngLat.lat], duration: 500 });
+    });
+
+    // Return cleanup function
+    return () => {
+      modalMapElement.removeEventListener('wheel', handleModalWheel);
+      modalMap?.remove();
+      modalMap = null;
+      modalMarker = null;
+    };
+  }
+
+  // Map modal functions
+  function openMapModal() {
+    mapModalOpen = true;
+  }
+
+  function closeMapModal() {
+    mapModalOpen = false;
+    // Cleanup will happen in the effect
   }
 
   // Range filter functions
@@ -825,7 +974,7 @@
                 type="button"
                 class="btn btn-sm btn-circle"
                 aria-label="Zoom in"
-                onclick={() => map?.zoomIn()}
+                onclick={() => map?.zoomIn({ duration: 300 })}
               >
                 +
               </button>
@@ -833,9 +982,30 @@
                 type="button"
                 class="btn btn-sm btn-circle"
                 aria-label="Zoom out"
-                onclick={() => map?.zoomOut()}
+                onclick={() => map?.zoomOut({ duration: 300 })}
               >
                 -
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-circle"
+                aria-label="Expand map to full screen"
+                onclick={openMapModal}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                  />
+                </svg>
               </button>
             </div>
             <div class="label">
@@ -1154,6 +1324,93 @@
   </SettingsSection>
 </main>
 
+<!-- Map Modal -->
+{#if mapModalOpen}
+  <div
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+    style:z-index="9999"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="map-modal-title"
+    tabindex="-1"
+    onclick={e => e.target === e.currentTarget && closeMapModal()}
+    onkeydown={e => e.key === 'Escape' && closeMapModal()}
+  >
+    <div
+      class="bg-base-100 rounded-lg p-4 max-w-[95vw] max-h-[95vh] w-full h-full md:max-w-[90vw] md:max-h-[90vh] overflow-hidden flex flex-col"
+      role="document"
+    >
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="map-modal-title" class="text-lg font-bold">
+          {t('settings.main.sections.rangeFilter.stationLocation.label')}
+        </h3>
+        <button
+          type="button"
+          class="btn btn-sm btn-circle btn-ghost"
+          aria-label="Close modal"
+          onclick={closeMapModal}
+        >
+          {@html navigationIcons.close}
+        </button>
+      </div>
+
+      <div class="mb-3 text-sm text-base-content/70">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <span class="font-medium">{t('settings.main.sections.rangeFilter.latitude.label')}</span
+            >
+            <span> {settings.birdnet.latitude}</span>
+          </div>
+          <div>
+            <span class="font-medium"
+              >{t('settings.main.sections.rangeFilter.longitude.label')}</span
+            >
+            <span> {settings.birdnet.longitude}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 min-h-0">
+        <div
+          bind:this={modalMapElement}
+          class="w-full h-full rounded-lg border border-base-300"
+          role="application"
+          aria-label="Full screen map for selecting station location"
+        >
+          <!-- Map will be initialized here when modal opens -->
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center mt-4 pt-4 border-t">
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-circle"
+            aria-label="Zoom in"
+            onclick={() => modalMap?.zoomIn({ duration: 300 })}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-circle"
+            aria-label="Zoom out"
+            onclick={() => modalMap?.zoomOut({ duration: 300 })}
+          >
+            -
+          </button>
+        </div>
+        <div class="text-sm text-base-content/60">
+          💡 {t('settings.main.sections.rangeFilter.stationLocation.helpText')}
+        </div>
+        <button type="button" class="btn btn-primary" onclick={closeMapModal}>
+          {t('common.done')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- Range Filter Species Modal -->
 {#if rangeFilterState.showModal}
   <div
@@ -1262,8 +1519,4 @@
   </div>
 {/if}
 
-<!-- Include Leaflet CSS and JS -->
-<svelte:head>
-  <link rel="stylesheet" href="/assets/leaflet.css" />
-  <script src="/assets/leaflet.js"></script>
-</svelte:head>
+<!-- MapLibre GL JS is imported via npm package in script section -->
