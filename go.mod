@@ -19,7 +19,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.9
-	github.com/prometheus/client_golang v1.22.0
+	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sj14/astral v0.2.2
@@ -100,8 +100,8 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/prometheus/common v0.62.0 // indirect
-	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/prometheus/common v0.65.0 // indirect
+	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
