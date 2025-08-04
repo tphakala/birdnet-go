@@ -35,8 +35,8 @@
   }
 </script>
 
-<!-- Save Actions Bar - Matches old Alpine.js styling but right-aligned -->
-<div class="flex justify-end items-center gap-3 mt-6 pt-6">
+<!-- Save Actions Bar -->
+<div class="flex justify-end items-center gap-3">
   <!-- Reset button - subtle and less prominent -->
   {#if unsavedChanges}
     <button

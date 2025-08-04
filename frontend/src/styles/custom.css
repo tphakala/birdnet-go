@@ -2,6 +2,19 @@
    Extracted styles from legacy custom.css that are used by Svelte UI
    ======================================================================== */
 
+/* ========================================================================
+   CSS Custom Properties for Settings Floating Bar
+   ======================================================================== */
+
+:root {
+  --floating-bar-clearance: 4rem; /* 64px - equivalent to mb-16 */
+}
+
+/* Settings page bottom margin for floating bar clearance */
+.settings-page-content {
+  margin-bottom: var(--floating-bar-clearance);
+}
+
 /* Screen reader only content */
 .sr-only {
   position: absolute;

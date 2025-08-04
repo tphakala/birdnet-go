@@ -1137,7 +1137,7 @@
   }
 </script>
 
-<main class="space-y-4" aria-label="Main settings configuration">
+<main class="space-y-4 settings-page-content" aria-label="Main settings configuration">
   <!-- Main Settings Section -->
   <SettingsSection
     title={t('settings.main.sections.main.title')}

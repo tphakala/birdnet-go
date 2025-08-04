@@ -228,8 +228,7 @@
   }
 </script>
 
-<!-- Remove page-level loading spinner to prevent flickering -->
-<div class="space-y-4">
+<div class="space-y-4 settings-page-content">
     <!-- Server Configuration -->
     <SettingsSection
       title={t('settings.security.serverConfiguration.title')}

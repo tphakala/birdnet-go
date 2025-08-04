@@ -425,8 +425,7 @@
   }
 </script>
 
-<!-- Remove page-level loading spinner to prevent flickering -->
-<div class="space-y-4">
+<div class="space-y-4 settings-page-content">
   <!-- Audio Capture Section -->
   <SettingsSection
     title={t('settings.audio.audioCapture.title')}
