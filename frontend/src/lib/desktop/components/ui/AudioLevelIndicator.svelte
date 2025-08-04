@@ -3,6 +3,9 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { mediaIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
+  import Hls from 'hls.js';
+  import type { ErrorData } from 'hls.js';
+  import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
 
   const logger = loggers.audio;
 
@@ -22,61 +25,9 @@
     accessAllowed?: boolean;
   }
 
-  // HLS.js type definitions
-  interface HLSConfig {
-    debug?: boolean;
-    enableWorker?: boolean;
-    lowLatencyMode?: boolean;
-    backBufferLength?: number;
-    liveSyncDurationCount?: number;
-    liveMaxLatencyDurationCount?: number;
-  }
-
-  interface HLSErrorData {
-    type: string;
-    details: string;
-    fatal: boolean;
-    reason?: string;
-  }
-
-  interface HLSInstance {
-    attachMedia(_mediaElement: HTMLElement): void;
-    loadSource(_source: string): void;
-    destroy(): void;
-    on(_event: string, _callback: (_event: string, _data: any) => void): void;
-  }
-
-  interface HLSConstructor {
-    new (_config?: HLSConfig): HLSInstance;
-    isSupported(): boolean;
-    Events: {
-      ERROR: string;
-      MANIFEST_PARSED: string;
-    };
-  }
-
   // PERFORMANCE OPTIMIZATION: Cache HLS availability check with $derived
-  // Avoids repeated window object and function checks on every HLS operation
-  let hlsSupported = $derived(
-    typeof window !== 'undefined' &&
-      typeof (window as any).Hls?.isSupported === 'function' &&
-      (window as any).Hls.isSupported()
-  );
-
-  // PERFORMANCE OPTIMIZATION: Cache HLS constructor with $derived
-  // Prevents repeated global object access and type casting
-  let hlsConstructor = $derived(hlsSupported ? ((window as any).Hls as HLSConstructor) : null);
-
-  // PERFORMANCE OPTIMIZATION: HLS availability now cached in $derived
-  // This function is kept for backwards compatibility but uses cached value
-  // function isHLSAvailable(): boolean {
-  //   return hlsSupported;
-  // }
-
-  // Get HLS constructor with proper typing - now uses cached value
-  function getHLSConstructor(): HLSConstructor | null {
-    return hlsConstructor;
-  }
+  // Now using imported Hls instead of global window.Hls
+  let hlsSupported = $derived(typeof window !== 'undefined' && Hls.isSupported());
 
   let { className = '', securityEnabled = false, accessAllowed = true }: Props = $props();
 
@@ -98,7 +49,7 @@
   // Internal state
   let eventSource: ReconnectingEventSource | null = null;
   let audioElement: HTMLAudioElement | null = null;
-  let hlsInstance: HLSInstance | null = null;
+  let hlsInstance: Hls | null = null;
   let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
@@ -358,42 +309,94 @@
     const audio = getAudioElement();
     if (!audio) return;
 
-    // Check if HLS.js is available and supported - uses cached values
-    const HLS = getHLSConstructor();
-    if (HLS && hlsSupported) {
+    // Check if HLS.js is supported
+    if (hlsSupported) {
       // Clean up existing instance
       if (hlsInstance) {
         hlsInstance.destroy();
         hlsInstance = null;
       }
 
-      // Create new HLS instance with proper typing
-      hlsInstance = new HLS({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 10,
-        liveSyncDurationCount: 5,
-        liveMaxLatencyDurationCount: 30,
-      });
+      // Create new HLS instance with audio-optimized configuration
+      hlsInstance = new Hls(HLS_AUDIO_CONFIG);
 
-      // Setup error handling with proper typing
-      hlsInstance.on(HLS.Events.ERROR, (_event: string, data: HLSErrorData) => {
+      // Track if we've attempted to play
+      let playbackAttempted = false;
+      let fragmentsBuffered = 0;
+
+      // Setup error handling with proper types
+      hlsInstance.on(Hls.Events.ERROR, (_event: string, data: ErrorData) => {
+        logger.error('HLS error:', {
+          type: data.type,
+          details: data.details,
+          fatal: data.fatal,
+          error: data.error.message,
+        });
+
         if (data.fatal) {
           // Handle fatal HLS error
           showStatusMessage('Playback error: ' + data.details);
           stopPlayback();
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          // Handle non-fatal media errors with improved categorization
+          if (ERROR_HANDLING.EXPECTED_STALL_ERRORS.includes(data.details as any)) {
+            // Buffer stalls are expected in low-latency audio streaming
+            // HLS.js will automatically handle recovery by buffering more segments
+            logger.debug('Buffer stalled (expected for low-latency audio)', {
+              details: data.details,
+              bufferInfo: data.bufferInfo,
+            });
+          } else if (ERROR_HANDLING.RECOVERABLE_MEDIA_ERRORS.includes(data.details as any)) {
+            // Try to recover from other recoverable media errors
+            logger.warn('Attempting to recover from recoverable media error', {
+              details: data.details,
+            });
+            hlsInstance?.recoverMediaError();
+          } else {
+            // Log unexpected media errors for investigation
+            logger.warn('Unexpected non-fatal media error', {
+              details: data.details,
+              error: data.error.message,
+            });
+          }
         }
       });
 
-      // Start playing when manifest is parsed
-      hlsInstance.on(HLS.Events.MANIFEST_PARSED, () => {
-        audio.play().catch((err: Error) => {
-          // Handle playback start error
-          if (err.name === 'NotAllowedError') {
-            showStatusMessage('Click to play (autoplay blocked)');
-          }
-        });
+      // Wait for media to be attached
+      hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
+        logger.debug('HLS.js media attached');
+      });
+
+      // Wait for manifest to be parsed
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        logger.debug('HLS.js manifest parsed');
+      });
+
+      // Wait for first fragment to be buffered before playing
+      hlsInstance.on(Hls.Events.FRAG_BUFFERED, () => {
+        logger.debug('HLS fragment buffered');
+        fragmentsBuffered++;
+
+        // Wait for optimal fragment count before starting playback
+        // See hls-config.ts BUFFERING_STRATEGY for rationale
+        if (
+          !playbackAttempted &&
+          fragmentsBuffered >= BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY
+        ) {
+          playbackAttempted = true;
+          logger.debug('Starting playback with buffered fragments:', {
+            fragmentsBuffered,
+            minRequired: BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY,
+          });
+          audio.play().catch((err: Error) => {
+            logger.error('Playback start error:', err);
+            if (err.name === 'NotAllowedError') {
+              showStatusMessage('Click to play (autoplay blocked)');
+            } else {
+              showStatusMessage('Playback error');
+            }
+          });
+        }
       });
 
       // Attach to media element and load source
