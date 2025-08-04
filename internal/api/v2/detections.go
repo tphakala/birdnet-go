@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -475,7 +476,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		ID:             note.ID,
 		Date:           note.Date,
 		Time:           note.Time,
-		Source:         note.Source,
+		Source:         privacy.SanitizeRTSPUrl(note.Source),
 		BeginTime:      note.BeginTime.Format(time.RFC3339),
 		EndTime:        note.EndTime.Format(time.RFC3339),
 		SpeciesCode:    note.SpeciesCode,

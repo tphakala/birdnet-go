@@ -327,6 +327,6 @@
 <LoginModal
   isOpen={showLoginModal}
   onClose={() => (showLoginModal = false)}
-  redirectUrl={currentRoute}
+  redirectUrl={window.location.pathname}
   {authConfig}
 />

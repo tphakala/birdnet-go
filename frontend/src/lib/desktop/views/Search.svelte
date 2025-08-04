@@ -699,7 +699,7 @@
                       </button>
                       <button
                         class="btn btn-xs btn-square"
-                        onclick={() => (window.location.href = `/api/v2/detections/${result.id}`)}
+                        onclick={() => (window.location.href = `/ui/detections/${result.id}`)}
                         aria-label={t('search.detailsPanel.viewDetails', {
                           species: result.commonName || t('search.detailsPanel.unknownSpecies'),
                         })}

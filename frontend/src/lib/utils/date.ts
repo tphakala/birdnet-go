@@ -116,3 +116,17 @@ export function parseTime(timeString: string): { hours: number; minutes: number;
 
   return { hours, minutes, seconds };
 }
+
+/**
+ * Format a Date object as a local date-time string (YYYY-MM-DD HH:MM:SS)
+ * This avoids timezone conversion issues and provides consistent formatting
+ *
+ * @param date - The date to format
+ * @param includeSeconds - Whether to include seconds in the time (defaults to true)
+ * @returns Date-time string in local timezone
+ */
+export function formatLocalDateTime(date: Date, includeSeconds: boolean = true): string {
+  const dateString = getLocalDateString(date);
+  const timeString = getLocalTimeString(date, includeSeconds);
+  return `${dateString} ${timeString}`;
+}

@@ -31,7 +31,6 @@
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
   import WeatherMetrics from '$lib/desktop/components/data/WeatherMetrics.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
-  import ReviewModal from '$lib/desktop/components/modals/ReviewModal.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
@@ -52,7 +51,6 @@
   let { detection, isExcluded = false, onDetailsClick, onRefresh }: Props = $props();
 
   // Modal states
-  let showReviewModal = $state(false);
   let showConfirmModal = $state(false);
   let confirmModalConfig = $state({
     title: '',
@@ -68,12 +66,17 @@
 
   function handleDetailsClick(e: Event) {
     e.preventDefault();
-    onDetailsClick?.(detection.id);
+    if (onDetailsClick) {
+      onDetailsClick(detection.id);
+    } else {
+      // Default navigation to detection detail page
+      window.location.href = `/ui/detections/${detection.id}`;
+    }
   }
 
   // Action handlers
   function handleReview() {
-    showReviewModal = true;
+    window.location.href = `/ui/detections/${detection.id}?tab=review`;
   }
 
   function handleToggleSpecies() {
@@ -332,7 +335,7 @@
 </td>
 
 <!-- Action Menu -->
-<td>
+<td onclick={e => e.stopPropagation()}>
   <ActionMenu
     {detection}
     {isExcluded}
@@ -344,28 +347,6 @@
 </td>
 
 <!-- Modals -->
-<ReviewModal
-  isOpen={showReviewModal}
-  {detection}
-  {isExcluded}
-  onClose={() => (showReviewModal = false)}
-  onSave={async (verified, lockDetection, ignoreSpecies, comment) => {
-    await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        verified,
-        lock_detection: lockDetection,
-        ignore_species: ignoreSpecies ? detection.commonName : null,
-        comment,
-      }),
-    });
-    onRefresh?.();
-  }}
-/>
-
 <ConfirmModal
   isOpen={showConfirmModal}
   title={confirmModalConfig.title}

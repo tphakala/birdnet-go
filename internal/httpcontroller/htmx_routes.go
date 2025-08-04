@@ -293,6 +293,42 @@ func (s *Server) initRoutes() {
 	
 	// Set up Svelte routes
 	s.SetupSvelteRoutes()
+	
+	// Add dynamic route for single detection view
+	s.Echo.GET("/ui/detections/:id", func(c echo.Context) error {
+		// Get CSRF token from context
+		token := c.Get(CSRFContextKey)
+		if token == nil {
+			s.Debug("CSRF token missing in context for path: %s", c.Path())
+			return s.Handlers.NewHandlerError(
+				fmt.Errorf("CSRF token not found"),
+				"Security validation failed",
+				http.StatusInternalServerError,
+			)
+		}
+
+		// Create render data for the Svelte standalone template
+		data := RenderData{
+			C:        c,
+			Page:     "svelte-standalone",
+			Title:    "Detection Details",
+			Settings: s.Settings,
+			Security: &Security{
+				Enabled:       s.isAuthenticationEnabled(c),
+				AccessAllowed: s.IsAccessAllowed(c),
+			},
+			CSRFToken: func() string {
+				tokenStr, ok := token.(string)
+				if !ok {
+					return ""
+				}
+				return tokenStr
+			}(),
+		}
+		
+		// Render the svelte-standalone template
+		return c.Render(http.StatusOK, "svelte-standalone", data)
+	})
 }
 
 // handleHLSStreamRequest handles requests for HLS stream endpoints

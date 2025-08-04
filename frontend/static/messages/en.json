@@ -99,6 +99,18 @@
       "removeSpecies": "Remove species",
       "dismissError": "Dismiss error"
     },
+    "actions": {
+      "back": "Back",
+      "review": "Review",
+      "download": "Download"
+    },
+    "labels": {
+      "confidence": "Confidence"
+    },
+    "values": {
+      "yes": "Yes",
+      "no": "No"
+    },
     "modal": {
       "confirmAction": "Confirm Action",
       "confirmMessage": "Are you sure you want to perform this action?"
@@ -461,6 +473,43 @@
     },
     "row": {
       "viewDetails": "View details for {species}"
+    },
+    "media": {
+      "title": "Recording & Spectrogram"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "taxonomy": "Taxonomy",
+      "history": "History",
+      "notes": "Notes"
+    },
+    "environmental": {
+      "title": "Environmental Conditions"
+    },
+    "metadata": {
+      "title": "Detection Metadata",
+      "source": "Source",
+      "duration": "Duration",
+      "status": "Status",
+      "locked": "Locked"
+    },
+    "history": {
+      "title": "Detection History",
+      "comingSoon": "History tracking coming soon..."
+    },
+    "notes": {
+      "title": "Notes & Comments",
+      "noComments": "No comments or notes for this detection."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Species Rarity"
+    },
+    "taxonomy": {
+      "hierarchy": "Taxonomic Classification",
+      "subspecies": "Subspecies",
+      "noData": "No taxonomy data available."
     }
   },
   "system": {

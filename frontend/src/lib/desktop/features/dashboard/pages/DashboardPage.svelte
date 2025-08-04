@@ -943,10 +943,8 @@
 
   // Handle detection click
   function handleDetectionClick(detection: Detection) {
-    // Navigate to detection details or open modal
-    logger.debug('Detection clicked:', detection);
-    // You can implement navigation to detection details here
-    // window.location.href = `/detections/${detection.id}`;
+    // Navigate to detection detail view
+    window.location.href = `/ui/detections/${detection.id}`;
   }
 </script>
 
