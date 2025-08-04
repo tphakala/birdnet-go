@@ -432,11 +432,42 @@
     try {
       // Dynamically import MapLibre GL JS and CSS when needed
       if (!maplibregl) {
-        const [maplibreModule] = await Promise.all([
-          import('maplibre-gl'),
-          import('maplibre-gl/dist/maplibre-gl.css'),
-        ]);
-        maplibregl = maplibreModule;
+        try {
+          const [maplibreModule] = await Promise.all([
+            import('maplibre-gl'),
+            import('maplibre-gl/dist/maplibre-gl.css'),
+          ]);
+          maplibregl = maplibreModule;
+        } catch (importError) {
+          logger.error('Failed to load MapLibre GL JS:', importError, {
+            component: 'MainSettingsPage',
+            action: 'dynamic import',
+          });
+
+          // Provide user-friendly error message
+          if (importError instanceof Error) {
+            if (
+              importError.message.includes('Network') ||
+              importError.message.includes('Failed to fetch')
+            ) {
+              toastActions.error(
+                'Failed to load map library. Please check your internet connection and try again.'
+              );
+            } else {
+              toastActions.error(
+                'Failed to load map library. Your browser may not support this feature.'
+              );
+            }
+          } else {
+            toastActions.error(
+              'Failed to load map library. Please refresh the page and try again.'
+            );
+          }
+
+          // Reset state and exit early
+          mapInitialized = false;
+          return;
+        }
       }
 
       // Use actual coordinates from $birdnetSettings, not derived fallbacks
