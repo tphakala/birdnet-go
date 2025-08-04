@@ -22,7 +22,6 @@
   import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
   import SpeciesThumbnail from '$lib/desktop/components/modals/SpeciesThumbnail.svelte';
   import SpeciesBadges from '$lib/desktop/components/modals/SpeciesBadges.svelte';
-  import { fetchWithCSRF } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { mediaIcons } from '$lib/utils/icons';
@@ -80,7 +79,12 @@
     detectionError = null;
 
     try {
-      detection = await fetchWithCSRF<Detection>(`/api/v2/detections/${detectionId}`);
+      const response = await fetch(`/api/v2/detections/${detectionId}`);
+      if (response.ok) {
+        detection = (await response.json()) as Detection;
+      } else {
+        throw new Error(`Failed to fetch detection: ${response.status}`);
+      }
 
       // Fetch additional data after detection is loaded
       if (detection) {
@@ -95,28 +99,34 @@
     }
   }
 
-  // Fetch species information
+  // Fetch species information (public data - no auth required)
   async function fetchSpeciesInfo() {
     if (!detection?.scientificName) return;
 
     try {
-      speciesInfo = await fetchWithCSRF<any>(
+      const response = await fetch(
         `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`
       );
+      if (response.ok) {
+        speciesInfo = await response.json();
+      }
     } catch (error) {
       logger.error('Error fetching species info:', error);
     }
   }
 
-  // Fetch taxonomy information
+  // Fetch taxonomy information (public data - no auth required)
   async function fetchTaxonomy() {
     if (!detection?.scientificName) return;
 
     isLoadingTaxonomy = true;
     try {
-      taxonomyInfo = await fetchWithCSRF<any>(
+      const response = await fetch(
         `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`
       );
+      if (response.ok) {
+        taxonomyInfo = await response.json();
+      }
     } catch (error) {
       logger.error('Error fetching taxonomy info:', error);
     } finally {
@@ -267,7 +277,7 @@
     <!-- Detection Metadata -->
     <div>
       <h3 class="text-lg font-semibold mb-4">{t('detections.metadata.title')}</h3>
-      <div class="space-y-2">
+      <div class="bg-base-200 rounded-lg p-4 space-y-2">
         <div class="flex justify-between">
           <span class="text-base-content/60">{t('detections.metadata.source')}:</span>
           <span>{detection.source || 'Unknown'}</span>
