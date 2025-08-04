@@ -568,7 +568,7 @@
   }
 </script>
 
-<main class="space-y-4 mb-16" aria-label="Species settings configuration">
+<main class="space-y-4 settings-page-content" aria-label="Species settings configuration">
   <!-- Include Species Section -->
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}

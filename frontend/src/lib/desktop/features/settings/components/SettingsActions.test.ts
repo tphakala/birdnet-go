@@ -133,7 +133,7 @@ describe('SettingsActions', () => {
       renderTyped(SettingsActions);
 
       const container = screen.getByRole('button', { name: 'Save settings' }).parentElement;
-      expect(container).toHaveClass('flex', 'justify-end', 'items-center', 'gap-3', 'mt-6', 'pt-6');
+      expect(container).toHaveClass('flex', 'justify-end', 'items-center', 'gap-3');
     });
   });
 

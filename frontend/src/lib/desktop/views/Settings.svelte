@@ -45,6 +45,9 @@
   // Get store values
   let store = $derived($settingsStore);
 
+  // Extract loading state logic to computed property
+  let showFloatingBar = $derived(!ENABLE_LOADING_SPINNERS || !store.isLoading);
+
   // Load settings data on mount
   onMount(() => {
     settingsActions.loadSettings();
@@ -125,9 +128,13 @@
 </main>
 
 <!-- Floating Settings Actions Bar -->
-{#if !ENABLE_LOADING_SPINNERS || !store.isLoading}
+{#if showFloatingBar}
   <!-- Fixed positioning for floating behavior, but constrained to main content area -->
-  <div class="fixed bottom-0 left-0 right-0 z-50 lg:left-64">
+  <div
+    class="fixed bottom-0 left-0 right-0 z-50 lg:left-64"
+    role="toolbar"
+    aria-label="Settings actions"
+  >
     <!-- Replicate the exact same container structure as main content -->
     <div class="mx-auto max-w-7xl">
       <div class="grid grid-cols-12 p-3 lg:px-8">

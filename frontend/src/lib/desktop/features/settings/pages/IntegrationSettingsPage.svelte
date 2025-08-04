@@ -805,7 +805,7 @@
   }
 </script>
 
-<div class="space-y-4 mb-16">
+<div class="space-y-4 settings-page-content">
   <!-- BirdWeather Settings -->
   <SettingsSection
     title={t('settings.integration.birdweather.title')}

@@ -228,7 +228,7 @@
   }
 </script>
 
-<div class="space-y-4 mb-16">
+<div class="space-y-4 settings-page-content">
     <!-- Server Configuration -->
     <SettingsSection
       title={t('settings.security.serverConfiguration.title')}

@@ -270,7 +270,7 @@
   }
 </script>
 
-<div class="space-y-4 mb-16">
+<div class="space-y-4 settings-page-content">
   <!-- Error Tracking & Telemetry Section -->
   <SettingsSection
     title={t('settings.support.sections.telemetry.title')}

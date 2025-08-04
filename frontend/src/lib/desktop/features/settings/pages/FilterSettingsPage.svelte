@@ -234,7 +234,7 @@
   }
 </script>
 
-<div class="space-y-4 mb-16">
+<div class="space-y-4 settings-page-content">
   <!-- Privacy Filter Section -->
   <SettingsSection
     title={t('settings.filters.privacyFiltering.title')}
