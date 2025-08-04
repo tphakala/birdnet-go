@@ -84,12 +84,12 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.34.1/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.35.0/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.34.1/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.0/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -119,7 +119,7 @@ Source: MIT
 
 ### github.com/go-logr/logr
 
-License: https://github.com/go-logr/logr/blob/v1.4.2/LICENSE
+License: https://github.com/go-logr/logr/blob/v1.4.3/LICENSE
 Source: Apache-2.0
 
 ### github.com/go-logr/stdr
@@ -484,17 +484,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.243.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.244.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/7130f93afb79/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/f173205681a0/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.73.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.74.2/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
