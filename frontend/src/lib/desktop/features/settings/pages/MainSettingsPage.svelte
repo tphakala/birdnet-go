@@ -517,8 +517,30 @@
         });
       }
     } catch (error) {
-      logger.error('Failed to initialize map:', error);
-      toastActions.error('Failed to load map. Please try refreshing the page.');
+      logger.error('Failed to initialize map:', error, {
+        component: 'MainSettingsPage',
+        action: 'initializeMap',
+        mapElement: !!mapElement,
+        maplibregl: !!maplibregl,
+      });
+
+      // Provide specific error messages based on error type
+      if (error instanceof Error) {
+        if (error.message.includes('WebGL')) {
+          toastActions.error(
+            'Map requires WebGL support. Please ensure your browser supports WebGL and hardware acceleration is enabled.'
+          );
+        } else if (error.message.includes('container')) {
+          toastActions.error('Map container not found. Please refresh the page and try again.');
+        } else {
+          toastActions.error(`Failed to load map: ${error.message}`);
+        }
+      } else {
+        toastActions.error('Failed to load map. Please try refreshing the page.');
+      }
+
+      // Reset map initialization state so user can retry
+      mapInitialized = false;
     }
   }
 
@@ -736,8 +758,36 @@
         });
       }
     } catch (error) {
-      logger.error('Failed to initialize modal map:', error);
-      toastActions.error('Failed to load modal map. Please try refreshing the page.');
+      logger.error('Failed to initialize modal map:', error, {
+        component: 'MainSettingsPage',
+        action: 'initializeModalMap',
+        modalMapElement: !!modalMapElement,
+        maplibregl: !!maplibregl,
+        modalMap: !!modalMap,
+      });
+
+      // Provide specific error messages based on error type
+      if (error instanceof Error) {
+        if (error.message.includes('WebGL')) {
+          toastActions.error(
+            'Modal map requires WebGL support. Please ensure your browser supports WebGL and hardware acceleration is enabled.'
+          );
+        } else if (error.message.includes('container')) {
+          toastActions.error(
+            'Modal map container not found. Please close and reopen the map modal.'
+          );
+        } else {
+          toastActions.error(`Failed to load modal map: ${error.message}`);
+        }
+      } else {
+        toastActions.error('Failed to load modal map. Please try closing and reopening the modal.');
+      }
+
+      // Close modal on error
+      mapModalOpen = false;
+
+      // Return empty cleanup function
+      return () => {};
     }
 
     // Return cleanup function
