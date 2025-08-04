@@ -240,11 +240,11 @@
       <!-- Host Address -->
       <TextInput
         id="host-address"
-        bind:value={settings.host}
+        value={settings.host}
         label={t('settings.security.hostLabel')}
         placeholder={t('settings.security.placeholders.host')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateAutoTLSHost(settings.host)}
+        onchange={updateAutoTLSHost}
       />
 
       <div class="border-t border-base-300 pt-4 mt-4">
@@ -252,10 +252,10 @@
         <p class="text-sm text-base-content/70 mb-4">{t('settings.security.httpsSettingsDescription')}</p>
 
         <Checkbox
-          bind:checked={settings.autoTls}
+          checked={settings.autoTls}
           label={t('settings.security.serverConfiguration.autoTlsLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={() => updateAutoTLSEnabled(settings.autoTls)}
+          onchange={updateAutoTLSEnabled}
         />
 
         {#if settings.autoTls}
@@ -281,10 +281,10 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.basicAuth.enabled}
+        checked={settings.basicAuth.enabled}
         label={t('settings.security.basicAuthentication.enableLabel')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateBasicAuthEnabled(settings.basicAuth.enabled)}
+        onchange={updateBasicAuthEnabled}
       />
 
       {#if settings.basicAuth?.enabled}
@@ -336,10 +336,10 @@
         </h4>
 
         <Checkbox
-          bind:checked={settings.googleAuth.enabled}
+          checked={settings.googleAuth.enabled}
           label={t('settings.security.oauth.google.enableLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={() => updateGoogleAuthEnabled(settings.googleAuth.enabled)}
+          onchange={updateGoogleAuthEnabled}
         />
 
         {#if settings.googleAuth?.enabled}
@@ -385,11 +385,11 @@
 
             <TextInput
               id="google-user-id"
-              bind:value={(settings.googleAuth as any).userId}
+              value={(settings.googleAuth as any).userId}
               label={t('settings.security.oauth.google.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
-              onchange={() => updateGoogleUserId((settings.googleAuth as any).userId || '')}
+              onchange={updateGoogleUserId}
             />
           </div>
         {/if}
@@ -407,10 +407,10 @@
         </h4>
 
         <Checkbox
-          bind:checked={settings.githubAuth.enabled}
+          checked={settings.githubAuth.enabled}
           label={t('settings.security.oauth.github.enableLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={() => updateGithubAuthEnabled(settings.githubAuth.enabled)}
+          onchange={updateGithubAuthEnabled}
         />
 
         {#if settings.githubAuth?.enabled}
@@ -456,11 +456,11 @@
 
             <TextInput
               id="github-user-id"
-              bind:value={(settings.githubAuth as any).userId}
+              value={(settings.githubAuth as any).userId}
               label={t('settings.security.oauth.github.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
-              onchange={() => updateGithubUserId((settings.githubAuth as any).userId || '')}
+              onchange={updateGithubUserId}
             />
           </div>
         {/if}
@@ -477,21 +477,21 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.allowSubnetBypass.enabled}
+        checked={settings.allowSubnetBypass.enabled}
         label={t('settings.security.allowSubnetBypassLabel')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateSubnetBypassEnabled(settings.allowSubnetBypass.enabled)}
+        onchange={updateSubnetBypassEnabled}
       />
 
       {#if settings.allowSubnetBypass?.enabled}
         <div class="ml-7">
           <TextInput
             id="allowed-subnet"
-            bind:value={settings.allowSubnetBypass.subnet}
+            value={settings.allowSubnetBypass.subnet}
             label={t('settings.security.allowedSubnetsLabel')}
             placeholder={t('settings.security.placeholders.subnet')}
             disabled={store.isLoading || store.isSaving}
-            onchange={() => updateSubnetBypassSubnet(settings.allowSubnetBypass.subnet || '')}
+            onchange={updateSubnetBypassSubnet}
           />
           <div class="text-sm text-base-content/70 mt-1">
             {t('settings.security.allowedSubnetsHelp')}

@@ -441,7 +441,7 @@
         </h4>
         <SelectField
           id="audio-source"
-          bind:value={settings.audio.source}
+          value={settings.audio.source}
           label={t('settings.audio.audioCapture.audioSourceLabel')}
           placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
           disabled={store.isLoading || store.isSaving || audioDevices.loading}
@@ -465,7 +465,7 @@
         <div class="mb-4">
           <SelectField
             id="rtsp-transport"
-            bind:value={settings.rtsp.transport}
+            value={settings.rtsp.transport}
             label={t('settings.audio.audioCapture.rtspTransportLabel')}
             options={[
               { value: 'tcp', label: t('settings.audio.transport.tcp') },
@@ -502,16 +502,16 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.audio.equalizer.enabled}
+        checked={settings.audio.equalizer.enabled}
         label={t('settings.audio.audioFilters.enableEqualizer')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() =>
+        onchange={enabled =>
           settingsActions.updateSection('realtime', {
             audio: {
               ...$audioSettings!,
               equalizer: {
                 ...settings.audio.equalizer,
-                enabled: settings.audio.equalizer.enabled,
+                enabled,
               },
             },
           })}
@@ -725,16 +725,16 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.audio.soundLevel.enabled}
+        checked={settings.audio.soundLevel.enabled}
         label={t('settings.audio.soundLevelMonitoring.enable')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() =>
+        onchange={enabled =>
           settingsActions.updateSection('realtime', {
             audio: {
               ...$audioSettings!,
               soundLevel: {
                 ...settings.audio.soundLevel,
-                enabled: settings.audio.soundLevel.enabled,
+                enabled,
               },
             },
           })}
@@ -796,22 +796,22 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.audio.export.enabled}
+        checked={settings.audio.export.enabled}
         label={t('settings.audio.audioExport.enable')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateExportEnabled(settings.audio.export.enabled)}
+        onchange={updateExportEnabled}
       />
 
       {#if settings.audio.export.enabled}
         <Checkbox
-          bind:checked={settings.audio.export.debug}
+          checked={settings.audio.export.debug}
           label={t('settings.audio.audioExport.enableDebug')}
           disabled={store.isLoading || store.isSaving}
-          onchange={() =>
+          onchange={debug =>
             settingsActions.updateSection('realtime', {
               audio: {
                 ...$audioSettings!,
-                export: { ...settings.audio.export, debug: settings.audio.export.debug },
+                export: { ...settings.audio.export, debug },
               },
             })}
         />
@@ -820,7 +820,7 @@
           <!-- Export Path -->
           <TextInput
             id="export-path"
-            bind:value={settings.audio.export.path}
+            value={settings.audio.export.path}
             label={t('settings.audio.audioExport.pathLabel')}
             placeholder="clips/"
             disabled={store.isLoading || store.isSaving}
@@ -833,7 +833,7 @@
           <!-- Export Type -->
           <SelectField
             id="export-type"
-            bind:value={settings.audio.export.type}
+            value={settings.audio.export.type}
             label={t('settings.audio.audioExport.typeLabel')}
             options={exportFormatOptions}
             disabled={store.isLoading || store.isSaving}
@@ -843,7 +843,7 @@
           <!-- Bitrate -->
           <TextInput
             id="export-bitrate"
-            bind:value={settings.audio.export.bitrate}
+            value={settings.audio.export.bitrate}
             label={t('settings.audio.audioExport.bitrateLabel')}
             placeholder="96k"
             disabled={store.isLoading ||
@@ -869,7 +869,7 @@
         <!-- Retention Policy -->
         <SelectField
           id="retention-policy"
-          bind:value={retentionSettings.policy}
+          value={retentionSettings.policy}
           label={t('settings.audio.audioClipRetention.policyLabel')}
           options={retentionPolicyOptions}
           disabled={store.isLoading || store.isSaving}
@@ -880,7 +880,7 @@
         {#if retentionSettings.policy === 'age'}
           <TextInput
             id="retention-max-age"
-            bind:value={retentionSettings.maxAge}
+            value={retentionSettings.maxAge}
             label={t('settings.audio.audioClipRetention.maxAgeLabel')}
             placeholder="7d"
             disabled={store.isLoading || store.isSaving}
@@ -892,11 +892,11 @@
         {#if retentionSettings.policy === 'usage'}
           <TextInput
             id="retention-max-usage"
-            bind:value={retentionSettings.maxUsage}
+            value={retentionSettings.maxUsage}
             label={t('settings.audio.audioClipRetention.maxUsageLabel')}
             placeholder="80%"
             disabled={store.isLoading || store.isSaving}
-            oninput={updateRetentionMaxUsage}
+            onchange={updateRetentionMaxUsage}
           />
         {/if}
       </div>
@@ -916,10 +916,10 @@
           <!-- Keep Spectrograms -->
           <div class="mt-8">
             <Checkbox
-              bind:checked={retentionSettings.keepSpectrograms}
+              checked={retentionSettings.keepSpectrograms}
               label={t('settings.audio.audioClipRetention.keepSpectrograms')}
               disabled={store.isLoading || store.isSaving}
-              onchange={() => updateRetentionKeepSpectrograms(retentionSettings.keepSpectrograms)}
+              onchange={updateRetentionKeepSpectrograms}
             />
           </div>
         </div>

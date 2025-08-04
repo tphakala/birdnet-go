@@ -295,10 +295,10 @@
 
       <!-- Enable Error Tracking -->
       <Checkbox
-        bind:checked={settings.sentry!.enabled}
+        checked={settings.sentry!.enabled}
         label={t('settings.support.telemetry.enableTracking')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateSentryEnabled(settings.sentry!.enabled)}
+        onchange={enabled => updateSentryEnabled(enabled)}
       />
 
       <!-- System ID Display -->

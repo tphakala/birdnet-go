@@ -245,10 +245,10 @@
     <div class="space-y-4">
       <!-- Enable Privacy Filtering -->
       <Checkbox
-        bind:checked={settings.privacy.enabled}
+        checked={settings.privacy.enabled}
         label={t('settings.filters.privacyFiltering.enable')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updatePrivacyEnabled(settings.privacy.enabled)}
+        onchange={enabled => updatePrivacyEnabled(enabled)}
       />
 
       {#if settings.privacy.enabled}
@@ -279,10 +279,10 @@
     <div class="space-y-4">
       <!-- Enable Dog Bark Filter -->
       <Checkbox
-        bind:checked={settings.dogBark.enabled}
+        checked={settings.dogBark.enabled}
         label={t('settings.filters.falsePositivePrevention.enableDogBark')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateDogBarkEnabled(settings.dogBark.enabled)}
+        onchange={enabled => updateDogBarkEnabled(enabled)}
       />
 
       {#if settings.dogBark.enabled}

@@ -1148,12 +1148,12 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
       <TextInput
         id="node-name"
-        bind:value={settings.main.name}
+        value={settings.main.name}
         label={t('settings.main.fields.nodeName.label')}
         placeholder={t('settings.main.fields.nodeName.placeholder')}
         helpText={t('settings.main.fields.nodeName.helpText')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateMainName(settings.main.name)}
+        onchange={updateMainName}
       />
     </div>
   </SettingsSection>
@@ -1203,7 +1203,7 @@
 
         <SelectField
           id="locale"
-          bind:value={settings.birdnet.locale}
+          value={settings.birdnet.locale}
           label={t('settings.main.fields.locale.label')}
           options={birdnetLocales.data}
           helpText={t('settings.main.fields.locale.helpText')}
@@ -1231,7 +1231,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <TextInput
             id="model-path"
-            bind:value={settings.birdnet.modelPath}
+            value={settings.birdnet.modelPath}
             label={t('settings.main.sections.customClassifier.modelPath.label')}
             placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
             helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
@@ -1241,7 +1241,7 @@
 
           <TextInput
             id="label-path"
-            bind:value={settings.birdnet.labelPath}
+            value={settings.birdnet.labelPath}
             label={t('settings.main.sections.customClassifier.labelPath.label')}
             placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
             helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
@@ -1257,7 +1257,7 @@
           {t('settings.main.sections.dynamicThreshold.title')}
         </h4>
         <Checkbox
-          bind:checked={settings.dynamicThreshold.enabled}
+          checked={settings.dynamicThreshold.enabled}
           label={t('settings.main.sections.dynamicThreshold.enable.label')}
           helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
           disabled={store.isLoading || store.isSaving}
@@ -1535,7 +1535,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
             <TextInput
               id="sqlite-path"
-              bind:value={settings.output.sqlite.path}
+              value={settings.output.sqlite.path}
               label={t('settings.main.sections.database.sqlite.path.label')}
               placeholder={t('settings.main.sections.database.sqlite.path.placeholder')}
               helpText={t('settings.main.sections.database.sqlite.path.helpText')}
@@ -1552,7 +1552,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <TextInput
               id="mysql-host"
-              bind:value={settings.output.mysql.host}
+              value={settings.output.mysql.host}
               label={t('settings.main.sections.database.mysql.host.label')}
               placeholder={t('settings.main.sections.database.mysql.host.placeholder')}
               helpText={t('settings.main.sections.database.mysql.host.helpText')}
@@ -1562,7 +1562,7 @@
 
             <TextInput
               id="mysql-port"
-              bind:value={settings.output.mysql.port}
+              value={settings.output.mysql.port}
               label={t('settings.main.sections.database.mysql.port.label')}
               placeholder="3306"
               helpText={t('settings.main.sections.database.mysql.port.helpText')}
@@ -1572,7 +1572,7 @@
 
             <TextInput
               id="mysql-username"
-              bind:value={settings.output.mysql.username}
+              value={settings.output.mysql.username}
               label={t('settings.main.sections.database.mysql.username.label')}
               placeholder={t('settings.main.sections.database.mysql.username.placeholder')}
               helpText={t('settings.main.sections.database.mysql.username.helpText')}
@@ -1592,7 +1592,7 @@
 
             <TextInput
               id="mysql-database"
-              bind:value={settings.output.mysql.database}
+              value={settings.output.mysql.database}
               label={t('settings.main.sections.database.mysql.database.label')}
               placeholder={t('settings.main.sections.database.mysql.database.placeholder')}
               helpText={t('settings.main.sections.database.mysql.database.helpText')}
@@ -1620,12 +1620,12 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <SelectField
             id="ui-locale"
-            bind:value={settings.dashboard.locale}
+            value={settings.dashboard.locale}
             label={t('settings.main.sections.userInterface.language.locale.label')}
             options={uiLocales}
             helpText={t('settings.main.sections.userInterface.language.locale.helpText')}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateUILocale(value)}
+            onchange={updateUILocale}
           />
         </div>
       </div>
@@ -1648,7 +1648,7 @@
 
         <div class="mt-4">
           <Checkbox
-            bind:checked={settings.dashboard.thumbnails.summary}
+            checked={settings.dashboard.thumbnails.summary}
             label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
             helpText={t(
               'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
@@ -1658,7 +1658,7 @@
           />
 
           <Checkbox
-            bind:checked={settings.dashboard.thumbnails.recent}
+            checked={settings.dashboard.thumbnails.recent}
             label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
             helpText={t(
               'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
@@ -1670,7 +1670,7 @@
           <div class:opacity-50={!multipleProvidersAvailable}>
             <SelectField
               id="image-provider"
-              bind:value={settings.dashboard.thumbnails.imageProvider}
+              value={settings.dashboard.thumbnails.imageProvider}
               label={t(
                 'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
               )}
@@ -1689,7 +1689,7 @@
           {#if multipleProvidersAvailable}
             <SelectField
               id="fallback-policy"
-              bind:value={settings.dashboard.thumbnails.fallbackPolicy}
+              value={settings.dashboard.thumbnails.fallbackPolicy}
               label={t(
                 'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
               )}
