@@ -47,8 +47,12 @@
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
   import { loggers } from '$lib/utils/logger';
-  import maplibregl from 'maplibre-gl';
-  import 'maplibre-gl/dist/maplibre-gl.css';
+  import {
+    MAP_CONFIG,
+    createMapStyle as createMapStyleFromConfig,
+    getInitialZoom,
+  } from '../utils/mapConfig';
+  // MapLibre will be dynamically imported when needed to reduce bundle size
 
   const logger = loggers.settings;
 
@@ -278,10 +282,11 @@
   // Map state
   let mapElement: HTMLElement | undefined = $state();
   let modalMapElement: HTMLElement | undefined = $state();
-  let map: maplibregl.Map | null = null;
-  let modalMap: maplibregl.Map | null = null;
-  let marker: maplibregl.Marker | null = null;
-  let modalMarker: maplibregl.Marker | null = null;
+  let maplibregl: typeof import('maplibre-gl') | null = null;
+  let map: import('maplibre-gl').Map | null = null;
+  let modalMap: import('maplibre-gl').Map | null = null;
+  let marker: import('maplibre-gl').Marker | null = null;
+  let modalMarker: import('maplibre-gl').Marker | null = null;
   let mapModalOpen = $state(false);
   let mapInitialized = $state(false);
   let initialMapCoordinates = $state<{ lat: number; lng: number } | null>(null);
@@ -300,7 +305,7 @@
 
   // Initialize map when settings are actually loaded from server
   $effect(() => {
-    logger.info('Map initialization effect triggered:', {
+    logger.debug('Map initialization effect triggered:', {
       storeLoading: store.isLoading,
       mapElementExists: !!mapElement,
       mapInitialized,
@@ -319,7 +324,7 @@
       $birdnetSettings.longitude !== undefined;
 
     if (!store.isLoading && mapElement && !mapInitialized && hasActualCoordinates) {
-      logger.info('Initializing map with actual coordinates:', {
+      logger.debug('Initializing map with actual coordinates:', {
         latitude: $birdnetSettings.latitude,
         longitude: $birdnetSettings.longitude,
         loadingComplete: !store.isLoading,
@@ -346,7 +351,7 @@
       // Only update if coordinates actually changed from initial ones
       const coordsChanged = lat !== initialMapCoordinates.lat || lng !== initialMapCoordinates.lng;
 
-      logger.info('Coordinate change effect triggered:', {
+      logger.debug('Coordinate change effect triggered:', {
         mapExists: !!map,
         mapInitialized,
         initialCoords: initialMapCoordinates,
@@ -356,7 +361,7 @@
       });
 
       if (coordsChanged) {
-        logger.info('Coordinates actually changed, updating map view:', {
+        logger.debug('Coordinates actually changed, updating map view:', {
           from: initialMapCoordinates,
           to: { lat, lng },
         });
@@ -381,10 +386,20 @@
 
   // Manage modal map lifecycle with proper Svelte 5 pattern
   $effect(() => {
+    let cleanup: (() => void) | undefined;
+
     if (mapModalOpen && modalMapElement) {
       logger.debug('Opening map modal, initializing modal map');
-      return initializeModalMap();
+      initializeModalMap().then(cleanupFn => {
+        cleanup = cleanupFn;
+      });
     }
+
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+    };
   });
 
   async function loadInitialData() {
@@ -441,92 +456,96 @@
   }
 
   // Create map style configuration
-  function createMapStyle() {
-    return {
-      version: 8 as const,
-      sources: {
-        'raster-tiles': {
-          type: 'raster' as const,
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          attribution: '© OpenStreetMap contributors',
-        },
-      },
-      layers: [
-        {
-          id: 'simple-tiles',
-          type: 'raster' as const,
-          source: 'raster-tiles',
-          minzoom: 0,
-          maxzoom: 22,
-        },
-      ],
-    };
-  }
+  // Use imported map style configuration
+  const createMapStyle = createMapStyleFromConfig;
 
   // Initialize MapLibre GL JS map
-  function initializeMap() {
-    if (!mapElement) return;
+  async function initializeMap() {
+    if (!mapElement || mapInitialized) return;
 
-    // Use actual coordinates from $birdnetSettings, not derived fallbacks
-    const initialLat = $birdnetSettings?.latitude ?? 0;
-    const initialLng = $birdnetSettings?.longitude ?? 0;
-    const initialZoom = initialLat !== 0 || initialLng !== 0 ? 12 : 5;
-
-    logger.info('Map initialization values:', {
-      initialLat,
-      initialLng,
-      initialZoom,
-      actualBirdnetSettings: $birdnetSettings,
-      derivedBirdnetSettings: settings.birdnet,
-    });
-
-    map = new maplibregl.Map({
-      container: mapElement,
-      style: createMapStyle(),
-      center: [initialLng, initialLat], // MapLibre uses [lng, lat] order
-      zoom: initialZoom,
-      scrollZoom: false, // Disable default scroll wheel zoom
-      keyboard: true, // Enable keyboard navigation
-      // Disable animations during initialization
-      fadeDuration: 0,
-      pitchWithRotate: false,
-      touchZoomRotate: false,
-    });
-
-    // Enable zoom only when Ctrl/Cmd is pressed
-    const handleWheel = (
-      e: Event & { deltaY: number; ctrlKey: boolean; metaKey: boolean; preventDefault: () => void }
-    ) => {
-      if ((e.ctrlKey || e.metaKey) && map) {
-        e.preventDefault();
-        if (e.deltaY > 0) {
-          map.zoomOut({ duration: 300 }); // Smooth zoom
-        } else {
-          map.zoomIn({ duration: 300 }); // Smooth zoom
-        }
+    try {
+      // Dynamically import MapLibre GL JS and CSS when needed
+      if (!maplibregl) {
+        const [maplibreModule] = await Promise.all([
+          import('maplibre-gl'),
+          import('maplibre-gl/dist/maplibre-gl.css'),
+        ]);
+        maplibregl = maplibreModule;
       }
-    };
-    mapElement.addEventListener('wheel', handleWheel);
 
-    // Add marker if coordinates exist (direct creation to avoid reactive loops)
-    if (initialLat !== 0 || initialLng !== 0) {
-      marker = new maplibregl.Marker({ draggable: true })
-        .setLngLat([initialLng, initialLat])
-        .addTo(map);
+      // Use actual coordinates from $birdnetSettings, not derived fallbacks
+      const initialLat = $birdnetSettings?.latitude ?? 0;
+      const initialLng = $birdnetSettings?.longitude ?? 0;
+      const initialZoom = getInitialZoom(initialLat, initialLng);
 
-      marker.on('dragend', () => {
-        const lngLat = marker!.getLngLat();
-        updateMarker(lngLat.lat, lngLat.lng);
+      logger.debug('Map initialization values:', {
+        initialLat,
+        initialLng,
+        initialZoom,
+        actualBirdnetSettings: $birdnetSettings,
+        derivedBirdnetSettings: settings.birdnet,
       });
-    }
 
-    // Handle map clicks
-    map.on('click', (e: maplibregl.MapMouseEvent) => {
-      const lngLat = e.lngLat;
-      updateMarker(lngLat.lat, lngLat.lng);
-      map?.easeTo({ center: [lngLat.lng, lngLat.lat], duration: 500 });
-    });
+      map = new maplibregl.Map({
+        container: mapElement,
+        style: createMapStyle(),
+        center: [initialLng, initialLat], // MapLibre uses [lng, lat] order
+        zoom: initialZoom,
+        scrollZoom: MAP_CONFIG.SCROLL_ZOOM,
+        keyboard: MAP_CONFIG.KEYBOARD_NAV,
+        // Disable animations during initialization
+        fadeDuration: MAP_CONFIG.FADE_DURATION,
+        pitchWithRotate: MAP_CONFIG.PITCH_WITH_ROTATE,
+        touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
+      });
+
+      // Enable zoom only when Ctrl/Cmd is pressed
+      const handleWheel = (
+        e: Event & {
+          deltaY: number;
+          ctrlKey: boolean;
+          metaKey: boolean;
+          preventDefault: () => void;
+        }
+      ) => {
+        if ((e.ctrlKey || e.metaKey) && map) {
+          e.preventDefault();
+          if (e.deltaY > 0) {
+            map.zoomOut({ duration: 300 }); // Smooth zoom
+          } else {
+            map.zoomIn({ duration: 300 }); // Smooth zoom
+          }
+        }
+      };
+      mapElement.addEventListener('wheel', handleWheel);
+
+      // Add marker if coordinates exist (direct creation to avoid reactive loops)
+      if ((initialLat !== 0 || initialLng !== 0) && maplibregl) {
+        marker = new maplibregl.Marker({ draggable: true })
+          .setLngLat([initialLng, initialLat])
+          .addTo(map);
+
+        marker.on('dragend', () => {
+          const lngLat = marker!.getLngLat();
+          updateMarker(lngLat.lat, lngLat.lng);
+        });
+      }
+
+      // Handle map clicks
+      if (map) {
+        map.on('click', (e: import('maplibre-gl').MapMouseEvent) => {
+          const lngLat = e.lngLat;
+          updateMarker(lngLat.lat, lngLat.lng);
+          map?.easeTo({
+            center: [lngLat.lng, lngLat.lat],
+            duration: MAP_CONFIG.ANIMATION_DURATION,
+          });
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to initialize map:', error);
+      toastActions.error('Failed to load map. Please try refreshing the page.');
+    }
   }
 
   // Update marker position and settings (called when coordinates change)
@@ -554,12 +573,12 @@
     if (!map) return;
 
     // Update map center with NO animation to prevent jump
-    map.easeTo({ center: [lng, lat], duration: 0 }); // MapLibre uses [lng, lat] order
+    map.easeTo({ center: [lng, lat], duration: MAP_CONFIG.ANIMATION_DURATION }); // MapLibre uses [lng, lat] order
 
     // Update or create marker
     if (marker) {
       marker.setLngLat([lng, lat]);
-    } else {
+    } else if (maplibregl) {
       marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map);
 
       marker.on('dragend', () => {
@@ -570,10 +589,10 @@
 
     // Sync modal map if it exists
     if (modalMap) {
-      modalMap.easeTo({ center: [lng, lat], duration: 500 });
+      modalMap.easeTo({ center: [lng, lat], duration: MAP_CONFIG.ANIMATION_DURATION });
       if (modalMarker) {
         modalMarker.setLngLat([lng, lat]);
-      } else {
+      } else if (maplibregl) {
         modalMarker = new maplibregl.Marker({ draggable: true })
           .setLngLat([lng, lat])
           .addTo(modalMap);
@@ -587,32 +606,17 @@
   }
 
   // Initialize modal map when modal is opened
-  function initializeModalMap() {
-    if (!modalMapElement || modalMap) return;
+  async function initializeModalMap() {
+    if (!modalMapElement || modalMap || !maplibregl) return;
 
-    const currentLat = $birdnetSettings?.latitude ?? 0;
-    const currentLng = $birdnetSettings?.longitude ?? 0;
-    const currentZoom = map?.getZoom() || (currentLat !== 0 || currentLng !== 0 ? 12 : 5);
-
-    logger.info('Modal map initialization values:', {
-      currentLat,
-      currentLng,
-      currentZoom,
-      actualBirdnetSettings: $birdnetSettings,
-    });
-
-    modalMap = new maplibregl.Map({
-      container: modalMapElement,
-      style: createMapStyle(),
-      center: [currentLng, currentLat],
-      zoom: currentZoom,
-      scrollZoom: false,
-      keyboard: true,
-    });
-
-    // Enable mouse wheel zooming in modal (no Ctrl requirement)
+    // Define handleModalWheel outside try block so it's accessible in cleanup
     const handleModalWheel = (
-      e: Event & { deltaY: number; ctrlKey: boolean; metaKey: boolean; preventDefault: () => void }
+      e: Event & {
+        deltaY: number;
+        ctrlKey: boolean;
+        metaKey: boolean;
+        preventDefault: () => void;
+      }
     ) => {
       if (modalMap) {
         e.preventDefault();
@@ -623,26 +627,64 @@
         }
       }
     };
-    modalMapElement.addEventListener('wheel', handleModalWheel);
 
-    // Add marker if coordinates exist
-    if (currentLat !== 0 || currentLng !== 0) {
-      modalMarker = new maplibregl.Marker({ draggable: true })
-        .setLngLat([currentLng, currentLat])
-        .addTo(modalMap);
+    try {
+      const currentLat = $birdnetSettings?.latitude ?? 0;
+      const currentLng = $birdnetSettings?.longitude ?? 0;
+      const currentZoom = map?.getZoom() || getInitialZoom(currentLat, currentLng);
 
-      modalMarker.on('dragend', () => {
-        const lngLat = modalMarker!.getLngLat();
-        updateMarker(lngLat.lat, lngLat.lng);
+      logger.debug('Modal map initialization values:', {
+        currentLat,
+        currentLng,
+        currentZoom,
+        actualBirdnetSettings: $birdnetSettings,
       });
-    }
 
-    // Handle modal map clicks
-    modalMap.on('click', (e: maplibregl.MapMouseEvent) => {
-      const lngLat = e.lngLat;
-      updateMarker(lngLat.lat, lngLat.lng);
-      modalMap?.easeTo({ center: [lngLat.lng, lngLat.lat], duration: 500 });
-    });
+      modalMap = new maplibregl.Map({
+        container: modalMapElement,
+        style: createMapStyle(),
+        center: [currentLng, currentLat],
+        zoom: currentZoom,
+        scrollZoom: MAP_CONFIG.SCROLL_ZOOM,
+        keyboard: MAP_CONFIG.KEYBOARD_NAV,
+        fadeDuration: MAP_CONFIG.FADE_DURATION,
+        pitchWithRotate: MAP_CONFIG.PITCH_WITH_ROTATE,
+        touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
+      });
+
+      // Enable mouse wheel zooming in modal (no Ctrl requirement - already handled by handleModalWheel)
+      if (modalMap) {
+        modalMap.scrollZoom.enable();
+      }
+      modalMapElement.addEventListener('wheel', handleModalWheel);
+
+      // Add marker if coordinates exist
+      if (currentLat !== 0 || currentLng !== 0) {
+        modalMarker = new maplibregl!.Marker({ draggable: true })
+          .setLngLat([currentLng, currentLat])
+          .addTo(modalMap);
+
+        modalMarker.on('dragend', () => {
+          const lngLat = modalMarker!.getLngLat();
+          updateMarker(lngLat.lat, lngLat.lng);
+        });
+      }
+
+      // Handle modal map clicks
+      if (modalMap) {
+        modalMap.on('click', (e: import('maplibre-gl').MapMouseEvent) => {
+          const lngLat = e.lngLat;
+          updateMarker(lngLat.lat, lngLat.lng);
+          modalMap?.easeTo({
+            center: [lngLat.lng, lngLat.lat],
+            duration: MAP_CONFIG.ANIMATION_DURATION,
+          });
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to initialize modal map:', error);
+      toastActions.error('Failed to load modal map. Please try refreshing the page.');
+    }
 
     // Return cleanup function
     return () => {
@@ -762,8 +804,6 @@
     // These variables are used by Svelte's reactivity system to track changes
     const lat = settings.birdnet.latitude;
     const lng = settings.birdnet.longitude;
-    // eslint-disable-next-line no-unused-vars
-    const threshold = settings.birdnet.rangeFilter.threshold;
 
     // Only test if we have valid coordinates
     if (lat && lng) {

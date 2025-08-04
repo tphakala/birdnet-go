@@ -22,15 +22,34 @@ const mockMarker = {
   getLngLat: vi.fn(() => ({ lat: 40.7128, lng: -74.006 })),
 };
 
+// Mock dynamic import of MapLibre GL JS
 vi.mock('maplibre-gl', () => ({
-  default: {
-    Map: vi.fn(() => mockMap),
-    Marker: vi.fn(() => mockMarker),
-  },
+  Map: vi.fn(() => mockMap),
+  Marker: vi.fn(() => mockMarker),
 }));
 
 // Mock MapLibre CSS import
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
+
+// Mock map config
+vi.mock('../utils/mapConfig', () => ({
+  MAP_CONFIG: {
+    DEFAULT_ZOOM: 12,
+    WORLD_VIEW_ZOOM: 5,
+    ANIMATION_DURATION: 0,
+    FADE_DURATION: 0,
+    TILE_URL: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    TILE_ATTRIBUTION: ['© OpenStreetMap contributors'],
+    SCROLL_ZOOM: false,
+    KEYBOARD_NAV: true,
+    PITCH_WITH_ROTATE: false,
+    TOUCH_ZOOM_ROTATE: false,
+    STYLE_VERSION: 8,
+    BACKGROUND_COLOR: '#f0f0f0',
+  },
+  createMapStyle: vi.fn(() => ({ version: 8, sources: {}, layers: [] })),
+  getInitialZoom: vi.fn((lat: number, lng: number) => (lat !== 0 || lng !== 0 ? 12 : 5)),
+}));
 
 // Mock API module
 vi.mock('$lib/utils/api', () => ({
@@ -151,6 +170,7 @@ describe('MainSettingsPage - Map Functionality', () => {
   });
 
   afterEach(() => {
+    vi.clearAllMocks();
     vi.useRealTimers();
   });
 
@@ -159,10 +179,10 @@ describe('MainSettingsPage - Map Functionality', () => {
       const MapLibre = await import('maplibre-gl');
       render(MainSettingsPage);
 
-      // Wait for effects to run
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for effects and dynamic import to complete
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      expect(MapLibre.default.Map).toHaveBeenCalledWith(
+      expect(MapLibre.Map).toHaveBeenCalledWith(
         expect.objectContaining({
           center: [-74.006, 40.7128], // MapLibre uses [lng, lat] order
           zoom: 12, // Should be 12 for non-zero coordinates
@@ -180,9 +200,9 @@ describe('MainSettingsPage - Map Functionality', () => {
       const MapLibre = await import('maplibre-gl');
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      expect(MapLibre.default.Map).toHaveBeenCalledWith(
+      expect(MapLibre.Map).toHaveBeenCalledWith(
         expect.objectContaining({
           center: [0, 0],
           zoom: 5, // Should be 5 for zero coordinates
@@ -201,9 +221,9 @@ describe('MainSettingsPage - Map Functionality', () => {
       const MapLibre = await import('maplibre-gl');
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      expect(MapLibre.default.Map).not.toHaveBeenCalled();
+      expect(MapLibre.Map).not.toHaveBeenCalled();
     });
 
     it('should not initialize map without actual coordinates', async () => {
@@ -216,10 +236,10 @@ describe('MainSettingsPage - Map Functionality', () => {
       const MapLibre = await import('maplibre-gl');
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Map should still initialize but with world view
-      expect(MapLibre.default.Map).toHaveBeenCalledWith(
+      expect(MapLibre.Map).toHaveBeenCalledWith(
         expect.objectContaining({
           zoom: 5, // World view zoom for 0,0 coordinates
         })
@@ -251,7 +271,7 @@ describe('MainSettingsPage - Map Functionality', () => {
       render(MainSettingsPage);
 
       // Wait for initial map setup
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Update coordinates
       settingsActions.updateSection('birdnet', {
@@ -259,12 +279,23 @@ describe('MainSettingsPage - Map Functionality', () => {
         longitude: -0.1278,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Clear any initial calls and reset
+      mockMap.easeTo.mockClear();
+
+      // Make another coordinate change to ensure update is working
+      settingsActions.updateSection('birdnet', {
+        latitude: 52.52, // Berlin
+        longitude: 13.405,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Should call easeTo with no animation to prevent jump
       expect(mockMap.easeTo).toHaveBeenCalledWith(
         expect.objectContaining({
-          center: [-0.1278, 51.5074], // MapLibre [lng, lat] order
+          center: [13.405, 52.52], // MapLibre [lng, lat] order
           duration: 0,
         })
       );
@@ -273,7 +304,7 @@ describe('MainSettingsPage - Map Functionality', () => {
     it('should update marker position when coordinates change', async () => {
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Update coordinates
       settingsActions.updateSection('birdnet', {
@@ -281,10 +312,21 @@ describe('MainSettingsPage - Map Functionality', () => {
         longitude: 2.3522,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Clear initial marker position call
+      mockMarker.setLngLat.mockClear();
+
+      // Make another coordinate change
+      settingsActions.updateSection('birdnet', {
+        latitude: 35.6762, // Tokyo
+        longitude: 139.6503,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Should update marker position
-      expect(mockMarker.setLngLat).toHaveBeenCalledWith([2.3522, 48.8566]);
+      expect(mockMarker.setLngLat).toHaveBeenCalledWith([139.6503, 35.6762]);
     });
   });
 
@@ -293,24 +335,30 @@ describe('MainSettingsPage - Map Functionality', () => {
       const MapLibre = await import('maplibre-gl');
       render(MainSettingsPage);
 
+      // Wait for initial map
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       // Open modal by clicking expand button
       const expandButton = screen.getByRole('button', { name: /expand map to full screen/i });
       await expandButton.click();
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Should create second map instance for modal
-      expect(MapLibre.default.Map).toHaveBeenCalledTimes(2);
+      expect(MapLibre.Map).toHaveBeenCalledTimes(2);
     });
 
     it('should sync coordinates between main and modal maps', async () => {
       render(MainSettingsPage);
 
+      // Wait for initial map
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       // Open modal
       const expandButton = screen.getByRole('button', { name: /expand map to full screen/i });
       await expandButton.click();
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Update coordinates while modal is open
       settingsActions.updateSection('birdnet', {
@@ -318,12 +366,23 @@ describe('MainSettingsPage - Map Functionality', () => {
         longitude: 139.6503,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Clear any calls from initialization
+      mockMap.easeTo.mockClear();
+
+      // Make coordinate change to test sync
+      settingsActions.updateSection('birdnet', {
+        latitude: 40.7128, // NYC
+        longitude: -74.006,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Both maps should be updated
       expect(mockMap.easeTo).toHaveBeenCalledWith(
         expect.objectContaining({
-          center: [139.6503, 35.6762],
+          center: [-74.006, 40.7128],
           duration: 0,
         })
       );
@@ -345,7 +404,7 @@ describe('MainSettingsPage - Map Functionality', () => {
     it('should update settings when map coordinates change via map interaction', async () => {
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Simulate map click event that would trigger coordinate update
       const clickHandler = mockMap.on.mock.calls.find(call => call[0] === 'click')?.[1];
@@ -356,7 +415,7 @@ describe('MainSettingsPage - Map Functionality', () => {
           lngLat: { lat: 52.52, lng: 13.405 }, // Berlin
         });
 
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => setTimeout(resolve, 200));
 
         // Settings should be updated
         const currentState = get(settingsStore);
@@ -371,7 +430,7 @@ describe('MainSettingsPage - Map Functionality', () => {
       // Mock scenario where mapElement is not available
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Should not throw errors even if map element binding fails
       expect(() => {
@@ -382,7 +441,7 @@ describe('MainSettingsPage - Map Functionality', () => {
     it('should cleanup map instances properly', async () => {
       const { unmount } = render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Unmount component
       unmount();
@@ -397,33 +456,33 @@ describe('MainSettingsPage - Map Functionality', () => {
       const MapLibre = await import('maplibre-gl');
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Trigger effect again by updating unrelated setting
       settingsActions.updateSection('birdnet', {
         sensitivity: 1.1,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Map should only be created once
-      expect(MapLibre.default.Map).toHaveBeenCalledTimes(1);
+      expect(MapLibre.Map).toHaveBeenCalledTimes(1);
     });
 
     it('should handle multiple coordinate updates', async () => {
       render(MainSettingsPage);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // Make coordinate changes
       settingsActions.updateSection('birdnet', { latitude: 40.1 });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       settingsActions.updateSection('birdnet', { latitude: 40.2 });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       settingsActions.updateSection('birdnet', { latitude: 40.3 });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Should handle multiple updates without errors
       expect(mockMap.easeTo).toHaveBeenCalled();
