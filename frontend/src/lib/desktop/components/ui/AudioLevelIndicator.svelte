@@ -4,6 +4,8 @@
   import { mediaIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
   import Hls from 'hls.js';
+  import type { ErrorData } from 'hls.js';
+  import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
 
   const logger = loggers.audio;
 
@@ -315,46 +317,47 @@
         hlsInstance = null;
       }
 
-      // Create new HLS instance with optimized settings for low-latency audio
-      hlsInstance = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 10,
-        liveSyncDurationCount: 5,
-        liveMaxLatencyDurationCount: 30,
-        // Buffer and stall detection tuning for audio streams
-        maxBufferHole: 1.0, // Increased from default 0.5s to tolerate larger gaps
-        highBufferWatchdogPeriod: 5, // Check less frequently (default is 2)
-        nudgeMaxRetry: 5, // More retry attempts before reporting stall
-        nudgeOffset: 0.2, // Larger nudge offset
-        maxFragLookUpTolerance: 0.5, // More tolerance for fragment lookup
-        maxBufferLength: 30, // Suitable for audio streaming
-        maxMaxBufferLength: 600, // 10 minutes max buffer
-      });
+      // Create new HLS instance with audio-optimized configuration
+      hlsInstance = new Hls(HLS_AUDIO_CONFIG);
 
       // Track if we've attempted to play
       let playbackAttempted = false;
       let fragmentsBuffered = 0;
 
-      // Setup error handling
-      hlsInstance.on(Hls.Events.ERROR, (_event: string, data: any) => {
-        logger.error('HLS error:', { type: data.type, details: data.details, fatal: data.fatal });
+      // Setup error handling with proper types
+      hlsInstance.on(Hls.Events.ERROR, (_event: string, data: ErrorData) => {
+        logger.error('HLS error:', {
+          type: data.type,
+          details: data.details,
+          fatal: data.fatal,
+          error: data.error.message,
+        });
 
         if (data.fatal) {
           // Handle fatal HLS error
           showStatusMessage('Playback error: ' + data.details);
           stopPlayback();
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          // Handle non-fatal media errors
-          if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+          // Handle non-fatal media errors with improved categorization
+          if (ERROR_HANDLING.EXPECTED_STALL_ERRORS.includes(data.details as any)) {
             // Buffer stalls are expected in low-latency audio streaming
             // HLS.js will automatically handle recovery by buffering more segments
-            logger.debug('Buffer stalled (expected for low-latency), HLS.js recovering');
-          } else {
-            // Try to recover from other media errors
-            logger.warn('Attempting to recover from media error');
+            logger.debug('Buffer stalled (expected for low-latency audio)', {
+              details: data.details,
+              bufferInfo: data.bufferInfo,
+            });
+          } else if (ERROR_HANDLING.RECOVERABLE_MEDIA_ERRORS.includes(data.details as any)) {
+            // Try to recover from other recoverable media errors
+            logger.warn('Attempting to recover from recoverable media error', {
+              details: data.details,
+            });
             hlsInstance?.recoverMediaError();
+          } else {
+            // Log unexpected media errors for investigation
+            logger.warn('Unexpected non-fatal media error', {
+              details: data.details,
+              error: data.error.message,
+            });
           }
         }
       });
@@ -374,10 +377,17 @@
         logger.debug('HLS fragment buffered');
         fragmentsBuffered++;
 
-        // Wait for 2 fragments to provide more buffer runway and avoid initial stalls
-        if (!playbackAttempted && fragmentsBuffered >= 2) {
+        // Wait for optimal fragment count before starting playback
+        // See hls-config.ts BUFFERING_STRATEGY for rationale
+        if (
+          !playbackAttempted &&
+          fragmentsBuffered >= BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY
+        ) {
           playbackAttempted = true;
-          logger.debug('Starting playback with buffered fragments:', fragmentsBuffered);
+          logger.debug('Starting playback with buffered fragments:', {
+            fragmentsBuffered,
+            minRequired: BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY,
+          });
           audio.play().catch((err: Error) => {
             logger.error('Playback start error:', err);
             if (err.name === 'NotAllowedError') {
