@@ -283,8 +283,8 @@
   let mapElement: HTMLElement | undefined = $state();
   let modalMapElement: HTMLElement | undefined = $state();
   let maplibregl: typeof import('maplibre-gl') | null = null;
-  let map: import('maplibre-gl').Map | null = null;
-  let modalMap: import('maplibre-gl').Map | null = null;
+  let map: import('maplibre-gl').Map | null = $state(null);
+  let modalMap: import('maplibre-gl').Map | null = $state(null);
   let marker: import('maplibre-gl').Marker | null = null;
   let modalMarker: import('maplibre-gl').Marker | null = null;
   let mapModalOpen = $state(false);
