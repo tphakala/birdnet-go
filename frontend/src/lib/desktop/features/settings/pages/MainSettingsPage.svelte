@@ -840,6 +840,59 @@
     // Cleanup will happen in the effect
   }
 
+  // Public method for programmatic map centering
+  export function centerMapOnCoordinates(lat: number, lng: number) {
+    // Validate inputs
+    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+      logger.warn('Invalid coordinates provided to centerMapOnCoordinates', {
+        lat,
+        lng,
+        component: 'MainSettingsPage',
+      });
+      return;
+    }
+
+    // Only update if map is initialized and not in modal view
+    if (map && !mapModalOpen) {
+      const currentZoom = map.getZoom();
+
+      logger.debug('Centering map programmatically', {
+        lat,
+        lng,
+        currentZoom,
+        component: 'MainSettingsPage',
+      });
+
+      map.easeTo({
+        center: [lng, lat],
+        zoom: currentZoom, // Preserve current zoom level
+        duration: MAP_CONFIG.ANIMATION_DURATION || 500, // Fallback to 500ms if config not set
+      });
+
+      // Update marker position if it exists
+      if (marker) {
+        marker.setLngLat([lng, lat]);
+      }
+
+      // Update settings with rounded coordinates
+      const roundedLat = parseFloat(lat.toFixed(3));
+      const roundedLng = parseFloat(lng.toFixed(3));
+
+      settingsActions.updateSection('birdnet', {
+        latitude: roundedLat,
+        longitude: roundedLng,
+      });
+    } else if (!map) {
+      logger.warn('Map not initialized, cannot center on coordinates', {
+        component: 'MainSettingsPage',
+      });
+    } else if (mapModalOpen) {
+      logger.debug('Map modal is open, skipping programmatic centering', {
+        component: 'MainSettingsPage',
+      });
+    }
+  }
+
   // Range filter functions
   let debounceTimer: any;
   let loadingDelayTimer: any;
