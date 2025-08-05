@@ -11,10 +11,15 @@
 <script lang="ts">
   import { api } from '$lib/utils/api';
   import { safeGet, safeArrayAccess, safeElementAccess } from '$lib/utils/security';
+  import { extractRelativePath } from '$lib/utils/urlHelpers';
+  import { loggers } from '$lib/utils/logger';
 
   // SECURITY: Define maximum password length to prevent DoS
   const MAX_PASSWORD_LENGTH = 512; // Reasonable limit for security
   const MAX_REDIRECT_LENGTH = 2000;
+
+  // Logger for authentication debugging
+  const logger = loggers.auth;
 
   // Loading state type for single state management
   type LoadingState = 'idle' | 'password' | 'google' | 'github';
@@ -156,15 +161,17 @@
     error = '';
     loadingState = 'password';
 
-    // If safeRedirectUrl already contains the base path, extract relative path to avoid duplication
-    let finalRedirectUrl = safeRedirectUrl;
-    if (safeRedirectUrl.startsWith(currentBasePath) && safeRedirectUrl !== currentBasePath) {
-      // Extract relative path: /ui/dashboard -> dashboard
-      finalRedirectUrl = safeRedirectUrl.substring(currentBasePath.length);
-      if (!finalRedirectUrl.startsWith('/')) {
-        finalRedirectUrl = '/' + finalRedirectUrl;
-      }
-    }
+    // Extract relative path to avoid backend duplication
+    const finalRedirectUrl = extractRelativePath(safeRedirectUrl, currentBasePath);
+
+    // Debug logging for troubleshooting redirect issues
+    logger.debug('Login redirect path extraction', {
+      original: safeRedirectUrl,
+      basePath: currentBasePath,
+      extracted: finalRedirectUrl,
+      component: 'LoginModal',
+      action: 'handlePasswordLogin',
+    });
 
     const loginPayload = {
       username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
@@ -184,6 +191,13 @@
 
       // Check if we need to complete OAuth flow
       if (response.redirectUrl) {
+        logger.debug('OAuth callback redirect received', {
+          callbackUrl: response.redirectUrl,
+          originalRedirect: finalRedirectUrl,
+          component: 'LoginModal',
+          action: 'handlePasswordLogin',
+        });
+
         // Backend returned OAuth callback URL to complete authentication
         // Redirect immediately to complete the OAuth flow
         window.location.href = response.redirectUrl;
@@ -224,6 +238,15 @@
     }
 
     loadingState = provider;
+
+    // Debug logging for OAuth flow
+    logger.debug('OAuth login initiated', {
+      provider,
+      endpoint,
+      currentPath: window.location.pathname,
+      component: 'LoginModal',
+      action: 'handleOAuthLogin',
+    });
 
     // Redirect to OAuth provider
     window.location.href = endpoint;
