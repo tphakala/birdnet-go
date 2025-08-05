@@ -3,6 +3,58 @@ import { extractRelativePath, isRelativePath, normalizePath } from './urlHelpers
 
 describe('URL Helpers', () => {
   describe('extractRelativePath', () => {
+    describe('input validation', () => {
+      it('should handle undefined inputs', () => {
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(undefined, '/ui/')).toBe('');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath('/ui/dashboard', undefined)).toBe('/ui/dashboard');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(undefined, undefined)).toBe('');
+      });
+
+      it('should handle null inputs', () => {
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(null, '/ui/')).toBe('');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath('/ui/dashboard', null)).toBe('/ui/dashboard');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(null, null)).toBe('');
+      });
+
+      it('should handle empty string inputs', () => {
+        expect(extractRelativePath('', '/ui/')).toBe('');
+        expect(extractRelativePath('/ui/dashboard', '')).toBe('/ui/dashboard');
+        expect(extractRelativePath('', '')).toBe('');
+      });
+
+      it('should handle whitespace-only inputs', () => {
+        expect(extractRelativePath('   ', '/ui/')).toBe('   ');
+        expect(extractRelativePath('/ui/dashboard', '   ')).toBe('/ui/dashboard');
+        expect(extractRelativePath('   ', '   ')).toBe('   ');
+      });
+
+      it('should handle non-string inputs', () => {
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(123, '/ui/')).toBe('');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath('/ui/dashboard', 123)).toBe('/ui/dashboard');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath({}, '/ui/')).toBe('');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath('/ui/dashboard', [])).toBe('/ui/dashboard');
+      });
+
+      it('should handle boolean inputs', () => {
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(true, '/ui/')).toBe('');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath(false, '/ui/')).toBe('');
+        // @ts-expect-error - Testing runtime behavior with invalid types
+        expect(extractRelativePath('/ui/dashboard', true)).toBe('/ui/dashboard');
+      });
+    });
+
     it('should extract relative path when fullPath contains basePath', () => {
       expect(extractRelativePath('/ui/dashboard', '/ui/')).toBe('/dashboard');
       expect(extractRelativePath('/ui/analytics/species', '/ui/')).toBe('/analytics/species');
@@ -68,6 +120,24 @@ describe('URL Helpers', () => {
   });
 
   describe('isRelativePath', () => {
+    describe('input validation', () => {
+      it('should handle invalid inputs', () => {
+        // @ts-expect-error - Testing runtime behavior
+        expect(isRelativePath(undefined)).toBe(false);
+        // @ts-expect-error - Testing runtime behavior
+        expect(isRelativePath(null)).toBe(false);
+        expect(isRelativePath('')).toBe(false);
+        // @ts-expect-error - Testing runtime behavior
+        expect(isRelativePath(123)).toBe(false);
+        // @ts-expect-error - Testing runtime behavior
+        expect(isRelativePath({})).toBe(false);
+        // @ts-expect-error - Testing runtime behavior
+        expect(isRelativePath([])).toBe(false);
+        // @ts-expect-error - Testing runtime behavior
+        expect(isRelativePath(true)).toBe(false);
+      });
+    });
+
     it('should return true for valid relative paths', () => {
       expect(isRelativePath('/')).toBe(true);
       expect(isRelativePath('/dashboard')).toBe(true);
@@ -94,6 +164,17 @@ describe('URL Helpers', () => {
   });
 
   describe('normalizePath', () => {
+    describe('input validation', () => {
+      it('should handle invalid inputs', () => {
+        expect(normalizePath(undefined)).toBe('/');
+        expect(normalizePath(null)).toBe('/');
+        expect(normalizePath(123)).toBe('/123');
+        expect(normalizePath(true)).toBe('/true');
+        expect(normalizePath(false)).toBe('/false');
+        expect(normalizePath({})).toBe('/[object Object]');
+      });
+    });
+
     it('should add leading slash when missing', () => {
       expect(normalizePath('dashboard')).toBe('/dashboard');
       expect(normalizePath('ui/settings')).toBe('/ui/settings');

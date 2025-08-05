@@ -17,6 +17,15 @@
  * extractRelativePath('/ui/', '/ui/') // returns '/ui/' (unchanged when equal)
  */
 export function extractRelativePath(fullPath: string, basePath: string): string {
+  // Input validation: check for empty, undefined, or non-string inputs
+  if (!fullPath || typeof fullPath !== 'string' || fullPath.trim() === '') {
+    return typeof fullPath === 'string' ? fullPath : '';
+  }
+
+  if (!basePath || typeof basePath !== 'string' || basePath.trim() === '') {
+    return fullPath;
+  }
+
   // Return unchanged if fullPath doesn't start with basePath or if they're equal
   if (!fullPath.startsWith(basePath) || fullPath === basePath) {
     return fullPath;
@@ -36,6 +45,11 @@ export function extractRelativePath(fullPath: string, basePath: string): string 
  * @returns true if the path is a valid relative URL
  */
 export function isRelativePath(path: string): boolean {
+  // Input validation
+  if (!path || typeof path !== 'string') {
+    return false;
+  }
+
   return path.startsWith('/') && !path.startsWith('//');
 }
 
@@ -46,9 +60,17 @@ export function isRelativePath(path: string): boolean {
  * @param addTrailingSlash - Whether to ensure a trailing slash
  * @returns The normalized path
  */
-export function normalizePath(path: string, addTrailingSlash = false): string {
+export function normalizePath(path: unknown, addTrailingSlash = false): string {
+  // Input validation: check for undefined, null, or empty string
+  if (path === undefined || path === null || path === '') {
+    return '/';
+  }
+
+  // Convert to string
+  const pathStr = String(path);
+
   // Ensure leading slash
-  let normalized = path.startsWith('/') ? path : '/' + path;
+  let normalized = pathStr.startsWith('/') ? pathStr : '/' + pathStr;
 
   // Handle trailing slash
   if (addTrailingSlash && !normalized.endsWith('/')) {
