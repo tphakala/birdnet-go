@@ -78,6 +78,7 @@
   let showTooltip = $state(false);
   let touched = $state(false);
   let inputElement: HTMLInputElement;
+  let portalDropdown: HTMLDivElement | null = null;
 
   // Auto-derive button size from input size if not specified
   let effectiveButtonSize = $derived(buttonSize || size);
@@ -115,10 +116,82 @@
       : []
   );
 
-  // Update predictions visibility
+  // Update predictions visibility and manage portal dropdown
   $effect(() => {
-    showPredictions = filteredPredictions.length > 0;
+    const shouldShow = filteredPredictions.length > 0;
+
+    if (shouldShow && !portalDropdown && inputElement) {
+      createPortalDropdown();
+    } else if (!shouldShow && portalDropdown) {
+      destroyPortalDropdown();
+    }
+
+    if (shouldShow && portalDropdown) {
+      updatePortalDropdown();
+    }
+
+    showPredictions = shouldShow;
   });
+
+  // Create dropdown element attached to document.body
+  function createPortalDropdown() {
+    if (!inputElement || portalDropdown) return;
+
+    portalDropdown = document.createElement('div');
+    portalDropdown.id = 'species-predictions-list';
+    portalDropdown.className =
+      'bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto';
+    portalDropdown.style.position = 'absolute';
+    portalDropdown.style.zIndex = '10001';
+    portalDropdown.setAttribute('role', 'listbox');
+    portalDropdown.setAttribute('aria-label', 'Species suggestions');
+
+    document.body.appendChild(portalDropdown);
+    updatePortalPosition();
+  }
+
+  // Update portal dropdown content and position
+  function updatePortalDropdown() {
+    if (!portalDropdown) return;
+
+    // Update content
+    portalDropdown.innerHTML = '';
+    filteredPredictions.forEach((prediction, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm';
+      button.textContent = prediction;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', 'false');
+      button.setAttribute('tabindex', '-1');
+
+      button.onclick = () => selectPrediction(prediction);
+      button.onkeydown = e => handlePredictionKeydown(e, prediction, index);
+
+      portalDropdown!.appendChild(button);
+    });
+
+    updatePortalPosition();
+  }
+
+  // Update portal dropdown position
+  function updatePortalPosition() {
+    if (!portalDropdown || !inputElement) return;
+
+    const rect = inputElement.getBoundingClientRect();
+    portalDropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+    portalDropdown.style.left = `${rect.left + window.scrollX}px`;
+    portalDropdown.style.width = `${rect.width}px`;
+  }
+
+  // Clean up portal dropdown
+  function destroyPortalDropdown() {
+    if (portalDropdown) {
+      document.body.removeChild(portalDropdown);
+      portalDropdown = null;
+    }
+  }
 
   function handleInput(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -142,11 +215,15 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      // Immediately destroy portal dropdown for testing consistency
+      destroyPortalDropdown();
       inputElement?.blur();
-    } else if (event.key === 'ArrowDown' && showPredictions) {
+    } else if (event.key === 'ArrowDown' && showPredictions && portalDropdown) {
       event.preventDefault();
-      // Focus first prediction
-      const firstPrediction = document.querySelector('.species-prediction-item') as HTMLElement;
+      // Focus first prediction in portal dropdown
+      const firstPrediction = portalDropdown.querySelector(
+        '.species-prediction-item'
+      ) as HTMLElement;
       firstPrediction?.focus();
     }
   }
@@ -180,23 +257,25 @@
       selectPrediction(prediction);
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
-      const nextItem = document.querySelectorAll('.species-prediction-item')[
-        index + 1
-      ] as HTMLElement;
-      nextItem?.focus();
+      if (portalDropdown) {
+        const items = portalDropdown.querySelectorAll('.species-prediction-item');
+        const nextItem = items[index + 1] as HTMLElement;
+        nextItem?.focus();
+      }
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       if (index === 0) {
         inputElement?.focus();
-      } else {
-        const prevItem = document.querySelectorAll('.species-prediction-item')[
-          index - 1
-        ] as HTMLElement;
+      } else if (portalDropdown) {
+        const items = portalDropdown.querySelectorAll('.species-prediction-item');
+        const prevItem = items[index - 1] as HTMLElement;
         prevItem?.focus();
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      // Immediately destroy portal dropdown for testing consistency
+      destroyPortalDropdown();
       inputElement?.focus();
     }
   }
@@ -204,18 +283,25 @@
   // Close predictions when clicking/touching outside
   function handleDocumentClick(event: MouseEvent | TouchEvent) {
     const target = event.target as globalThis.Element;
-    if (!target.closest('.form-control')) {
+    if (!target.closest('.form-control') && !target.closest('#species-predictions-list')) {
       showPredictions = false;
     }
   }
 
-  // Add document click and touch listeners for mobile support
+  // Add document click and touch listeners for mobile support, plus scroll/resize for positioning
   $effect(() => {
     document.addEventListener('click', handleDocumentClick);
     document.addEventListener('touchstart', handleDocumentClick);
+    window.addEventListener('scroll', updatePortalPosition, { passive: true });
+    window.addEventListener('resize', updatePortalPosition);
+
     return () => {
       document.removeEventListener('click', handleDocumentClick);
       document.removeEventListener('touchstart', handleDocumentClick);
+      window.removeEventListener('scroll', updatePortalPosition);
+      window.removeEventListener('resize', updatePortalPosition);
+      // Clean up any remaining portal dropdown
+      destroyPortalDropdown();
     };
   });
 </script>
@@ -269,6 +355,9 @@
         onfocus={() => {
           if (filteredPredictions.length > 0) {
             showPredictions = true;
+            if (portalDropdown) {
+              updatePortalPosition();
+            }
           }
         }}
         autocomplete="off"
@@ -292,30 +381,7 @@
       </button>
     </div>
 
-    <!-- Predictions Dropdown - positioned relative to input container -->
-    {#if showPredictions && filteredPredictions.length > 0}
-      <div
-        id="species-predictions-list"
-        class="dropdown-menu bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto min-w-0"
-        style:min-width="100%"
-        role="listbox"
-        aria-label="Species suggestions"
-      >
-        {#each filteredPredictions as prediction, index}
-          <button
-            type="button"
-            class="species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm"
-            onclick={() => selectPrediction(prediction)}
-            onkeydown={e => handlePredictionKeydown(e, prediction, index)}
-            role="option"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            {prediction}
-          </button>
-        {/each}
-      </div>
-    {/if}
+    <!-- Predictions Dropdown is now rendered as a portal to document.body via JavaScript -->
   </div>
 
   <!-- Validation Message -->
@@ -335,7 +401,7 @@
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute !z-[10002] p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
       role="tooltip"
     >
       {tooltip}
@@ -351,24 +417,9 @@
     outline-offset: -2px;
   }
 
-  /* Ensure the dropdown doesn't get cut off - use specific class instead of global overrides */
+  /* Container positioning - portal dropdown is rendered to document.body */
   .species-input-container {
     position: relative;
-    z-index: 50; /* Reasonable z-index instead of 9999 */
-  }
-
-  .species-input-container .dropdown-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 51;
-
-    /* Use viewport units to prevent cutoff on small screens */
-    max-width: 100vw;
-    box-shadow:
-      0 10px 15px -3px rgb(0 0 0 / 0.1),
-      0 4px 6px -2px rgb(0 0 0 / 0.05);
   }
 
   /* Ensure long species names don't break layout */

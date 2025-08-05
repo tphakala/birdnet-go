@@ -38,7 +38,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { navigationIcons } from '$lib/utils/icons';
+  import { navigationIcons, actionIcons } from '$lib/utils/icons';
 
   const logger = loggers.settings;
 
@@ -402,12 +402,13 @@
             <span class="text-sm">{species}</span>
             <button
               type="button"
-              class="btn btn-ghost btn-xs"
+              class="btn btn-ghost btn-xs text-error"
               onclick={() => removeIncludeSpecies(species)}
               disabled={store.isLoading || store.isSaving}
               aria-label="Remove {species}"
+              title="Remove species"
             >
-              ✕
+              {@html actionIcons.delete}
             </button>
           </div>
         {/each}
@@ -448,12 +449,13 @@
             <span class="text-sm">{species}</span>
             <button
               type="button"
-              class="btn btn-ghost btn-xs"
+              class="btn btn-ghost btn-xs text-error"
               onclick={() => removeExcludeSpecies(species)}
               disabled={store.isLoading || store.isSaving}
               aria-label="Remove {species}"
+              title="Remove species"
             >
-              ✕
+              {@html actionIcons.delete}
             </button>
           </div>
         {/each}
@@ -495,14 +497,7 @@
             onclick={() => (showAddForm = true)}
             disabled={store.isLoading || store.isSaving}
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
+            {@html actionIcons.add}
             Add Configuration
           </button>
         {:else}
@@ -756,14 +751,7 @@
                 title="Edit configuration"
                 aria-label="Edit {species} configuration"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
+                {@html actionIcons.edit}
               </button>
 
               <button
@@ -772,14 +760,7 @@
                 title="Remove configuration"
                 aria-label="Remove {species} configuration"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                {@html actionIcons.delete}
               </button>
             </div>
           </div>
