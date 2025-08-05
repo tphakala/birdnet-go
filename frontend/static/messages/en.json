@@ -670,6 +670,7 @@
     "loading": "Loading settings...",
     "sections": {
       "node": "Main Settings",
+      "userinterface": "User Interface",
       "audio": "Audio Settings",
       "filters": "Detection Filters",
       "integration": "Integrations",
@@ -824,20 +825,42 @@
         "userInterface": {
           "title": "User Interface Settings",
           "description": "Customize user interface",
+          "interface": {
+            "title": "Interface Settings",
+            "description": "Choose your preferred language and interface version",
+            "locale": {
+              "label": "Display Language",
+              "helpText": "Select the language for the user interface"
+            },
+            "newUI": {
+              "label": "Use Modern Interface",
+              "helpText": "Enable the new Svelte-based interface with improved performance and features. When disabled, uses the classic HTMX interface."
+            }
+          },
           "language": {
             "title": "Language",
+            "description": "Configure the display language for the user interface",
             "locale": {
               "label": "Interface Language",
               "helpText": "Select the language for the user interface"
             }
           },
           "dashboard": {
-            "title": "Dashboard",
+            "title": "Dashboard Display",
+            "description": "Configure how detections are displayed on the dashboard",
+            "general": {
+              "title": "General Settings"
+            },
             "summaryLimit": {
               "label": "Max Number of Species on Daily Summary Table",
               "helpText": "Max number of species shown in the daily summary table (Value between 10 and 1000)"
             },
+            "newUI": {
+              "label": "Use New User Interface",
+              "helpText": "Enable redirect from old HTMX UI to new Svelte UI"
+            },
             "thumbnails": {
+              "title": "Thumbnail Display",
               "summary": {
                 "label": "Show Thumbnails on Daily Summary table",
                 "helpText": "Enable to show thumbnails of detected species on the daily summary table"

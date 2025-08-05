@@ -34,7 +34,6 @@
     settingsActions,
     mainSettings,
     birdnetSettings,
-    dashboardSettings,
     dynamicThresholdSettings,
     outputSettings,
   } from '$lib/stores/settings';
@@ -44,8 +43,7 @@
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
-  import { t, getLocale } from '$lib/i18n';
-  import { LOCALES } from '$lib/i18n/config';
+  import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import {
     MAP_CONFIG,
@@ -95,18 +93,6 @@
         port: '3306',
       },
     },
-    dashboard: {
-      ...($dashboardSettings || {
-        thumbnails: {
-          summary: true,
-          recent: true,
-          imageProvider: 'wikimedia',
-          fallbackPolicy: 'all',
-        },
-        summaryLimit: 100,
-      }),
-      locale: $dashboardSettings?.locale || (getLocale() as string),
-    },
   });
 
   let store = $derived($settingsStore);
@@ -143,13 +129,6 @@
     hasSettingsChanged((store.originalData as any)?.output, (store.formData as any)?.output)
   );
 
-  let dashboardSettingsHasChanges = $derived(
-    hasSettingsChanged(
-      (store.originalData as any)?.realtime?.dashboard,
-      (store.formData as any)?.realtime?.dashboard
-    )
-  );
-
   // API State Management
   interface ApiState<T> {
     loading: boolean;
@@ -163,21 +142,6 @@
     error: null,
     data: [],
   });
-
-  // PERFORMANCE OPTIMIZATION: Static UI locales computed once
-  // These don't change during the session, so we compute them once
-  const uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
-    value: code,
-    label: `${info.flag} ${info.name}`,
-  }));
-
-  // Image provider options
-  let providerOptions = $state<ApiState<Array<{ value: string; label: string }>>>({
-    loading: true,
-    error: null,
-    data: [],
-  });
-  let multipleProvidersAvailable = $derived(providerOptions.data.length > 1);
 
   // Range filter state with proper structure
   let rangeFilterState = $state<{
@@ -432,7 +396,7 @@
 
   async function loadInitialData() {
     // Load all API data in parallel for better performance
-    await Promise.all([loadBirdnetLocales(), loadImageProviders(), loadRangeFilterCount()]);
+    await Promise.all([loadBirdnetLocales(), loadRangeFilterCount()]);
   }
 
   async function loadBirdnetLocales() {
@@ -454,32 +418,6 @@
       birdnetLocales.data = [{ value: 'en', label: 'English' }];
     } finally {
       birdnetLocales.loading = false;
-    }
-  }
-
-  async function loadImageProviders() {
-    providerOptions.loading = true;
-    providerOptions.error = null;
-
-    try {
-      const providersData = await api.get<{
-        providers?: Array<{ value: string; display: string }>;
-      }>('/api/v2/settings/imageproviders');
-
-      // Map v2 API response format to client format
-      providerOptions.data = (providersData?.providers || []).map((provider: any) => ({
-        value: provider.value,
-        label: provider.display,
-      }));
-    } catch (error) {
-      if (error instanceof ApiError) {
-        toastActions.warning(t('settings.main.errors.providersLoadFailed'));
-      }
-      providerOptions.error = t('settings.main.errors.providersLoadFailed');
-      // Fallback to basic provider so form still works
-      providerOptions.data = [{ value: 'wikipedia', label: 'Wikipedia' }];
-    } finally {
-      providerOptions.loading = false;
     }
   }
 
@@ -1114,27 +1052,6 @@
       mysql: { ...settings.output.mysql, enabled: type === 'mysql' },
     });
   }
-
-  function updateDashboardSetting(key: string, value: any) {
-    settingsActions.updateSection('realtime', {
-      dashboard: { ...settings.dashboard, [key]: value },
-    });
-  }
-
-  function updateThumbnailSetting(key: string, value: any) {
-    settingsActions.updateSection('realtime', {
-      dashboard: {
-        ...settings.dashboard,
-        thumbnails: { ...settings.dashboard.thumbnails, [key]: value },
-      },
-    });
-  }
-
-  function updateUILocale(locale: string) {
-    settingsActions.updateSection('realtime', {
-      dashboard: { ...settings.dashboard, locale },
-    });
-  }
 </script>
 
 <main class="space-y-4 settings-page-content" aria-label="Main settings configuration">
@@ -1516,8 +1433,9 @@
           bind:value={selectedDatabaseType}
           label={t('settings.main.sections.database.type.label')}
           options={[
-            { value: 'sqlite', label: t('settings.main.sections.database.type.options.sqlite') },
-            { value: 'mysql', label: t('settings.main.sections.database.type.options.mysql') },
+            // Database names are technical terms that don't need translation
+            { value: 'sqlite', label: 'SQLite' },
+            { value: 'mysql', label: 'MySQL' },
           ]}
           helpText={t('settings.main.sections.database.type.helpText')}
           disabled={store.isLoading || store.isSaving}
@@ -1602,120 +1520,6 @@
           </div>
         </div>
       {/if}
-    </div>
-  </SettingsSection>
-
-  <!-- User Interface Settings Section -->
-  <SettingsSection
-    title={t('settings.main.sections.userInterface.title')}
-    description={t('settings.main.sections.userInterface.description')}
-    defaultOpen={true}
-    hasChanges={dashboardSettingsHasChanges}
-  >
-    <div class="space-y-6">
-      <div>
-        <h4 class="text-lg font-medium pb-2">
-          {t('settings.main.sections.userInterface.language.title')}
-        </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
-          <SelectField
-            id="ui-locale"
-            value={settings.dashboard.locale}
-            label={t('settings.main.sections.userInterface.language.locale.label')}
-            options={uiLocales}
-            helpText={t('settings.main.sections.userInterface.language.locale.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateUILocale}
-          />
-        </div>
-      </div>
-
-      <div>
-        <h4 class="text-lg font-medium pb-2 mt-6">
-          {t('settings.main.sections.userInterface.dashboard.title')}
-        </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <NumberField
-            label={t('settings.main.sections.userInterface.dashboard.summaryLimit.label')}
-            value={settings.dashboard.summaryLimit}
-            onUpdate={value => updateDashboardSetting('summaryLimit', value)}
-            min={10}
-            max={1000}
-            helpText={t('settings.main.sections.userInterface.dashboard.summaryLimit.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-
-        <div class="mt-4">
-          <Checkbox
-            checked={settings.dashboard.thumbnails.summary}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('summary', value)}
-          />
-
-          <Checkbox
-            checked={settings.dashboard.thumbnails.recent}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('recent', value)}
-          />
-
-          <div class:opacity-50={!multipleProvidersAvailable}>
-            <SelectField
-              id="image-provider"
-              value={settings.dashboard.thumbnails.imageProvider}
-              label={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
-              )}
-              options={providerOptions.data}
-              helpText={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
-              )}
-              disabled={store.isLoading ||
-                store.isSaving ||
-                !multipleProvidersAvailable ||
-                providerOptions.loading}
-              onchange={value => updateThumbnailSetting('imageProvider', value)}
-            />
-          </div>
-
-          {#if multipleProvidersAvailable}
-            <SelectField
-              id="fallback-policy"
-              value={settings.dashboard.thumbnails.fallbackPolicy}
-              label={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
-              )}
-              options={[
-                {
-                  value: 'all',
-                  label: t(
-                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all'
-                  ),
-                },
-                {
-                  value: 'none',
-                  label: t(
-                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none'
-                  ),
-                },
-              ]}
-              helpText={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
-              )}
-              disabled={store.isLoading || store.isSaving}
-              onchange={value => updateThumbnailSetting('fallbackPolicy', value)}
-            />
-          {/if}
-        </div>
-      </div>
     </div>
   </SettingsSection>
 </main>

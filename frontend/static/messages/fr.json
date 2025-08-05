@@ -583,6 +583,7 @@
     "loading": "Chargement des paramètres...",
     "sections": {
       "node": "Paramètres principaux",
+      "userinterface": "Interface utilisateur",
       "audio": "Paramètres audio",
       "filters": "Filtres de détection",
       "integration": "Intégrations",
@@ -737,20 +738,42 @@
         "userInterface": {
           "title": "Paramètres de l'interface utilisateur",
           "description": "Personnaliser l'interface utilisateur",
+          "interface": {
+            "title": "Paramètres d'interface",
+            "description": "Choisissez votre langue et version d'interface préférées",
+            "locale": {
+              "label": "Langue d'affichage",
+              "helpText": "Sélectionnez la langue de l'interface utilisateur"
+            },
+            "newUI": {
+              "label": "Utiliser l'interface moderne",
+              "helpText": "Active la nouvelle interface basée sur Svelte avec des performances et des fonctionnalités améliorées. Lorsque désactivée, utilise l'interface HTMX classique."
+            }
+          },
           "language": {
             "title": "Langue",
+            "description": "Configurer la langue d'affichage de l'interface utilisateur",
             "locale": {
               "label": "Langue de l'interface",
               "helpText": "Sélectionnez la langue de l'interface utilisateur"
             }
           },
           "dashboard": {
-            "title": "Tableau de bord",
+            "title": "Affichage du tableau de bord",
+            "description": "Configurez l'affichage des détections sur le tableau de bord",
+            "general": {
+              "title": "Paramètres généraux"
+            },
             "summaryLimit": {
               "label": "Nombre maximum d'espèces dans le tableau de résumé quotidien",
               "helpText": "Nombre maximum d'espèces affichées dans le tableau de résumé quotidien (valeur entre 10 et 1000)"
             },
+            "newUI": {
+              "label": "Utiliser la nouvelle interface utilisateur",
+              "helpText": "Activer la redirection de l'ancienne interface HTMX vers la nouvelle interface Svelte"
+            },
             "thumbnails": {
+              "title": "Affichage des vignettes",
               "summary": {
                 "label": "Afficher les miniatures dans le tableau de résumé quotidien",
                 "helpText": "Activer pour afficher les miniatures des espèces détectées dans le tableau de résumé quotidien"

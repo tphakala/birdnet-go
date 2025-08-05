@@ -581,6 +581,7 @@
     "loading": "Ladataan asetuksia...",
     "sections": {
       "node": "Pääasetukset",
+      "userinterface": "Käyttöliittymä",
       "audio": "Ääniasetukset",
       "filters": "Tunnistussuodattimet",
       "integration": "Integraatiot",
@@ -735,20 +736,42 @@
         "userInterface": {
           "title": "Käyttöliittymäasetukset",
           "description": "Mukauta käyttöliittymää",
+          "interface": {
+            "title": "Käyttöliittymän asetukset",
+            "description": "Valitse haluamasi kieli ja käyttöliittymäversio",
+            "locale": {
+              "label": "Näyttökieli",
+              "helpText": "Valitse käyttöliittymän kieli"
+            },
+            "newUI": {
+              "label": "Käytä modernia käyttöliittymää",
+              "helpText": "Ottaa käyttöön uuden Svelte-pohjaisen käyttöliittymän, jossa on parempi suorituskyky ja ominaisuudet. Kun poistettu käytöstä, käytetään klassista HTMX-käyttöliittymää."
+            }
+          },
           "language": {
             "title": "Kieli",
+            "description": "Määritä käyttöliittymän näyttökieli",
             "locale": {
               "label": "Käyttöliittymän kieli",
               "helpText": "Valitse käyttöliittymän kieli"
             }
           },
           "dashboard": {
-            "title": "Kojelauta",
+            "title": "Kojelaudan näyttö",
+            "description": "Määritä, miten havainnot näytetään kojelaudalla",
+            "general": {
+              "title": "Yleiset asetukset"
+            },
             "summaryLimit": {
               "label": "Lajien enimmäismäärä päivittäisessä yhteenvetotaulukossa",
               "helpText": "Päivittäisessä yhteenvetotaulukossa näytettävien lajien enimmäismäärä (arvo välillä 10-1000)"
             },
+            "newUI": {
+              "label": "Käytä uutta käyttöliittymää",
+              "helpText": "Ota käyttöön uudelleenohjaus vanhasta HTMX-käyttöliittymästä uuteen Svelte-käyttöliittymään"
+            },
             "thumbnails": {
+              "title": "Pikkukuvien näyttö",
               "summary": {
                 "label": "Näytä pienoiskuvat päivittäisessä yhteenvetotaulukossa",
                 "helpText": "Ota käyttöön näyttääksesi havaittujen lajien pienoiskuvat päivittäisessä yhteenvetotaulukossa"
