@@ -404,13 +404,11 @@ describe('UserInterfaceSettingsPage', () => {
           .getByRole('heading', { name: 'Interface Settings' })
           .closest('[data-testid="settings-card"]');
         expect(interfaceSection).toBeInTheDocument();
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const interfaceChangeBadge = within(interfaceSection! as HTMLElement).queryByRole(
-          'status',
-          {
-            name: 'Settings changed',
-          }
-        );
+        const interfaceChangeBadge = interfaceSection
+          ? within(interfaceSection as HTMLElement).queryByRole('status', {
+              name: 'Settings changed',
+            })
+          : null;
         expect(interfaceChangeBadge).toBeInTheDocument();
 
         // Dashboard section should not show changes
@@ -418,13 +416,11 @@ describe('UserInterfaceSettingsPage', () => {
           .getByRole('heading', { name: 'Dashboard Display' })
           .closest('[data-testid="settings-card"]');
         expect(dashboardSection).toBeInTheDocument();
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const dashboardChangeBadge = within(dashboardSection! as HTMLElement).queryByRole(
-          'status',
-          {
-            name: 'Settings changed',
-          }
-        );
+        const dashboardChangeBadge = dashboardSection
+          ? within(dashboardSection as HTMLElement).queryByRole('status', {
+              name: 'Settings changed',
+            })
+          : null;
         expect(dashboardChangeBadge).not.toBeInTheDocument();
       });
     });
@@ -447,13 +443,11 @@ describe('UserInterfaceSettingsPage', () => {
           .getByRole('heading', { name: 'Interface Settings' })
           .closest('[data-testid="settings-card"]');
         expect(interfaceSection).toBeInTheDocument();
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const interfaceChangeBadge = within(interfaceSection! as HTMLElement).queryByRole(
-          'status',
-          {
-            name: 'Settings changed',
-          }
-        );
+        const interfaceChangeBadge = interfaceSection
+          ? within(interfaceSection as HTMLElement).queryByRole('status', {
+              name: 'Settings changed',
+            })
+          : null;
         expect(interfaceChangeBadge).not.toBeInTheDocument();
 
         // Dashboard section should show changes
@@ -461,13 +455,11 @@ describe('UserInterfaceSettingsPage', () => {
           .getByRole('heading', { name: 'Dashboard Display' })
           .closest('[data-testid="settings-card"]');
         expect(dashboardSection).toBeInTheDocument();
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const dashboardChangeBadge = within(dashboardSection! as HTMLElement).queryByRole(
-          'status',
-          {
-            name: 'Settings changed',
-          }
-        );
+        const dashboardChangeBadge = dashboardSection
+          ? within(dashboardSection as HTMLElement).queryByRole('status', {
+              name: 'Settings changed',
+            })
+          : null;
         expect(dashboardChangeBadge).toBeInTheDocument();
       });
     });
