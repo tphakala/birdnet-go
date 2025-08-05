@@ -156,10 +156,20 @@
     error = '';
     loadingState = 'password';
 
+    // If safeRedirectUrl already contains the base path, extract relative path to avoid duplication
+    let finalRedirectUrl = safeRedirectUrl;
+    if (safeRedirectUrl.startsWith(currentBasePath) && safeRedirectUrl !== currentBasePath) {
+      // Extract relative path: /ui/dashboard -> dashboard
+      finalRedirectUrl = safeRedirectUrl.substring(currentBasePath.length);
+      if (!finalRedirectUrl.startsWith('/')) {
+        finalRedirectUrl = '/' + finalRedirectUrl;
+      }
+    }
+
     const loginPayload = {
       username: 'birdnet-client', // Must match Security.BasicAuth.ClientID in config
       password: trimmedPassword, // Use the already trimmed password
-      redirectUrl: safeRedirectUrl, // Pass the intended redirect URL
+      redirectUrl: finalRedirectUrl, // Pass the relative redirect URL to avoid duplication
       basePath: currentBasePath, // Send the detected base path
     };
 
