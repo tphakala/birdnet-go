@@ -330,6 +330,425 @@ describe('SpeciesInput', () => {
     expect(screen.queryByText('American Robin')).not.toBeInTheDocument();
   });
 
+  describe('Portal Dropdown Positioning', () => {
+    it('creates portal dropdown attached to document.body', async () => {
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      // Focus input to trigger predictions
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+
+      // Wait for portal dropdown to be created
+      await waitFor(() => {
+        const portals = document.body.querySelectorAll('[id^="species-predictions-"]');
+        expect(portals.length).toBeGreaterThan(0);
+      });
+
+      // Verify portal is attached to body
+      const portal = document.body.querySelector('[id^="species-predictions-"]');
+      expect(portal?.parentElement).toBe(document.body);
+    });
+
+    it('positions dropdown below input when space is available', async () => {
+      // Mock getBoundingClientRect for input element
+      const mockRect = {
+        top: 100,
+        bottom: 130,
+        left: 50,
+        right: 350,
+        width: 300,
+        height: 30,
+      };
+
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox') as HTMLInputElement;
+      input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
+
+      await fireEvent.focus(input);
+
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]') as HTMLElement;
+        expect(portal).toBeTruthy();
+        // Check position is below input
+        expect(portal.classList.contains('dropdown-below')).toBe(true);
+      });
+    });
+
+    it('positions dropdown above input when no space below', async () => {
+      // Mock viewport height and input position near bottom
+      Object.defineProperty(window, 'innerHeight', {
+        value: 200,
+        writable: true,
+      });
+
+      const mockRect = {
+        top: 150,
+        bottom: 180,
+        left: 50,
+        right: 350,
+        width: 300,
+        height: 30,
+      };
+
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox') as HTMLInputElement;
+      input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
+
+      await fireEvent.focus(input);
+
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]') as HTMLElement;
+        expect(portal).toBeTruthy();
+        // Check position is above input
+        expect(portal.classList.contains('dropdown-above')).toBe(true);
+      });
+    });
+
+    it('adjusts horizontal position when dropdown would overflow viewport', async () => {
+      // Mock viewport width
+      Object.defineProperty(window, 'innerWidth', {
+        value: 400,
+        writable: true,
+      });
+
+      // Position input near right edge
+      const mockRect = {
+        top: 100,
+        bottom: 130,
+        left: 350,
+        right: 650, // Would overflow
+        width: 300,
+        height: 30,
+      };
+
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox') as HTMLInputElement;
+      input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
+
+      await fireEvent.focus(input);
+
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]') as HTMLElement;
+        expect(portal).toBeTruthy();
+        // Portal should be repositioned to fit within viewport
+        const leftPos = parseInt(portal.style.left);
+        expect(leftPos).toBeLessThan(350); // Adjusted left position
+      });
+    });
+
+    it('updates position on scroll', async () => {
+      const mockRect = {
+        top: 100,
+        bottom: 130,
+        left: 50,
+        right: 350,
+        width: 300,
+        height: 30,
+      };
+
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox') as HTMLInputElement;
+      input.getBoundingClientRect = vi.fn().mockReturnValue(mockRect);
+
+      await fireEvent.focus(input);
+
+      // Simulate scroll
+      const newRect = { ...mockRect, top: 50, bottom: 80 };
+      input.getBoundingClientRect = vi.fn().mockReturnValue(newRect);
+
+      await fireEvent.scroll(window);
+
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]') as HTMLElement;
+        expect(portal).toBeTruthy();
+        // Position should be updated
+        const topPos = parseInt(portal.style.top);
+        expect(topPos).toBeLessThan(100); // New position after scroll
+      });
+    });
+
+    it('cleans up portal on unmount', async () => {
+      const { unmount } = render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+
+      // Verify portal exists
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]');
+        expect(portal).toBeTruthy();
+      });
+
+      // Unmount component
+      unmount();
+
+      // Verify portal is removed
+      const portal = document.body.querySelector('[id^="species-predictions-"]');
+      expect(portal).toBeFalsy();
+    });
+  });
+
+  describe('Multiple Instances', () => {
+    it('creates unique IDs for multiple instances', async () => {
+      // Render first instance
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      // Render second instance
+      render(SpeciesInput, {
+        props: {
+          value: 'jay',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      // Focus both inputs
+      const inputs = screen.getAllByRole('combobox');
+      await fireEvent.focus(inputs[0]);
+      await fireEvent.focus(inputs[1]);
+
+      // Wait for portals
+      await waitFor(() => {
+        const portals = document.body.querySelectorAll('[id^="species-predictions-"]');
+        expect(portals.length).toBe(2);
+
+        // Verify unique IDs
+        const ids = Array.from(portals).map(p => p.id);
+        expect(new Set(ids).size).toBe(2); // All IDs are unique
+      });
+    });
+
+    it('handles interactions independently for multiple instances', async () => {
+      const onAdd1 = vi.fn();
+      const onAdd2 = vi.fn();
+
+      // Render two instances with different search terms
+      render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: onAdd1,
+        },
+      });
+
+      render(SpeciesInput, {
+        props: {
+          value: 'jay',
+          predictions: defaultPredictions,
+          onAdd: onAdd2,
+        },
+      });
+
+      const inputs = screen.getAllByRole('combobox');
+
+      // Interact with first instance
+      await fireEvent.focus(inputs[0]);
+
+      // Wait for portal to be created and populated
+      await waitFor(() => {
+        const portals = document.body.querySelectorAll('[id^="species-predictions-"]');
+        expect(portals.length).toBeGreaterThan(0);
+      });
+
+      // Click first prediction in first dropdown
+      const portals = document.body.querySelectorAll('[id^="species-predictions-"]');
+      const firstPortal = portals[0];
+      const button = firstPortal.querySelector('.species-prediction-item') as HTMLElement;
+
+      // Ensure button exists and has correct data
+      expect(button).toBeTruthy();
+      expect(button.textContent).toContain('Robin');
+
+      await fireEvent.click(button);
+
+      // Wait for the onAdd callback to be called
+      await waitFor(() => {
+        expect(onAdd1).toHaveBeenCalledWith('American Robin');
+      });
+
+      // Verify only first callback was called
+      expect(onAdd2).not.toHaveBeenCalled();
+    });
+
+    it('cleans up all portals when multiple instances unmount', async () => {
+      const { unmount: unmount1 } = render(SpeciesInput, {
+        props: {
+          value: 'rob',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const { unmount: unmount2 } = render(SpeciesInput, {
+        props: {
+          value: 'jay',
+          predictions: defaultPredictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      // Focus both inputs
+      const inputs = screen.getAllByRole('combobox');
+      await fireEvent.focus(inputs[0]);
+      await fireEvent.focus(inputs[1]);
+
+      // Verify both portals exist
+      await waitFor(() => {
+        const portals = document.body.querySelectorAll('[id^="species-predictions-"]');
+        expect(portals.length).toBe(2);
+      });
+
+      // Unmount both
+      unmount1();
+      unmount2();
+
+      // Verify all portals removed
+      const portals = document.body.querySelectorAll('[id^="species-predictions-"]');
+      expect(portals.length).toBe(0);
+    });
+  });
+
+  describe('DOM Element Reuse Optimization', () => {
+    it('reuses existing buttons when predictions change', async () => {
+      // Use search term that matches multiple predictions
+      let predictions = ['American Robin', 'American Goldfinch'];
+
+      const { rerender } = render(SpeciesInput, {
+        props: {
+          value: 'american', // Matches both predictions
+          predictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+
+      // Get initial buttons
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]');
+        const buttons = portal?.querySelectorAll('.species-prediction-item');
+        expect(buttons?.length).toBe(2);
+      });
+
+      // Track initial button elements
+      const portal = document.body.querySelector('[id^="species-predictions-"]');
+      const initialButtons = Array.from(portal?.querySelectorAll('.species-prediction-item') ?? []);
+
+      // Update predictions to add more matching items
+      predictions = ['American Robin', 'American Goldfinch', 'American Crow'];
+      await rerender({
+        value: 'american', // Still matches all predictions
+        predictions,
+        onAdd: vi.fn(),
+      });
+
+      // Check buttons after update
+      await waitFor(() => {
+        const updatedPortal = document.body.querySelector('[id^="species-predictions-"]');
+        const updatedButtons = Array.from(
+          updatedPortal?.querySelectorAll('.species-prediction-item') ?? []
+        );
+
+        // First two buttons should be the same elements (reused)
+        expect(updatedButtons[0]).toBe(initialButtons[0]);
+        expect(updatedButtons[1]).toBe(initialButtons[1]);
+
+        // Third button is new
+        expect(updatedButtons.length).toBe(3);
+      });
+    });
+
+    it('hides excess buttons when predictions decrease', async () => {
+      // Use predictions that all contain 'bird' to match the filter
+      let predictions = ['Mockingbird', 'Blackbird', 'Bluebird'];
+
+      const { rerender } = render(SpeciesInput, {
+        props: {
+          value: 'bird', // Matches all three predictions
+          predictions,
+          onAdd: vi.fn(),
+        },
+      });
+
+      const input = screen.getByRole('combobox');
+      await fireEvent.focus(input);
+
+      // Verify initial count
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]');
+        const buttons = portal?.querySelectorAll('.species-prediction-item');
+        expect(buttons?.length).toBe(3);
+      });
+
+      // Reduce predictions but keep one that matches
+      predictions = ['Mockingbird'];
+      await rerender({
+        value: 'bird', // Still matches the remaining prediction
+        predictions,
+        onAdd: vi.fn(),
+      });
+
+      // Check visible buttons
+      await waitFor(() => {
+        const portal = document.body.querySelector('[id^="species-predictions-"]');
+        const allButtons = portal?.querySelectorAll('.species-prediction-item');
+        const visibleButtons = Array.from(allButtons ?? []).filter(
+          btn => (btn as HTMLElement).style.display !== 'none'
+        );
+
+        expect(visibleButtons.length).toBe(1);
+        expect(allButtons?.length).toBe(3); // All buttons still exist but hidden
+      });
+    });
+  });
+
   it('applies size classes correctly', () => {
     render(SpeciesInput, {
       props: {

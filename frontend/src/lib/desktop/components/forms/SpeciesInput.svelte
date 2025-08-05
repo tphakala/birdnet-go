@@ -25,6 +25,7 @@
   import { cn } from '$lib/utils/cn.js';
   import { actionIcons } from '$lib/utils/icons';
   import { safeGet } from '$lib/utils/security';
+  import { Z_INDEX } from '$lib/utils/z-index';
 
   interface Props {
     value?: string;
@@ -78,6 +79,20 @@
   let showTooltip = $state(false);
   let touched = $state(false);
   let inputElement: HTMLInputElement;
+  let portalDropdown: HTMLDivElement | null = null;
+
+  // Generate unique ID for this instance using timestamp and counter
+  // This ensures no collisions even with multiple instances created simultaneously
+  let idCounter = 0;
+  if (typeof window !== 'undefined') {
+    // Use a type assertion for the counter property
+    const win = window as Window & { __speciesInputCounter?: number };
+    if (!win.__speciesInputCounter) {
+      win.__speciesInputCounter = 0;
+    }
+    idCounter = ++win.__speciesInputCounter;
+  }
+  const instanceId = `species-predictions-${Date.now()}-${idCounter}`;
 
   // Auto-derive button size from input size if not specified
   let effectiveButtonSize = $derived(buttonSize || size);
@@ -115,10 +130,180 @@
       : []
   );
 
-  // Update predictions visibility
+  // Update predictions visibility and manage portal dropdown
   $effect(() => {
-    showPredictions = filteredPredictions.length > 0;
+    const shouldShow = filteredPredictions.length > 0;
+
+    if (shouldShow && !portalDropdown && inputElement) {
+      createPortalDropdown();
+    } else if (!shouldShow && portalDropdown) {
+      destroyPortalDropdown();
+    }
+
+    if (shouldShow && portalDropdown) {
+      updatePortalDropdown();
+    }
+
+    showPredictions = shouldShow;
   });
+
+  // Event delegation handlers
+  function handlePortalClick(event: MouseEvent) {
+    const button = (event.target as HTMLElement).closest('.species-prediction-item');
+    if (button) {
+      const prediction = button.getAttribute('data-prediction');
+      if (prediction) {
+        selectPrediction(prediction);
+      }
+    }
+  }
+
+  function handlePortalKeydown(event: KeyboardEvent) {
+    const button = (event.target as HTMLElement).closest('.species-prediction-item');
+    if (button) {
+      const prediction = button.getAttribute('data-prediction');
+      const index = parseInt(button.getAttribute('data-index') || '0', 10);
+      if (prediction !== null) {
+        handlePredictionKeydown(event, prediction, index);
+      }
+    }
+  }
+
+  // Create dropdown element attached to document.body
+  function createPortalDropdown() {
+    if (!inputElement || portalDropdown) return;
+
+    portalDropdown = document.createElement('div');
+    portalDropdown.id = instanceId;
+    portalDropdown.className =
+      'bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto';
+    portalDropdown.style.position = 'absolute';
+    portalDropdown.style.zIndex = Z_INDEX.PORTAL_DROPDOWN.toString();
+    portalDropdown.setAttribute('role', 'listbox');
+    portalDropdown.setAttribute('aria-label', 'Species suggestions');
+
+    // Event delegation to prevent memory leaks
+    portalDropdown.addEventListener('click', handlePortalClick);
+    portalDropdown.addEventListener('keydown', handlePortalKeydown);
+
+    document.body.appendChild(portalDropdown);
+    updatePortalPosition();
+  }
+
+  // Update portal dropdown content and position
+  function updatePortalDropdown() {
+    if (!portalDropdown) return;
+
+    // Optimize by reusing existing elements
+    const existingButtons = portalDropdown.querySelectorAll('.species-prediction-item');
+    const predictionsCount = filteredPredictions.length;
+    const existingCount = existingButtons.length;
+
+    // Update existing buttons
+    for (let i = 0; i < Math.min(predictionsCount, existingCount); i++) {
+      // eslint-disable-next-line security/detect-object-injection
+      const button = existingButtons[i] as HTMLButtonElement;
+      // eslint-disable-next-line security/detect-object-injection
+      button.textContent = filteredPredictions[i];
+      // eslint-disable-next-line security/detect-object-injection
+      button.setAttribute('data-prediction', filteredPredictions[i]);
+      button.setAttribute('data-index', i.toString());
+      button.style.display = 'block';
+    }
+
+    // Add new buttons if needed
+    if (predictionsCount > existingCount) {
+      for (let i = existingCount; i < predictionsCount; i++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className =
+          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm';
+        // eslint-disable-next-line security/detect-object-injection
+        button.textContent = filteredPredictions[i];
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', 'false');
+        button.setAttribute('tabindex', '-1');
+        // eslint-disable-next-line security/detect-object-injection
+        button.setAttribute('data-prediction', filteredPredictions[i]);
+        button.setAttribute('data-index', i.toString());
+        portalDropdown.appendChild(button);
+      }
+    }
+
+    // Hide excess buttons
+    if (existingCount > predictionsCount) {
+      for (let i = predictionsCount; i < existingCount; i++) {
+        // eslint-disable-next-line security/detect-object-injection
+        (existingButtons[i] as HTMLElement).style.display = 'none';
+      }
+    }
+
+    updatePortalPosition();
+  }
+
+  // Update portal dropdown position with smart positioning
+  function updatePortalPosition() {
+    if (!portalDropdown || !inputElement) return;
+
+    const rect = inputElement.getBoundingClientRect();
+    const dropdownHeight = Math.min(240, filteredPredictions.length * 40); // Estimate height
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Determine if we should position above or below
+    if (spaceBelow < dropdownHeight + 8 && spaceAbove > spaceBelow) {
+      // Position above the input
+      // Position from top, but calculate to appear above the input
+      const topPosition = rect.top + window.scrollY - dropdownHeight - 4;
+      portalDropdown.style.top = `${topPosition}px`;
+      portalDropdown.style.bottom = 'auto';
+      // Add class for styling (shadow direction, etc.)
+      portalDropdown.classList.add('dropdown-above');
+      portalDropdown.classList.remove('dropdown-below');
+    } else {
+      // Position below the input (default)
+      portalDropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+      portalDropdown.style.bottom = 'auto';
+      portalDropdown.classList.add('dropdown-below');
+      portalDropdown.classList.remove('dropdown-above');
+    }
+
+    // Horizontal viewport boundary detection
+    let leftPosition = rect.left + window.scrollX;
+    const dropdownWidth = rect.width;
+    const viewportWidth = window.innerWidth;
+
+    // Check if dropdown would go off-screen on the right
+    if (rect.left + dropdownWidth > viewportWidth) {
+      // Align dropdown to right edge of viewport with small margin
+      leftPosition = viewportWidth - dropdownWidth - 8 + window.scrollX;
+    }
+
+    // Check if dropdown would go off-screen on the left
+    if (rect.left < 0) {
+      // Align dropdown to left edge of viewport with small margin
+      leftPosition = 8 + window.scrollX;
+    }
+
+    portalDropdown.style.left = `${leftPosition}px`;
+    portalDropdown.style.width = `${dropdownWidth}px`;
+  }
+
+  // Clean up portal dropdown
+  function destroyPortalDropdown() {
+    if (portalDropdown) {
+      // Remove event listeners to prevent memory leaks
+      portalDropdown.removeEventListener('click', handlePortalClick);
+      portalDropdown.removeEventListener('keydown', handlePortalKeydown);
+
+      // Check if element is actually in the DOM before removing
+      if (portalDropdown.parentNode === document.body) {
+        document.body.removeChild(portalDropdown);
+      }
+      portalDropdown = null;
+    }
+  }
 
   function handleInput(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -142,11 +327,15 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      // Immediately destroy portal dropdown for testing consistency
+      destroyPortalDropdown();
       inputElement?.blur();
-    } else if (event.key === 'ArrowDown' && showPredictions) {
+    } else if (event.key === 'ArrowDown' && showPredictions && portalDropdown) {
       event.preventDefault();
-      // Focus first prediction
-      const firstPrediction = document.querySelector('.species-prediction-item') as HTMLElement;
+      // Focus first prediction in portal dropdown
+      const firstPrediction = portalDropdown.querySelector(
+        '.species-prediction-item'
+      ) as HTMLElement;
       firstPrediction?.focus();
     }
   }
@@ -180,23 +369,25 @@
       selectPrediction(prediction);
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
-      const nextItem = document.querySelectorAll('.species-prediction-item')[
-        index + 1
-      ] as HTMLElement;
-      nextItem?.focus();
+      if (portalDropdown) {
+        const items = portalDropdown.querySelectorAll('.species-prediction-item');
+        const nextItem = items[index + 1] as HTMLElement;
+        nextItem?.focus();
+      }
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       if (index === 0) {
         inputElement?.focus();
-      } else {
-        const prevItem = document.querySelectorAll('.species-prediction-item')[
-          index - 1
-        ] as HTMLElement;
+      } else if (portalDropdown) {
+        const items = portalDropdown.querySelectorAll('.species-prediction-item');
+        const prevItem = items[index - 1] as HTMLElement;
         prevItem?.focus();
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
       showPredictions = false;
+      // Immediately destroy portal dropdown for testing consistency
+      destroyPortalDropdown();
       inputElement?.focus();
     }
   }
@@ -204,18 +395,25 @@
   // Close predictions when clicking/touching outside
   function handleDocumentClick(event: MouseEvent | TouchEvent) {
     const target = event.target as globalThis.Element;
-    if (!target.closest('.form-control')) {
+    if (!target.closest('.form-control') && !target.closest(`#${instanceId}`)) {
       showPredictions = false;
     }
   }
 
-  // Add document click and touch listeners for mobile support
+  // Add document click and touch listeners for mobile support, plus scroll/resize for positioning
   $effect(() => {
     document.addEventListener('click', handleDocumentClick);
     document.addEventListener('touchstart', handleDocumentClick);
+    window.addEventListener('scroll', updatePortalPosition, { passive: true });
+    window.addEventListener('resize', updatePortalPosition);
+
     return () => {
       document.removeEventListener('click', handleDocumentClick);
       document.removeEventListener('touchstart', handleDocumentClick);
+      window.removeEventListener('scroll', updatePortalPosition);
+      window.removeEventListener('resize', updatePortalPosition);
+      // Clean up any remaining portal dropdown
+      destroyPortalDropdown();
     };
   });
 </script>
@@ -269,13 +467,16 @@
         onfocus={() => {
           if (filteredPredictions.length > 0) {
             showPredictions = true;
+            if (portalDropdown) {
+              updatePortalPosition();
+            }
           }
         }}
         autocomplete="off"
         role="combobox"
         aria-expanded={showPredictions}
         aria-haspopup="listbox"
-        aria-controls="species-predictions-list"
+        aria-controls={instanceId}
         aria-label={label || placeholder}
       />
       <button
@@ -292,30 +493,7 @@
       </button>
     </div>
 
-    <!-- Predictions Dropdown - positioned relative to input container -->
-    {#if showPredictions && filteredPredictions.length > 0}
-      <div
-        id="species-predictions-list"
-        class="dropdown-menu bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto min-w-0"
-        style:min-width="100%"
-        role="listbox"
-        aria-label="Species suggestions"
-      >
-        {#each filteredPredictions as prediction, index}
-          <button
-            type="button"
-            class="species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm"
-            onclick={() => selectPrediction(prediction)}
-            onkeydown={e => handlePredictionKeydown(e, prediction, index)}
-            role="option"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            {prediction}
-          </button>
-        {/each}
-      </div>
-    {/if}
+    <!-- Predictions Dropdown is now rendered as a portal to document.body via JavaScript -->
   </div>
 
   <!-- Validation Message -->
@@ -335,12 +513,22 @@
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      style:z-index={Z_INDEX.PORTAL_TOOLTIP}
       role="tooltip"
     >
       {tooltip}
     </div>
   {/if}
+
+  <!-- Screen reader announcement for dropdown state changes -->
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+    {#if showPredictions && filteredPredictions.length > 0}
+      {filteredPredictions.length} species suggestions available. Use arrow keys to navigate.
+    {:else if showPredictions && filteredPredictions.length === 0}
+      No species suggestions available.
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -351,24 +539,9 @@
     outline-offset: -2px;
   }
 
-  /* Ensure the dropdown doesn't get cut off - use specific class instead of global overrides */
+  /* Container positioning - portal dropdown is rendered to document.body */
   .species-input-container {
     position: relative;
-    z-index: 50; /* Reasonable z-index instead of 9999 */
-  }
-
-  .species-input-container .dropdown-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 51;
-
-    /* Use viewport units to prevent cutoff on small screens */
-    max-width: 100vw;
-    box-shadow:
-      0 10px 15px -3px rgb(0 0 0 / 0.1),
-      0 4px 6px -2px rgb(0 0 0 / 0.05);
   }
 
   /* Ensure long species names don't break layout */
@@ -376,5 +549,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Dropdown positioning classes for portal */
+  :global(.dropdown-above) {
+    /* Shadow pointing down when dropdown is above */
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  :global(.dropdown-below) {
+    /* Shadow pointing up when dropdown is below (default) */
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.1),
+      0 4px 6px -2px rgb(0 0 0 / 0.05);
   }
 </style>
