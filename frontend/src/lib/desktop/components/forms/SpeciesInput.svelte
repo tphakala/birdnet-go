@@ -136,6 +136,28 @@
     showPredictions = shouldShow;
   });
 
+  // Event delegation handlers
+  function handlePortalClick(event: MouseEvent) {
+    const button = (event.target as HTMLElement).closest('.species-prediction-item');
+    if (button) {
+      const prediction = button.getAttribute('data-prediction');
+      if (prediction) {
+        selectPrediction(prediction);
+      }
+    }
+  }
+
+  function handlePortalKeydown(event: KeyboardEvent) {
+    const button = (event.target as HTMLElement).closest('.species-prediction-item');
+    if (button) {
+      const prediction = button.getAttribute('data-prediction');
+      const index = parseInt(button.getAttribute('data-index') || '0', 10);
+      if (prediction !== null) {
+        handlePredictionKeydown(event, prediction, index);
+      }
+    }
+  }
+
   // Create dropdown element attached to document.body
   function createPortalDropdown() {
     if (!inputElement || portalDropdown) return;
@@ -145,9 +167,13 @@
     portalDropdown.className =
       'bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto';
     portalDropdown.style.position = 'absolute';
-    portalDropdown.style.zIndex = '10001';
+    portalDropdown.style.zIndex = '1000'; // Consistent with app-wide dropdown z-index scale
     portalDropdown.setAttribute('role', 'listbox');
     portalDropdown.setAttribute('aria-label', 'Species suggestions');
+
+    // Event delegation to prevent memory leaks
+    portalDropdown.addEventListener('click', handlePortalClick);
+    portalDropdown.addEventListener('keydown', handlePortalKeydown);
 
     document.body.appendChild(portalDropdown);
     updatePortalPosition();
@@ -168,9 +194,8 @@
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', 'false');
       button.setAttribute('tabindex', '-1');
-
-      button.onclick = () => selectPrediction(prediction);
-      button.onkeydown = e => handlePredictionKeydown(e, prediction, index);
+      button.setAttribute('data-prediction', prediction);
+      button.setAttribute('data-index', index.toString());
 
       portalDropdown!.appendChild(button);
     });
@@ -213,7 +238,14 @@
   // Clean up portal dropdown
   function destroyPortalDropdown() {
     if (portalDropdown) {
-      document.body.removeChild(portalDropdown);
+      // Remove event listeners to prevent memory leaks
+      portalDropdown.removeEventListener('click', handlePortalClick);
+      portalDropdown.removeEventListener('keydown', handlePortalKeydown);
+
+      // Check if element is actually in the DOM before removing
+      if (portalDropdown.parentNode === document.body) {
+        document.body.removeChild(portalDropdown);
+      }
       portalDropdown = null;
     }
   }
@@ -426,7 +458,7 @@
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute !z-[10002] p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute z-[1001] p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
       role="tooltip"
     >
       {tooltip}

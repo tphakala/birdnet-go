@@ -39,6 +39,7 @@
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
   import { navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { toastActions } from '$lib/stores/toast';
 
   const logger = loggers.settings;
 
@@ -348,6 +349,14 @@
     let updatedConfig = { ...settings.config };
 
     if (editingSpecies && editingSpecies !== species) {
+      // Check if new species name already exists
+      if (species in updatedConfig) {
+        // Prevent overwriting existing configuration
+        toastActions.error(
+          `Species "${species}" already has a configuration. Please choose a different name.`
+        );
+        return;
+      }
       // Rename: delete old entry and create new
       // eslint-disable-next-line security/detect-object-injection
       delete updatedConfig[editingSpecies];
