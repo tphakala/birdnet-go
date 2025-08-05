@@ -112,7 +112,6 @@ export interface AudioSettings {
   soundLevel: SoundLevelSettings;
   useAudioCore?: boolean;
   equalizer: EqualizerSettings;
-  retention?: RetentionSettings;
 }
 
 export interface SoundLevelSettings {
@@ -155,6 +154,7 @@ export interface ExportSettings {
   enabled: boolean;
   debug: boolean;
   path: string;
+  retention: RetentionSettings;
 }
 
 export interface RetentionSettings {
@@ -482,13 +482,13 @@ function createEmptySettings(): SettingsFormData {
           enabled: false,
           debug: false,
           path: 'clips/',
-        },
-        retention: {
-          policy: 'none',
-          maxAge: '7d',
-          maxUsage: '80%',
-          minClips: 10,
-          keepSpectrograms: false,
+          retention: {
+            policy: 'none',
+            maxAge: '7d',
+            maxUsage: '80%',
+            minClips: 10,
+            keepSpectrograms: false,
+          },
         },
         soundLevel: {
           enabled: false,

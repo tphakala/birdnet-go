@@ -828,10 +828,10 @@
       {/if}
 
       <Checkbox
-        bind:checked={settings.birdweather!.enabled}
+        checked={settings.birdweather!.enabled}
         label={t('settings.integration.birdweather.enable')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateBirdWeatherEnabled(settings.birdweather!.enabled)}
+        onchange={updateBirdWeatherEnabled}
       />
 
       {#if settings.birdweather?.enabled}
@@ -910,17 +910,17 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.mqtt!.enabled}
+        checked={settings.mqtt!.enabled}
         label={t('settings.integration.mqtt.enable')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateMQTTEnabled(settings.mqtt!.enabled)}
+        onchange={updateMQTTEnabled}
       />
 
       {#if settings.mqtt?.enabled}
         <div class="space-y-4">
           <TextInput
             id="mqtt-broker"
-            bind:value={settings.mqtt!.broker}
+            value={settings.mqtt!.broker}
             label={t('settings.integration.mqtt.broker.label')}
             placeholder={t('settings.integration.mqtt.broker.placeholder')}
             disabled={store.isLoading || store.isSaving}
@@ -929,7 +929,7 @@
 
           <TextInput
             id="mqtt-topic"
-            bind:value={settings.mqtt!.topic}
+            value={settings.mqtt!.topic}
             label={t('settings.integration.mqtt.topic.label')}
             placeholder={t('settings.integration.mqtt.topic.placeholder')}
             disabled={store.isLoading || store.isSaving}
@@ -989,18 +989,18 @@
             <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
 
             <Checkbox
-              bind:checked={settings.mqtt!.tls.enabled}
+              checked={settings.mqtt!.tls.enabled}
               label={t('settings.integration.mqtt.tls.enable')}
               disabled={store.isLoading || store.isSaving}
-              onchange={() => updateMQTTTLSEnabled(settings.mqtt!.tls.enabled)}
+              onchange={updateMQTTTLSEnabled}
             />
 
             {#if settings.mqtt?.tls.enabled}
               <Checkbox
-                bind:checked={settings.mqtt!.tls.skipVerify}
+                checked={settings.mqtt!.tls.skipVerify}
                 label={t('settings.integration.mqtt.tls.skipVerify')}
                 disabled={store.isLoading || store.isSaving}
-                onchange={() => updateMQTTTLSSkipVerify(settings.mqtt!.tls.skipVerify)}
+                onchange={updateMQTTTLSSkipVerify}
               />
 
               <div class="alert alert-info">
@@ -1062,10 +1062,10 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.observability!.prometheus.enabled}
+        checked={settings.observability!.prometheus.enabled}
         label={t('settings.integration.observability.enable')}
         disabled={store.isLoading || store.isSaving}
-        onchange={() => updateObservabilityEnabled(settings.observability!.prometheus.enabled)}
+        onchange={updateObservabilityEnabled}
       />
 
       {#if settings.observability?.prometheus.enabled}
@@ -1093,7 +1093,7 @@
     <div class="space-y-4">
       <SelectField
         id="weather-provider"
-        bind:value={settings.weather!.provider}
+        value={settings.weather!.provider}
         label={t('settings.integration.weather.provider.label')}
         options={[
           { value: 'none', label: t('settings.integration.weather.provider.options.none') },
