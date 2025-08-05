@@ -80,6 +80,9 @@
   let inputElement: HTMLInputElement;
   let portalDropdown: HTMLDivElement | null = null;
 
+  // Generate unique ID for this instance to avoid conflicts
+  const instanceId = `species-predictions-${Math.random().toString(36).substring(2, 9)}`;
+
   // Auto-derive button size from input size if not specified
   let effectiveButtonSize = $derived(buttonSize || size);
 
@@ -138,7 +141,7 @@
     if (!inputElement || portalDropdown) return;
 
     portalDropdown = document.createElement('div');
-    portalDropdown.id = 'species-predictions-list';
+    portalDropdown.id = instanceId;
     portalDropdown.className =
       'bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto';
     portalDropdown.style.position = 'absolute';
@@ -175,12 +178,34 @@
     updatePortalPosition();
   }
 
-  // Update portal dropdown position
+  // Update portal dropdown position with smart positioning
   function updatePortalPosition() {
     if (!portalDropdown || !inputElement) return;
 
     const rect = inputElement.getBoundingClientRect();
-    portalDropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+    const dropdownHeight = Math.min(240, filteredPredictions.length * 40); // Estimate height
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Determine if we should position above or below
+    if (spaceBelow < dropdownHeight + 8 && spaceAbove > spaceBelow) {
+      // Position above the input
+      // Position from top, but calculate to appear above the input
+      const topPosition = rect.top + window.scrollY - dropdownHeight - 4;
+      portalDropdown.style.top = `${topPosition}px`;
+      portalDropdown.style.bottom = 'auto';
+      // Add class for styling (shadow direction, etc.)
+      portalDropdown.classList.add('dropdown-above');
+      portalDropdown.classList.remove('dropdown-below');
+    } else {
+      // Position below the input (default)
+      portalDropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+      portalDropdown.style.bottom = 'auto';
+      portalDropdown.classList.add('dropdown-below');
+      portalDropdown.classList.remove('dropdown-above');
+    }
+
     portalDropdown.style.left = `${rect.left + window.scrollX}px`;
     portalDropdown.style.width = `${rect.width}px`;
   }
@@ -283,7 +308,7 @@
   // Close predictions when clicking/touching outside
   function handleDocumentClick(event: MouseEvent | TouchEvent) {
     const target = event.target as globalThis.Element;
-    if (!target.closest('.form-control') && !target.closest('#species-predictions-list')) {
+    if (!target.closest('.form-control') && !target.closest(`#${instanceId}`)) {
       showPredictions = false;
     }
   }
@@ -364,7 +389,7 @@
         role="combobox"
         aria-expanded={showPredictions}
         aria-haspopup="listbox"
-        aria-controls="species-predictions-list"
+        aria-controls={instanceId}
         aria-label={label || placeholder}
       />
       <button
@@ -407,6 +432,15 @@
       {tooltip}
     </div>
   {/if}
+
+  <!-- Screen reader announcement for dropdown state changes -->
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+    {#if showPredictions && filteredPredictions.length > 0}
+      {filteredPredictions.length} species suggestions available. Use arrow keys to navigate.
+    {:else if showPredictions && filteredPredictions.length === 0}
+      No species suggestions available.
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -427,5 +461,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Dropdown positioning classes for portal */
+  :global(.dropdown-above) {
+    /* Shadow pointing down when dropdown is above */
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  :global(.dropdown-below) {
+    /* Shadow pointing up when dropdown is below (default) */
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.1),
+      0 4px 6px -2px rgb(0 0 0 / 0.05);
   }
 </style>
