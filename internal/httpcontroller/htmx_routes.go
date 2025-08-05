@@ -94,6 +94,7 @@ func (s *Server) initRoutes() {
 		"/ui/settings/security":         {Path: "/ui/settings/security", TemplateName: "svelte-standalone", Title: "Security Settings", Authorized: true},
 		"/ui/settings/species":          {Path: "/ui/settings/species", TemplateName: "svelte-standalone", Title: "Species Settings", Authorized: true},
 		"/ui/settings/support":          {Path: "/ui/settings/support", TemplateName: "svelte-standalone", Title: "Support", Authorized: true},
+		"/ui/settings/userinterface":    {Path: "/ui/settings/userinterface", TemplateName: "svelte-standalone", Title: "User Interface", Authorized: true},
 		// System route is protected by auth middleware
 		"/system": {Path: "/system", TemplateName: "system", Title: "System Dashboard", Authorized: true},
 		// Settings Routes are managed by settingsBase template

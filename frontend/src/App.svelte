@@ -75,6 +75,7 @@
 
   const settingsSubpages = {
     '/main': 'Main Settings',
+    '/userinterface': 'User Interface',
     '/audio': 'Audio Settings',
     '/detectionfilters': 'Detection Filters',
     '/integrations': 'Integrations',

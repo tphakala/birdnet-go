@@ -7,6 +7,7 @@
   // Change back to true to re-enable spinners for testing
   const ENABLE_LOADING_SPINNERS = false;
   import MainSettingsSection from '$lib/desktop/features/settings/pages/MainSettingsPage.svelte';
+  import UserInterfaceSettingsSection from '$lib/desktop/features/settings/pages/UserInterfaceSettingsPage.svelte';
   import AudioSettingsSection from '$lib/desktop/features/settings/pages/AudioSettingsPage.svelte';
   import FilterSettingsSection from '$lib/desktop/features/settings/pages/FilterSettingsPage.svelte';
   import IntegrationSettingsSection from '$lib/desktop/features/settings/pages/IntegrationSettingsPage.svelte';
@@ -28,6 +29,7 @@
     // Map URL paths to section names
     const sectionMap: Record<string, string> = {
       main: 'node',
+      userinterface: 'userinterface',
       audio: 'audio',
       detectionfilters: 'filters',
       integrations: 'integration',
@@ -103,6 +105,8 @@
     <div class="space-y-6">
       {#if currentSection === 'node'}
         <MainSettingsSection />
+      {:else if currentSection === 'userinterface'}
+        <UserInterfaceSettingsSection />
       {:else if currentSection === 'audio'}
         <AudioSettingsSection />
       {:else if currentSection === 'filters'}

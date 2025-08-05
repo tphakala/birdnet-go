@@ -581,6 +581,7 @@
     "loading": "Einstellungen werden geladen...",
     "sections": {
       "node": "Haupteinstellungen",
+      "userinterface": "Benutzeroberfläche",
       "audio": "Audio-Einstellungen",
       "filters": "Erkennungsfilter",
       "integration": "Integrationen",
@@ -735,20 +736,42 @@
         "userInterface": {
           "title": "Benutzeroberflächeneinstellungen",
           "description": "Benutzeroberfläche anpassen",
+          "interface": {
+            "title": "Schnittstelleneinstellungen",
+            "description": "Wählen Sie Ihre bevorzugte Sprache und Oberflächenversion",
+            "locale": {
+              "label": "Anzeigesprache",
+              "helpText": "Wählen Sie die Sprache für die Benutzeroberfläche"
+            },
+            "newUI": {
+              "label": "Moderne Oberfläche verwenden",
+              "helpText": "Aktiviert die neue Svelte-basierte Oberfläche mit verbesserter Leistung und Funktionen. Bei Deaktivierung wird die klassische HTMX-Oberfläche verwendet."
+            }
+          },
           "language": {
             "title": "Sprache",
+            "description": "Anzeigesprache für die Benutzeroberfläche konfigurieren",
             "locale": {
               "label": "Schnittstellensprache",
               "helpText": "Wählen Sie die Sprache für die Benutzeroberfläche"
             }
           },
           "dashboard": {
-            "title": "Dashboard",
+            "title": "Dashboard-Anzeige",
+            "description": "Konfigurieren Sie, wie Erkennungen auf dem Dashboard angezeigt werden",
+            "general": {
+              "title": "Allgemeine Einstellungen"
+            },
             "summaryLimit": {
               "label": "Maximale Anzahl von Arten in der täglichen Übersichtstabelle",
               "helpText": "Maximale Anzahl der in der täglichen Übersichtstabelle angezeigten Arten (Wert zwischen 10 und 1000)"
             },
+            "newUI": {
+              "label": "Neue Benutzeroberfläche verwenden",
+              "helpText": "Umleitung von der alten HTMX-Benutzeroberfläche zur neuen Svelte-Benutzeroberfläche aktivieren"
+            },
             "thumbnails": {
+              "title": "Miniaturbildanzeige",
               "summary": {
                 "label": "Miniaturbilder in der täglichen Übersichtstabelle anzeigen",
                 "helpText": "Aktivieren, um Miniaturbilder erkannter Arten in der täglichen Übersichtstabelle anzuzeigen"

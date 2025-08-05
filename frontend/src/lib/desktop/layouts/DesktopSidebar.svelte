@@ -51,6 +51,7 @@
       settingsSecurity: currentRoute === '/ui/settings/security',
       settingsSpecies: currentRoute === '/ui/settings/species',
       settingsSupport: currentRoute === '/ui/settings/support',
+      settingsUserInterface: currentRoute === '/ui/settings/userinterface',
     };
     return routes;
   });
@@ -78,6 +79,7 @@
     settingsSecurity: onNavigate ? '/settings/security' : '/ui/settings/security',
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
     settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
+    settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
   // PERFORMANCE OPTIMIZATION: Simplified navigation function using cached URLs
@@ -220,6 +222,15 @@
                     role="menuitem"
                   >
                     {t('settings.sections.node')}
+                  </button>
+                </li>
+                <li role="none">
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsUserInterface)}
+                    class={cn({ active: routeCache().settingsUserInterface })}
+                    role="menuitem"
+                  >
+                    {t('settings.sections.userinterface')}
                   </button>
                 </li>
                 <li role="none">

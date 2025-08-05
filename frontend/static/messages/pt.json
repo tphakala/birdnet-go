@@ -581,6 +581,7 @@
     "loading": "Carregando configurações...",
     "sections": {
       "node": "Configurações principais",
+      "userinterface": "Interface do usuário",
       "audio": "Configurações de áudio",
       "filters": "Filtros de detecção",
       "integration": "Integrações",
@@ -735,6 +736,18 @@
         "userInterface": {
           "title": "Configurações da interface do usuário",
           "description": "Personalizar a interface do usuário",
+          "interface": {
+            "title": "Configurações de interface",
+            "description": "Escolha seu idioma e versão de interface preferidos",
+            "locale": {
+              "label": "Idioma de exibição",
+              "helpText": "Selecione o idioma para a interface do usuário"
+            },
+            "newUI": {
+              "label": "Usar interface moderna",
+              "helpText": "Ativa a nova interface baseada em Svelte com desempenho e recursos aprimorados. Quando desativada, usa a interface HTMX clássica."
+            }
+          },
           "language": {
             "title": "Idioma",
             "locale": {
@@ -743,12 +756,21 @@
             }
           },
           "dashboard": {
-            "title": "Painel",
+            "title": "Exibição do painel",
+            "description": "Configure como as detecções são exibidas no painel",
+            "general": {
+              "title": "Configurações gerais"
+            },
             "summaryLimit": {
               "label": "Número máximo de espécies na tabela de resumo diário",
               "helpText": "Número máximo de espécies mostradas na tabela de resumo diário (valor entre 10 e 1000)"
             },
+            "newUI": {
+              "label": "Usar nova interface do usuário",
+              "helpText": "Ativar redirecionamento da interface HTMX antiga para a nova interface Svelte"
+            },
             "thumbnails": {
+              "title": "Exibição de miniaturas",
               "summary": {
                 "label": "Mostrar miniaturas na tabela de resumo diário",
                 "helpText": "Ativar para mostrar miniaturas de espécies detectadas na tabela de resumo diário"
