@@ -76,136 +76,58 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
   });
 
   describe('Component Rendering', () => {
-    it('MainSettingsPage renders without binding-related errors', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const settingsPages = [
+      { name: 'MainSettingsPage', path: './MainSettingsPage.svelte', checkFormElements: true },
+      { name: 'AudioSettingsPage', path: './AudioSettingsPage.svelte', checkFormElements: false },
+      { name: 'FilterSettingsPage', path: './FilterSettingsPage.svelte', checkFormElements: false },
+      {
+        name: 'SecuritySettingsPage',
+        path: './SecuritySettingsPage.svelte',
+        checkFormElements: false,
+      },
+    ];
 
-      try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { component } = render(MainSettingsPage.default);
+    settingsPages.forEach(({ name, path, checkFormElements }) => {
+      it(`${name} renders without binding-related errors`, async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-        // Component should render successfully
-        expect(component).toBeTruthy();
+        try {
+          const SettingsPageModule = await import(path);
+          const { component } = render(SettingsPageModule.default);
 
-        // Check for any form inputs (confirms component rendered)
-        const inputs = screen.queryAllByRole('textbox');
-        const checkboxes = screen.queryAllByRole('checkbox');
-        const selects = screen.queryAllByRole('combobox');
+          // Component should render successfully
+          expect(component).toBeTruthy();
 
-        // At least one type of form element should exist
-        expect(inputs.length + checkboxes.length + selects.length).toBeGreaterThan(0);
+          // Check for form elements if required (MainSettingsPage specific)
+          if (checkFormElements) {
+            const inputs = screen.queryAllByRole('textbox');
+            const checkboxes = screen.queryAllByRole('checkbox');
+            const selects = screen.queryAllByRole('combobox');
 
-        // Check that no binding-related errors were logged
-        const errorCalls = consoleSpy.mock.calls;
-        const warnCalls = consoleWarnSpy.mock.calls;
+            // At least one type of form element should exist
+            expect(inputs.length + checkboxes.length + selects.length).toBeGreaterThan(0);
+          }
 
-        const bindingErrors = [...errorCalls, ...warnCalls].filter(
-          ([message]) =>
-            message &&
-            typeof message === 'string' &&
-            (message.includes('bind:') ||
-              message.includes('non-reactive') ||
-              message.includes('derived'))
-        );
+          // Check that no binding-related errors were logged
+          const errorCalls = consoleSpy.mock.calls;
+          const warnCalls = consoleWarnSpy.mock.calls;
 
-        expect(bindingErrors).toHaveLength(0);
-      } finally {
-        consoleSpy.mockRestore();
-        consoleWarnSpy.mockRestore();
-      }
-    });
+          const bindingErrors = [...errorCalls, ...warnCalls].filter(
+            ([message]) =>
+              message &&
+              typeof message === 'string' &&
+              (message.includes('bind:') ||
+                message.includes('non-reactive') ||
+                message.includes('derived'))
+          );
 
-    it('AudioSettingsPage renders without binding-related errors', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      try {
-        const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
-        const { component } = render(AudioSettingsPage.default);
-
-        // Component should render successfully
-        expect(component).toBeTruthy();
-
-        // Check that no binding-related errors were logged
-        const errorCalls = consoleSpy.mock.calls;
-        const warnCalls = consoleWarnSpy.mock.calls;
-
-        const bindingErrors = [...errorCalls, ...warnCalls].filter(
-          ([message]) =>
-            message &&
-            typeof message === 'string' &&
-            (message.includes('bind:') ||
-              message.includes('non-reactive') ||
-              message.includes('derived'))
-        );
-
-        expect(bindingErrors).toHaveLength(0);
-      } finally {
-        consoleSpy.mockRestore();
-        consoleWarnSpy.mockRestore();
-      }
-    });
-
-    it('FilterSettingsPage renders without binding-related errors', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      try {
-        const FilterSettingsPage = await import('./FilterSettingsPage.svelte');
-        const { component } = render(FilterSettingsPage.default);
-
-        // Component should render successfully
-        expect(component).toBeTruthy();
-
-        // Check that no binding-related errors were logged
-        const errorCalls = consoleSpy.mock.calls;
-        const warnCalls = consoleWarnSpy.mock.calls;
-
-        const bindingErrors = [...errorCalls, ...warnCalls].filter(
-          ([message]) =>
-            message &&
-            typeof message === 'string' &&
-            (message.includes('bind:') ||
-              message.includes('non-reactive') ||
-              message.includes('derived'))
-        );
-
-        expect(bindingErrors).toHaveLength(0);
-      } finally {
-        consoleSpy.mockRestore();
-        consoleWarnSpy.mockRestore();
-      }
-    });
-
-    it('SecuritySettingsPage renders without binding-related errors', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      try {
-        const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
-        const { component } = render(SecuritySettingsPage.default);
-
-        // Component should render successfully
-        expect(component).toBeTruthy();
-
-        // Check that no binding-related errors were logged
-        const errorCalls = consoleSpy.mock.calls;
-        const warnCalls = consoleWarnSpy.mock.calls;
-
-        const bindingErrors = [...errorCalls, ...warnCalls].filter(
-          ([message]) =>
-            message &&
-            typeof message === 'string' &&
-            (message.includes('bind:') ||
-              message.includes('non-reactive') ||
-              message.includes('derived'))
-        );
-
-        expect(bindingErrors).toHaveLength(0);
-      } finally {
-        consoleSpy.mockRestore();
-        consoleWarnSpy.mockRestore();
-      }
+          expect(bindingErrors).toHaveLength(0);
+        } finally {
+          consoleSpy.mockRestore();
+          consoleWarnSpy.mockRestore();
+        }
+      });
     });
   });
 
@@ -532,9 +454,7 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         const checkboxes = screen.queryAllByRole('checkbox');
 
         // Test all checkboxes (privacy filter, dog bark filter, etc.)
-        for (let i = 0; i < Math.min(checkboxes.length, 5); i++) {
-          // eslint-disable-next-line security/detect-object-injection
-          const checkbox = checkboxes[i];
+        for (const checkbox of checkboxes.slice(0, 5)) {
           const initialChecked = (checkbox as HTMLInputElement).checked;
 
           await fireEvent.click(checkbox);

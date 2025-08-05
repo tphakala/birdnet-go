@@ -62,6 +62,11 @@ vi.mock('maplibre-gl', () => ({
   },
 }));
 
+// Accessibility labeling threshold - gradually increase this over time
+// Current milestone: 15% (baseline established)
+// Next milestones: 25% → 40% → 60% → 80%
+const ACCESSIBILITY_LABELING_THRESHOLD = 0.15; // 15%
+
 describe('Settings Binding Accessibility Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -217,11 +222,26 @@ describe('Settings Binding Accessibility Tests', () => {
       // Some elements should have accessible names (enforce meaningful standard)
       if (totalElements > 0) {
         const labelingPercentage = labeledElementsCount / totalElements;
-        // Enforce meaningful accessibility labeling standard
-        expect(labelingPercentage).toBeGreaterThanOrEqual(0.15); // At least 15% should be properly labeled (realistic baseline)
+        const currentPercentage = Math.round(labelingPercentage * 100);
 
-        // Log the current state for improvement tracking
-        expect(typeof labelingPercentage).toBe('number');
+        // Log current accessibility metrics for tracking progress
+        // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
+        console.log(
+          `📊 Accessibility Metrics: ${labeledElementsCount}/${totalElements} elements labeled (${currentPercentage}%)`
+        );
+        // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
+        console.log(`🎯 Current threshold: ${Math.round(ACCESSIBILITY_LABELING_THRESHOLD * 100)}%`);
+
+        // Enforce meaningful accessibility labeling standard
+        expect(labelingPercentage).toBeGreaterThanOrEqual(ACCESSIBILITY_LABELING_THRESHOLD);
+
+        // Track if we're significantly above threshold (ready for next milestone)
+        if (labelingPercentage >= ACCESSIBILITY_LABELING_THRESHOLD + 0.1) {
+          // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
+          console.log(
+            `🚀 Accessibility above threshold! Consider increasing to ${Math.round((ACCESSIBILITY_LABELING_THRESHOLD + 0.1) * 100)}%`
+          );
+        }
       }
 
       unmount();

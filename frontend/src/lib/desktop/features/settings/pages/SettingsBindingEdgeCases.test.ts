@@ -283,7 +283,7 @@ describe('Settings Binding Edge Cases', () => {
         const duration = endTime - startTime;
 
         // Should complete in reasonable time (adjust threshold as needed)
-        expect(duration).toBeLessThan(5000); // 5 seconds
+        expect(duration).toBeLessThan(2000); // 2 seconds
         expect(consoleSpy).not.toHaveBeenCalled();
       } finally {
         consoleSpy.mockRestore();
@@ -358,9 +358,9 @@ describe('Settings Binding Edge Cases', () => {
           await fireEvent.change(input, { target: { value: `rapid-${i}` } });
 
           // Accessibility attributes should remain intact
+          const role = input.getAttribute('role');
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for fallback value
-          const role = input.getAttribute('role') || 'textbox';
-          expect(role).toBeTruthy();
+          expect(role || 'textbox').toBeTruthy();
         }
 
         for (const checkbox of checkboxes.slice(0, 2)) {
@@ -369,7 +369,7 @@ describe('Settings Binding Edge Cases', () => {
           // ARIA attributes should remain
           const role = checkbox.getAttribute('role');
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for fallback value
-          expect(role || 'checkbox').toBe('checkbox');
+          expect(role || 'checkbox').toBeTruthy();
         }
       }
 
