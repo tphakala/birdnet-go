@@ -87,13 +87,13 @@
         path: 'clips/',
         type: 'wav' as const,
         bitrate: '96k',
-      },
-      retention: {
-        policy: 'none',
-        maxAge: '7d',
-        maxUsage: '80%',
-        minClips: 10,
-        keepSpectrograms: false,
+        retention: {
+          policy: 'none',
+          maxAge: '7d',
+          maxUsage: '80%',
+          minClips: 10,
+          keepSpectrograms: false,
+        },
       },
     },
     rtsp: $rtspSettings || {
@@ -126,8 +126,8 @@
 
   let audioRetentionHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.audio?.retention,
-      (store.formData as any)?.realtime?.audio?.retention
+      (store.originalData as any)?.realtime?.audio?.export?.retention,
+      (store.formData as any)?.realtime?.audio?.export?.retention
     )
   );
 
@@ -262,11 +262,11 @@
 
   // Retention settings with proper structure
   let retentionSettings = $derived({
-    policy: settings.audio.retention?.policy || 'none',
-    maxAge: settings.audio.retention?.maxAge || '7d',
-    maxUsage: settings.audio.retention?.maxUsage || '80%',
-    minClips: settings.audio.retention?.minClips || 10,
-    keepSpectrograms: settings.audio.retention?.keepSpectrograms || false,
+    policy: settings.audio.export?.retention?.policy || 'none',
+    maxAge: settings.audio.export?.retention?.maxAge || '7d',
+    maxUsage: settings.audio.export?.retention?.maxUsage || '80%',
+    minClips: settings.audio.export?.retention?.minClips || 10,
+    keepSpectrograms: settings.audio.export?.retention?.keepSpectrograms || false,
   });
 
   // Update handlers
@@ -309,13 +309,25 @@
   // Update retention settings
   function updateRetentionPolicy(policy: string) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, retention: { ...retentionSettings, policy } },
+      audio: {
+        ...$audioSettings!,
+        export: {
+          ...settings.audio.export,
+          retention: { ...retentionSettings, policy },
+        },
+      },
     });
   }
 
   function updateRetentionMaxAge(maxAge: string) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, retention: { ...retentionSettings, maxAge } },
+      audio: {
+        ...$audioSettings!,
+        export: {
+          ...settings.audio.export,
+          retention: { ...retentionSettings, maxAge },
+        },
+      },
     });
   }
 
@@ -325,19 +337,37 @@
       maxUsage = maxUsage + '%';
     }
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, retention: { ...retentionSettings, maxUsage } },
+      audio: {
+        ...$audioSettings!,
+        export: {
+          ...settings.audio.export,
+          retention: { ...retentionSettings, maxUsage },
+        },
+      },
     });
   }
 
   function updateRetentionMinClips(minClips: number) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, retention: { ...retentionSettings, minClips } },
+      audio: {
+        ...$audioSettings!,
+        export: {
+          ...settings.audio.export,
+          retention: { ...retentionSettings, minClips },
+        },
+      },
     });
   }
 
   function updateRetentionKeepSpectrograms(keepSpectrograms: boolean) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, retention: { ...retentionSettings, keepSpectrograms } },
+      audio: {
+        ...$audioSettings!,
+        export: {
+          ...settings.audio.export,
+          retention: { ...retentionSettings, keepSpectrograms },
+        },
+      },
     });
   }
 
