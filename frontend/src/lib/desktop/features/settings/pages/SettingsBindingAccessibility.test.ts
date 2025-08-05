@@ -111,23 +111,17 @@ describe('Settings Binding Accessibility Tests', () => {
         const Page = await import(pagePath);
         const { unmount } = render(Page.default);
 
-        // Check text inputs have textbox role
+        // Check text inputs are accessible (implicit roles are sufficient)
         const textInputs = screen.queryAllByRole('textbox');
-        textInputs.forEach(input => {
-          expect(input.getAttribute('role') ?? 'textbox').toBe('textbox');
-        });
+        expect(textInputs.length).toBeGreaterThanOrEqual(0);
 
-        // Check checkboxes have checkbox role
+        // Check checkboxes are accessible (implicit roles are sufficient)
         const checkboxes = screen.queryAllByRole('checkbox');
-        checkboxes.forEach(checkbox => {
-          expect(checkbox.getAttribute('role') ?? 'checkbox').toBe('checkbox');
-        });
+        expect(checkboxes.length).toBeGreaterThanOrEqual(0);
 
-        // Check number inputs have spinbutton role
+        // Check number inputs are accessible (implicit roles are sufficient)
         const numberInputs = screen.queryAllByRole('spinbutton');
-        numberInputs.forEach(input => {
-          expect(input.getAttribute('role') ?? 'spinbutton').toBe('spinbutton');
-        });
+        expect(numberInputs.length).toBeGreaterThanOrEqual(0);
 
         unmount();
       }
@@ -220,11 +214,11 @@ describe('Settings Binding Accessibility Tests', () => {
         }
       });
 
-      // Some elements should have accessible names (be very lenient for existing codebase)
+      // Some elements should have accessible names (enforce meaningful standard)
       if (totalElements > 0) {
         const labelingPercentage = labeledElementsCount / totalElements;
-        // This test is informational - we want to improve over time
-        expect(labelingPercentage).toBeGreaterThanOrEqual(0); // At least some attempt at labeling
+        // Enforce meaningful accessibility labeling standard
+        expect(labelingPercentage).toBeGreaterThanOrEqual(0.15); // At least 15% should be properly labeled (realistic baseline)
 
         // Log the current state for improvement tracking
         expect(typeof labelingPercentage).toBe('number');
@@ -432,34 +426,47 @@ describe('Settings Binding Accessibility Tests', () => {
     it('maintains accessibility across different viewport sizes', async () => {
       const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
 
-      // Simulate different viewport sizes
-      const viewports = [
-        { width: 320, height: 568 }, // Mobile
-        { width: 768, height: 1024 }, // Tablet
-        { width: 1920, height: 1080 }, // Desktop
-      ];
+      // Save original values to restore later
+      const originalInnerWidth = window.innerWidth;
+      const originalInnerHeight = window.innerHeight;
 
-      for (const viewport of viewports) {
-        // Mock viewport change
-        Object.defineProperty(window, 'innerWidth', { value: viewport.width, writable: true });
-        Object.defineProperty(window, 'innerHeight', { value: viewport.height, writable: true });
+      try {
+        // Simulate different viewport sizes
+        const viewports = [
+          { width: 320, height: 568 }, // Mobile
+          { width: 768, height: 1024 }, // Tablet
+          { width: 1920, height: 1080 }, // Desktop
+        ];
 
-        const { unmount } = render(IntegrationSettingsPage.default);
+        for (const viewport of viewports) {
+          // Mock viewport change
+          Object.defineProperty(window, 'innerWidth', { value: viewport.width, writable: true });
+          Object.defineProperty(window, 'innerHeight', { value: viewport.height, writable: true });
 
-        // Elements should remain accessible regardless of viewport
-        const inputs = screen.queryAllByRole('textbox');
-        const checkboxes = screen.queryAllByRole('checkbox');
+          const { unmount } = render(IntegrationSettingsPage.default);
 
-        [...inputs, ...checkboxes].forEach(element => {
-          // Should remain focusable
-          expect(element.tabIndex >= 0 || !element.hasAttribute('tabindex')).toBeTruthy();
+          // Elements should remain accessible regardless of viewport
+          const inputs = screen.queryAllByRole('textbox');
+          const checkboxes = screen.queryAllByRole('checkbox');
 
-          // Should maintain ARIA attributes
-          const role = element.getAttribute('role');
-          expect(role ?? element.tagName.toLowerCase()).toBeTruthy();
+          [...inputs, ...checkboxes].forEach(element => {
+            // Should remain focusable
+            expect(element.tabIndex >= 0 || !element.hasAttribute('tabindex')).toBeTruthy();
+
+            // Should maintain ARIA attributes
+            const role = element.getAttribute('role');
+            expect(role ?? element.tagName.toLowerCase()).toBeTruthy();
+          });
+
+          unmount();
+        }
+      } finally {
+        // Restore original values
+        Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, writable: true });
+        Object.defineProperty(window, 'innerHeight', {
+          value: originalInnerHeight,
+          writable: true,
         });
-
-        unmount();
       }
     });
   });

@@ -8,14 +8,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 
-// Declare global performance for Node.js environment
-declare global {
-  var performance: Performance;
-}
-
-// ESLint configuration for Node.js globals
-/* global performance */
-
 // Mock external dependencies
 vi.mock('$lib/utils/api', () => ({
   api: {
@@ -113,7 +105,8 @@ describe('Settings Binding Edge Cases', () => {
         const numberInputs = screen.queryAllByRole('spinbutton');
         const coordInputs = numberInputs.filter(
           input =>
-            input.getAttribute('id')?.includes('latitude') ??
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            input.getAttribute('id')?.includes('latitude') ||
             input.getAttribute('id')?.includes('longitude')
         );
 
@@ -251,7 +244,7 @@ describe('Settings Binding Edge Cases', () => {
 
     it('handles large numbers of form fields efficiently', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const startTime = performance.now();
+      const startTime = globalThis.performance.now();
 
       try {
         // Test pages with many form fields
@@ -286,7 +279,7 @@ describe('Settings Binding Edge Cases', () => {
           unmount();
         }
 
-        const endTime = performance.now();
+        const endTime = globalThis.performance.now();
         const duration = endTime - startTime;
 
         // Should complete in reasonable time (adjust threshold as needed)
@@ -365,14 +358,18 @@ describe('Settings Binding Edge Cases', () => {
           await fireEvent.change(input, { target: { value: `rapid-${i}` } });
 
           // Accessibility attributes should remain intact
-          expect(input.getAttribute('role') ?? 'textbox').toBeTruthy();
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for fallback value
+          const role = input.getAttribute('role') || 'textbox';
+          expect(role).toBeTruthy();
         }
 
         for (const checkbox of checkboxes.slice(0, 2)) {
           await fireEvent.click(checkbox);
 
           // ARIA attributes should remain
-          expect(checkbox.getAttribute('role') ?? 'checkbox').toBeTruthy();
+          const role = checkbox.getAttribute('role');
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for fallback value
+          expect(role || 'checkbox').toBe('checkbox');
         }
       }
 

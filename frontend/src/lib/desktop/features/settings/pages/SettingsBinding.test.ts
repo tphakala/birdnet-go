@@ -316,11 +316,12 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const totalElements = inputs.length + checkboxes.length + selects.length;
 
       [...inputs, ...checkboxes, ...selects].forEach(element => {
-        const hasLabel = element.id && document.querySelector(`label[for="${element.id}"]`);
+        const hasExplicitLabel = element.id && document.querySelector(`label[for="${element.id}"]`);
+        const hasImplicitLabel = element.closest('label');
         const hasAriaLabel = element.getAttribute('aria-label');
         const hasAriaLabelledBy = element.getAttribute('aria-labelledby');
 
-        if (hasLabel || hasAriaLabel || hasAriaLabelledBy) {
+        if (hasExplicitLabel || hasImplicitLabel || hasAriaLabel || hasAriaLabelledBy) {
           properlyLabeledCount++;
         }
       });
@@ -415,7 +416,8 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         // Test interactions with equalizer controls
         const equalizerCheckboxes = checkboxes.filter(
           checkbox =>
-            checkbox.getAttribute('id')?.includes('equalizer') ??
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            checkbox.getAttribute('id')?.includes('equalizer') ||
             checkbox.closest('label')?.textContent?.toLowerCase().includes('equalizer')
         );
 
@@ -458,9 +460,12 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         // Test OAuth field interactions
         const oauthInputs = [...textInputs, ...passwordInputs].filter(
           input =>
-            input.getAttribute('id')?.includes('google') ??
-            input.getAttribute('id')?.includes('github') ??
-            input.getAttribute('id')?.includes('client') ??
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            input.getAttribute('id')?.includes('google') ||
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            input.getAttribute('id')?.includes('github') ||
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            input.getAttribute('id')?.includes('client') ||
             input.getAttribute('id')?.includes('secret')
         );
 
@@ -491,8 +496,10 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         // Test coordinate inputs with valid values
         const coordInputs = numberInputs.filter(
           input =>
-            input.getAttribute('id')?.includes('latitude') ??
-            input.getAttribute('id')?.includes('longitude') ??
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            input.getAttribute('id')?.includes('latitude') ||
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
+            input.getAttribute('id')?.includes('longitude') ||
             input.getAttribute('step') === '0.000001' // Coordinate precision
         );
 
