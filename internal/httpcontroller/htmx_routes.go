@@ -355,6 +355,37 @@ func (s *Server) handleHLSStreamRequest(c echo.Context) error {
 // handlePageRequest handles requests for full page routes
 func (s *Server) handlePageRequest(c echo.Context) error {
 	path := c.Path()
+	
+	// Check if NewUI is enabled and redirect old routes to new UI
+	if s.Settings.Realtime.Dashboard.NewUI && !strings.HasPrefix(path, "/ui") {
+		// Map of old routes to new UI routes
+		redirectMap := map[string]string{
+			"/":                  "/ui/",
+			"/dashboard":         "/ui/dashboard",
+			"/logs":              "/ui/detections",
+			"/analytics":         "/ui/analytics",
+			"/analytics/species": "/ui/analytics/species",
+			"/search":            "/ui/search",
+			"/about":             "/ui/about",
+			"/notifications":     "/ui/notifications",
+			"/system":            "/ui/system",
+			"/settings/main":     "/ui/settings/main",
+			"/settings/audio":    "/ui/settings/audio",
+			"/settings/detectionfilters": "/ui/settings/detectionfilters",
+			"/settings/integrations":     "/ui/settings/integrations",
+			"/settings/security":         "/ui/settings/security",
+			"/settings/species":          "/ui/settings/species",
+			"/settings/support":          "/ui/settings/support",
+		}
+		
+		if newPath, shouldRedirect := redirectMap[path]; shouldRedirect {
+			// Don't redirect HTMX requests - they should stay on old UI
+			if c.Request().Header.Get("HX-Request") == "" {
+				return c.Redirect(http.StatusTemporaryRedirect, newPath)
+			}
+		}
+	}
+	
 	pageRoute, isPageRoute := s.pageRoutes[path]
 	partialRoute, isFragment := s.partialRoutes[path]
 

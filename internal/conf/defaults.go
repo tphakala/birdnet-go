@@ -83,6 +83,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
 	viper.SetDefault("realtime.dashboard.locale", "en") // Default UI locale
+	viper.SetDefault("realtime.dashboard.newui", false) // Enable redirect from old HTMX UI to new Svelte UI
 
 	// Retention policy configuration
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)

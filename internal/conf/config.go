@@ -90,6 +90,7 @@ type Dashboard struct {
 	Thumbnails   Thumbnails `json:"thumbnails"`       // thumbnails settings
 	SummaryLimit int        `json:"summaryLimit"`     // limit for the number of species shown in the summary table
 	Locale       string     `json:"locale,omitempty"` // UI locale setting
+	NewUI        bool       `json:"newUI"`            // Enable redirect from old HTMX UI to new Svelte UI
 }
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.
