@@ -26,9 +26,6 @@
 -->
 <script lang="ts">
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
-  import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -36,11 +33,12 @@
     realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { SpeciesConfig, Action, SpeciesSettings } from '$lib/stores/settings';
+  import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
+  import { navigationIcons } from '$lib/utils/icons';
 
   const logger = loggers.settings;
 
@@ -95,104 +93,26 @@
   let newInterval = $state(0);
   let showAddForm = $state(false);
   let editingSpecies = $state<string | null>(null);
+  let showActions = $state(false);
 
-  // Actions modal state
-  let showActionsModal = $state(false);
-  let currentSpecies = $state('');
-  let currentAction = $state<{
-    type: 'ExecuteCommand';
-    command: string;
-    parameters: string;
-    executeDefaults: boolean;
-  }>({
-    type: 'ExecuteCommand',
-    command: '',
-    parameters: '',
-    executeDefaults: true,
-  });
+  // Actions configuration state
+  let actionCommand = $state('');
+  let actionParameters = $state('');
+  let actionExecuteDefaults = $state(true);
 
-  // Focus management for modal accessibility
-  let previouslyFocusedElement: HTMLElement | null = null;
-
-  // Helper function to get all focusable elements within a container
-  function getFocusableElements(container: HTMLElement): HTMLElement[] {
-    const focusableSelectors = [
-      'button:not([disabled])',
-      'input:not([disabled])',
-      'select:not([disabled])',
-      'textarea:not([disabled])',
-      'a[href]',
-      '[tabindex]:not([tabindex="-1"])',
-    ];
-
-    const elements = container.querySelectorAll(focusableSelectors.join(', '));
-    return Array.from(elements).filter(el => {
-      const style = window.getComputedStyle(el as HTMLElement);
-      return style.display !== 'none' && style.visibility !== 'hidden';
-    }) as HTMLElement[];
-  }
-
-  // Focus trap handler for modal keyboard navigation
-  function handleFocusTrap(event: KeyboardEvent, modal: HTMLElement) {
-    if (event.key !== 'Tab') return;
-
-    const focusableElements = getFocusableElements(modal);
-    if (focusableElements.length === 0) return;
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-
-    if (event.shiftKey) {
-      // Shift + Tab - moving backwards
-      if (document.activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-      }
+  // Helper function to add parameter to the list
+  function addParameter(param: string) {
+    if (actionParameters) {
+      actionParameters += ',' + param;
     } else {
-      // Tab - moving forwards
-      if (document.activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
+      actionParameters = param;
     }
   }
 
-  // Focus trapping effect for actions modal
-  $effect(() => {
-    if (showActionsModal) {
-      // Store previously focused element
-      previouslyFocusedElement = document.activeElement as HTMLElement;
-
-      // Set focus to the modal after a microtask to ensure it's in the DOM
-      setTimeout(() => {
-        const modal = document.querySelector(
-          '[role="dialog"][aria-labelledby="actions-modal-title"]'
-        ) as HTMLElement;
-        if (modal) {
-          // Focus the first focusable element or the modal itself
-          const focusableElements = getFocusableElements(modal);
-          if (focusableElements.length > 0) {
-            focusableElements[0].focus();
-          } else {
-            modal.focus();
-          }
-
-          // Add focus trap event listener
-          const trapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
-          modal.addEventListener('keydown', trapHandler);
-
-          // Cleanup function
-          return () => {
-            modal.removeEventListener('keydown', trapHandler);
-          };
-        }
-      }, 0);
-    } else if (previouslyFocusedElement) {
-      // Restore focus to previously focused element
-      previouslyFocusedElement.focus();
-      previouslyFocusedElement = null;
-    }
-  });
+  // Helper function to clear parameters
+  function clearParameters() {
+    actionParameters = '';
+  }
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
@@ -384,6 +304,22 @@
     newInterval = config.interval || 0;
     editingSpecies = species;
     showAddForm = true;
+
+    // Load existing action if present
+    const existingAction = config.actions?.[0];
+    if (existingAction) {
+      actionCommand = existingAction.command || '';
+      actionParameters = Array.isArray(existingAction.parameters)
+        ? existingAction.parameters.join(',')
+        : '';
+      actionExecuteDefaults = existingAction.executeDefaults !== false;
+    } else {
+      // Reset action fields
+      actionCommand = '';
+      actionParameters = '';
+      actionExecuteDefaults = true;
+    }
+    showActions = false; // Start with actions collapsed
   }
 
   function saveConfig() {
@@ -395,35 +331,35 @@
 
     const interval = Number(newInterval) || 0;
 
+    // Build actions array if command is provided
+    const actions = [];
+    if (actionCommand.trim()) {
+      actions.push({
+        type: 'ExecuteCommand' as const,
+        command: actionCommand.trim(),
+        parameters: actionParameters
+          .split(',')
+          .map(p => p.trim())
+          .filter(p => p),
+        executeDefaults: actionExecuteDefaults,
+      });
+    }
+
     let updatedConfig = { ...settings.config };
 
     if (editingSpecies && editingSpecies !== species) {
-      // Rename: copy actions from old species
-      const oldConfig = safeGet(settings.config, editingSpecies, {
-        threshold: 0.5,
-        interval: 0,
-        actions: [],
-      });
+      // Rename: delete old entry and create new
       // eslint-disable-next-line security/detect-object-injection
       delete updatedConfig[editingSpecies];
-      // eslint-disable-next-line security/detect-object-injection
-      updatedConfig[species] = {
-        threshold,
-        interval,
-        actions: oldConfig.actions || [],
-      };
-    } else {
-      // Add new or update existing
-      const existingConfig = editingSpecies
-        ? safeGet(settings.config, editingSpecies, { threshold: 0.5, interval: 0, actions: [] })
-        : null;
-      // eslint-disable-next-line security/detect-object-injection
-      updatedConfig[species] = {
-        threshold,
-        interval,
-        actions: existingConfig?.actions || [],
-      };
     }
+
+    // Add/update species configuration
+    // eslint-disable-next-line security/detect-object-injection
+    updatedConfig[species] = {
+      threshold,
+      interval,
+      actions,
+    };
 
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
@@ -443,91 +379,10 @@
     newInterval = 0;
     editingSpecies = null;
     showAddForm = false;
-  }
-
-  // Actions modal functions
-  function openActionsModal(species: string) {
-    currentSpecies = species;
-
-    const speciesConfig = safeGet(settings.config, species, {
-      threshold: 0.5,
-      interval: 0,
-      actions: [],
-    });
-    const existingAction = speciesConfig.actions?.[0];
-    if (existingAction) {
-      currentAction = {
-        type: existingAction.type,
-        command: existingAction.command,
-        parameters: Array.isArray(existingAction.parameters)
-          ? existingAction.parameters.join(',')
-          : '',
-        executeDefaults: existingAction.executeDefaults !== false,
-      };
-    } else {
-      currentAction = {
-        type: 'ExecuteCommand',
-        command: '',
-        parameters: '',
-        executeDefaults: true,
-      };
-    }
-
-    showActionsModal = true;
-  }
-
-  function saveAction() {
-    if (!currentSpecies) return;
-
-    const newAction: Action = {
-      type: currentAction.type,
-      command: currentAction.command,
-      parameters: currentAction.parameters
-        .split(',')
-        .map(p => p.trim())
-        .filter(p => p),
-      executeDefaults: currentAction.executeDefaults,
-    };
-
-    const updatedConfig = { ...settings.config };
-    const currentSpeciesConfig = safeGet(settings.config, currentSpecies, {
-      threshold: 0.5,
-      interval: 0,
-      actions: [],
-    });
-    Object.assign(updatedConfig, {
-      [currentSpecies]: {
-        ...currentSpeciesConfig,
-        actions: [newAction],
-      },
-    });
-
-    settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
-      species: {
-        ...settings,
-        config: updatedConfig,
-      },
-    });
-    closeActionsModal();
-  }
-
-  function closeActionsModal() {
-    showActionsModal = false;
-    currentSpecies = '';
-  }
-
-  // Parameter helper functions
-  function addParameter(param: string) {
-    if (currentAction.parameters) {
-      currentAction.parameters += ',' + param;
-    } else {
-      currentAction.parameters = param;
-    }
-  }
-
-  function clearParameters() {
-    currentAction.parameters = '';
+    showActions = false;
+    actionCommand = '';
+    actionParameters = '';
+    actionExecuteDefaults = true;
   }
 </script>
 
@@ -665,7 +520,8 @@
 
       <!-- Compact Add/Edit Form -->
       {#if showAddForm}
-        <div class="border border-base-300 rounded-lg p-3 bg-base-100">
+        <div class="border border-base-300 rounded-lg p-3 bg-base-100 space-y-3">
+          <!-- Main configuration row -->
           <div class="grid grid-cols-12 gap-3 items-end">
             <!-- Species Input -->
             <div class="col-span-4">
@@ -733,6 +589,132 @@
               <button class="btn btn-xs btn-ghost flex-1" onclick={cancelEdit}> Cancel </button>
             </div>
           </div>
+
+          <!-- Actions Toggle -->
+          <div class="border-t border-base-300 pt-2">
+            <button
+              type="button"
+              class="flex items-center gap-2 text-xs font-medium hover:text-primary transition-colors"
+              onclick={() => (showActions = !showActions)}
+              aria-expanded={showActions}
+              aria-controls="actionsSection"
+            >
+              <span class="transition-transform duration-200" class:rotate-90={showActions}>
+                {@html navigationIcons.chevronRight}
+              </span>
+              <span>Configure Actions</span>
+              {#if actionCommand}
+                <span class="badge badge-xs badge-accent">Configured</span>
+              {/if}
+            </button>
+          </div>
+
+          <!-- Actions Section -->
+          {#if showActions}
+            <div class="space-y-3 pl-6" id="actionsSection">
+              <!-- Command Input -->
+              <div>
+                <label class="label py-1" for="action-command">
+                  <span class="label-text text-xs"
+                    >{t('settings.species.actionsModal.command.label')}</span
+                  >
+                </label>
+                <input
+                  id="action-command"
+                  type="text"
+                  bind:value={actionCommand}
+                  placeholder={t('settings.species.commandPathPlaceholder')}
+                  class="input input-bordered input-xs w-full"
+                />
+                <div class="label">
+                  <span class="label-text-alt text-xs"
+                    >{t('settings.species.actionsModal.command.helpText')}</span
+                  >
+                </div>
+              </div>
+
+              <!-- Parameters -->
+              <div>
+                <label class="label py-1" for="action-parameters">
+                  <span class="label-text text-xs"
+                    >{t('settings.species.actionsModal.parameters.label')}</span
+                  >
+                </label>
+                <input
+                  id="action-parameters"
+                  type="text"
+                  bind:value={actionParameters}
+                  placeholder={t('settings.species.parametersPlaceholder')}
+                  class="input input-bordered input-xs w-full"
+                  readonly
+                />
+                <div class="label">
+                  <span class="label-text-alt text-xs"
+                    >{t('settings.species.actionsModal.parameters.helpText')}</span
+                  >
+                </div>
+              </div>
+
+              <!-- Parameter Buttons -->
+              <div>
+                <div class="text-xs font-medium mb-1">
+                  {t('settings.species.actionsModal.parameters.availableTitle')}
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    class="btn btn-xs"
+                    onclick={() => addParameter('CommonName')}
+                    >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button
+                  >
+                  <button
+                    type="button"
+                    class="btn btn-xs"
+                    onclick={() => addParameter('ScientificName')}
+                    >{t('settings.species.actionsModal.parameters.buttons.scientificName')}</button
+                  >
+                  <button
+                    type="button"
+                    class="btn btn-xs"
+                    onclick={() => addParameter('Confidence')}
+                    >{t('settings.species.actionsModal.parameters.buttons.confidence')}</button
+                  >
+                  <button type="button" class="btn btn-xs" onclick={() => addParameter('Time')}
+                    >{t('settings.species.actionsModal.parameters.buttons.time')}</button
+                  >
+                  <button type="button" class="btn btn-xs" onclick={() => addParameter('Source')}
+                    >{t('settings.species.actionsModal.parameters.buttons.source')}</button
+                  >
+                  <button type="button" class="btn btn-xs btn-warning" onclick={clearParameters}
+                    >{t('settings.species.actionsModal.parameters.buttons.clearParameters')}</button
+                  >
+                </div>
+              </div>
+
+              <!-- Execute Defaults Checkbox -->
+              <div class="form-control">
+                <label
+                  class="label cursor-pointer justify-start gap-2"
+                  for="action-execute-defaults"
+                >
+                  <input
+                    id="action-execute-defaults"
+                    type="checkbox"
+                    bind:checked={actionExecuteDefaults}
+                    class="checkbox checkbox-xs checkbox-primary"
+                  />
+                  <span class="label-text text-xs"
+                    >{t('settings.species.actionsModal.executeDefaults.label')}</span
+                  >
+                </label>
+                <div class="label">
+                  <span class="label-text-alt text-xs"
+                    >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
+                  >
+                </div>
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -785,28 +767,6 @@
               </button>
 
               <button
-                class="btn btn-ghost btn-xs"
-                onclick={() => openActionsModal(species)}
-                title="Configure actions"
-                aria-label="Configure actions for {species}"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </button>
-
-              <button
                 class="btn btn-ghost btn-xs text-error"
                 onclick={() => removeConfig(species)}
                 title="Remove configuration"
@@ -838,105 +798,3 @@
     </div>
   </SettingsSection>
 </main>
-
-<!-- Actions Modal -->
-{#if showActionsModal}
-  <div
-    class="modal modal-open"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="actions-modal-title"
-  >
-    <div class="modal-box bg-base-100 max-h-[90vh] overflow-y-auto">
-      <h3 id="actions-modal-title" class="text-lg font-bold mb-4">
-        {t('settings.species.actionsModal.title', { species: currentSpecies })}
-      </h3>
-
-      <div class="space-y-4">
-        <SelectField
-          label={t('settings.species.actionsModal.actionType.label')}
-          bind:value={currentAction.type}
-          options={[
-            {
-              value: 'ExecuteCommand',
-              label: t('settings.species.actionsModal.actionType.executeCommand'),
-            },
-          ]}
-          disabled={true}
-          helpText={t('settings.species.actionsModal.actionType.onlySupported')}
-        />
-
-        <TextInput
-          label={t('settings.species.actionsModal.command.label')}
-          bind:value={currentAction.command}
-          placeholder={t('settings.species.commandPathPlaceholder')}
-          helpText={t('settings.species.actionsModal.command.helpText')}
-        />
-
-        <div class="form-control">
-          <label class="label" for="action-parameters">
-            <span class="label-text">{t('settings.species.actionsModal.parameters.label')}</span>
-          </label>
-          <TextInput
-            id="action-parameters"
-            bind:value={currentAction.parameters}
-            placeholder={t('settings.species.parametersPlaceholder')}
-            readonly={true}
-            helpText={t('settings.species.actionsModal.parameters.helpText')}
-          />
-        </div>
-
-        <div>
-          <div class="font-medium text-sm mb-2">
-            {t('settings.species.actionsModal.parameters.availableTitle')}
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" class="btn btn-xs" onclick={() => addParameter('CommonName')}
-              >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button
-            >
-            <button type="button" class="btn btn-xs" onclick={() => addParameter('ScientificName')}
-              >{t('settings.species.actionsModal.parameters.buttons.scientificName')}</button
-            >
-            <button type="button" class="btn btn-xs" onclick={() => addParameter('Confidence')}
-              >{t('settings.species.actionsModal.parameters.buttons.confidence')}</button
-            >
-            <button type="button" class="btn btn-xs" onclick={() => addParameter('Time')}
-              >{t('settings.species.actionsModal.parameters.buttons.time')}</button
-            >
-            <button type="button" class="btn btn-xs" onclick={() => addParameter('Source')}
-              >{t('settings.species.actionsModal.parameters.buttons.source')}</button
-            >
-          </div>
-          <div class="mt-2">
-            <button type="button" class="btn btn-xs btn-warning" onclick={clearParameters}
-              >{t('settings.species.actionsModal.parameters.buttons.clearParameters')}</button
-            >
-          </div>
-        </div>
-
-        <Checkbox
-          bind:checked={currentAction.executeDefaults}
-          label={t('settings.species.actionsModal.executeDefaults.label')}
-          helpText={t('settings.species.actionsModal.executeDefaults.helpText')}
-        />
-      </div>
-
-      <div class="modal-action mt-6">
-        <button type="button" class="btn btn-primary" onclick={saveAction}>
-          {t('common.buttons.save')}
-        </button>
-        <button type="button" class="btn btn-ghost" onclick={closeActionsModal}>
-          {t('common.buttons.cancel')}
-        </button>
-      </div>
-    </div>
-    <div
-      class="modal-backdrop bg-black/50"
-      role="button"
-      tabindex="0"
-      onclick={closeActionsModal}
-      onkeydown={e => (e.key === 'Escape' ? closeActionsModal() : null)}
-      aria-label="Close actions modal"
-    ></div>
-  </div>
-{/if}
