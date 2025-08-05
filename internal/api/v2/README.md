@@ -172,6 +172,7 @@ routeInitializers := []struct {
 |--------|-------|---------|------|-------------|
 | GET | `/species` | `GetSpeciesInfo` | ❌ | Get extended species information including rarity status |
 | GET | `/species/taxonomy` | `GetSpeciesTaxonomy` | ❌ | Get detailed taxonomy data with subspecies and hierarchy |
+| GET | `/species/:code/thumbnail` | `GetSpeciesThumbnail` | ❌ | Get bird thumbnail image by species code (redirects to image URL) |
 
 ### Server-Sent Events (`sse.go`)
 

@@ -59,6 +59,9 @@ func (c *Controller) initSpeciesRoutes() {
 	// Public endpoints for species information
 	c.Group.GET("/species", c.GetSpeciesInfo)
 	c.Group.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
+	
+	// RESTful thumbnail endpoint - uses species code from path
+	c.Group.GET("/species/:code/thumbnail", c.GetSpeciesThumbnail)
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
@@ -408,4 +411,99 @@ func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, spec
 	}
 
 	return subspecies
+}
+
+// GetSpeciesThumbnail retrieves a bird thumbnail image by species code
+// GET /api/v2/species/:code/thumbnail
+func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
+	speciesCode := ctx.Param("code")
+	if speciesCode == "" {
+		return c.HandleError(ctx, errors.Newf("species code parameter is required").
+			Category(errors.CategoryValidation).
+			Component("api-species").
+			Build(), "Missing species code", http.StatusBadRequest)
+	}
+
+	// Log the request if API logger is available
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Retrieving thumbnail for species code",
+			"species_code", speciesCode,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	// Check if BirdNET processor is available
+	if c.Processor == nil || c.Processor.Bn == nil {
+		return c.HandleError(ctx, errors.Newf("BirdNET processor not available").
+			Category(errors.CategorySystem).
+			Component("api-species").
+			Build(), "BirdNET service unavailable", http.StatusServiceUnavailable)
+	}
+
+	// Check if BirdImageCache is available
+	if c.BirdImageCache == nil {
+		return c.HandleError(ctx, errors.Newf("image service unavailable").
+			Category(errors.CategorySystem).
+			Component("api-species").
+			Build(), "Image service unavailable", http.StatusServiceUnavailable)
+	}
+
+	// Get species name from the taxonomy map using the species code
+	bn := c.Processor.Bn
+	speciesName, exists := birdnet.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
+	
+	if !exists {
+		return c.HandleError(ctx, errors.Newf("species code '%s' not found in taxonomy", speciesCode).
+			Category(errors.CategoryNotFound).
+			Context("species_code", speciesCode).
+			Component("api-species").
+			Build(), "Species not found", http.StatusNotFound)
+	}
+
+	// Split the species name to get scientific name
+	scientificName, _ := birdnet.SplitSpeciesName(speciesName)
+	
+	if scientificName == "" {
+		return c.HandleError(ctx, errors.Newf("invalid species name format for code '%s'", speciesCode).
+			Category(errors.CategoryValidation).
+			Context("species_code", speciesCode).
+			Context("species_name", speciesName).
+			Component("api-species").
+			Build(), "Invalid species data", http.StatusInternalServerError)
+	}
+
+	// Now use the scientific name to get the bird image
+	birdImage, err := c.BirdImageCache.Get(scientificName)
+	if err != nil {
+		// Check for "not found" errors - the cache returns a specific error message
+		if strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, errors.New(err).
+				Context("species_code", speciesCode).
+				Context("scientific_name", scientificName).
+				Component("api-species").
+				Build(), "Image not found for species", http.StatusNotFound)
+		}
+		// For other errors
+		return c.HandleError(ctx, errors.New(err).
+			Category(errors.CategoryProcessing).
+			Context("species_code", speciesCode).
+			Context("scientific_name", scientificName).
+			Component("api-species").
+			Build(), "Failed to fetch species image", http.StatusInternalServerError)
+	}
+
+	// Log successful retrieval
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Successfully retrieved thumbnail",
+			"species_code", speciesCode,
+			"scientific_name", scientificName,
+			"image_url", birdImage.URL,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	// Redirect to the image URL
+	return ctx.Redirect(http.StatusFound, birdImage.URL)
 }
