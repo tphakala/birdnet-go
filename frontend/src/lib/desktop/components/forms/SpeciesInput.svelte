@@ -25,6 +25,7 @@
   import { cn } from '$lib/utils/cn.js';
   import { actionIcons } from '$lib/utils/icons';
   import { safeGet } from '$lib/utils/security';
+  import { Z_INDEX } from '$lib/utils/z-index';
 
   interface Props {
     value?: string;
@@ -80,8 +81,18 @@
   let inputElement: HTMLInputElement;
   let portalDropdown: HTMLDivElement | null = null;
 
-  // Generate unique ID for this instance to avoid conflicts
-  const instanceId = `species-predictions-${Math.random().toString(36).substring(2, 9)}`;
+  // Generate unique ID for this instance using timestamp and counter
+  // This ensures no collisions even with multiple instances created simultaneously
+  let idCounter = 0;
+  if (typeof window !== 'undefined') {
+    // Use a type assertion for the counter property
+    const win = window as Window & { __speciesInputCounter?: number };
+    if (!win.__speciesInputCounter) {
+      win.__speciesInputCounter = 0;
+    }
+    idCounter = ++win.__speciesInputCounter;
+  }
+  const instanceId = `species-predictions-${Date.now()}-${idCounter}`;
 
   // Auto-derive button size from input size if not specified
   let effectiveButtonSize = $derived(buttonSize || size);
@@ -167,7 +178,7 @@
     portalDropdown.className =
       'bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto';
     portalDropdown.style.position = 'absolute';
-    portalDropdown.style.zIndex = '1000'; // Consistent with app-wide dropdown z-index scale
+    portalDropdown.style.zIndex = Z_INDEX.PORTAL_DROPDOWN.toString();
     portalDropdown.setAttribute('role', 'listbox');
     portalDropdown.setAttribute('aria-label', 'Species suggestions');
 
@@ -183,22 +194,49 @@
   function updatePortalDropdown() {
     if (!portalDropdown) return;
 
-    // Update content
-    portalDropdown.innerHTML = '';
-    filteredPredictions.forEach((prediction, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className =
-        'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm';
-      button.textContent = prediction;
-      button.setAttribute('role', 'option');
-      button.setAttribute('aria-selected', 'false');
-      button.setAttribute('tabindex', '-1');
-      button.setAttribute('data-prediction', prediction);
-      button.setAttribute('data-index', index.toString());
+    // Optimize by reusing existing elements
+    const existingButtons = portalDropdown.querySelectorAll('.species-prediction-item');
+    const predictionsCount = filteredPredictions.length;
+    const existingCount = existingButtons.length;
 
-      portalDropdown!.appendChild(button);
-    });
+    // Update existing buttons
+    for (let i = 0; i < Math.min(predictionsCount, existingCount); i++) {
+      // eslint-disable-next-line security/detect-object-injection
+      const button = existingButtons[i] as HTMLButtonElement;
+      // eslint-disable-next-line security/detect-object-injection
+      button.textContent = filteredPredictions[i];
+      // eslint-disable-next-line security/detect-object-injection
+      button.setAttribute('data-prediction', filteredPredictions[i]);
+      button.setAttribute('data-index', i.toString());
+      button.style.display = 'block';
+    }
+
+    // Add new buttons if needed
+    if (predictionsCount > existingCount) {
+      for (let i = existingCount; i < predictionsCount; i++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className =
+          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm';
+        // eslint-disable-next-line security/detect-object-injection
+        button.textContent = filteredPredictions[i];
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', 'false');
+        button.setAttribute('tabindex', '-1');
+        // eslint-disable-next-line security/detect-object-injection
+        button.setAttribute('data-prediction', filteredPredictions[i]);
+        button.setAttribute('data-index', i.toString());
+        portalDropdown.appendChild(button);
+      }
+    }
+
+    // Hide excess buttons
+    if (existingCount > predictionsCount) {
+      for (let i = predictionsCount; i < existingCount; i++) {
+        // eslint-disable-next-line security/detect-object-injection
+        (existingButtons[i] as HTMLElement).style.display = 'none';
+      }
+    }
 
     updatePortalPosition();
   }
@@ -231,8 +269,25 @@
       portalDropdown.classList.remove('dropdown-above');
     }
 
-    portalDropdown.style.left = `${rect.left + window.scrollX}px`;
-    portalDropdown.style.width = `${rect.width}px`;
+    // Horizontal viewport boundary detection
+    let leftPosition = rect.left + window.scrollX;
+    const dropdownWidth = rect.width;
+    const viewportWidth = window.innerWidth;
+
+    // Check if dropdown would go off-screen on the right
+    if (rect.left + dropdownWidth > viewportWidth) {
+      // Align dropdown to right edge of viewport with small margin
+      leftPosition = viewportWidth - dropdownWidth - 8 + window.scrollX;
+    }
+
+    // Check if dropdown would go off-screen on the left
+    if (rect.left < 0) {
+      // Align dropdown to left edge of viewport with small margin
+      leftPosition = 8 + window.scrollX;
+    }
+
+    portalDropdown.style.left = `${leftPosition}px`;
+    portalDropdown.style.width = `${dropdownWidth}px`;
   }
 
   // Clean up portal dropdown
@@ -458,7 +513,8 @@
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute z-[1001] p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      style:z-index={Z_INDEX.PORTAL_TOOLTIP}
       role="tooltip"
     >
       {tooltip}

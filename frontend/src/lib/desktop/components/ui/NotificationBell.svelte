@@ -500,7 +500,8 @@
       bind:this={dropdownRef}
       id="notification-dropdown"
       role="menu"
-      class="absolute right-0 top-full mt-2 min-w-[28rem] max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 z-[1010] overflow-hidden flex flex-col"
+      class="absolute right-0 top-full mt-2 min-w-[28rem] max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
+      style:z-index={1010}
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-300">

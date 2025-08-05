@@ -640,17 +640,20 @@
               <!-- Parameters -->
               <div>
                 <label class="label py-1" for="action-parameters">
-                  <span class="label-text text-xs"
-                    >{t('settings.species.actionsModal.parameters.label')}</span
-                  >
+                  <span class="label-text text-xs flex items-center gap-1">
+                    {t('settings.species.actionsModal.parameters.label')}
+                    <span class="text-base-content/60" title="Use buttons below or type directly">
+                      ⓘ
+                    </span>
+                  </span>
                 </label>
                 <input
                   id="action-parameters"
                   type="text"
                   bind:value={actionParameters}
-                  placeholder={t('settings.species.parametersPlaceholder')}
-                  class="input input-bordered input-xs w-full"
-                  readonly
+                  placeholder="Click buttons below to add parameters or type manually"
+                  class="input input-bordered input-xs w-full bg-base-200/50"
+                  title="Add parameters using the buttons below or type directly (comma-separated)"
                 />
                 <div class="label">
                   <span class="label-text-alt text-xs"
