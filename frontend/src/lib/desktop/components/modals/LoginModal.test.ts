@@ -386,6 +386,236 @@ describe('LoginModal', () => {
     });
   });
 
+  describe('Redirect URL Duplication Prevention', () => {
+    it('should extract relative path when redirectUrl contains base path', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/dashboard', // Full path with base
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            username: 'birdnet-client',
+            password: 'valid-password',
+            redirectUrl: '/dashboard', // Should be relative path
+            basePath: '/ui/', // Should be base path
+          })
+        );
+      });
+    });
+
+    it('should handle analytics subpage URLs correctly', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/analytics/species');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/analytics/species',
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/analytics/species',
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
+    it('should handle settings subpage URLs correctly', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/settings/main');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/settings/main',
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/settings/main',
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
+    it('should not modify relative URLs that do not contain base path', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/custom/path', // Different from base path
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/custom/path', // Should remain unchanged
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
+    it('should handle base path only redirectUrl correctly', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/', // Exactly matches base path
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/ui/', // Should remain unchanged as it equals base path
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
+    it('should handle different base paths correctly', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/app/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/app/settings',
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/settings',
+            basePath: '/app/',
+          })
+        );
+      });
+    });
+
+    it('should ensure relative path starts with slash', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/');
+
+      // Create a scenario where the relative path would not start with /
+      // by setting up a redirectUrl that when base path is removed, doesn't start with /
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/dashboard',
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/dashboard', // Should start with /
+            basePath: '/ui/',
+          })
+        );
+      });
+
+      // Verify that the redirectUrl always starts with '/'
+      const [, payload] = postSpy.mock.calls[0] as [
+        string,
+        { redirectUrl: string; basePath: string },
+      ];
+      expect(payload.redirectUrl).toMatch(/^\/.*$/);
+    });
+  });
+
   describe('Form Submission', () => {
     it('should prevent form submission when validation fails', async () => {
       const { api } = await import('$lib/utils/api');
@@ -458,6 +688,161 @@ describe('LoginModal', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Invalid credentials. Please try again.')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Integration Tests - URL Preservation', () => {
+    it('should preserve the complete URL path after successful login without OAuth callback', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      const onCloseMock = vi.fn();
+      const mockLocation = mockWindowLocation('/ui/analytics/species');
+
+      // Mock successful login without OAuth callback
+      postSpy.mockResolvedValue({
+        success: true,
+        message: 'Login successful',
+        // No redirectUrl in response means standard login flow
+      });
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: onCloseMock,
+        redirectUrl: '/ui/analytics/species', // User was on analytics/species page
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      // Perform login
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      // Verify API call with correct URL structure
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            username: 'birdnet-client',
+            password: 'valid-password',
+            redirectUrl: '/analytics/species', // Relative path prevents duplication
+            basePath: '/ui/', // Base path sent separately
+          })
+        );
+      });
+
+      // Verify modal closes after successful login
+      await waitFor(() => {
+        expect(onCloseMock).toHaveBeenCalled();
+      });
+
+      // Verify page refresh is called (simulating successful login)
+      await new Promise(resolve => setTimeout(resolve, 600)); // Wait for timeout
+      expect(mockLocation.reload).toHaveBeenCalled();
+    });
+
+    it('should handle OAuth callback redirect preserving original URL', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      const mockLocation = mockWindowLocation('/ui/settings/main');
+
+      // Mock successful login with OAuth callback
+      postSpy.mockResolvedValue({
+        success: true,
+        message: 'Login successful',
+        redirectUrl: '/api/v1/oauth2/callback?code=123&state=settings%2Fmain', // OAuth callback
+      });
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/settings/main', // User was on settings page
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      // Perform login
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      // Verify API call
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/settings/main', // Relative path
+            basePath: '/ui/',
+          })
+        );
+      });
+
+      // Verify OAuth redirect happens immediately
+      expect(mockLocation.href).toBe('/api/v1/oauth2/callback?code=123&state=settings%2Fmain');
+    });
+
+    it('should handle edge case of user on root path', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/', // User on root UI path
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/ui/', // Should remain as-is when it equals base path
+            basePath: '/ui/',
+          })
+        );
+      });
+    });
+
+    it('should handle complex nested URLs correctly', async () => {
+      const { api } = await import('$lib/utils/api');
+      const postSpy = vi.mocked(api.post);
+      postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+
+      mockWindowLocation('/ui/detections/12345');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        redirectUrl: '/ui/detections/12345', // Detection detail page
+        authConfig: { basicEnabled: true, googleEnabled: false, githubEnabled: false },
+      });
+
+      const passwordInput = screen.getByLabelText('Password');
+      const loginButton = screen.getByRole('button', { name: /login with password/i });
+
+      await fireEvent.input(passwordInput, { target: { value: 'valid-password' } });
+      await fireEvent.click(loginButton);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v2/auth/login',
+          expect.objectContaining({
+            redirectUrl: '/detections/12345', // Relative path
+            basePath: '/ui/',
+          })
+        );
       });
     });
   });
