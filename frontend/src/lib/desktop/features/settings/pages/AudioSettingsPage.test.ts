@@ -368,20 +368,23 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
         // Remove any non-numeric characters except %
         const cleaned = value.replace(/[^0-9%]/g, '');
 
+        // Normalize multiple % signs to single %
+        const normalized = cleaned.replace(/%+/g, '%');
+
         // If it already has %, return as is
-        if (cleaned.endsWith('%')) {
-          return cleaned;
+        if (normalized.endsWith('%')) {
+          return normalized;
         }
 
         // Otherwise add %
-        return `${cleaned}%`;
+        return `${normalized}%`;
       };
 
       // Test various input formats
       expect(formatDiskUsage('80')).toBe('80%');
       expect(formatDiskUsage('80%')).toBe('80%');
       expect(formatDiskUsage('  80  ')).toBe('80%');
-      expect(formatDiskUsage('80%%')).toBe('80%%'); // Note: This might need special handling
+      expect(formatDiskUsage('80%%')).toBe('80%'); // Multiple % signs normalized to single %
       expect(formatDiskUsage('abc80xyz')).toBe('80%');
     });
   });

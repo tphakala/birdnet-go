@@ -987,7 +987,7 @@
         "policyLabel": "Política de retención",
         "maxAgeLabel": "Edad máxima",
         "maxUsageLabel": "Uso máximo de disco",
-        "maxUsageHelp": "Eliminar los clips más antiguos cuando el directorio de audio utilice más de este porcentaje del espacio disponible en el disco.",
+        "maxUsageHelp": "Eliminar los clips más antiguos cuando el directorio de audio use más de este porcentaje del espacio libre disponible.",
         "minClipsLabel": "Clips mínimos",
         "keepSpectrograms": "Mantener imágenes de espectrograma",
         "policies": {

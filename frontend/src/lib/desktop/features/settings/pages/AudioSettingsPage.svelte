@@ -332,13 +332,13 @@
 
   function updateExportEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, export: { ...settings.audio.export, enabled, debug: false } },
+      audio: { ...$audioSettings!, export: { ...settings.audio.export, enabled } },
     });
   }
 
   function updateExportFormat(type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus') {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, export: { ...settings.audio.export, type, debug: false } },
+      audio: { ...$audioSettings!, export: { ...settings.audio.export, type } },
     });
   }
 
@@ -350,7 +350,7 @@
     settingsActions.updateSection('realtime', {
       audio: {
         ...$audioSettings!,
-        export: { ...settings.audio.export, bitrate: formattedBitrate, debug: false },
+        export: { ...settings.audio.export, bitrate: formattedBitrate },
       },
     });
   }
@@ -363,7 +363,6 @@
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, policy },
-          debug: false,
         },
       },
     });
@@ -376,7 +375,6 @@
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, maxAge },
-          debug: false,
         },
       },
     });
@@ -389,7 +387,6 @@
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, maxUsage },
-          debug: false,
         },
       },
     });
@@ -402,7 +399,6 @@
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, minClips },
-          debug: false,
         },
       },
     });
@@ -415,7 +411,6 @@
         export: {
           ...settings.audio.export,
           retention: { ...retentionSettings, keepSpectrograms },
-          debug: false,
         },
       },
     });
@@ -906,7 +901,7 @@
               settingsActions.updateSection('realtime', {
                 audio: {
                   ...$audioSettings!,
-                  export: { ...settings.audio.export, path: value, debug: false },
+                  export: { ...settings.audio.export, path: value },
                 },
               })}
           />

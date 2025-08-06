@@ -35,12 +35,12 @@
   interface Props {
     label: string;
     value: number;
-    onUpdate: (_value: number) => void;
+    onUpdate: (value: number) => void; // eslint-disable-line no-unused-vars
     min: number;
     max: number;
     step?: number;
     unit?: string;
-    formatValue?: (_value: number) => string;
+    formatValue?: (value: number) => string; // eslint-disable-line no-unused-vars
     disabled?: boolean;
     size?: 'xs' | 'sm' | 'md' | 'lg';
     className?: string;
