@@ -5,6 +5,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
+  import { getHigherPriority, createNotificationKey, type Priority } from '$lib/utils/priority';
 
   const logger = loggers.ui;
 
@@ -15,7 +16,7 @@
     message: string;
     timestamp: string;
     read: boolean;
-    priority: 'critical' | 'high' | 'medium' | 'low';
+    priority: Priority;
     component?: string;
   }
 
@@ -241,19 +242,6 @@
     }
   }
 
-  // Helper function to determine higher priority
-  function getHigherPriority(
-    priority1: 'critical' | 'high' | 'medium' | 'low',
-    priority2: 'critical' | 'high' | 'medium' | 'low'
-  ): 'critical' | 'high' | 'medium' | 'low' {
-    const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
-    // eslint-disable-next-line security/detect-object-injection
-    const p1Value = priorityOrder[priority1];
-    // eslint-disable-next-line security/detect-object-injection
-    const p2Value = priorityOrder[priority2];
-    return p1Value >= p2Value ? priority1 : priority2;
-  }
-
   // Add new notification
   function addNotification(notification: Notification) {
     if (!shouldShowNotification(notification)) {
@@ -261,11 +249,13 @@
     }
 
     // Check for duplicate notification by matching message, title, and type
+    const notificationKey = createNotificationKey(
+      notification.message,
+      notification.title,
+      notification.type
+    );
     const existingIndex = notifications.findIndex(
-      n =>
-        n.message === notification.message &&
-        n.title === notification.title &&
-        n.type === notification.type
+      n => createNotificationKey(n.message, n.title, n.type) === notificationKey
     );
 
     if (existingIndex !== -1) {
@@ -285,11 +275,11 @@
       notifications = [
         updated,
         ...notifications.slice(0, existingIndex),
-        ...notifications.slice(existingIndex + 1, 19),
+        ...notifications.slice(existingIndex + 1, 20),
       ];
     } else {
       // No duplicate - add to beginning of array
-      notifications = [notification, ...notifications.slice(0, 19)];
+      notifications = [notification, ...notifications.slice(0, 20)];
     }
 
     updateUnreadCount();
@@ -542,7 +532,7 @@
     <div
       bind:this={dropdownRef}
       id="notification-dropdown"
-      role="menu"
+      role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
       class="absolute right-0 top-full mt-2 min-w-[28rem] max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
       style:z-index={1010}
     >

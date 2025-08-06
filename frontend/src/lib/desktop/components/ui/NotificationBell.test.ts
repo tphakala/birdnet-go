@@ -741,16 +741,6 @@ describe('NotificationBell Component', () => {
     });
   });
 
-  describe('Priority Helper Function', () => {
-    it('should correctly determine higher priority', () => {
-      // We can't directly test the internal function, but we can test its behavior
-      // through the deduplication feature which is tested above
-
-      // The function behavior is tested through the deduplication tests above
-      expect(true).toBe(true);
-    });
-  });
-
   describe('Empty State', () => {
     it('should show empty state when no notifications', async () => {
       vi.mocked(api.get).mockResolvedValue({ notifications: [] });
@@ -852,6 +842,10 @@ describe('NotificationBell Component', () => {
     it('should have proper ARIA attributes', async () => {
       const { container } = render(NotificationBell);
 
+      await waitFor(() => {
+        expect(api.get).toHaveBeenCalled();
+      });
+
       const button = screen.getByRole('button', { name: /notifications/i });
 
       expect(button).toHaveAttribute('aria-label', 'Notifications');
@@ -863,6 +857,7 @@ describe('NotificationBell Component', () => {
       expect(button).toHaveAttribute('aria-expanded', 'true');
 
       const dropdown = container.querySelector('#notification-dropdown');
+      // Role should be 'menu' when there are notifications
       expect(dropdown).toHaveAttribute('role', 'menu');
     });
 
