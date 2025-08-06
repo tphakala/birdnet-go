@@ -5,6 +5,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
+  import { getHigherPriority, createNotificationKey, type Priority } from '$lib/utils/priority';
 
   const logger = loggers.ui;
 
@@ -15,7 +16,7 @@
     message: string;
     timestamp: string;
     read: boolean;
-    priority: 'critical' | 'high' | 'medium' | 'low';
+    priority: Priority;
     component?: string;
   }
 
@@ -247,8 +248,40 @@
       return;
     }
 
-    // Add to beginning of array
-    notifications = [notification, ...notifications.slice(0, 19)];
+    // Check for duplicate notification by matching message, title, and type
+    const notificationKey = createNotificationKey(
+      notification.message,
+      notification.title,
+      notification.type
+    );
+    const existingIndex = notifications.findIndex(
+      n => createNotificationKey(n.message, n.title, n.type) === notificationKey
+    );
+
+    if (existingIndex !== -1) {
+      // Duplicate found - update timestamp and move to top
+      // eslint-disable-next-line security/detect-object-injection
+      const existing = notifications[existingIndex];
+      const updated = {
+        ...existing,
+        timestamp: notification.timestamp,
+        // Preserve read status if the existing notification was already read
+        read: existing.read,
+        // Update priority if the new one is higher priority
+        priority: getHigherPriority(existing.priority, notification.priority),
+      };
+
+      // Remove from current position and add to beginning
+      notifications = [
+        updated,
+        ...notifications.slice(0, existingIndex),
+        ...notifications.slice(existingIndex + 1, 20),
+      ];
+    } else {
+      // No duplicate - add to beginning of array
+      notifications = [notification, ...notifications.slice(0, 20)];
+    }
+
     updateUnreadCount();
 
     // Wiggle animation
@@ -499,7 +532,7 @@
     <div
       bind:this={dropdownRef}
       id="notification-dropdown"
-      role="menu"
+      role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
       class="absolute right-0 top-full mt-2 min-w-[28rem] max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
       style:z-index={1010}
     >
