@@ -20,11 +20,18 @@
 - Table-driven tests with `t.Run()`
 - `b.ResetTimer()` after benchmark setup
 
+## Benchmarks (Go 1.24)
+- Use `b.Loop()` instead of manual `for i := 0; i < b.N; i++`
+- Use `b.TempDir()` instead of `os.MkdirTemp()`
+- Call `b.ReportAllocs()` to track memory allocations
+- Use `runtime.AddCleanup()` instead of `runtime.SetFinalizer()`
+
 ## Modern Go (1.22+)
 - `any` not `interface{}`
 - `for i := range n` for loops
 - Pre-compile regex at package level
 - Store interfaces in `atomic.Value` directly
+- Use `os.Root` for filesystem sandboxing (1.24)
 
 ## Standard Library First
 - URLs: `url.Parse()`
