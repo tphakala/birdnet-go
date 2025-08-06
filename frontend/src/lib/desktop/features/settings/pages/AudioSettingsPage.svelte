@@ -40,6 +40,8 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import Modal from '$lib/desktop/components/ui/Modal.svelte';
+  import FileBrowser from '$lib/desktop/components/ui/FileBrowser.svelte';
   import { t } from '$lib/i18n';
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -240,6 +242,10 @@
     q: 0,
     gain: 0,
   });
+
+  // File browser modal state
+  let showFileBrowser = $state(false);
+  let selectedExportPath = $derived(settings.audio.export.path);
 
   // PERFORMANCE OPTIMIZATION: Load audio devices with proper state management
   $effect(() => {
@@ -470,6 +476,29 @@
     });
 
     newFilter = updatedFilter;
+  }
+
+  // File browser handlers
+  function openFileBrowser() {
+    showFileBrowser = true;
+  }
+
+  function closeFileBrowser() {
+    showFileBrowser = false;
+  }
+
+  function handlePathSelected(path: string) {
+    updateExportPath(path);
+    closeFileBrowser();
+  }
+
+  function updateExportPath(path: string) {
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...$audioSettings!,
+        export: { ...settings.audio.export, path },
+      },
+    });
   }
 </script>
 
@@ -863,21 +892,36 @@
       {#if settings.audio.export.enabled}
         <div class="settings-form-grid">
           <!-- Export Path -->
-          <TextInput
-            id="export-path"
-            value={settings.audio.export.path}
-            label={t('settings.audio.audioExport.pathLabel')}
-            placeholder="clips/"
-            helpText={t('settings.audio.audioExport.pathHelp')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value =>
-              settingsActions.updateSection('realtime', {
-                audio: {
-                  ...$audioSettings!,
-                  export: { ...settings.audio.export, path: value },
-                },
-              })}
-          />
+          <div class="form-control">
+            <label class="label" for="export-path">
+              <span class="label-text">{t('settings.audio.audioExport.pathLabel')}</span>
+            </label>
+            <div class="flex gap-2">
+              <input
+                id="export-path"
+                type="text"
+                class="input input-bordered input-sm flex-1"
+                value={settings.audio.export.path}
+                placeholder="clips/"
+                disabled={store.isLoading || store.isSaving}
+                onchange={e => updateExportPath(e.currentTarget.value)}
+              />
+              <button
+                type="button"
+                class="btn btn-sm btn-outline"
+                onclick={openFileBrowser}
+                disabled={store.isLoading || store.isSaving}
+                aria-label="Browse for export directory"
+              >
+                Browse
+              </button>
+            </div>
+            <div class="label">
+              <span class="label-text-alt text-base-content/70">
+                {t('settings.audio.audioExport.pathHelp')}
+              </span>
+            </div>
+          </div>
 
           <!-- Export Type -->
           <SelectField
@@ -1009,3 +1053,33 @@
     </div>
   </SettingsSection>
 </div>
+
+<!-- File Browser Modal -->
+<Modal
+  isOpen={showFileBrowser}
+  title={t('settings.audio.audioExport.browseTitle', { default: 'Select Export Directory' })}
+  onClose={closeFileBrowser}
+  size="xl"
+>
+  <div class="space-y-4">
+    <p class="text-base-content/70">
+      {t('settings.audio.audioExport.browseDescription', {
+        default:
+          'Browse and select a directory for audio clip exports. Only accessible directories are shown for security.',
+      })}
+    </p>
+
+    <FileBrowser
+      currentPath={selectedExportPath}
+      directoryOnly={true}
+      onPathSelected={handlePathSelected}
+      className="border border-base-300 rounded-lg"
+    />
+
+    <div class="flex justify-end gap-2 pt-4 border-t border-base-300">
+      <button type="button" class="btn btn-sm btn-ghost" onclick={closeFileBrowser}>
+        Cancel
+      </button>
+    </div>
+  </div>
+</Modal>

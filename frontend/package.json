@@ -98,6 +98,7 @@
     "hls.js": "^1.6.7",
     "maplibre-gl": "^5.6.1",
     "reconnecting-eventsource": "^1.6.4",
-    "svelte-portal": "^2.2.1"
+    "svelte-portal": "^2.2.1",
+    "wx-svelte-filemanager": "^2.2.0"
   }
 }
