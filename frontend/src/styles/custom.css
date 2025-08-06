@@ -160,11 +160,6 @@
    Form Field Helpers
    ======================================================================== */
 
-/* Uniform help text styling across all form components */
-.help-text {
-  @apply text-base-content/60 text-sm;
-}
-
 /* Settings form grid alignment - ensures consistent field heights */
 .settings-form-grid {
   @apply grid grid-cols-1 md:grid-cols-3 gap-6;

@@ -561,7 +561,9 @@
             />
           </div>
           <div class="label">
-            <span class="help-text">{t('settings.audio.audioCapture.rtspUrlsHelp')}</span>
+            <span class="label-text-alt text-base-content/70"
+              >{t('settings.audio.audioCapture.rtspUrlsHelp')}</span
+            >
           </div>
         </div>
       </div>
@@ -842,10 +844,10 @@
           <p class="font-semibold">
             {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
           </p>
-          <p class="help-text">
+          <p class="text-base-content/70 text-sm">
             {t('settings.audio.soundLevelMonitoring.dataOutputDescription')}
           </p>
-          <ul class="help-text list-disc list-inside mt-1">
+          <ul class="text-base-content/70 text-sm list-disc list-inside mt-1">
             <li>
               {t('settings.audio.soundLevelMonitoring.mqttTopic')}
               <code>{'{base_topic}'}/soundlevel</code>
@@ -954,7 +956,9 @@
                 aria-describedby="lossless-note"
               />
               <div class="label" id="lossless-note">
-                <span class="help-text">{t('settings.audio.audioExport.losslessNote')}</span>
+                <span class="label-text-alt text-base-content/70"
+                  >{t('settings.audio.audioExport.losslessNote')}</span
+                >
               </div>
             {/if}
           </div>

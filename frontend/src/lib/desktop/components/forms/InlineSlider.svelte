@@ -109,7 +109,7 @@
   }
 </script>
 
-<div class={cn('inline-slider form-control', className)}>
+<div class={cn('form-control', className)}>
   <label class="label" for={inputId}>
     <span class={cn('label-text', size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : '')}>
       {label}
@@ -145,13 +145,7 @@
   />
   {#if helpText}
     <div class="label">
-      <span class="help-text">{helpText}</span>
+      <span class="label-text-alt text-base-content/70">{helpText}</span>
     </div>
   {/if}
 </div>
-
-<style>
-  .inline-slider {
-    width: 100%;
-  }
-</style>

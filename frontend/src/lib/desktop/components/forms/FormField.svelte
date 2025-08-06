@@ -437,7 +437,7 @@
     </div>
   {:else if helpText}
     <div class="label">
-      <span class="help-text">{helpText}</span>
+      <span class="label-text-alt text-base-content/70">{helpText}</span>
     </div>
   {/if}
 </div>
