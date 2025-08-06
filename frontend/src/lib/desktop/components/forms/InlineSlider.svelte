@@ -142,11 +142,15 @@
     {disabled}
     oninput={handleInputChange}
     onchange={handleInputChange}
-    class={cn('range range-primary', sizeClasses[size], {
-      'opacity-50': disabled,
-      'mt-1': size === 'sm',
-      'mb-1': size === 'sm',
-    })}
+    class={cn(
+      'range range-primary',
+      size in sizeClasses ? sizeClasses[size as keyof typeof sizeClasses] : sizeClasses.md,
+      {
+        'opacity-50': disabled,
+        'mt-1': size === 'sm',
+        'mb-1': size === 'sm',
+      }
+    )}
     aria-label={label}
     aria-valuemin={min}
     aria-valuemax={max}
