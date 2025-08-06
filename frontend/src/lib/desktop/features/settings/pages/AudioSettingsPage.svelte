@@ -342,9 +342,9 @@
   }
 
   function updateExportBitrate(bitrate: number | string) {
-    // Ensure bitrate always has 'k' suffix for consistency
-    const bitrateStr = typeof bitrate === 'number' ? `${bitrate}k` : bitrate;
-    const formattedBitrate = bitrateStr.endsWith('k') ? bitrateStr : `${bitrateStr}k`;
+    // Simplified: ensure bitrate has 'k' suffix
+    const formattedBitrate =
+      typeof bitrate === 'number' ? `${bitrate}k` : bitrate.endsWith('k') ? bitrate : `${bitrate}k`;
 
     settingsActions.updateSection('realtime', {
       audio: {

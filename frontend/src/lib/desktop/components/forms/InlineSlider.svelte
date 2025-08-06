@@ -76,6 +76,9 @@
 
   const inputId = id || generateId();
 
+  // Constants for clarity
+  const DEFAULT_DECIMAL_PLACES = 2;
+
   // Size classes for the range input
   const sizeClasses = {
     xs: 'range-xs',
@@ -84,27 +87,44 @@
     lg: 'range-lg',
   };
 
+  // Calculate decimal places for value formatting
+  // If step is less than 1, determine precision from step value
+  // Otherwise, use whole numbers (0 decimal places)
+  const getDecimalPlaces = (stepValue: number): number => {
+    if (stepValue >= 1) return 0;
+
+    const stepString = stepValue.toString();
+    const decimalPart = stepString.split('.')[1];
+    return decimalPart?.length ?? DEFAULT_DECIMAL_PLACES;
+  };
+
   // Format display value
   let displayValue = $derived(
     formatValue
       ? formatValue(value)
       : (() => {
-          // For decimal steps, show appropriate precision
-          const decimalPlaces = step < 1 ? step.toString().split('.')[1]?.length || 2 : 0;
+          const decimalPlaces = getDecimalPlaces(step);
           return `${value.toFixed(decimalPlaces)}${unit}`;
         })()
   );
 
+  // Ensure value stays within configured bounds
+  function clampValue(val: number): number {
+    return Math.min(Math.max(val, min), max);
+  }
+
   function handleInput(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
-    const newValue = Number(target.value);
+    const rawValue = Number(target.value);
+    const newValue = clampValue(rawValue);
     value = newValue;
     onUpdate(newValue);
   }
 
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
-    const newValue = Number(target.value);
+    const rawValue = Number(target.value);
+    const newValue = clampValue(rawValue);
     value = newValue;
     onUpdate(newValue);
   }
