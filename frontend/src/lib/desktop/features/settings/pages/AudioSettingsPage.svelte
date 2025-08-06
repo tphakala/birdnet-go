@@ -28,6 +28,7 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -260,6 +261,38 @@
   // Check if ffmpeg is available
   let ffmpegAvailable = $state(true); // Assume true for now
 
+  // Bitrate slider configuration based on format
+  let bitrateConfig = $derived(
+    (() => {
+      const format = settings.audio.export.type;
+
+      // Only lossy formats support bitrate
+      if (!['aac', 'opus', 'mp3'].includes(format)) {
+        return null;
+      }
+
+      // Different formats have different optimal bitrate ranges
+      // Using 32k steps for reasonable bitrate increments
+      const configs = {
+        mp3: { min: 32, max: 320, step: 32, default: 128 },
+        aac: { min: 32, max: 320, step: 32, default: 96 },
+        opus: { min: 32, max: 256, step: 32, default: 96 }, // Opus typically maxes at 256k
+      };
+
+      return configs[format as keyof typeof configs] || configs.aac;
+    })()
+  );
+
+  // Parse numeric bitrate from string format (e.g., "96k" -> 96)
+  let numericBitrate = $derived(
+    (() => {
+      const bitrate = settings.audio.export.bitrate;
+      if (!bitrate) return 96;
+      const parsed = parseInt(bitrate.replace('k', ''));
+      return isNaN(parsed) ? 96 : parsed;
+    })()
+  );
+
   // Retention settings with proper structure
   let retentionSettings = $derived({
     policy: settings.audio.export?.retention?.policy || 'none',
@@ -300,9 +333,16 @@
     });
   }
 
-  function updateExportBitrate(bitrate: string) {
+  function updateExportBitrate(bitrate: number | string) {
+    // Ensure bitrate always has 'k' suffix for consistency
+    const bitrateStr = typeof bitrate === 'number' ? `${bitrate}k` : bitrate;
+    const formattedBitrate = bitrateStr.endsWith('k') ? bitrateStr : `${bitrateStr}k`;
+
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, export: { ...settings.audio.export, bitrate } },
+      audio: {
+        ...$audioSettings!,
+        export: { ...settings.audio.export, bitrate: formattedBitrate },
+      },
     });
   }
 
@@ -474,6 +514,7 @@
           value={settings.audio.source}
           label={t('settings.audio.audioCapture.audioSourceLabel')}
           placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
+          helpText={t('settings.audio.audioCapture.audioSourceHelp')}
           disabled={store.isLoading || store.isSaving || audioDevices.loading}
           onchange={updateAudioSource}
           options={[]}
@@ -497,6 +538,7 @@
             id="rtsp-transport"
             value={settings.rtsp.transport}
             label={t('settings.audio.audioCapture.rtspTransportLabel')}
+            helpText={t('settings.audio.audioCapture.rtspTransportHelp')}
             options={[
               { value: 'tcp', label: t('settings.audio.transport.tcp') },
               { value: 'udp', label: t('settings.audio.transport.udp') },
@@ -518,6 +560,9 @@
               disabled={store.isLoading || store.isSaving}
             />
           </div>
+          <div class="label">
+            <span class="help-text">{t('settings.audio.audioCapture.rtspUrlsHelp')}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -534,6 +579,7 @@
       <Checkbox
         checked={settings.audio.equalizer.enabled}
         label={t('settings.audio.audioFilters.enableEqualizer')}
+        helpText={t('settings.audio.audioFilters.enableEqualizerHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={enabled =>
           settingsActions.updateSection('realtime', {
@@ -757,6 +803,7 @@
       <Checkbox
         checked={settings.audio.soundLevel.enabled}
         label={t('settings.audio.soundLevelMonitoring.enable')}
+        helpText={t('settings.audio.soundLevelMonitoring.enableHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={enabled =>
           settingsActions.updateSection('realtime', {
@@ -795,10 +842,10 @@
           <p class="font-semibold">
             {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
           </p>
-          <p class="text-sm">
+          <p class="help-text">
             {t('settings.audio.soundLevelMonitoring.dataOutputDescription')}
           </p>
-          <ul class="text-sm list-disc list-inside mt-1">
+          <ul class="help-text list-disc list-inside mt-1">
             <li>
               {t('settings.audio.soundLevelMonitoring.mqttTopic')}
               <code>{'{base_topic}'}/soundlevel</code>
@@ -828,6 +875,7 @@
       <Checkbox
         checked={settings.audio.export.enabled}
         label={t('settings.audio.audioExport.enable')}
+        helpText={t('settings.audio.audioExport.enableHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateExportEnabled}
       />
@@ -836,6 +884,7 @@
         <Checkbox
           checked={settings.audio.export.debug}
           label={t('settings.audio.audioExport.enableDebug')}
+          helpText={t('settings.audio.audioExport.enableDebugHelp')}
           disabled={store.isLoading || store.isSaving}
           onchange={debug =>
             settingsActions.updateSection('realtime', {
@@ -846,13 +895,14 @@
             })}
         />
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="settings-form-grid">
           <!-- Export Path -->
           <TextInput
             id="export-path"
             value={settings.audio.export.path}
             label={t('settings.audio.audioExport.pathLabel')}
             placeholder="clips/"
+            helpText={t('settings.audio.audioExport.pathHelp')}
             disabled={store.isLoading || store.isSaving}
             onchange={value =>
               settingsActions.updateSection('realtime', {
@@ -865,23 +915,53 @@
             id="export-type"
             value={settings.audio.export.type}
             label={t('settings.audio.audioExport.typeLabel')}
+            helpText={t('settings.audio.audioExport.typeHelp')}
             options={exportFormatOptions}
             disabled={store.isLoading || store.isSaving}
             onchange={value => updateExportFormat(value as 'wav' | 'mp3' | 'flac' | 'aac' | 'opus')}
           />
 
           <!-- Bitrate -->
-          <TextInput
-            id="export-bitrate"
-            value={settings.audio.export.bitrate}
-            label={t('settings.audio.audioExport.bitrateLabel')}
-            placeholder="96k"
-            disabled={store.isLoading ||
-              store.isSaving ||
-              !ffmpegAvailable ||
-              !['aac', 'opus', 'mp3'].includes(settings.audio.export.type)}
-            onchange={updateExportBitrate}
-          />
+          <div class="form-control">
+            {#if bitrateConfig}
+              <InlineSlider
+                label={t('settings.audio.audioExport.bitrateLabel')}
+                value={numericBitrate}
+                onUpdate={updateExportBitrate}
+                min={bitrateConfig.min}
+                max={bitrateConfig.max}
+                step={bitrateConfig.step}
+                unit="k"
+                disabled={store.isLoading || store.isSaving || !ffmpegAvailable}
+                formatValue={(v: number) => `${v}k`}
+                size="xs"
+              />
+              <div class="label">
+                <span class="help-text">
+                  {t('settings.audio.audioExport.bitrateHelp', {
+                    min: bitrateConfig.min,
+                    max: bitrateConfig.max,
+                  })}
+                </span>
+              </div>
+            {:else}
+              <!-- Show disabled field for lossless formats -->
+              <label class="label" for="export-bitrate-disabled">
+                <span class="label-text">{t('settings.audio.audioExport.bitrateLabel')}</span>
+              </label>
+              <input
+                id="export-bitrate-disabled"
+                type="text"
+                class="input input-bordered input-disabled"
+                value="N/A - Lossless"
+                disabled
+                aria-describedby="lossless-note"
+              />
+              <div class="label" id="lossless-note">
+                <span class="help-text">{t('settings.audio.audioExport.losslessNote')}</span>
+              </div>
+            {/if}
+          </div>
         </div>
       {/if}
     </div>
@@ -901,6 +981,7 @@
           id="retention-policy"
           value={retentionSettings.policy}
           label={t('settings.audio.audioClipRetention.policyLabel')}
+          helpText={t('settings.audio.audioClipRetention.policyHelp')}
           options={retentionPolicyOptions}
           disabled={store.isLoading || store.isSaving}
           onchange={updateRetentionPolicy}
@@ -913,6 +994,7 @@
             value={retentionSettings.maxAge}
             label={t('settings.audio.audioClipRetention.maxAgeLabel')}
             placeholder="7d"
+            helpText={t('settings.audio.audioClipRetention.maxAgeHelp')}
             disabled={store.isLoading || store.isSaving}
             onchange={updateRetentionMaxAge}
           />
@@ -925,6 +1007,7 @@
             value={retentionSettings.maxUsage}
             label={t('settings.audio.audioClipRetention.maxUsageLabel')}
             placeholder="80%"
+            helpText={t('settings.audio.audioClipRetention.maxUsageHelp')}
             disabled={store.isLoading || store.isSaving}
             onchange={updateRetentionMaxUsage}
           />
@@ -940,6 +1023,7 @@
             onUpdate={updateRetentionMinClips}
             min={0}
             placeholder="10"
+            helpText={t('settings.audio.audioClipRetention.minClipsHelp')}
             disabled={store.isLoading || store.isSaving}
           />
 
@@ -948,6 +1032,7 @@
             <Checkbox
               checked={retentionSettings.keepSpectrograms}
               label={t('settings.audio.audioClipRetention.keepSpectrograms')}
+              helpText={t('settings.audio.audioClipRetention.keepSpectrogramsHelp')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateRetentionKeepSpectrograms}
             />
