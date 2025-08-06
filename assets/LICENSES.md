@@ -249,7 +249,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.29/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.30/LICENSE
 Source: MIT
 
 ### github.com/mrjones/oauth
@@ -284,7 +284,7 @@ Source: BSD-3-Clause
 
 ### github.com/prometheus/client_golang/prometheus
 
-License: https://github.com/prometheus/client_golang/blob/v1.22.0/LICENSE
+License: https://github.com/prometheus/client_golang/blob/v1.23.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
@@ -294,12 +294,12 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.62.0/LICENSE
+License: https://github.com/prometheus/common/blob/v0.65.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs
 
-License: https://github.com/prometheus/procfs/blob/v0.15.1/LICENSE
+License: https://github.com/prometheus/procfs/blob/v0.16.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/sagikazarmark/locafero
