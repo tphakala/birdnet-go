@@ -22,6 +22,7 @@
   - unit?: string - Unit suffix to display (e.g., 'k', '%')
   - formatValue?: (value: number) => string - Custom value formatter
   - disabled?: boolean - Disable the slider
+  - size?: 'xs' | 'sm' | 'md' | 'lg' - Size variant for the slider (default: 'sm')
   - className?: string - Additional CSS classes
   - id?: string - Custom ID for the input element
   - helpText?: string - Help text to display below the slider
@@ -41,6 +42,7 @@
     unit?: string;
     formatValue?: (_value: number) => string;
     disabled?: boolean;
+    size?: 'xs' | 'sm' | 'md' | 'lg';
     className?: string;
     id?: string;
     helpText?: string;
@@ -56,6 +58,7 @@
     unit = '',
     formatValue,
     disabled = false,
+    size = 'sm',
     className = '',
     id,
     helpText = '',
@@ -72,6 +75,14 @@
   };
 
   const inputId = id || generateId();
+
+  // Size classes for the range input
+  const sizeClasses = {
+    xs: 'range-xs',
+    sm: 'range-sm',
+    md: 'range-md',
+    lg: 'range-lg',
+  };
 
   // Format display value
   let displayValue = $derived(
@@ -118,7 +129,7 @@
     {disabled}
     oninput={handleInput}
     onchange={handleChange}
-    class={cn('range range-primary range-sm', {
+    class={cn('range range-primary', sizeClasses[size], {
       'opacity-50': disabled,
     })}
     aria-label={label}
