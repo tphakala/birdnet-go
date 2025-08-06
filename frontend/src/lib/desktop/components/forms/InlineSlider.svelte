@@ -131,6 +131,8 @@
     onchange={handleChange}
     class={cn('range range-primary', sizeClasses[size], {
       'opacity-50': disabled,
+      'mt-1': size === 'sm',
+      'mb-1': size === 'sm',
     })}
     aria-label={label}
     aria-valuemin={min}

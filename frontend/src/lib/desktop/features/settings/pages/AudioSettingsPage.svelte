@@ -70,6 +70,15 @@
     ];
   });
 
+  const maxUsageOptions = [
+    { value: '70%', label: '70%' },
+    { value: '75%', label: '75%' },
+    { value: '80%', label: '80%' },
+    { value: '85%', label: '85%' },
+    { value: '90%', label: '90%' },
+    { value: '95%', label: '95%' },
+  ];
+
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived({
     audio: $audioSettings || {
@@ -373,10 +382,6 @@
   }
 
   function updateRetentionMaxUsage(maxUsage: string) {
-    // Ensure it has % suffix
-    if (!maxUsage.endsWith('%') && !isNaN(Number(maxUsage))) {
-      maxUsage = maxUsage + '%';
-    }
     settingsActions.updateSection('realtime', {
       audio: {
         ...$audioSettings!,
@@ -925,6 +930,7 @@
               min={bitrateConfig.min}
               max={bitrateConfig.max}
               step={bitrateConfig.step}
+              size="sm"
               unit="k"
               disabled={store.isLoading || store.isSaving || !ffmpegAvailable}
               formatValue={(v: number) => `${v}k`}
@@ -994,12 +1000,12 @@
 
         <!-- Max Usage (shown when policy is 'usage') -->
         {#if retentionSettings.policy === 'usage'}
-          <TextInput
+          <SelectField
             id="retention-max-usage"
             value={retentionSettings.maxUsage}
             label={t('settings.audio.audioClipRetention.maxUsageLabel')}
-            placeholder="80%"
             helpText={t('settings.audio.audioClipRetention.maxUsageHelp')}
+            options={maxUsageOptions}
             disabled={store.isLoading || store.isSaving}
             onchange={updateRetentionMaxUsage}
           />
