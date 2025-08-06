@@ -43,6 +43,7 @@
   import { t } from '$lib/i18n';
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
 
   const logger = loggers.audio;
 
@@ -271,36 +272,10 @@
   let ffmpegAvailable = $state(true); // Assume true for now
 
   // Bitrate slider configuration based on format
-  let bitrateConfig = $derived(
-    (() => {
-      const format = settings.audio.export.type;
-
-      // Only lossy formats support bitrate
-      if (!['aac', 'opus', 'mp3'].includes(format)) {
-        return null;
-      }
-
-      // Different formats have different optimal bitrate ranges
-      // Using 32k steps for reasonable bitrate increments
-      const configs = {
-        mp3: { min: 32, max: 320, step: 32, default: 128 },
-        aac: { min: 32, max: 320, step: 32, default: 96 },
-        opus: { min: 32, max: 256, step: 32, default: 96 }, // Opus typically maxes at 256k
-      };
-
-      return configs[format as keyof typeof configs] || configs.aac;
-    })()
-  );
+  let bitrateConfig = $derived(getBitrateConfig(settings.audio.export.type));
 
   // Parse numeric bitrate from string format (e.g., "96k" -> 96)
-  let numericBitrate = $derived(
-    (() => {
-      const bitrate = settings.audio.export.bitrate;
-      if (!bitrate) return 96;
-      const parsed = parseInt(bitrate.replace('k', ''));
-      return isNaN(parsed) ? 96 : parsed;
-    })()
-  );
+  let numericBitrate = $derived(parseNumericBitrate(settings.audio.export.bitrate));
 
   // Retention settings with proper structure
   let retentionSettings = $derived({
@@ -343,9 +318,7 @@
   }
 
   function updateExportBitrate(bitrate: number | string) {
-    // Simplified: ensure bitrate has 'k' suffix
-    const formattedBitrate =
-      typeof bitrate === 'number' ? `${bitrate}k` : bitrate.endsWith('k') ? bitrate : `${bitrate}k`;
+    const formattedBitrate = formatBitrate(bitrate);
 
     settingsActions.updateSection('realtime', {
       audio: {

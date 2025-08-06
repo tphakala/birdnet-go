@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
-
-// Define proper TypeScript interfaces for test data
-interface MockSettingsActions {
-  updateSection: ReturnType<typeof vi.fn>;
-}
+import {
+  getBitrateConfig,
+  validateBitrate,
+  getExportTypeConfig,
+  formatBitrate,
+  formatDiskUsage,
+} from '$lib/utils/audioValidation';
 
 // Mock the imports with factory functions
 vi.mock('$lib/i18n', () => ({
@@ -83,128 +84,24 @@ vi.mock('$lib/stores/settings', async () => {
   };
 });
 
-// Now we can safely import the component after mocks are set up
-import AudioSettingsPage from './AudioSettingsPage.svelte';
-import { settingsActions } from '$lib/stores/settings';
-
 describe('AudioSettingsPage - Backend Format Validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe('Bitrate Format Validation', () => {
-    it('should always store bitrate with "k" suffix for lossy formats', () => {
-      render(AudioSettingsPage);
+    it('should format bitrate values correctly using utility function', () => {
+      // Test the utility function that the component uses
+      expect(formatBitrate(128)).toBe('128k');
+      expect(formatBitrate('192')).toBe('192k');
+      expect(formatBitrate('256k')).toBe('256k');
 
-      // Test the bitrate formatting logic directly (no need to update store)
-      const mockActions = settingsActions as unknown as MockSettingsActions;
-      mockActions.updateSection.mockClear();
-
-      // The updateExportBitrate function should be called with numeric value
-      // and it should convert to "128k" format
-      const updateExportBitrate = (bitrate: number | string) => {
-        const formattedBitrate =
-          typeof bitrate === 'number'
-            ? `${bitrate}k`
-            : bitrate.endsWith('k')
-              ? bitrate
-              : `${bitrate}k`;
-
-        mockActions.updateSection('realtime', {
-          audio: {
-            export: {
-              type: 'mp3',
-              enabled: true,
-              path: 'clips/',
-              bitrate: formattedBitrate,
-              debug: false,
-              retention: {
-                policy: 'none',
-                maxAge: '7d',
-                maxUsage: '80%',
-                minClips: 10,
-                keepSpectrograms: false,
-              },
-            },
-          },
-        });
-      };
-
-      // Test numeric input
-      updateExportBitrate(128);
-      expect(mockActions.updateSection).toHaveBeenCalledWith('realtime', {
-        audio: {
-          export: {
-            type: 'mp3',
-            enabled: true,
-            path: 'clips/',
-            bitrate: '128k',
-            debug: false,
-            retention: {
-              policy: 'none',
-              maxAge: '7d',
-              maxUsage: '80%',
-              minClips: 10,
-              keepSpectrograms: false,
-            },
-          },
-        },
-      });
-
-      // Test string input without 'k'
-      mockActions.updateSection.mockClear();
-      updateExportBitrate('192');
-      expect(mockActions.updateSection).toHaveBeenCalledWith('realtime', {
-        audio: {
-          export: {
-            type: 'mp3',
-            enabled: true,
-            path: 'clips/',
-            bitrate: '192k',
-            debug: false,
-            retention: {
-              policy: 'none',
-              maxAge: '7d',
-              maxUsage: '80%',
-              minClips: 10,
-              keepSpectrograms: false,
-            },
-          },
-        },
-      });
-
-      // Test string input with 'k' already
-      mockActions.updateSection.mockClear();
-      updateExportBitrate('256k');
-      expect(mockActions.updateSection).toHaveBeenCalledWith('realtime', {
-        audio: {
-          export: {
-            type: 'mp3',
-            enabled: true,
-            path: 'clips/',
-            bitrate: '256k',
-            debug: false,
-            retention: {
-              policy: 'none',
-              maxAge: '7d',
-              maxUsage: '80%',
-              minClips: 10,
-              keepSpectrograms: false,
-            },
-          },
-        },
-      });
+      // Test edge cases
+      expect(formatBitrate(0)).toBe('0k');
+      expect(formatBitrate('')).toBe('k');
     });
 
     it('should validate bitrate is within valid range (32-320)', () => {
-      // Test validation logic that should be in the component
-      const validateBitrate = (bitrate: number, format: string): boolean => {
-        if (['aac', 'opus', 'mp3'].includes(format)) {
-          return bitrate >= 32 && bitrate <= 320;
-        }
-        return true; // No bitrate validation for lossless formats
-      };
-
       // Valid ranges for lossy formats
       expect(validateBitrate(32, 'mp3')).toBe(true);
       expect(validateBitrate(128, 'aac')).toBe(true);
@@ -217,31 +114,16 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
       expect(validateBitrate(321, 'opus')).toBe(false);
       expect(validateBitrate(512, 'mp3')).toBe(false);
 
+      // Opus has different max (256 vs 320)
+      expect(validateBitrate(300, 'opus')).toBe(false);
+      expect(validateBitrate(256, 'opus')).toBe(true);
+
       // No validation for lossless formats
       expect(validateBitrate(0, 'wav')).toBe(true);
       expect(validateBitrate(999, 'flac')).toBe(true);
     });
 
     it('should handle different audio format bitrate ranges correctly', () => {
-      interface BitrateConfig {
-        min: number;
-        max: number;
-        step: number;
-        default: number;
-      }
-
-      const getBitrateConfig = (format: string): BitrateConfig | null => {
-        const configs: Record<string, BitrateConfig> = {
-          mp3: { min: 32, max: 320, step: 32, default: 128 },
-          aac: { min: 32, max: 320, step: 32, default: 96 },
-          opus: { min: 32, max: 256, step: 32, default: 96 },
-        };
-        if (format in configs) {
-          return configs[format as keyof typeof configs];
-        }
-        return null;
-      };
-
       // Test MP3 configuration
       const mp3Config = getBitrateConfig('mp3');
       expect(mp3Config).toEqual({
@@ -267,76 +149,17 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
   });
 
   describe('Disk Usage Threshold Format Validation', () => {
-    it('should always store maxUsage with "%" suffix', () => {
-      const mockActions = settingsActions as unknown as MockSettingsActions;
+    it('should format disk usage percentage correctly using utility function', () => {
+      // Test the utility function that handles disk usage formatting
+      expect(formatDiskUsage('70')).toBe('70%');
+      expect(formatDiskUsage('70%')).toBe('70%');
+      expect(formatDiskUsage('  80  ')).toBe('80%');
+      expect(formatDiskUsage('80%%')).toBe('80%'); // Multiple % signs normalized to single %
+      expect(formatDiskUsage('abc80xyz')).toBe('80%');
 
-      const updateRetentionMaxUsage = (maxUsage: string) => {
-        // The function should ensure the value has a % suffix
-        const formattedUsage = maxUsage.endsWith('%') ? maxUsage : `${maxUsage}%`;
-
-        mockActions.updateSection('realtime', {
-          audio: {
-            export: {
-              type: 'wav',
-              enabled: false,
-              path: 'clips/',
-              bitrate: '96k',
-              debug: false,
-              retention: {
-                policy: 'usage',
-                maxAge: '7d',
-                maxUsage: formattedUsage,
-                minClips: 10,
-                keepSpectrograms: false,
-              },
-            },
-          },
-        });
-      };
-
-      // Test with percentage already included
-      mockActions.updateSection.mockClear();
-      updateRetentionMaxUsage('70%');
-      expect(mockActions.updateSection).toHaveBeenCalledWith('realtime', {
-        audio: {
-          export: {
-            type: 'wav',
-            enabled: false,
-            path: 'clips/',
-            bitrate: '96k',
-            debug: false,
-            retention: {
-              policy: 'usage',
-              maxAge: '7d',
-              maxUsage: '70%',
-              minClips: 10,
-              keepSpectrograms: false,
-            },
-          },
-        },
-      });
-
-      // Test without percentage (should add it)
-      mockActions.updateSection.mockClear();
-      updateRetentionMaxUsage('85');
-      expect(mockActions.updateSection).toHaveBeenCalledWith('realtime', {
-        audio: {
-          export: {
-            type: 'wav',
-            enabled: false,
-            path: 'clips/',
-            bitrate: '96k',
-            debug: false,
-            retention: {
-              policy: 'usage',
-              maxAge: '7d',
-              maxUsage: '85%',
-              minClips: 10,
-              keepSpectrograms: false,
-            },
-          },
-        },
-      });
+      // Edge cases
+      expect(formatDiskUsage('')).toBe('%');
+      expect(formatDiskUsage('%')).toBe('%');
     });
 
     it('should validate maxUsage options are properly formatted', () => {
@@ -362,31 +185,6 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
         expect(numericValue).toBeLessThanOrEqual(95);
       });
     });
-
-    it('should handle edge cases for disk usage formatting', () => {
-      const formatDiskUsage = (value: string): string => {
-        // Remove any non-numeric characters except %
-        const cleaned = value.replace(/[^0-9%]/g, '');
-
-        // Normalize multiple % signs to single %
-        const normalized = cleaned.replace(/%+/g, '%');
-
-        // If it already has %, return as is
-        if (normalized.endsWith('%')) {
-          return normalized;
-        }
-
-        // Otherwise add %
-        return `${normalized}%`;
-      };
-
-      // Test various input formats
-      expect(formatDiskUsage('80')).toBe('80%');
-      expect(formatDiskUsage('80%')).toBe('80%');
-      expect(formatDiskUsage('  80  ')).toBe('80%');
-      expect(formatDiskUsage('80%%')).toBe('80%'); // Multiple % signs normalized to single %
-      expect(formatDiskUsage('abc80xyz')).toBe('80%');
-    });
   });
 
   describe('Integration with Backend Validation', () => {
@@ -405,24 +203,25 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
       const formatForBackend = (settings: BackendSettings): BackendSettings => {
         const formatted = { ...settings };
 
-        // Ensure bitrate has 'k' suffix for lossy formats
+        // Ensure bitrate has 'k' suffix for lossy formats using utility function
         if (['aac', 'opus', 'mp3'].includes(formatted.export.type)) {
-          if (!formatted.export.bitrate.endsWith('k')) {
-            formatted.export.bitrate = `${formatted.export.bitrate}k`;
-          }
+          formatted.export.bitrate = formatBitrate(formatted.export.bitrate);
 
-          // Validate bitrate range
+          // Validate bitrate range using utility function
           const bitrateValue = parseInt(formatted.export.bitrate, 10);
-          if (bitrateValue < 32 || bitrateValue > 320) {
-            throw new Error(`Bitrate for ${formatted.export.type} must be between 32k and 320k`);
+          if (!validateBitrate(bitrateValue, formatted.export.type)) {
+            const maxBitrate = formatted.export.type === 'opus' ? 256 : 320;
+            throw new Error(
+              `Bitrate for ${formatted.export.type} must be between 32k and ${maxBitrate}k`
+            );
           }
         }
 
-        // Ensure maxUsage has % suffix
+        // Ensure maxUsage has % suffix using utility function
         if (formatted.export.retention.maxUsage) {
-          if (!formatted.export.retention.maxUsage.endsWith('%')) {
-            formatted.export.retention.maxUsage = `${formatted.export.retention.maxUsage}%`;
-          }
+          formatted.export.retention.maxUsage = formatDiskUsage(
+            formatted.export.retention.maxUsage
+          );
         }
 
         return formatted;
@@ -460,24 +259,7 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
     });
 
     it('should handle all export types correctly', () => {
-      interface ExportTypeConfig {
-        requiresBitrate: boolean;
-        isLossless: boolean;
-        bitrateRange: { min: number; max: number } | null;
-      }
-
-      const getExportTypeConfig = (type: string): ExportTypeConfig => {
-        const requiresBitrate = ['aac', 'opus', 'mp3'].includes(type);
-        const isLossless = ['wav', 'flac'].includes(type);
-
-        return {
-          requiresBitrate,
-          isLossless,
-          bitrateRange: requiresBitrate ? { min: 32, max: type === 'opus' ? 256 : 320 } : null,
-        };
-      };
-
-      // Test each export type
+      // Test each export type using the utility function
       expect(getExportTypeConfig('mp3')).toEqual({
         requiresBitrate: true,
         isLossless: false,
@@ -522,7 +304,8 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
 
       const prepareSettingsForSave = (settings: TestSettings): TestSettings => {
         // This simulates what should happen before sending to backend
-        const prepared = JSON.parse(JSON.stringify(settings)) as TestSettings; // Deep clone
+
+        const prepared = JSON.parse(JSON.stringify(settings)) as TestSettings; // Deep clone for test
 
         // Ensure all required formats
         // Bitrate formatting
