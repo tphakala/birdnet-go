@@ -241,14 +241,57 @@
     }
   }
 
+  // Helper function to determine higher priority
+  function getHigherPriority(
+    priority1: 'critical' | 'high' | 'medium' | 'low',
+    priority2: 'critical' | 'high' | 'medium' | 'low'
+  ): 'critical' | 'high' | 'medium' | 'low' {
+    const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+    // eslint-disable-next-line security/detect-object-injection
+    const p1Value = priorityOrder[priority1];
+    // eslint-disable-next-line security/detect-object-injection
+    const p2Value = priorityOrder[priority2];
+    return p1Value >= p2Value ? priority1 : priority2;
+  }
+
   // Add new notification
   function addNotification(notification: Notification) {
     if (!shouldShowNotification(notification)) {
       return;
     }
 
-    // Add to beginning of array
-    notifications = [notification, ...notifications.slice(0, 19)];
+    // Check for duplicate notification by matching message, title, and type
+    const existingIndex = notifications.findIndex(
+      n =>
+        n.message === notification.message &&
+        n.title === notification.title &&
+        n.type === notification.type
+    );
+
+    if (existingIndex !== -1) {
+      // Duplicate found - update timestamp and move to top
+      // eslint-disable-next-line security/detect-object-injection
+      const existing = notifications[existingIndex];
+      const updated = {
+        ...existing,
+        timestamp: notification.timestamp,
+        // Preserve read status if the existing notification was already read
+        read: existing.read,
+        // Update priority if the new one is higher priority
+        priority: getHigherPriority(existing.priority, notification.priority),
+      };
+
+      // Remove from current position and add to beginning
+      notifications = [
+        updated,
+        ...notifications.slice(0, existingIndex),
+        ...notifications.slice(existingIndex + 1, 19),
+      ];
+    } else {
+      // No duplicate - add to beginning of array
+      notifications = [notification, ...notifications.slice(0, 19)];
+    }
+
     updateUnreadCount();
 
     // Wiggle animation
