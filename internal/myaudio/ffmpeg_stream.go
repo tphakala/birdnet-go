@@ -73,6 +73,7 @@ func init() {
 
 // dataRateCalculator tracks data rate over a sliding window
 type dataRateCalculator struct {
+	url        string // Store URL once to avoid passing it repeatedly
 	samples    []dataSample
 	samplesMu  sync.RWMutex
 	windowSize time.Duration
@@ -85,8 +86,9 @@ type dataSample struct {
 }
 
 // newDataRateCalculator creates a new data rate calculator
-func newDataRateCalculator(windowSize time.Duration) *dataRateCalculator {
+func newDataRateCalculator(url string, windowSize time.Duration) *dataRateCalculator {
 	return &dataRateCalculator{
+		url:        url,
 		samples:    make([]dataSample, 0, dataRateMaxSamples),
 		windowSize: windowSize,
 		maxSamples: dataRateMaxSamples,
@@ -126,21 +128,23 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 	defer d.samplesMu.RUnlock()
 
 	if len(d.samples) == 0 {
-		return 0, errors.Newf("no data received from RTSP source").
+		return 0, errors.Newf("no data received from RTSP source: %s", privacy.SanitizeRTSPUrl(d.url)).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryAudioSource).
 			Priority(errors.PriorityMedium).
 			Context("operation", "calculate_data_rate").
+			Context("url", privacy.SanitizeRTSPUrl(d.url)).
 			Build()
 	}
 
 	if len(d.samples) < 2 {
-		return 0, errors.Newf("insufficient data received from RTSP source").
+		return 0, errors.Newf("insufficient data received from RTSP source: %s", privacy.SanitizeRTSPUrl(d.url)).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryAudioSource).
 			Priority(errors.PriorityLow).
 			Context("operation", "calculate_data_rate").
 			Context("sample_count", len(d.samples)).
+			Context("url", privacy.SanitizeRTSPUrl(d.url)).
 			Build()
 	}
 
@@ -266,7 +270,7 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		backoffDuration:                defaultBackoffDuration,
 		maxBackoff:                     maxBackoffDuration,
 		lastDataTime:                   time.Now(),
-		dataRateCalc:                   newDataRateCalculator(dataRateWindowSize),
+		dataRateCalc:                   newDataRateCalculator(url, dataRateWindowSize),
 		lastDropLogTime:                time.Now(),
 		lastSoundLevelNotRegisteredLog: time.Now().Add(-dropLogInterval), // Allow immediate first log
 	}
@@ -345,7 +349,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				s.recordFailure(runtime)
 				// Log process exit with sanitized error message
 				errorMsg := err.Error()
-				sanitizedError := privacy.SanitizeRTSPUrls(errorMsg)
+				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
 
 				// Check if this was a silence timeout
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
@@ -575,8 +579,8 @@ func (s *FFmpegStream) processAudio() error {
 				s.stderrMu.RLock()
 				stderrOutput := s.stderr.String()
 				s.stderrMu.RUnlock()
-				// Sanitize stderr output to remove sensitive data
-				sanitizedOutput := privacy.SanitizeRTSPUrls(stderrOutput)
+				// Sanitize stderr output to remove sensitive data and memory addresses
+				sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
 				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").

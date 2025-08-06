@@ -45,6 +45,9 @@ var (
 	// RTSP URL pattern for finding and sanitizing RTSP URLs with credentials
 	// Supports various formats including IPv6 addresses in brackets
 	rtspURLPattern = regexp.MustCompile(`rtsp://(?:[^:]+:[^@]+@)?(?:\[[0-9a-fA-F:]+\]|[^/:\s]+)(?::[0-9]+)?(?:/[^\s]*)?`)
+	
+	// FFmpeg error prefix pattern - matches memory addresses like [rtsp @ 0x55d4a4808980]
+	ffmpegPrefixPattern = regexp.MustCompile(`\[\w+\s*@\s*0x[0-9a-fA-F]+\]\s*`)
 )
 
 // Common two-part TLDs that need special handling
@@ -141,6 +144,15 @@ func SanitizeRTSPUrl(source string) string {
 // It uses regex pattern matching to identify RTSP URLs and replaces them with sanitized versions
 func SanitizeRTSPUrls(text string) string {
 	return rtspURLPattern.ReplaceAllStringFunc(text, SanitizeRTSPUrl)
+}
+
+// SanitizeFFmpegError removes memory addresses from FFmpeg error messages to enable proper deduplication
+// It removes prefixes like "[rtsp @ 0x55d4a4808980]" which contain unique memory addresses
+func SanitizeFFmpegError(text string) string {
+	// First remove FFmpeg memory address prefixes
+	text = ffmpegPrefixPattern.ReplaceAllString(text, "")
+	// Then sanitize any RTSP URLs
+	return SanitizeRTSPUrls(text)
 }
 
 // GenerateSystemID creates a unique system identifier

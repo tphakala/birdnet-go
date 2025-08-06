@@ -1271,3 +1271,57 @@ func TestRedactUserAgent(t *testing.T) {
 		})
 	}
 }
+
+
+func TestSanitizeFFmpegError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "FFmpeg error with memory address prefix",
+			input:    "[rtsp @ 0x55a57dbe9980] method DESCRIBE failed: 404 Not Found",
+			expected: "method DESCRIBE failed: 404 Not Found",
+		},
+		{
+			name:     "FFmpeg error with different memory address",
+			input:    "[rtsp @ 0x55c4076ab980] method DESCRIBE failed: 404 Not Found",
+			expected: "method DESCRIBE failed: 404 Not Found",
+		},
+		{
+			name:     "FFmpeg error with RTSP URL and memory address",
+			input:    "[rtsp @ 0x55d4a4808980] method DESCRIBE failed: 404 Not Found rtsp://localhost:8554/mystream: Server returned 404 Not Found",
+			expected: "method DESCRIBE failed: 404 Not Found rtsp://localhost:8554/mystream: Server returned 404 Not Found",
+		},
+		{
+			name:     "FFmpeg error with credentials in URL",
+			input:    "[rtsp @ 0x55d4a4808980] Failed to connect to rtsp://admin:password@192.168.1.100:554/stream1",
+			expected: "Failed to connect to rtsp://192.168.1.100:554/stream1",
+		},
+		{
+			name:     "Multiple FFmpeg prefixes in same error",
+			input:    "[rtsp @ 0x55a57dbe9980] [tcp @ 0x55a57dbea100] Connection refused",
+			expected: "Connection refused",
+		},
+		{
+			name:     "FFmpeg error without memory address",
+			input:    "Connection timeout occurred",
+			expected: "Connection timeout occurred",
+		},
+		{
+			name:     "FFmpeg error with other protocol prefix",
+			input:    "[http @ 0x7f8b2c001200] HTTP error 403 Forbidden",
+			expected: "HTTP error 403 Forbidden",
+		},
+		{
+			name:     "Complex FFmpeg error with multiple issues",
+			input:    "[rtsp @ 0x55a57dbe9980] method DESCRIBE failed: 404 Not Found\nrtsp://user:pass@camera.local:554/stream1: Server returned 404 Not Found",
+			expected: "method DESCRIBE failed: 404 Not Found\nrtsp://camera.local:554/stream1: Server returned 404 Not Found",
+		},
+	}
+
+	runScrubTests(t, SanitizeFFmpegError, tests)
+}
