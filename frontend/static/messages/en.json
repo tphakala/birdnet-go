@@ -1149,7 +1149,7 @@
         "rtspTransportLabel": "RTSP Transport Protocol",
         "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
         "rtspUrlsLabel": "RTSP Stream URLs",
-        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://username:password@ip:port/stream"
+        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security."
       },
       "audioFilters": {
         "title": "Audio Filters",

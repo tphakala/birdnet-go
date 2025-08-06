@@ -1108,7 +1108,7 @@
         "description": "Configurer le nettoyage des clips audio",
         "policyLabel": "Politique de rétention",
         "maxAgeLabel": "Âge maximum",
-        "maxUsageLabel": "Utilisation maximale du disque",
+        "maxUsageLabel": "Utilisation maximale du disque (%)",
         "maxUsageHelp": "Supprimer les clips les plus anciens lorsque le répertoire audio utilise plus de ce pourcentage de l'espace disque disponible.",
         "minClipsLabel": "Nombre minimum de clips",
         "keepSpectrograms": "Conserver les images de spectrogramme",

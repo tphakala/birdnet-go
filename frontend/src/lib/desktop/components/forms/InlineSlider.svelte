@@ -113,15 +113,8 @@
     return Math.min(Math.max(val, min), max);
   }
 
-  function handleInput(event: Event) {
-    const target = event.currentTarget as HTMLInputElement;
-    const rawValue = Number(target.value);
-    const newValue = clampValue(rawValue);
-    value = newValue;
-    onUpdate(newValue);
-  }
-
-  function handleChange(event: Event) {
+  // Single handler for both input and change events since they have identical logic
+  function handleInputChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     const rawValue = Number(target.value);
     const newValue = clampValue(rawValue);
@@ -147,8 +140,8 @@
     {step}
     {value}
     {disabled}
-    oninput={handleInput}
-    onchange={handleChange}
+    oninput={handleInputChange}
+    onchange={handleInputChange}
     class={cn('range range-primary', sizeClasses[size], {
       'opacity-50': disabled,
       'mt-1': size === 'sm',
