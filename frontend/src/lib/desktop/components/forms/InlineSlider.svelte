@@ -25,6 +25,7 @@
   - size?: 'xs' | 'sm' | 'md' - Size variant (default: 'xs')
   - className?: string - Additional CSS classes
   - id?: string - Custom ID for the input element
+  - helpText?: string - Help text to display below the slider
   
   @component
 -->
@@ -44,6 +45,7 @@
     size?: 'xs' | 'sm' | 'md';
     className?: string;
     id?: string;
+    helpText?: string;
   }
 
   let {
@@ -59,6 +61,7 @@
     size = 'xs',
     className = '',
     id,
+    helpText = '',
   }: Props = $props();
 
   // Generate unique ID if not provided (browser-compatible)
@@ -106,8 +109,8 @@
   }
 </script>
 
-<div class={cn('inline-slider', className)}>
-  <label class="label py-1" for={inputId}>
+<div class={cn('inline-slider form-control', className)}>
+  <label class="label" for={inputId}>
     <span class={cn('label-text', size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : '')}>
       {label}
     </span>
@@ -140,6 +143,11 @@
     aria-valuetext={displayValue}
     aria-disabled={disabled}
   />
+  {#if helpText}
+    <div class="label">
+      <span class="help-text">{helpText}</span>
+    </div>
+  {/if}
 </div>
 
 <style>

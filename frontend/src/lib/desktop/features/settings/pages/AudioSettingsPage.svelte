@@ -935,15 +935,11 @@
                 disabled={store.isLoading || store.isSaving || !ffmpegAvailable}
                 formatValue={(v: number) => `${v}k`}
                 size="xs"
+                helpText={t('settings.audio.audioExport.bitrateHelp', {
+                  min: bitrateConfig.min,
+                  max: bitrateConfig.max,
+                })}
               />
-              <div class="label">
-                <span class="help-text">
-                  {t('settings.audio.audioExport.bitrateHelp', {
-                    min: bitrateConfig.min,
-                    max: bitrateConfig.max,
-                  })}
-                </span>
-              </div>
             {:else}
               <!-- Show disabled field for lossless formats -->
               <label class="label" for="export-bitrate-disabled">
