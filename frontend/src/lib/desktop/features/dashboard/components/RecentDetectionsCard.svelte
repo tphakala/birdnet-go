@@ -333,7 +333,7 @@
               </div>
 
               <!-- Recording -->
-              <div>
+              <div onclick={e => e.stopPropagation()} role="presentation">
                 <div class="rd-audio-player-container relative min-w-[50px]">
                   <AudioPlayer
                     audioUrl="/api/v2/audio/{detection.id}"
