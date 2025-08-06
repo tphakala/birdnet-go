@@ -9,12 +9,10 @@ import (
 // BenchmarkRepeatedStatOperationsWithoutCache simulates the real-world scenario
 // where the same files are checked multiple times (like in spectrogram generation)
 func BenchmarkRepeatedStatOperationsWithoutCache(b *testing.B) {
-	// Create a temporary directory with actual files
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create a temporary directory with actual files using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	// Create actual test files
 	testFiles := []string{
@@ -45,7 +43,8 @@ func BenchmarkRepeatedStatOperationsWithoutCache(b *testing.B) {
 	sfs.root = nil
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		for _, file := range testFiles {
 			// Simulate the expensive operations that happen in real usage
 			
@@ -69,12 +68,10 @@ func BenchmarkRepeatedStatOperationsWithoutCache(b *testing.B) {
 
 // BenchmarkRepeatedStatOperationsWithCache simulates the same scenario with caching
 func BenchmarkRepeatedStatOperationsWithCache(b *testing.B) {
-	// Create a temporary directory with actual files
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create a temporary directory with actual files using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	// Create actual test files
 	testFiles := []string{
@@ -99,7 +96,8 @@ func BenchmarkRepeatedStatOperationsWithCache(b *testing.B) {
 	cache := NewPathCache()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		for _, file := range testFiles {
 			// Simulate the same expensive operations but with caching
 			
@@ -128,16 +126,16 @@ func BenchmarkRepeatedStatOperationsWithCache(b *testing.B) {
 
 // BenchmarkManyUniqueOperationsWithoutCache tests performance with many unique operations
 func BenchmarkManyUniqueOperationsWithoutCache(b *testing.B) {
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create a temporary directory using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		// Create unique paths each time (cache won't help)
-		uniquePath := filepath.Join(tempDir, "unique", string(rune(i)), "file.mp3")
+		uniquePath := filepath.Join(tempDir, "unique", string(rune(b.N)), "file.mp3")
 		_, _ = filepath.Abs(uniquePath)
 		_, _ = filepath.EvalSymlinks(filepath.Dir(uniquePath))
 	}
@@ -145,18 +143,18 @@ func BenchmarkManyUniqueOperationsWithoutCache(b *testing.B) {
 
 // BenchmarkManyUniqueOperationsWithCache tests the same with cache (should perform similarly)
 func BenchmarkManyUniqueOperationsWithCache(b *testing.B) {
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create a temporary directory using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	cache := NewPathCache()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		// Create unique paths each time (cache won't help much)
-		uniquePath := filepath.Join(tempDir, "unique", string(rune(i)), "file.mp3")
+		uniquePath := filepath.Join(tempDir, "unique", string(rune(b.N)), "file.mp3")
 		_, _ = cache.GetAbsPath(uniquePath, filepath.Abs)
 		_, _ = cache.GetSymlinkResolution(filepath.Dir(uniquePath), filepath.EvalSymlinks)
 	}
@@ -164,6 +162,8 @@ func BenchmarkManyUniqueOperationsWithCache(b *testing.B) {
 
 // BenchmarkCacheOverhead measures just the cache overhead
 func BenchmarkCacheOverhead(b *testing.B) {
+	b.ReportAllocs()
+	
 	cache := NewPathCache()
 	testPath := "test/path/file.txt"
 	
@@ -173,7 +173,8 @@ func BenchmarkCacheOverhead(b *testing.B) {
 	})
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		// This should hit cache every time
 		_, _ = cache.GetValidatePath(testPath, func(path string) (string, error) {
 			b.Fatal("Should not be called - should use cache")
@@ -184,12 +185,8 @@ func BenchmarkCacheOverhead(b *testing.B) {
 
 // BenchmarkRealWorldSpectrogramScenario simulates the actual spectrogram generation scenario
 func BenchmarkRealWorldSpectrogramScenario(b *testing.B) {
-	// Create a temporary directory structure similar to real usage
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	// Create a temporary directory structure similar to real usage using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	// Create actual audio files
 	audioFiles := []string{
@@ -211,7 +208,9 @@ func BenchmarkRealWorldSpectrogramScenario(b *testing.B) {
 	}
 
 	b.Run("WithoutCache", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		b.ReportAllocs()
+		// Use Go 1.24 b.Loop() instead of manual for loop
+		for b.Loop() {
 			for _, audioFile := range audioFiles {
 				// Simulate what happens in the v2 API for each spectrogram request
 				audioPath := filepath.Join(tempDir, audioFile)
@@ -237,9 +236,11 @@ func BenchmarkRealWorldSpectrogramScenario(b *testing.B) {
 	})
 
 	b.Run("WithCache", func(b *testing.B) {
+		b.ReportAllocs()
 		cache := NewPathCache()
 		
-		for i := 0; i < b.N; i++ {
+		// Use Go 1.24 b.Loop() instead of manual for loop
+		for b.Loop() {
 			for _, audioFile := range audioFiles {
 				// Simulate the same operations but with caching
 				audioPath := filepath.Join(tempDir, audioFile)

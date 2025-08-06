@@ -1,24 +1,20 @@
 package securefs
 
 import (
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
 
 // BenchmarkValidateRelativePathWithoutCache benchmarks path validation without caching
 func BenchmarkValidateRelativePathWithoutCache(b *testing.B) {
-	// Create a temporary directory
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create a temporary directory using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	// Create SecureFS without cache (simulate old behavior)
-	_ = &SecureFS{
+	sfs := &SecureFS{
 		baseDir: tempDir,
 		cache:   nil, // No cache
 	}
@@ -32,29 +28,21 @@ func BenchmarkValidateRelativePathWithoutCache(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		for _, path := range testPaths {
-			// Direct validation without cache
-			cleanedPath := filepath.Clean(path)
-			if filepath.IsAbs(cleanedPath) {
-				continue
-			}
-			if strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) || cleanedPath == ".." {
-				continue
-			}
-			_ = filepath.ToSlash(cleanedPath)
+			// Use actual SecureFS validation methods
+			_, _ = sfs.ValidateRelativePath(path)
 		}
 	}
 }
 
 // BenchmarkValidateRelativePathWithCache benchmarks path validation with caching
 func BenchmarkValidateRelativePathWithCache(b *testing.B) {
-	// Create a temporary directory
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create a temporary directory using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	// Create SecureFS with cache
 	sfs := &SecureFS{
@@ -71,9 +59,10 @@ func BenchmarkValidateRelativePathWithCache(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		for _, path := range testPaths {
-			// Use cached validation 
+			// Use cached validation
 			_, _ = sfs.ValidateRelativePath(path)
 		}
 	}
@@ -81,12 +70,10 @@ func BenchmarkValidateRelativePathWithCache(b *testing.B) {
 
 // BenchmarkIsPathWithinBaseWithoutCache benchmarks path checking without caching
 func BenchmarkIsPathWithinBaseWithoutCache(b *testing.B) {
-	// Create temporary directories
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create temporary directories using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	baseDir := tempDir
 	testPaths := []string{
@@ -97,7 +84,8 @@ func BenchmarkIsPathWithinBaseWithoutCache(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		for _, path := range testPaths {
 			// Direct check without cache
 			_, _ = IsPathWithinBase(baseDir, path)
@@ -107,12 +95,10 @@ func BenchmarkIsPathWithinBaseWithoutCache(b *testing.B) {
 
 // BenchmarkIsPathWithinBaseWithCache benchmarks path checking with caching
 func BenchmarkIsPathWithinBaseWithCache(b *testing.B) {
-	// Create temporary directories
-	tempDir, err := os.MkdirTemp("", "securefs_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	b.ReportAllocs()
+	
+	// Create temporary directories using Go 1.24 b.TempDir()
+	tempDir := b.TempDir()
 
 	cache := NewPathCache()
 	baseDir := tempDir
@@ -124,7 +110,8 @@ func BenchmarkIsPathWithinBaseWithCache(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	// Use Go 1.24 b.Loop() instead of manual for loop
+	for b.Loop() {
 		for _, path := range testPaths {
 			// Use cached check
 			_, _ = IsPathWithinBaseWithCache(cache, baseDir, path)
