@@ -33,14 +33,19 @@ func BenchmarkRepeatedStatOperationsWithoutCache(b *testing.B) {
 		}
 	}
 
-	// Create SecureFS without cache
-	sfs := &SecureFS{
-		baseDir: tempDir,
-		cache:   nil, // No cache
+	// Create SecureFS without cache but with proper root initialization
+	sfs, err := New(tempDir)
+	if err != nil {
+		b.Fatal(err)
 	}
-
-	// Create a fake root to avoid the os.Root dependency in benchmarks
-	sfs.root = nil
+	defer func() {
+		if err := sfs.Close(); err != nil {
+			b.Logf("Failed to close SecureFS: %v", err)
+		}
+	}()
+	
+	// Disable cache for this benchmark to simulate old behavior
+	sfs.cache = nil
 
 	b.ResetTimer()
 	// Use Go 1.24 b.Loop() instead of manual for loop
@@ -133,11 +138,13 @@ func BenchmarkManyUniqueOperationsWithoutCache(b *testing.B) {
 
 	b.ResetTimer()
 	// Use Go 1.24 b.Loop() instead of manual for loop
+	counter := 0
 	for b.Loop() {
 		// Create unique paths each time (cache won't help)
-		uniquePath := filepath.Join(tempDir, "unique", string(rune(b.N)), "file.mp3")
+		uniquePath := filepath.Join(tempDir, "unique", string(rune(counter)), "file.mp3")
 		_, _ = filepath.Abs(uniquePath)
 		_, _ = filepath.EvalSymlinks(filepath.Dir(uniquePath))
+		counter++
 	}
 }
 
@@ -152,11 +159,13 @@ func BenchmarkManyUniqueOperationsWithCache(b *testing.B) {
 
 	b.ResetTimer()
 	// Use Go 1.24 b.Loop() instead of manual for loop
+	counter := 0
 	for b.Loop() {
 		// Create unique paths each time (cache won't help much)
-		uniquePath := filepath.Join(tempDir, "unique", string(rune(b.N)), "file.mp3")
+		uniquePath := filepath.Join(tempDir, "unique", string(rune(counter)), "file.mp3")
 		_, _ = cache.GetAbsPath(uniquePath, filepath.Abs)
 		_, _ = cache.GetSymlinkResolution(filepath.Dir(uniquePath), filepath.EvalSymlinks)
+		counter++
 	}
 }
 

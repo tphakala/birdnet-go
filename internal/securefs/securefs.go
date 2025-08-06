@@ -752,3 +752,47 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 func (sfs *SecureFS) BaseDir() string {
 	return sfs.baseDir
 }
+
+// ParentPath returns the parent directory path for a given path, or empty string
+// if the path is at the root of the SecureFS base directory.
+// The input path can be absolute or relative to the base directory.
+func (sfs *SecureFS) ParentPath(path string) (string, error) {
+	// Convert to relative path first to ensure it's within our boundaries
+	relPath, err := sfs.RelativePath(path)
+	if err != nil {
+		return "", err
+	}
+
+	// If we're at the root (empty or "."), there's no parent
+	if relPath == "" || relPath == "." {
+		return "", nil
+	}
+
+	// Get the parent directory of the relative path
+	parentRelPath := filepath.Dir(relPath)
+	
+	// If parent is "." or same as original, we're at the root
+	if parentRelPath == "." || parentRelPath == relPath {
+		return "", nil
+	}
+
+	// Convert back to absolute path
+	parentAbsPath := filepath.Join(sfs.baseDir, parentRelPath)
+	return parentAbsPath, nil
+}
+
+// Readlink reads the target of a symbolic link, ensuring the operation
+// stays within the SecureFS sandbox.
+func (sfs *SecureFS) Readlink(path string) (string, error) {
+	// Get relative path for os.Root operations
+	relPath, err := sfs.RelativePath(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Construct the full path within the base directory
+	// Since we've already validated the path is within our boundaries,
+	// this is safe to read from
+	fullPath := filepath.Join(sfs.baseDir, relPath)
+	return os.Readlink(fullPath)
+}

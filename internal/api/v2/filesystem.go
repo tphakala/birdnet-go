@@ -143,15 +143,14 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 		items = append(items, item)
 	}
 
-	// Determine parent path securely
-	parentPath := ""
-	if relPath != "" && relPath != "." {
-		// Get parent directory relative path
-		parentRelPath := filepath.Dir(relPath)
-		if parentRelPath != "." && parentRelPath != relPath {
-			// Convert back to absolute path for response
-			parentPath = filepath.Join(c.SFS.BaseDir(), parentRelPath)
+	// Determine parent path securely using SecureFS
+	parentPath, err := c.SFS.ParentPath(browsePath)
+	if err != nil {
+		// Log error but continue - parent path is optional
+		if c.apiLogger != nil {
+			c.apiLogger.Debug("Failed to get parent path", "path", browsePath, "error", err.Error())
 		}
+		parentPath = ""
 	}
 
 	// Get the current absolute path for response
@@ -179,15 +178,8 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 
 // validateSymlinkTarget validates that a symlink target is within allowed boundaries
 func (c *Controller) validateSymlinkTarget(symlinkPath string) error {
-	// Use SecureFS to safely read the symlink target
-	relPath, err := c.SFS.RelativePath(symlinkPath)
-	if err != nil {
-		return fmt.Errorf("failed to get relative path for symlink: %w", err)
-	}
-
-	// Read the symlink target using the os.Root sandbox
-	// This is safe because os.Root prevents reading targets outside the sandbox
-	target, err := os.Readlink(filepath.Join(c.SFS.BaseDir(), relPath))
+	// Use SecureFS to safely read the symlink target within the sandbox
+	target, err := c.SFS.Readlink(symlinkPath)
 	if err != nil {
 		return fmt.Errorf("failed to read symlink target: %w", err)
 	}
