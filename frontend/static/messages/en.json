@@ -1214,7 +1214,7 @@
         "maxAgeLabel": "Maximum Age",
         "maxAgeHelp": "Delete audio clips older than this duration. Format: number followed by unit (h=hours, d=days, w=weeks, m=months). Examples: '7d' for 7 days, '4w' for 4 weeks.",
         "maxUsageLabel": "Maximum Disk Usage",
-        "maxUsageHelp": "Delete oldest clips when the audio directory uses more than this percentage of available disk space. Enter as percentage (e.g., '80%').",
+        "maxUsageHelp": "Delete oldest clips when the audio directory uses more than this percentage of available disk space.",
         "minClipsLabel": "Minimum Clips per Species",
         "minClipsHelp": "Always keep at least this many clips for each bird species, regardless of age or disk usage. Helps preserve rare recordings.",
         "keepSpectrograms": "Keep Spectrogram Images",
