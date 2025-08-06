@@ -62,7 +62,8 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	assert.Equal(t, PriorityHigh, notif.Priority)
 	assert.Contains(t, notif.Title, "New Species Detected: American Robin")
 	assert.Contains(t, notif.Message, "First detection of American Robin")
-	assert.Contains(t, notif.Message, "92.0% confidence")
+	assert.Contains(t, notif.Message, "Turdus migratorius")
+	assert.Contains(t, notif.Message, "backyard-camera")
 	assert.Equal(t, "detection", notif.Component)
 
 	// Verify metadata

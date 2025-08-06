@@ -340,7 +340,7 @@ func TestFFmpegStream_DataRateCalculation(t *testing.T) {
 	calc.addSample(1536)
 
 	// Calculate rate
-	rate, err := calc.getRate()
+	rate, err := calc.getRate("test://stream")
 	require.NoError(t, err)
 	assert.Greater(t, rate, 0.0)
 }

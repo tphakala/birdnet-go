@@ -121,26 +121,28 @@ func (d *dataRateCalculator) addSample(numBytes int64) {
 }
 
 // getRate returns the current data rate in bytes per second and an error if insufficient data
-func (d *dataRateCalculator) getRate() (float64, error) {
+func (d *dataRateCalculator) getRate(url string) (float64, error) {
 	d.samplesMu.RLock()
 	defer d.samplesMu.RUnlock()
 
 	if len(d.samples) == 0 {
-		return 0, errors.Newf("no data received from RTSP source").
+		return 0, errors.Newf("no data received from RTSP source: %s", privacy.SanitizeRTSPUrl(url)).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryAudioSource).
 			Priority(errors.PriorityMedium).
 			Context("operation", "calculate_data_rate").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
 			Build()
 	}
 
 	if len(d.samples) < 2 {
-		return 0, errors.Newf("insufficient data received from RTSP source").
+		return 0, errors.Newf("insufficient data received from RTSP source: %s", privacy.SanitizeRTSPUrl(url)).
 			Component("ffmpeg-stream").
 			Category(errors.CategoryAudioSource).
 			Priority(errors.PriorityLow).
 			Context("operation", "calculate_data_rate").
 			Context("sample_count", len(d.samples)).
+			Context("url", privacy.SanitizeRTSPUrl(url)).
 			Build()
 	}
 
@@ -345,7 +347,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				s.recordFailure(runtime)
 				// Log process exit with sanitized error message
 				errorMsg := err.Error()
-				sanitizedError := privacy.SanitizeRTSPUrls(errorMsg)
+				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
 
 				// Check if this was a silence timeout
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
@@ -575,8 +577,8 @@ func (s *FFmpegStream) processAudio() error {
 				s.stderrMu.RLock()
 				stderrOutput := s.stderr.String()
 				s.stderrMu.RUnlock()
-				// Sanitize stderr output to remove sensitive data
-				sanitizedOutput := privacy.SanitizeRTSPUrls(stderrOutput)
+				// Sanitize stderr output to remove sensitive data and memory addresses
+				sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
 				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
 					Category(errors.CategoryRTSP).
 					Component("ffmpeg-stream").
@@ -1112,7 +1114,7 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	s.bytesReceivedMu.RUnlock()
 
 	// Get current data rate
-	dataRate, err := s.dataRateCalc.getRate()
+	dataRate, err := s.dataRateCalc.getRate(s.url)
 	if err != nil {
 		// Log error but don't fail health check
 		if conf.Setting().Debug {
@@ -1181,7 +1183,7 @@ func (s *FFmpegStream) logStreamHealth() {
 	totalBytes := s.totalBytesReceived
 	s.bytesReceivedMu.RUnlock()
 
-	dataRate, err := s.dataRateCalc.getRate()
+	dataRate, err := s.dataRateCalc.getRate(s.url)
 	if err != nil {
 		// Log error but continue with zero rate for display
 		if conf.Setting().Debug {
