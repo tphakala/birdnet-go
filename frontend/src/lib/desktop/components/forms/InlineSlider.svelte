@@ -22,7 +22,6 @@
   - unit?: string - Unit suffix to display (e.g., 'k', '%')
   - formatValue?: (value: number) => string - Custom value formatter
   - disabled?: boolean - Disable the slider
-  - size?: 'xs' | 'sm' | 'md' - Size variant (default: 'xs')
   - className?: string - Additional CSS classes
   - id?: string - Custom ID for the input element
   - helpText?: string - Help text to display below the slider
@@ -42,7 +41,6 @@
     unit?: string;
     formatValue?: (_value: number) => string;
     disabled?: boolean;
-    size?: 'xs' | 'sm' | 'md';
     className?: string;
     id?: string;
     helpText?: string;
@@ -58,7 +56,6 @@
     unit = '',
     formatValue,
     disabled = false,
-    size = 'xs',
     className = '',
     id,
     helpText = '',
@@ -87,13 +84,6 @@
         })()
   );
 
-  // Size classes for the range input
-  const sizeClasses: Record<'xs' | 'sm' | 'md', string> = {
-    xs: 'range-xs',
-    sm: 'range-sm',
-    md: '',
-  };
-
   function handleInput(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     const newValue = Number(target.value);
@@ -114,7 +104,7 @@
     <span class="label-text">
       {label}
     </span>
-    <span class="label-text-alt font-mono">
+    <span class="label-text font-mono">
       {displayValue}
     </span>
   </label>
@@ -128,7 +118,7 @@
     {disabled}
     oninput={handleInput}
     onchange={handleChange}
-    class={cn('range range-primary', sizeClasses[size as keyof typeof sizeClasses], {
+    class={cn('range range-primary range-sm', {
       'opacity-50': disabled,
     })}
     aria-label={label}
