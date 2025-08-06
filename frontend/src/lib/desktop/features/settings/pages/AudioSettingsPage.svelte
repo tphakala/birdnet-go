@@ -924,33 +924,32 @@
           />
 
           <!-- Bitrate -->
-          <div class="form-control">
-            {#if bitrateConfig}
-              <InlineSlider
-                label={t('settings.audio.audioExport.bitrateLabel')}
-                value={numericBitrate}
-                onUpdate={updateExportBitrate}
-                min={bitrateConfig.min}
-                max={bitrateConfig.max}
-                step={bitrateConfig.step}
-                unit="k"
-                disabled={store.isLoading || store.isSaving || !ffmpegAvailable}
-                formatValue={(v: number) => `${v}k`}
-                size="xs"
-                helpText={t('settings.audio.audioExport.bitrateHelp', {
-                  min: bitrateConfig.min,
-                  max: bitrateConfig.max,
-                })}
-              />
-            {:else}
-              <!-- Show disabled field for lossless formats -->
+          {#if bitrateConfig}
+            <InlineSlider
+              label={t('settings.audio.audioExport.bitrateLabel')}
+              value={numericBitrate}
+              onUpdate={updateExportBitrate}
+              min={bitrateConfig.min}
+              max={bitrateConfig.max}
+              step={bitrateConfig.step}
+              unit="k"
+              disabled={store.isLoading || store.isSaving || !ffmpegAvailable}
+              formatValue={(v: number) => `${v}k`}
+              helpText={t('settings.audio.audioExport.bitrateHelp', {
+                min: bitrateConfig.min,
+                max: bitrateConfig.max,
+              })}
+            />
+          {:else}
+            <!-- Show disabled field for lossless formats -->
+            <div class="form-control">
               <label class="label" for="export-bitrate-disabled">
                 <span class="label-text">{t('settings.audio.audioExport.bitrateLabel')}</span>
               </label>
               <input
                 id="export-bitrate-disabled"
                 type="text"
-                class="input input-bordered input-disabled"
+                class="input input-bordered input-sm input-disabled w-full"
                 value="N/A - Lossless"
                 disabled
                 aria-describedby="lossless-note"
@@ -960,8 +959,8 @@
                   >{t('settings.audio.audioExport.losslessNote')}</span
                 >
               </div>
-            {/if}
-          </div>
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

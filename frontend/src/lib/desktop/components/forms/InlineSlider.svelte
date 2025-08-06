@@ -111,15 +111,10 @@
 
 <div class={cn('form-control', className)}>
   <label class="label" for={inputId}>
-    <span class={cn('label-text', size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : '')}>
+    <span class="label-text">
       {label}
     </span>
-    <span
-      class={cn(
-        'label-text-alt font-mono',
-        size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : ''
-      )}
-    >
+    <span class="label-text-alt font-mono">
       {displayValue}
     </span>
   </label>
