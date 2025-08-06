@@ -59,6 +59,8 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 	// Create notification for new species
 	title := fmt.Sprintf("New Species Detected: %s", event.GetSpeciesName())
+	// Removed confidence from message to enable proper deduplication
+	// when same species detected with different confidence values
 	message := fmt.Sprintf(
 		"First detection of %s (%s) at %s",
 		event.GetSpeciesName(),

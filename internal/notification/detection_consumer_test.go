@@ -64,6 +64,8 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	assert.Contains(t, notif.Message, "First detection of American Robin")
 	assert.Contains(t, notif.Message, "Turdus migratorius")
 	assert.Contains(t, notif.Message, "backyard-camera")
+	// Verify confidence percentage is not included to prevent regression
+	assert.NotContains(t, notif.Message, "%", "Message should not contain percentage symbol")
 	assert.Equal(t, "detection", notif.Component)
 
 	// Verify metadata
