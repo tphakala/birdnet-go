@@ -157,6 +157,28 @@
 }
 
 /* ========================================================================
+   Form Field Helpers
+   ======================================================================== */
+
+/* Settings form grid alignment - ensures consistent field heights */
+.settings-form-grid {
+  @apply grid grid-cols-1 md:grid-cols-3 gap-6;
+}
+
+.settings-form-grid .form-control {
+  @apply flex flex-col;
+}
+
+/* Ensure labels have consistent height to align input fields
+   min-h-[2rem] (32px) provides enough space for label text while preventing
+   vertical misalignment when labels wrap or have different heights.
+   This ensures all input fields in the same row start at the same vertical position. */
+.settings-form-grid .form-control > label:first-child,
+.settings-form-grid .form-control > .label:first-child {
+  @apply min-h-[2rem] items-start;
+}
+
+/* ========================================================================
    Miscellaneous Utilities
    ======================================================================== */
 

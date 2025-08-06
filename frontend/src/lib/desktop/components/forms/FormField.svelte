@@ -108,6 +108,13 @@
     externalError || null
   );
   let fieldId = id || `field-${name || 'field'}-${++fieldCounter}`;
+  let helpTextId = helpText ? `${fieldId}-help` : undefined;
+  let errorId = `${fieldId}-error`;
+
+  // Compute aria-describedby based on what's visible
+  let describedBy = $derived(
+    error && (touched || externalError) ? errorId : helpText ? helpTextId : undefined
+  );
 
   // Update error when external error changes
   $effect(() => {
@@ -271,6 +278,7 @@
         {readonly}
         {rows}
         {cols}
+        aria-describedby={describedBy}
         class={cn(
           'textarea textarea-bordered textarea-sm w-full',
           error && 'textarea-error',
@@ -291,6 +299,7 @@
           {required}
           {disabled}
           multiple
+          aria-describedby={describedBy}
           class={cn(
             'select select-bordered select-sm w-full',
             error && 'select-error',
@@ -314,6 +323,7 @@
           bind:value
           {required}
           {disabled}
+          aria-describedby={describedBy}
           class={cn(
             'select select-bordered select-sm w-full',
             error && 'select-error',
@@ -344,6 +354,7 @@
           {required}
           {disabled}
           {readonly}
+          aria-describedby={describedBy}
           class={cn('checkbox', error && 'checkbox-error', inputClassName)}
           onchange={handleChange}
           onblur={handleBlur}
@@ -369,6 +380,7 @@
             {required}
             {disabled}
             {readonly}
+            aria-describedby={describedBy}
             class={cn('radio', error && 'radio-error', inputClassName)}
             onchange={handleChange}
             onblur={handleBlur}
@@ -390,6 +402,7 @@
           {step}
           {disabled}
           {readonly}
+          aria-describedby={describedBy}
           class={cn('range', error && 'range-error', inputClassName)}
           onchange={handleChange}
           oninput={handleInput}
@@ -421,6 +434,7 @@
         {accept}
         {pattern}
         {autocomplete}
+        aria-describedby={describedBy}
         class={getInputClasses()}
         onchange={handleChange}
         oninput={handleInput}
@@ -433,11 +447,13 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span class={cn('label-text-alt text-error', errorClassName)}>{displayError()}</span>
+      <span id={errorId} class={cn('label-text-alt text-error', errorClassName)}
+        >{displayError()}</span
+      >
     </div>
   {:else if helpText}
     <div class="label">
-      <span class="label-text-alt">{helpText}</span>
+      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
     </div>
   {/if}
 </div>

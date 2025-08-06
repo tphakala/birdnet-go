@@ -152,7 +152,7 @@ export interface ExportSettings {
   type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus';
   bitrate: string;
   enabled: boolean;
-  debug: boolean;
+  debug?: boolean;
   path: string;
   retention: RetentionSettings;
 }

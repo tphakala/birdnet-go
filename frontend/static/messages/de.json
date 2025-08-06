@@ -1106,7 +1106,8 @@
         "description": "Audioclip-Bereinigung konfigurieren",
         "policyLabel": "Aufbewahrungsrichtlinie",
         "maxAgeLabel": "Maximales Alter",
-        "maxUsageLabel": "Maximale Nutzung (Prozent)",
+        "maxUsageLabel": "Maximale Festplattennutzung",
+        "maxUsageHelp": "Älteste Clips löschen, wenn das Audioverzeichnis mehr als diesen Prozentsatz des verfügbaren Speicherplatzes verwendet.",
         "minClipsLabel": "Minimale Clips",
         "keepSpectrograms": "Spektrogrammbilder behalten",
         "policies": {

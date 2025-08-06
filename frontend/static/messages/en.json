@@ -1143,38 +1143,48 @@
         "description": "Set audio capture source, sound card or RTSP stream",
         "soundCardSource": "Sound Card Source",
         "audioSourceLabel": "Audio Source (requires application restart to take effect)",
+        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
         "noSoundCardCapture": "No sound card capture",
         "rtspSource": "RTSP Source",
         "rtspTransportLabel": "RTSP Transport Protocol",
-        "rtspUrlsLabel": "RTSP Stream URLs"
+        "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
+        "rtspUrlsLabel": "RTSP Stream URLs",
+        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security."
       },
       "audioFilters": {
         "title": "Audio Filters",
         "description": "Configure audio processing filters",
         "enableEqualizer": "Enable Audio Equalizer",
+        "enableEqualizerHelp": "Apply frequency filtering to improve bird call detection by reducing unwanted noise and frequencies.",
         "filterType": "Filter Type",
         "newFilterType": "New Filter Type",
         "selectFilterType": "Select filter type",
         "addFilter": "Add Filter",
         "remove": "Remove",
         "cutoffFrequency": "Cutoff Frequency",
+        "cutoffFrequencyHelp": "Frequency at which the filter begins to attenuate signals. Bird calls typically range from 1-10 kHz.",
         "qFactor": "Q Factor",
+        "qFactorHelp": "Quality factor controls the sharpness of the filter. Lower values (0.1-1) create gentler slopes, higher values (1-10) create steeper cutoffs.",
         "gain": "Gain",
+        "gainHelp": "Amplification or attenuation level in decibels (dB).",
         "attenuation": "Attenuation",
+        "attenuationHelp": "Filter rolloff rate. Higher values provide steeper attenuation of filtered frequencies.",
         "attenuationLevels": {
           "0db": "0dB",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
           "48db": "48dB"
-        }
+        },
+        "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment."
       },
       "soundLevelMonitoring": {
         "title": "Sound Level Monitoring",
         "description": "Monitor and report environmental sound levels",
         "enable": "Enable Sound Level Monitoring",
+        "enableHelp": "Track ambient noise levels to understand your recording environment and correlate with bird activity patterns.",
         "intervalLabel": "Measurement Interval (seconds)",
-        "intervalHelp": "How often to report sound level measurements",
+        "intervalHelp": "How often to measure and report sound levels. Lower values provide more granular data but use more resources. Minimum 5 seconds, recommended 60 seconds.",
         "dataOutputTitle": "Sound Level Data Output",
         "dataOutputDescription": "When enabled, sound level measurements are published via:",
         "mqttTopic": "MQTT topic:",
@@ -1185,23 +1195,34 @@
         "title": "Audio Export",
         "description": "Configure audio clip saving for identified bird calls",
         "enable": "Enable Audio Export",
+        "enableHelp": "Save audio clips of detected bird calls for review, sharing, or building custom datasets.",
         "enableDebug": "Enable Debug Mode",
+        "enableDebugHelp": "Save additional debug information and unprocessed audio clips for troubleshooting detection issues.",
         "pathLabel": "Export Path",
-        "typeLabel": "Export Type",
-        "bitrateLabel": "Bitrate"
+        "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
+        "typeLabel": "Export Format",
+        "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
+        "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
       },
       "audioClipRetention": {
         "title": "Audio Clip Retention",
-        "description": "Configure audio clip cleanup",
+        "description": "Configure automatic cleanup of saved audio clips",
         "policyLabel": "Retention Policy",
-        "maxAgeLabel": "Max Age",
-        "maxUsageLabel": "Max Usage (Percentage)",
-        "minClipsLabel": "Minimum Clips",
+        "policyHelp": "Choose how audio clips are automatically deleted. None: keep all clips. Age: delete clips older than specified. Usage: delete oldest clips when disk usage exceeds limit.",
+        "maxAgeLabel": "Maximum Age",
+        "maxAgeHelp": "Delete audio clips older than this duration. Format: number followed by unit (h=hours, d=days, w=weeks, m=months). Examples: '7d' for 7 days, '4w' for 4 weeks.",
+        "maxUsageLabel": "Maximum Disk Usage",
+        "maxUsageHelp": "Delete oldest clips when the audio directory uses more than this percentage of available disk space.",
+        "minClipsLabel": "Minimum Clips per Species",
+        "minClipsHelp": "Always keep at least this many clips for each bird species, regardless of age or disk usage. Helps preserve rare recordings.",
         "keepSpectrograms": "Keep Spectrogram Images",
+        "keepSpectrogramsHelp": "Retain spectrogram images even when audio clips are deleted. Spectrograms use less space and provide visual reference.",
         "policies": {
-          "none": "None",
-          "age": "Age",
-          "usage": "Usage"
+          "none": "None - Keep All",
+          "age": "Age-Based",
+          "usage": "Disk Usage-Based"
         }
       },
       "formats": {
@@ -1220,6 +1241,11 @@
         "highpass": "Highpass Filter",
         "bandpass": "Bandpass Filter",
         "bandstop": "Bandstop Filter"
+      },
+      "errors": {
+        "devicesLoadFailed": "Failed to load audio devices. Please check system permissions.",
+        "invalidBitrate": "Invalid bitrate value",
+        "invalidRetentionPolicy": "Invalid retention policy"
       }
     },
     "security": {

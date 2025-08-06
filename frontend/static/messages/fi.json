@@ -986,7 +986,8 @@
         "description": "Määritä äänileikkeiden siivous",
         "policyLabel": "Säilytyskäytäntö",
         "maxAgeLabel": "Enimmäisikä",
-        "maxUsageLabel": "Enimmäiskäyttö (prosenttia)",
+        "maxUsageLabel": "Levyn enimmäiskäyttö",
+        "maxUsageHelp": "Poista vanhimmat leikkeet, kun äänihakemisto käyttää enemmän kuin tämän prosenttiosuuden käytettävissä olevasta levytilasta.",
         "minClipsLabel": "Vähimmäisleikkeet",
         "keepSpectrograms": "Säilytä spektrogrammikuvat",
         "policies": {
