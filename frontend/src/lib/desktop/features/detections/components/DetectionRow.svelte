@@ -64,6 +64,9 @@
   let thumbnailError = $state(false); // Track if thumbnail failed to load
   let loadingTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Track failed URLs to prevent retry loops
+  const failedImageUrls = new Set<string>();
+
   function handleDetailsClick(e: Event) {
     e.preventDefault();
     if (onDetailsClick) {
@@ -169,36 +172,56 @@
   }
 
   // Thumbnail loading handlers
-  function handleThumbnailLoadStart() {
-    thumbnailLoading = true;
-    // Set a 10 second timeout for loading
-    clearLoadingTimeout();
-    loadingTimeout = setTimeout(() => {
-      if (thumbnailLoading) {
-        handleThumbnailError();
-      }
-    }, 10000);
-  }
-
   function handleThumbnailLoad() {
     clearLoadingTimeout();
     thumbnailLoading = false;
+    thumbnailError = false;
   }
 
   function handleThumbnailError() {
     clearLoadingTimeout();
     thumbnailLoading = false;
     thumbnailError = true;
+    // Mark this URL as failed to prevent retry loops
+    const currentUrl = getThumbnailUrl(detection.scientificName);
+    failedImageUrls.add(currentUrl);
   }
 
-  // Reset loading state when detection changes
+  // Track previous URL to avoid unnecessary resets
+  let previousThumbnailUrl = $state<string | null>(null);
+
+  // Handle thumbnail loading state when detection changes
   $effect(() => {
-    if (detection.scientificName) {
+    const currentUrl = getThumbnailUrl(detection.scientificName);
+    // Only reset loading state if URL actually changed
+    if (detection.scientificName && currentUrl !== previousThumbnailUrl) {
+      previousThumbnailUrl = currentUrl;
+
+      // Check if this URL has previously failed to prevent retry loops
+      if (failedImageUrls.has(currentUrl)) {
+        thumbnailLoading = false;
+        thumbnailError = true;
+        return; // Don't try to load known failed URLs
+      }
+
+      // Start loading when URL changes
       thumbnailLoading = true;
       thumbnailError = false;
-      // Clear any existing timeout
+      // Set timeout in case events don't fire
       clearLoadingTimeout();
+      loadingTimeout = setTimeout(() => {
+        if (thumbnailLoading) {
+          handleThumbnailError();
+        }
+      }, 10000);
     }
+  });
+
+  // Cleanup on URL change
+  $effect(() => {
+    return () => {
+      clearLoadingTimeout();
+    };
   });
 
   // Cleanup on component destroy
@@ -276,14 +299,16 @@
             </svg>
             <span class="sr-only">Image failed to load</span>
           </div>
-        {:else}
+        {:else if !failedImageUrls.has(getThumbnailUrl(detection.scientificName))}
+          <!-- Only render img element if URL hasn't failed before -->
           <img
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
             src={getThumbnailUrl(detection.scientificName)}
             alt={detection.commonName}
             class="sp-thumbnail-image"
             class:opacity-0={thumbnailLoading}
-            onloadstart={handleThumbnailLoadStart}
             onload={handleThumbnailLoad}
             onerror={e => {
               handleThumbnailError();
