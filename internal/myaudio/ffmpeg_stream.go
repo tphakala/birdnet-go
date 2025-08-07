@@ -25,11 +25,11 @@ const (
 
 	// Health check intervals and timeouts
 	healthCheckInterval  = 5 * time.Second
-	silenceTimeout       = 60 * time.Second
+	silenceTimeout       = 90 * time.Second  // Increased from 60s to prevent false triggers
 	silenceCheckInterval = 10 * time.Second
 
 	// Data rate calculation settings
-	dataRateWindowSize = 30 * time.Second
+	dataRateWindowSize = 60 * time.Second  // Increased from 30s to align better with silence timeout
 	dataRateMaxSamples = 100
 
 	// Process management timeouts
@@ -1504,7 +1504,7 @@ func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
 			
 			streamLogger.Info("resetting failure count after successful stable operation",
 				"url", privacy.SanitizeRTSPUrl(s.url),
-				"runtime_seconds", time.Since(processStartTime).Seconds(),
+				"runtime_seconds", timeSinceStart.Seconds(),
 				"total_bytes", totalBytesReceived,
 				"previous_failures", previousFailures,
 				"min_stability_seconds", circuitBreakerMinStabilityTime.Seconds(),
@@ -1518,7 +1518,7 @@ func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
 				Priority(errors.PriorityLow).
 				Context("operation", "failure_reset").
 				Context("url", privacy.SanitizeRTSPUrl(s.url)).
-				Context("runtime_seconds", time.Since(processStartTime).Seconds()).
+				Context("runtime_seconds", timeSinceStart.Seconds()).
 				Context("total_bytes", totalBytesReceived).
 				Context("previous_failures", previousFailures).
 				Context("min_stability_seconds", circuitBreakerMinStabilityTime.Seconds()).

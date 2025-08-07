@@ -72,7 +72,7 @@ func (s *FFmpegStream) setTotalBytesReceivedForTest(bytes int64) {
 
 // getTotalBytesReceivedForTest gets the total bytes received for testing purposes (test helper)
 func (s *FFmpegStream) getTotalBytesReceivedForTest() int64 {
-	s.bytesReceivedMu.Lock()
-	defer s.bytesReceivedMu.Unlock()
+	s.bytesReceivedMu.RLock()
+	defer s.bytesReceivedMu.RUnlock()
 	return s.totalBytesReceived
 }

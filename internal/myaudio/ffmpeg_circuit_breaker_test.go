@@ -24,7 +24,7 @@ import (
 // accumulate across restart attempts without premature resets.
 func TestCircuitBreaker_FailureAccumulation(t *testing.T) {
 	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
+	t.Cleanup(func() { close(audioChan) })
 	stream := NewFFmpegStream("rtsp://test.local/accumulation", "tcp", audioChan)
 	
 	// Record failures without resets
@@ -101,8 +101,9 @@ func TestCircuitBreaker_RapidFailureThresholds(t *testing.T) {
 	
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			audioChan := make(chan UnifiedAudioData, 10)
-			defer close(audioChan)
+			t.Cleanup(func() { close(audioChan) })
 			stream := NewFFmpegStream("rtsp://test.local/"+tc.name, "tcp", audioChan)
 			
 			// Record failures up to just before threshold
@@ -129,7 +130,7 @@ func TestCircuitBreaker_RapidFailureThresholds(t *testing.T) {
 // TestCircuitBreaker_CooldownPeriod tests the circuit breaker cooldown behavior.
 func TestCircuitBreaker_CooldownPeriod(t *testing.T) {
 	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
+	t.Cleanup(func() { close(audioChan) })
 	stream := NewFFmpegStream("rtsp://test.local/cooldown", "tcp", audioChan)
 	
 	// Force circuit breaker to open
@@ -172,7 +173,7 @@ func TestCircuitBreaker_CooldownPeriod(t *testing.T) {
 // are reset before the process has proven stability.
 func TestCircuitBreaker_PrematureResetBug(t *testing.T) {
 	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
+	t.Cleanup(func() { close(audioChan) })
 	stream := NewFFmpegStream("rtsp://test.local/premature", "tcp", audioChan)
 	
 	scenarios := []struct {
@@ -253,7 +254,7 @@ func TestCircuitBreaker_ProcessStabilityValidation(t *testing.T) {
 	}
 	
 	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
+	t.Cleanup(func() { close(audioChan) })
 	stream := NewFFmpegStream("rtsp://test.local/stability", "tcp", audioChan)
 	
 	// Set up initial failure count
@@ -343,7 +344,7 @@ func TestCircuitBreaker_ProcessStabilityValidation(t *testing.T) {
 // failure recording and resetting, and validates that the fix prevents premature resets.
 func TestCircuitBreaker_ConcurrentFailureAndReset(t *testing.T) {
 	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
+	t.Cleanup(func() { close(audioChan) })
 	stream := NewFFmpegStream("rtsp://test.local/concurrent", "tcp", audioChan)
 	
 	var wg sync.WaitGroup
@@ -432,8 +433,9 @@ func TestCircuitBreaker_ConcurrentFailureAndReset(t *testing.T) {
 // TestCircuitBreaker_StateTransitions tests the complete state machine of
 // the circuit breaker through multiple transitions.
 func TestCircuitBreaker_StateTransitions(t *testing.T) {
+	// Note: Not using t.Parallel() as this test manipulates circuit breaker state timing
 	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
+	t.Cleanup(func() { close(audioChan) })
 	stream := NewFFmpegStream("rtsp://test.local/transitions", "tcp", audioChan)
 	
 	// Track state transitions
@@ -462,13 +464,13 @@ func TestCircuitBreaker_StateTransitions(t *testing.T) {
 	recordState("initial")
 	
 	// Phase 2: Record some failures (not enough to open)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		stream.recordFailure(2 * time.Second)
 	}
 	recordState("few_failures")
 	
 	// Phase 3: Record enough failures to open circuit
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		stream.recordFailure(100 * time.Millisecond)
 	}
 	recordState("circuit_opened")
@@ -604,8 +606,9 @@ func TestCircuitBreaker_EdgeCaseScenarios(t *testing.T) {
 	
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			audioChan := make(chan UnifiedAudioData, 10)
-			defer close(audioChan)
+			t.Cleanup(func() { close(audioChan) })
 			stream := NewFFmpegStream("rtsp://test.local/edge_case", "tcp", audioChan)
 			
 			tc.setup(stream)
