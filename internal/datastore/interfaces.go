@@ -33,6 +33,9 @@ var (
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
+// Optional methods:
+//   - CheckpointWAL() error - Implemented by stores that support Write-Ahead Logging (e.g., SQLite)
+//     Call via type assertion: if sqliteStore, ok := store.(*SQLiteStore); ok { sqliteStore.CheckpointWAL() }
 type Interface interface {
 	Open() error
 	Save(note *Note, results []Results) error

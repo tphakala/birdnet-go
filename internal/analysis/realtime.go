@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -32,6 +33,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
+)
+
+// Constants for system operations
+const (
+	// shutdownTimeout is the maximum time allowed for graceful shutdown (9s for Docker's 10s default)
+	shutdownTimeout = 9 * time.Second
 )
 
 // audioLevelChan is a channel to send audio level updates
@@ -84,7 +91,7 @@ var audioDemuxManager = NewAudioDemuxManager()
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 //
-//nolint:gocognit // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
+//nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
@@ -247,7 +254,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			log.Println("🛑 Initiating graceful shutdown sequence...")
 			shutdownStart := time.Now()
 			
-			// Execute shutdown with a 9-second timeout (leaving 1 second buffer for Docker's 10s default)
+			// Create context with timeout for the entire shutdown process
+			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			
+			// Execute shutdown with context
 			shutdownComplete := make(chan struct{})
 			go func() {
 				defer close(shutdownComplete)
@@ -256,20 +266,39 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 				log.Println("  1️⃣ Stopping control channel...")
 				close(controlChan)
 				
+				// Check context cancellation between steps
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 1")
+					return
+				}
+				
 				// Step 2: Stop control monitor
 				if ctrlMonitorRef != nil {
 					log.Println("  2️⃣ Stopping control monitor...")
 					ctrlMonitorRef.Stop()
 				}
 				
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 2")
+					return
+				}
+				
 				// Step 3: Stop analysis buffer monitors
 				log.Println("  3️⃣ Stopping analysis buffer monitors...")
 				bufferManager.RemoveAllMonitors()
 				
-				// Step 4: Clean up HLS resources
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 3")
+					return
+				}
+				
+				// Step 4: Clean up HLS resources asynchronously with timeout
 				log.Println("  4️⃣ Cleaning up HLS resources...")
-				if err := cleanupHLSStreamingFiles(); err != nil {
-					log.Printf("  ⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+				cleanupHLSWithTimeout(ctx)
+				
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 4")
+					return
 				}
 				
 				// Step 5: Shutdown HTTP server
@@ -280,14 +309,29 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					}
 				}
 				
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 5")
+					return
+				}
+				
 				// Step 6: Wait for all goroutines
 				log.Println("  6️⃣ Waiting for goroutines to finish...")
 				wg.Wait()
+				
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 6")
+					return
+				}
 				
 				// Step 7: Stop system monitor
 				if systemMonitorRef != nil {
 					log.Println("  7️⃣ Stopping system monitor...")
 					systemMonitorRef.Stop()
+				}
+				
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 7")
+					return
 				}
 				
 				// Step 8: Stop notification service
@@ -298,6 +342,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					}
 				}
 				
+				if ctx.Err() != nil {
+					log.Printf("  ⚠️ Shutdown context cancelled after step 8")
+					return
+				}
+				
 				// Step 9: Delete BirdNET interpreter
 				log.Println("  9️⃣ Cleaning up BirdNET interpreter...")
 				bn.Delete()
@@ -305,13 +354,15 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 				log.Printf("✅ Graceful shutdown completed in %v", time.Since(shutdownStart))
 			}()
 			
-			// Wait for shutdown to complete or timeout
+			// Wait for shutdown to complete or context timeout
 			select {
 			case <-shutdownComplete:
 				// Shutdown completed successfully
+				cancel()
 				return nil
-			case <-time.After(9 * time.Second):
-				log.Printf("⚠️ Shutdown timeout exceeded (9s), forcing exit")
+			case <-ctx.Done():
+				log.Printf("⚠️ Shutdown timeout exceeded (%v), forcing exit", shutdownTimeout)
+				cancel()
 				return nil
 			}
 
@@ -452,8 +503,15 @@ func closeDataStore(store datastore.Interface) {
 	if sqliteStore, ok := store.(*datastore.SQLiteStore); ok {
 		log.Println("📝 Performing SQLite WAL checkpoint before shutdown...")
 		if err := sqliteStore.CheckpointWAL(); err != nil {
-			// Log but continue with shutdown
-			log.Printf("⚠️ Warning: WAL checkpoint failed: %v", err)
+			// Enhanced error handling - check for specific error conditions
+			errStr := err.Error()
+			if strings.Contains(errStr, "database is closed") || strings.Contains(errStr, "nil pointer") {
+				// Database is likely already closed or connection is nil
+				log.Printf("⚠️ Warning: Database already closed or invalid state during WAL checkpoint")
+			} else {
+				// Other checkpoint failures - log but continue with shutdown
+				log.Printf("⚠️ Warning: WAL checkpoint failed (continuing shutdown): %v", err)
+			}
 		}
 	}
 	
@@ -847,6 +905,30 @@ func initializeBuffers(sources []string) error {
 	}
 
 	return nil
+}
+
+// cleanupHLSWithTimeout runs HLS cleanup asynchronously with a timeout to prevent blocking shutdown
+func cleanupHLSWithTimeout(ctx context.Context) {
+	// Create a channel to signal completion
+	cleanupDone := make(chan error, 1)
+	
+	// Run cleanup in a goroutine
+	go func() {
+		cleanupDone <- cleanupHLSStreamingFiles()
+	}()
+	
+	// Create a timeout context for cleanup operation (2 seconds max)
+	cleanupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	
+	select {
+	case err := <-cleanupDone:
+		if err != nil {
+			log.Printf("  ⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+		}
+	case <-cleanupCtx.Done():
+		log.Printf("  ⚠️ Warning: HLS cleanup timeout exceeded (2s), continuing shutdown")
+	}
 }
 
 // cleanupHLSStreamingFiles removes any leftover HLS streaming files and directories
