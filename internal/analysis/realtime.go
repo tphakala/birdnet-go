@@ -83,6 +83,8 @@ func (m *AudioDemuxManager) Done() {
 var audioDemuxManager = NewAudioDemuxManager()
 
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
+//
+//nolint:gocognit // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
@@ -230,8 +232,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// start control monitor for hot reloads
 	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
 
-	// start quit signal monitor
-	monitorCtrlC(quitChan)
+	// start shutdown signal monitor
+	monitorShutdownSignals(quitChan)
 
 	// Track the HTTP server, system monitor and control monitor for clean shutdown
 	httpServerRef := httpServer
@@ -242,43 +244,76 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	for {
 		select {
 		case <-quitChan:
-			// Close controlChan to signal that no restart attempts should be made.
-			close(controlChan)
-			// Stop control monitor first to clean up sound level and telemetry
-			if ctrlMonitorRef != nil {
-				ctrlMonitorRef.Stop()
-			}
-			// Stop all analysis buffer monitors
-			bufferManager.RemoveAllMonitors()
-			// Perform HLS resources cleanup
-			log.Println("🧹 Cleaning up HLS resources before shutdown")
-			if err := cleanupHLSStreamingFiles(); err != nil {
-				log.Printf("⚠️ Warning: Failed to clean up HLS streaming files during shutdown: %v", err)
-			}
-			// Shut down HTTP server and clean up its resources
-			if httpServerRef != nil {
-				log.Println("🔌 Shutting down HTTP server")
-				if err := httpServerRef.Shutdown(); err != nil {
-					log.Printf("⚠️ Warning: Error shutting down HTTP server: %v", err)
+			log.Println("🛑 Initiating graceful shutdown sequence...")
+			shutdownStart := time.Now()
+			
+			// Execute shutdown with a 9-second timeout (leaving 1 second buffer for Docker's 10s default)
+			shutdownComplete := make(chan struct{})
+			go func() {
+				defer close(shutdownComplete)
+				
+				// Step 1: Stop accepting new work
+				log.Println("  1️⃣ Stopping control channel...")
+				close(controlChan)
+				
+				// Step 2: Stop control monitor
+				if ctrlMonitorRef != nil {
+					log.Println("  2️⃣ Stopping control monitor...")
+					ctrlMonitorRef.Stop()
 				}
-			}
-			// Wait for all goroutines to finish.
-			wg.Wait()
-			// Stop system monitor if running
-			if systemMonitorRef != nil {
-				systemMonitorRef.Stop()
-			}
-			// Stop notification service
-			if notification.IsInitialized() {
-				logging.Info("Stopping notification service", "component", "notification")
-				if service := notification.GetService(); service != nil {
-					service.Stop()
+				
+				// Step 3: Stop analysis buffer monitors
+				log.Println("  3️⃣ Stopping analysis buffer monitors...")
+				bufferManager.RemoveAllMonitors()
+				
+				// Step 4: Clean up HLS resources
+				log.Println("  4️⃣ Cleaning up HLS resources...")
+				if err := cleanupHLSStreamingFiles(); err != nil {
+					log.Printf("  ⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
 				}
+				
+				// Step 5: Shutdown HTTP server
+				if httpServerRef != nil {
+					log.Println("  5️⃣ Shutting down HTTP server...")
+					if err := httpServerRef.Shutdown(); err != nil {
+						log.Printf("  ⚠️ Warning: Error shutting down HTTP server: %v", err)
+					}
+				}
+				
+				// Step 6: Wait for all goroutines
+				log.Println("  6️⃣ Waiting for goroutines to finish...")
+				wg.Wait()
+				
+				// Step 7: Stop system monitor
+				if systemMonitorRef != nil {
+					log.Println("  7️⃣ Stopping system monitor...")
+					systemMonitorRef.Stop()
+				}
+				
+				// Step 8: Stop notification service
+				if notification.IsInitialized() {
+					log.Println("  8️⃣ Stopping notification service...")
+					if service := notification.GetService(); service != nil {
+						service.Stop()
+					}
+				}
+				
+				// Step 9: Delete BirdNET interpreter
+				log.Println("  9️⃣ Cleaning up BirdNET interpreter...")
+				bn.Delete()
+				
+				log.Printf("✅ Graceful shutdown completed in %v", time.Since(shutdownStart))
+			}()
+			
+			// Wait for shutdown to complete or timeout
+			select {
+			case <-shutdownComplete:
+				// Shutdown completed successfully
+				return nil
+			case <-time.After(9 * time.Second):
+				log.Printf("⚠️ Shutdown timeout exceeded (9s), forcing exit")
+				return nil
 			}
-			// Delete the BirdNET interpreter.
-			bn.Delete()
-			// Return nil to indicate that the program exited successfully.
-			return nil
 
 		case <-restartChan:
 			// Handle the restart signal.
@@ -397,21 +432,32 @@ func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics
 	}
 }
 
-// monitorCtrlC listens for the SIGINT (Ctrl+C) signal and triggers the application shutdown process.
-func monitorCtrlC(quitChan chan struct{}) {
+// monitorShutdownSignals listens for shutdown signals (SIGINT, SIGTERM) and triggers the application shutdown process.
+func monitorShutdownSignals(quitChan chan struct{}) {
 	go func() {
 		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT) // Register to receive SIGINT (Ctrl+C)
+		// Register to receive both SIGINT (Ctrl+C) and SIGTERM (Docker/systemd stop)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-		<-sigChan // Block until a SIGINT signal is received
+		sig := <-sigChan // Block until a signal is received
 
-		log.Println("Received Ctrl+C, shutting down")
+		log.Printf("Received %s signal, initiating graceful shutdown", sig)
 		close(quitChan) // Close the quit channel to signal other goroutines to stop
 	}()
 }
 
 // closeDataStore attempts to close the database connection and logs the result.
 func closeDataStore(store datastore.Interface) {
+	// If this is an SQLite store, perform WAL checkpoint before closing
+	if sqliteStore, ok := store.(*datastore.SQLiteStore); ok {
+		log.Println("📝 Performing SQLite WAL checkpoint before shutdown...")
+		if err := sqliteStore.CheckpointWAL(); err != nil {
+			// Log but continue with shutdown
+			log.Printf("⚠️ Warning: WAL checkpoint failed: %v", err)
+		}
+	}
+	
+	// Close the database connection
 	if err := store.Close(); err != nil {
 		log.Printf("Failed to close database: %v", err)
 	} else {
