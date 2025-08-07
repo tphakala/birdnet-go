@@ -1,6 +1,12 @@
-// ffmpeg_circuit_breaker_test.go
-// Comprehensive tests for circuit breaker behavior and edge cases
-// These tests validate the circuit breaker logic and identify timing issues
+// Package myaudio provides comprehensive test coverage for FFmpeg stream circuit breaker functionality.
+// This test suite validates critical circuit breaker mechanisms including:
+// - Failure accumulation and threshold-based circuit opening
+// - Graduated failure thresholds based on process runtime
+// - Cooldown period enforcement and automatic circuit closure
+// - Thread-safe state transitions and concurrent operation handling
+// - Edge cases including zero/negative runtimes and race conditions
+// These tests ensure the circuit breaker prevents infinite restart loops while
+// maintaining the ability to recover when RTSP sources become available.
 
 package myaudio
 
@@ -146,9 +152,7 @@ func TestCircuitBreaker_CooldownPeriod(t *testing.T) {
 	
 	for _, elapsed := range testPoints {
 		// Simulate passage of time by updating circuit open time
-		stream.circuitMu.Lock()
-		stream.circuitOpenTime = initialOpenTime.Add(-elapsed)
-		stream.circuitMu.Unlock()
+		stream.setCircuitOpenTimeForTest(initialOpenTime.Add(-elapsed))
 		
 		isOpen := stream.isCircuitOpen()
 		
@@ -348,14 +352,28 @@ func TestCircuitBreaker_ConcurrentFailureAndReset(t *testing.T) {
 	var failureCount int32
 	var resetCount int32
 	
+	// Use channels for coordination instead of sleep
+	failureChan := make(chan struct{}, 50)
+	resetChan := make(chan struct{}, 25)
+	
+	// Fill channels to control execution
+	for i := 0; i < 50; i++ {
+		failureChan <- struct{}{}
+	}
+	close(failureChan)
+	
+	for i := 0; i < 25; i++ {
+		resetChan <- struct{}{}
+	}
+	close(resetChan)
+	
 	// Concurrent failure recording
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ {
+		for range failureChan {
 			stream.recordFailure(100 * time.Millisecond)
 			atomic.AddInt32(&failureCount, 1)
-			time.Sleep(1 * time.Millisecond)
 		}
 	}()
 	
@@ -363,10 +381,9 @@ func TestCircuitBreaker_ConcurrentFailureAndReset(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 25; i++ {
+		for range resetChan {
 			stream.resetFailures()
 			atomic.AddInt32(&resetCount, 1)
-			time.Sleep(2 * time.Millisecond)
 		}
 	}()
 	

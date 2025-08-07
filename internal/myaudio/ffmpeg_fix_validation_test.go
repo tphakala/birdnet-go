@@ -1,6 +1,12 @@
-// ffmpeg_fix_validation_test.go
-// Tests that validate the fixes are working correctly
-// These tests should PASS after implementing the fixes
+// Package myaudio provides validation tests for implemented circuit breaker fixes.
+// This test suite verifies the correctness of fixes for RTSP stream restart issues:
+// - Initial health state correctly reports unhealthy for streams without data
+// - Circuit breaker failure accumulation without premature resets
+// - Conditional failure reset only after proven stable operation
+// - Proper handling of zero time values in health checks
+// - Grace period implementation for new streams
+// These tests confirm that the circuit breaker and health monitoring fixes
+// prevent infinite restart loops while maintaining proper stream recovery capabilities.
 
 package myaudio
 
@@ -38,9 +44,7 @@ func TestFix_InitialHealthStateCorrect(t *testing.T) {
 	health := stream.GetHealth()
 	
 	// Get the lastDataTime to verify the fix
-	stream.lastDataMu.RLock()
-	lastDataTime := stream.lastDataTime
-	stream.lastDataMu.RUnlock()
+	lastDataTime := stream.GetLastDataTime()
 	
 	timeSinceCreation := time.Since(creationTime)
 	isZeroTime := lastDataTime.IsZero()
@@ -200,9 +204,7 @@ func TestFix_HealthStateTransitions(t *testing.T) {
 	assert.True(t, health2.IsHealthy, "FIXED: Healthy after receiving data")
 	
 	// Phase 3: After data becomes old - should be unhealthy
-	stream.lastDataMu.Lock()
-	stream.lastDataTime = time.Now().Add(-70 * time.Second) // Older than 60s threshold
-	stream.lastDataMu.Unlock()
+	stream.setLastDataTimeForTest(time.Now().Add(-70 * time.Second)) // Older than 60s threshold
 	
 	health3 := stream.GetHealth()
 	t.Logf("  Phase 3 - Old data: healthy=%v (should be false)", health3.IsHealthy)
@@ -225,9 +227,7 @@ func TestFix_ZeroTimeHandling(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.local/zero_time", "tcp", audioChan)
 	
 	// Verify initial zero time state
-	stream.lastDataMu.RLock()
-	lastDataTime := stream.lastDataTime
-	stream.lastDataMu.RUnlock()
+	lastDataTime := stream.GetLastDataTime()
 	
 	t.Logf("FIXED: Zero time handling validation")
 	t.Logf("  Initial lastDataTime: %v", lastDataTime)
@@ -277,18 +277,14 @@ func TestFix_ConfigurationRespected(t *testing.T) {
 	assert.False(t, initialHealth.IsHealthy, "FIXED: Not healthy initially despite custom threshold")
 	
 	// Set data age to 25 seconds (within 30s threshold)
-	stream.lastDataMu.Lock()
-	stream.lastDataTime = time.Now().Add(-25 * time.Second)
-	stream.lastDataMu.Unlock()
+	stream.setLastDataTimeForTest(time.Now().Add(-25 * time.Second))
 	
 	health25s := stream.GetHealth()
 	t.Logf("  Health with 25s old data: %v (should be true)", health25s.IsHealthy)
 	assert.True(t, health25s.IsHealthy, "FIXED: Healthy within custom threshold")
 	
 	// Set data age to 35 seconds (beyond 30s threshold)
-	stream.lastDataMu.Lock()
-	stream.lastDataTime = time.Now().Add(-35 * time.Second)
-	stream.lastDataMu.Unlock()
+	stream.setLastDataTimeForTest(time.Now().Add(-35 * time.Second))
 	
 	health35s := stream.GetHealth()
 	t.Logf("  Health with 35s old data: %v (should be false)", health35s.IsHealthy)
@@ -319,7 +315,6 @@ func TestFix_NoPrematureResetInRealScenario(t *testing.T) {
 		stream.cmdMu.Unlock()
 		
 		// Process fails quickly (before any substantial data)
-		time.Sleep(1 * time.Millisecond) // Minimal delay
 		stream.recordFailure(100 * time.Millisecond)
 		
 		currentFailures := stream.getConsecutiveFailures()

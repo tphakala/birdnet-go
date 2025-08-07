@@ -1436,20 +1436,6 @@ func (s *FFmpegStream) validateUserTimeout(timeoutStr string) error {
 	return nil
 }
 
-// getConsecutiveFailures returns the current consecutive failure count (for testing)
-func (s *FFmpegStream) getConsecutiveFailures() int {
-	s.circuitMu.Lock()
-	defer s.circuitMu.Unlock()
-	return s.consecutiveFailures
-}
-
-// setConsecutiveFailures sets the consecutive failure count (for testing)
-func (s *FFmpegStream) setConsecutiveFailures(count int) {
-	s.circuitMu.Lock()
-	defer s.circuitMu.Unlock()
-	s.consecutiveFailures = count
-}
-
 // conditionalFailureReset resets failures only after the process has proven
 // stable operation with substantial data reception
 func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
