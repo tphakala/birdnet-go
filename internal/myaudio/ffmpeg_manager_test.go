@@ -1,3 +1,8 @@
+// ffmpeg_manager_test.go
+// Comprehensive tests for FFmpegManager functionality and edge cases
+// These tests validate the manager's ability to handle multiple streams,
+// concurrent operations, and health checks.
+
 package myaudio
 
 import (
@@ -151,10 +156,19 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 		t.Fatal("Stream initialization timed out")
 	}
 
+	// Simulate data reception to make the stream healthy
+	manager.streamsMu.RLock()
+	stream, exists := manager.streams[url]
+	manager.streamsMu.RUnlock()
+	require.True(t, exists, "Stream should exist in manager")
+	
+	// Update the stream's last data time to simulate receiving data
+	stream.updateLastDataTime()
+
 	// Check health
 	health := manager.HealthCheck()
 	assert.Len(t, health, 1)
-	
+
 	streamHealth, exists := health[url]
 	assert.True(t, exists)
 	assert.True(t, streamHealth.IsHealthy)
@@ -228,7 +242,7 @@ func TestFFmpegManager_ConcurrentOperations(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			url := fmt.Sprintf("rtsp://test%d.example.com/stream", idx)
-			
+
 			if idx%2 == 0 {
 				err := manager.RestartStream(url)
 				assert.NoError(t, err)
@@ -287,6 +301,15 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 		t.Fatal("Monitoring test timed out")
 	}
 
+	// Simulate data reception to make the stream healthy
+	manager.streamsMu.RLock()
+	stream, exists := manager.streams[url]
+	manager.streamsMu.RUnlock()
+	require.True(t, exists, "Stream should exist in manager")
+	
+	// Update the stream's last data time to simulate receiving data
+	stream.updateLastDataTime()
+
 	// Stream should still be healthy
 	health := manager.HealthCheck()
 	assert.True(t, health[url].IsHealthy)
@@ -300,8 +323,8 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 
 	audioChan := make(chan UnifiedAudioData, 1000)
 	defer close(audioChan)
-	const numStreams = 5  // Reduced from 20 to avoid FFmpeg connection issues
-	const numOperations = 20  // Reduced from 50
+	const numStreams = 5     // Reduced from 20 to avoid FFmpeg connection issues
+	const numOperations = 20 // Reduced from 50
 
 	// Generate unique URLs for testing - use localhost to avoid DNS issues
 	urls := make([]string, numStreams)
@@ -311,7 +334,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 
 	// Use sync.WaitGroup for better synchronization
 	var wg sync.WaitGroup
-	
+
 	// Concurrent start operations
 	for i := 0; i < numOperations/2; i++ {
 		wg.Add(1)
@@ -354,7 +377,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		// All operations completed
@@ -365,7 +388,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	// Verify manager is still in a consistent state
 	activeStreams := manager.GetActiveStreams()
 	health := manager.HealthCheck()
-	
+
 	// Health map should match active streams
 	assert.Len(t, health, len(activeStreams))
 	for _, url := range activeStreams {
@@ -383,7 +406,7 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
 	const testDuration = 200 * time.Millisecond
-	
+
 	// Start a few streams - use localhost to avoid DNS issues
 	urls := []string{
 		"rtsp://localhost:554/stress1",
@@ -398,7 +421,7 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 
 	// Run stress test
 	done := make(chan bool, 3)
-	
+
 	// Continuous health checks
 	go func() {
 		defer func() { done <- true }()

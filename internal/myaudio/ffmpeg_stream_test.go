@@ -84,11 +84,17 @@ func TestFFmpegStream_GetHealth(t *testing.T) {
 	defer close(audioChan)
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
-	// Get initial health
+	// Get initial health - FIXED: should not be healthy without data
 	health := stream.GetHealth()
-	assert.True(t, health.IsHealthy)
-	assert.WithinDuration(t, time.Now(), health.LastDataReceived, time.Second)
+	assert.False(t, health.IsHealthy, "New stream should not be healthy without data")
+	assert.True(t, health.LastDataReceived.IsZero(), "Initial LastDataReceived should be zero time")
 	assert.Equal(t, 0, health.RestartCount)
+	
+	// Update data time to make stream healthy
+	stream.updateLastDataTime()
+	health = stream.GetHealth()
+	assert.True(t, health.IsHealthy, "Stream should be healthy after receiving data")
+	assert.WithinDuration(t, time.Now(), health.LastDataReceived, time.Second)
 
 	// Simulate old data time
 	stream.lastDataMu.Lock()
