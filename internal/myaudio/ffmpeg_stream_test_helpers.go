@@ -20,8 +20,8 @@ func (s *FFmpegStream) setConsecutiveFailures(count int) {
 	s.consecutiveFailures = count
 }
 
-// getLastDataTime returns the last data time in a thread-safe manner (test helper)
-func (s *FFmpegStream) getLastDataTime() time.Time {
+// getLastDataTimeForTest returns the last data time in a thread-safe manner (test helper)
+func (s *FFmpegStream) getLastDataTimeForTest() time.Time {
 	s.lastDataMu.RLock()
 	defer s.lastDataMu.RUnlock()
 	return s.lastDataTime

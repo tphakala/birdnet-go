@@ -44,7 +44,7 @@ func TestFix_InitialHealthStateCorrect(t *testing.T) {
 	health := stream.GetHealth()
 	
 	// Get the lastDataTime to verify the fix
-	lastDataTime := stream.getLastDataTime()
+	lastDataTime := stream.getLastDataTimeForTest()
 	
 	timeSinceCreation := time.Since(creationTime)
 	isZeroTime := lastDataTime.IsZero()
@@ -225,7 +225,7 @@ func TestFix_ZeroTimeHandling(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.local/zero_time", "tcp", audioChan)
 	
 	// Verify initial zero time state
-	lastDataTime := stream.getLastDataTime()
+	lastDataTime := stream.getLastDataTimeForTest()
 	
 	t.Logf("FIXED: Zero time handling validation")
 	t.Logf("  Initial lastDataTime: %v", lastDataTime)
