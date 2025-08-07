@@ -463,3 +463,34 @@ func (s *SQLiteStore) GetDBPath() string {
 	}
 	return ""
 }
+
+// CheckpointWAL forces a checkpoint of the Write-Ahead Log to ensure all changes are written to the main database file.
+// This is important for graceful shutdown to prevent data loss.
+func (s *SQLiteStore) CheckpointWAL() error {
+	// Check for nil DB connection
+	if s.DB == nil {
+		return errors.Newf("database connection is nil").
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "wal_checkpoint").
+			Context("error_type", "nil_connection").
+			Build()
+	}
+	
+	// PRAGMA wal_checkpoint(TRUNCATE) will:
+	// 1. Copy all frames from WAL to the database file
+	// 2. Truncate the WAL file to zero bytes
+	// 3. Ensure all changes are persisted
+	if err := s.DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+		// Return error without logging (caller will handle logging)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "wal_checkpoint").
+			Context("mode", "truncate").
+			Build()
+	}
+	
+	log.Println("✅ SQLite WAL checkpoint completed successfully")
+	return nil
+}
