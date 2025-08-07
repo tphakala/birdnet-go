@@ -990,12 +990,20 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 	if err != nil {
 		// Check for "not found" errors using errors.Is
 		if errors.Is(err, ErrImageNotFound) {
+			// For images not found, still set cache headers to prevent repeated lookups
+			// Cache the 404 response to reduce load
+			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
 			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
 		}
 		// For other errors, return 500
 		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
 	}
 
+	// Set aggressive cache headers for species images since they rarely change
+	// These are external images from wikimedia/flickr that are stable
+	// Cache with immutable flag to prevent revalidation
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", ImageCacheSeconds))
+	
 	// Redirect to the image URL
 	return ctx.Redirect(http.StatusFound, birdImage.URL)
 }

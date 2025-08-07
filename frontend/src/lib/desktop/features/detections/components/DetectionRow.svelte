@@ -37,7 +37,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { onDestroy } from 'svelte';
+  import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
 
   const logger = loggers.ui;
 
@@ -59,10 +59,17 @@
     onConfirm: () => {},
   });
 
-  // Thumbnail loading state
-  let thumbnailLoading = $state(true); // Start as loading
-  let thumbnailError = $state(false); // Track if thumbnail failed to load
-  let loadingTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Thumbnail loading with delayed spinner and URL failure tracking
+  const thumbnailLoader = useImageDelayedLoading({
+    delayMs: 150,
+    timeoutMs: 10000,
+    onTimeout: () => {
+      logger.warn('Thumbnail loading timeout', {
+        scientificName: detection.scientificName,
+        detectionId: detection.id,
+      });
+    },
+  });
 
   function handleDetailsClick(e: Event) {
     e.preventDefault();
@@ -160,51 +167,38 @@
     return `/api/v2/media/species-image?name=${encodeURIComponent(scientificName)}`;
   }
 
-  // Clear existing timeout if any
-  function clearLoadingTimeout() {
-    if (loadingTimeout) {
-      clearTimeout(loadingTimeout);
-      loadingTimeout = null;
-    }
-  }
-
   // Thumbnail loading handlers
-  function handleThumbnailLoadStart() {
-    thumbnailLoading = true;
-    // Set a 10 second timeout for loading
-    clearLoadingTimeout();
-    loadingTimeout = setTimeout(() => {
-      if (thumbnailLoading) {
-        handleThumbnailError();
-      }
-    }, 10000);
-  }
-
   function handleThumbnailLoad() {
-    clearLoadingTimeout();
-    thumbnailLoading = false;
+    thumbnailLoader.setLoading(false);
   }
 
   function handleThumbnailError() {
-    clearLoadingTimeout();
-    thumbnailLoading = false;
-    thumbnailError = true;
+    const currentUrl = getThumbnailUrl(detection.scientificName);
+    thumbnailLoader.markUrlFailed(currentUrl);
   }
 
-  // Reset loading state when detection changes
+  // Track previous URL to avoid unnecessary resets
+  let previousThumbnailUrl = $state<string | null>(null);
+
+  // Handle thumbnail loading state when detection changes
   $effect(() => {
-    if (detection.scientificName) {
-      thumbnailLoading = true;
-      thumbnailError = false;
-      // Clear any existing timeout
-      clearLoadingTimeout();
+    const currentUrl = getThumbnailUrl(detection.scientificName);
+    // Only reset loading state if URL actually changed
+    if (detection.scientificName && currentUrl !== previousThumbnailUrl) {
+      previousThumbnailUrl = currentUrl;
+
+      // Check if this URL has previously failed to prevent retry loops
+      if (thumbnailLoader.hasUrlFailed(currentUrl)) {
+        thumbnailLoader.setError();
+        return; // Don't try to load known failed URLs
+      }
+
+      // Start loading when URL changes
+      thumbnailLoader.setLoading(true);
     }
   });
 
-  // Cleanup on component destroy
-  onDestroy(() => {
-    clearLoadingTimeout();
-  });
+  // Cleanup is handled automatically by useImageDelayedLoading
 </script>
 
 <!-- DetectionRow now returns table cells for proper table structure -->
@@ -243,13 +237,13 @@
       <button class="sp-thumbnail-button" onclick={handleDetailsClick} tabindex="0">
         <!-- Screen reader announcement for loading state -->
         <span class="sr-only" role="status" aria-live="polite">
-          {thumbnailLoading
+          {thumbnailLoader.loading
             ? `Loading ${detection.commonName} thumbnail...`
             : `${detection.commonName} thumbnail loaded`}
         </span>
 
         <!-- Loading spinner overlay -->
-        {#if thumbnailLoading}
+        {#if thumbnailLoader.showSpinner}
           <div
             class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md"
           >
@@ -257,7 +251,7 @@
           </div>
         {/if}
 
-        {#if thumbnailError}
+        {#if thumbnailLoader.error}
           <!-- Error placeholder -->
           <div class="absolute inset-0 flex items-center justify-center bg-base-200 rounded-md">
             <svg
@@ -276,14 +270,16 @@
             </svg>
             <span class="sr-only">Image failed to load</span>
           </div>
-        {:else}
+        {:else if !thumbnailLoader.hasUrlFailed(getThumbnailUrl(detection.scientificName))}
+          <!-- Only render img element if URL hasn't failed before -->
           <img
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
             src={getThumbnailUrl(detection.scientificName)}
             alt={detection.commonName}
             class="sp-thumbnail-image"
-            class:opacity-0={thumbnailLoading}
-            onloadstart={handleThumbnailLoadStart}
+            class:opacity-0={thumbnailLoader.loading}
             onload={handleThumbnailLoad}
             onerror={e => {
               handleThumbnailError();
