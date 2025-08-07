@@ -150,15 +150,25 @@ describe('AudioPlayer', () => {
     expect(img).toHaveAttribute('src', '/api/v2/spectrogram/123?size=md');
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading state after delay', async () => {
     const { container } = audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
       showSpectrogram: true,
     });
 
-    const loadingSpinner = container.querySelector('.loading.loading-spinner');
-    expect(loadingSpinner).toBeInTheDocument();
+    // Initially, spinner should not be visible (delayed by 150ms)
+    let loadingSpinner = container.querySelector('.loading.loading-spinner');
+    expect(loadingSpinner).not.toBeInTheDocument();
+
+    // Advance timers by 150ms to trigger spinner display
+    vi.advanceTimersByTime(150);
+
+    // Now spinner should be visible
+    await waitFor(() => {
+      loadingSpinner = container.querySelector('.loading.loading-spinner');
+      expect(loadingSpinner).toBeInTheDocument();
+    });
   });
 
   it('shows play button when paused', () => {
