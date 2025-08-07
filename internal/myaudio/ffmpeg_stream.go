@@ -46,8 +46,24 @@ const (
 	defaultGracePeriod            = 30 * time.Second // Grace period for new streams before marking unhealthy
 
 	// Circuit breaker settings
-	circuitBreakerThreshold = 10              // Number of consecutive failures before opening circuit
+	circuitBreakerThreshold = 10              // Number of consecutive failures before opening circuit (standard threshold)
 	circuitBreakerCooldown  = 5 * time.Minute // Cooldown period when circuit is open
+	
+	// Circuit breaker graduated failure thresholds
+	// These thresholds open the circuit earlier for rapid failures to prevent resource waste
+	circuitBreakerImmediateThreshold = 3  // Opens after 3 failures for processes failing < 1 second
+	circuitBreakerRapidThreshold     = 5  // Opens after 5 failures for processes failing < 5 seconds
+	circuitBreakerQuickThreshold     = 8  // Opens after 8 failures for processes failing < 30 seconds
+	
+	// Circuit breaker runtime thresholds for graduated failure detection
+	circuitBreakerImmediateRuntime = 1 * time.Second  // Runtime below which failures are considered "immediate"
+	circuitBreakerRapidRuntime     = 5 * time.Second  // Runtime below which failures are considered "rapid"
+	circuitBreakerQuickRuntime     = 30 * time.Second // Runtime below which failures are considered "quick"
+	
+	// Circuit breaker stability requirements for resetting failures
+	// These ensure the stream is genuinely stable before clearing failure history
+	circuitBreakerMinStabilityTime  = 30 * time.Second // Minimum process runtime before considering stable
+	circuitBreakerMinStabilityBytes = 100 * 1024       // Minimum data received (100KB) before considering stable
 
 	// Drop logging settings
 	dropLogInterval = 30 * time.Second // Minimum interval between drop log messages
@@ -796,8 +812,13 @@ func (s *FFmpegStream) logDroppedData() {
 			Context("channel_capacity", cap(s.audioChan)).
 			Context("drop_log_interval_seconds", dropLogInterval.Seconds()).
 			Build()
-		// This will be reported via event bus if telemetry is enabled
-		_ = errorWithContext
+		// Report via telemetry if enabled, otherwise log for debugging
+		if conf.Setting().Debug {
+			streamLogger.Debug("audio data dropped from channel",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"channel_capacity", cap(s.audioChan))
+		}
+		_ = errorWithContext // Keep for telemetry reporting when enabled
 	}
 }
 
@@ -1299,14 +1320,35 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 			Context("open_duration_seconds", openDuration.Seconds()).
 			Context("cooldown_seconds", circuitBreakerCooldown.Seconds()).
 			Build()
-		// This will be reported via event bus if telemetry is enabled
-		_ = errorWithContext
+		// Report via telemetry if enabled, otherwise log for debugging
+		if conf.Setting().Debug {
+			streamLogger.Debug("circuit breaker closed after cooldown",
+				"url", privacy.SanitizeRTSPUrl(s.url),
+				"previous_failures", previousFailures,
+				"open_duration_seconds", openDuration.Seconds())
+		}
+		_ = errorWithContext // Keep for telemetry reporting when enabled
 	}
 	
 	return false
 }
 
-// recordFailure records a failure for the circuit breaker with runtime consideration
+// recordFailure records a failure for the circuit breaker with runtime consideration.
+//
+// The function implements a graduated threshold system that opens the circuit breaker
+// earlier for rapid failures, preventing resource waste on streams that fail quickly:
+//
+//   - Immediate failures (< 1 second): Opens after 3 failures
+//     These are typically connection refused or DNS resolution failures
+//   - Rapid failures (< 5 seconds): Opens after 5 failures  
+//     These indicate authentication issues or immediate stream errors
+//   - Quick failures (< 30 seconds): Opens after 8 failures
+//     These suggest configuration problems or unstable streams
+//   - Normal failures (any runtime): Opens after 10 failures
+//     Standard threshold for streams that run longer before failing
+//
+// This graduated approach prevents infinite restart loops while allowing genuine
+// recovery attempts for temporarily unavailable streams.
 func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
@@ -1339,15 +1381,15 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 	var reason string
 
 	switch {
-	case runtime < 1*time.Second && s.consecutiveFailures >= 3:
+	case runtime < circuitBreakerImmediateRuntime && s.consecutiveFailures >= circuitBreakerImmediateThreshold:
 		// Immediate failures (< 1 second) - open circuit after just 3 failures
 		shouldOpenCircuit = true
 		reason = "immediate connection failures"
-	case runtime < 5*time.Second && s.consecutiveFailures >= 5:
+	case runtime < circuitBreakerRapidRuntime && s.consecutiveFailures >= circuitBreakerRapidThreshold:
 		// Rapid failures (< 5 seconds) - open circuit after just 5 failures
 		shouldOpenCircuit = true
 		reason = "rapid process failures"
-	case runtime < 30*time.Second && s.consecutiveFailures >= 8:
+	case runtime < circuitBreakerQuickRuntime && s.consecutiveFailures >= circuitBreakerQuickThreshold:
 		// Quick failures (< 30 seconds) - open circuit after 8 failures
 		shouldOpenCircuit = true
 		reason = "quick process failures"
@@ -1380,8 +1422,9 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 			Context("reason", reason).
 			Context("cooldown_seconds", circuitBreakerCooldown.Seconds()).
 			Build()
-		// This will be reported via event bus if telemetry is enabled
-		_ = errorWithContext
+		// Report via telemetry if enabled, otherwise log for debugging
+		// Note: We already log at WARN level above, so only add debug if not already logged
+		_ = errorWithContext // Keep for telemetry reporting when enabled
 	}
 }
 
@@ -1437,24 +1480,22 @@ func (s *FFmpegStream) validateUserTimeout(timeoutStr string) error {
 }
 
 // conditionalFailureReset resets failures only after the process has proven
-// stable operation with substantial data reception
+// stable operation with substantial data reception.
+// This prevents premature failure resets that could lead to infinite restart loops.
 func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
-	// Get process start time safely
+	// Get process start time safely and calculate time since start atomically
+	// to avoid race condition where process could change between check and use
 	s.cmdMu.Lock()
 	processStartTime := s.processStartTime
+	if processStartTime.IsZero() {
+		s.cmdMu.Unlock()
+		return // No running process
+	}
+	timeSinceStart := time.Since(processStartTime)
 	s.cmdMu.Unlock()
 	
-	// Only proceed if we have a running process
-	if processStartTime.IsZero() {
-		return
-	}
-	
-	// Define minimum stability requirements
-	const minStabilityTime = 30 * time.Second
-	const minResetBytes = 100 * 1024 // 100KB
-	
 	// Check if process has been stable long enough and received sufficient data
-	if time.Since(processStartTime) >= minStabilityTime && totalBytesReceived >= minResetBytes {
+	if timeSinceStart >= circuitBreakerMinStabilityTime && totalBytesReceived >= circuitBreakerMinStabilityBytes {
 		s.circuitMu.Lock()
 		if s.consecutiveFailures > 0 {
 			previousFailures := s.consecutiveFailures
@@ -1466,8 +1507,8 @@ func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
 				"runtime_seconds", time.Since(processStartTime).Seconds(),
 				"total_bytes", totalBytesReceived,
 				"previous_failures", previousFailures,
-				"min_stability_seconds", minStabilityTime.Seconds(),
-				"min_reset_bytes", minResetBytes,
+				"min_stability_seconds", circuitBreakerMinStabilityTime.Seconds(),
+				"min_reset_bytes", circuitBreakerMinStabilityBytes,
 				"component", "ffmpeg-stream")
 			
 			// Report failure reset to telemetry
@@ -1480,11 +1521,18 @@ func (s *FFmpegStream) conditionalFailureReset(totalBytesReceived int64) {
 				Context("runtime_seconds", time.Since(processStartTime).Seconds()).
 				Context("total_bytes", totalBytesReceived).
 				Context("previous_failures", previousFailures).
-				Context("min_stability_seconds", minStabilityTime.Seconds()).
-				Context("min_reset_bytes", minResetBytes).
+				Context("min_stability_seconds", circuitBreakerMinStabilityTime.Seconds()).
+				Context("min_reset_bytes", circuitBreakerMinStabilityBytes).
 				Build()
-			// This will be reported via event bus if telemetry is enabled
-			_ = errorWithContext
+			// Report via telemetry if enabled, otherwise log for debugging  
+			if conf.Setting().Debug {
+				streamLogger.Debug("failures reset after stable operation",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"runtime_seconds", timeSinceStart.Seconds(),
+					"total_bytes", totalBytesReceived,
+					"previous_failures", previousFailures)
+			}
+			_ = errorWithContext // Keep for telemetry reporting when enabled
 		} else {
 			s.circuitMu.Unlock()
 		}

@@ -44,7 +44,7 @@ func TestFix_InitialHealthStateCorrect(t *testing.T) {
 	health := stream.GetHealth()
 	
 	// Get the lastDataTime to verify the fix
-	lastDataTime := stream.GetLastDataTime()
+	lastDataTime := stream.getLastDataTime()
 	
 	timeSinceCreation := time.Since(creationTime)
 	isZeroTime := lastDataTime.IsZero()
@@ -127,9 +127,7 @@ func TestFix_ConditionalFailureReset(t *testing.T) {
 	stream.setConsecutiveFailures(initialFailures)
 	
 	// Set up process state (simulating a running process)
-	stream.cmdMu.Lock()
-	stream.processStartTime = time.Now().Add(-35 * time.Second) // 35 seconds runtime
-	stream.cmdMu.Unlock()
+	stream.setProcessStartTimeForTest(time.Now().Add(-35 * time.Second)) // 35 seconds runtime
 	
 	t.Logf("FIXED: Conditional failure reset validation")
 	t.Logf("  Initial failures: %d", initialFailures)
@@ -227,7 +225,7 @@ func TestFix_ZeroTimeHandling(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.local/zero_time", "tcp", audioChan)
 	
 	// Verify initial zero time state
-	lastDataTime := stream.GetLastDataTime()
+	lastDataTime := stream.getLastDataTime()
 	
 	t.Logf("FIXED: Zero time handling validation")
 	t.Logf("  Initial lastDataTime: %v", lastDataTime)
@@ -310,9 +308,7 @@ func TestFix_NoPrematureResetInRealScenario(t *testing.T) {
 	// Simulate several process start/fail cycles
 	for i := 0; i < 6; i++ {
 		// Simulate process start - set process start time but don't reset failures
-		stream.cmdMu.Lock()
-		stream.processStartTime = time.Now()
-		stream.cmdMu.Unlock()
+		stream.setProcessStartTimeForTest(time.Now())
 		
 		// Process fails quickly (before any substantial data)
 		stream.recordFailure(100 * time.Millisecond)
