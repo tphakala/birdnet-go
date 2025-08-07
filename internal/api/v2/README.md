@@ -166,6 +166,12 @@ routeInitializers := []struct {
 | PUT | `/settings` | `UpdateSettings` | ✅ | Update all settings |
 | PATCH | `/settings/:section` | `UpdateSectionSettings` | ✅ | Update settings section |
 
+### Filesystem (`filesystem.go`)
+
+| Method | Route | Handler | Auth | Description |
+|--------|-------|---------|------|-------------|
+| GET | `/filesystem/browse` | `BrowseFileSystem` | ✅ | Browse files and directories with secure path validation |
+
 ### Species (`species.go`)
 
 | Method | Route | Handler | Auth | Description |
