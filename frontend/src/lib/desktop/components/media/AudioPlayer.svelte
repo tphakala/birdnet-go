@@ -31,6 +31,7 @@
   import { mediaIcons } from '$lib/utils/icons.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
 
   const logger = loggers.audio;
 
@@ -96,13 +97,17 @@
   let audioContextError = $state<string | null>(null);
   let progress = $state(0);
   let isLoading = $state(false);
-  let spectrogramLoading = $state(false);
-  let spectrogramError = $state(false);
-  let showSpectrogramSpinner = $state(false); // Separate state for spinner visibility
   let error = $state<string | null>(null);
   let updateInterval: ReturnType<typeof setInterval> | undefined;
-  let spectrogramLoadingTimeout: ReturnType<typeof setTimeout> | undefined;
-  let spinnerDelayTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  // Spectrogram loading with delayed spinner
+  const spectrogramLoader = useDelayedLoading({
+    delayMs: 150,
+    timeoutMs: 15000,
+    onTimeout: () => {
+      logger.warn('Spectrogram loading timeout', { detectionId });
+    },
+  });
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -137,7 +142,7 @@
   const FILTER_HP_MAX_FREQ = 10000;
   const FILTER_HP_DEFAULT_FREQ = 20;
   const PLAY_END_DELAY_MS = 3000; // 3 second delay after audio stops before resuming updates
-  const SPINNER_DELAY_MS = 150; // Only show spinner if loading takes longer than this
+  // Spinner delay is now handled by useDelayedLoading utility
 
   // Computed values
   const spectrogramUrl = $derived(
@@ -145,14 +150,6 @@
       ? `/api/v2/spectrogram/${detectionId}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
       : null
   );
-
-  // Track URL changes for cleanup
-  $effect(() => {
-    return () => {
-      // Cleanup timeout when component unmounts or URL changes
-      clearSpectrogramLoadingTimeout();
-    };
-  });
 
   const playPauseId = $derived(`playPause-${detectionId}`);
   const audioId = $derived(`audio-${detectionId}`);
@@ -366,37 +363,13 @@
     updateFilter(newFreq);
   };
 
-  // Clear spectrogram loading timeout
-  const clearSpectrogramLoadingTimeout = () => {
-    if (spectrogramLoadingTimeout) {
-      clearTimeout(spectrogramLoadingTimeout);
-      spectrogramLoadingTimeout = undefined;
-    }
-  };
-
-  // Clear spinner delay timeout
-  const clearSpinnerDelayTimeout = () => {
-    if (spinnerDelayTimeout) {
-      clearTimeout(spinnerDelayTimeout);
-      spinnerDelayTimeout = undefined;
-    }
-  };
-
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
-    clearSpectrogramLoadingTimeout();
-    clearSpinnerDelayTimeout();
-    spectrogramLoading = false;
-    showSpectrogramSpinner = false;
-    spectrogramError = false;
+    spectrogramLoader.setLoading(false);
   };
 
   const handleSpectrogramError = () => {
-    clearSpectrogramLoadingTimeout();
-    clearSpinnerDelayTimeout();
-    spectrogramLoading = false;
-    showSpectrogramSpinner = false;
-    spectrogramError = true;
+    spectrogramLoader.setError();
   };
 
   // Track previous URL to avoid unnecessary resets
@@ -405,29 +378,10 @@
   // Handle spectrogram URL changes with proper loading state
   $effect(() => {
     // Only reset loading state if URL actually changed
-    if (spectrogramUrl && spectrogramUrl !== previousSpectrogramUrl && !spectrogramError) {
+    if (spectrogramUrl && spectrogramUrl !== previousSpectrogramUrl && !spectrogramLoader.error) {
       previousSpectrogramUrl = spectrogramUrl;
       // Start loading when URL changes
-      spectrogramLoading = true;
-      showSpectrogramSpinner = false; // Don't show spinner immediately
-
-      // Clear any existing timeouts
-      clearSpinnerDelayTimeout();
-      clearSpectrogramLoadingTimeout();
-
-      // Only show spinner if loading takes longer than SPINNER_DELAY_MS
-      spinnerDelayTimeout = setTimeout(() => {
-        if (spectrogramLoading) {
-          showSpectrogramSpinner = true;
-        }
-      }, SPINNER_DELAY_MS);
-
-      // Set timeout in case events don't fire
-      spectrogramLoadingTimeout = setTimeout(() => {
-        if (spectrogramLoading) {
-          handleSpectrogramError();
-        }
-      }, 15000);
+      spectrogramLoader.setLoading(true);
     }
   });
 
@@ -522,8 +476,7 @@
     // Clear any pending timeouts
     clearSliderTimeout();
     clearPlayEndTimeout();
-    clearSpectrogramLoadingTimeout();
-    clearSpinnerDelayTimeout();
+    spectrogramLoader.cleanup();
 
     // Remove all tracked event listeners
     eventListeners.forEach(({ element, event, handler }) => {
@@ -580,11 +533,11 @@
   {#if spectrogramUrl}
     <!-- Screen reader announcement for loading state -->
     <div class="sr-only" role="status" aria-live="polite">
-      {spectrogramLoading ? 'Loading spectrogram...' : 'Spectrogram loaded'}
+      {spectrogramLoader.loading ? 'Loading spectrogram...' : 'Spectrogram loaded'}
     </div>
 
     <!-- Loading spinner overlay -->
-    {#if showSpectrogramSpinner}
+    {#if spectrogramLoader.showSpinner}
       <div
         class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
         style={responsive
@@ -595,7 +548,7 @@
       </div>
     {/if}
 
-    {#if spectrogramError}
+    {#if spectrogramLoader.error}
       <!-- Error placeholder for failed spectrogram -->
       <div
         class="flex items-center justify-center bg-base-200 rounded-md border border-base-300"
@@ -631,7 +584,7 @@
         class={responsive
           ? 'w-full h-auto object-contain rounded-md border border-base-300'
           : 'w-full h-full object-cover rounded-md border border-base-300'}
-        class:opacity-0={spectrogramLoading}
+        class:opacity-0={spectrogramLoader.loading}
         style={responsive
           ? ''
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
