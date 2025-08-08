@@ -443,8 +443,9 @@ func TestHashIndexCleanup(t *testing.T) {
 	// Check that cleanup occurred
 	finalHashCount := store.getHashIndexCount()
 	
-	// Should have the new notification and oldNotif2 (still in main store)
-	// oldNotif1 should be cleaned up as it was deleted from main store
+	// With the fixed cleanup logic:
+	// - Both old notifications should be removed from hash index (older than deduplication window)
+	// - Only the new notification should remain in the hash index
 	hasNewNotif := store.hasHashIndexEntry(newNotif.ContentHash)
 	hasOldNotif1 := store.hasHashIndexEntry(oldNotif1.ContentHash)
 	hasOldNotif2 := store.hasHashIndexEntry(oldNotif2.ContentHash)
@@ -454,15 +455,16 @@ func TestHashIndexCleanup(t *testing.T) {
 		t.Error("Expected new notification to be in hash index")
 	}
 	if hasOldNotif1 {
-		t.Error("Expected oldNotif1 to be cleaned up from hash index (was deleted from main store)")
+		t.Error("Expected oldNotif1 to be cleaned up from hash index (older than deduplication window)")
 	}
-	if !hasOldNotif2 {
-		t.Error("Expected oldNotif2 to remain in hash index (still in main store)")
+	if hasOldNotif2 {
+		t.Error("Expected oldNotif2 to be cleaned up from hash index (older than deduplication window)")
 	}
 
-	// The hash index should have exactly 2 entries: newNotif and oldNotif2
-	if finalHashCount != 2 {
-		t.Errorf("Expected 2 entries in hash index after cleanup, got %d", finalHashCount)
+	// The hash index should have exactly 1 entry: newNotif
+	// Both old notifications are removed because they're outside the deduplication window
+	if finalHashCount != 1 {
+		t.Errorf("Expected 1 entry in hash index after cleanup, got %d", finalHashCount)
 	}
 }
 

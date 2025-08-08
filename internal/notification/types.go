@@ -481,13 +481,15 @@ func (s *InMemoryStore) updateNotificationFields(target, source *Notification) {
 	}
 	
 	target.ExpiresAt = source.ExpiresAt
-	target.OccurrenceCount = source.OccurrenceCount
-	target.FirstOccurrence = source.FirstOccurrence
 	
 	// If hash-affecting fields changed, regenerate ContentHash and update hashIndex
 	if hashAffectingFieldsChanged {
 		oldHash := target.ContentHash
 		target.ContentHash = target.GenerateContentHash()
+		
+		// Reset occurrence tracking since this is essentially a new notification
+		target.OccurrenceCount = 1
+		target.FirstOccurrence = target.Timestamp
 		
 		// Update hash index if hash changed
 		if oldHash != target.ContentHash {
@@ -498,6 +500,10 @@ func (s *InMemoryStore) updateNotificationFields(target, source *Notification) {
 			// Add new hash entry
 			s.hashIndex[target.ContentHash] = target
 		}
+	} else {
+		// Only copy occurrence tracking if content hasn't changed
+		target.OccurrenceCount = source.OccurrenceCount
+		target.FirstOccurrence = source.FirstOccurrence
 	}
 }
 
@@ -635,12 +641,10 @@ func (s *InMemoryStore) cleanupHashIndex() {
 	toDelete := make([]string, 0)
 	
 	for hash, notif := range s.hashIndex {
-		// Check if the notification is expired based on deduplication window
+		// Remove any hash entry older than the deduplication window
+		// This prevents memory leaks from accumulating old hash entries
 		if notif.Timestamp.Before(cutoff) {
-			// Also check if it's been removed from main store (orphaned entry)
-			if _, exists := s.notifications[notif.ID]; !exists {
-				toDelete = append(toDelete, hash)
-			}
+			toDelete = append(toDelete, hash)
 		}
 	}
 	
