@@ -64,8 +64,7 @@ func NewResourceEventWorker(service *Service, config *ResourceWorkerConfig) (*Re
 	logger = logger.With("component", "resource-worker")
 
 	// Copy resource throttles to avoid mutation
-	resourceThrottles := make(map[string]time.Duration)
-	maps.Copy(resourceThrottles, config.ResourceThrottles)
+	resourceThrottles := maps.Clone(config.ResourceThrottles)
 
 	worker := &ResourceEventWorker{
 		service:           service,

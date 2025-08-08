@@ -102,11 +102,12 @@ type Notification struct {
 	// OccurrenceCount tracks how many times this notification has occurred
 	OccurrenceCount int `json:"occurrence_count,omitempty"`
 	// FirstOccurrence tracks when this notification first occurred (for deduplicated notifications)
-	FirstOccurrence *time.Time `json:"first_occurrence,omitempty"`
+	FirstOccurrence time.Time `json:"first_occurrence,omitempty"`
 }
 
 // NewNotification creates a new notification with a unique ID and timestamp
 func NewNotification(notifType Type, priority Priority, title, message string) *Notification {
+	now := time.Now()
 	n := &Notification{
 		ID:              uuid.New().String(),
 		Type:            notifType,
@@ -114,12 +115,11 @@ func NewNotification(notifType Type, priority Priority, title, message string) *
 		Status:          StatusUnread,
 		Title:           title,
 		Message:         message,
-		Timestamp:       time.Now(),
+		Timestamp:       now,
 		Metadata:        make(map[string]any),
 		OccurrenceCount: 1,
+		FirstOccurrence: now, // Copy the timestamp value
 	}
-	// Set first occurrence to point to the same timestamp (no extra allocation)
-	n.FirstOccurrence = &n.Timestamp
 	// Generate content hash for deduplication
 	n.ContentHash = n.GenerateContentHash()
 	return n
@@ -351,20 +351,28 @@ func (s *InMemoryStore) Save(notification *Notification) (string, error) {
 		s.removeOldest()
 	}
 
-	s.notifications[notification.ID] = notification
+	// Create a deep copy of the notification to store
+	notifCopy := *notification
+	// Deep copy metadata to prevent shared references
+	if notification.Metadata != nil {
+		notifCopy.Metadata = maps.Clone(notification.Metadata)
+	}
 	
-	// Update hash index
-	if notification.ContentHash != "" {
-		s.hashIndex[notification.ContentHash] = notification
+	// Store the copy, not the original
+	s.notifications[notifCopy.ID] = &notifCopy
+	
+	// Update hash index with the copy
+	if notifCopy.ContentHash != "" {
+		s.hashIndex[notifCopy.ContentHash] = &notifCopy
 	}
 	
 	// Update unread count if this is a new unread notification
-	if notification.Status == StatusUnread {
+	if notifCopy.Status == StatusUnread {
 		s.unreadCount++
 	}
 	
 	// Return the ID of the newly saved notification
-	return notification.ID, nil
+	return notifCopy.ID, nil
 }
 
 // Get retrieves a notification by ID
@@ -377,8 +385,7 @@ func (s *InMemoryStore) Get(id string) (*Notification, error) {
 		notifCopy := *notif
 		// Deep copy metadata to prevent shared references
 		if notif.Metadata != nil {
-			notifCopy.Metadata = make(map[string]any, len(notif.Metadata))
-			maps.Copy(notifCopy.Metadata, notif.Metadata)
+			notifCopy.Metadata = maps.Clone(notif.Metadata)
 		}
 		return &notifCopy, nil
 	}
@@ -397,8 +404,7 @@ func (s *InMemoryStore) List(filter *FilterOptions) ([]*Notification, error) {
 			notifCopy := *notif
 			// Deep copy metadata to prevent shared references
 			if notif.Metadata != nil {
-				notifCopy.Metadata = make(map[string]any, len(notif.Metadata))
-				maps.Copy(notifCopy.Metadata, notif.Metadata)
+				notifCopy.Metadata = maps.Clone(notif.Metadata)
 			}
 			results = append(results, &notifCopy)
 		}
@@ -469,8 +475,7 @@ func (s *InMemoryStore) updateNotificationFields(target, source *Notification) {
 	
 	// Deep copy Metadata to prevent shared references
 	if source.Metadata != nil {
-		target.Metadata = make(map[string]any, len(source.Metadata))
-		maps.Copy(target.Metadata, source.Metadata)
+		target.Metadata = maps.Clone(source.Metadata)
 	} else {
 		target.Metadata = nil
 	}
