@@ -4,15 +4,15 @@
 package notification
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -31,6 +31,9 @@ const (
 	TypeDetection Type = "detection"
 	// TypeSystem indicates a system status notification
 	TypeSystem Type = "system"
+
+	// DefaultDeduplicationWindow is the default time window for deduplication
+	DefaultDeduplicationWindow = 5 * time.Minute
 )
 
 // Sentinel errors for notification operations
@@ -147,8 +150,11 @@ func (n *Notification) IsExpired() bool {
 	return time.Now().After(*n.ExpiresAt)
 }
 
-// GenerateContentHash generates a hash of the notification's content for deduplication
-// The hash includes: component, type, title, and message (but not timestamp or ID)
+// GenerateContentHash generates a hash of the notification's content for deduplication.
+// The hash is stable and depends on the specific fields: component, type, title,
+// and message in that exact order. Changing these fields or their order will break
+// deduplication for existing notifications.
+// Uses xxHash for better performance compared to cryptographic hashes.
 func (n *Notification) GenerateContentHash() string {
 	// Normalize the content to ensure consistent hashing
 	content := strings.Join([]string{
@@ -158,9 +164,8 @@ func (n *Notification) GenerateContentHash() string {
 		strings.TrimSpace(n.Message),
 	}, "|")
 	
-	hasher := sha256.New()
-	hasher.Write([]byte(content))
-	return hex.EncodeToString(hasher.Sum(nil))
+	h := xxhash.Sum64([]byte(content))
+	return strconv.FormatUint(h, 36) // Use base36 for shorter string representation
 }
 
 // MarkAsRead updates the notification status to read
@@ -234,7 +239,8 @@ type InMemoryStore struct {
 	hashIndex          map[string]*Notification      // Index by content hash for deduplication
 	maxSize            int
 	unreadCount        int                          // Track unread count for optimization
-	deduplicationWindow time.Duration                // Time window for deduplication (default: 5 minutes)
+	deduplicationWindow time.Duration                // Time window for deduplication
+	lastCleanup        time.Time                    // Track last hash index cleanup
 }
 
 // NewInMemoryStore creates a new in-memory notification store
@@ -248,7 +254,8 @@ func NewInMemoryStore(maxSize int) *InMemoryStore {
 		notifications:       make(map[string]*Notification),
 		hashIndex:          make(map[string]*Notification),
 		maxSize:            maxSize,
-		deduplicationWindow: 5 * time.Minute, // Default 5-minute deduplication window
+		deduplicationWindow: DefaultDeduplicationWindow,
+		lastCleanup:        time.Now(),
 	}
 }
 
@@ -268,7 +275,9 @@ func (s *InMemoryStore) FindByContentHash(hash string) (*Notification, bool) {
 		// Check if the existing notification is within the deduplication window
 		cutoff := time.Now().Add(-s.deduplicationWindow)
 		if existing.Timestamp.After(cutoff) {
-			return existing, true
+			// Return a copy to prevent external modifications
+			notifCopy := *existing
+			return &notifCopy, true
 		}
 	}
 	return nil, false
@@ -278,6 +287,12 @@ func (s *InMemoryStore) FindByContentHash(hash string) (*Notification, bool) {
 func (s *InMemoryStore) Save(notification *Notification) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Periodically cleanup old hash entries (every hour)
+	if time.Since(s.lastCleanup) > time.Hour {
+		s.cleanupHashIndex()
+		s.lastCleanup = time.Now()
+	}
 
 	// Check for duplicate within deduplication window
 	if notification.ContentHash != "" {
@@ -392,22 +407,27 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 		s.unreadCount++
 	}
 	
-	// Update the actual stored notification fields instead of replacing the pointer
-	// This ensures hashIndex continues to point to the same object
-	oldNotif.Status = notification.Status
-	oldNotif.Priority = notification.Priority
-	oldNotif.Title = notification.Title
-	oldNotif.Message = notification.Message
-	oldNotif.Component = notification.Component
-	oldNotif.Timestamp = notification.Timestamp
-	oldNotif.Metadata = notification.Metadata
-	oldNotif.ExpiresAt = notification.ExpiresAt
-	oldNotif.OccurrenceCount = notification.OccurrenceCount
-	oldNotif.FirstOccurrence = notification.FirstOccurrence
-	
-	// Don't update ContentHash as it should remain consistent
+	// Update fields using a helper method to reduce complexity
+	s.updateNotificationFields(oldNotif, notification)
 	
 	return nil
+}
+
+// updateNotificationFields copies fields from source to target notification
+func (s *InMemoryStore) updateNotificationFields(target, source *Notification) {
+	// Update the actual stored notification fields instead of replacing the pointer
+	// This ensures hashIndex continues to point to the same object
+	target.Status = source.Status
+	target.Priority = source.Priority
+	target.Title = source.Title
+	target.Message = source.Message
+	target.Component = source.Component
+	target.Timestamp = source.Timestamp
+	target.Metadata = source.Metadata
+	target.ExpiresAt = source.ExpiresAt
+	target.OccurrenceCount = source.OccurrenceCount
+	target.FirstOccurrence = source.FirstOccurrence
+	// Don't update ContentHash as it should remain consistent
 }
 
 // Delete removes a notification
@@ -532,6 +552,19 @@ func sortNotificationsByTime(notifications []*Notification) {
 	sort.Slice(notifications, func(i, j int) bool {
 		return notifications[i].Timestamp.After(notifications[j].Timestamp)
 	})
+}
+
+// cleanupHashIndex removes expired entries from the hash index
+func (s *InMemoryStore) cleanupHashIndex() {
+	cutoff := time.Now().Add(-s.deduplicationWindow)
+	for hash, notif := range s.hashIndex {
+		if notif.Timestamp.Before(cutoff) {
+			// Only delete if this notification is not in the main store
+			if _, exists := s.notifications[notif.ID]; !exists {
+				delete(s.hashIndex, hash)
+			}
+		}
+	}
 }
 
 // Config is deprecated and will be removed in a future version.

@@ -116,268 +116,281 @@ func TestGenerateContentHash(t *testing.T) {
 func TestInMemoryStoreDeduplication(t *testing.T) {
 	t.Parallel()
 
-	t.Run("duplicate within window increments count", func(t *testing.T) {
-		store := NewInMemoryStore(100)
-		store.SetDeduplicationWindow(5 * time.Minute)
+	t.Run("duplicate within window increments count", testDuplicateWithinWindow)
+	t.Run("duplicate outside window creates new notification", testDuplicateOutsideWindow)
+	t.Run("priority escalation on duplicate", testPriorityEscalation)
+	t.Run("read status reset on duplicate", testReadStatusReset)
+	t.Run("hash index cleanup on delete", testHashIndexCleanup)
+	t.Run("multiple different notifications", testMultipleDifferentNotifications)
+}
 
-		// Create first notification
-		notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif1.Component = "diskmanager"
-		notif1.ContentHash = notif1.GenerateContentHash()
+// testDuplicateWithinWindow tests that duplicates within the deduplication window increment the count
+func testDuplicateWithinWindow(t *testing.T) {
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(5 * time.Minute)
 
-		// Save first notification
-		err := store.Save(notif1)
-		if err != nil {
-			t.Fatalf("Failed to save first notification: %v", err)
+	// Create first notification
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif1.Component = "diskmanager"
+	notif1.ContentHash = notif1.GenerateContentHash()
+
+	// Save first notification
+	err := store.Save(notif1)
+	if err != nil {
+		t.Fatalf("Failed to save first notification: %v", err)
+	}
+
+	// Create duplicate notification
+	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif2.Component = "diskmanager"
+	notif2.ContentHash = notif2.GenerateContentHash()
+
+	// Save duplicate - should deduplicate
+	err = store.Save(notif2)
+	if err != nil {
+		t.Fatalf("Failed to save duplicate notification: %v", err)
+	}
+
+	// Verify only one notification exists
+	notifications, err := store.List(nil)
+	if err != nil {
+		t.Fatalf("Failed to list notifications: %v", err)
+	}
+
+	if len(notifications) != 1 {
+		t.Errorf("Expected 1 notification, got %d", len(notifications))
+	}
+
+	// Verify occurrence count was incremented
+	if notifications[0].OccurrenceCount != 2 {
+		t.Errorf("Expected occurrence count 2, got %d", notifications[0].OccurrenceCount)
+	}
+}
+
+// testDuplicateOutsideWindow tests that duplicates outside the deduplication window create new notifications
+func testDuplicateOutsideWindow(t *testing.T) {
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(100 * time.Millisecond) // Very short window for testing
+
+	// Create first notification with timestamp in the past
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif1.Component = "diskmanager"
+	notif1.ContentHash = notif1.GenerateContentHash()
+	// Manually set timestamp to be in the past (outside deduplication window)
+	pastTime := time.Now().Add(-200 * time.Millisecond)
+	notif1.Timestamp = pastTime
+
+	// Save first notification
+	err := store.Save(notif1)
+	if err != nil {
+		t.Fatalf("Failed to save first notification: %v", err)
+	}
+
+	// Create duplicate notification with current timestamp
+	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif2.Component = "diskmanager"
+	notif2.ContentHash = notif2.GenerateContentHash()
+
+	// Save duplicate - should create new notification since window expired
+	err = store.Save(notif2)
+	if err != nil {
+		t.Fatalf("Failed to save duplicate notification: %v", err)
+	}
+
+	// Verify two notifications exist
+	notifications, err := store.List(nil)
+	if err != nil {
+		t.Fatalf("Failed to list notifications: %v", err)
+	}
+
+	if len(notifications) != 2 {
+		t.Errorf("Expected 2 notifications, got %d", len(notifications))
+	}
+
+	// Both should have occurrence count of 1
+	for i, n := range notifications {
+		if n.OccurrenceCount != 1 {
+			t.Errorf("Notification %d: expected occurrence count 1, got %d", i, n.OccurrenceCount)
 		}
+	}
+}
 
-		// Create duplicate notification
-		notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif2.Component = "diskmanager"
-		notif2.ContentHash = notif2.GenerateContentHash()
+// testPriorityEscalation tests that duplicate notifications with higher priority update the existing one
+func testPriorityEscalation(t *testing.T) {
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(5 * time.Minute)
 
-		// Save duplicate - should deduplicate
-		err = store.Save(notif2)
-		if err != nil {
-			t.Fatalf("Failed to save duplicate notification: %v", err)
-		}
+	// Create first notification with medium priority
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif1.Component = "diskmanager"
+	notif1.ContentHash = notif1.GenerateContentHash()
 
-		// Verify only one notification exists
-		notifications, err := store.List(nil)
-		if err != nil {
-			t.Fatalf("Failed to list notifications: %v", err)
-		}
+	err := store.Save(notif1)
+	if err != nil {
+		t.Fatalf("Failed to save first notification: %v", err)
+	}
 
-		if len(notifications) != 1 {
-			t.Errorf("Expected 1 notification, got %d", len(notifications))
-		}
+	// Create duplicate with higher priority
+	notif2 := NewNotification(TypeError, PriorityHigh, "Test Error", "Disk error occurred")
+	notif2.Component = "diskmanager"
+	notif2.ContentHash = notif2.GenerateContentHash()
 
-		// Verify occurrence count was incremented
-		if notifications[0].OccurrenceCount != 2 {
-			t.Errorf("Expected occurrence count 2, got %d", notifications[0].OccurrenceCount)
-		}
-	})
+	err = store.Save(notif2)
+	if err != nil {
+		t.Fatalf("Failed to save duplicate notification: %v", err)
+	}
 
-	t.Run("duplicate outside window creates new notification", func(t *testing.T) {
-		store := NewInMemoryStore(100)
-		store.SetDeduplicationWindow(100 * time.Millisecond) // Very short window for testing
+	// Verify priority was escalated
+	notifications, err := store.List(nil)
+	if err != nil {
+		t.Fatalf("Failed to list notifications: %v", err)
+	}
 
-		// Create first notification
-		notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif1.Component = "diskmanager"
-		notif1.ContentHash = notif1.GenerateContentHash()
+	if len(notifications) != 1 {
+		t.Errorf("Expected 1 notification, got %d", len(notifications))
+	}
 
-		// Save first notification
-		err := store.Save(notif1)
-		if err != nil {
-			t.Fatalf("Failed to save first notification: %v", err)
-		}
+	if notifications[0].Priority != PriorityHigh {
+		t.Errorf("Expected priority to be escalated to high, got %s", notifications[0].Priority)
+	}
+}
 
-		// Wait for deduplication window to expire
-		time.Sleep(150 * time.Millisecond)
+// testReadStatusReset tests that duplicate notifications reset the read status
+func testReadStatusReset(t *testing.T) {
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(5 * time.Minute)
 
-		// Create duplicate notification
-		notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif2.Component = "diskmanager"
-		notif2.ContentHash = notif2.GenerateContentHash()
+	// Create and save first notification
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif1.Component = "diskmanager"
+	notif1.ContentHash = notif1.GenerateContentHash()
 
-		// Save duplicate - should create new notification since window expired
-		err = store.Save(notif2)
-		if err != nil {
-			t.Fatalf("Failed to save duplicate notification: %v", err)
-		}
+	err := store.Save(notif1)
+	if err != nil {
+		t.Fatalf("Failed to save first notification: %v", err)
+	}
 
-		// Verify two notifications exist
-		notifications, err := store.List(nil)
-		if err != nil {
-			t.Fatalf("Failed to list notifications: %v", err)
-		}
+	// Get the notification from store and mark as read
+	savedNotif, err := store.Get(notif1.ID)
+	if err != nil {
+		t.Fatalf("Failed to get notification: %v", err)
+	}
+	savedNotif.MarkAsRead()
+	err = store.Update(savedNotif)
+	if err != nil {
+		t.Fatalf("Failed to update notification: %v", err)
+	}
 
-		if len(notifications) != 2 {
-			t.Errorf("Expected 2 notifications, got %d", len(notifications))
-		}
+	// Create duplicate notification
+	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif2.Component = "diskmanager"
+	notif2.ContentHash = notif2.GenerateContentHash()
 
-		// Both should have occurrence count of 1
-		for i, n := range notifications {
-			if n.OccurrenceCount != 1 {
-				t.Errorf("Notification %d: expected occurrence count 1, got %d", i, n.OccurrenceCount)
-			}
-		}
-	})
+	err = store.Save(notif2)
+	if err != nil {
+		t.Fatalf("Failed to save duplicate notification: %v", err)
+	}
 
-	t.Run("priority escalation on duplicate", func(t *testing.T) {
-		store := NewInMemoryStore(100)
-		store.SetDeduplicationWindow(5 * time.Minute)
+	// Verify status was reset to unread
+	notifications, err := store.List(nil)
+	if err != nil {
+		t.Fatalf("Failed to list notifications: %v", err)
+	}
 
-		// Create first notification with medium priority
-		notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif1.Component = "diskmanager"
-		notif1.ContentHash = notif1.GenerateContentHash()
+	if notifications[0].Status != StatusUnread {
+		t.Errorf("Expected status to be reset to unread, got %s", notifications[0].Status)
+	}
 
-		err := store.Save(notif1)
-		if err != nil {
-			t.Fatalf("Failed to save first notification: %v", err)
-		}
+	// Verify unread count
+	unreadCount, err := store.GetUnreadCount()
+	if err != nil {
+		t.Fatalf("Failed to get unread count: %v", err)
+	}
 
-		// Create duplicate with higher priority
-		notif2 := NewNotification(TypeError, PriorityHigh, "Test Error", "Disk error occurred")
-		notif2.Component = "diskmanager"
-		notif2.ContentHash = notif2.GenerateContentHash()
+	if unreadCount != 1 {
+		t.Errorf("Expected unread count 1, got %d", unreadCount)
+	}
+}
 
-		err = store.Save(notif2)
-		if err != nil {
-			t.Fatalf("Failed to save duplicate notification: %v", err)
-		}
+// testHashIndexCleanup tests that the hash index is cleaned up when notifications are deleted
+func testHashIndexCleanup(t *testing.T) {
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(5 * time.Minute)
 
-		// Verify priority was escalated
-		notifications, err := store.List(nil)
-		if err != nil {
-			t.Fatalf("Failed to list notifications: %v", err)
-		}
+	// Create and save notification
+	notif := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
+	notif.Component = "diskmanager"
+	notif.ContentHash = notif.GenerateContentHash()
 
-		if len(notifications) != 1 {
-			t.Errorf("Expected 1 notification, got %d", len(notifications))
-		}
+	err := store.Save(notif)
+	if err != nil {
+		t.Fatalf("Failed to save notification: %v", err)
+	}
 
-		if notifications[0].Priority != PriorityHigh {
-			t.Errorf("Expected priority to be escalated to high, got %s", notifications[0].Priority)
-		}
-	})
+	// Verify it exists in hash index
+	existing, found := store.FindByContentHash(notif.ContentHash)
+	if !found {
+		t.Error("Expected to find notification in hash index")
+	}
+	if existing.ID != notif.ID {
+		t.Errorf("Expected notification ID %s, got %s", notif.ID, existing.ID)
+	}
 
-	t.Run("read status reset on duplicate", func(t *testing.T) {
-		store := NewInMemoryStore(100)
-		store.SetDeduplicationWindow(5 * time.Minute)
+	// Delete notification
+	err = store.Delete(notif.ID)
+	if err != nil {
+		t.Fatalf("Failed to delete notification: %v", err)
+	}
 
-		// Create and save first notification
-		notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif1.Component = "diskmanager"
-		notif1.ContentHash = notif1.GenerateContentHash()
+	// Verify it's removed from hash index
+	_, found = store.FindByContentHash(notif.ContentHash)
+	if found {
+		t.Error("Expected notification to be removed from hash index")
+	}
+}
 
-		err := store.Save(notif1)
-		if err != nil {
-			t.Fatalf("Failed to save first notification: %v", err)
-		}
+// testMultipleDifferentNotifications tests that multiple different notifications are stored separately
+func testMultipleDifferentNotifications(t *testing.T) {
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(5 * time.Minute)
 
-		// Get the notification from store and mark as read
-		savedNotif, err := store.Get(notif1.ID)
-		if err != nil {
-			t.Fatalf("Failed to get notification: %v", err)
-		}
-		savedNotif.MarkAsRead()
-		err = store.Update(savedNotif)
-		if err != nil {
-			t.Fatalf("Failed to update notification: %v", err)
-		}
+	// Create different notifications
+	notif1 := NewNotification(TypeError, PriorityMedium, "Error 1", "First error")
+	notif1.Component = "component1"
+	notif1.ContentHash = notif1.GenerateContentHash()
 
-		// Create duplicate notification
-		notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif2.Component = "diskmanager"
-		notif2.ContentHash = notif2.GenerateContentHash()
+	notif2 := NewNotification(TypeWarning, PriorityLow, "Warning 1", "First warning")
+	notif2.Component = "component2"
+	notif2.ContentHash = notif2.GenerateContentHash()
 
-		err = store.Save(notif2)
-		if err != nil {
-			t.Fatalf("Failed to save duplicate notification: %v", err)
-		}
+	notif3 := NewNotification(TypeInfo, PriorityLow, "Info 1", "Information")
+	notif3.Component = "component3"
+	notif3.ContentHash = notif3.GenerateContentHash()
 
-		// Verify status was reset to unread
-		notifications, err := store.List(nil)
-		if err != nil {
-			t.Fatalf("Failed to list notifications: %v", err)
-		}
-
-		if notifications[0].Status != StatusUnread {
-			t.Errorf("Expected status to be reset to unread, got %s", notifications[0].Status)
-		}
-
-		// Verify unread count
-		unreadCount, err := store.GetUnreadCount()
-		if err != nil {
-			t.Fatalf("Failed to get unread count: %v", err)
-		}
-
-		if unreadCount != 1 {
-			t.Errorf("Expected unread count 1, got %d", unreadCount)
-		}
-	})
-
-	t.Run("hash index cleanup on delete", func(t *testing.T) {
-		store := NewInMemoryStore(100)
-		store.SetDeduplicationWindow(5 * time.Minute)
-
-		// Create and save notification
-		notif := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-		notif.Component = "diskmanager"
-		notif.ContentHash = notif.GenerateContentHash()
-
-		err := store.Save(notif)
+	// Save all notifications
+	for _, n := range []*Notification{notif1, notif2, notif3} {
+		err := store.Save(n)
 		if err != nil {
 			t.Fatalf("Failed to save notification: %v", err)
 		}
+	}
 
-		// Verify it exists in hash index
-		existing, found := store.FindByContentHash(notif.ContentHash)
-		if !found {
-			t.Error("Expected to find notification in hash index")
+	// Verify all three exist
+	notifications, err := store.List(nil)
+	if err != nil {
+		t.Fatalf("Failed to list notifications: %v", err)
+	}
+
+	if len(notifications) != 3 {
+		t.Errorf("Expected 3 notifications, got %d", len(notifications))
+	}
+
+	// All should have occurrence count of 1
+	for i, n := range notifications {
+		if n.OccurrenceCount != 1 {
+			t.Errorf("Notification %d: expected occurrence count 1, got %d", i, n.OccurrenceCount)
 		}
-		if existing.ID != notif.ID {
-			t.Errorf("Expected notification ID %s, got %s", notif.ID, existing.ID)
-		}
-
-		// Delete notification
-		err = store.Delete(notif.ID)
-		if err != nil {
-			t.Fatalf("Failed to delete notification: %v", err)
-		}
-
-		// Verify it's removed from hash index
-		_, found = store.FindByContentHash(notif.ContentHash)
-		if found {
-			t.Error("Expected notification to be removed from hash index")
-		}
-	})
-
-	t.Run("multiple different notifications", func(t *testing.T) {
-		store := NewInMemoryStore(100)
-		store.SetDeduplicationWindow(5 * time.Minute)
-
-		// Create different notifications
-		notif1 := NewNotification(TypeError, PriorityMedium, "Error 1", "First error")
-		notif1.Component = "component1"
-		notif1.ContentHash = notif1.GenerateContentHash()
-
-		notif2 := NewNotification(TypeWarning, PriorityLow, "Warning 1", "First warning")
-		notif2.Component = "component2"
-		notif2.ContentHash = notif2.GenerateContentHash()
-
-		notif3 := NewNotification(TypeInfo, PriorityLow, "Info 1", "Information")
-		notif3.Component = "component3"
-		notif3.ContentHash = notif3.GenerateContentHash()
-
-		// Save all notifications
-		for _, n := range []*Notification{notif1, notif2, notif3} {
-			err := store.Save(n)
-			if err != nil {
-				t.Fatalf("Failed to save notification: %v", err)
-			}
-		}
-
-		// Verify all three exist
-		notifications, err := store.List(nil)
-		if err != nil {
-			t.Fatalf("Failed to list notifications: %v", err)
-		}
-
-		if len(notifications) != 3 {
-			t.Errorf("Expected 3 notifications, got %d", len(notifications))
-		}
-
-		// All should have occurrence count of 1
-		for i, n := range notifications {
-			if n.OccurrenceCount != 1 {
-				t.Errorf("Notification %d: expected occurrence count 1, got %d", i, n.OccurrenceCount)
-			}
-		}
-	})
+	}
 }
 
 // TestHashIndexCleanup tests the automatic cleanup of expired hash index entries
