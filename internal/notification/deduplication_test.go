@@ -380,6 +380,106 @@ func TestInMemoryStoreDeduplication(t *testing.T) {
 	})
 }
 
+// TestHashIndexCleanup tests the automatic cleanup of expired hash index entries
+func TestHashIndexCleanup(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+	store.SetDeduplicationWindow(100 * time.Millisecond) // Short window for testing
+
+	// Create notifications with old timestamps
+	oldNotif1 := NewNotification(TypeError, PriorityMedium, "Old Error 1", "Old error message 1")
+	oldNotif1.Component = "component1"
+	oldNotif1.ContentHash = oldNotif1.GenerateContentHash()
+	oldNotif1.Timestamp = time.Now().Add(-2 * time.Hour) // Way outside deduplication window
+
+	oldNotif2 := NewNotification(TypeError, PriorityMedium, "Old Error 2", "Old error message 2")
+	oldNotif2.Component = "component2"
+	oldNotif2.ContentHash = oldNotif2.GenerateContentHash()
+	oldNotif2.Timestamp = time.Now().Add(-2 * time.Hour) // Way outside deduplication window
+
+	// Save old notifications
+	err := store.Save(oldNotif1)
+	if err != nil {
+		t.Fatalf("Failed to save old notification 1: %v", err)
+	}
+	err = store.Save(oldNotif2)
+	if err != nil {
+		t.Fatalf("Failed to save old notification 2: %v", err)
+	}
+
+	// Delete one of the old notifications from main store but keep in hash index
+	err = store.Delete(oldNotif1.ID)
+	if err != nil {
+		t.Fatalf("Failed to delete notification: %v", err)
+	}
+
+	// Manually add back to hash index to simulate orphaned entry
+	store.mu.Lock()
+	store.hashIndex[oldNotif1.ContentHash] = oldNotif1
+	initialHashCount := len(store.hashIndex)
+	store.mu.Unlock()
+
+	// Verify we have entries in hash index
+	if initialHashCount < 2 {
+		t.Errorf("Expected at least 2 entries in hash index, got %d", initialHashCount)
+	}
+
+	// Force cleanup by setting lastCleanup to over an hour ago
+	store.mu.Lock()
+	store.lastCleanup = time.Now().Add(-2 * time.Hour)
+	store.mu.Unlock()
+
+	// Create a new notification to trigger cleanup
+	newNotif := NewNotification(TypeInfo, PriorityLow, "New Info", "New message")
+	newNotif.Component = "component3"
+	newNotif.ContentHash = newNotif.GenerateContentHash()
+
+	err = store.Save(newNotif)
+	if err != nil {
+		t.Fatalf("Failed to save new notification: %v", err)
+	}
+
+	// Check that cleanup occurred
+	store.mu.RLock()
+	finalHashCount := len(store.hashIndex)
+	
+	// Should have the new notification and oldNotif2 (still in main store)
+	// oldNotif1 should be cleaned up as it was deleted from main store
+	hasNewNotif := false
+	hasOldNotif1 := false
+	hasOldNotif2 := false
+	
+	for hash := range store.hashIndex {
+		if hash == newNotif.ContentHash {
+			hasNewNotif = true
+		}
+		if hash == oldNotif1.ContentHash {
+			hasOldNotif1 = true
+		}
+		if hash == oldNotif2.ContentHash {
+			hasOldNotif2 = true
+		}
+	}
+	store.mu.RUnlock()
+
+	// Verify cleanup results
+	if !hasNewNotif {
+		t.Error("Expected new notification to be in hash index")
+	}
+	if hasOldNotif1 {
+		t.Error("Expected oldNotif1 to be cleaned up from hash index (was deleted from main store)")
+	}
+	if !hasOldNotif2 {
+		t.Error("Expected oldNotif2 to remain in hash index (still in main store)")
+	}
+
+	// The hash index should have exactly 2 entries: newNotif and oldNotif2
+	if finalHashCount != 2 {
+		t.Errorf("Expected 2 entries in hash index after cleanup, got %d", finalHashCount)
+	}
+}
+
 // TestServiceDeduplication tests deduplication at the service level
 func TestServiceDeduplication(t *testing.T) {
 	t.Parallel()
