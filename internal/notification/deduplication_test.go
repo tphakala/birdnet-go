@@ -135,7 +135,7 @@ func testDuplicateWithinWindow(t *testing.T) {
 		WithComponent("diskmanager")
 
 	// Save first notification
-	err := store.Save(notif1)
+	_, err := store.Save(notif1)
 	if err != nil {
 		t.Fatalf("Failed to save first notification: %v", err)
 	}
@@ -145,7 +145,7 @@ func testDuplicateWithinWindow(t *testing.T) {
 		WithComponent("diskmanager")
 
 	// Save duplicate - should deduplicate
-	err = store.Save(notif2)
+	_, err = store.Save(notif2)
 	if err != nil {
 		t.Fatalf("Failed to save duplicate notification: %v", err)
 	}
@@ -180,7 +180,7 @@ func testDuplicateOutsideWindow(t *testing.T) {
 	notif1.Timestamp = pastTime
 
 	// Save first notification
-	err := store.Save(notif1)
+	_, err := store.Save(notif1)
 	if err != nil {
 		t.Fatalf("Failed to save first notification: %v", err)
 	}
@@ -190,7 +190,7 @@ func testDuplicateOutsideWindow(t *testing.T) {
 		WithComponent("diskmanager")
 
 	// Save duplicate - should create new notification since window expired
-	err = store.Save(notif2)
+	_, err = store.Save(notif2)
 	if err != nil {
 		t.Fatalf("Failed to save duplicate notification: %v", err)
 	}
@@ -223,7 +223,7 @@ func testPriorityEscalation(t *testing.T) {
 	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
 		WithComponent("diskmanager")
 
-	err := store.Save(notif1)
+	_, err := store.Save(notif1)
 	if err != nil {
 		t.Fatalf("Failed to save first notification: %v", err)
 	}
@@ -232,7 +232,7 @@ func testPriorityEscalation(t *testing.T) {
 	notif2 := NewNotification(TypeError, PriorityHigh, "Test Error", "Disk error occurred").
 		WithComponent("diskmanager")
 
-	err = store.Save(notif2)
+	_, err = store.Save(notif2)
 	if err != nil {
 		t.Fatalf("Failed to save duplicate notification: %v", err)
 	}
@@ -262,7 +262,7 @@ func testReadStatusReset(t *testing.T) {
 	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
 		WithComponent("diskmanager")
 
-	err := store.Save(notif1)
+	_, err := store.Save(notif1)
 	if err != nil {
 		t.Fatalf("Failed to save first notification: %v", err)
 	}
@@ -282,7 +282,7 @@ func testReadStatusReset(t *testing.T) {
 	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
 		WithComponent("diskmanager")
 
-	err = store.Save(notif2)
+	_, err = store.Save(notif2)
 	if err != nil {
 		t.Fatalf("Failed to save duplicate notification: %v", err)
 	}
@@ -318,7 +318,7 @@ func testHashIndexCleanup(t *testing.T) {
 	notif := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
 		WithComponent("diskmanager")
 
-	err := store.Save(notif)
+	_, err := store.Save(notif)
 	if err != nil {
 		t.Fatalf("Failed to save notification: %v", err)
 	}
@@ -363,7 +363,7 @@ func testMultipleDifferentNotifications(t *testing.T) {
 
 	// Save all notifications
 	for _, n := range []*Notification{notif1, notif2, notif3} {
-		err := store.Save(n)
+		_, err := store.Save(n)
 		if err != nil {
 			t.Fatalf("Failed to save notification: %v", err)
 		}
@@ -404,11 +404,11 @@ func TestHashIndexCleanup(t *testing.T) {
 	oldNotif2.Timestamp = time.Now().Add(-2 * time.Hour) // Way outside deduplication window
 
 	// Save old notifications
-	err := store.Save(oldNotif1)
+	_, err := store.Save(oldNotif1)
 	if err != nil {
 		t.Fatalf("Failed to save old notification 1: %v", err)
 	}
-	err = store.Save(oldNotif2)
+	_, err = store.Save(oldNotif2)
 	if err != nil {
 		t.Fatalf("Failed to save old notification 2: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestHashIndexCleanup(t *testing.T) {
 	newNotif := NewNotification(TypeInfo, PriorityLow, "New Info", "New message").
 		WithComponent("component3")
 
-	err = store.Save(newNotif)
+	_, err = store.Save(newNotif)
 	if err != nil {
 		t.Fatalf("Failed to save new notification: %v", err)
 	}

@@ -38,7 +38,7 @@ func mustGetNotification(t *testing.T, store *InMemoryStore, id string) *Notific
 // mustSaveNotification saves a notification and fails the test if an error occurs
 func mustSaveNotification(t *testing.T, store *InMemoryStore, notif *Notification) {
 	t.Helper()
-	if err := store.Save(notif); err != nil {
+	if _, err := store.Save(notif); err != nil {
 		t.Fatalf("Failed to save notification: %v", err)
 	}
 }

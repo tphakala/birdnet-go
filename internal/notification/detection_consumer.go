@@ -80,7 +80,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 	// Add the notification through the service
 	// First save to store
-	if err := c.service.store.Save(notification); err != nil {
+	if _, err := c.service.store.Save(notification); err != nil {
 		c.logger.Error("failed to save new species notification",
 			"species", event.GetSpeciesName(),
 			"error", err,

@@ -41,7 +41,7 @@ func (s *Service) CreateWithMetadata(notification *Notification) error {
 	}
 
 	// Save to store
-	if err := s.store.Save(notification); err != nil {
+	if _, err := s.store.Save(notification); err != nil {
 		return errors.New(err).
 			Component("notification").
 			Category(errors.CategorySystem).

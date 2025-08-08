@@ -270,9 +270,9 @@ type failingStore struct {
 	shouldFail bool
 }
 
-func (f *failingStore) Save(notification *Notification) error {
+func (f *failingStore) Save(notification *Notification) (string, error) {
 	if f.shouldFail {
-		return context.DeadlineExceeded // Simulate store failure
+		return "", context.DeadlineExceeded // Simulate store failure
 	}
 	return f.InMemoryStore.Save(notification)
 }

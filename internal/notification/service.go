@@ -64,7 +64,7 @@ func DefaultServiceConfig() *ServiceConfig {
 		CleanupInterval:     5 * time.Minute,
 		RateLimitWindow:     1 * time.Minute,
 		RateLimitMaxEvents:  100,
-		DeduplicationWindow: 5 * time.Minute,
+		DeduplicationWindow: 1440 * time.Minute, // 1 day
 	}
 }
 
@@ -140,7 +140,7 @@ func (s *Service) Create(notifType Type, priority Priority, title, message strin
 	}
 
 	// Save to store
-	if err := s.store.Save(notification); err != nil {
+	if _, err := s.store.Save(notification); err != nil {
 		return nil, errors.New(err).
 			Component("notification").
 			Category(errors.CategorySystem).
@@ -173,8 +173,9 @@ func (s *Service) CreateWithComponent(notifType Type, priority Priority, title, 
 	notification := NewNotification(notifType, priority, title, message).
 		WithComponent(component)
 
-	// Save to store
-	if err := s.store.Save(notification); err != nil {
+	// Save to store (returns ID of saved/deduplicated notification)
+	savedID, err := s.store.Save(notification)
+	if err != nil {
 		return nil, errors.New(err).
 			Component("notification").
 			Category(errors.CategorySystem).
@@ -182,10 +183,20 @@ func (s *Service) CreateWithComponent(notifType Type, priority Priority, title, 
 			Build()
 	}
 
-	// Broadcast to subscribers
-	s.broadcast(notification)
+	// Get the actual saved notification (might be deduplicated)
+	savedNotif, err := s.store.Get(savedID)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("notification").
+			Category(errors.CategorySystem).
+			Context("operation", "get_saved_notification").
+			Build()
+	}
 
-	return notification, nil
+	// Broadcast to subscribers
+	s.broadcast(savedNotif)
+
+	return savedNotif, nil
 }
 
 // Get retrieves a notification by ID
@@ -289,12 +300,12 @@ func (s *Service) Subscribe() (<-chan *Notification, context.Context) {
 		cancel: cancel,
 	}
 	s.subscribers = append(s.subscribers, sub)
-	
+
 	if s.config.Debug {
 		s.logger.Debug("new subscriber added",
 			"total_subscribers", len(s.subscribers))
 	}
-	
+
 	return sub.ch, ctx
 }
 
@@ -309,12 +320,12 @@ func (s *Service) Unsubscribe(ch <-chan *Notification) {
 		if subscriber.ch == ch {
 			subscriber.cancel()
 			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
-			
+
 			if s.config.Debug {
 				s.logger.Debug("subscriber removed",
 					"remaining_subscribers", len(s.subscribers))
 			}
-			
+
 			break
 		}
 	}
@@ -438,7 +449,7 @@ func (s *Service) cleanupLoop() {
 						"total_count", len(notifications))
 				}
 			}
-			
+
 			if err := s.store.DeleteExpired(); err != nil {
 				// Log error but don't stop the cleanup loop
 				if s.logger != nil {
@@ -459,7 +470,7 @@ func (s *Service) cleanupLoop() {
 // Stop gracefully shuts down the notification service
 func (s *Service) Stop() {
 	s.logger.Info("notification service shutting down")
-	
+
 	s.cancel()
 	s.cleanupTicker.Stop()
 	s.wg.Wait()
@@ -472,10 +483,10 @@ func (s *Service) Stop() {
 	}
 	s.subscribers = nil
 	s.subscribersMu.Unlock()
-	
+
 	s.logger.Info("notification service stopped",
 		"subscribers_cancelled", subscriberCount)
-	
+
 	// Close the logger to clean up resources
 	if err := CloseLogger(); err != nil {
 		// Use fallback logging since our logger might be closed
