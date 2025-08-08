@@ -126,6 +126,7 @@ func TestInMemoryStoreDeduplication(t *testing.T) {
 
 // testDuplicateWithinWindow tests that duplicates within the deduplication window increment the count
 func testDuplicateWithinWindow(t *testing.T) {
+	t.Parallel()
 	store := NewInMemoryStore(100)
 	store.SetDeduplicationWindow(5 * time.Minute)
 
@@ -169,6 +170,7 @@ func testDuplicateWithinWindow(t *testing.T) {
 
 // testDuplicateOutsideWindow tests that duplicates outside the deduplication window create new notifications
 func testDuplicateOutsideWindow(t *testing.T) {
+	t.Parallel()
 	store := NewInMemoryStore(100)
 	store.SetDeduplicationWindow(100 * time.Millisecond) // Very short window for testing
 
@@ -217,6 +219,7 @@ func testDuplicateOutsideWindow(t *testing.T) {
 
 // testPriorityEscalation tests that duplicate notifications with higher priority update the existing one
 func testPriorityEscalation(t *testing.T) {
+	t.Parallel()
 	store := NewInMemoryStore(100)
 	store.SetDeduplicationWindow(5 * time.Minute)
 
@@ -257,6 +260,7 @@ func testPriorityEscalation(t *testing.T) {
 
 // testReadStatusReset tests that duplicate notifications reset the read status
 func testReadStatusReset(t *testing.T) {
+	t.Parallel()
 	store := NewInMemoryStore(100)
 	store.SetDeduplicationWindow(5 * time.Minute)
 
@@ -314,6 +318,7 @@ func testReadStatusReset(t *testing.T) {
 
 // testHashIndexCleanup tests that the hash index is cleaned up when notifications are deleted
 func testHashIndexCleanup(t *testing.T) {
+	t.Parallel()
 	store := NewInMemoryStore(100)
 	store.SetDeduplicationWindow(5 * time.Minute)
 
@@ -351,6 +356,7 @@ func testHashIndexCleanup(t *testing.T) {
 
 // testMultipleDifferentNotifications tests that multiple different notifications are stored separately
 func testMultipleDifferentNotifications(t *testing.T) {
+	t.Parallel()
 	store := NewInMemoryStore(100)
 	store.SetDeduplicationWindow(5 * time.Minute)
 
@@ -428,10 +434,8 @@ func TestHashIndexCleanup(t *testing.T) {
 	}
 
 	// Manually add back to hash index to simulate orphaned entry
-	store.mu.Lock()
-	store.hashIndex[oldNotif1.ContentHash] = oldNotif1
-	initialHashCount := len(store.hashIndex)
-	store.mu.Unlock()
+	store.forceHashIndexEntry(oldNotif1.ContentHash, oldNotif1)
+	initialHashCount := store.getHashIndexCount()
 
 	// Verify we have entries in hash index
 	if initialHashCount < 2 {
@@ -439,9 +443,7 @@ func TestHashIndexCleanup(t *testing.T) {
 	}
 
 	// Force cleanup by setting lastCleanup to over an hour ago
-	store.mu.Lock()
-	store.lastCleanup = time.Now().Add(-2 * time.Hour)
-	store.mu.Unlock()
+	store.forceCleanupTrigger()
 
 	// Create a new notification to trigger cleanup
 	newNotif := NewNotification(TypeInfo, PriorityLow, "New Info", "New message")
@@ -454,27 +456,13 @@ func TestHashIndexCleanup(t *testing.T) {
 	}
 
 	// Check that cleanup occurred
-	store.mu.RLock()
-	finalHashCount := len(store.hashIndex)
+	finalHashCount := store.getHashIndexCount()
 	
 	// Should have the new notification and oldNotif2 (still in main store)
 	// oldNotif1 should be cleaned up as it was deleted from main store
-	hasNewNotif := false
-	hasOldNotif1 := false
-	hasOldNotif2 := false
-	
-	for hash := range store.hashIndex {
-		if hash == newNotif.ContentHash {
-			hasNewNotif = true
-		}
-		if hash == oldNotif1.ContentHash {
-			hasOldNotif1 = true
-		}
-		if hash == oldNotif2.ContentHash {
-			hasOldNotif2 = true
-		}
-	}
-	store.mu.RUnlock()
+	hasNewNotif := store.hasHashIndexEntry(newNotif.ContentHash)
+	hasOldNotif1 := store.hasHashIndexEntry(oldNotif1.ContentHash)
+	hasOldNotif2 := store.hasHashIndexEntry(oldNotif2.ContentHash)
 
 	// Verify cleanup results
 	if !hasNewNotif {
