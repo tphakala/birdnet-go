@@ -39,6 +39,7 @@ type Service struct {
 // - Notification storage limits
 // - Automatic cleanup of expired notifications
 // - Rate limiting to prevent notification spam
+// - Deduplication of similar notifications
 //
 // Use this struct when initializing the notification service via NewService().
 type ServiceConfig struct {
@@ -52,15 +53,18 @@ type ServiceConfig struct {
 	RateLimitWindow time.Duration
 	// RateLimitMaxEvents is the maximum number of events per window
 	RateLimitMaxEvents int
+	// DeduplicationWindow is the time window for deduplicating similar notifications
+	DeduplicationWindow time.Duration
 }
 
 // DefaultServiceConfig returns a default configuration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-		MaxNotifications:   1000,
-		CleanupInterval:    5 * time.Minute,
-		RateLimitWindow:    1 * time.Minute,
-		RateLimitMaxEvents: 100,
+		MaxNotifications:    1000,
+		CleanupInterval:     5 * time.Minute,
+		RateLimitWindow:     1 * time.Minute,
+		RateLimitMaxEvents:  100,
+		DeduplicationWindow: 5 * time.Minute,
 	}
 }
 
@@ -72,8 +76,14 @@ func NewService(config *ServiceConfig) *Service {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create store and configure deduplication window
+	store := NewInMemoryStore(config.MaxNotifications)
+	if config.DeduplicationWindow > 0 {
+		store.SetDeduplicationWindow(config.DeduplicationWindow)
+	}
+
 	service := &Service{
-		store:         NewInMemoryStore(config.MaxNotifications),
+		store:         store,
 		subscribers:   make([]*Subscriber, 0),
 		rateLimiter:   NewRateLimiter(config.RateLimitWindow, config.RateLimitMaxEvents),
 		cleanupTicker: time.NewTicker(config.CleanupInterval),
@@ -89,6 +99,7 @@ func NewService(config *ServiceConfig) *Service {
 		"cleanup_interval", config.CleanupInterval,
 		"rate_limit_window", config.RateLimitWindow,
 		"rate_limit_max_events", config.RateLimitMaxEvents,
+		"deduplication_window", config.DeduplicationWindow,
 		"debug", config.Debug)
 
 	// Start background cleanup

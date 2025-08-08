@@ -4,9 +4,12 @@
 package notification
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,25 +86,40 @@ type Notification struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 	// ExpiresAt indicates when the notification should be auto-removed (optional)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// ContentHash is a hash of the notification content for deduplication
+	ContentHash string `json:"-"` // Not exposed in JSON to maintain API compatibility
+	// OccurrenceCount tracks how many times this notification has occurred
+	OccurrenceCount int `json:"occurrence_count,omitempty"`
+	// FirstOccurrence tracks when this notification first occurred (for deduplicated notifications)
+	FirstOccurrence *time.Time `json:"first_occurrence,omitempty"`
 }
 
 // NewNotification creates a new notification with a unique ID and timestamp
 func NewNotification(notifType Type, priority Priority, title, message string) *Notification {
-	return &Notification{
-		ID:        uuid.New().String(),
-		Type:      notifType,
-		Priority:  priority,
-		Status:    StatusUnread,
-		Title:     title,
-		Message:   message,
-		Timestamp: time.Now(),
-		Metadata:  make(map[string]any),
+	now := time.Now()
+	n := &Notification{
+		ID:              uuid.New().String(),
+		Type:            notifType,
+		Priority:        priority,
+		Status:          StatusUnread,
+		Title:           title,
+		Message:         message,
+		Timestamp:       now,
+		Metadata:        make(map[string]any),
+		OccurrenceCount: 1,
 	}
+	// Set first occurrence to current timestamp
+	n.FirstOccurrence = &now
+	// Generate content hash for deduplication
+	n.ContentHash = n.GenerateContentHash()
+	return n
 }
 
 // WithComponent sets the component field and returns the notification for chaining
 func (n *Notification) WithComponent(component string) *Notification {
 	n.Component = component
+	// Regenerate content hash since component is part of the hash
+	n.ContentHash = n.GenerateContentHash()
 	return n
 }
 
@@ -127,6 +145,22 @@ func (n *Notification) IsExpired() bool {
 		return false
 	}
 	return time.Now().After(*n.ExpiresAt)
+}
+
+// GenerateContentHash generates a hash of the notification's content for deduplication
+// The hash includes: component, type, title, and message (but not timestamp or ID)
+func (n *Notification) GenerateContentHash() string {
+	// Normalize the content to ensure consistent hashing
+	content := strings.Join([]string{
+		strings.ToLower(n.Component),
+		string(n.Type),
+		strings.TrimSpace(n.Title),
+		strings.TrimSpace(n.Message),
+	}, "|")
+	
+	hasher := sha256.New()
+	hasher.Write([]byte(content))
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 // MarkAsRead updates the notification status to read
@@ -157,6 +191,22 @@ type NotificationStore interface {
 	GetUnreadCount() (int, error)
 }
 
+// getPriorityWeight returns a numeric weight for priority comparison
+func getPriorityWeight(p Priority) int {
+	switch p {
+	case PriorityCritical:
+		return 4
+	case PriorityHigh:
+		return 3
+	case PriorityMedium:
+		return 2
+	case PriorityLow:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // FilterOptions provides filtering capabilities for listing notifications
 type FilterOptions struct {
 	// Types filters by notification types
@@ -179,10 +229,12 @@ type FilterOptions struct {
 
 // InMemoryStore provides a thread-safe in-memory notification store
 type InMemoryStore struct {
-	mu            sync.RWMutex
-	notifications map[string]*Notification
-	maxSize       int
-	unreadCount   int // Track unread count for optimization
+	mu                  sync.RWMutex
+	notifications       map[string]*Notification      // Index by ID
+	hashIndex          map[string]*Notification      // Index by content hash for deduplication
+	maxSize            int
+	unreadCount        int                          // Track unread count for optimization
+	deduplicationWindow time.Duration                // Time window for deduplication (default: 5 minutes)
 }
 
 // NewInMemoryStore creates a new in-memory notification store
@@ -193,22 +245,81 @@ func NewInMemoryStore(maxSize int) *InMemoryStore {
 	}
 
 	return &InMemoryStore{
-		notifications: make(map[string]*Notification),
-		maxSize:       maxSize,
+		notifications:       make(map[string]*Notification),
+		hashIndex:          make(map[string]*Notification),
+		maxSize:            maxSize,
+		deduplicationWindow: 5 * time.Minute, // Default 5-minute deduplication window
 	}
 }
 
-// Save stores a notification in memory
+// SetDeduplicationWindow sets the time window for deduplication
+func (s *InMemoryStore) SetDeduplicationWindow(window time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deduplicationWindow = window
+}
+
+// FindByContentHash finds an existing notification by content hash within the deduplication window
+func (s *InMemoryStore) FindByContentHash(hash string) (*Notification, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	if existing, ok := s.hashIndex[hash]; ok {
+		// Check if the existing notification is within the deduplication window
+		cutoff := time.Now().Add(-s.deduplicationWindow)
+		if existing.Timestamp.After(cutoff) {
+			return existing, true
+		}
+	}
+	return nil, false
+}
+
+// Save stores a notification in memory, handling deduplication
 func (s *InMemoryStore) Save(notification *Notification) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check for duplicate within deduplication window
+	if notification.ContentHash != "" {
+		if existing, ok := s.hashIndex[notification.ContentHash]; ok {
+			cutoff := time.Now().Add(-s.deduplicationWindow)
+			if existing.Timestamp.After(cutoff) {
+				// Found duplicate within window - update existing notification
+				existing.OccurrenceCount++
+				existing.Timestamp = notification.Timestamp // Update to latest timestamp
+				
+				// Update priority if new one is higher
+				if getPriorityWeight(notification.Priority) > getPriorityWeight(existing.Priority) {
+					existing.Priority = notification.Priority
+				}
+				
+				// Mark as unread if it was previously read
+				wasRead := existing.Status != StatusUnread
+				if wasRead {
+					existing.Status = StatusUnread
+					s.unreadCount++
+				}
+				
+				// Update the notification in the store (existing is a pointer to the stored notification)
+				// No need to update s.notifications[existing.ID] since existing is already a pointer
+				
+				return nil
+			}
+		}
+	}
+
+	// No duplicate found or outside window - save as new notification
 	// Enforce max size by removing oldest notifications
 	if len(s.notifications) >= s.maxSize {
 		s.removeOldest()
 	}
 
 	s.notifications[notification.ID] = notification
+	
+	// Update hash index
+	if notification.ContentHash != "" {
+		s.hashIndex[notification.ContentHash] = notification
+	}
 	
 	// Update unread count if this is a new unread notification
 	if notification.Status == StatusUnread {
@@ -281,7 +392,21 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 		s.unreadCount++
 	}
 	
-	s.notifications[notification.ID] = notification
+	// Update the actual stored notification fields instead of replacing the pointer
+	// This ensures hashIndex continues to point to the same object
+	oldNotif.Status = notification.Status
+	oldNotif.Priority = notification.Priority
+	oldNotif.Title = notification.Title
+	oldNotif.Message = notification.Message
+	oldNotif.Component = notification.Component
+	oldNotif.Timestamp = notification.Timestamp
+	oldNotif.Metadata = notification.Metadata
+	oldNotif.ExpiresAt = notification.ExpiresAt
+	oldNotif.OccurrenceCount = notification.OccurrenceCount
+	oldNotif.FirstOccurrence = notification.FirstOccurrence
+	
+	// Don't update ContentHash as it should remain consistent
+	
 	return nil
 }
 
@@ -294,6 +419,12 @@ func (s *InMemoryStore) Delete(id string) error {
 	if notif, exists := s.notifications[id]; exists {
 		if notif.Status == StatusUnread {
 			s.unreadCount--
+		}
+		// Remove from hash index if it's the current entry
+		if notif.ContentHash != "" {
+			if hashEntry, ok := s.hashIndex[notif.ContentHash]; ok && hashEntry.ID == notif.ID {
+				delete(s.hashIndex, notif.ContentHash)
+			}
 		}
 	}
 	
@@ -310,6 +441,12 @@ func (s *InMemoryStore) DeleteExpired() error {
 		if notif.IsExpired() {
 			if notif.Status == StatusUnread {
 				s.unreadCount--
+			}
+			// Remove from hash index if it's the current entry
+			if notif.ContentHash != "" {
+				if hashEntry, ok := s.hashIndex[notif.ContentHash]; ok && hashEntry.ID == notif.ID {
+					delete(s.hashIndex, notif.ContentHash)
+				}
 			}
 			delete(s.notifications, id)
 		}
@@ -331,8 +468,16 @@ func (s *InMemoryStore) removeOldest() {
 
 	if oldestID != "" {
 		// Update unread count if removing an unread notification
-		if notif, exists := s.notifications[oldestID]; exists && notif.Status == StatusUnread {
-			s.unreadCount--
+		if notif, exists := s.notifications[oldestID]; exists {
+			if notif.Status == StatusUnread {
+				s.unreadCount--
+			}
+			// Remove from hash index if it's the current entry
+			if notif.ContentHash != "" {
+				if hashEntry, ok := s.hashIndex[notif.ContentHash]; ok && hashEntry.ID == notif.ID {
+					delete(s.hashIndex, notif.ContentHash)
+				}
+			}
 		}
 		delete(s.notifications, oldestID)
 	}
