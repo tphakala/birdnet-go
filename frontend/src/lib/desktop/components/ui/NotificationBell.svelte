@@ -18,6 +18,8 @@
     read: boolean;
     priority: Priority;
     component?: string;
+    occurrence_count?: number;
+    first_occurrence?: string;
   }
 
   interface SSEMessage {
@@ -269,6 +271,11 @@
         read: existing.read,
         // Update priority if the new one is higher priority
         priority: getHigherPriority(existing.priority, notification.priority),
+        // Update occurrence count - if backend already deduplicated, use its count
+        // Otherwise increment the frontend count
+        occurrence_count: notification.occurrence_count || (existing.occurrence_count || 1) + 1,
+        // Preserve first occurrence timestamp
+        first_occurrence: existing.first_occurrence || existing.timestamp,
       };
 
       // Remove from current position and add to beginning
@@ -279,7 +286,13 @@
       ];
     } else {
       // No duplicate - add to beginning of array
-      notifications = [notification, ...notifications.slice(0, 20)];
+      // Ensure occurrence_count defaults to 1 if not provided by backend
+      const newNotification = {
+        ...notification,
+        occurrence_count: notification.occurrence_count || 1,
+        first_occurrence: notification.first_occurrence || notification.timestamp,
+      };
+      notifications = [newNotification, ...notifications.slice(0, 20)];
     }
 
     updateUnreadCount();
@@ -629,6 +642,14 @@
                   </div>
                   <p class="text-sm text-base-content/80 mt-1">{notification.message}</p>
                   <div class="flex items-center gap-2 mt-2">
+                    {#if notification.occurrence_count && notification.occurrence_count > 1}
+                      <span
+                        class="badge badge-sm badge-secondary"
+                        title="This notification occurred {notification.occurrence_count} times"
+                      >
+                        ×{notification.occurrence_count}
+                      </span>
+                    {/if}
                     {#if notification.component}
                       <span class="badge badge-sm badge-ghost">{notification.component}</span>
                     {/if}
