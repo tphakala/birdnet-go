@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func mustGetNotification(t *testing.T, store *InMemoryStore, id string) *Notific
 // mustSaveNotification saves a notification and fails the test if an error occurs
 func mustSaveNotification(t *testing.T, store *InMemoryStore, notif *Notification) {
 	t.Helper()
-	if err := store.Save(notif); err != nil {
+	if _, err := store.Save(notif); err != nil {
 		t.Fatalf("Failed to save notification: %v", err)
 	}
 }
@@ -178,10 +179,11 @@ func TestInMemoryStoreMaxSize(t *testing.T) {
 	store := NewInMemoryStore(3) // Small size for testing
 
 	// Create 4 notifications (more than max size)
+	// Make each notification unique to avoid deduplication
 	notifications := make([]*Notification, 4)
 	baseTime := time.Now()
 	for i := range 4 {
-		notifications[i] = NewNotification(TypeInfo, PriorityMedium, "Test", "Message")
+		notifications[i] = NewNotification(TypeInfo, PriorityMedium, fmt.Sprintf("Test %d", i), fmt.Sprintf("Message %d", i))
 		// Set timestamps deterministically to ensure ordering
 		notifications[i].Timestamp = baseTime.Add(time.Duration(i) * time.Second)
 		mustSaveNotification(t, store, notifications[i])
