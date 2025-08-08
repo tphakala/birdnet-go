@@ -131,9 +131,8 @@ func testDuplicateWithinWindow(t *testing.T) {
 	store.SetDeduplicationWindow(5 * time.Minute)
 
 	// Create first notification
-	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif1.Component = "diskmanager"
-	notif1.ContentHash = notif1.GenerateContentHash()
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	// Save first notification
 	err := store.Save(notif1)
@@ -142,9 +141,8 @@ func testDuplicateWithinWindow(t *testing.T) {
 	}
 
 	// Create duplicate notification
-	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif2.Component = "diskmanager"
-	notif2.ContentHash = notif2.GenerateContentHash()
+	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	// Save duplicate - should deduplicate
 	err = store.Save(notif2)
@@ -175,9 +173,8 @@ func testDuplicateOutsideWindow(t *testing.T) {
 	store.SetDeduplicationWindow(100 * time.Millisecond) // Very short window for testing
 
 	// Create first notification with timestamp in the past
-	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif1.Component = "diskmanager"
-	notif1.ContentHash = notif1.GenerateContentHash()
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 	// Manually set timestamp to be in the past (outside deduplication window)
 	pastTime := time.Now().Add(-200 * time.Millisecond)
 	notif1.Timestamp = pastTime
@@ -189,9 +186,8 @@ func testDuplicateOutsideWindow(t *testing.T) {
 	}
 
 	// Create duplicate notification with current timestamp
-	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif2.Component = "diskmanager"
-	notif2.ContentHash = notif2.GenerateContentHash()
+	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	// Save duplicate - should create new notification since window expired
 	err = store.Save(notif2)
@@ -224,9 +220,8 @@ func testPriorityEscalation(t *testing.T) {
 	store.SetDeduplicationWindow(5 * time.Minute)
 
 	// Create first notification with medium priority
-	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif1.Component = "diskmanager"
-	notif1.ContentHash = notif1.GenerateContentHash()
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	err := store.Save(notif1)
 	if err != nil {
@@ -234,9 +229,8 @@ func testPriorityEscalation(t *testing.T) {
 	}
 
 	// Create duplicate with higher priority
-	notif2 := NewNotification(TypeError, PriorityHigh, "Test Error", "Disk error occurred")
-	notif2.Component = "diskmanager"
-	notif2.ContentHash = notif2.GenerateContentHash()
+	notif2 := NewNotification(TypeError, PriorityHigh, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	err = store.Save(notif2)
 	if err != nil {
@@ -265,9 +259,8 @@ func testReadStatusReset(t *testing.T) {
 	store.SetDeduplicationWindow(5 * time.Minute)
 
 	// Create and save first notification
-	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif1.Component = "diskmanager"
-	notif1.ContentHash = notif1.GenerateContentHash()
+	notif1 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	err := store.Save(notif1)
 	if err != nil {
@@ -286,9 +279,8 @@ func testReadStatusReset(t *testing.T) {
 	}
 
 	// Create duplicate notification
-	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif2.Component = "diskmanager"
-	notif2.ContentHash = notif2.GenerateContentHash()
+	notif2 := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	err = store.Save(notif2)
 	if err != nil {
@@ -323,9 +315,8 @@ func testHashIndexCleanup(t *testing.T) {
 	store.SetDeduplicationWindow(5 * time.Minute)
 
 	// Create and save notification
-	notif := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred")
-	notif.Component = "diskmanager"
-	notif.ContentHash = notif.GenerateContentHash()
+	notif := NewNotification(TypeError, PriorityMedium, "Test Error", "Disk error occurred").
+		WithComponent("diskmanager")
 
 	err := store.Save(notif)
 	if err != nil {
@@ -361,17 +352,14 @@ func testMultipleDifferentNotifications(t *testing.T) {
 	store.SetDeduplicationWindow(5 * time.Minute)
 
 	// Create different notifications
-	notif1 := NewNotification(TypeError, PriorityMedium, "Error 1", "First error")
-	notif1.Component = "component1"
-	notif1.ContentHash = notif1.GenerateContentHash()
+	notif1 := NewNotification(TypeError, PriorityMedium, "Error 1", "First error").
+		WithComponent("component1")
 
-	notif2 := NewNotification(TypeWarning, PriorityLow, "Warning 1", "First warning")
-	notif2.Component = "component2"
-	notif2.ContentHash = notif2.GenerateContentHash()
+	notif2 := NewNotification(TypeWarning, PriorityLow, "Warning 1", "First warning").
+		WithComponent("component2")
 
-	notif3 := NewNotification(TypeInfo, PriorityLow, "Info 1", "Information")
-	notif3.Component = "component3"
-	notif3.ContentHash = notif3.GenerateContentHash()
+	notif3 := NewNotification(TypeInfo, PriorityLow, "Info 1", "Information").
+		WithComponent("component3")
 
 	// Save all notifications
 	for _, n := range []*Notification{notif1, notif2, notif3} {
@@ -407,14 +395,12 @@ func TestHashIndexCleanup(t *testing.T) {
 	store.SetDeduplicationWindow(100 * time.Millisecond) // Short window for testing
 
 	// Create notifications with old timestamps
-	oldNotif1 := NewNotification(TypeError, PriorityMedium, "Old Error 1", "Old error message 1")
-	oldNotif1.Component = "component1"
-	oldNotif1.ContentHash = oldNotif1.GenerateContentHash()
+	oldNotif1 := NewNotification(TypeError, PriorityMedium, "Old Error 1", "Old error message 1").
+		WithComponent("component1")
 	oldNotif1.Timestamp = time.Now().Add(-2 * time.Hour) // Way outside deduplication window
 
-	oldNotif2 := NewNotification(TypeError, PriorityMedium, "Old Error 2", "Old error message 2")
-	oldNotif2.Component = "component2"
-	oldNotif2.ContentHash = oldNotif2.GenerateContentHash()
+	oldNotif2 := NewNotification(TypeError, PriorityMedium, "Old Error 2", "Old error message 2").
+		WithComponent("component2")
 	oldNotif2.Timestamp = time.Now().Add(-2 * time.Hour) // Way outside deduplication window
 
 	// Save old notifications
@@ -446,9 +432,8 @@ func TestHashIndexCleanup(t *testing.T) {
 	store.forceCleanupTrigger()
 
 	// Create a new notification to trigger cleanup
-	newNotif := NewNotification(TypeInfo, PriorityLow, "New Info", "New message")
-	newNotif.Component = "component3"
-	newNotif.ContentHash = newNotif.GenerateContentHash()
+	newNotif := NewNotification(TypeInfo, PriorityLow, "New Info", "New message").
+		WithComponent("component3")
 
 	err = store.Save(newNotif)
 	if err != nil {

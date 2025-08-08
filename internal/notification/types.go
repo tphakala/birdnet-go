@@ -66,21 +66,29 @@ const (
 	StatusAcknowledged Status = "acknowledged"
 )
 
-// Notification represents a single notification event
+// Notification represents a single notification event.
+//
+// IMPORTANT: Do not directly modify Component, Type, Title, or Message fields after creation
+// as this will cause ContentHash to become stale and break deduplication. Use the provided
+// builder methods like WithComponent() instead, which properly regenerate the hash.
 type Notification struct {
 	// ID is the unique identifier for the notification
 	ID string `json:"id"`
 	// Type categorizes the notification
+	// WARNING: Direct mutation breaks deduplication - use builder methods
 	Type Type `json:"type"`
 	// Priority indicates the urgency level
 	Priority Priority `json:"priority"`
 	// Status tracks whether the notification has been read
 	Status Status `json:"status"`
 	// Title is a short summary of the notification
+	// WARNING: Direct mutation breaks deduplication - use builder methods
 	Title string `json:"title"`
 	// Message provides detailed information
+	// WARNING: Direct mutation breaks deduplication - use builder methods
 	Message string `json:"message"`
 	// Component identifies the source component (e.g., "database", "audio", "birdweather")
+	// WARNING: Direct mutation breaks deduplication - use WithComponent() instead
 	Component string `json:"component,omitempty"`
 	// Timestamp indicates when the notification was created
 	Timestamp time.Time `json:"timestamp"`
@@ -419,6 +427,13 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 func (s *InMemoryStore) updateNotificationFields(target, source *Notification) {
 	// Update the actual stored notification fields instead of replacing the pointer
 	// This ensures hashIndex continues to point to the same object
+	
+	// Check if hash-affecting fields are being changed
+	hashAffectingFieldsChanged := target.Component != source.Component ||
+		target.Type != source.Type ||
+		target.Title != source.Title ||
+		target.Message != source.Message
+
 	target.Status = source.Status
 	target.Priority = source.Priority
 	target.Title = source.Title
@@ -429,7 +444,22 @@ func (s *InMemoryStore) updateNotificationFields(target, source *Notification) {
 	target.ExpiresAt = source.ExpiresAt
 	target.OccurrenceCount = source.OccurrenceCount
 	target.FirstOccurrence = source.FirstOccurrence
-	// Don't update ContentHash as it should remain consistent
+	
+	// If hash-affecting fields changed, regenerate ContentHash and update hashIndex
+	if hashAffectingFieldsChanged {
+		oldHash := target.ContentHash
+		target.ContentHash = target.GenerateContentHash()
+		
+		// Update hash index if hash changed
+		if oldHash != target.ContentHash {
+			// Remove old hash entry if it exists and points to this notification
+			if oldEntry, exists := s.hashIndex[oldHash]; exists && oldEntry.ID == target.ID {
+				delete(s.hashIndex, oldHash)
+			}
+			// Add new hash entry
+			s.hashIndex[target.ContentHash] = target
+		}
+	}
 }
 
 // Delete removes a notification
