@@ -49,7 +49,7 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 	for _, n := range notifications {
 		isToast, exists := n.Metadata["isToast"]
 		assert.False(t, exists && isToast == true, "No toast notifications should be returned")
-		assert.NotEqual(t, "Toast Message", n.Title, "Toast notifications should not appear in list")
+		assert.NotEqual(t, ToastNotificationTitle, n.Title, "Toast notifications should not appear in list")
 	}
 
 	// List with various filters - toast should never appear
@@ -82,7 +82,7 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 
 			// Verify no toast notifications in results
 			for _, n := range notifications {
-				assert.NotEqual(t, "Toast Message", n.Title, "Toast notifications should not appear in filtered list")
+				assert.NotEqual(t, ToastNotificationTitle, n.Title, "Toast notifications should not appear in filtered list")
 			}
 		})
 	}
