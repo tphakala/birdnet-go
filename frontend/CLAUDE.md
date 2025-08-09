@@ -141,6 +141,42 @@ const bad = base.include || []; // ❌ Converts 0, "", false to []
 const good = base.include ?? []; // ✅ Only null/undefined to []
 ```
 
+### Type Guards for Object Safety
+
+Always validate object types before using them, especially in settings derivation:
+
+```typescript
+// ✅ Define reusable type guard
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// ✅ Use type guard for safe object assignment
+const settings = {
+  include: base.include ?? [],
+  exclude: base.exclude ?? [],
+  config: isPlainObject(base.config) ? base.config : {}, // Safe object validation
+};
+
+// ❌ Unsafe direct assignment (base.config could be array, null, etc.)
+const unsafe = {
+  config: base.config ?? {}, // Could assign [] or other non-plain objects
+};
+
+// ✅ Complete pattern for settings derivation
+let settings = $derived(
+  (() => {
+    const base = $speciesSettings ?? fallbackSettings; // Use ?? for root object
+
+    return {
+      include: base.include ?? [],
+      exclude: base.exclude ?? [],
+      config: isPlainObject(base.config) ? base.config : {}, // Type guard for objects
+    } as SettingsType;
+  })()
+);
+```
+
 ## Icon Usage
 
 ```svelte
