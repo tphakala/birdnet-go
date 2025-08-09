@@ -100,8 +100,13 @@ describe('DataTable', () => {
       onSort,
     });
 
-    const nameHeader = screen.getByRole('button', { name: /Name/i });
-    await fireEvent.click(nameHeader);
+    // Find the Name button by its text content
+    const buttons = screen.getAllByRole('button');
+    const nameHeader = buttons.find(btn => btn.textContent?.includes('Name'));
+    expect(nameHeader).toBeDefined();
+    if (nameHeader) {
+      await fireEvent.click(nameHeader);
+    }
 
     expect(onSort).toHaveBeenCalledWith('name', 'asc');
   });
@@ -120,10 +125,15 @@ describe('DataTable', () => {
       },
     });
 
-    const nameHeader = screen.getByRole('button', { name: /Name/i });
+    // Find the Name button by its text content
+    const buttons = screen.getAllByRole('button');
+    const nameHeader = buttons.find(btn => btn.textContent?.includes('Name'));
+    expect(nameHeader).toBeDefined();
 
     // Click to sort desc
-    await fireEvent.click(nameHeader);
+    if (nameHeader) {
+      await fireEvent.click(nameHeader);
+    }
     expect(onSort).toHaveBeenCalledWith('name', 'desc');
 
     // Update props to reflect new sort
@@ -136,7 +146,9 @@ describe('DataTable', () => {
     });
 
     // Click to remove sort
-    await fireEvent.click(nameHeader);
+    if (nameHeader) {
+      await fireEvent.click(nameHeader);
+    }
     expect(onSort).toHaveBeenCalledWith('name', null);
   });
 
@@ -236,8 +248,11 @@ describe('DataTable', () => {
       sortDirection: 'asc',
     });
 
-    const nameHeader = screen.getByRole('button', { name: /Name/i });
-    const svg = nameHeader.querySelector('svg');
+    // Find the Name button by its text content
+    const buttons = screen.getAllByRole('button');
+    const nameHeader = buttons.find(btn => btn.textContent?.includes('Name'));
+    expect(nameHeader).toBeDefined();
+    const svg = nameHeader?.querySelector('svg');
     expect(svg).toBeInTheDocument();
     expect(svg?.querySelector('path')).toBeInTheDocument(); // Check icon is rendered without relying on specific path data
   });
