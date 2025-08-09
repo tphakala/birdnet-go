@@ -322,7 +322,8 @@ describe('Settings Validation and Boundary Conditions', () => {
         const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
         render(SecuritySettingsPage.default);
 
-        const uriInputs = screen.queryAllByPlaceholderText(/redirect/i);
+        // Query by accessible label instead of fragile placeholder text
+        const uriInputs = screen.queryAllByLabelText(/redirect.*uri/i);
 
         // Ensure redirect URI input exists before proceeding with tests
         expect(uriInputs.length).toBeGreaterThan(0);
@@ -335,20 +336,14 @@ describe('Settings Validation and Boundary Conditions', () => {
         });
         expect(uriInput.value).toBe('https://example.com/callback');
 
-        // Test invalid URLs - should show validation error or revert to valid state
-        const validURL = uriInput.value; // Store valid URL for comparison
+        // Test invalid URLs - should show validation error via aria-invalid
         await fireEvent.change(uriInput, {
           target: { value: 'not-a-url' },
         });
         await fireEvent.blur(uriInput);
 
-        // Check for validation failure - either aria-invalid, error message, or value reverted
-        const isInvalid =
-          uriInput.getAttribute('aria-invalid') === 'true' ||
-          screen.queryByText(/invalid.*url|url.*invalid/i) !== null ||
-          uriInput.value === validURL; // Value reverted to last valid URL
-
-        expect(isInvalid).toBe(true);
+        // Explicitly check for validation failure via aria-invalid attribute
+        expect(uriInput.getAttribute('aria-invalid')).toBe('true');
       });
     });
 
@@ -376,8 +371,13 @@ describe('Settings Validation and Boundary Conditions', () => {
         for (const cidr of validCIDRs) {
           await fireEvent.change(input, { target: { value: cidr } });
           await fireEvent.blur(input);
-          // Should accept valid CIDR
-          expect(input.value).toBeTruthy();
+
+          // Value should remain exactly the same as entered
+          expect(input.value).toBe(cidr);
+
+          // Input should not have invalid state or error class
+          expect(input.getAttribute('aria-invalid')).not.toBe('true');
+          expect(input.classList.contains('input-error')).toBe(false);
         }
 
         // Invalid CIDR formats
@@ -461,6 +461,18 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       // Should handle large lists appropriately
       expect(Array.isArray(speciesList)).toBe(true);
+
+      // Assert either all entries are retained or there's a reasonable maximum cap
+      const originalLength = largeList.length; // 1000 entries
+      expect(speciesList.length).toBeGreaterThan(0);
+
+      if (speciesList.length < originalLength) {
+        // If there's a cap, it should be a reasonable maximum (e.g., 500 or similar)
+        expect(speciesList.length).toBeGreaterThanOrEqual(500);
+      } else {
+        // If no cap, all original entries should be preserved
+        expect(speciesList.length).toBe(originalLength);
+      }
     });
 
     it('prevents duplicate entries in species lists', async () => {
@@ -475,22 +487,20 @@ describe('Settings Validation and Boundary Conditions', () => {
       const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
       render(SpeciesSettingsPage.default);
 
-      // Try to add duplicate
-      const addInput = screen.queryByPlaceholderText(/add species to include/i);
-      const addButton = screen.queryByRole('button', { name: /add/i });
+      // Try to add duplicate - elements must exist for test to be valid
+      const addInput = screen.getByPlaceholderText(/add species to include/i);
+      const addButton = screen.getByRole('button', { name: /add/i });
 
-      if (addInput && addButton) {
-        await fireEvent.change(addInput, { target: { value: 'Robin' } });
-        await fireEvent.click(addButton);
+      await fireEvent.change(addInput, { target: { value: 'Robin' } });
+      await fireEvent.click(addButton);
 
-        // Check that duplicate wasn't added
-        const settings = get(settingsStore);
+      // Check that duplicate wasn't added
+      const settings = get(settingsStore);
 
-        const includeList = (settings.formData as any)?.realtime?.species?.include;
-        const robinCount = includeList?.filter((s: string) => s === 'Robin').length ?? 0;
+      const includeList = (settings.formData as any)?.realtime?.species?.include;
+      const robinCount = includeList?.filter((s: string) => s === 'Robin').length ?? 0;
 
-        expect(robinCount).toBeLessThanOrEqual(1);
-      }
+      expect(robinCount).toBeLessThanOrEqual(1);
     });
 
     it('validates subnet array constraints', async () => {
@@ -512,10 +522,12 @@ describe('Settings Validation and Boundary Conditions', () => {
         const settings = get(securitySettings);
         const subnetList = (settings as any)?.allowSubnetBypass?.subnets;
 
+        // Assert subnet list is defined and is an array
+        expect(subnetList).toBeDefined();
+        expect(Array.isArray(subnetList)).toBe(true);
+
         // Should enforce maximum items limit
-        if (Array.isArray(subnetList)) {
-          expect(subnetList.length).toBeLessThanOrEqual(maxSubnets);
-        }
+        expect(subnetList.length).toBeLessThanOrEqual(maxSubnets);
       });
     });
   });
@@ -554,16 +566,15 @@ describe('Settings Validation and Boundary Conditions', () => {
         },
       } as any);
 
-      // Broker should be required when MQTT is enabled
-      const brokerInput = screen.queryByPlaceholderText(/broker/i);
-      if (brokerInput) {
-        // Input should indicate required state
-        const isRequired =
-          brokerInput.hasAttribute('required') ||
-          brokerInput.getAttribute('aria-required') === 'true';
+      // Broker input must be present for MQTT settings
+      const brokerInput = screen.getByPlaceholderText(/broker/i);
 
-        expect(isRequired).toBe(true);
-      }
+      // Input should indicate required state
+      const isRequired =
+        brokerInput.hasAttribute('required') ||
+        brokerInput.getAttribute('aria-required') === 'true';
+
+      expect(isRequired).toBe(true);
     });
 
     it('validates species configuration dependencies', async () => {

@@ -7,7 +7,7 @@
  * Automatically loaded by Vitest via setupFiles configuration.
  */
 
-import '@testing-library/jest-dom';
+import 'vitest-dom/extend-expect';
 import { vi } from 'vitest';
 
 // Note: API utilities are not mocked globally to allow their own tests to run
@@ -77,6 +77,30 @@ vi.mock('maplibre-gl', () => ({
     Marker: vi.fn(),
   },
 }));
+
+// Mock requestAnimationFrame and cancelAnimationFrame
+const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
+let animationFrameId = 0;
+
+Object.defineProperty(globalThis, 'requestAnimationFrame', {
+  writable: true,
+  value: vi.fn().mockImplementation((callback: FrameRequestCallback): number => {
+    const id = ++animationFrameId;
+    animationFrameCallbacks.set(id, callback);
+    // Synchronously invoke the callback with a timestamp for deterministic testing
+    // Use Date.now() for consistent behavior in test environment
+    const timestamp = Date.now();
+    setTimeout(() => callback(timestamp), 0);
+    return id;
+  }),
+});
+
+Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+  writable: true,
+  value: vi.fn().mockImplementation((id: number): void => {
+    animationFrameCallbacks.delete(id);
+  }),
+});
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -204,6 +228,8 @@ globalThis.fetch = vi.fn().mockImplementation(url => {
     return Promise.resolve({
       ok: true,
       status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: () => Promise.resolve(mockTranslations),
       text: () => Promise.resolve(JSON.stringify(mockTranslations)),
     });
