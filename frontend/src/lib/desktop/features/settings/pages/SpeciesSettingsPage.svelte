@@ -51,12 +51,20 @@
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
-    $speciesSettings ||
-      ({
+    (() => {
+      const base = $speciesSettings || {
         include: [] as string[],
         exclude: [] as string[],
         config: {} as Record<string, SpeciesConfig>,
-      } as SpeciesSettings)
+      };
+
+      // Ensure config is always a valid object to prevent Object.keys() errors
+      return {
+        include: base.include || [],
+        exclude: base.exclude || [],
+        config: base.config || {},
+      } as SpeciesSettings;
+    })()
   );
 
   let store = $derived($settingsStore);
