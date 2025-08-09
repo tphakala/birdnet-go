@@ -70,13 +70,21 @@ vi.mock('$lib/i18n', () => ({
   getLocale: vi.fn(() => 'en'),
 }));
 
-// Mock MapLibre GL
-vi.mock('maplibre-gl', () => ({
-  default: {
-    Map: vi.fn(),
-    Marker: vi.fn(),
-  },
-}));
+// Mock MapLibre GL - provide both default and named exports
+vi.mock('maplibre-gl', () => {
+  const Map = vi.fn();
+  const Marker = vi.fn();
+
+  return {
+    default: {
+      Map,
+      Marker,
+    },
+    // Named exports for compatibility with all import styles
+    Map,
+    Marker,
+  };
+});
 
 // Mock requestAnimationFrame and cancelAnimationFrame
 const animationFrameCallbacks = new Map<number, FrameRequestCallback>();

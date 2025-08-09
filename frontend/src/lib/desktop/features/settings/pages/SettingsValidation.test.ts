@@ -256,12 +256,8 @@ describe('Settings Validation and Boundary Conditions', () => {
         const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
         render(SecuritySettingsPage.default);
 
-        const passwordInputs = screen.queryAllByLabelText(/password/i);
-
-        // Ensure password input exists before proceeding with tests
-        expect(passwordInputs.length).toBeGreaterThan(0);
-
-        const pwdInput = passwordInputs[0] as HTMLInputElement;
+        // Query password input directly - fails loudly if not found
+        const pwdInput = screen.getByLabelText(/password/i) as HTMLInputElement;
 
         // Test too short password
         await fireEvent.change(pwdInput, { target: { value: '123' } });
@@ -312,13 +308,8 @@ describe('Settings Validation and Boundary Conditions', () => {
         const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
         render(SecuritySettingsPage.default);
 
-        // Query by accessible label instead of fragile placeholder text
-        const uriInputs = screen.queryAllByLabelText(/redirect.*uri/i);
-
-        // Ensure redirect URI input exists before proceeding with tests
-        expect(uriInputs.length).toBeGreaterThan(0);
-
-        const uriInput = uriInputs[0] as HTMLInputElement;
+        // Query redirect URI input directly - fails loudly if not found
+        const uriInput = screen.getByLabelText(/redirect.*uri/i) as HTMLInputElement;
 
         // Test valid URLs
         await fireEvent.change(uriInput, {
@@ -382,12 +373,12 @@ describe('Settings Validation and Boundary Conditions', () => {
           await fireEvent.change(input, { target: { value: cidr } });
           await fireEvent.blur(input);
 
-          // Check for validation error - either aria-invalid or error message
-          const isInvalid =
-            input.getAttribute('aria-invalid') === 'true' ||
-            screen.queryByText(/invalid.*cidr|cidr.*invalid/i) !== null;
+          // Check for validation error - input should show validation failure
+          const hasAriaInvalid = input.getAttribute('aria-invalid') === 'true';
+          const hasErrorMessage = screen.queryByText(/invalid.*cidr|cidr.*invalid/i) !== null;
 
-          expect(isInvalid).toBe(true);
+          // Expect at least one validation indicator for invalid CIDR
+          expect(hasAriaInvalid || hasErrorMessage).toBe(true);
         }
       });
 
@@ -597,15 +588,15 @@ describe('Settings Validation and Boundary Conditions', () => {
       const config = (settings.formData as any)?.realtime?.species?.config?.TestBird;
 
       // Test invalid command handling - actions with empty commands should be filtered out
-      if (config?.actions?.length > 0) {
-        const action = config.actions[0];
+      expect(config?.actions).toBeDefined();
+      expect(Array.isArray(config.actions)).toBe(true);
 
-        // If action still exists, command should be properly sanitized and non-empty
+      // Empty command actions should have been filtered out
+      // Either no actions remain, or remaining actions have valid commands
+      if (config.actions.length > 0) {
+        const action = config.actions[0];
         expect(typeof action.command).toBe('string');
         expect(action.command.trim().length).toBeGreaterThan(0);
-      } else {
-        // If no actions, empty command action should have been filtered out
-        expect(config?.actions).toHaveLength(0);
       }
     });
   });
@@ -704,23 +695,21 @@ describe('Settings Validation and Boundary Conditions', () => {
         const settings = get(birdnetSettings);
 
         // Should handle extreme values gracefully with proper range constraints
-        if (settings) {
-          // Sensitivity should be finite and within valid range (0.5 to 1.5)
-          expect(isFinite(settings.sensitivity)).toBe(true);
-          expect(settings.sensitivity).toBeGreaterThanOrEqual(0.5);
-          expect(settings.sensitivity).toBeLessThanOrEqual(1.5);
+        // Sensitivity should be finite and within valid range (0.5 to 1.5)
+        expect(isFinite(settings.sensitivity)).toBe(true);
+        expect(settings.sensitivity).toBeGreaterThanOrEqual(0.5);
+        expect(settings.sensitivity).toBeLessThanOrEqual(1.5);
 
-          // Threshold should be finite, not NaN, and within valid range (0 to 1)
-          expect(isNaN(settings.threshold)).toBe(false);
-          expect(isFinite(settings.threshold)).toBe(true);
-          expect(settings.threshold).toBeGreaterThanOrEqual(0);
-          expect(settings.threshold).toBeLessThanOrEqual(1);
+        // Threshold should be finite, not NaN, and within valid range (0 to 1)
+        expect(isNaN(settings.threshold)).toBe(false);
+        expect(isFinite(settings.threshold)).toBe(true);
+        expect(settings.threshold).toBeGreaterThanOrEqual(0);
+        expect(settings.threshold).toBeLessThanOrEqual(1);
 
-          // Overlap should be finite and within valid range (0 to 100)
-          expect(isFinite(settings.overlap)).toBe(true);
-          expect(settings.overlap).toBeGreaterThanOrEqual(0);
-          expect(settings.overlap).toBeLessThanOrEqual(100);
-        }
+        // Overlap should be finite and within valid range (0 to 100)
+        expect(isFinite(settings.overlap)).toBe(true);
+        expect(settings.overlap).toBeGreaterThanOrEqual(0);
+        expect(settings.overlap).toBeLessThanOrEqual(100);
       });
     });
 
@@ -736,15 +725,14 @@ describe('Settings Validation and Boundary Conditions', () => {
         const settings = get(audioSettings);
 
         // Should constrain to reasonable values for audio settings
-        // Settings from get() always exist but test properties may not exist
-        if ((settings as any).captureDuration !== undefined) {
-          // Capture duration should be constrained to a reasonable maximum (e.g., 1 hour = 3600 seconds)
-          expect((settings as any).captureDuration).toBeLessThanOrEqual(3600);
-        }
-        if ((settings as any).bufferSize !== undefined) {
-          // Buffer size should be constrained to reasonable memory limits (e.g., 64MB = 67108864 bytes)
-          expect((settings as any).bufferSize).toBeLessThanOrEqual(67108864);
-        }
+        // Assert properties are defined before checking bounds
+        expect((settings as any).captureDuration).toBeDefined();
+        expect((settings as any).bufferSize).toBeDefined();
+
+        // Capture duration should be constrained to a reasonable maximum (e.g., 1 hour = 3600 seconds)
+        expect((settings as any).captureDuration).toBeLessThanOrEqual(3600);
+        // Buffer size should be constrained to reasonable memory limits (e.g., 64MB = 67108864 bytes)
+        expect((settings as any).bufferSize).toBeLessThanOrEqual(67108864);
       });
     });
 
@@ -758,10 +746,8 @@ describe('Settings Validation and Boundary Conditions', () => {
         const settings = get(birdnetSettings);
 
         // Should handle or round appropriately
-        if (settings) {
-          expect(settings.threshold).toBeGreaterThanOrEqual(0);
-          expect(settings.sensitivity).toBeGreaterThan(0);
-        }
+        expect(settings.threshold).toBeGreaterThanOrEqual(0);
+        expect(settings.sensitivity).toBeGreaterThan(0);
       });
     });
   });
