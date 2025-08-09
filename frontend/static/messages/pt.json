@@ -1422,5 +1422,13 @@
       "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",
       "seekProgress": "Progresso de busca de áudio: {current} / {total} segundos"
     }
+  },
+  "components": {
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Valor ajustado para mínimo ({value})",
+        "adjustedToMaximum": "Valor ajustado para máximo ({value})"
+      }
+    }
   }
 }

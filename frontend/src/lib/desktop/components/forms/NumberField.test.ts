@@ -362,10 +362,10 @@ describe('NumberField', () => {
     expect(onUpdate).toHaveBeenCalledWith(0.123456789012345);
   });
 
-  it('handles infinite values by directly testing handleChange', () => {
+  it('handles infinite values when set programmatically', async () => {
     const onUpdate = vi.fn();
 
-    render(NumberField, {
+    const { rerender } = render(NumberField, {
       props: {
         label: 'Test Number',
         value: 0,
@@ -375,73 +375,84 @@ describe('NumberField', () => {
       },
     });
 
-    // Get the FormField component and trigger its onChange directly
-    // This simulates FormField processing 'Infinity' and calling onChange(Infinity)
+    // Simulate receiving Infinity from external source (e.g., API)
+    await rerender({
+      label: 'Test Number',
+      value: Infinity,
+      onUpdate,
+      min: 0,
+      max: 100,
+    });
 
-    // Manually trigger what FormField would do: parseFloat('Infinity') = Infinity
-    // Then simulate the NumberField receiving this value
-    const processedValue = parseFloat('Infinity'); // This equals Infinity
+    const input = screen.getByRole('spinbutton');
 
-    // Now test our NumberField handleChange logic by calling onUpdate directly
-    // (since we know NumberField should receive Infinity and clamp it)
+    // Trigger blur to ensure clamping occurs
+    await fireEvent.blur(input);
 
-    // This is testing the logical flow: user types 'Infinity' -> FormField processes it to Infinity -> NumberField clamps it
-
-    // For now, let's test by setting the value prop to Infinity directly
-    // This tests the internal clamping logic
-    expect(typeof processedValue).toBe('number');
-    expect(processedValue).toBe(Infinity);
-    expect(isFinite(processedValue)).toBe(false);
-
-    // The test verifies that our logic would work correctly:
-    // If NumberField receives Infinity, it should clamp to min (0)
-    const expectedClampedValue = 0; // min value
-
-    // This test validates the mathematical logic rather than the UI interaction
-    expect(expectedClampedValue).toBe(0);
+    // Should clamp Infinity to min (0)
+    expect(onUpdate).toHaveBeenCalledWith(0);
   });
 
-  it('handles NaN values by validating clamping logic', () => {
-    // Test the mathematical logic for NaN handling
-    const processedValue = parseFloat('NaN'); // This equals NaN
+  it('handles NaN values when set programmatically', async () => {
+    const onUpdate = vi.fn();
 
-    // Verify our understanding of NaN behavior
-    expect(typeof processedValue).toBe('number');
-    expect(isNaN(processedValue)).toBe(true);
-    expect(isFinite(processedValue)).toBe(false);
+    const { rerender } = render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 0,
+        onUpdate,
+        min: 0,
+        max: 100,
+      },
+    });
 
-    // Test the clamping logic: if min=0, NaN should clamp to min (0)
-    const min = 0;
+    // Simulate receiving NaN from external source (e.g., calculation result)
+    await rerender({
+      label: 'Test Number',
+      value: NaN,
+      onUpdate,
+      min: 0,
+      max: 100,
+    });
 
-    // Simulate our clampValue function logic
-    let clampedValue;
-    if (isNaN(processedValue) || !isFinite(processedValue)) {
-      clampedValue = min; // min is 0 in this test
-    }
+    const input = screen.getByRole('spinbutton');
 
-    expect(clampedValue).toBe(0);
+    // Trigger blur to ensure clamping occurs
+    await fireEvent.blur(input);
+
+    // Should clamp NaN to min (0)
+    expect(onUpdate).toHaveBeenCalledWith(0);
   });
 
-  it('handles negative infinity by validating clamping logic', () => {
-    // Test the mathematical logic for -Infinity handling
-    const processedValue = parseFloat('-Infinity'); // This equals -Infinity
+  it('handles negative infinity when set programmatically', async () => {
+    const onUpdate = vi.fn();
 
-    // Verify our understanding of -Infinity behavior
-    expect(typeof processedValue).toBe('number');
-    expect(processedValue).toBe(-Infinity);
-    expect(isNaN(processedValue)).toBe(false);
-    expect(isFinite(processedValue)).toBe(false);
+    const { rerender } = render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 0,
+        onUpdate,
+        min: 0,
+        max: 100,
+      },
+    });
 
-    // Test the clamping logic: if min=0, -Infinity should clamp to min (0)
-    const min = 0;
+    // Simulate receiving -Infinity from external source
+    await rerender({
+      label: 'Test Number',
+      value: -Infinity,
+      onUpdate,
+      min: 0,
+      max: 100,
+    });
 
-    // Simulate our clampValue function logic
-    let clampedValue;
-    if (isNaN(processedValue) || !isFinite(processedValue)) {
-      clampedValue = min; // min is 0 in this test
-    }
+    const input = screen.getByRole('spinbutton');
 
-    expect(clampedValue).toBe(0);
+    // Trigger blur to ensure clamping occurs
+    await fireEvent.blur(input);
+
+    // Should clamp -Infinity to min (0)
+    expect(onUpdate).toHaveBeenCalledWith(0);
   });
 
   it('clamps values on blur event', async () => {
@@ -484,8 +495,8 @@ describe('NumberField', () => {
     // Input value above maximum
     await fireEvent.change(input, { target: { value: '15' } });
 
-    // Should show clamping message
-    expect(screen.getByText(/Value was adjusted to maximum/)).toBeInTheDocument();
+    // Should show clamping message (check for the translated text with parameter placeholder)
+    expect(screen.getByText(/Value was adjusted to maximum \(\{value\}\)/)).toBeInTheDocument();
   });
 
   it('handles extremely large numbers by clamping', async () => {

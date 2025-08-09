@@ -54,9 +54,12 @@
 
   // Initialize CSRF token once on mount - prevents stale values across hot-reloads
   onMount(() => {
-    csrfToken =
-      (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      '';
+    const metaElement = document.querySelector('meta[name="csrf-token"]');
+    // eslint-disable-next-line no-undef -- HTMLMetaElement is a standard DOM type
+    csrfToken = (metaElement as HTMLMetaElement | null)?.getAttribute('content') || '';
+
+    // Load species data after CSRF token is available
+    loadSpeciesData();
   });
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
@@ -155,10 +158,7 @@
     )
   );
 
-  // PERFORMANCE OPTIMIZATION: Load species data with proper state management
-  $effect(() => {
-    loadSpeciesData();
-  });
+  // Species data will be loaded in onMount after CSRF token is available
 
   async function loadSpeciesData() {
     speciesListState.loading = true;
@@ -228,9 +228,12 @@
       }
 
       const inputLower = input.toLowerCase();
-      const includeSet = new Set(settings.include); // Use Set for faster lookups
+      const includeSet = new Set(settings.include.map(s => s.toLowerCase())); // Use Set with lowercase for case-insensitive comparison
       includePredictions = allSpecies
-        .filter(species => species.toLowerCase().includes(inputLower) && !includeSet.has(species))
+        .filter(
+          species =>
+            species.toLowerCase().includes(inputLower) && !includeSet.has(species.toLowerCase())
+        )
         .slice(0, 10);
     }, 150); // Debounce by 150ms
   }
@@ -244,9 +247,12 @@
       }
 
       const inputLower = input.toLowerCase();
-      const excludeSet = new Set(settings.exclude); // Use Set for faster lookups
+      const excludeSet = new Set(settings.exclude.map(s => s.toLowerCase())); // Use Set with lowercase for case-insensitive comparison
       excludePredictions = filteredSpecies
-        .filter(species => species.toLowerCase().includes(inputLower) && !excludeSet.has(species))
+        .filter(
+          species =>
+            species.toLowerCase().includes(inputLower) && !excludeSet.has(species.toLowerCase())
+        )
         .slice(0, 10);
     }, 150); // Debounce by 150ms
   }

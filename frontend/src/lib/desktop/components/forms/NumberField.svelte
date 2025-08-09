@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
   import FormField from './FormField.svelte';
+  import { t } from '$lib/i18n';
   import type { HTMLAttributes } from 'svelte/elements';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -55,9 +56,9 @@
   let clampedMessage = $derived(
     wasClamped
       ? min !== undefined && value === min
-        ? `Value was adjusted to minimum (${min})`
+        ? t('components.forms.numberField.adjustedToMinimum', { value: min })
         : max !== undefined && value === max
-          ? `Value was adjusted to maximum (${max})`
+          ? t('components.forms.numberField.adjustedToMaximum', { value: max })
           : ''
       : ''
   );
@@ -172,7 +173,14 @@
     </div>
   {:else if clampedMessage}
     <div class="label">
-      <span class="label-text-alt text-warning animate-pulse">{clampedMessage}</span>
+      <span
+        class="label-text-alt text-warning animate-pulse"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {clampedMessage}
+      </span>
     </div>
   {/if}
 </div>

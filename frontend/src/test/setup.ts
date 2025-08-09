@@ -91,6 +91,8 @@ const translations: Record<string, string> = {
   'forms.password.strength.suggestions.special': 'Include at least one special character',
   'common.buttons.cancel': 'Cancel',
   'common.buttons.confirm': 'Confirm',
+  'components.forms.numberField.adjustedToMinimum': 'Value was adjusted to minimum ({value})',
+  'components.forms.numberField.adjustedToMaximum': 'Value was adjusted to maximum ({value})',
 };
 
 vi.mock('$lib/i18n', () => ({

@@ -265,6 +265,9 @@ describe('Settings Validation and Boundary Conditions', () => {
         expect(iframeElements.length).toBe(0);
 
         cleanup();
+
+        // Reset store state to prevent leakage between iterations
+        settingsActions.resetAllSettings();
       }
     });
 
@@ -298,6 +301,9 @@ describe('Settings Validation and Boundary Conditions', () => {
         }
 
         cleanup();
+
+        // Reset store state to prevent leakage between iterations
+        settingsActions.resetAllSettings();
       }
     });
 
@@ -327,6 +333,9 @@ describe('Settings Validation and Boundary Conditions', () => {
         }
 
         cleanup();
+
+        // Reset store state to prevent leakage between iterations
+        settingsActions.resetAllSettings();
       }
     });
   });
