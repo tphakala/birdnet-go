@@ -43,6 +43,11 @@
 
   const logger = loggers.settings;
 
+  // Helper function to check if a value is a plain object
+  function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
   // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
     (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
@@ -51,12 +56,20 @@
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
-    $speciesSettings ||
-      ({
+    (() => {
+      const base = $speciesSettings ?? {
         include: [] as string[],
         exclude: [] as string[],
         config: {} as Record<string, SpeciesConfig>,
-      } as SpeciesSettings)
+      };
+
+      // Ensure config is always a valid object to prevent Object.keys() errors
+      return {
+        include: base.include ?? [],
+        exclude: base.exclude ?? [],
+        config: isPlainObject(base.config) ? base.config : {},
+      } as SpeciesSettings;
+    })()
   );
 
   let store = $derived($settingsStore);
