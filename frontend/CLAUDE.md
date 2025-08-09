@@ -366,3 +366,369 @@ node tools/test-all-pages.js
 - Svelte 5 docs available via MCP tool
 - WCAG: https://www.w3.org/WAI/WCAG21/quickref/
 - axe DevTools browser extension for testing
+
+## Testing Best Practices
+
+### Mock Organization and Shared Setup
+
+**Problem**: Duplicating identical `vi.mock()` blocks across multiple test files creates maintenance overhead and inconsistency.
+
+**Solution**: Use shared test setup files for common mocks.
+
+#### Shared Mock Setup Pattern
+
+1. **Extract common mocks to `src/test/setup.ts`**:
+
+```javascript
+// src/test/setup.ts
+import '@testing-library/jest-dom';
+import { vi } from 'vitest';
+
+// Mock API utilities (used across multiple test suites)
+vi.mock('$lib/utils/api', () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: { species: [] } }),
+    post: vi.fn().mockResolvedValue({ data: {} }),
+  },
+  ApiError: class ApiError extends Error {
+    constructor(message, status, data) {
+      super(message);
+      this.status = status;
+      this.data = data;
+    }
+  },
+}));
+
+// Mock toast notifications
+vi.mock('$lib/stores/toast', () => ({
+  toastActions: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
+// Mock internationalization
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn(key => key),
+  getLocale: vi.fn(() => 'en'),
+}));
+```
+
+2. **Configure Vitest to load setup file** (`vite.config.js`):
+
+```javascript
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'], // ✅ Load shared TypeScript setup
+    include: ['src/**/*.{test,spec}.{js,ts}'],
+  },
+});
+```
+
+3. **Clean test files** - Remove duplicate mocks:
+
+```typescript
+// ❌ Before: Duplicate mocks in every test file
+import { vi } from 'vitest';
+
+vi.mock('$lib/utils/api', () => ({
+  /* duplicate */
+}));
+vi.mock('$lib/stores/toast', () => ({
+  /* duplicate */
+}));
+vi.mock('$lib/i18n', () => ({
+  /* duplicate */
+}));
+
+describe('Component Tests', () => {
+  // tests...
+});
+
+// ✅ After: Clean test file with shared setup
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/svelte';
+
+// Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
+
+describe('Component Tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); // Clear mock call history between tests
+  });
+
+  // tests...
+});
+```
+
+#### When to Use Shared vs File-Specific Mocks
+
+**✅ Use shared setup for**:
+
+- API utilities (`$lib/utils/api`)
+- Toast notifications (`$lib/stores/toast`)
+- Internationalization (`$lib/i18n`)
+- Global browser APIs (fetch, localStorage)
+- Third-party libraries (MapLibre, Chart.js)
+
+**✅ Use file-specific mocks for**:
+
+- Component-specific stores
+- Test-specific mock implementations
+- Mocks that need different behavior per test
+
+#### Setup File Best Practices
+
+**✅ Always use TypeScript for setup files** (`src/test/setup.ts`):
+
+- Provides type safety for mock definitions
+- Enables IntelliSense and better IDE support
+- Allows exporting typed test utilities
+- Consistent with codebase TypeScript standards
+
+**❌ Avoid JavaScript setup files** - they lack type safety and can't use TypeScript features needed for proper mock typing.
+
+#### Mock Reset Patterns
+
+```typescript
+describe('Component Tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); // Clear call history but keep implementation
+    settingsActions.resetAllSettings(); // Reset store state
+  });
+
+  afterEach(() => {
+    cleanup(); // Clean up DOM after each test
+  });
+});
+```
+
+#### Advanced Mock Patterns
+
+```typescript
+// Override shared mock for specific test
+beforeEach(() => {
+  const { api } = await import('$lib/utils/api');
+  vi.mocked(api.get).mockResolvedValue({ data: { customData: [] } });
+});
+
+// Restore original mock
+afterEach(() => {
+  vi.restoreAllMocks(); // Restore to setup.js defaults
+});
+```
+
+### TypeScript in Test Files
+
+#### Handling `any` Types in Edge Case Testing
+
+When testing edge cases with intentionally malformed data, you need to use `any` types. Follow these patterns:
+
+1. **Use inline ESLint disable comments for intentional `any` usage**:
+
+```typescript
+// For single line
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const malformedData = 'string' as any;
+
+// For blocks
+/* eslint-disable @typescript-eslint/no-explicit-any */
+settingsActions.updateSection('realtime', {
+  species: undefined as any,
+  config: 'not-an-object' as any,
+});
+/* eslint-enable @typescript-eslint/no-explicit-any */
+```
+
+2. **Create type helpers for test data**:
+
+```typescript
+// Define test-specific types
+type MalformedSettings = Record<string, unknown>;
+type TestData = Partial<SettingsFormData> & { [key: string]: unknown };
+
+// Use unknown with type guards instead of any where possible
+const testData: unknown = getData();
+if (typeof testData === 'object' && testData !== null) {
+  // Type guard ensures safe access
+}
+```
+
+#### Avoiding Common ESLint Errors
+
+1. **Unused Variables**:
+   - Remove unused imports immediately
+   - Use underscore prefix for intentionally unused variables: `_unusedVar`
+   - For required but unused component references: `expect(component).toBeTruthy()`
+
+2. **Nullish Coalescing vs Logical OR**:
+
+```typescript
+// ❌ Avoid - triggers ESLint warning
+const count = value || 0; // Problem: treats 0 as falsy
+
+// ✅ Correct - use nullish coalescing
+const count = value ?? 0; // Only replaces null/undefined
+
+// When you explicitly want logical OR behavior, add comment:
+const display = value || 'default'; // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy check
+```
+
+3. **Unnecessary Conditionals**:
+
+```typescript
+// ❌ Avoid - settings is always defined after get()
+const settings = get(birdnetSettings);
+if (settings) {
+  // Unnecessary - get() always returns a value
+  // ...
+}
+
+// ✅ Correct - check specific properties
+const settings = get(birdnetSettings);
+if (settings.sensitivity !== undefined) {
+  // ...
+}
+```
+
+4. **Browser APIs in Tests**:
+
+```typescript
+// Check for API availability
+if (typeof performance !== 'undefined') {
+  const startTime = performance.now();
+  // ...
+}
+
+// Or use Node.js alternatives in test environment
+import { performance } from 'perf_hooks'; // For Node.js
+```
+
+#### Type Assertions in Tests
+
+```typescript
+// For accessing nested properties in tests
+const formData = get(settingsStore).formData;
+const speciesConfig = (formData as TestFormData)?.realtime?.species?.config;
+
+// Type guard approach (preferred)
+function isSpeciesSettings(value: unknown): value is SpeciesSettings {
+  return typeof value === 'object' && value !== null && 'include' in value && 'exclude' in value;
+}
+```
+
+#### Test File Organization
+
+1. **Group ESLint disable directives at the top for file-wide issues**:
+
+```typescript
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Test file with many intentional any types
+```
+
+2. **Use describe blocks to scope disable directives**:
+
+```typescript
+describe('Edge Cases', () => {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  // Tests with malformed data
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+});
+```
+
+3. **Document why `any` is necessary**:
+
+```typescript
+// Testing malformed data structure - any is required
+settingsActions.updateSection('config', {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: 'string-instead-of-object' as any,
+});
+```
+
+### Performance Testing
+
+```typescript
+// Safe performance measurement in tests
+function measurePerformance(fn: () => void): number {
+  if (typeof performance !== 'undefined') {
+    const start = performance.now();
+    fn();
+    return performance.now() - start;
+  }
+  // Fallback for environments without performance API
+  const start = Date.now();
+  fn();
+  return Date.now() - start;
+}
+```
+
+### Mock Data Types
+
+Create dedicated types for test scenarios:
+
+```typescript
+// types/test-helpers.ts
+export type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T[P]> } : T;
+
+export type MalformedData =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | unknown[]
+  | Record<string, unknown>;
+
+export type TestSettings = DeepPartial<SettingsFormData> & {
+  [key: string]: MalformedData;
+};
+```
+
+### Running Linters Before Commit
+
+**Always run these commands before committing test files**:
+
+```bash
+# Check formatting
+npm run format:check
+
+# Fix formatting
+npx prettier --write src/**/*.test.ts
+
+# Check linting
+npm run lint
+
+# Fix auto-fixable issues
+npx eslint --fix src/**/*.test.ts
+
+# Full check
+npm run check:all
+```
+
+### Strict TypeScript Configuration
+
+#### Dealing with Strict Null Checks
+
+When TypeScript's strict mode is enabled, be careful with store values:
+
+```typescript
+// ❌ Problematic - assumes store always has value
+const settings = get(birdnetSettings);
+settings.threshold = 0.5; // Error if settings could be undefined
+
+// ✅ Safe access patterns
+const settings = get(birdnetSettings);
+if (settings) {
+  settings.threshold = 0.5;
+}
+
+// ✅ With default fallback
+const settings = get(birdnetSettings) ?? createDefaultSettings();
+settings.threshold = 0.5;
+
+// ✅ Optional chaining for nested access
+const threshold = get(birdnetSettings)?.dynamicThreshold?.min ?? 0;
+```
