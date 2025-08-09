@@ -139,6 +139,21 @@ const isEnabled = flag || false; // Any falsy → false
 // Common mistake in settings derivation:
 const bad = base.include || []; // ❌ Converts 0, "", false to []
 const good = base.include ?? []; // ✅ Only null/undefined to []
+
+// Array validation example:
+const items = Array.isArray(data.items) ? data.items : [];
+const config = isPlainObject(data.config) ? data.config : {};
+
+// Guard against non-array but truthy values:
+function safeArrayDefault(value: unknown, defaultValue: unknown[] = []): unknown[] {
+  return Array.isArray(value) ? value : defaultValue;
+}
+
+// Usage in settings:
+const settings = {
+  include: safeArrayDefault(base.include),
+  exclude: safeArrayDefault(base.exclude),
+};
 ```
 
 ### Type Guards for Object Safety
@@ -148,7 +163,13 @@ Always validate object types before using them, especially in settings derivatio
 ```typescript
 // ✅ Define reusable type guard
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  // Check if the prototype is exactly Object.prototype or null
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || proto === Object.prototype;
 }
 
 // ✅ Use type guard for safe object assignment
@@ -169,8 +190,8 @@ let settings = $derived(
     const base = $speciesSettings ?? fallbackSettings; // Use ?? for root object
 
     return {
-      include: base.include ?? [],
-      exclude: base.exclude ?? [],
+      include: Array.isArray(base.include) ? base.include : [],
+      exclude: Array.isArray(base.exclude) ? base.exclude : [],
       config: isPlainObject(base.config) ? base.config : {}, // Type guard for objects
     } as SettingsType;
   })()
