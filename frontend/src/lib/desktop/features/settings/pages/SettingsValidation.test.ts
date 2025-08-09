@@ -196,13 +196,8 @@ describe('Settings Validation and Boundary Conditions', () => {
         const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
         render(AudioSettingsPage.default);
 
-        // Query by accessible label text instead of fragile ID filtering
-        const sampleRateSelects = screen.queryAllByLabelText(/sample rate/i);
-
-        // Ensure sample rate select exists before proceeding with tests
-        expect(sampleRateSelects.length).toBeGreaterThan(0);
-
-        const select = sampleRateSelects[0] as HTMLSelectElement;
+        // Query sample rate select directly - fails loudly if not found
+        const select = screen.getByLabelText(/sample rate/i) as HTMLSelectElement;
 
         // Check valid options
         const validRates = [16000, 22050, 24000, 44100, 48000];
@@ -332,12 +327,14 @@ describe('Settings Validation and Boundary Conditions', () => {
         const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
         render(SecuritySettingsPage.default);
 
-        const subnetInputs = screen.queryAllByPlaceholderText(/CIDR/i);
-
-        // Ensure CIDR input exists before proceeding with tests
-        expect(subnetInputs.length).toBeGreaterThan(0);
-
-        const input = subnetInputs[0] as HTMLInputElement;
+        // Query CIDR input directly - try label first, fallback to placeholder
+        let input: HTMLInputElement;
+        try {
+          input = screen.getByLabelText(/subnet|cidr|allowed.*subnet/i) as HTMLInputElement;
+        } catch {
+          // Fallback: Some subnet inputs might only have placeholder text
+          input = screen.getByPlaceholderText(/CIDR/i) as HTMLInputElement;
+        }
 
         // Valid CIDR formats
         const validCIDRs = [
@@ -525,7 +522,8 @@ describe('Settings Validation and Boundary Conditions', () => {
       } as any);
 
       // Should show validation error or warning
-      const warnings = screen.queryAllByText(/required/i);
+      // Check for validation warnings - at least one should exist
+      const warnings = screen.getAllByText(/required/i);
       // OAuth should require credentials when enabled - expect at least one warning
       expect(warnings.length).toBeGreaterThan(0);
     });
@@ -590,8 +588,10 @@ describe('Settings Validation and Boundary Conditions', () => {
       expect(config?.actions).toBeDefined();
       expect(Array.isArray(config.actions)).toBe(true);
 
-      // Empty command actions should have been filtered out
-      // Either no actions remain, or remaining actions have valid commands
+      // INTENTIONAL: Using conditional check because we're testing two valid outcomes:
+      // 1. Invalid actions were filtered out (length = 0)
+      // 2. Actions remain but have been sanitized (length > 0)
+      // Both are correct behaviors depending on implementation.
       if (config.actions.length > 0) {
         const action = config.actions[0];
         expect(typeof action.command).toBe('string');

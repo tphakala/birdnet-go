@@ -139,14 +139,12 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
-        // Find text inputs
-        const inputs = screen.queryAllByRole('textbox');
+        // Find text inputs - getAllByRole will fail if none found
+        const inputs = screen.getAllByRole('textbox');
 
-        if (inputs.length > 0) {
-          // Interact with the first input
-          const firstInput = inputs[0] as HTMLInputElement;
-          await fireEvent.change(firstInput, { target: { value: 'test-value' } });
-        }
+        // Interact with the first input
+        const firstInput = inputs[0] as HTMLInputElement;
+        await fireEvent.change(firstInput, { target: { value: 'test-value' } });
 
         // Should not cause any console errors
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -182,13 +180,11 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
-        // Find select elements
-        const selects = screen.queryAllByRole('combobox');
+        // Find select elements - getAllByRole will fail if none found
+        const selects = screen.getAllByRole('combobox');
 
-        if (selects.length > 0) {
-          // Change the first select
-          await fireEvent.change(selects[0], { target: { value: 'mysql' } });
-        }
+        // Change the first select
+        await fireEvent.change(selects[0], { target: { value: 'mysql' } });
 
         // Should not cause any console errors
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -204,16 +200,14 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
-        // Find number inputs (spinbutton role)
-        const numberInputs = screen.queryAllByRole('spinbutton');
+        // Find number inputs - getAllByRole will fail if none found
+        const numberInputs = screen.getAllByRole('spinbutton');
 
-        if (numberInputs.length > 0) {
-          const numberInput = numberInputs[0] as HTMLInputElement;
-          await fireEvent.change(numberInput, { target: { value: '42' } });
+        const numberInput = numberInputs[0] as HTMLInputElement;
+        await fireEvent.change(numberInput, { target: { value: '42' } });
 
-          // Verify the input accepted the value
-          expect(numberInput.value).toBe('42');
-        }
+        // Verify the input accepted the value
+        expect(numberInput.value).toBe('42');
 
         // Should not cause any console errors
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -284,12 +278,16 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
           // Component should render
           expect(component).toBeTruthy();
 
-          // Interact with form elements if they exist (use queryAll to avoid throwing errors)
+          // INTENTIONAL: Using queryAll + conditional checks here because we're iterating
+          // through multiple different pages that have varying form elements.
+          // Not all pages have all element types, so we need to handle missing elements gracefully.
+          // This is testing that ANY page can handle interactions without errors, not that
+          // specific elements exist on every page.
           const inputs = screen.queryAllByRole('textbox');
           const checkboxes = screen.queryAllByRole('checkbox');
           const selects = screen.queryAllByRole('combobox');
 
-          // Try interacting with first element of each type
+          // Try interacting with first element of each type if they exist
           if (inputs.length > 0) {
             await fireEvent.change(inputs[0], { target: { value: 'test' } });
           }
@@ -486,7 +484,10 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         const numberInputs = screen.queryAllByRole('spinbutton');
         const checkboxes = screen.queryAllByRole('checkbox');
 
-        // Test integration field interactions
+        // INTENTIONAL: Using conditional checks because IntegrationSettingsPage
+        // has dynamic content based on which integrations are enabled.
+        // Not all integration sections render all input types, so we test
+        // whatever elements are actually present.
         if (textInputs.length > 0) {
           await fireEvent.change(textInputs[0], { target: { value: 'test-broker' } });
         }
