@@ -1,13 +1,12 @@
 <script lang="ts">
-  import type { RTSPUrl } from '$lib/stores/settings';
   import { loggers } from '$lib/utils/logger';
-  import { validateProtocolURL, safeArrayAccess } from '$lib/utils/security';
+  import { validateProtocolURL } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
   interface Props {
-    urls: RTSPUrl[];
-    onUpdate: (_urls: RTSPUrl[]) => void;
+    urls: string[]; // Changed from RTSPUrl[] to string[] to match backend
+    onUpdate: (_urls: string[]) => void;
     disabled?: boolean;
   }
 
@@ -17,7 +16,8 @@
 
   function isValidRtspUrl(url: string): boolean {
     // Use security utility for safe URL validation
-    return validateProtocolURL(url, ['rtsp'], 2048);
+    // Support both rtsp:// and rtsps:// protocols
+    return validateProtocolURL(url, ['rtsp', 'rtsps'], 2048);
   }
 
   // Redact credentials from URL for safe logging
@@ -26,19 +26,19 @@
       const urlObj = new URL(url);
       if (urlObj.username || urlObj.password) {
         // Replace credentials with [REDACTED]
-        return url.replace(/(rtsp:\/\/)[^@]+(@)/, '$1[REDACTED]$2');
+        return url.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1[REDACTED]$2');
       }
       return url;
     } catch {
       // If URL parsing fails, redact anything that looks like credentials
-      return url.replace(/(rtsp:\/\/)[^@]+(@)/, '$1[REDACTED]$2');
+      return url.replace(/(rtsps?:\/\/)[^@]+(@)/, '$1[REDACTED]$2');
     }
   }
 
   function addUrl() {
     const trimmedUrl = newUrl.trim();
     if (trimmedUrl && isValidRtspUrl(trimmedUrl)) {
-      const updatedUrls = [...urls, { url: trimmedUrl, enabled: true }];
+      const updatedUrls = [...urls, trimmedUrl]; // Simple string array
       onUpdate(updatedUrls);
       newUrl = '';
     } else if (trimmedUrl && !isValidRtspUrl(trimmedUrl)) {
@@ -58,9 +58,9 @@
 
   function updateUrl(index: number, value: string) {
     const updatedUrls = [...urls];
-    const existingUrl = safeArrayAccess(updatedUrls, index);
-    if (existingUrl && index >= 0 && index < updatedUrls.length) {
-      updatedUrls.splice(index, 1, { ...existingUrl, url: value });
+    if (index >= 0 && index < updatedUrls.length) {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: index is validated above
+      updatedUrls[index] = value;
     }
     onUpdate(updatedUrls);
   }
@@ -78,7 +78,7 @@
     <div class="flex items-center gap-2">
       <input
         type="text"
-        value={url.url}
+        value={url}
         oninput={e => updateUrl(index, e.currentTarget.value)}
         class="input input-bordered input-sm flex-1"
         placeholder="rtsp://user:password@example.com/stream"

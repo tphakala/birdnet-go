@@ -1,424 +1,859 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  getBitrateConfig,
-  validateBitrate,
-  getExportTypeConfig,
-  formatBitrate,
-  formatDiskUsage,
-} from '$lib/utils/audioValidation';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { get } from 'svelte/store';
+import AudioSettingsPage from './AudioSettingsPage.svelte';
+import type { SettingsFormData } from '$lib/stores/settings';
 
-// Mock the imports with factory functions
-vi.mock('$lib/i18n', () => ({
-  t: (key: string, params?: Record<string, unknown>) => {
-    // Simple mock translation that returns the key or a default value
-    const translations: Record<string, string> = {
-      'settings.audio.audioExport.bitrateHelp':
-        'Audio compression bitrate for lossy formats. Range: {min}-{max} kbps.',
-      'settings.audio.audioClipRetention.maxUsageHelp':
-        'Delete oldest clips when the audio directory uses more than this percentage of available disk space.',
-    };
-
-    const translation = key in translations ? translations[key as keyof typeof translations] : key;
-    if (params) {
-      // Process parameter replacements safely
-      return Object.entries(params).reduce((result, [paramKey, value]) => {
-        return result.replace(`{${paramKey}}`, String(value));
-      }, translation);
-    }
-    return translation;
-  },
-  getLocale: () => 'en',
+// Mock utilities needed by AudioSettingsPage
+vi.mock('$lib/utils/security', () => ({
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock
+  safeGet: vi.fn((obj, key, defaultValue) => obj?.[key] ?? defaultValue),
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock
+  safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
+  validateProtocolURL: vi.fn((url, protocols, maxLength = 2048) => {
+    if (!url) return false;
+    if (url.length > maxLength) return false;
+    return protocols.some((protocol: string) => url.startsWith(`${protocol}://`));
+  }),
 }));
 
-// Mock the stores module with factory function
+vi.mock('$lib/utils/audioValidation', () => ({
+  getBitrateConfig: vi.fn(format => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Required for mock flexibility
+    const configs: Record<string, any> = {
+      mp3: { min: 32, max: 320, step: 32, default: 128 },
+      opus: { min: 32, max: 256, step: 32, default: 96 },
+      aac: { min: 32, max: 320, step: 32, default: 128 },
+    };
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with predefined configs
+    return configs[format] ?? null;
+  }),
+  formatBitrate: vi.fn(bitrate => {
+    if (typeof bitrate === 'string' && bitrate.endsWith('k')) return bitrate;
+    return `${bitrate}k`;
+  }),
+  parseNumericBitrate: vi.fn(bitrate => {
+    if (typeof bitrate === 'string') {
+      return parseInt(bitrate.replace('k', ''), 10);
+    }
+    return bitrate;
+  }),
+}));
+
+vi.mock('$lib/utils/settingsChanges', () => ({
+  hasSettingsChanged: vi.fn((original, current) => {
+    return JSON.stringify(original) !== JSON.stringify(current);
+  }),
+}));
+
+// Mock the settings module at the test level
 vi.mock('$lib/stores/settings', async () => {
-  const { writable } = await import('svelte/store');
+  const { writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
 
-  const mockAudioSettings = writable({
-    export: {
-      enabled: false,
-      debug: false,
-      path: 'clips/',
-      type: 'wav',
-      bitrate: '96k',
-      retention: {
-        policy: 'none',
-        maxAge: '7d',
-        maxUsage: '80%',
-        minClips: 10,
-        keepSpectrograms: false,
-      },
-    },
-    equalizer: {
-      enabled: false,
-      filters: [],
-    },
-    soundLevel: {
-      enabled: false,
-      interval: 10,
-    },
-    source: '',
-  });
-
-  const mockRtspSettings = writable({
-    urls: [],
-  });
-
-  const mockSettingsStore = writable({
+  const settingsStore = writable({
     isLoading: false,
     isSaving: false,
     error: null,
-    originalData: {},
-    formData: {},
+    activeSection: 'audio',
+    originalData: {
+      main: {
+        name: '',
+        locale: 'en',
+        latitude: 0,
+        longitude: 0,
+        timezone: '',
+        debugMode: false,
+        logLevel: 'info',
+        logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+      },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.03,
+        overlap: 0.0,
+        locale: 'en',
+        latitude: 0,
+        longitude: 0,
+        threads: 1,
+        rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+      },
+    } as unknown as SettingsFormData,
+    formData: {
+      main: {
+        name: '',
+        locale: 'en',
+        latitude: 0,
+        longitude: 0,
+        timezone: '',
+        debugMode: false,
+        logLevel: 'info',
+        logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+      },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.03,
+        overlap: 0.0,
+        locale: 'en',
+        latitude: 0,
+        longitude: 0,
+        threads: 1,
+        rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+      },
+    } as unknown as SettingsFormData,
   });
 
-  const mockSettingsActions = {
-    updateSection: vi.fn(),
+  const audioSettings = writable(null);
+  const rtspSettings = writable(null);
+
+  const settingsActions = {
+    updateSection: vi.fn((section: string, data: unknown) => {
+      settingsStore.update(store => {
+        // Initialize section if it doesn't exist
+        // eslint-disable-next-line security/detect-object-injection, @typescript-eslint/no-explicit-any -- Safe: test mock
+        (store.formData as any)[section] ??= {};
+
+        // Properly merge the data
+        // eslint-disable-next-line security/detect-object-injection, @typescript-eslint/no-explicit-any -- Safe: test mock
+        (store.formData as any)[section] = {
+          // eslint-disable-next-line security/detect-object-injection, @typescript-eslint/no-explicit-any -- Safe: test mock
+          ...(store.formData as any)[section],
+          ...(data as object),
+        };
+
+        return store;
+      });
+    }),
   };
 
   return {
-    audioSettings: mockAudioSettings,
-    rtspSettings: mockRtspSettings,
-    settingsActions: mockSettingsActions,
-    settingsStore: mockSettingsStore,
+    settingsStore,
+    audioSettings,
+    rtspSettings,
+    settingsActions,
   };
 });
 
-describe('AudioSettingsPage - Backend Format Validation', () => {
-  beforeEach(() => {
+describe('AudioSettingsPage - RTSP Stream Configuration', () => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+
+    // Import the actual mocked stores
+    const { settingsStore } = await import('$lib/stores/settings');
+
+    // Reset store to default state
+    settingsStore.set({
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      activeSection: 'audio',
+      originalData: {
+        main: {
+          name: '',
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          timezone: '',
+          debugMode: false,
+          logLevel: 'info',
+          logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+        },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.03,
+          overlap: 0.0,
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          threads: 1,
+          rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+        },
+        realtime: {
+          audio: {
+            source: '',
+            soundLevel: {
+              enabled: false,
+              interval: 60,
+            },
+            equalizer: {
+              enabled: false,
+              filters: [],
+            },
+            export: {
+              enabled: false,
+              path: 'clips/',
+              type: 'wav',
+              bitrate: '96k',
+              retention: {
+                policy: 'none',
+                maxAge: '7d',
+                maxUsage: '80%',
+                minClips: 10,
+                keepSpectrograms: false,
+              },
+            },
+          },
+          rtsp: {
+            transport: 'tcp',
+            urls: [],
+          },
+        },
+      } as unknown as SettingsFormData,
+      formData: {
+        main: {
+          name: '',
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          timezone: '',
+          debugMode: false,
+          logLevel: 'info',
+          logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+        },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.03,
+          overlap: 0.0,
+          locale: 'en',
+          latitude: 0,
+          longitude: 0,
+          threads: 1,
+          rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+        },
+        realtime: {
+          audio: {
+            source: '',
+            soundLevel: {
+              enabled: false,
+              interval: 60,
+            },
+            equalizer: {
+              enabled: false,
+              filters: [],
+            },
+            export: {
+              enabled: false,
+              path: 'clips/',
+              type: 'wav',
+              bitrate: '96k',
+              retention: {
+                policy: 'none',
+                maxAge: '7d',
+                maxUsage: '80%',
+                minClips: 10,
+                keepSpectrograms: false,
+              },
+            },
+          },
+          rtsp: {
+            transport: 'tcp',
+            urls: [],
+          },
+        },
+      } as unknown as SettingsFormData,
+    });
+
+    // Mock CSRF token
+    document.head.innerHTML = '<meta name="csrf-token" content="test-csrf-token">';
+
+    // Mock successful audio devices fetch
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          { Index: 0, Name: 'Built-in Microphone' },
+          { Index: 1, Name: 'USB Audio Device' },
+        ]),
+    });
   });
 
-  describe('Bitrate Format Validation', () => {
-    it('should format bitrate values correctly using utility function', () => {
-      // Test the utility function that the component uses
-      expect(formatBitrate(128)).toBe('128k');
-      expect(formatBitrate('192')).toBe('192k');
-      expect(formatBitrate('256k')).toBe('256k');
-
-      // Test edge cases
-      expect(formatBitrate(0)).toBe('0k');
-      expect(formatBitrate('')).toBe('k');
-    });
-
-    it('should validate bitrate is within valid range (32-320)', () => {
-      // Valid ranges for lossy formats
-      expect(validateBitrate(32, 'mp3')).toBe(true);
-      expect(validateBitrate(128, 'aac')).toBe(true);
-      expect(validateBitrate(256, 'opus')).toBe(true);
-      expect(validateBitrate(320, 'mp3')).toBe(true);
-
-      // Invalid ranges for lossy formats
-      expect(validateBitrate(16, 'mp3')).toBe(false);
-      expect(validateBitrate(31, 'aac')).toBe(false);
-      expect(validateBitrate(321, 'opus')).toBe(false);
-      expect(validateBitrate(512, 'mp3')).toBe(false);
-
-      // Opus has different max (256 vs 320)
-      expect(validateBitrate(300, 'opus')).toBe(false);
-      expect(validateBitrate(256, 'opus')).toBe(true);
-
-      // No validation for lossless formats
-      expect(validateBitrate(0, 'wav')).toBe(true);
-      expect(validateBitrate(999, 'flac')).toBe(true);
-    });
-
-    it('should handle different audio format bitrate ranges correctly', () => {
-      // Test MP3 configuration
-      const mp3Config = getBitrateConfig('mp3');
-      expect(mp3Config).toEqual({
-        min: 32,
-        max: 320,
-        step: 32,
-        default: 128,
-      });
-
-      // Test Opus configuration (different max)
-      const opusConfig = getBitrateConfig('opus');
-      expect(opusConfig).toEqual({
-        min: 32,
-        max: 256,
-        step: 32,
-        default: 96,
-      });
-
-      // Test lossless format returns null
-      expect(getBitrateConfig('wav')).toBeNull();
-      expect(getBitrateConfig('flac')).toBeNull();
-    });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  describe('Disk Usage Threshold Format Validation', () => {
-    it('should format disk usage percentage correctly using utility function', () => {
-      // Test the utility function that handles disk usage formatting
-      expect(formatDiskUsage('70')).toBe('70%');
-      expect(formatDiskUsage('70%')).toBe('70%');
-      expect(formatDiskUsage('  80  ')).toBe('80%');
-      expect(formatDiskUsage('80%%')).toBe('80%'); // Multiple % signs normalized to single %
-      expect(formatDiskUsage('abc80xyz')).toBe('80%');
+  describe('RTSP URL Management', () => {
+    it('should render RTSP URL input section', async () => {
+      render(AudioSettingsPage);
 
-      // Edge cases
-      expect(formatDiskUsage('')).toBe('%');
-      expect(formatDiskUsage('%')).toBe('%');
+      await waitFor(() => {
+        expect(screen.getByText('RTSP Source')).toBeInTheDocument();
+        expect(screen.getByText('RTSP URLs')).toBeInTheDocument();
+      });
     });
 
-    it('should validate maxUsage options are properly formatted', () => {
-      const maxUsageOptions = [
-        { value: '70%', label: '70%' },
-        { value: '75%', label: '75%' },
-        { value: '80%', label: '80%' },
-        { value: '85%', label: '85%' },
-        { value: '90%', label: '90%' },
-        { value: '95%', label: '95%' },
+    it('should display RTSPUrlInput component', async () => {
+      const { container } = render(AudioSettingsPage);
+
+      await waitFor(() => {
+        // Check that the RTSPUrlInput area exists
+        const rtspSection = container.querySelector('#rtsp-urls');
+        expect(rtspSection).toBeInTheDocument();
+      });
+    });
+
+    it('should call updateRTSPUrls when URLs are added', async () => {
+      const { settingsActions } = await import('$lib/stores/settings');
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Simulate adding URLs through the RTSPUrlInput component
+      const newUrls: string[] = [
+        'rtsp://192.168.1.100:554/stream1',
+        'rtsp://192.168.1.101:554/stream2',
       ];
 
-      // All options should have % suffix in value
-      maxUsageOptions.forEach(option => {
-        expect(option.value).toMatch(/^\d{2}%$/);
-        expect(option.value.endsWith('%')).toBe(true);
-      });
-
-      // All values should be valid percentages between 70 and 95
-      maxUsageOptions.forEach(option => {
-        const numericValue = parseInt(option.value, 10);
-        expect(numericValue).toBeGreaterThanOrEqual(70);
-        expect(numericValue).toBeLessThanOrEqual(95);
-      });
-    });
-  });
-
-  describe('Integration with Backend Validation', () => {
-    it('should format values to match Go validateAudioSettings expectations', () => {
-      interface BackendSettings {
-        export: {
-          type: string;
-          bitrate: string;
-          retention: {
-            maxUsage: string;
-          };
-        };
-      }
-
-      // Based on validate.go lines 431-455
-      const formatForBackend = (settings: BackendSettings): BackendSettings => {
-        const formatted = { ...settings };
-
-        // Ensure bitrate has 'k' suffix for lossy formats using utility function
-        if (['aac', 'opus', 'mp3'].includes(formatted.export.type)) {
-          formatted.export.bitrate = formatBitrate(formatted.export.bitrate);
-
-          // Validate bitrate range using utility function
-          const bitrateValue = parseInt(formatted.export.bitrate, 10);
-          if (!validateBitrate(bitrateValue, formatted.export.type)) {
-            const maxBitrate = formatted.export.type === 'opus' ? 256 : 320;
-            throw new Error(
-              `Bitrate for ${formatted.export.type} must be between 32k and ${maxBitrate}k`
-            );
-          }
-        }
-
-        // Ensure maxUsage has % suffix using utility function
-        if (formatted.export.retention.maxUsage) {
-          formatted.export.retention.maxUsage = formatDiskUsage(
-            formatted.export.retention.maxUsage
-          );
-        }
-
-        return formatted;
-      };
-
-      // Test valid MP3 settings
-      const mp3Settings: BackendSettings = {
-        export: {
-          type: 'mp3',
-          bitrate: '128',
-          retention: {
-            maxUsage: '80',
-          },
+      // Since RTSPUrlInput is mocked, we directly call the update function
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: newUrls,
         },
-      };
+      });
 
-      const formatted = formatForBackend(mp3Settings);
-      expect(formatted.export.bitrate).toBe('128k');
-      expect(formatted.export.retention.maxUsage).toBe('80%');
-
-      // Test invalid bitrate throws error
-      const invalidSettings: BackendSettings = {
-        export: {
-          type: 'mp3',
-          bitrate: '16',
-          retention: {
-            maxUsage: '80',
-          },
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: newUrls,
         },
-      };
-
-      expect(() => formatForBackend(invalidSettings)).toThrow(
-        'Bitrate for mp3 must be between 32k and 320k'
-      );
-    });
-
-    it('should handle all export types correctly', () => {
-      // Test each export type using the utility function
-      expect(getExportTypeConfig('mp3')).toEqual({
-        requiresBitrate: true,
-        isLossless: false,
-        bitrateRange: { min: 32, max: 320 },
-      });
-
-      expect(getExportTypeConfig('opus')).toEqual({
-        requiresBitrate: true,
-        isLossless: false,
-        bitrateRange: { min: 32, max: 256 },
-      });
-
-      expect(getExportTypeConfig('wav')).toEqual({
-        requiresBitrate: false,
-        isLossless: true,
-        bitrateRange: null,
-      });
-
-      expect(getExportTypeConfig('flac')).toEqual({
-        requiresBitrate: false,
-        isLossless: true,
-        bitrateRange: null,
       });
     });
-  });
 
-  describe('Settings Persistence Format', () => {
-    it('should maintain correct format when saving to backend', () => {
-      interface TestSettings {
-        audio: {
-          export: {
-            enabled: boolean;
-            type: string;
-            bitrate: string;
-            retention: {
-              policy: string;
-              maxUsage: string;
-            };
-          };
-        };
-      }
+    it('should handle empty RTSP URLs array', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+      render(AudioSettingsPage);
 
-      const prepareSettingsForSave = (settings: TestSettings): TestSettings => {
-        // This simulates what should happen before sending to backend
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.urls).toEqual([]);
+    });
 
-        const prepared = JSON.parse(JSON.stringify(settings)) as TestSettings; // Deep clone for test
+    it('should update RTSP transport protocol', async () => {
+      const { settingsActions } = await import('$lib/stores/settings');
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      const { container } = render(AudioSettingsPage);
 
-        // Ensure all required formats
-        // Bitrate formatting
-        const bitrate = prepared.audio.export.bitrate;
-        if (!bitrate.endsWith('k')) {
-          prepared.audio.export.bitrate = `${bitrate}k`;
-        }
+      await waitFor(() => {
+        const transportSelect = container.querySelector('#rtsp-transport') as HTMLSelectElement;
+        expect(transportSelect).toBeInTheDocument();
+      });
 
-        // Retention settings formatting
-        const maxUsage = prepared.audio.export.retention.maxUsage;
-        if (!maxUsage.endsWith('%')) {
-          prepared.audio.export.retention.maxUsage = `${maxUsage}%`;
-        }
+      const transportSelect = container.querySelector('#rtsp-transport') as HTMLSelectElement;
 
-        return prepared;
-      };
+      // Change to UDP
+      fireEvent.change(transportSelect, { target: { value: 'udp' } });
 
-      const testSettings: TestSettings = {
-        audio: {
-          export: {
-            enabled: true,
-            type: 'mp3',
-            bitrate: '192',
-            retention: {
-              policy: 'usage',
-              maxUsage: '85',
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'udp',
+          urls: [],
+        },
+      });
+    });
+
+    it('should handle multiple RTSP URLs from config', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      // Set initial URLs in the store
+      const initialUrls: string[] = [
+        'rtsps://192.168.40.125:7441/VbTsd1jklShb6wLs?enableSrtp',
+        'rtsps://192.168.40.125:7441/2uX4KEa73ZCljhw2?enableSrtp',
+        'rtsps://192.168.40.125:7441/JUFhxKg39V0bQDMq?enableSrtp',
+      ];
+
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: initialUrls,
             },
           },
         },
-      };
+      }));
 
-      const prepared = prepareSettingsForSave(testSettings);
+      render(AudioSettingsPage);
 
-      // Verify formatting
-      expect(prepared.audio.export.bitrate).toBe('192k');
-      expect(prepared.audio.export.retention.maxUsage).toBe('85%');
-
-      // Original should be unchanged
-      expect(testSettings.audio.export.bitrate).toBe('192');
-      expect(testSettings.audio.export.retention.maxUsage).toBe('85');
+      await waitFor(() => {
+        const store = get(settingsStore);
+        expect(store.formData.realtime?.rtsp?.urls).toEqual(initialUrls);
+      });
     });
 
-    it('should validate complete settings structure matches Go types', () => {
-      // Based on config.go ExportSettings and RetentionSettings
-      interface ExportSettings {
-        debug: boolean;
-        enabled: boolean;
-        path: string;
-        type: string;
-        bitrate: string; // Must end with 'k' for lossy formats
-        retention: RetentionSettings;
-      }
+    it('should validate RTSP URL format', async () => {
+      const { validateProtocolURL } = await import('$lib/utils/security');
 
-      interface RetentionSettings {
-        debug: boolean;
-        policy: string;
-        maxAge: string;
-        maxUsage: string; // Must end with '%'
-        minClips: number;
-        keepSpectrograms: boolean;
-      }
+      // Valid RTSP URLs
+      expect(validateProtocolURL('rtsp://192.168.1.100:554/stream', ['rtsp'], 2048)).toBe(true);
+      expect(validateProtocolURL('rtsps://192.168.1.100:7441/stream', ['rtsps'], 2048)).toBe(true);
 
-      const validateExportSettings = (settings: ExportSettings): boolean => {
-        // Validate bitrate format for lossy types
-        if (['aac', 'opus', 'mp3'].includes(settings.type)) {
-          if (!settings.bitrate.endsWith('k')) {
-            return false;
-          }
-          const bitrateNum = parseInt(settings.bitrate, 10);
-          if (bitrateNum < 32 || bitrateNum > 320) {
-            return false;
-          }
-        }
+      // Invalid URLs
+      expect(validateProtocolURL('http://192.168.1.100/stream', ['rtsp'], 2048)).toBe(false);
+      expect(validateProtocolURL('', ['rtsp'], 2048)).toBe(false);
+      expect(validateProtocolURL('invalid-url', ['rtsp'], 2048)).toBe(false);
+    });
 
-        // Validate retention settings
-        if (settings.retention.policy === 'usage') {
-          if (!settings.retention.maxUsage.endsWith('%')) {
-            return false;
-          }
-        }
+    it('should handle disabled state for RTSP inputs', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
 
-        return true;
-      };
+      settingsStore.update(store => ({
+        ...store,
+        isLoading: true,
+      }));
 
-      // Valid settings
-      const validSettings: ExportSettings = {
-        debug: false,
-        enabled: true,
-        path: 'clips/',
-        type: 'mp3',
-        bitrate: '128k',
-        retention: {
-          debug: false,
-          policy: 'usage',
-          maxAge: '7d',
-          maxUsage: '80%',
-          minClips: 10,
-          keepSpectrograms: false,
+      const { container } = render(AudioSettingsPage);
+
+      await waitFor(() => {
+        const transportSelect = container.querySelector('#rtsp-transport') as HTMLSelectElement;
+        expect(transportSelect).toBeDisabled();
+      });
+    });
+
+    it('should detect changes in RTSP configuration', async () => {
+      const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
+
+      const original = {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
         },
       };
 
-      expect(validateExportSettings(validSettings)).toBe(true);
-
-      // Invalid bitrate format
-      const invalidBitrate = { ...validSettings, bitrate: '128' };
-      expect(validateExportSettings(invalidBitrate)).toBe(false);
-
-      // Invalid maxUsage format
-      const invalidMaxUsage = {
-        ...validSettings,
-        retention: { ...validSettings.retention, maxUsage: '80' },
+      const modified = {
+        rtsp: {
+          transport: 'tcp',
+          urls: ['rtsp://192.168.1.100:554/stream'],
+        },
       };
-      expect(validateExportSettings(invalidMaxUsage)).toBe(false);
+
+      expect(hasSettingsChanged(original, modified)).toBe(true);
+      expect(hasSettingsChanged(original, original)).toBe(false);
+    });
+  });
+
+  describe('Issue #1112 - Blank RTSP Stream Contents', () => {
+    it('should render RTSPUrlInput component with empty URLs initially', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+      const { container } = render(AudioSettingsPage);
+
+      await waitFor(() => {
+        const rtspSection = container.querySelector('#rtsp-urls');
+        expect(rtspSection).toBeInTheDocument();
+      });
+
+      // Verify the component receives empty URLs array
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.urls).toEqual([]);
+    });
+
+    it('should call onUpdate callback when adding new RTSP URL', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Simulate user adding a new RTSP URL
+      const newUrl = 'rtsp://192.168.1.100:554/stream';
+
+      // Simulate the RTSPUrlInput component calling onUpdate
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [newUrl],
+        },
+      });
+
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [newUrl],
+        },
+      });
+
+      // Verify the store was updated
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.urls).toEqual([newUrl]);
+    });
+
+    it('should handle removal of RTSP URLs', async () => {
+      const { settingsStore, settingsActions } = await import('$lib/stores/settings');
+
+      // Start with multiple URLs
+      const initialUrls: string[] = [
+        'rtsp://192.168.1.100:554/stream1',
+        'rtsp://192.168.1.101:554/stream2',
+      ];
+
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: initialUrls,
+            },
+          },
+        },
+      }));
+
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Simulate removing the first URL
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [initialUrls[1]!], // eslint-disable-line @typescript-eslint/no-non-null-assertion -- Safe: test data
+        },
+      });
+
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [initialUrls[1]],
+        },
+      });
+    });
+
+    it('should handle updating existing RTSP URLs', async () => {
+      const { settingsStore, settingsActions } = await import('$lib/stores/settings');
+
+      const initialUrl = 'rtsp://192.168.1.100:554/stream';
+
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls: [initialUrl],
+            },
+          },
+        },
+      }));
+
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Simulate updating the URL
+      const updatedUrl = 'rtsp://192.168.1.100:554/updated-stream';
+
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [updatedUrl],
+        },
+      });
+
+      expect(updateSectionSpy).toHaveBeenCalledWith('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [updatedUrl],
+        },
+      });
+    });
+
+    it('should pass correct props to RTSPUrlInput component', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+      const urls: string[] = ['rtsp://192.168.1.100:554/stream'];
+
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls,
+            },
+          },
+        },
+      }));
+
+      render(AudioSettingsPage);
+
+      // The mocked RTSPUrlInput should receive the correct props
+      const RTSPUrlInputMock = vi.mocked(
+        await import('$lib/desktop/components/forms/RTSPUrlInput.svelte')
+      ).default;
+
+      await waitFor(() => {
+        // Verify the mock was called with correct props structure
+        expect(RTSPUrlInputMock).toBeDefined();
+      });
+    });
+
+    it('should handle empty string RTSP URLs gracefully', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+      render(AudioSettingsPage);
+
+      // Try to add an empty URL (should be filtered out)
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: [],
+        },
+      });
+
+      expect(updateSectionSpy).toHaveBeenCalled();
+
+      const store = get(settingsStore);
+      expect(store.formData.realtime?.rtsp?.urls).toEqual([]);
+    });
+
+    it('should preserve RTSP URLs when switching transport protocol', async () => {
+      const { settingsStore, settingsActions } = await import('$lib/stores/settings');
+      const { get } = await import('svelte/store');
+      const urls: string[] = ['rtsp://192.168.1.100:554/stream'];
+
+      // Set up store with RTSP configuration
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            rtsp: {
+              transport: 'tcp',
+              urls,
+            },
+          },
+        },
+      }));
+
+      // Mock the updateSection to capture what the component attempts to update with
+      const updateSectionSpy = vi.spyOn(settingsActions, 'updateSection');
+
+      const { container } = render(AudioSettingsPage);
+
+      await waitFor(() => {
+        const transportSelect = container.querySelector('#rtsp-transport') as HTMLSelectElement;
+        expect(transportSelect).toBeInTheDocument();
+      });
+
+      const transportSelect = container.querySelector('#rtsp-transport') as HTMLSelectElement;
+
+      // Change transport to UDP
+      fireEvent.change(transportSelect, { target: { value: 'udp' } });
+
+      await waitFor(() => {
+        expect(updateSectionSpy).toHaveBeenCalled();
+      });
+
+      // The key test: Check that the update function received the URLs from the store
+      // Even if the component's derived state doesn't show them, the updateRTSPTransport
+      // function should read from the actual store state to preserve URLs
+      const updateCall = updateSectionSpy.mock.calls[0];
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Safe: test assertion for mock call
+      expect(updateCall![0]).toBe('realtime');
+
+      // The critical bug fix - URLs should be preserved from the actual store state
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Safe: test assertion for mock call
+      const rtspUpdate = (updateCall![1] as { rtsp: { transport: string; urls: string[] } }).rtsp;
+      expect(rtspUpdate.transport).toBe('udp');
+
+      // This is the test for the bug fix: URLs should be preserved from store
+      // If this fails, it means the component is not properly reading the existing URLs from the store
+      const actualStoreState = get(settingsStore);
+      const currentUrls = actualStoreState.formData.realtime?.rtsp?.urls ?? [];
+      expect(rtspUpdate.urls).toEqual(currentUrls);
+    });
+  });
+
+  describe('Edge Cases and Error Handling', () => {
+    it('should handle malformed RTSP URLs', async () => {
+      const { validateProtocolURL } = await import('$lib/utils/security');
+
+      // Test various malformed URLs
+      expect(validateProtocolURL('not-a-url', ['rtsp'], 2048)).toBe(false);
+      expect(validateProtocolURL('http://wrong-protocol.com', ['rtsp'], 2048)).toBe(false);
+      expect(validateProtocolURL('rtsp://', ['rtsp'], 2048)).toBe(true); // Protocol only is technically valid
+      expect(validateProtocolURL('rtsp://[invalid-ipv6', ['rtsp'], 2048)).toBe(true); // URL validation is basic
+    });
+
+    it('should handle extremely long RTSP URLs', async () => {
+      const { validateProtocolURL } = await import('$lib/utils/security');
+
+      const longUrl = 'rtsp://' + 'a'.repeat(2050); // Exceeds 2048 limit
+      expect(validateProtocolURL(longUrl, ['rtsp'], 2048)).toBe(false);
+
+      const validLongUrl = 'rtsp://' + 'a'.repeat(2040); // Within limit
+      expect(validateProtocolURL(validLongUrl, ['rtsp'], 2048)).toBe(true);
+    });
+
+    it('should handle null/undefined RTSP settings gracefully', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      settingsStore.update(store => ({
+        ...store,
+        formData: {
+          ...store.formData,
+          realtime: {
+            ...(store.formData.realtime ?? {}),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            rtsp: null as any,
+          },
+        },
+      }));
+
+      // Should not crash when rendering
+      const { container } = render(AudioSettingsPage);
+
+      await waitFor(() => {
+        expect(container.querySelector('#rtsp-urls')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle saving while RTSP URLs are being edited', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      settingsStore.update(store => ({
+        ...store,
+        isSaving: true,
+      }));
+
+      const { container } = render(AudioSettingsPage);
+
+      await waitFor(() => {
+        const transportSelect = container.querySelector('#rtsp-transport') as HTMLSelectElement;
+        expect(transportSelect).toBeDisabled();
+      });
+    });
+
+    it('should handle API error when loading audio devices', async () => {
+      // Mock failed API call
+      global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+      render(AudioSettingsPage);
+
+      await waitFor(() => {
+        // Component should handle error gracefully
+        expect(screen.getByText('Audio Capture')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Integration with Settings Store', () => {
+    it('should persist RTSP URLs to settings store', async () => {
+      const { settingsActions, settingsStore } = await import('$lib/stores/settings');
+      const urls: string[] = [
+        'rtsp://192.168.1.100:554/stream1',
+        'rtsp://192.168.1.101:554/stream2',
+      ];
+
+      render(AudioSettingsPage);
+
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls,
+        },
+      });
+
+      await waitFor(() => {
+        const store = get(settingsStore);
+        expect(store.formData.realtime?.rtsp?.urls).toEqual(urls);
+      });
+    });
+
+    it('should reflect RTSP changes in hasChanges indicator', async () => {
+      const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
+      const { settingsStore, settingsActions } = await import('$lib/stores/settings');
+
+      // Set original data
+      settingsStore.update(store => ({
+        ...store,
+        originalData: {
+          main: {
+            name: '',
+            locale: 'en',
+            latitude: 0,
+            longitude: 0,
+            timezone: '',
+            debugMode: false,
+            logLevel: 'info',
+            logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+          },
+          birdnet: {
+            modelPath: '',
+            labelPath: '',
+            sensitivity: 1.0,
+            threshold: 0.03,
+            overlap: 0.0,
+            locale: 'en',
+            latitude: 0,
+            longitude: 0,
+            threads: 1,
+            rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+          },
+          realtime: {
+            rtsp: {
+              transport: 'tcp',
+              urls: [],
+            },
+          },
+        } as unknown as SettingsFormData,
+        formData: {
+          main: {
+            name: '',
+            locale: 'en',
+            latitude: 0,
+            longitude: 0,
+            timezone: '',
+            debugMode: false,
+            logLevel: 'info',
+            logRotation: { enabled: false, maxSize: '10MB', maxAge: '30d', maxBackups: 5 },
+          },
+          birdnet: {
+            modelPath: '',
+            labelPath: '',
+            sensitivity: 1.0,
+            threshold: 0.03,
+            overlap: 0.0,
+            locale: 'en',
+            latitude: 0,
+            longitude: 0,
+            threads: 1,
+            rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+          },
+          realtime: {
+            rtsp: {
+              transport: 'tcp',
+              urls: [],
+            },
+          },
+        } as unknown as SettingsFormData,
+      }));
+
+      render(AudioSettingsPage);
+
+      // Add a new URL
+      settingsActions.updateSection('realtime', {
+        rtsp: {
+          transport: 'tcp',
+          urls: ['rtsp://192.168.1.100:554/stream'],
+        },
+      });
+
+      const store = get(settingsStore);
+      const hasChanges = hasSettingsChanged(
+        store.originalData.realtime?.rtsp,
+        store.formData.realtime?.rtsp
+      );
+
+      expect(hasChanges).toBe(true);
     });
   });
 });

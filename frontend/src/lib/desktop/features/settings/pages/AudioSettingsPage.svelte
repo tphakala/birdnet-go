@@ -36,7 +36,6 @@
     rtspSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
@@ -108,8 +107,8 @@
       },
     },
     rtsp: $rtspSettings || {
-      transport: 'tcp' as const,
-      urls: [] as RTSPUrl[],
+      transport: 'tcp',
+      urls: [] as string[], // Changed to string[] to match backend
     },
   });
   let store = $derived($settingsStore);
@@ -293,15 +292,29 @@
     });
   }
 
-  function updateRTSPTransport(transport: 'tcp' | 'udp') {
+  function updateRTSPTransport(transport: string) {
+    // Read current RTSP settings directly from store to ensure URLs are preserved
+    const storeState = $settingsStore;
+    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
+
     settingsActions.updateSection('realtime', {
-      rtsp: { ...settings.rtsp, transport },
+      rtsp: {
+        ...currentRtsp, // Preserve all existing fields including URLs
+        transport,
+      },
     });
   }
 
-  function updateRTSPUrls(urls: RTSPUrl[]) {
+  function updateRTSPUrls(urls: string[]) {
+    // Read current RTSP settings directly from store to ensure transport is preserved
+    const storeState = $settingsStore;
+    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
+
     settingsActions.updateSection('realtime', {
-      rtsp: { ...settings.rtsp, urls },
+      rtsp: {
+        ...currentRtsp, // Preserve all existing fields including transport
+        urls,
+      },
     });
   }
 
@@ -522,7 +535,7 @@
               { value: 'udp', label: t('settings.audio.transport.udp') },
             ]}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateRTSPTransport(value as 'tcp' | 'udp')}
+            onchange={updateRTSPTransport}
           />
         </div>
 

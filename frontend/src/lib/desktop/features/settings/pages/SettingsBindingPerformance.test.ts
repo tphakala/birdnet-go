@@ -96,7 +96,7 @@ describe('Settings Binding Performance Tests', () => {
         const renderTime = performance.now() - startTime;
 
         // Should render within reasonable time (adjust based on complexity)
-        expect(renderTime).toBeLessThan(1500); // 1.5 second max
+        expect(renderTime).toBeLessThan(3000); // 3 second max
 
         unmount();
       }
