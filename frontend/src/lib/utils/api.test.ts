@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Unmock the logger module for API tests since API depends on logger
+vi.unmock('$lib/utils/logger');
+
 import { getCsrfToken, fetchWithCSRF, api } from './api';
 
 describe('API utilities', () => {

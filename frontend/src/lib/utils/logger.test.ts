@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Unmock the logger module for its own tests
+vi.unmock('$lib/utils/logger');
+
 import { getLogger, loggers } from './logger';
 
 describe('Logger', () => {

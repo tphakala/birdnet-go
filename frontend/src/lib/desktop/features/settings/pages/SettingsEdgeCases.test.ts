@@ -25,6 +25,23 @@ import { settingsStore, settingsActions, speciesSettings } from '$lib/stores/set
 
 // Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
 
+// File-specific API mock for component tests that need to mock API calls
+vi.mock('$lib/utils/api', () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: { species: [] } }),
+    post: vi.fn().mockResolvedValue({ data: {} }),
+  },
+  ApiError: class ApiError extends Error {
+    status: number;
+    data?: unknown;
+    constructor(message: string, status: number, data?: unknown) {
+      super(message);
+      this.status = status;
+      this.data = data;
+    }
+  },
+}));
+
 describe('Settings Pages - Edge Cases and Corner Cases', () => {
   beforeEach(() => {
     vi.clearAllMocks();
