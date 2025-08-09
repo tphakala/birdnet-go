@@ -57,12 +57,12 @@
 
     // Validate the parsed number and ensure it's within bounds if specified
     if (!isNaN(numValue) && isFinite(numValue)) {
-      // Check min/max constraints if specified
+      // Clamp to min/max constraints if specified
       if (min !== undefined && numValue < min) {
-        return; // Don't update if below minimum
+        numValue = min;
       }
       if (max !== undefined && numValue > max) {
-        return; // Don't update if above maximum
+        numValue = max;
       }
 
       value = numValue;

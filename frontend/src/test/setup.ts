@@ -61,6 +61,7 @@ vi.mock('$lib/stores/toast', () => ({
     success: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    warning: vi.fn(), // Added missing warning method
   },
 }));
 
@@ -72,8 +73,40 @@ vi.mock('$lib/i18n', () => ({
 
 // Mock MapLibre GL - provide both default and named exports
 vi.mock('maplibre-gl', () => {
-  const MockMap = vi.fn();
-  const MockMarker = vi.fn();
+  const MockMap = vi.fn(() => ({
+    // Add methods that are used in the components
+    getZoom: vi.fn(() => 10),
+    setZoom: vi.fn(),
+    getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
+    setCenter: vi.fn(),
+    easeTo: vi.fn(),
+    flyTo: vi.fn(),
+    remove: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
+    addControl: vi.fn(),
+    removeControl: vi.fn(),
+    resize: vi.fn(),
+    getBounds: vi.fn(),
+    fitBounds: vi.fn(),
+    setPadding: vi.fn(),
+    project: vi.fn(),
+    unproject: vi.fn(),
+  }));
+
+  const MockMarker = vi.fn(() => ({
+    setLngLat: vi.fn().mockReturnThis(),
+    addTo: vi.fn().mockReturnThis(),
+    remove: vi.fn().mockReturnThis(),
+    getLngLat: vi.fn(() => ({ lng: 0, lat: 0 })),
+    setPopup: vi.fn().mockReturnThis(),
+    togglePopup: vi.fn().mockReturnThis(),
+    getPopup: vi.fn(),
+    setDraggable: vi.fn().mockReturnThis(),
+    isDraggable: vi.fn(() => false),
+    getElement: vi.fn(() => document.createElement('div')),
+  }));
 
   return {
     default: {

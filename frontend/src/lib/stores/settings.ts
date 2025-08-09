@@ -43,6 +43,7 @@ import { writable, derived, get } from 'svelte/store';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { toastActions } from './toast.js';
 import { safeGet, safeSpread } from '$lib/utils/security';
+import { coerceSettings } from '$lib/utils/settingsCoercion';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -707,10 +708,20 @@ export const settingsActions = {
       const data = await settingsAPI.load();
       const mergedData = { ...createEmptySettings(), ...data };
 
+      // Apply coercion to each section
+      const coercedData = { ...mergedData } as SettingsFormData;
+      for (const [section, sectionData] of Object.entries(mergedData)) {
+        if (sectionData && typeof sectionData === 'object') {
+          const coercedSection = coerceSettings(section, sectionData as Record<string, unknown>);
+          // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
+          (coercedData as unknown as Record<string, unknown>)[section] = coercedSection;
+        }
+      }
+
       settingsStore.update(state => ({
         ...state,
-        formData: mergedData,
-        originalData: JSON.parse(JSON.stringify(mergedData)),
+        formData: coercedData,
+        originalData: JSON.parse(JSON.stringify(coercedData)),
         isLoading: false,
       }));
     } catch (error) {
@@ -731,12 +742,19 @@ export const settingsActions = {
         section as string,
         {} as SettingsFormData[K]
       );
-      const newSectionData = safeSpread(currentSectionData, data) as SettingsFormData[K];
+      const mergedData = safeSpread(currentSectionData, data) as SettingsFormData[K];
+
+      // Apply coercion and validation
+      const coercedData = coerceSettings(
+        section as string,
+        mergedData as Record<string, unknown>
+      ) as SettingsFormData[K];
+
       return {
         ...state,
         formData: {
           ...state.formData,
-          [section]: newSectionData,
+          [section]: coercedData,
         },
       };
     });
