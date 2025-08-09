@@ -17,6 +17,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { get } from 'svelte/store';
+import { expectNoA11yViolations, A11Y_CONFIGS } from '$lib/utils/axe-utils';
 import {
   settingsStore,
   settingsActions,
@@ -43,28 +44,29 @@ describe('Settings Validation and Boundary Conditions', () => {
           .queryAllByRole('spinbutton')
           .filter(input => input.getAttribute('id')?.includes('latitude'));
 
-        if (latitudeInputs.length > 0) {
-          const latInput = latitudeInputs[0] as HTMLInputElement;
+        // Ensure latitude input exists before proceeding with tests
+        expect(latitudeInputs.length).toBeGreaterThan(0);
 
-          // Test valid values
-          await fireEvent.change(latInput, { target: { value: '45.5' } });
-          expect(latInput.value).toBe('45.5');
+        const latInput = latitudeInputs[0] as HTMLInputElement;
 
-          await fireEvent.change(latInput, { target: { value: '-90' } });
-          expect(latInput.value).toBe('-90');
+        // Test valid values
+        await fireEvent.change(latInput, { target: { value: '45.5' } });
+        expect(latInput.value).toBe('45.5');
 
-          await fireEvent.change(latInput, { target: { value: '90' } });
-          expect(latInput.value).toBe('90');
+        await fireEvent.change(latInput, { target: { value: '-90' } });
+        expect(latInput.value).toBe('-90');
 
-          // Test invalid values (should be constrained or rejected)
-          await fireEvent.change(latInput, { target: { value: '91' } });
-          // Value should be constrained to max
-          expect(Number(latInput.value)).toBeLessThanOrEqual(90);
+        await fireEvent.change(latInput, { target: { value: '90' } });
+        expect(latInput.value).toBe('90');
 
-          await fireEvent.change(latInput, { target: { value: '-91' } });
-          // Value should be constrained to min
-          expect(Number(latInput.value)).toBeGreaterThanOrEqual(-90);
-        }
+        // Test invalid values (should be constrained or rejected)
+        await fireEvent.change(latInput, { target: { value: '91' } });
+        // Value should be constrained to max
+        expect(Number(latInput.value)).toBeLessThanOrEqual(90);
+
+        await fireEvent.change(latInput, { target: { value: '-91' } });
+        // Value should be constrained to min
+        expect(Number(latInput.value)).toBeGreaterThanOrEqual(-90);
       });
 
       it('validates longitude bounds (-180 to 180)', async () => {
@@ -75,26 +77,27 @@ describe('Settings Validation and Boundary Conditions', () => {
           .queryAllByRole('spinbutton')
           .filter(input => input.getAttribute('id')?.includes('longitude'));
 
-        if (longitudeInputs.length > 0) {
-          const lngInput = longitudeInputs[0] as HTMLInputElement;
+        // Ensure longitude input exists before proceeding with tests
+        expect(longitudeInputs.length).toBeGreaterThan(0);
 
-          // Test valid values
-          await fireEvent.change(lngInput, { target: { value: '120.5' } });
-          expect(lngInput.value).toBe('120.5');
+        const lngInput = longitudeInputs[0] as HTMLInputElement;
 
-          await fireEvent.change(lngInput, { target: { value: '-180' } });
-          expect(lngInput.value).toBe('-180');
+        // Test valid values
+        await fireEvent.change(lngInput, { target: { value: '120.5' } });
+        expect(lngInput.value).toBe('120.5');
 
-          await fireEvent.change(lngInput, { target: { value: '180' } });
-          expect(lngInput.value).toBe('180');
+        await fireEvent.change(lngInput, { target: { value: '-180' } });
+        expect(lngInput.value).toBe('-180');
 
-          // Test invalid values
-          await fireEvent.change(lngInput, { target: { value: '181' } });
-          expect(Number(lngInput.value)).toBeLessThanOrEqual(180);
+        await fireEvent.change(lngInput, { target: { value: '180' } });
+        expect(lngInput.value).toBe('180');
 
-          await fireEvent.change(lngInput, { target: { value: '-181' } });
-          expect(Number(lngInput.value)).toBeGreaterThanOrEqual(-180);
-        }
+        // Test invalid values
+        await fireEvent.change(lngInput, { target: { value: '181' } });
+        expect(Number(lngInput.value)).toBeLessThanOrEqual(180);
+
+        await fireEvent.change(lngInput, { target: { value: '-181' } });
+        expect(Number(lngInput.value)).toBeGreaterThanOrEqual(-180);
       });
 
       it('handles coordinate precision correctly', async () => {
@@ -105,18 +108,20 @@ describe('Settings Validation and Boundary Conditions', () => {
           .queryAllByRole('spinbutton')
           .filter(input => input.getAttribute('step') === '0.000001');
 
-        if (coordInputs.length > 0) {
-          const input = coordInputs[0] as HTMLInputElement;
+        // Ensure coordinate input with step exists before proceeding with tests
+        expect(coordInputs.length).toBeGreaterThan(0);
 
-          // Test high precision values
-          await fireEvent.change(input, { target: { value: '40.7127816' } });
-          expect(input.value).toBe('40.7127816');
+        const input = coordInputs[0] as HTMLInputElement;
 
-          // Test very high precision (should maintain or round appropriately)
-          await fireEvent.change(input, { target: { value: '40.71278161234567890' } });
-          // Should maintain reasonable precision
-          expect(input.value.length).toBeLessThanOrEqual(20);
-        }
+        // Test high precision values
+        await fireEvent.change(input, { target: { value: '40.7127816' } });
+        expect(input.value).toBe('40.7127816');
+
+        // Test very high precision (should maintain or round appropriately)
+        await fireEvent.change(input, { target: { value: '40.71278161234567890' } });
+        // Should maintain reasonable precision - verify numeric value is rounded to 6 decimal places
+        const numericValue = Number(input.value);
+        expect(numericValue).toBeCloseTo(40.712782, 6);
       });
     });
 
@@ -201,23 +206,23 @@ describe('Settings Validation and Boundary Conditions', () => {
         const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
         render(AudioSettingsPage.default);
 
-        const sampleRateSelects = screen
-          .queryAllByRole('combobox')
-          .filter(select => select.getAttribute('id')?.includes('samplerate'));
+        // Query by accessible label text instead of fragile ID filtering
+        const sampleRateSelects = screen.queryAllByLabelText(/sample rate/i);
 
-        if (sampleRateSelects.length > 0) {
-          const select = sampleRateSelects[0] as HTMLSelectElement;
+        // Ensure sample rate select exists before proceeding with tests
+        expect(sampleRateSelects.length).toBeGreaterThan(0);
 
-          // Check valid options
-          const validRates = [16000, 22050, 24000, 44100, 48000];
-          const options = Array.from(select.options).map(opt => Number(opt.value));
+        const select = sampleRateSelects[0] as HTMLSelectElement;
 
-          options.forEach(rate => {
-            if (!isNaN(rate) && rate > 0) {
-              expect(validRates).toContain(rate);
-            }
-          });
-        }
+        // Check valid options
+        const validRates = [16000, 22050, 24000, 44100, 48000];
+        const options = Array.from(select.options).map(opt => Number(opt.value));
+
+        options.forEach(rate => {
+          if (!isNaN(rate) && rate > 0) {
+            expect(validRates).toContain(rate);
+          }
+        });
       });
 
       it('validates capture duration limits', async () => {
@@ -231,7 +236,8 @@ describe('Settings Validation and Boundary Conditions', () => {
           const settings = get(audioSettings);
 
           if ((settings as any)?.captureDuration !== undefined) {
-            expect((settings as any).captureDuration).toBeGreaterThan(0);
+            // Should be corrected to minimum valid value (1 second)
+            expect((settings as any).captureDuration).toBeGreaterThanOrEqual(1);
           }
         });
 
@@ -262,17 +268,22 @@ describe('Settings Validation and Boundary Conditions', () => {
 
         const passwordInputs = screen.queryAllByLabelText(/password/i);
 
-        if (passwordInputs.length > 0) {
-          const pwdInput = passwordInputs[0] as HTMLInputElement;
+        // Ensure password input exists before proceeding with tests
+        expect(passwordInputs.length).toBeGreaterThan(0);
 
-          // Test too short password
-          await fireEvent.change(pwdInput, { target: { value: '123' } });
-          await fireEvent.blur(pwdInput);
+        const pwdInput = passwordInputs[0] as HTMLInputElement;
 
-          // Should show validation error or not accept
-          // Note: Actual validation depends on implementation
-          expect(pwdInput.value).toBeTruthy();
-        }
+        // Test too short password
+        await fireEvent.change(pwdInput, { target: { value: '123' } });
+        await fireEvent.blur(pwdInput);
+
+        // Check for validation failure - either aria-invalid or error message present
+        const isInvalid =
+          pwdInput.getAttribute('aria-invalid') === 'true' ||
+          pwdInput.classList.contains('input-error') ||
+          screen.queryByText(/min(imum)?\s*(length|characters)/i) !== null;
+
+        expect(isInvalid).toBe(true);
       });
 
       it('handles special characters in OAuth client IDs', async () => {
@@ -290,12 +301,21 @@ describe('Settings Validation and Boundary Conditions', () => {
         // Should render without executing scripts
         expect(component).toBeTruthy();
 
-        // Check that script tags are escaped in display
-        const scriptElements = document.querySelectorAll('script');
-        const maliciousScript = Array.from(scriptElements).find(el =>
-          el.innerHTML.includes('alert("xss")')
-        );
-        expect(maliciousScript).toBeFalsy();
+        // Verify that the malicious input is rendered as text, not executed as HTML
+        const scriptString = '<script>alert("xss")</script>';
+        try {
+          // Check if the raw script string appears as a display value (properly escaped)
+          screen.getByDisplayValue(scriptString);
+        } catch {
+          // If not found by display value, check that it's visible as text content
+          expect(screen.queryByText(scriptString)).toBeInTheDocument();
+        }
+
+        // Verify that the document body HTML doesn't contain executable script tags with malicious content
+        const bodyHTML = document.body.innerHTML;
+        const executableScriptRegex =
+          /<script[^>]*>[\s\S]*alert\s*\(\s*["']xss["']\s*\)[\s\S]*<\/script>/i;
+        expect(bodyHTML).not.toMatch(executableScriptRegex);
       });
 
       it('validates URL format for OAuth redirect URIs', async () => {
@@ -304,22 +324,31 @@ describe('Settings Validation and Boundary Conditions', () => {
 
         const uriInputs = screen.queryAllByPlaceholderText(/redirect/i);
 
-        if (uriInputs.length > 0) {
-          const uriInput = uriInputs[0] as HTMLInputElement;
+        // Ensure redirect URI input exists before proceeding with tests
+        expect(uriInputs.length).toBeGreaterThan(0);
 
-          // Test valid URLs
-          await fireEvent.change(uriInput, {
-            target: { value: 'https://example.com/callback' },
-          });
-          expect(uriInput.value).toBe('https://example.com/callback');
+        const uriInput = uriInputs[0] as HTMLInputElement;
 
-          // Test invalid URLs
-          await fireEvent.change(uriInput, {
-            target: { value: 'not-a-url' },
-          });
-          // Should handle invalid URL gracefully
-          expect(uriInput.value).toBeTruthy();
-        }
+        // Test valid URLs
+        await fireEvent.change(uriInput, {
+          target: { value: 'https://example.com/callback' },
+        });
+        expect(uriInput.value).toBe('https://example.com/callback');
+
+        // Test invalid URLs - should show validation error or revert to valid state
+        const validURL = uriInput.value; // Store valid URL for comparison
+        await fireEvent.change(uriInput, {
+          target: { value: 'not-a-url' },
+        });
+        await fireEvent.blur(uriInput);
+
+        // Check for validation failure - either aria-invalid, error message, or value reverted
+        const isInvalid =
+          uriInput.getAttribute('aria-invalid') === 'true' ||
+          screen.queryByText(/invalid.*url|url.*invalid/i) !== null ||
+          uriInput.value === validURL; // Value reverted to last valid URL
+
+        expect(isInvalid).toBe(true);
       });
     });
 
@@ -330,38 +359,45 @@ describe('Settings Validation and Boundary Conditions', () => {
 
         const subnetInputs = screen.queryAllByPlaceholderText(/CIDR/i);
 
-        if (subnetInputs.length > 0) {
-          const input = subnetInputs[0] as HTMLInputElement;
+        // Ensure CIDR input exists before proceeding with tests
+        expect(subnetInputs.length).toBeGreaterThan(0);
 
-          // Valid CIDR formats
-          const validCIDRs = [
-            '192.168.1.0/24',
-            '10.0.0.0/8',
-            '172.16.0.0/16',
-            '::1/128',
-            'fe80::/10',
-          ];
+        const input = subnetInputs[0] as HTMLInputElement;
 
-          for (const cidr of validCIDRs) {
-            await fireEvent.change(input, { target: { value: cidr } });
-            await fireEvent.blur(input);
-            // Should accept valid CIDR
-            expect(input.value).toBeTruthy();
-          }
+        // Valid CIDR formats
+        const validCIDRs = [
+          '192.168.1.0/24',
+          '10.0.0.0/8',
+          '172.16.0.0/16',
+          '::1/128',
+          'fe80::/10',
+        ];
 
-          // Invalid CIDR formats
-          const invalidCIDRs = [
-            '192.168.1.0/33', // Invalid mask
-            '256.256.256.256/24', // Invalid IP
-            '192.168.1.0', // Missing mask
-            'not-an-ip/24',
-          ];
+        for (const cidr of validCIDRs) {
+          await fireEvent.change(input, { target: { value: cidr } });
+          await fireEvent.blur(input);
+          // Should accept valid CIDR
+          expect(input.value).toBeTruthy();
+        }
 
-          for (const cidr of invalidCIDRs) {
-            await fireEvent.change(input, { target: { value: cidr } });
-            await fireEvent.blur(input);
-            // Should handle invalid CIDR appropriately
-          }
+        // Invalid CIDR formats
+        const invalidCIDRs = [
+          '192.168.1.0/33', // Invalid mask
+          '256.256.256.256/24', // Invalid IP
+          '192.168.1.0', // Missing mask
+          'not-an-ip/24',
+        ];
+
+        for (const cidr of invalidCIDRs) {
+          await fireEvent.change(input, { target: { value: cidr } });
+          await fireEvent.blur(input);
+
+          // Check for validation error - either aria-invalid or error message
+          const isInvalid =
+            input.getAttribute('aria-invalid') === 'true' ||
+            screen.queryByText(/invalid.*cidr|cidr.*invalid/i) !== null;
+
+          expect(isInvalid).toBe(true);
         }
       });
 
@@ -441,9 +477,7 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       // Try to add duplicate
       const addInput = screen.queryByPlaceholderText(/add species to include/i);
-      const addButton = screen
-        .queryAllByRole('button')
-        .find(btn => btn.textContent?.includes('Add'));
+      const addButton = screen.queryByRole('button', { name: /add/i });
 
       if (addInput && addButton) {
         await fireEvent.change(addInput, { target: { value: 'Robin' } });
@@ -528,7 +562,7 @@ describe('Settings Validation and Boundary Conditions', () => {
           brokerInput.hasAttribute('required') ||
           brokerInput.getAttribute('aria-required') === 'true';
 
-        expect(isRequired || brokerInput).toBeTruthy();
+        expect(isRequired).toBe(true);
       }
     });
 
@@ -563,13 +597,32 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       const config = (settings.formData as any)?.realtime?.species?.config?.TestBird;
 
-      // Actions with empty commands should be filtered out or have meaningful commands
+      // Test invalid command handling - actions with empty commands should be filtered out
       if (config?.actions?.length > 0) {
         const action = config.actions[0];
-        // Test actual command content - should either be non-empty or action should be filtered
+
+        // If action still exists, command should be properly sanitized and non-empty
         expect(typeof action.command).toBe('string');
-        expect(action.command.length).toBeGreaterThan(0);
+        expect(action.command.trim().length).toBeGreaterThan(0);
+      } else {
+        // If no actions, empty command action should have been filtered out
+        expect(config?.actions).toHaveLength(0);
       }
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('SecuritySettingsPage should have no accessibility violations', async () => {
+      const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
+      const { container } = render(SecuritySettingsPage.default);
+
+      await waitFor(() => {
+        // Wait for component to fully render
+        expect(container.firstChild).toBeInTheDocument();
+      });
+
+      // Run axe-core accessibility tests
+      await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
     });
   });
 
@@ -651,11 +704,23 @@ describe('Settings Validation and Boundary Conditions', () => {
       await waitFor(() => {
         const settings = get(birdnetSettings);
 
-        // Should handle extreme values gracefully
+        // Should handle extreme values gracefully with proper range constraints
         if (settings) {
+          // Sensitivity should be finite and within valid range (0.5 to 1.5)
           expect(isFinite(settings.sensitivity)).toBe(true);
+          expect(settings.sensitivity).toBeGreaterThanOrEqual(0.5);
+          expect(settings.sensitivity).toBeLessThanOrEqual(1.5);
+
+          // Threshold should be finite, not NaN, and within valid range (0 to 1)
           expect(isNaN(settings.threshold)).toBe(false);
+          expect(isFinite(settings.threshold)).toBe(true);
+          expect(settings.threshold).toBeGreaterThanOrEqual(0);
+          expect(settings.threshold).toBeLessThanOrEqual(1);
+
+          // Overlap should be finite and within valid range (0 to 100)
           expect(isFinite(settings.overlap)).toBe(true);
+          expect(settings.overlap).toBeGreaterThanOrEqual(0);
+          expect(settings.overlap).toBeLessThanOrEqual(100);
         }
       });
     });

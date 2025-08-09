@@ -13,7 +13,7 @@ import { vi } from 'vitest';
 // Note: API utilities are not mocked globally to allow their own tests to run
 // Component tests that need API mocks should mock them individually
 
-// Mock logger utilities (used by API and other modules)
+// Mock logger utilities (used by API and other modules) - consolidated mock
 vi.mock('$lib/utils/logger', () => ({
   loggers: {
     api: {
@@ -29,6 +29,18 @@ vi.mock('$lib/utils/logger', () => ({
       error: vi.fn(),
     },
     system: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+    settings: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+    audio: {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -56,30 +68,6 @@ vi.mock('$lib/stores/toast', () => ({
 vi.mock('$lib/i18n', () => ({
   t: vi.fn((key: string) => key),
   getLocale: vi.fn(() => 'en'),
-}));
-
-// Mock logging utilities
-vi.mock('$lib/utils/logger', () => ({
-  loggers: {
-    settings: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-    audio: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-    ui: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-  },
 }));
 
 // Mock MapLibre GL
