@@ -234,6 +234,14 @@ tasks:
     cmds:
       - npm run lint:css:fix
 
+  # Format all markdown files with prettier
+  format-md:
+    desc: Format all markdown files in the project with prettier
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npx prettier --write "../**/*.md"
+
   clean:
     cmds:
       - go clean
