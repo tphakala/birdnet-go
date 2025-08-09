@@ -60,9 +60,9 @@
 
       // Ensure config is always a valid object to prevent Object.keys() errors
       return {
-        include: base.include || [],
-        exclude: base.exclude || [],
-        config: base.config || {},
+        include: base.include ?? [],
+        exclude: base.exclude ?? [],
+        config: base.config ?? {},
       } as SpeciesSettings;
     })()
   );

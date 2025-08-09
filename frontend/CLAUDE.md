@@ -102,6 +102,16 @@ const result = iterator.next();
 if (!result.done && result.value !== undefined) {
   // Safe to use result.value
 }
+
+// Nullish coalescing for defaults (preferred over logical OR)
+const settings = {
+  include: base.include ?? [], // Only null/undefined → []
+  exclude: base.exclude ?? [], // Only null/undefined → []
+  config: base.config ?? {}, // Only null/undefined → {}
+};
+
+// Use logical OR only when you want to handle falsy values
+const displayName = user.name || 'Anonymous'; // Handles "", null, undefined
 ```
 
 ### ❌ FORBIDDEN
@@ -110,6 +120,25 @@ if (!result.done && result.value !== undefined) {
 const value = map.get(key) as string; // Type assertion
 const value = map.get(key)!; // Non-null assertion
 let data: any; // Untyped
+
+// Avoid logical OR for object defaults (can cause issues with empty arrays/objects)
+const config = base.config || {}; // ❌ Converts [] to {}, 0 to {}, etc.
+```
+
+### Nullish Coalescing vs Logical OR
+
+```typescript
+// ✅ Use ?? when you only want to handle null/undefined
+const items = data.items ?? []; // Only null/undefined → []
+const config = settings.config ?? {}; // Only null/undefined → {}
+
+// ✅ Use || when you want to handle all falsy values
+const displayText = input || 'Default'; // "", 0, false, null, undefined → 'Default'
+const isEnabled = flag || false; // Any falsy → false
+
+// Common mistake in settings derivation:
+const bad = base.include || []; // ❌ Converts 0, "", false to []
+const good = base.include ?? []; // ✅ Only null/undefined to []
 ```
 
 ## Icon Usage
