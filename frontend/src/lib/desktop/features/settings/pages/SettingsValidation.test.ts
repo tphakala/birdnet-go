@@ -225,10 +225,10 @@ describe('Settings Validation and Boundary Conditions', () => {
         await waitFor(() => {
           const settings = get(audioSettings);
 
-          if ((settings as any)?.captureDuration !== undefined) {
-            // Should be corrected to minimum valid value (1 second)
-            expect((settings as any).captureDuration).toBeGreaterThanOrEqual(1);
-          }
+          // Assert captureDuration is defined before checking bounds
+          expect((settings as any).captureDuration).toBeDefined();
+          // Should be corrected to minimum valid value (1 second)
+          expect((settings as any).captureDuration).toBeGreaterThanOrEqual(1);
         });
 
         settingsActions.updateSection('realtime', {
@@ -240,11 +240,10 @@ describe('Settings Validation and Boundary Conditions', () => {
         await waitFor(() => {
           const settings = get(audioSettings);
 
-          if ((settings as any)?.captureDuration !== undefined) {
-            // Should have reasonable upper limit
-
-            expect((settings as any).captureDuration).toBeLessThanOrEqual(3600);
-          }
+          // Assert captureDuration is defined before checking bounds
+          expect((settings as any).captureDuration).toBeDefined();
+          // Should have reasonable upper limit
+          expect((settings as any).captureDuration).toBeLessThanOrEqual(3600);
         });
       });
     });

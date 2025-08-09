@@ -72,17 +72,17 @@ vi.mock('$lib/i18n', () => ({
 
 // Mock MapLibre GL - provide both default and named exports
 vi.mock('maplibre-gl', () => {
-  const Map = vi.fn();
-  const Marker = vi.fn();
+  const MockMap = vi.fn();
+  const MockMarker = vi.fn();
 
   return {
     default: {
-      Map,
-      Marker,
+      Map: MockMap,
+      Marker: MockMarker,
     },
     // Named exports for compatibility with all import styles
-    Map,
-    Marker,
+    Map: MockMap,
+    Marker: MockMarker,
   };
 });
 
