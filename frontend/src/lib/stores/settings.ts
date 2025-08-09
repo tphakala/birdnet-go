@@ -744,13 +744,18 @@ export const settingsActions = {
       );
       const mergedData = safeSpread(currentSectionData, data) as SettingsFormData[K];
 
-      // Note: Coercion is now deferred until save to improve performance
-      // This avoids repeated deep-object processing on every keystroke
+      // Apply coercion immediately to ensure values are always within valid ranges
+      // This is especially important for NumberField components that need instant validation
+      const coercedData = coerceSettings(
+        section as string,
+        mergedData as Record<string, unknown>
+      ) as SettingsFormData[K];
+
       return {
         ...state,
         formData: {
           ...state.formData,
-          [section]: mergedData,
+          [section]: coercedData,
         },
       };
     });
@@ -767,6 +772,7 @@ export const settingsActions = {
         if (data && typeof data === 'object') {
           const key = section as keyof SettingsFormData;
           // Use a type assertion to handle the assignment
+          // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
           (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
             section,
             data as Record<string, unknown>

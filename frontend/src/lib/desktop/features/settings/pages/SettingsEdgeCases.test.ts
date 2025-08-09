@@ -781,19 +781,27 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       // Should have at least some focusable elements
       expect(focusableElements.length).toBeGreaterThan(0);
 
-      // Tab through elements - in test environment, focus may not work exactly like browser
-      for (const element of focusableElements) {
+      // Filter out disabled buttons - they should not be focusable for accessibility
+      const enabledButtons = focusableElements.filter(element => !element.hasAttribute('disabled'));
+
+      // Should have at least some enabled focusable elements
+      expect(enabledButtons.length).toBeGreaterThan(0);
+
+      // Tab through enabled elements - in test environment, focus may not work exactly like browser
+      for (const element of enabledButtons) {
         element.focus();
         // In JSDOM test environment, focus simulation may not work exactly like real browser
         // Ensure the element can receive focus and is not disabled
         const isButton = element.tagName.toLowerCase() === 'button';
         const isDisabled = element.hasAttribute('disabled');
         const isFocusable = (element.tabIndex >= 0 || isButton) && !isDisabled;
+
+        // This should always be true for enabled buttons
         expect(isFocusable).toBe(true);
       }
 
-      // Ensure at least one element can be focused
-      expect(focusableElements.length).toBeGreaterThan(0);
+      // Ensure at least one enabled element can be focused
+      expect(enabledButtons.length).toBeGreaterThan(0);
     });
   });
 

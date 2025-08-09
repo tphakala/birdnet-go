@@ -522,9 +522,7 @@ describe('Data Type Coercion', () => {
       basicAuth: {
         enabled: '1' as any, // String "1" instead of boolean
       },
-      autoTLS: {
-        enabled: '0' as any, // String "0" instead of boolean
-      },
+      autoTls: '0' as any, // String "0" instead of boolean (correct structure)
     } as any);
 
     await waitFor(() => {
@@ -535,7 +533,7 @@ describe('Data Type Coercion', () => {
 
       expect(typeof (settings as any).basicAuth?.enabled).toBe('boolean');
 
-      expect(typeof (settings as any).autoTLS?.enabled).toBe('boolean');
+      expect(typeof (settings as any).autoTls).toBe('boolean');
     });
   });
 

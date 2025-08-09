@@ -72,6 +72,27 @@
     }
   });
 
+  function clampValue(numValue: number): number {
+    // Handle extreme values first - check for NaN and Infinity
+    if (isNaN(numValue) || !isFinite(numValue)) {
+      // For invalid numbers (NaN, Infinity, -Infinity), use defaults
+      wasClamped = true;
+      return min !== undefined ? min : max !== undefined ? max : 0;
+    }
+
+    // For valid finite numbers, clamp to min/max constraints if specified
+    if (min !== undefined && numValue < min) {
+      wasClamped = true;
+      return min;
+    } else if (max !== undefined && numValue > max) {
+      wasClamped = true;
+      return max;
+    } else {
+      wasClamped = false;
+      return numValue;
+    }
+  }
+
   function handleChange(newValue: string | number | boolean | string[]) {
     // Explicitly handle different input types
     if (Array.isArray(newValue)) {
@@ -84,6 +105,7 @@
 
     // Convert to number with robust validation
     let numValue: number;
+
     if (typeof newValue === 'number') {
       numValue = newValue;
     } else {
@@ -91,24 +113,34 @@
       if (stringValue === '' || stringValue === null || stringValue === undefined) {
         return; // Empty values should not update state
       }
-      numValue = parseFloat(stringValue);
+
+      // Special handling for known numeric string values
+      if (stringValue === 'NaN' || stringValue === 'Infinity' || stringValue === '-Infinity') {
+        numValue = parseFloat(stringValue);
+      } else {
+        numValue = parseFloat(stringValue);
+        // For string inputs that are not valid numbers (except for special cases above),
+        // maintain backward compatibility by not calling onUpdate
+        if (isNaN(numValue)) {
+          return;
+        }
+      }
     }
 
-    // Validate the parsed number and ensure it's within bounds if specified
-    if (!isNaN(numValue) && isFinite(numValue)) {
-      // Clamp to min/max constraints if specified
-      if (min !== undefined && numValue < min) {
-        numValue = min;
-        wasClamped = true;
-      } else if (max !== undefined && numValue > max) {
-        numValue = max;
-        wasClamped = true;
-      } else {
-        wasClamped = false;
-      }
+    // Apply clamping for all numeric values (including NaN, Infinity, -Infinity)
+    const clampedValue = clampValue(numValue);
+    value = clampedValue;
+    onUpdate(clampedValue);
+  }
 
-      value = numValue;
-      onUpdate(numValue);
+  function handleBlur() {
+    // On blur, ensure the current value is clamped and update if needed
+    const currentNumValue = typeof value === 'number' ? value : parseFloat(String(value));
+    const clampedValue = clampValue(currentNumValue);
+
+    if (clampedValue !== value) {
+      value = clampedValue;
+      onUpdate(clampedValue);
     }
   }
 </script>
@@ -130,6 +162,7 @@
     {required}
     {disabled}
     onChange={handleChange}
+    onBlur={handleBlur}
     inputClassName={error || clampedMessage ? 'input-error' : ''}
   />
 

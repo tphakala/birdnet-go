@@ -536,6 +536,7 @@
       <div class="flex justify-between items-center">
         {#if !showAddForm}
           <button
+            type="button"
             class="btn btn-sm btn-primary gap-2"
             data-testid="add-configuration-button"
             onclick={() => (showAddForm = true)}
@@ -775,7 +776,8 @@
             <!-- Threshold -->
             <div class="flex items-center gap-2">
               <span class="text-xs text-base-content/60">Threshold:</span>
-              <span class="font-mono text-xs font-medium">{config.threshold.toFixed(2)}</span>
+              <span class="font-mono text-xs font-medium">{(config.threshold ?? 0).toFixed(2)}</span
+              >
             </div>
 
             <!-- Interval -->
