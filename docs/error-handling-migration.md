@@ -9,7 +9,7 @@ This document explains the error handling improvements made to address `nilerr` 
 Several functions that previously returned `nil, nil` were identified as having callers that depend on this behavior. To maintain API compatibility, these functions were NOT changed:
 
 1. **`GetNoteReview`** - Callers check for `nil` result
-2. **`GetNoteLock`** - Callers check for `nil` result  
+2. **`GetNoteLock`** - Callers check for `nil` result
 3. **`GetImageCache`** - Caller in `imageprovider.go:439` checks `if cachedImage == nil`
 4. **`Get` (notification)** - Caller in `notification/service.go` checks `if notification == nil`
 5. **`createFilter`** - Caller checks `if filter != nil`

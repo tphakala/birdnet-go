@@ -21,6 +21,7 @@ The `jobqueue` package provides a job queue implementation with the following ke
 ## Job IDs
 
 Jobs are assigned unique identifiers using the format `job-xxxxxxx` where:
+
 - The prefix "job-" identifies it as a job identifier
 - The "xxxxxxx" part is a truncated UUID v4 (first 12 characters)
 - This provides reliable uniqueness while keeping IDs reasonably short
@@ -344,4 +345,4 @@ When working with this codebase, keep in mind:
 
 ## License
 
-This package is part of the BirdNet-Go project and is subject to its licensing terms. 
+This package is part of the BirdNet-Go project and is subject to its licensing terms.

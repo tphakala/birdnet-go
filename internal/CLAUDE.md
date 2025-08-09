@@ -1,6 +1,7 @@
 # Go Coding Standards
 
 ## Quick Reference
+
 - Use `internal/errors` package (never standard `errors`)
 - Structured logging with `internal/logging`
 - Test with `-race` flag always
@@ -9,18 +10,21 @@
 - **Zero linter tolerance** - fix all issues before commit
 
 ## Import Rules
+
 - **Use** `"github.com/tphakala/birdnet-go/internal/errors"` (never standard `"errors"`)
 - **Use** `internal/logging` for structured logging
 - Specify `.Component()` and `.Category()` for telemetry
 - Register new components in error package's `init()`
 
 ## Error Handling
+
 - Wrap errors: `fmt.Errorf("operation failed: %w", err)`
 - Use sentinel errors: `var ErrNotFound = errors.New("not found")`
 - Log but continue on batch operation failures
 - Provide detailed context in messages
 
 ## Testing
+
 - `t.Parallel()` only for independent tests
 - No `time.Sleep()` - use channels/sync
 - Use `t.TempDir()` for temp files
@@ -29,12 +33,14 @@
 - `b.ResetTimer()` after benchmark setup
 
 ## Benchmarks (Go 1.24)
+
 - Use `b.Loop()` instead of manual `for i := 0; i < b.N; i++`
 - Use `b.TempDir()` instead of `os.MkdirTemp()`
 - Call `b.ReportAllocs()` to track memory allocations
 - Use `runtime.AddCleanup()` instead of `runtime.SetFinalizer()`
 
 ## Modern Go (1.22+)
+
 - `any` not `interface{}`
 - `for i := range n` for loops
 - Pre-compile regex at package level
@@ -42,12 +48,14 @@
 - Use `os.Root` for filesystem sandboxing (1.24)
 
 ## Standard Library First
+
 - URLs: `url.Parse()`
 - IPs: `net.ParseIP()`, `ip.IsPrivate()`
 - Paths: `filepath.Join()`, `filepath.Clean()`
 - Never manual string parsing for these
 
 ## Common Patterns
+
 - Safe type assertions: `if v, ok := x.(Type); ok { }`
 - Avoid circular dependencies in init
 - Accept interfaces, return concrete types
@@ -57,35 +65,41 @@
 - Document all exports: `// TypeName does...`
 
 ## Dependency Injection for Testability
+
 - **Pass dependencies as interfaces** through constructors or struct fields
 - **Avoid global state** - inject configuration, loggers, and clients
 - **Define minimal interfaces** close to where they're used
 - **Constructor pattern**: `NewService(deps...) *Service`
 - **Identify untestable code** - if you see direct instantiation of external dependencies, flag it
 - **Example pattern**:
+
   ```go
   type Store interface {
       Get(id string) (*Item, error)
   }
-  
+
   type Service struct {
       store Store  // inject interface, not concrete type
   }
-  
+
   func NewService(store Store) *Service {
       return &Service{store: store}
   }
   ```
+
 - **Common injection targets**: databases, HTTP clients, file systems, time providers
 - **If you encounter code that would benefit from DI**, communicate it rather than leaving it untestable
 
 ## Security
+
 - Validate all user input
 - Check path traversal, injection attacks
 - Validate UUIDs properly
 
 ## Goroutine Leak Detection
+
 Add to tests that create services/goroutines:
+
 ```go
 defer goleak.VerifyNone(t,
     goleak.IgnoreTopFunction("testing.(*T).Run"),
@@ -93,6 +107,7 @@ defer goleak.VerifyNone(t,
     goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 )
 ```
+
 - Always `defer service.Stop()` after creating services
 - Use local service instances, not global singletons
 - Use 500ms+ timeouts for async operations (CI reliability)
@@ -101,32 +116,33 @@ defer goleak.VerifyNone(t,
 
 ### Active Linters & Common Fixes
 
-| Linter | Purpose | Common Fixes |
-|--------|---------|--------------|
-| **errorlint** | Error handling | Use `errors.Is()`, `errors.As()` not `==` |
-| **errname** | Error naming | Prefix errors with `Err`: `var ErrNotFound` |
-| **nilerr** | Nil error returns | Don't return nil error with non-nil value |
-| **nilnil** | Nil returns | Avoid `return nil, nil` - return zero value |
-| **bodyclose** | HTTP bodies | Always `defer resp.Body.Close()` |
-| **ineffassign** | Unused assignments | Remove or use assigned values |
-| **staticcheck** | Static analysis | Fix all SA* warnings |
-| **gocritic** | Style/performance | Follow suggestions (rangeValCopy, etc.) |
-| **gocognit** | Complexity | Split functions >50 complexity |
-| **gocyclo** | Cyclomatic complexity | Refactor complex functions |
-| **dupl** | Duplication | Extract common code |
-| **misspell** | Spelling | Fix typos in comments/strings |
-| **unconvert** | Unnecessary conversions | Remove redundant type conversions |
-| **wastedassign** | Wasted assignments | Remove unused assignments |
-| **prealloc** | Slice preallocation | Use `make([]T, 0, cap)` when size known |
-| **exhaustive** | Switch exhaustiveness | Handle all enum cases or add default |
-| **testifylint** | Testify usage | Use `assert.Equal` not `assert.True(a == b)` |
-| **thelper** | Test helpers | Add `t.Helper()` to test functions |
-| **fatcontext** | Context usage | Don't store context in structs |
-| **iface** | Interface pollution | Accept interfaces, return structs |
+| Linter           | Purpose                 | Common Fixes                                 |
+| ---------------- | ----------------------- | -------------------------------------------- |
+| **errorlint**    | Error handling          | Use `errors.Is()`, `errors.As()` not `==`    |
+| **errname**      | Error naming            | Prefix errors with `Err`: `var ErrNotFound`  |
+| **nilerr**       | Nil error returns       | Don't return nil error with non-nil value    |
+| **nilnil**       | Nil returns             | Avoid `return nil, nil` - return zero value  |
+| **bodyclose**    | HTTP bodies             | Always `defer resp.Body.Close()`             |
+| **ineffassign**  | Unused assignments      | Remove or use assigned values                |
+| **staticcheck**  | Static analysis         | Fix all SA\* warnings                        |
+| **gocritic**     | Style/performance       | Follow suggestions (rangeValCopy, etc.)      |
+| **gocognit**     | Complexity              | Split functions >50 complexity               |
+| **gocyclo**      | Cyclomatic complexity   | Refactor complex functions                   |
+| **dupl**         | Duplication             | Extract common code                          |
+| **misspell**     | Spelling                | Fix typos in comments/strings                |
+| **unconvert**    | Unnecessary conversions | Remove redundant type conversions            |
+| **wastedassign** | Wasted assignments      | Remove unused assignments                    |
+| **prealloc**     | Slice preallocation     | Use `make([]T, 0, cap)` when size known      |
+| **exhaustive**   | Switch exhaustiveness   | Handle all enum cases or add default         |
+| **testifylint**  | Testify usage           | Use `assert.Equal` not `assert.True(a == b)` |
+| **thelper**      | Test helpers            | Add `t.Helper()` to test functions           |
+| **fatcontext**   | Context usage           | Don't store context in structs               |
+| **iface**        | Interface pollution     | Accept interfaces, return structs            |
 
 ### Common Fixes by Category
 
 #### Error Handling
+
 ```go
 // ❌ Wrong
 if err == io.EOF { }
@@ -146,6 +162,7 @@ if err != nil {
 ```
 
 #### Resource Management
+
 ```go
 // ❌ Wrong - bodyclose
 resp, _ := http.Get(url)
@@ -159,6 +176,7 @@ defer resp.Body.Close()
 ```
 
 #### Test Helpers
+
 ```go
 // ❌ Wrong - thelper
 func assertSomething(t *testing.T, val int) {
@@ -177,6 +195,7 @@ func assertSomething(t *testing.T, val int) {
 ```
 
 #### Performance
+
 ```go
 // ❌ Wrong - prealloc
 var results []string
@@ -192,6 +211,7 @@ for _, item := range items {
 ```
 
 ## Pre-Commit Checklist
+
 - [ ] Run `golangci-lint run -v` - **MUST have zero errors**
 - [ ] Run `go test -race -v`
 - [ ] Check all linter categories above
@@ -200,6 +220,7 @@ for _, item := range items {
 - [ ] Handle all errors properly
 
 ## Linter Configuration Notes
+
 - Config: `.golangci.yaml` (v2 format)
 - Complexity threshold: 50 (gocognit)
 - Disabled checks: commentFormatting, commentedOutCode (gocritic)

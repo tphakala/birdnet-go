@@ -22,7 +22,7 @@ graph TD
     A[Application] -->|Error| B[Error Package]
     B -->|Publish| C[Event Bus]
     C -->|ErrorEvent| D[TelemetryWorker]
-    
+
     D --> E{Rate Limiter}
     E -->|Allow| F{Circuit Breaker}
     E -->|Deny| G[Drop Event]
@@ -33,17 +33,17 @@ graph TD
     H -->|Skip| G
     I --> J[Sentry Reporter]
     J --> K[Sentry]
-    
+
     L[SystemInitManager] -->|Coordinates| M[InitManager]
     L -->|Manages| N[Notification Service]
     L -->|Manages| C
-    
+
     O[Health Monitor] --> D
     O --> M
-    
+
     P[Attachment Uploader] --> K
     Q[Support Dumps] --> P
-    
+
     style D fill:#bbf,stroke:#333,stroke-width:4px
     style J fill:#f96,stroke:#333,stroke-width:2px
     style I fill:#9f9,stroke:#333,stroke-width:2px
@@ -87,14 +87,14 @@ type WorkerConfig struct {
     FailureThreshold  int           // Default: 10
     RecoveryTimeout   time.Duration // Default: 60s
     HalfOpenMaxEvents int           // Default: 5
-    
+
     // Rate limiting
     RateLimitWindow    time.Duration // Default: 1 minute
     RateLimitMaxEvents int           // Default: 100
-    
+
     // Sampling
     SamplingRate float64 // 0.0-1.0, Default: 1.0 (100%)
-    
+
     // Batching
     BatchingEnabled bool          // Default: true
     BatchSize       int           // Default: 10
@@ -258,13 +258,13 @@ telemetry.FastCaptureMessage("Important event occurred")
 
 ## Performance Characteristics
 
-| Metric | Sync (Before) | Async (After) | Improvement |
-|--------|---------------|---------------|-------------|
-| Error.Build() latency | 100.78ms | 30.77μs | 3,275x |
-| CPU usage | High (blocking) | Minimal | Significant |
-| Memory usage | Per-error | Batched | Reduced |
-| Throughput | Limited | 1000s/sec | 100x+ |
-| Fast capture check | N/A | <10ns | Optimal |
+| Metric                | Sync (Before)   | Async (After) | Improvement |
+| --------------------- | --------------- | ------------- | ----------- |
+| Error.Build() latency | 100.78ms        | 30.77μs       | 3,275x      |
+| CPU usage             | High (blocking) | Minimal       | Significant |
+| Memory usage          | Per-error       | Batched       | Reduced     |
+| Throughput            | Limited         | 1000s/sec     | 100x+       |
+| Fast capture check    | N/A             | <10ns         | Optimal     |
 
 ## Features
 
@@ -403,13 +403,13 @@ export LOG_LEVEL=debug
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SENTRY_DSN` | Sentry DSN | - |
-| `SENTRY_ENVIRONMENT` | Environment name | "production" |
-| `SENTRY_SAMPLE_RATE` | Sample rate (0.0-1.0) | 1.0 |
-| `SENTRY_DEBUG` | Enable debug mode | false |
-| `LOG_LEVEL` | Logging level | "info" |
+| Variable             | Description           | Default      |
+| -------------------- | --------------------- | ------------ |
+| `SENTRY_DSN`         | Sentry DSN            | -            |
+| `SENTRY_ENVIRONMENT` | Environment name      | "production" |
+| `SENTRY_SAMPLE_RATE` | Sample rate (0.0-1.0) | 1.0          |
+| `SENTRY_DEBUG`       | Enable debug mode     | false        |
+| `LOG_LEVEL`          | Logging level         | "info"       |
 
 ## Dependencies and Integration
 

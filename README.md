@@ -79,8 +79,8 @@ skills and a keen interest in contributing to a nature-focused project, I'd love
 For detailed installation instructions, see the [installation documentation](doc/wiki/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/wiki/security.md). See [recommended hardware](doc/wiki/hardware.md) for optimal performance.
 
 ## Building
-For instructions on how to build the project, see the [building documentation](doc/wiki/building.md).
 
+For instructions on how to build the project, see the [building documentation](doc/wiki/building.md).
 
 ## Usage
 
@@ -88,7 +88,7 @@ For instructions on how to build the project, see the [building documentation](d
 BirdNET-Go CLI
 
 Usage:
-  birdnet [command]
+  birdnet-go [command]
 
 Available Commands:
   authors     Print the list of authors
@@ -128,3 +128,4 @@ Please let me know if you are missing from contributors list!
 BirdNET AI model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
 
 BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.
+```

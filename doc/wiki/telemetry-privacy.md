@@ -7,19 +7,23 @@ This document provides detailed information about BirdNET-Go's privacy-compliant
 BirdNET-Go's telemetry system is built on these core privacy principles:
 
 ### 🛡️ Privacy by Design
+
 - **Data minimization**: Only essential technical error data is collected
 - **Purpose limitation**: Data is used solely for debugging and improving reliability
 - **Storage limitation**: Error data is automatically purged after analysis
 - **Transparency**: Complete disclosure of what data is collected and how it's used
 
 ### 🔒 GDPR Compliance
+
 - **Lawful basis**: Legitimate interest for software improvement, with clear opt-in consent
 - **Data subject rights**: Users can enable/disable tracking at any time
 - **Data protection**: All data is processed securely and anonymized before transmission
 - **Data minimization**: Only the minimum necessary data for debugging is collected
 
 ### 🌍 Global Privacy Standards
+
 The system meets privacy requirements for:
+
 - **GDPR** (European Union)
 - **CCPA** (California, USA)
 - **PIPEDA** (Canada)
@@ -77,7 +81,8 @@ BirdNET-Go uses a **unique system ID** for telemetry purposes:
 **What**: A randomly generated identifier (format: XXXX-XXXX-XXXX)
 **Why**: Allows tracking errors from the same system without revealing identity
 **Example**: "A1B2-C3D4-E5F6"
-**Privacy protection**: 
+**Privacy protection**:
+
 - Generated locally using cryptographically secure random numbers
 - No connection to hardware, network, or user information
 - Stored only in your local configuration directory
@@ -90,13 +95,17 @@ BirdNET-Go uses a **unique system ID** for telemetry purposes:
 BirdNET-Go uses a sophisticated anonymization process that protects privacy while preserving debugging value:
 
 #### Step 1: URL Detection
+
 ```regex
 Pattern: \b(?:https?|rtsp|rtmp)://[^\s]+
 ```
+
 Automatically finds URLs in error messages using regex patterns.
 
 #### Step 2: Component Analysis
+
 The URL is broken down into components:
+
 - **Scheme**: rtsp, http, https (preserved for debugging)
 - **Credentials**: username:password (completely removed)
 - **Host**: IP address or hostname (categorized, not preserved)
@@ -104,20 +113,26 @@ The URL is broken down into components:
 - **Path**: stream path (structure preserved, content anonymized)
 
 #### Step 3: Host Categorization
+
 Instead of preserving actual hosts, they are categorized as:
+
 - `localhost` for local connections
 - `private-ip` for internal network addresses
 - `public-ip` for internet addresses
 - `domain-com` for .com domains (TLD only)
 
 #### Step 4: Path Structure Preservation
+
 Stream paths are analyzed to preserve structure while anonymizing content:
+
 - Common stream names (`stream`, `live`, `cam`) → preserved as categories
 - Numeric identifiers → preserved as `numeric`
 - Custom names → hashed to `seg-abc123`
 
 #### Step 5: Consistent Hashing
+
 The anonymized components are combined and hashed using SHA-256 to create a consistent identifier that:
+
 - ✅ Always produces the same result for the same URL
 - ✅ Cannot be reverse-engineered to reveal the original
 - ✅ Maintains reasonable uniqueness for debugging
@@ -125,29 +140,33 @@ The anonymized components are combined and hashed using SHA-256 to create a cons
 
 ### Anonymization Examples
 
-| Original URL | Anonymized Identifier | Information Preserved |
-|-------------|----------------------|---------------------|
+| Original URL                                  | Anonymized Identifier          | Information Preserved                             |
+| --------------------------------------------- | ------------------------------ | ------------------------------------------------- |
 | `rtsp://admin:pass@192.168.1.100:554/stream1` | `url-b0c823d0454e766694949834` | Protocol, private network, port, stream structure |
-| `rtsp://user@10.0.0.50/cam/live` | `url-942848b0732d3a2288ca6516` | Protocol, private network, camera/live pattern |
-| `http://public-server.com/api/stream` | `url-8a6d125351c079f9d0a27598` | Protocol, public domain (.com), API structure |
-| `rtsp://localhost:8554/mystream` | `url-c46a4ffb7c9a74b9ddc0a603` | Protocol, localhost, port, single stream |
+| `rtsp://user@10.0.0.50/cam/live`              | `url-942848b0732d3a2288ca6516` | Protocol, private network, camera/live pattern    |
+| `http://public-server.com/api/stream`         | `url-8a6d125351c079f9d0a27598` | Protocol, public domain (.com), API structure     |
+| `rtsp://localhost:8554/mystream`              | `url-c46a4ffb7c9a74b9ddc0a603` | Protocol, localhost, port, single stream          |
 
 ## Data Transmission
 
 ### Where Data Goes
+
 Error reports are transmitted to:
+
 - **Service**: Sentry (industry-standard error tracking)
 - **Region**: Europe (Frankfurt, Germany data center)
 - **Operator**: BirdNET-Go development team
 - **Purpose**: Software debugging and improvement only
 
 ### Transmission Security
+
 - **Encryption**: TLS 1.3 for all data in transit
 - **Authentication**: Secure API keys for authorized transmission
 - **Rate limiting**: Prevents excessive data transmission
 - **Filtering**: All data passes through privacy filters before leaving your system
 
 ### Data Retention
+
 - **Active errors**: Kept for 90 days for debugging purposes
 - **Resolved errors**: Automatically purged after 30 days
 - **Trend data**: Anonymized statistics may be retained longer for development planning
@@ -156,6 +175,7 @@ Error reports are transmitted to:
 ## Technical Implementation
 
 ### Privacy Filters
+
 All telemetry data passes through multiple privacy filters before transmission:
 
 ```go
@@ -170,6 +190,7 @@ anonymizedID := anonymizeURL(originalURL)
 ```
 
 ### Error Processing Pipeline
+
 1. **Error occurs** in BirdNET-Go
 2. **Privacy filters applied** automatically
 3. **URLs anonymized** using consistent hashing
@@ -178,7 +199,9 @@ anonymizedID := anonymizeURL(originalURL)
 6. **Data received** by development team for debugging
 
 ### Local Privacy Protection
+
 Even before transmission, BirdNET-Go protects your privacy:
+
 - **No logging** of sensitive URLs in local log files
 - **Memory safety**: Credentials never stored in memory longer than necessary
 - **Configuration protection**: Sensitive settings are not included in telemetry
@@ -186,6 +209,7 @@ Even before transmission, BirdNET-Go protects your privacy:
 ## User Rights & Control
 
 ### Data Subject Rights (GDPR)
+
 - **Right to consent**: Explicit opt-in required for any data collection
 - **Right to withdraw**: Can disable telemetry at any time in settings
 - **Right to information**: This documentation provides complete transparency
@@ -193,6 +217,7 @@ Even before transmission, BirdNET-Go protects your privacy:
 - **Right to portability**: Technical error data is not personal, but users can request information about their contributions
 
 ### Control Mechanisms
+
 - **Settings panel**: Easy on/off toggle in web interface
 - **Immediate effect**: Changes take effect without restart
 - **Visual indicators**: Clear status display of telemetry state
@@ -208,12 +233,14 @@ Your unique System ID provides a privacy-preserving way to help developers debug
 4. **Privacy preserved**: The System ID cannot be linked to you without your explicit action
 
 **Example GitHub issue**:
+
 ```markdown
 I'm experiencing connection issues with my RTSP stream.
 System ID: A1B2-C3D4-E5F6 (telemetry enabled)
 ```
 
 This allows developers to:
+
 - ✅ Find related error reports in telemetry data
 - ✅ Better understand your specific issue
 - ✅ Provide more targeted solutions
@@ -222,13 +249,16 @@ This allows developers to:
 ## Compliance & Auditing
 
 ### Regular Reviews
+
 The BirdNET-Go development team regularly reviews:
+
 - **Data collection practices** to ensure minimal necessary collection
 - **Privacy filter effectiveness** to prevent sensitive data leakage
 - **Anonymization quality** to maintain privacy while preserving debugging value
 - **Security measures** to protect data in transit and at rest
 
 ### Third-Party Auditing
+
 - **Sentry compliance**: The error tracking service is SOC 2 Type II certified
 - **Data processing agreements**: Formal agreements ensure GDPR compliance
 - **Regular security audits** of the entire data pipeline
@@ -236,13 +266,16 @@ The BirdNET-Go development team regularly reviews:
 ## Contact & Questions
 
 ### Privacy Questions
+
 For questions about privacy and data collection:
+
 - **GitHub Issues**: [BirdNET-Go Privacy Issues](https://github.com/tphakala/birdnet-go/issues)
 - **Email**: Include "Privacy" in the subject line for faster routing
 
 ### Data Protection Officer
+
 For GDPR-related requests or concerns, contact the project maintainers through the official GitHub repository.
 
 ---
 
-*Last updated: June 2025*
+_Last updated: June 2025_

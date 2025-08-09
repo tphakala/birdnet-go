@@ -19,18 +19,20 @@ config := middleware.CSRFConfig{
 ## Token Distribution
 
 1. **Page Rendering**: Token injected via `CSRFContextKey`
+
    ```go
    data.CSRFToken = c.Get(CSRFContextKey).(string)
    ```
 
-2. **Template Usage**: 
+2. **Template Usage**:
    ```html
-   <meta name="csrf-token" content="{{.CSRFToken}}">
+   <meta name="csrf-token" content="{{.CSRFToken}}" />
    ```
 
 ## Exempted Paths
 
 CSRF validation skipped for:
+
 - `/assets/*` - Static files
 - `/api/v1/media/*` - Media streaming
 - `/api/v1/sse` - Server-sent events

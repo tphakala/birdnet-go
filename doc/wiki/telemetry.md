@@ -28,12 +28,14 @@ Telemetry in BirdNET-Go refers to the automatic collection and transmission of t
 ## Privacy-First Design
 
 ### 🔒 Completely Optional
+
 - Error tracking is **disabled by default**
 - Requires **explicit user consent** to enable
 - Can be **disabled at any time** in settings
 - No tracking without permission
 
 ### 🛡️ Data Protection
+
 - **No personal data** is collected or transmitted
 - **No audio recordings** or bird detection data is sent
 - **RTSP URLs are anonymized** to protect private network information
@@ -41,7 +43,9 @@ Telemetry in BirdNET-Go refers to the automatic collection and transmission of t
 - All data is **filtered before transmission** to ensure privacy
 
 ### 🎯 Technical Focus
+
 The system only collects essential technical information needed for debugging:
+
 - Error types and categories
 - Component names where errors occur
 - Anonymous resource identifiers (not actual URLs or file paths)
@@ -52,6 +56,7 @@ The system only collects essential technical information needed for debugging:
 ## Data Collection Details
 
 ### What IS Collected ✅
+
 - **Error messages** (with URLs and credentials anonymized)
 - **Error types and categories** (network errors, validation errors, system resource errors, etc.)
 - **Component names** (component where error occurred, such as datastore, audio processing, etc.)
@@ -79,7 +84,8 @@ BirdNET-Go uses a **unique system ID** for telemetry purposes:
 **What**: A randomly generated identifier (format: XXXX-XXXX-XXXX)
 **Why**: Allows tracking errors from the same system without revealing identity
 **Example**: "A1B2-C3D4-E5F6"
-**Privacy protection**: 
+**Privacy protection**:
+
 - Generated locally using cryptographically secure random numbers
 - No connection to hardware, network, or user information
 - Stored only in your local configuration directory
@@ -90,16 +96,19 @@ BirdNET-Go uses a **unique system ID** for telemetry purposes:
 When an error occurs with sensitive information, the system automatically anonymizes it:
 
 **Original error (never sent):**
+
 ```
 failed to connect to rtsp://admin:password123@192.168.1.100:554/cam/stream1
 ```
 
 **Anonymized version (what gets sent):**
+
 ```
 failed to connect to url-b0c823d0454e766694949834
 ```
 
 The anonymized identifier:
+
 - ✅ **Allows tracking** of issues with the same resource
 - ✅ **Preserves error patterns** for debugging
 - ❌ **Cannot be reverse-engineered** to reveal the original data
@@ -108,6 +117,7 @@ The anonymized identifier:
 ## Technical Implementation
 
 ### Enhanced Error System
+
 BirdNET-Go uses an advanced error handling system that automatically integrates with telemetry:
 
 1. **Component Detection**: Automatically identifies which part of the system generated the error
@@ -116,6 +126,7 @@ BirdNET-Go uses an advanced error handling system that automatically integrates 
 4. **Meaningful Titles**: Generates descriptive error titles in telemetry instead of generic error types
 
 ### Automatic Privacy Protection
+
 All telemetry data is automatically processed through privacy filters before transmission:
 
 1. **URL Detection**: Regex patterns identify URLs, file paths, and other sensitive data in error messages
@@ -124,7 +135,9 @@ All telemetry data is automatically processed through privacy filters before tra
 4. **Context Preservation**: Technical error context is maintained for debugging while removing personal information
 
 ### Consistent Identifiers
+
 The same sensitive data always produces the same anonymized identifier, allowing developers to:
+
 - Track recurring issues with the same resources without exposing sensitive information
 - Identify patterns in system failures across different installations
 - Understand which configurations are most problematic
@@ -133,12 +146,14 @@ The same sensitive data always produces the same anonymized identifier, allowing
 ## Benefits
 
 ### For Users
+
 - **Better reliability**: Bugs get fixed faster based on real-world usage data
 - **Improved compatibility**: Stream connection issues are identified and resolved
 - **Enhanced stability**: System crashes and resource problems are tracked and fixed
 - **Privacy protected**: No sensitive information leaves your system
 
 ### For Developers
+
 - **Real-world insights**: Understanding of how BirdNET-Go performs in different environments
 - **Prioritized development**: Focus on issues that affect the most users
 - **Faster debugging**: Anonymous error patterns help identify root causes
@@ -156,24 +171,31 @@ The same sensitive data always produces the same anonymized identifier, allowing
 ## Frequently Asked Questions
 
 ### Q: Is telemetry enabled by default?
+
 **A:** No. Error tracking is completely disabled by default and requires explicit opt-in through the web interface.
 
 ### Q: Can I see what data is being sent?
+
 **A:** While you cannot see the exact transmitted data, all URLs and sensitive information are automatically anonymized using the privacy protection system described above.
 
 ### Q: How do I disable telemetry?
+
 **A:** Go to Settings → Support and uncheck "Enable Error Tracking". Changes take effect immediately.
 
 ### Q: Where is the data sent?
+
 **A:** Error reports are sent to Sentry (SOC 2 Type II certified error tracking service) in Frankfurt, Germany. See our [Privacy Statement](../../PRIVACY.md) for complete information about all external services.
 
 ### Q: What about other external services?
+
 **A:** BirdNET-Go may connect to other external services when explicitly configured (BirdWeather, MQTT brokers, backup services, weather APIs). All require user configuration and are disabled by default. See [Privacy Statement](../../PRIVACY.md) for details.
 
 ### Q: Does this affect performance?
+
 **A:** No. The telemetry system has minimal performance impact and only activates when errors occur.
 
 ### Q: Is this GDPR compliant?
+
 **A:** We strive to comply with GDPR and follow privacy-by-design principles. As a volunteer-maintained project, all privacy commitments are made on a best-effort basis. See our [Privacy Statement](../../PRIVACY.md) for detailed compliance information.
 
 ## External Integrations Beyond Telemetry
@@ -181,10 +203,12 @@ The same sensitive data always produces the same anonymized identifier, allowing
 **Important**: This document focuses on telemetry (error tracking). BirdNET-Go has several other external integrations that may transmit data:
 
 ### Default External Connections (No Personal Data)
+
 - **Weather Services**: YR.no for weather data (read-only)
 - **Image Services**: Wikimedia Commons & AviCommons for bird photos (read-only)
 
 ### Optional External Integrations (Require User Configuration)
+
 - **BirdWeather**: Citizen science platform (audio clips, species data)
 - **MQTT Brokers**: Real-time detection publishing
 - **Backup Services**: External storage (FTP, SFTP, Google Drive, rsync)
@@ -205,6 +229,6 @@ For immediate privacy protection, simply disable telemetry in Settings → Suppo
 
 ---
 
-*Last updated: June 2025*
+_Last updated: June 2025_
 
-*This document covers telemetry specifically. For comprehensive privacy information including all external integrations, see [Privacy Statement](../../PRIVACY.md). BirdNET-Go is provided "AS IS" without warranty of any kind.*
+_This document covers telemetry specifically. For comprehensive privacy information including all external integrations, see [Privacy Statement](../../PRIVACY.md). BirdNET-Go is provided "AS IS" without warranty of any kind._

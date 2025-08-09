@@ -45,28 +45,28 @@ System monitoring is configured through the application's configuration file:
 ```yaml
 realtime:
   monitoring:
-    enabled: true                    # Enable/disable monitoring
-    checkinterval: 60               # Check interval in seconds
-    
+    enabled: true # Enable/disable monitoring
+    checkinterval: 60 # Check interval in seconds
+
     cpu:
       enabled: true
-      warning: 85.0                 # Warning threshold (%)
-      critical: 95.0                # Critical threshold (%)
-    
+      warning: 85.0 # Warning threshold (%)
+      critical: 95.0 # Critical threshold (%)
+
     memory:
       enabled: true
       warning: 85.0
       critical: 95.0
-    
+
     disk:
       enabled: true
       warning: 85.0
       critical: 95.0
       # Paths MAY be quoted to avoid '/' being interpreted as an alias anchor
-      paths:                        # Disk paths to monitor
-        - "/"                       # Root filesystem
-        - "/home"                   # Home partition
-        - "/var"                    # Var partition
+      paths: # Disk paths to monitor
+        - "/" # Root filesystem
+        - "/home" # Home partition
+        - "/var" # Var partition
 ```
 
 ### Default Values
@@ -156,12 +156,14 @@ status := systemMonitor.GetResourceStatus()
 ### Hysteresis
 
 To prevent alert flapping, the monitor implements 5% hysteresis:
+
 - Warning clears when usage drops below (warning_threshold - 5%)
 - Critical clears when usage drops below (critical_threshold - 5%)
 
 ### Persistent Notifications
 
 Critical disk alerts have special handling:
+
 - Initial notification sent when threshold exceeded
 - Automatic resubmission every 30 minutes while critical
 - 24-hour expiry time (vs 30 minutes for other alerts)
@@ -254,12 +256,14 @@ When disk monitoring is enabled, the system automatically detects and monitors p
 - **Container Volumes**: `/data` and `/config` when running in Docker/Podman
 
 **Important Notes:**
+
 - Auto-detected paths are added at runtime only (not persisted to config file)
 - They are merged with your configured paths for monitoring
 - The monitor log shows both configured and auto-detected paths
 - To make auto-detected paths permanent, manually add them to your `config.yaml`
 
 **Example Log Output:**
+
 ```
 Disk monitoring paths configured user_configured=[] auto_detected=[/ /home/user/.config/birdnet-go ./clips] total_monitored=[/ /home/user/.config/birdnet-go ./clips]
 ```

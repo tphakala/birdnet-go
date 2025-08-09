@@ -68,12 +68,13 @@ To add even more security, you can also require that the Cloudflare Team Domain 
 ```yaml
 security:
   allowcloudflarebypass:
-          enabled: true
-          teamdomain: "your-subdomain-of-cloudflareaccess.com"
-          audience: "your-policy-auddience"
-```	
+    enabled: true
+    teamdomain: "your-subdomain-of-cloudflareaccess.com"
+    audience: "your-policy-auddience"
+```
 
 See the following links for more information on Cloudflare Access:
+
 - [Cloudflare tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/)
 - [Create a remotely-managed tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/)
 - [Self-hosted applications](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/)

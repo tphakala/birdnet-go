@@ -20,6 +20,7 @@ Both registries contain identical images and can be used interchangeably. The ex
 ## Setup Instructions
 
 1. **Create a new directory for BirdNET-Go:**
+
    ```bash
    mkdir -p ~/birdnet-go-app
    cd ~/birdnet-go-app
@@ -29,12 +30,14 @@ Both registries contain identical images and can be used interchangeably. The ex
    Create a file named `docker-compose.yml` in this directory and copy the content from the [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file in the repository, or the example below.
 
 3. **Create config and data directories:**
+
    ```bash
    mkdir -p config data/clips
    ```
 
 4. **Set up environment variables (optional):**
    You can create a `.env` file in the same directory to set environment variables:
+
    ```bash
    # .env example
    WEB_PORT=8080
@@ -53,9 +56,11 @@ Both registries contain identical images and can be used interchangeably. The ex
 ### Audio Input Options
 
 #### Using Sound Card (default)
+
 The default configuration maps `/dev/snd` to use your local sound card for audio capture.
 
 #### Using RTSP Stream
+
 If you prefer to use an RTSP stream instead of a sound card:
 
 1. You don't need to modify the docker-compose.yml file
@@ -79,6 +84,7 @@ The Docker Compose configuration includes an option to use Cloudflare Tunnel (cl
 **For comprehensive instructions and security best practices, see the dedicated [Cloudflare Tunnel Guide](cloudflare_tunnel_guide.md).**
 
 Key benefits of using Cloudflare Tunnel:
+
 - Enhanced security with no open ports on your network
 - End-to-end encryption for all traffic
 - Performance optimization through Cloudflare's content caching
@@ -110,32 +116,38 @@ Key benefits of using Cloudflare Tunnel:
 ### Port Configuration
 
 By default, the web interface is accessible on port 8080. You can change this by:
+
 - Setting the `WEB_PORT` environment variable in your `.env` file
 - Or directly editing the port mapping in the `docker-compose.yml` file
 
 ### User Permissions
 
 The container runs with the following permissions by default:
+
 - UID: 1000
 - GID: 1000
 
 To match your user's permissions:
+
 - Set `BIRDNET_UID` to your user ID (find with `id -u`)
 - Set `BIRDNET_GID` to your group ID (find with `id -g`)
 
 ## Common Commands
 
 - **Start BirdNET-Go:**
+
   ```bash
   docker-compose up -d
   ```
 
 - **Stop BirdNET-Go:**
+
   ```bash
   docker-compose down
   ```
 
 - **View logs:**
+
   ```bash
   docker-compose logs -f
   ```
@@ -149,6 +161,7 @@ To match your user's permissions:
 ## Accessing the Web Interface
 
 Once running, you can access the BirdNET-Go web interface at:
+
 - http://localhost:8080 (replace 8080 with your configured port)
 - Or using your machine's IP address: http://YOUR_IP:8080
 - If avahi-daemon/mDNS is configured: http://HOSTNAME.local:8080
@@ -168,38 +181,41 @@ When exposing BirdNET-Go to the internet (using Cloudflare Tunnel or other metho
 BirdNET-Go supports several authentication methods that can be configured in the `config.yaml` file:
 
 1. **Basic Authentication**:
+
    ```yaml
    security:
      basicauth:
-       enabled: true              # Enable basic authentication
-       password: "your_password"  # Password hash (will be auto-hashed)
+       enabled: true # Enable basic authentication
+       password: "your_password" # Password hash (will be auto-hashed)
    ```
 
 2. **Google OAuth2**:
+
    ```yaml
    security:
-     host: "yourdomain.com"     # Your domain for the auth system
+     host: "yourdomain.com" # Your domain for the auth system
      googleauth:
-       enabled: true            # Enable Google authentication
-       clientid: "your_id"      # From Google Cloud Console
-       clientsecret: "secret"   # From Google Cloud Console
-       userid: "your_email"     # Your Google account email
+       enabled: true # Enable Google authentication
+       clientid: "your_id" # From Google Cloud Console
+       clientsecret: "secret" # From Google Cloud Console
+       userid: "your_email" # Your Google account email
    ```
 
 3. **GitHub OAuth2**:
    ```yaml
    security:
-     host: "yourdomain.com"     # Your domain for the auth system
+     host: "yourdomain.com" # Your domain for the auth system
      githubauth:
-       enabled: true            # Enable GitHub authentication
-       clientid: "your_id"      # From GitHub Developer settings
-       clientsecret: "secret"   # From GitHub Developer settings
-       userid: "username"       # Your GitHub username
+       enabled: true # Enable GitHub authentication
+       clientid: "your_id" # From GitHub Developer settings
+       clientsecret: "secret" # From GitHub Developer settings
+       userid: "username" # Your GitHub username
    ```
 
 ### Setting Up Authentication with Docker Compose
 
 1. **Create or edit your configuration**:
+
    ```bash
    nano config/config.yaml
    ```
@@ -220,7 +236,7 @@ If you want to disable authentication for your local network while keeping it en
 security:
   allowsubnetbypass:
     enabled: true
-    subnet: "192.168.1.0/24,10.0.0.0/8"  # Your local network CIDR ranges
+    subnet: "192.168.1.0/24,10.0.0.0/8" # Your local network CIDR ranges
 ```
 
 ### Using TLS
@@ -229,9 +245,9 @@ For additional security, consider enabling TLS:
 
 ```yaml
 security:
-  host: "yourdomain.com"  # Your domain
-  autotls: true           # Enable automatic TLS certificate
-  redirecttohttps: true   # Redirect HTTP to HTTPS
+  host: "yourdomain.com" # Your domain
+  autotls: true # Enable automatic TLS certificate
+  redirecttohttps: true # Redirect HTTP to HTTPS
 ```
 
 Note: When using Cloudflare Tunnel, the connection between Cloudflare and your server is already encrypted, but enabling TLS provides end-to-end encryption.

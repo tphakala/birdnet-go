@@ -9,31 +9,31 @@ The package aims to decouple authentication logic from the specific API route ha
 ## Key Components
 
 1.  **`Service` Interface (`service.go`)**:
-    *   Defines the contract for any authentication service used by the API.
-    *   Methods include checking access (`CheckAccess`), determining if auth is required (`IsAuthRequired`), retrieving username (`GetUsername`), getting the auth method (`GetAuthMethod`), validating tokens (`ValidateToken`), handling basic auth (`AuthenticateBasic`), and logging out (`Logout`).
-    *   Defines sentinel errors (`ErrInvalidCredentials`, `ErrInvalidToken`, `ErrSessionNotFound`, `ErrLogoutFailed`, `ErrBasicAuthDisabled`) for common authentication failure scenarios.
+    - Defines the contract for any authentication service used by the API.
+    - Methods include checking access (`CheckAccess`), determining if auth is required (`IsAuthRequired`), retrieving username (`GetUsername`), getting the auth method (`GetAuthMethod`), validating tokens (`ValidateToken`), handling basic auth (`AuthenticateBasic`), and logging out (`Logout`).
+    - Defines sentinel errors (`ErrInvalidCredentials`, `ErrInvalidToken`, `ErrSessionNotFound`, `ErrLogoutFailed`, `ErrBasicAuthDisabled`) for common authentication failure scenarios.
 
 2.  **`AuthMethod` Enum (`service.go`, `authmethod_string.go`)**:
-    *   An `int`-based enum representing the different authentication methods detected or used (e.g., `AuthMethodToken`, `AuthMethodBrowserSession`, `AuthMethodBasicAuth`, `AuthMethodLocalSubnet`, `AuthMethodNone`).
-    *   Uses `go generate` with `stringer` to automatically create the `String()` method for readable representations. Remember to run `go generate ./...` in the package directory after adding or modifying `AuthMethod` values.
+    - An `int`-based enum representing the different authentication methods detected or used (e.g., `AuthMethodToken`, `AuthMethodBrowserSession`, `AuthMethodBasicAuth`, `AuthMethodLocalSubnet`, `AuthMethodNone`).
+    - Uses `go generate` with `stringer` to automatically create the `String()` method for readable representations. Remember to run `go generate ./...` in the package directory after adding or modifying `AuthMethod` values.
 
 3.  **`SecurityAdapter` (`adapter.go`)**:
-    *   An implementation of the `Service` interface.
-    *   Adapts the functionality of the `internal/security` package, specifically using `security.OAuth2Server` for core authentication logic (session checks, token validation, subnet bypass, basic auth credential verification).
-    *   Provides logic to retrieve username and determine the authentication method, often relying on context values set by the middleware.
-    *   Includes `AuthMethodFromString` helper to convert string representations back to `AuthMethod` constants.
+    - An implementation of the `Service` interface.
+    - Adapts the functionality of the `internal/security` package, specifically using `security.OAuth2Server` for core authentication logic (session checks, token validation, subnet bypass, basic auth credential verification).
+    - Provides logic to retrieve username and determine the authentication method, often relying on context values set by the middleware.
+    - Includes `AuthMethodFromString` helper to convert string representations back to `AuthMethod` constants.
 
 4.  **`Middleware` (`middleware.go`)**:
-    *   An Echo middleware struct that utilizes an instance of the `Service` interface.
-    *   The `Authenticate` method wraps API handlers to enforce authentication.
-    *   Checks if authentication is required based on the client IP (`IsAuthRequired`).
-    *   Attempts authentication in the following order:
-        1.  Bearer Token (`Authorization: Bearer <token>`) via `ValidateToken`.
-        2.  Session-based authentication via `CheckAccess`.
-    *   Sets context values (`isAuthenticated`, `username`, `authMethod`) upon successful authentication.
-    *   Handles unauthenticated requests:
-        *   Redirects browser clients (HTML `Accept` header or `HX-Request` header) to `/login` with a `redirect` query parameter. Handles HTMX redirects appropriately (`HX-Redirect` header).
-        *   Returns a `401 Unauthorized` JSON response for API clients.
+    - An Echo middleware struct that utilizes an instance of the `Service` interface.
+    - The `Authenticate` method wraps API handlers to enforce authentication.
+    - Checks if authentication is required based on the client IP (`IsAuthRequired`).
+    - Attempts authentication in the following order:
+      1.  Bearer Token (`Authorization: Bearer <token>`) via `ValidateToken`.
+      2.  Session-based authentication via `CheckAccess`.
+    - Sets context values (`isAuthenticated`, `username`, `authMethod`) upon successful authentication.
+    - Handles unauthenticated requests:
+      - Redirects browser clients (HTML `Accept` header or `HX-Request` header) to `/login` with a `redirect` query parameter. Handles HTMX redirects appropriately (`HX-Redirect` header).
+      - Returns a `401 Unauthorized` JSON response for API clients.
 
 ## Authentication Flow
 
@@ -45,12 +45,12 @@ The package aims to decouple authentication logic from the specific API route ha
 
 ## Basic Authentication
 
-*   Handled by `SecurityAdapter.AuthenticateBasic`.
-*   Relies on a *single*, fixed username/password combination configured in settings (`Security.BasicAuth.ClientID` and `Security.BasicAuth.Password`).
-*   The provided username must match the configured `ClientID`.
-*   Uses constant-time comparison for security.
-*   If basic auth is disabled in the configuration, it returns `ErrBasicAuthDisabled`.
-*   On successful basic auth, it stores the username (`userId`) in the session.
+- Handled by `SecurityAdapter.AuthenticateBasic`.
+- Relies on a _single_, fixed username/password combination configured in settings (`Security.BasicAuth.ClientID` and `Security.BasicAuth.Password`).
+- The provided username must match the configured `ClientID`.
+- Uses constant-time comparison for security.
+- If basic auth is disabled in the configuration, it returns `ErrBasicAuthDisabled`.
+- On successful basic auth, it stores the username (`userId`) in the session.
 
 ## Usage
 
@@ -74,8 +74,8 @@ apiGroup.GET("/protected/resource", handlerFunc)
 
 ## Dependencies
 
-*   `github.com/labstack/echo/v4`: Web framework.
-*   `github.com/markbates/goth/gothic`: Session management, particularly for OAuth and storing user IDs post-login.
-*   `github.com/tphakala/birdnet-go/internal/security`: Provides the underlying authentication logic adapted by `SecurityAdapter`.
-*   `log/slog`: Structured logging.
-*   `golang.org/x/tools/cmd/stringer`: Used via `go generate` for `AuthMethod`. 
+- `github.com/labstack/echo/v4`: Web framework.
+- `github.com/markbates/goth/gothic`: Session management, particularly for OAuth and storing user IDs post-login.
+- `github.com/tphakala/birdnet-go/internal/security`: Provides the underlying authentication logic adapted by `SecurityAdapter`.
+- `log/slog`: Structured logging.
+- `golang.org/x/tools/cmd/stringer`: Used via `go generate` for `AuthMethod`.

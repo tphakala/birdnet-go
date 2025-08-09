@@ -75,7 +75,7 @@ invalid := privacy.IsValidSystemID("invalid-id")   // false
 1. **URL Parsing**: Parse the URL to extract components
 2. **Host Categorization**: Categorize hosts while preserving useful information:
    - `localhost` for local connections
-   - `private-ip` for internal networks  
+   - `private-ip` for internal networks
    - `public-ip` for internet addresses
    - `domain-com` for .com domains (TLD only)
 3. **Consistent Hashing**: SHA-256 creates anonymous but consistent identifiers
@@ -132,6 +132,7 @@ Typical performance characteristics on modern hardware:
 ### Consistent Anonymization
 
 The same input will always produce the same anonymized output, allowing for:
+
 - Error correlation across time
 - Debugging with consistent identifiers
 - Privacy protection without losing debugging capability
@@ -153,7 +154,7 @@ func main() {
     errorMsg := "Connection failed to rtsp://admin:secret@192.168.1.100:554/stream1"
     cleanMsg := privacy.ScrubMessage(errorMsg)
     fmt.Println(cleanMsg) // "Connection failed to url-a1b2c3d4e5f6g7h8"
-    
+
     // Generate system ID for telemetry
     systemID, err := privacy.GenerateSystemID()
     if err != nil {
@@ -170,7 +171,7 @@ func displayConnectionInfo(rtspURL string) {
     // Show sanitized URL to user (remove credentials but keep host for debugging)
     displayURL := privacy.SanitizeRTSPUrl(rtspURL)
     fmt.Printf("Connecting to: %s\n", displayURL)
-    
+
     // Log anonymized version for telemetry
     anonymizedURL := privacy.AnonymizeURL(rtspURL)
     fmt.Printf("Telemetry ID: %s\n", anonymizedURL)
@@ -197,7 +198,7 @@ go test ./internal/privacy -race
 This package is designed to be imported by:
 
 - **Telemetry Package**: For anonymizing error messages and URLs in Sentry reports
-- **Logging Package**: For scrubbing sensitive data from log messages  
+- **Logging Package**: For scrubbing sensitive data from log messages
 - **Configuration Package**: For sanitizing URLs in configuration validation
 - **Support Package**: For cleaning data in support bundles
 

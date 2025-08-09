@@ -16,14 +16,14 @@ graph TB
         C[API Handlers]
         D[Background Jobs]
     end
-    
+
     subgraph "Error Handling Layer"
         E[Enhanced Error Package]
         F[Error Builder API]
         G[Privacy Scrubber]
         H[Component Detection]
     end
-    
+
     subgraph "Event Bus Core"
         I[Event Publisher Interface]
         J[Event Bus]
@@ -32,44 +32,44 @@ graph TB
         M[Deduplicator]
         N[Fast Path Check]
     end
-    
+
     subgraph "Consumer Layer"
         O[Notification Worker]
         P[Telemetry Worker]
         Q[Future Consumers]
     end
-    
+
     subgraph "External Systems"
         R[Notification Service]
         S[Sentry]
         T[Future Systems]
     end
-    
+
     A --> E
     B --> E
     C --> E
     D --> E
-    
+
     E --> F
     F --> G
     F --> H
     F --> I
-    
+
     I --> N
     N -->|No Consumers| U[Skip<br/>2.5ns]
     N -->|Has Consumers| J
-    
+
     J --> K
     K --> L
     L --> M
     M --> O
     M --> P
     M --> Q
-    
+
     O --> R
     P --> S
     Q --> T
-    
+
     style J fill:#f9f,stroke:#333,stroke-width:4px
     style L fill:#bbf,stroke:#333,stroke-width:2px
     style N fill:#ff9,stroke:#333,stroke-width:2px
@@ -80,6 +80,7 @@ graph TB
 ### 1. Zero-Cost Abstraction
 
 When no consumers are registered:
+
 - Fast path optimization skips all processing
 - Only ~2.5ns overhead for error creation
 - No allocations or goroutine creation
@@ -109,6 +110,7 @@ type EventPublisher interface {
 ```
 
 Flow:
+
 1. `errors.New()` creates enhanced error
 2. `.Build()` publishes to event bus
 3. Event bus distributes to consumers
@@ -117,6 +119,7 @@ Flow:
 ### Event Bus Core
 
 Features:
+
 - **Buffer Size**: 10,000 events (configurable)
 - **Workers**: 4 concurrent workers (configurable)
 - **Deduplication**: 1-minute window
@@ -136,6 +139,7 @@ type EventConsumer interface {
 ```
 
 Current consumers:
+
 1. **NotificationWorker**: Creates user notifications
 2. **TelemetryWorker**: Reports to Sentry
 
@@ -143,23 +147,23 @@ Current consumers:
 
 ### Benchmarks Summary
 
-| Operation | Target | Actual | Status |
-|-----------|--------|--------|---------|
-| Error creation (disabled) | < 100ns | 2.5ns | ✅ |
-| Error creation (enabled) | < 1μs | 300ns | ✅ |
-| Event publishing | < 500ns | 165-390ns | ✅ |
-| Deduplication check | < 100ns | 95ns | ✅ |
-| Memory per error | < 1KB | ~200B | ✅ |
-| End-to-end latency | Non-blocking | 30.77μs | ✅ |
+| Operation                 | Target       | Actual    | Status |
+| ------------------------- | ------------ | --------- | ------ |
+| Error creation (disabled) | < 100ns      | 2.5ns     | ✅     |
+| Error creation (enabled)  | < 1μs        | 300ns     | ✅     |
+| Event publishing          | < 500ns      | 165-390ns | ✅     |
+| Deduplication check       | < 100ns      | 95ns      | ✅     |
+| Memory per error          | < 1KB        | ~200B     | ✅     |
+| End-to-end latency        | Non-blocking | 30.77μs   | ✅     |
 
 ### Performance Improvements
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Error.Build() | 100.78ms | 30.77μs | 3,275x |
-| Batch 1000 errors | 5.13s | <50ms | 100x+ |
-| CPU usage | High (blocking) | Minimal | Significant |
-| Memory usage | Per-error | Batched | Reduced |
+| Metric            | Before          | After   | Improvement |
+| ----------------- | --------------- | ------- | ----------- |
+| Error.Build()     | 100.78ms        | 30.77μs | 3,275x      |
+| Batch 1000 errors | 5.13s           | <50ms   | 100x+       |
+| CPU usage         | High (blocking) | Minimal | Significant |
+| Memory usage      | Per-error       | Batched | Reduced     |
 
 ## Configuration
 
@@ -179,11 +183,13 @@ type Config struct {
 Each consumer has specific configuration:
 
 **TelemetryWorker**:
+
 - Rate limiting: 100 events/minute
 - Circuit breaker: 10 failures threshold
 - Sampling: Configurable 0-100%
 
 **NotificationWorker**:
+
 - Rate limiting: 50 events/30s
 - Priority mapping from error categories
 - Automatic expiration
@@ -197,21 +203,21 @@ sequenceDiagram
     participant Errors
     participant Telemetry
     participant Notification
-    
+
     Main->>EventBus: Initialize()
     EventBus-->>Main: Ready
-    
+
     Main->>Errors: SetEventPublisher()
     Errors-->>Main: Configured
-    
+
     Main->>Telemetry: InitSentry()
     Telemetry->>EventBus: RegisterConsumer(TelemetryWorker)
     EventBus-->>Telemetry: Registered
-    
+
     Main->>Notification: Initialize()
     Notification->>EventBus: RegisterConsumer(NotificationWorker)
     EventBus-->>Notification: Registered
-    
+
     Note over EventBus: System Ready
 ```
 
@@ -226,14 +232,14 @@ sequenceDiagram
     participant Worker
     participant Telemetry
     participant Notification
-    
+
     Code->>Error: errors.New("API failed")
     Error->>Error: .Component("api")
     Error->>Error: .Category(Network)
     Error->>Error: .Build()
-    
+
     Error->>EventBus: PublishError()
-    
+
     alt Fast Path (no consumers)
         EventBus-->>Error: Skip (2.5ns)
     else Normal Path
@@ -244,7 +250,7 @@ sequenceDiagram
             Dedup->>Worker: Queue event
             Worker->>Telemetry: ProcessEvent()
             Worker->>Notification: ProcessEvent()
-            
+
             par Async Processing
                 Telemetry->>Telemetry: Rate limit check
                 Telemetry->>Telemetry: Circuit breaker
@@ -255,7 +261,7 @@ sequenceDiagram
             end
         end
     end
-    
+
     EventBus-->>Error: Return (non-blocking)
 ```
 
@@ -279,6 +285,7 @@ Note: The metrics use atomic 64-bit counters. On 32-bit platforms, ensure proper
 ### Health Checks
 
 Each component provides health status:
+
 - Event bus: Buffer usage, worker status
 - Telemetry: Circuit breaker state, Sentry connectivity
 - Notification: Storage usage, rate limit status
@@ -304,16 +311,19 @@ Each component provides health status:
 ## Testing Strategy
 
 ### Unit Tests
+
 - Mock event publishers for error package
 - Mock consumers for event bus testing
 - Isolated component testing
 
 ### Integration Tests
+
 - End-to-end error flow validation
 - Consumer interaction testing
 - Performance benchmarking
 
 ### Load Tests
+
 - High-volume event generation
 - Buffer overflow handling
 - Consumer backpressure
@@ -331,15 +341,17 @@ Each component provides health status:
 For systems upgrading to the async event system:
 
 1. **Update error handling**:
+
    ```go
    // Old
    sentry.CaptureException(err)
-   
+
    // New
    errors.New(err).Component("myapp").Build()
    ```
 
 2. **Initialize event bus**:
+
    ```go
    // In main.go
    events.Initialize(nil)

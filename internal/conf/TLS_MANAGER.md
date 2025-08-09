@@ -7,6 +7,7 @@ The TLS Certificate Manager provides a secure, centralized system for managing T
 ## Purpose
 
 This manager addresses several key requirements:
+
 - **Security**: Store certificates and keys with proper file permissions
 - **Convenience**: Allow users to paste certificates directly in the UI
 - **Scalability**: Support multiple services (MQTT, MySQL, etc.) with isolated storage
@@ -15,6 +16,7 @@ This manager addresses several key requirements:
 ## Architecture
 
 ### File Structure
+
 ```
 config/
 └── tls/                    # Root TLS directory (0700)
@@ -56,36 +58,47 @@ tlsManager := conf.NewTLSManager("/path/to/config")
 ### Core Methods
 
 #### SaveCertificate
+
 ```go
 func (tm *TLSManager) SaveCertificate(service string, certType TLSCertificateType, content string) (string, error)
 ```
+
 Saves a certificate or key with proper validation and permissions.
+
 - Returns the file path on success
 - Empty content removes the certificate file
 - Validates PEM format and certificate structure
 
 #### GetCertificatePath
+
 ```go
 func (tm *TLSManager) GetCertificatePath(service string, certType TLSCertificateType) string
 ```
+
 Returns the path where a certificate would be stored.
 
 #### CertificateExists
+
 ```go
 func (tm *TLSManager) CertificateExists(service string, certType TLSCertificateType) bool
 ```
+
 Checks if a certificate file exists for the service.
 
 #### RemoveCertificate
+
 ```go
 func (tm *TLSManager) RemoveCertificate(service string, certType TLSCertificateType) error
 ```
+
 Removes a specific certificate file.
 
 #### RemoveAllCertificates
+
 ```go
 func (tm *TLSManager) RemoveAllCertificates(service string) error
 ```
+
 Removes all certificates for a service.
 
 ## Usage Examples
@@ -93,6 +106,7 @@ Removes all certificates for a service.
 ### Adding TLS Support to a New Service
 
 1. **Update Configuration Structure**:
+
 ```go
 type MySQLTLSSettings struct {
     Enabled            bool   `yaml:"enabled"`
@@ -104,6 +118,7 @@ type MySQLTLSSettings struct {
 ```
 
 2. **Process Certificates in Settings Handler**:
+
 ```go
 // In processTLSCertificates function, add:
 "realtime.mysql.tls.cacert": {
@@ -115,6 +130,7 @@ type MySQLTLSSettings struct {
 ```
 
 3. **Use in Your Service Client**:
+
 ```go
 // Read certificates from the managed paths
 if config.TLS.CACert != "" {
@@ -129,18 +145,20 @@ if config.TLS.CACert != "" {
 ### UI Integration
 
 1. **Add Certificate Fields**:
+
 ```html
-<textarea 
-    id="mysqlTlsCaCert"
-    x-model="mysql.tls.caCert"
-    name="realtime.mysql.tls.cacert"
-    class="textarea textarea-bordered textarea-sm h-24"
-    placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----">
-</textarea>
+<textarea
+  id="mysqlTlsCaCert"
+  x-model="mysql.tls.caCert"
+  name="realtime.mysql.tls.cacert"
+  class="textarea textarea-bordered textarea-sm h-24"
+  placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+></textarea>
 ```
 
 2. **Backend Processing**:
-The settings handler will automatically:
+   The settings handler will automatically:
+
 - Extract certificate content from form
 - Validate and save to secure location
 - Update configuration with file path
@@ -149,16 +167,19 @@ The settings handler will automatically:
 ## Security Considerations
 
 ### File Permissions
+
 - **Directories**: 0700 (owner read/write/execute only)
 - **Private Keys**: 0600 (owner read/write only)
 - **Certificates**: 0644 (owner write, all read)
 
 ### Certificate Validation
+
 - Validates PEM encoding structure
 - Checks certificate parsing for CA and client certificates
 - Validates private key block types (RSA, EC, PKCS#8)
 
 ### Best Practices
+
 1. **Never store certificates in config files**: Use file paths only
 2. **Validate user input**: All certificates are validated before storage
 3. **Isolate by service**: Each service has its own directory
@@ -168,11 +189,13 @@ The settings handler will automatically:
 ## Error Handling
 
 All errors include:
+
 - **Component**: "tls-manager"
 - **Category**: Appropriate error category
 - **Context**: Operation, file paths, service name
 
 Example:
+
 ```go
 errors.New(err).
     Component("tls-manager").
@@ -185,6 +208,7 @@ errors.New(err).
 ## Testing
 
 ### Unit Testing
+
 ```go
 // Test certificate validation
 func TestValidateCertificateContent(t *testing.T) {
@@ -192,7 +216,7 @@ func TestValidateCertificateContent(t *testing.T) {
     validCert := "-----BEGIN CERTIFICATE-----\n..."
     err := validateCertificateContent(TLSCertTypeCA, validCert)
     assert.NoError(t, err)
-    
+
     // Test invalid PEM
     err = validateCertificateContent(TLSCertTypeCA, "invalid")
     assert.Error(t, err)
@@ -200,16 +224,17 @@ func TestValidateCertificateContent(t *testing.T) {
 ```
 
 ### Integration Testing
+
 ```go
 // Test full save/load cycle
 func TestCertificateLifecycle(t *testing.T) {
     tm := NewTLSManager(t.TempDir())
-    
+
     // Save certificate
     path, err := tm.SaveCertificate("test", TLSCertTypeCA, testCert)
     assert.NoError(t, err)
     assert.FileExists(t, path)
-    
+
     // Verify permissions
     info, _ := os.Stat(path)
     assert.Equal(t, os.FileMode(0644), info.Mode())
@@ -219,6 +244,7 @@ func TestCertificateLifecycle(t *testing.T) {
 ## Future Enhancements
 
 Potential improvements:
+
 1. **Certificate expiration monitoring**
 2. **Automatic certificate renewal support**
 3. **Certificate chain validation**
@@ -231,6 +257,7 @@ Potential improvements:
 ## Migration Guide
 
 For existing installations:
+
 1. Certificates previously stored as content in config will continue to work
 2. New saves through UI will migrate to file-based storage
 3. Manual migration: paste existing certificates into UI and save
@@ -253,6 +280,7 @@ For existing installations:
    - Check config directory path is correct
 
 ### Debug Tips
+
 - Check file permissions: `ls -la config/tls/service/`
 - Validate certificate: `openssl x509 -in cert.pem -text -noout`
 - Test private key: `openssl rsa -in key.pem -check`

@@ -16,6 +16,7 @@ debug: true
 ```
 
 When debug mode is enabled:
+
 - pprof HTTP endpoints are exposed at `/debug/pprof/`
 - Mutex profiling is enabled to detect lock contention
 - Block profiling is enabled to detect blocking operations
@@ -50,6 +51,7 @@ go tool pprof heap.pprof
 ```
 
 Useful commands in pprof interactive mode:
+
 - `top` - Show top memory consumers
 - `list <function>` - Show source code with memory allocations
 - `web` - Open interactive graph in browser (requires graphviz)
@@ -110,6 +112,7 @@ BIRDNET_GO_PROFILE=1 ./birdnet-go
 1. **Production Use**: Only enable debug mode in production temporarily when diagnosing issues, as profiling has a performance overhead.
 
 2. **Memory Profiles**: Take multiple heap profiles over time to identify memory leaks:
+
    ```bash
    # Take baseline
    curl -o heap1.pprof http://localhost:8080/debug/pprof/heap
@@ -134,6 +137,7 @@ The profiling endpoints are protected by the same authentication mechanism as ot
 ## Troubleshooting
 
 If profiling endpoints are not available:
+
 1. Verify debug mode is enabled in config
 2. Check the logs for "pprof debugging endpoints enabled at /debug/pprof/"
 3. Ensure you're authenticated if security is enabled

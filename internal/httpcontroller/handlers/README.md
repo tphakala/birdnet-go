@@ -19,7 +19,7 @@ The handler package is organized as follows:
 - **`statistics.go`**: Handlers for statistical data endpoints
 - **`species.go`**: Handlers for species-related endpoints
 - **`weather.go`**: Handlers for weather information
-- **`mqtt.go`**: Handlers for MQTT messaging 
+- **`mqtt.go`**: Handlers for MQTT messaging
 - **`audio_level_sse.go`**: Real-time audio level updates via SSE
 - **`utils.go`**: Utility functions used by handlers
 
@@ -73,6 +73,7 @@ The package includes a full implementation of Server-Sent Events for real-time u
 ### Bird Detection Handlers
 
 The package provides handlers for:
+
 - Retrieving bird detections (hourly, by species, or via search)
 - Getting detection details
 - Serving detection media (audio clips and spectrograms)
@@ -81,6 +82,7 @@ The package provides handlers for:
 ### Dashboard
 
 Provides data for the main dashboard, including:
+
 - Top bird sightings
 - Hourly occurrence statistics
 - Recent detections
@@ -88,6 +90,7 @@ Provides data for the main dashboard, including:
 ### Settings Management
 
 Comprehensive handlers for application settings, covering:
+
 - Audio configuration
 - BirdNET parameters
 - Detection filters
@@ -97,6 +100,7 @@ Comprehensive handlers for application settings, covering:
 ### Media Serving
 
 Handlers for serving media assets:
+
 - Audio clips of bird sounds
 - Spectrograms of detections
 - Bird images
@@ -104,6 +108,7 @@ Handlers for serving media assets:
 ### Real-time Updates
 
 Support for real-time updates via Server-Sent Events (SSE):
+
 - Detection notifications
 - Audio level updates
 - System status
@@ -148,13 +153,13 @@ When implementing a new handler, follow this pattern:
 func (h *Handlers) MyNewHandler(c echo.Context) error {
     // Parse and validate request parameters
     // ...
-    
+
     // Perform business logic with dependencies
     data, err := h.DS.SomeDataOperation()
     if err != nil {
         return h.NewHandlerError(err, "Failed to perform operation", http.StatusInternalServerError)
     }
-    
+
     // Return appropriate response
     return c.Render(http.StatusOK, "templateName", data)
     // or
@@ -194,4 +199,4 @@ The handlers package is designed to be compatible with:
 - macOS
 - Windows
 
-No platform-specific code is used in the handlers themselves, ensuring consistent operation across all supported platforms. 
+No platform-specific code is used in the handlers themselves, ensuring consistent operation across all supported platforms.

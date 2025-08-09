@@ -11,8 +11,8 @@ realtime:
   ebird:
     enabled: true
     apikey: "your-ebird-api-key"
-    cachettl: 24  # Cache duration in hours (default: 24)
-    locale: "en"  # Language locale (default: "en")
+    cachettl: 24 # Cache duration in hours (default: 24)
+    locale: "en" # Language locale (default: "en")
 ```
 
 ## Getting an eBird API Key
@@ -77,6 +77,7 @@ The eBird client caches API responses to improve performance and reduce API usag
 ## Error Handling
 
 The integration is designed to fail gracefully:
+
 - If eBird API is unavailable, endpoints continue to work without taxonomy data
 - Failed requests are logged but don't break the main functionality
 - Rate limit errors are handled automatically with retry logic

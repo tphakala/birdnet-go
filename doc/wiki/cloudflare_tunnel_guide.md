@@ -56,6 +56,7 @@ If you're using Docker Compose with BirdNET-Go, setting up Cloudflare Tunnel is 
    - Alternatively, use the [premade docker-compose.yml](../Docker/docker-compose.yml) which already includes this configuration (commented out)
 
 4. **Start the Services**:
+
    ```bash
    docker-compose up -d
    ```
@@ -75,6 +76,7 @@ If you're using the standard Docker installation method:
 1. **Create a Cloudflare Tunnel** (same as above)
 
 2. **Download and Run Cloudflared**:
+
    ```bash
    # Create a directory for configuration
    mkdir -p ~/cloudflared
@@ -96,16 +98,17 @@ If you're running BirdNET-Go directly on your system (not using Docker):
 1. **Install cloudflared**:
    - Download the appropriate binary for your system from the [cloudflared GitHub releases page](https://github.com/cloudflare/cloudflared/releases)
    - Or use your system's package manager:
+
      ```bash
      # Debian/Ubuntu
      curl -L https://pkg.cloudflare.com/cloudflare-main.gpg | sudo apt-key add -
      echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
      sudo apt update
      sudo apt install cloudflared
-     
+
      # macOS
      brew install cloudflare/cloudflare/cloudflared
-     
+
      # Windows (using Scoop)
      scoop install cloudflared
      ```
@@ -115,6 +118,7 @@ If you're running BirdNET-Go directly on your system (not using Docker):
    - Create a tunnel and copy the token
 
 3. **Run cloudflared**:
+
    ```bash
    cloudflared tunnel run --token your-tunnel-token
    ```
@@ -139,6 +143,7 @@ cloudflared tunnel --no-autoupdate run --url http://localhost:8080
 This will create a temporary public URL that you can use to access your BirdNET-Go instance. The output will show the random hostname assigned to your tunnel, such as `https://randomly-generated-hostname.trycloudflare.com`.
 
 **Important limitations of quick tunnels**:
+
 - The hostname is randomly generated each time you start the tunnel
 - The tunnel is temporary and will be deleted when the cloudflared process stops
 - Quick tunnels do not support custom domains or advanced configuration
@@ -148,7 +153,7 @@ For more information on quick tunnels, see the [TryCloudflare documentation](htt
 
 ## Enabling Authentication
 
-When exposing BirdNET-Go to the internet, it's **strongly recommended** to enable authentication. 
+When exposing BirdNET-Go to the internet, it's **strongly recommended** to enable authentication.
 
 ### Security Implications of Not Enabling Authentication
 
@@ -159,13 +164,11 @@ Without authentication, your BirdNET-Go instance is completely open to anyone wh
   - Deleting detection records from the database
   - Viewing your configured location coordinates (privacy concern)
   - Accessing all audio recordings of detected birds
-  
 - **Potential for Abuse**:
   - Malicious users could deliberately misconfigure your system
   - Someone could wipe your detection history and audio clips
   - Your data could be scraped or downloaded without your knowledge
   - An attacker could use your system as an entry point to other services
-  
 - **Privacy Concerns**:
   - Your exact location is visible in the settings
   - Personal information might be inferred from detection patterns and setup
@@ -182,31 +185,31 @@ There are several authentication methods available in BirdNET-Go:
    ```yaml
    security:
      # Required for OAuth methods
-     host: "birdnet.yourdomain.com"  # Your Cloudflare domain
-     
+     host: "birdnet.yourdomain.com" # Your Cloudflare domain
+
      # Option 1: Basic Password Authentication
      basicauth:
        enabled: true
-       password: "your_password"  # Will be automatically hashed
-     
+       password: "your_password" # Will be automatically hashed
+
      # Option 2: Google OAuth (requires Google Cloud account)
      googleauth:
        enabled: true
-       clientid: "your_client_id"  # From Google Cloud Console
+       clientid: "your_client_id" # From Google Cloud Console
        clientsecret: "your_client_secret"
        userid: "your_email@gmail.com"
-     
+
      # Option 3: GitHub OAuth
      githubauth:
        enabled: true
-       clientid: "your_client_id"  # From GitHub developer settings
+       clientid: "your_client_id" # From GitHub developer settings
        clientsecret: "your_client_secret"
        userid: "your_github_username"
-     
+
      # Optional: Allow local network access without auth
      allowsubnetbypass:
        enabled: true
-       subnet: "192.168.1.0/24,10.0.0.0/8"  # Your local network ranges
+       subnet: "192.168.1.0/24,10.0.0.0/8" # Your local network ranges
    ```
 
 2. **Restart BirdNET-Go** for the changes to take effect
@@ -226,11 +229,13 @@ If you're sharing your BirdNET-Go instance with family or friends, consider usin
 For more advanced setups, you can use a config file instead of a token:
 
 1. **Create configuration files**:
+
    ```bash
    mkdir -p ~/cloudflared
    ```
 
 2. **Add config.yml**:
+
    ```yaml
    # ~/cloudflared/config.yml
    tunnel: your-tunnel-id
@@ -277,4 +282,4 @@ If you run multiple services on your network, you can expose them all through a 
 - **Cannot access web interface**: Verify that your DNS settings in Cloudflare are properly configured for your domain.
 - **Authentication issues**: If using OAuth, ensure the `security.host` matches your public domain exactly.
 
-For more help, see the [Cloudflare Tunnel documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/). 
+For more help, see the [Cloudflare Tunnel documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/).

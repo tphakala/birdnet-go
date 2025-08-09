@@ -56,6 +56,7 @@ type ModelInfo struct {
 ```
 
 Key functions:
+
 - `DetermineModelInfo()` - Identifies model type from filepath or model identifier
 - `IsLocaleSupported()` - Validates if a locale is supported by the model
 
@@ -66,6 +67,7 @@ The package exclusively uses the V2.4 format label files, which contain species 
 The language-specific files follow the naming pattern `BirdNET_GLOBAL_6K_V2.4_Labels_<locale>.txt`, where `<locale>` is the locale identifier (e.g., `en_uk`, `de`, `fr`).
 
 The package handles two locale formats:
+
 - Hyphenated format in the API (e.g., `en-uk`, `pt-br`): Used in settings and code
 - Underscore format in filenames (e.g., `en_uk`, `pt_BR`): Used in label filenames
 
@@ -74,6 +76,7 @@ The system automatically converts between these formats, allowing users to speci
 Label files are embedded directly in the binary using Go's `embed` package, eliminating the need for external files during deployment.
 
 Key functions:
+
 - `GetLabelFileData()` - Loads the appropriate label file based on model version and locale
 - `loadEmbeddedLabels()` - Loads embedded label files based on the model and locale
 - `loadExternalLabels()` - Allows loading custom label files from external sources
@@ -88,6 +91,7 @@ type TaxonomyMap map[string]string
 ```
 
 Key functions:
+
 - `LoadTaxonomyData()` - Loads taxonomy data from embedded or custom file
 - `GetSpeciesCodeFromName()` - Gets eBird code for a species name
 - `GetSpeciesNameFromCode()` - Gets species name for an eBird code
@@ -95,9 +99,10 @@ Key functions:
 - `EnrichResultWithTaxonomy()` - Adds taxonomy information to detection results
 
 Example usage of taxonomy enrichment:
+
 ```go
 scientific, common, code := bn.EnrichResultWithTaxonomy(result.Species)
-fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n", 
+fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n",
     common, scientific, code, result.Confidence)
 ```
 
@@ -110,6 +115,7 @@ The package implements a sophisticated range filtering system that uses location
 - `BuildRangeFilter()` - Updates the range filter with current probable species
 
 The range filtering system uses a specialized TensorFlow Lite model that takes three inputs:
+
 - Latitude (float)
 - Longitude (float)
 - Week number (float, 1-52)
@@ -156,7 +162,7 @@ if err != nil {
 // Process results with taxonomy information
 for _, result := range results {
     scientific, common, code := bn.EnrichResultWithTaxonomy(result.Species)
-    fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n", 
+    fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n",
         common, scientific, code, result.Confidence)
 }
 ```
@@ -180,6 +186,7 @@ The package includes several optimizations for performance:
 ## Cross-Platform Support
 
 The package is designed to work on multiple platforms:
+
 - Linux (including Raspberry Pi and other SBCs)
 - macOS
 - Windows

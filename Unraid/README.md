@@ -56,23 +56,24 @@ If BirdNET-Go is not yet available in Community Applications:
 
 ### Required Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **WebUI Port** | `8080` | Port for accessing the web interface |
-| **Config Directory** | `/mnt/user/appdata/birdnet-go/config` | Configuration files storage |
-| **Data Directory** | `/mnt/user/appdata/birdnet-go/data` | Database and audio clips storage |
-| **Timezone** | `America/New_York` | Container timezone for accurate timestamps |
+| Setting              | Default                               | Description                                |
+| -------------------- | ------------------------------------- | ------------------------------------------ |
+| **WebUI Port**       | `8080`                                | Port for accessing the web interface       |
+| **Config Directory** | `/mnt/user/appdata/birdnet-go/config` | Configuration files storage                |
+| **Data Directory**   | `/mnt/user/appdata/birdnet-go/data`   | Database and audio clips storage           |
+| **Timezone**         | `America/New_York`                    | Container timezone for accurate timestamps |
 
 ### Advanced Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **User ID** | `99` | User ID for file permissions (99 = nobody) |
-| **Group ID** | `100` | Group ID for file permissions (100 = users) |
+| Setting      | Default | Description                                 |
+| ------------ | ------- | ------------------------------------------- |
+| **User ID**  | `99`    | User ID for file permissions (99 = nobody)  |
+| **Group ID** | `100`   | Group ID for file permissions (100 = users) |
 
 ### Audio Device Requirements
 
 BirdNET-Go requires access to audio input devices. The template automatically includes:
+
 - `--device /dev/snd` - Access to all sound devices
 - `--add-host="host.docker.internal:host-gateway"` - Network access for RTSP streams
 
@@ -159,21 +160,25 @@ Configure security in the web interface under **Settings** → **Security**.
 ### Common Issues
 
 **Container won't start:**
+
 - Check Unraid logs: **Tools** → **System Log**
 - Verify audio device permissions
 - Ensure sufficient disk space
 
 **No audio detected:**
+
 - Verify USB audio device is connected and recognized by Unraid
 - Check container has access to `/dev/snd`
 - Test audio device with: `arecord -l` from Unraid terminal
 
 **Web interface not accessible:**
+
 - Verify port 8080 is not in use by another service
 - Check container logs for startup errors
 - Ensure firewall/network settings allow access
 
 **Performance issues:**
+
 - Move appdata to SSD cache drive
 - Increase container memory limit
 - Check CPU usage during bird detection
@@ -227,6 +232,7 @@ Set up notifications for rare bird species or high-confidence detections.
 ### Configuration Backup
 
 Essential files to backup:
+
 - `/mnt/user/appdata/birdnet-go/config/config.yaml`
 - `/mnt/user/appdata/birdnet-go/data/birdnet.db`
 
@@ -236,4 +242,4 @@ Use Unraid's built-in backup tools or third-party plugins to backup the entire a
 
 ## License
 
-BirdNET-Go is open source software. See the [main repository](https://github.com/tphakala/birdnet-go) for license details. 
+BirdNET-Go is open source software. See the [main repository](https://github.com/tphakala/birdnet-go) for license details.

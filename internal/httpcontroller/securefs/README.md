@@ -7,6 +7,7 @@ SecureFS now includes intelligent caching to eliminate performance bottlenecks i
 ## Performance Improvements
 
 ### Real-World Spectrogram Generation Scenario
+
 ```
 BenchmarkRealWorldSpectrogramScenario/WithoutCache-16    31,308 ns/op   16,640 B/op   185 allocs/op
 BenchmarkRealWorldSpectrogramScenario/WithCache-16        2,347 ns/op      960 B/op    10 allocs/op
@@ -14,7 +15,8 @@ BenchmarkRealWorldSpectrogramScenario/WithCache-16        2,347 ns/op      960 B
 
 **13.3x performance improvement** with **17.3x reduction in memory allocations**
 
-### Repeated Operations Scenario  
+### Repeated Operations Scenario
+
 ```
 BenchmarkRepeatedStatOperationsWithoutCache-16          21,515 ns/op   10,176 B/op   131 allocs/op
 BenchmarkRepeatedStatOperationsWithCache-16              2,477 ns/op      768 B/op    15 allocs/op
@@ -31,7 +33,7 @@ The caching system optimizes these expensive operations:
    - High impact on performance
 
 2. **Path Validation** (`ValidateRelativePath`)
-   - TTL: 10 minutes  
+   - TTL: 10 minutes
    - Deterministic results, safe to cache long-term
 
 3. **Path Within Base Checks** (`IsPathWithinBase`)
@@ -49,6 +51,7 @@ The caching system optimizes these expensive operations:
 ## Cache Management
 
 ### Automatic Cleanup
+
 ```go
 // Start background cleanup (recommended)
 stopCh := sfs.StartCacheCleanup(5 * time.Minute)
@@ -58,22 +61,24 @@ close(stopCh)
 ```
 
 ### Manual Cache Management
+
 ```go
 // Clear expired entries manually
 sfs.ClearExpiredCache()
 
 // Get cache statistics for monitoring
 stats := sfs.GetCacheStats()
-fmt.Printf("Validate cache: %d entries (%d expired)\n", 
+fmt.Printf("Validate cache: %d entries (%d expired)\n",
     stats.ValidateTotal, stats.ValidateExpired)
 ```
 
 ### Cache Statistics
+
 ```go
 type CacheStats struct {
     AbsPathTotal      int // Absolute path cache entries
     AbsPathExpired    int
-    ValidateTotal     int // Path validation cache entries  
+    ValidateTotal     int // Path validation cache entries
     ValidateExpired   int
     WithinBaseTotal   int // Path within base cache entries
     WithinBaseExpired int
@@ -96,6 +101,7 @@ The V2 JSON API was significantly slower than the HTMX API due to:
 ## Architecture
 
 The smart memoization uses:
+
 - **Thread-safe caching** with `sync.Map` for concurrent access
 - **TTL-based expiration** with different lifetimes for different operation types
 - **Configurable cache policies** optimized for each operation type
@@ -118,6 +124,7 @@ if err != nil {
 ## Memory Impact
 
 The cache uses minimal memory overhead:
+
 - Small cache entries (typically <100 bytes each)
 - Automatic expiration prevents unbounded growth
 - Background cleanup removes expired entries

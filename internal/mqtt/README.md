@@ -7,6 +7,7 @@ The `mqtt` package provides a robust MQTT client implementation for BirdNET-Go, 
 ## Package Purpose
 
 This package serves as the MQTT integration layer for BirdNET-Go, allowing:
+
 - Real-time publishing of bird detection events
 - Integration with home automation systems (Home Assistant, Node-RED, etc.)
 - Reliable message delivery with automatic reconnection
@@ -44,10 +45,12 @@ This package serves as the MQTT integration layer for BirdNET-Go, allowing:
 ## Dependencies
 
 ### External Dependencies
+
 - `github.com/eclipse/paho.mqtt.golang`: MQTT client library
 - `github.com/prometheus/client_golang`: Metrics collection
 
 ### Internal Dependencies
+
 - `internal/conf`: Configuration management
 - `internal/errors`: Enhanced error handling system
 - `internal/logging`: Centralized logging infrastructure
@@ -58,14 +61,16 @@ This package serves as the MQTT integration layer for BirdNET-Go, allowing:
 ## Key Features
 
 ### Connection Management
+
 - **Automatic Reconnection**: Configurable reconnection with exponential backoff
 - **Connection Cooldown**: Prevents rapid reconnection attempts
 - **DNS Resolution**: Pre-flight DNS checks with proper error handling
 - **Thread Safety**: All operations are protected by appropriate locking
 
 ### Error Handling
+
 - **Enhanced Errors**: All errors include component, category, and context
-- **Error Categories**: 
+- **Error Categories**:
   - `CategoryMQTTConnection`: Connection-related errors
   - `CategoryMQTTPublish`: Publishing errors
   - `CategoryNetwork`: Network and DNS errors
@@ -73,6 +78,7 @@ This package serves as the MQTT integration layer for BirdNET-Go, allowing:
   - `CategoryValidation`: Data validation errors
 
 ### Observability
+
 - **Metrics Collected**:
   - Connection status (gauge)
   - Messages delivered (counter)
@@ -82,6 +88,7 @@ This package serves as the MQTT integration layer for BirdNET-Go, allowing:
   - Reconnection attempts (counter)
 
 ### Logging
+
 - **Dedicated Log File**: `logs/mqtt.log`
 - **Dynamic Log Levels**: Can be changed at runtime
 - **Debug Mode**: Detailed logging for troubleshooting
@@ -90,6 +97,7 @@ This package serves as the MQTT integration layer for BirdNET-Go, allowing:
 ## Configuration
 
 ### Settings Structure
+
 ```go
 type Config struct {
     Broker            string        // MQTT broker URL (e.g., "tcp://localhost:1883")
@@ -108,6 +116,7 @@ type Config struct {
 ```
 
 ### Default Configuration
+
 - ReconnectCooldown: 5 seconds
 - ReconnectDelay: 1 second
 - ConnectTimeout: 30 seconds
@@ -118,6 +127,7 @@ type Config struct {
 ## Usage Examples
 
 ### Basic Usage
+
 ```go
 // Create client
 client, err := mqtt.NewClient(settings, metrics)
@@ -141,6 +151,7 @@ defer client.Disconnect()
 ```
 
 ### Connection Testing
+
 ```go
 // Run comprehensive connection test
 resultChan := make(chan mqtt.TestResult, 10)
@@ -157,25 +168,28 @@ for result := range resultChan {
 ### Secure Connection Examples
 
 #### Basic TLS Connection
+
 ```yaml
 realtime:
   mqtt:
     enabled: true
-    broker: "tls://mqtt.example.com:8883"  # or ssl:// or mqtts://
+    broker: "tls://mqtt.example.com:8883" # or ssl:// or mqtts://
     username: "your-username"
     password: "your-password"
 ```
 
 #### Self-Signed Certificate
+
 ```yaml
 realtime:
   mqtt:
     broker: "tls://mqtt.local:8883"
     tls:
-      insecureSkipVerify: true  # Skip certificate verification
+      insecureSkipVerify: true # Skip certificate verification
 ```
 
 #### Custom CA Certificate
+
 ```yaml
 realtime:
   mqtt:
@@ -185,6 +199,7 @@ realtime:
 ```
 
 #### Mutual TLS (mTLS)
+
 ```yaml
 realtime:
   mqtt:
@@ -198,6 +213,7 @@ realtime:
 ## Testing
 
 ### Test Coverage
+
 - Basic functionality tests
 - Error handling scenarios
 - Reconnection behavior
@@ -207,6 +223,7 @@ realtime:
 - DNS resolution edge cases
 
 ### Running Tests
+
 ```bash
 # Run all tests
 go test ./internal/mqtt/...
@@ -219,7 +236,9 @@ go test -v ./internal/mqtt/...
 ```
 
 ### Test Environment
+
 Tests support multiple brokers:
+
 1. Local broker (preferred): `localhost:1883`
 2. Public test broker: `test.mosquitto.org:1883`
 3. Custom broker via `MQTT_TEST_BROKER` environment variable
@@ -227,13 +246,15 @@ Tests support multiple brokers:
 ## Security Considerations
 
 ### Authentication
+
 - **Username/Password**: Basic authentication support
 - **Anonymous Connections**: Can connect without credentials if broker allows
 
 ### TLS/SSL Support
+
 - **Automatic Detection**: TLS is enabled automatically for `ssl://`, `tls://`, `mqtts://` schemes
 - **Port 8883**: Standard MQTTS port with TLS encryption
-- **Certificate Verification**: 
+- **Certificate Verification**:
   - Validates server certificates by default
   - `InsecureSkipVerify` option for self-signed certificates (use with caution)
 - **Custom CA Certificates**: Support for custom Certificate Authority certificates
@@ -244,13 +265,16 @@ Tests support multiple brokers:
   - Client private key (`ClientKey`)
 
 ### TLS Certificate Management
+
 BirdNET-Go provides a secure certificate management system:
+
 - **UI Certificate Entry**: Paste PEM-encoded certificates directly in the web interface
 - **Secure Storage**: Certificates are saved to `config/tls/mqtt/` with proper permissions
 - **File Permissions**: Private keys (0600), certificates (0644)
 - **Automatic Path Management**: The system handles file paths internally
 
 ### Security Best Practices
+
 1. **Always use TLS** for production deployments
 2. **Verify certificates** unless using self-signed certs in trusted networks
 3. **Protect private keys** with appropriate file permissions
@@ -261,6 +285,7 @@ BirdNET-Go provides a secure certificate management system:
 ## Best Practices for Developers and LLMs
 
 ### For Developers
+
 1. Always use context for cancellation support
 2. Check `IsConnected()` before publishing
 3. Handle errors appropriately with logging
@@ -268,6 +293,7 @@ BirdNET-Go provides a secure certificate management system:
 5. Use the test utilities for debugging connection issues
 
 ### For LLMs
+
 1. **Error Handling**: Always use the enhanced error system from `internal/errors`
 2. **Logging**: Use the package-level `mqttLogger` for consistency
 3. **Thread Safety**: Protect shared state with appropriate locking
@@ -278,18 +304,21 @@ BirdNET-Go provides a secure certificate management system:
 ## Common Issues and Troubleshooting
 
 ### Connection Failures
+
 - Check DNS resolution using the test utilities
 - Verify broker address format (e.g., `tcp://host:port`)
 - Ensure network connectivity to the broker
 - Check authentication credentials if required
 
 ### Publishing Failures
+
 - Verify client is connected before publishing
 - Check topic format and permissions
 - Monitor publish timeout settings
 - Review broker logs for additional context
 
 ### Debugging
+
 1. Enable debug mode: `client.SetDebug(true)`
 2. Check `logs/mqtt.log` for detailed information
 3. Use the connection test feature for diagnostics
@@ -298,7 +327,9 @@ BirdNET-Go provides a secure certificate management system:
 ## User Interface Integration
 
 ### Settings UI
+
 The MQTT integration settings are managed through a web interface located at:
+
 - **Template**: `views/pages/settings/integrationSettings.html` (lines 106-287)
 - **Handler**: `internal/httpcontroller/handlers/settings.go`
 
@@ -345,7 +376,7 @@ The MQTT integration settings are managed through a web interface located at:
 1. **Settings Handler** (`handlers/settings.go`):
    - **SaveSettings**: Processes form data and updates MQTT configuration
    - **TLS Certificate Processing**: `processTLSCertificates` saves certificates securely before form processing
-   - **Anonymous Connection**: Special handling in `updateSettingsFromForm` 
+   - **Anonymous Connection**: Special handling in `updateSettingsFromForm`
    - **Configuration Changes**: Detected by `mqttSettingsChanged`
    - **Control Channel**: Sends `reconfigure_mqtt` command when settings change
 
@@ -359,7 +390,9 @@ The MQTT integration settings are managed through a web interface located at:
    - Password fields are handled securely (never logged)
 
 ### Home Assistant Integration Notes
+
 The UI includes specific guidance for Home Assistant users:
+
 - Recommends enabling the retain flag for MQTT messages
 - Explains that retained messages allow Home Assistant to retrieve last known sensor states after restart
 - Compares behavior to platforms like Zigbee2MQTT
@@ -367,6 +400,7 @@ The UI includes specific guidance for Home Assistant users:
 ## Future Enhancements
 
 Potential improvements for consideration:
+
 - Message queue for offline publishing
 - Multiple broker support for failover
 - Message compression options

@@ -137,7 +137,7 @@ When parsing API responses, always include what was expected:
 ```go
 // Good - Shows exactly what field was missing
 Context("expected_path", "query.pages")
-Context("expected_path", "thumbnail.source") 
+Context("expected_path", "thumbnail.source")
 Context("expected_path", "imageinfo[0].extmetadata")
 
 // Also include the original error details
@@ -225,6 +225,7 @@ func init() {
 ```
 
 The `RegisterComponent` function takes two parameters:
+
 - `packagePattern`: The pattern to match in the call stack (usually the package name)
 - `componentName`: The name to use for telemetry (should match what you use with `.Component()`)
 
@@ -248,6 +249,7 @@ Components should match your package structure:
 ### Component Tagging Best Practices
 
 1. **Always explicitly set the component** when creating errors:
+
    ```go
    err := errors.New(originalErr).
        Component("birdweather").  // Explicit is better than implicit
@@ -293,7 +295,7 @@ if err != nil {
     } else {
         descriptiveMessage = fmt.Sprintf("failed to parse Wikipedia API response pages: %s", err.Error())
     }
-    
+
     return errors.Newf("%s", descriptiveMessage).
         Component("imageprovider").
         Category(errors.CategoryImageFetch).
@@ -366,6 +368,7 @@ if err != nil {
 ### Error Titles
 
 The system generates meaningful Sentry titles based on:
+
 1. Component name (e.g., "Imageprovider")
 2. Category (e.g., "Image Fetch Error")
 3. Operation (e.g., "Parse Pages From Response")
@@ -375,6 +378,7 @@ Result: "Imageprovider Image Fetch Error Parse Pages From Response"
 ### Error Levels
 
 Errors are automatically assigned appropriate Sentry levels:
+
 - `CategoryValidation`, `CategoryDatabase`: Error level
 - `CategoryNetwork`, `CategoryFileIO`: Warning level
 - `CategoryModelInit`, `CategoryModelLoad`: Error level (critical)
@@ -386,11 +390,13 @@ All context data is automatically added to Sentry with privacy scrubbing applied
 ## Migration from Standard Errors
 
 ### Before
+
 ```go
 return fmt.Errorf("failed to save detection: %w", err)
 ```
 
 ### After
+
 ```go
 return errors.New(err).
     Component("datastore").
@@ -427,6 +433,7 @@ if errors.As(err, &enhancedErr) {
 ### Poor Sentry Titles
 
 If you see generic titles like `*errors.errorString` or `*errors.SentryError`:
+
 1. Ensure you're using the enhanced error system (`errors.New().Build()`)
 2. Always specify `Component()` and `Category()`
 3. Add descriptive `Context("operation", "...")` data
@@ -435,6 +442,7 @@ If you see generic titles like `*errors.errorString` or `*errors.SentryError`:
 ### Incorrect Component Attribution
 
 If errors are being attributed to the wrong component (e.g., birdweather errors tagged as imageprovider):
+
 1. **Check component registration**: Ensure your component is registered in the `init()` function
 2. **Use explicit component setting**: Always use `.Component("your-component")` instead of relying on auto-detection
 3. **Debug auto-detection**: The system searches the call stack when no component is set, which can pick up the wrong component if:
@@ -443,6 +451,7 @@ If errors are being attributed to the wrong component (e.g., birdweather errors 
    - Shared handlers process errors from multiple components
 
 Example of the issue:
+
 ```go
 // If "birdweather" is not registered, and this error passes through
 // code that contains "imageprovider", it will be incorrectly tagged
@@ -453,6 +462,7 @@ err := errors.New(originalErr).
 ```
 
 Solution:
+
 ```go
 // 1. Add to init() in errors.go:
 RegisterComponent("birdweather", "birdweather")
@@ -467,6 +477,7 @@ err := errors.New(originalErr).
 ### Generic Error Messages
 
 If your error messages are too generic (like "key not found"):
+
 1. Create descriptive error messages that specify what was expected
 2. Use the pattern: check for specific error types and provide context
 3. Add `expected_path` context for API parsing errors
@@ -491,6 +502,7 @@ if err.Error() == "key not found" {
 ### Performance Impact
 
 The enhanced error system is designed to be lightweight:
+
 - Context data is only processed when errors occur
 - Telemetry reporting is asynchronous via event bus
 - Privacy scrubbing uses efficient regex patterns
@@ -523,6 +535,7 @@ errors.Join(errs...)       // Standard error joining
 ### Function Availability
 
 The custom errors package provides:
+
 - **Enhanced Functions**: `errors.New()`, `errors.Newf()` with telemetry integration
 - **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.Unwrap()`, `errors.Join()`
 - **Specialized Functions**: Component detection, context building, privacy scrubbing
@@ -530,6 +543,7 @@ The custom errors package provides:
 ### Migration Checklist
 
 When updating existing code:
+
 1. ✅ Remove any `import "errors"` or `import stderrors "errors"`
 2. ✅ Ensure `import "github.com/tphakala/birdnet-go/internal/errors"` is present
 3. ✅ Replace `fmt.Errorf()` with `errors.Newf()` where enhanced telemetry is needed
@@ -548,9 +562,9 @@ graph LR
     B -->|Publish| C[Event Bus]
     C -->|Async| D[Telemetry Worker]
     C -->|Async| E[Notification Worker]
-    
+
     F[Fast Path] -->|No Consumers| G[Skip Publishing]
-    
+
     style C fill:#f9f,stroke:#333,stroke-width:4px
     style F fill:#ff9,stroke:#333,stroke-width:2px
 ```
@@ -566,11 +580,11 @@ graph LR
 
 The event bus integration provides exceptional performance:
 
-| Operation | Synchronous (Before) | Asynchronous (After) | Improvement |
-|-----------|---------------------|---------------------|-------------|
-| Error.Build() | 100.78ms | 30.77μs | 3,275x |
-| Batch (1000 errors) | 5.13s | <50ms | 100x+ |
-| No telemetry | 200ns | 2.5ns | 80x |
+| Operation           | Synchronous (Before) | Asynchronous (After) | Improvement |
+| ------------------- | -------------------- | -------------------- | ----------- |
+| Error.Build()       | 100.78ms             | 30.77μs              | 3,275x      |
+| Batch (1000 errors) | 5.13s                | <50ms                | 100x+       |
+| No telemetry        | 200ns                | 2.5ns                | 80x         |
 
 ### Event Publisher Interface
 
@@ -583,6 +597,7 @@ type EventPublisher interface {
 ```
 
 This design prevents circular dependencies and allows for:
+
 - Mock implementations in tests
 - Alternative event bus implementations
 - Clean separation of concerns
@@ -607,6 +622,7 @@ eventBus, err := events.Initialize(&events.Config{
 ### Error Deduplication
 
 Errors are automatically deduplicated by the event bus:
+
 - Same component + category + message within 1 minute window
 - Prevents notification spam
 - Reduces telemetry noise

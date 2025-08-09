@@ -26,11 +26,13 @@ type Recorder interface {
 ### Available Implementations
 
 #### Production Implementations
+
 - `BirdNETMetrics` - For BirdNET model operations
 - `DatastoreMetrics` - For database operations
 - Other concrete metric types implement this interface
 
 #### Test Implementations
+
 - `TestRecorder` - Captures metrics for verification in tests (includes `HasRecordedMetrics()` for negative tests)
 - `NoOpRecorder` - Does nothing, useful when metrics aren't needed
 
@@ -39,6 +41,7 @@ type Recorder interface {
 To ensure consistency across the codebase, follow these naming conventions for operations:
 
 ### General Patterns
+
 - Use lowercase with underscores: `operation_name`
 - Be specific but concise: `db_query` not `database_query_operation`
 - Include the action and target: `cache_get`, `model_load`
@@ -46,6 +49,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 ### Common Operation Names
 
 #### Database Operations
+
 - `db_query` - Database query operations
 - `db_insert` - Database insert operations
 - `db_update` - Database update operations
@@ -55,6 +59,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 **Note**: For DatastoreMetrics, database operations should include the table name using the format `operation:table` (e.g., `db_query:notes`, `db_insert:detections`). This allows proper tracking of per-table metrics.
 
 #### Model Operations
+
 - `model_load` - Loading ML models
 - `prediction` - Running predictions
 - `chunk_process` - Processing audio chunks
@@ -62,6 +67,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 - `range_filter` - Applying range filters
 
 #### Cache Operations
+
 - `cache_get` - Retrieving from cache
 - `cache_set` - Writing to cache
 - `cache_delete` - Removing from cache
@@ -69,6 +75,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 - `cache_miss` - Failed cache retrieval
 
 #### Note Operations
+
 - `note_create` - Creating new notes
 - `note_update` - Updating existing notes
 - `note_delete` - Deleting notes
@@ -76,6 +83,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 - `note_lock` - Acquiring note locks
 
 #### Other Operations
+
 - `search` - Search operations
 - `analytics` - Analytics queries
 - `weather_data` - Weather data operations
@@ -84,6 +92,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 - `maintenance` - Maintenance operations
 
 ### Status Values
+
 - `success` - Operation completed successfully
 - `error` - Operation failed with an error
 - `started` - Operation has begun (for long-running operations)
@@ -92,6 +101,7 @@ To ensure consistency across the codebase, follow these naming conventions for o
 - `cancelled` - Operation was cancelled
 
 ### Error Types
+
 - `validation` - Input validation errors
 - `io` - I/O related errors
 - `network` - Network communication errors
@@ -120,9 +130,9 @@ func (s *MyService) ProcessData() error {
     defer func() {
         s.metrics.RecordDuration("process_data", time.Since(start).Seconds())
     }()
-    
+
     // Do processing...
-    
+
     s.metrics.RecordOperation("process_data", "success")
     return nil
 }
@@ -134,17 +144,17 @@ func (s *MyService) ProcessData() error {
 func TestProcessData(t *testing.T) {
     recorder := metrics.NewTestRecorder()
     service := NewMyService(recorder)
-    
+
     err := service.ProcessData()
     if err != nil {
         t.Fatal(err)
     }
-    
+
     // Verify metrics
     if count := recorder.GetOperationCount("process_data", "success"); count != 1 {
         t.Errorf("expected 1 success operation, got %d", count)
     }
-    
+
     // Check if any metrics were recorded
     if !recorder.HasRecordedMetrics() {
         t.Error("expected metrics to be recorded")
@@ -153,7 +163,7 @@ func TestProcessData(t *testing.T) {
 
 func TestNoMetricsRecorded(t *testing.T) {
     recorder := metrics.NewTestRecorder()
-    
+
     // Verify no metrics were recorded
     if recorder.HasRecordedMetrics() {
         t.Error("expected no metrics to be recorded")
@@ -164,6 +174,7 @@ func TestNoMetricsRecorded(t *testing.T) {
 ### Migration from Concrete Types
 
 Before:
+
 ```go
 type Service struct {
     metrics *metrics.DatastoreMetrics
@@ -171,6 +182,7 @@ type Service struct {
 ```
 
 After:
+
 ```go
 type Service struct {
     metrics metrics.Recorder
@@ -188,11 +200,13 @@ type Service struct {
 ## When to Use Concrete Types vs Interface
 
 Use the **Recorder interface** when:
+
 - The component needs basic metric recording (operations, durations, errors)
 - You want to improve testability
 - The component might be reused with different metric backends
 
 Use **concrete metric types** when:
+
 - You need access to specialized metrics (e.g., histograms, gauges)
 - The component is tightly coupled to a specific metric implementation
 - You need the full Prometheus collector interface

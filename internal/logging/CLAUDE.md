@@ -53,7 +53,7 @@ logger.Error("operation failed",
 
 // Debug (check if enabled for expensive ops)
 if logger.Enabled(ctx, slog.LevelDebug) {
-    logger.Debug("expensive debug info", 
+    logger.Debug("expensive debug info",
         "data", expensiveOperation())
 }
 ```
@@ -81,13 +81,14 @@ if logger.Enabled(ctx, slog.LevelDebug) {
 ```go
 // For specialized file logging
 logger, closer, err := logging.NewFileLogger(
-    "logs/myservice.log", 
+    "logs/myservice.log",
     "myservice",
     currentLogLevel)
 defer closer()
 ```
 
 ### Standard Services (auto-created)
+
 - birdweather, imageprovider, mqtt, notification
 - weather, telemetry, events, init-manager
 
@@ -99,7 +100,7 @@ logging.SetLogLevel(logging.DebugLevel)
 
 // Available levels
 logging.ErrorLevel  // Errors only
-logging.WarnLevel   // Warnings + errors  
+logging.WarnLevel   // Warnings + errors
 logging.InfoLevel   // Info + above (default)
 logging.DebugLevel  // Everything
 ```
@@ -114,7 +115,7 @@ err := errors.New(originalErr).
     Category(errors.CategoryNetwork).
     Build()
 
-logger.Error("operation failed", 
+logger.Error("operation failed",
     "error", err,  // Full enhanced error context
     "component", "myservice")
 ```
@@ -126,7 +127,7 @@ logger.Error("operation failed",
 func initializeSystem() error {
     // ❌ AVOID in init code
     // return errors.New(err).Build()
-    
+
     // ✅ CORRECT for init
     return fmt.Errorf("init failed: %w", err)
 }
@@ -135,11 +136,13 @@ func initializeSystem() error {
 ## Privacy & Performance
 
 ### Privacy Requirements (from #868)
+
 - Always scrub sensitive data before logging
 - Use structured logging for automatic scrubbing
 - Never log: passwords, tokens, connection strings, full paths
 
 ### Performance Patterns
+
 - Check log level before expensive operations
 - Use async event bus for high-frequency errors
 - Batch logging for bulk operations
@@ -147,18 +150,22 @@ func initializeSystem() error {
 ## Troubleshooting
 
 ### Logger is nil?
+
 1. Ensure `logging.Init()` called in main
 2. Use defensive fallback pattern (shown above)
 3. Check circular dependencies
 
 ### Missing logs?
+
 1. Verify log level: `logging.SetLogLevel()`
 2. Check file permissions for `logs/` directory
 3. Ensure service logger initialized in `init()`
 
 ## Full Documentation
+
 For details: `internal/logging/README.md`
+
 - Architecture: lines 5-22
-- Service patterns: lines 122-166  
+- Service patterns: lines 122-166
 - Best practices: lines 168-209
 - Privacy/security: lines 510-543

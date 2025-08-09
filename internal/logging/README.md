@@ -52,7 +52,7 @@ var logger *slog.Logger
 
 func init() {
     logger = logging.ForService("myservice")
-    
+
     // Defensive initialization for early startup
     if logger == nil {
         logger = slog.Default().With("service", "myservice")
@@ -61,11 +61,11 @@ func init() {
 
 func DoWork() {
     logger.Info("Processing started", "items", 42)
-    
+
     // With timing
     start := time.Now()
     // ... do work ...
-    logger.Debug("Processing completed", 
+    logger.Debug("Processing completed",
         "duration_ms", time.Since(start).Milliseconds(),
         "processed", 42)
 }
@@ -74,8 +74,9 @@ func DoWork() {
 ## Log Levels
 
 Available log levels (from highest to lowest priority):
+
 - `ErrorLevel` - Error conditions
-- `WarnLevel` - Warning conditions  
+- `WarnLevel` - Warning conditions
 - `InfoLevel` - Informational messages
 - `DebugLevel` - Debug messages
 
@@ -136,7 +137,7 @@ var logger *slog.Logger
 func init() {
     // Create service-specific logger
     logger = logging.ForService("birdweather")
-    
+
     // Defensive initialization for early startup
     if logger == nil {
         logger = slog.Default().With("service", "birdweather")
@@ -145,19 +146,19 @@ func init() {
 
 // Use throughout the module
 func UploadDetection(detection Detection) error {
-    logger.Debug("Starting upload", 
+    logger.Debug("Starting upload",
         "species", detection.Species,
         "confidence", detection.Confidence)
-    
+
     // ... perform upload ...
-    
+
     if err != nil {
         logger.Error("Upload failed",
             "error", err,
             "species", detection.Species)
         return err
     }
-    
+
     logger.Info("Upload successful",
         "species", detection.Species,
         "id", detection.ID)
@@ -221,7 +222,7 @@ err := errors.New(originalErr).
     Build()
 
 // Log with full error context
-logger.Error("Operation failed", 
+logger.Error("Operation failed",
     "error", err,
     "component", "birdweather")
 ```
@@ -233,7 +234,7 @@ The logging system integrates with the event bus for asynchronous error processi
 ```go
 // Errors are automatically published to the event bus
 // Workers consume these events for telemetry and notifications
-logger.Error("Critical error occurred", 
+logger.Error("Critical error occurred",
     "error", enhancedErr,
     "severity", "critical")
 
@@ -251,10 +252,10 @@ func handleRequest(req *Request) {
         "method", req.Method,
         "path", req.Path,
         "client_ip", req.ClientIP)
-    
+
     start := time.Now()
     resp, err := processRequest(req)
-    
+
     logger.Info("Request completed",
         "method", req.Method,
         "path", req.Path,
@@ -270,10 +271,10 @@ func handleRequest(req *Request) {
 func processBatch(items []Item) {
     logger.Info("Batch processing started",
         "batch_size", len(items))
-    
+
     processed := 0
     failed := 0
-    
+
     for _, item := range items {
         if err := processItem(item); err != nil {
             failed++
@@ -284,7 +285,7 @@ func processBatch(items []Item) {
             processed++
         }
     }
-    
+
     logger.Info("Batch processing completed",
         "total", len(items),
         "processed", processed,
@@ -301,7 +302,7 @@ func updateConfiguration(newConfig Config) {
         "old_level", oldLevel,
         "new_level", newConfig.LogLevel,
         "changed_by", "admin")
-    
+
     applyConfig(newConfig)
 }
 ```
@@ -311,12 +312,12 @@ func updateConfiguration(newConfig Config) {
 ```go
 func initializeComponent() error {
     logger.Debug("initializing component")
-    
+
     if err := setupDependencies(); err != nil {
         logger.Error("dependency setup failed", "error", err)
         return err
     }
-    
+
     logger.Info("component initialized successfully",
         "dependencies", len(dependencies),
         "startup_time_ms", time.Since(start).Milliseconds())
@@ -329,7 +330,7 @@ func initializeComponent() error {
 ```go
 func reportPerformanceMetrics() {
     stats := getSystemStats()
-    
+
     logger.Info("system performance metrics",
         "events_processed", stats.EventsProcessed,
         "events_dropped", stats.EventsDropped,
@@ -365,15 +366,15 @@ func TestMyFunction(t *testing.T) {
     testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
         Level: slog.LevelDebug,
     }))
-    
+
     // Replace module logger for testing
     oldLogger := logger
     logger = testLogger
     defer func() { logger = oldLogger }()
-    
+
     // Run test
     DoWork()
-    
+
     // Verify logs
     logs := buf.String()
     assert.Contains(t, logs, "Processing started")
@@ -386,7 +387,7 @@ func TestMyFunction(t *testing.T) {
 2. **Conditional Logging**: Check level before expensive operations
    ```go
    if logger.Enabled(context.Background(), slog.LevelDebug) {
-       logger.Debug("Expensive debug info", 
+       logger.Debug("Expensive debug info",
            "data", expensiveOperation())
    }
    ```
@@ -401,7 +402,7 @@ To migrate from standard `log` package:
 // Before
 log.Printf("Processing %d items", count)
 
-// After  
+// After
 logger.Info("Processing items", "count", count)
 
 // Before
@@ -416,6 +417,7 @@ logger.Error("Operation failed", "error", err)
 ### Logger Returns Discard Writer
 
 If `NewFileLogger` returns a discard logger, check:
+
 1. Directory permissions for `logs/` folder
 2. Disk space availability
 3. File system errors in application logs
@@ -430,6 +432,7 @@ If `NewFileLogger` returns a discard logger, check:
 ### Performance Impact
 
 If logging impacts performance:
+
 1. Reduce log level (e.g., Info instead of Debug)
 2. Use conditional logging for expensive operations
 3. Consider sampling for high-frequency events
@@ -455,7 +458,7 @@ func initializeSystem() error {
     if err := validate(); err != nil {
         return fmt.Errorf("validation failed: %w", err)
     }
-    
+
     logger := logging.ForService("init-manager")
     logger.Info("system initialization completed")
     return nil
@@ -479,10 +482,10 @@ func getLoggerSafe(service string) *slog.Logger {
 ```go
 func monitorIntegrationHealth() {
     logger := logging.ForService("health-monitor")
-    
+
     // Check all integrated systems
     systems := []string{"telemetry", "events", "notifications"}
-    
+
     for _, system := range systems {
         if health := checkSystemHealth(system); !health.OK {
             logger.Warn("system health check failed",
@@ -516,7 +519,7 @@ The telemetry system provides privacy scrubbing that integrates with logging:
 ```go
 // Privacy scrubbing is automatically applied to telemetry logs
 // Sensitive data is scrubbed before being sent to external services
-logger.Info("user action logged", 
+logger.Info("user action logged",
     "action", "detection_upload",
     "user_id", userID, // Automatically scrubbed in telemetry
     "success", true)
@@ -545,6 +548,7 @@ logger.Error("database connection failed",
 ## Future Enhancements
 
 Planned improvements:
+
 - Structured query support for log analysis
 - Integration with centralized logging systems
 - Advanced filtering and routing

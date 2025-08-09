@@ -151,7 +151,7 @@ type OAuth2Server struct {
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
-	
+
 	// Token persistence
 	tokensFile     string
 	persistTokens  bool
@@ -305,6 +305,7 @@ configureLocalNetworkCookieStore()
 ## Cross-Platform Compatibility
 
 The security package is designed to work on:
+
 - Linux
 - macOS
 - Windows
@@ -314,7 +315,7 @@ It properly handles different network interface naming conventions and subnet ca
 ## Best Practices
 
 1. Always maintain secure values for client secrets and session keys
-2. Use HTTPS in production environments 
+2. Use HTTPS in production environments
 3. Be cautious when enabling local network authentication bypass
 4. Regularly rotate access tokens using appropriate expiration times
 5. Verify the identity provider configurations (redirect URIs, client IDs, etc.)
@@ -328,7 +329,7 @@ It properly handles different network interface naming conventions and subnet ca
 - Concurrent access to token stores is protected by mutexes
 - The package cleans up expired tokens to prevent memory leaks and unauthorized access
 - Always verify that redirect URIs match the configured hosts to prevent open redirectors
-- Session files are stored with strict permissions (0600) to prevent unauthorized access 
+- Session files are stored with strict permissions (0600) to prevent unauthorized access
 
 ## Testing
 
@@ -346,4 +347,4 @@ security.SetTestConfigPath("/path/for/testing")
 
 // Make sure to reset it after the test
 defer security.SetTestConfigPath("")
-``` 
+```

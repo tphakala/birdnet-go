@@ -114,13 +114,13 @@ func main() {
             Longitude: 24.5678,
         },
     }
-    
+
     client, err := birdweather.New(settings)
     if err != nil {
         log.Fatalf("Failed to create BirdWeather client: %v", err)
     }
     defer client.Close()
-    
+
     // Use the client...
 }
 ```
@@ -140,7 +140,7 @@ func publishDetection(client *birdweather.BwClient, pcmData []byte) error {
         ScientificName: "Turdus merula",
         Confidence:    0.95,
     }
-    
+
     return client.Publish(note, pcmData)
 }
 ```
@@ -151,11 +151,11 @@ func publishDetection(client *birdweather.BwClient, pcmData []byte) error {
 func testConnection(client *birdweather.BwClient) {
     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
     defer cancel()
-    
+
     resultChan := make(chan birdweather.TestResult)
-    
+
     go client.TestConnection(ctx, resultChan)
-    
+
     for result := range resultChan {
         if result.IsProgress {
             fmt.Printf("Progress: %s - %s\n", result.Stage, result.State)
@@ -271,10 +271,12 @@ When FFmpeg is available, bird call audio is processed using the `loudnorm` filt
 - **Loudness Range (LRA)**: 11 LU - maintains appropriate dynamic range
 
 The normalization process involves:
+
 1.  **Pass 1 (Analysis)**: Reads raw PCM audio data and runs `loudnorm` in analysis mode (`print_format=json`) to measure the input audio's characteristics (I, LRA, TP, Threshold).
 2.  **Pass 2 (Normalization & Encoding)**: Reads the PCM data again, applies the `loudnorm` filter using the measured values from Pass 1 (`linear=true`, `measured_*` parameters), and encodes the normalized audio directly to FLAC format in a single step.
 
 Benefits:
+
 - Produces higher quality, more consistent normalization compared to single-pass, avoiding audible artifacts like "pumping".
 - Improves listening experience across different devices.
 - Makes quiet bird calls more audible without clipping loud ones.
@@ -312,6 +314,7 @@ Comprehensive tests are provided for all key functionality:
 ## Thread Safety
 
 The package is designed with concurrent usage in mind:
+
 - Rate limiting uses mutex locks
 - HTTP client is safe for concurrent use
-- Configuration data is not modified after initialization 
+- Configuration data is not modified after initialization

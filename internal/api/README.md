@@ -13,7 +13,7 @@ internal/api/
     ├── api_test.go        - Tests for main API functionality
     ├── auth/              - Authentication package
     │   ├── adapter.go     - Adapter for security package
-    │   ├── middleware.go  - Authentication middleware  
+    │   ├── middleware.go  - Authentication middleware
     │   └── service.go     - Authentication service interface
     ├── auth.go            - Authentication endpoints and handlers
     ├── auth_test.go       - Tests for authentication endpoints
@@ -51,10 +51,10 @@ The API implements a comprehensive, service-based authentication system managed 
 
 Key components of the `auth` package:
 
--   **`Service` Interface (`auth/service.go`)**: Defines the contract for authentication operations (checking access, validating tokens, basic auth, logout, etc.) and standard sentinel errors.
--   **`AuthMethod` Enum (`auth/service.go`)**: Represents different authentication methods (`Token`, `BrowserSession`, `BasicAuth`, `LocalSubnet`, `None`). Uses `go generate` with `stringer`.
--   **`SecurityAdapter` (`auth/adapter.go`)**: Implements the `Service` interface, adapting the `internal/security` package's `OAuth2Server` for core logic like session checks, token validation, and basic auth credential verification.
--   **`Middleware` (`auth/middleware.go`)**: An Echo middleware that uses the `AuthService` to enforce authentication. It checks if auth is required, attempts token and session authentication, sets context values (`isAuthenticated`, `username`, `authMethod`) on success, and handles unauthenticated requests appropriately (redirect for browsers, 401 for API clients).
+- **`Service` Interface (`auth/service.go`)**: Defines the contract for authentication operations (checking access, validating tokens, basic auth, logout, etc.) and standard sentinel errors.
+- **`AuthMethod` Enum (`auth/service.go`)**: Represents different authentication methods (`Token`, `BrowserSession`, `BasicAuth`, `LocalSubnet`, `None`). Uses `go generate` with `stringer`.
+- **`SecurityAdapter` (`auth/adapter.go`)**: Implements the `Service` interface, adapting the `internal/security` package's `OAuth2Server` for core logic like session checks, token validation, and basic auth credential verification.
+- **`Middleware` (`auth/middleware.go`)**: An Echo middleware that uses the `AuthService` to enforce authentication. It checks if auth is required, attempts token and session authentication, sets context values (`isAuthenticated`, `username`, `authMethod`) on success, and handles unauthenticated requests appropriately (redirect for browsers, 401 for API clients).
 
 **Authentication Flow:**
 
@@ -110,7 +110,7 @@ The middleware follows this decision flow:
 
 1. Checks for Bearer token and validates if present
 2. Falls back to session authentication for browser clients
-3. Determines appropriate response based on client type 
+3. Determines appropriate response based on client type
 4. Allows request to proceed if authentication succeeds, setting authentication details in the context
 
 ## Key Features
@@ -179,6 +179,7 @@ The middleware follows this decision flow:
 The API follows a consistent pattern for organizing routes:
 
 1. **Group-Based Structure**: Routes are organized by feature into logical groups:
+
    ```go
    analyticsGroup := c.Group.Group("/analytics")
    speciesGroup := analyticsGroup.Group("/species")
@@ -190,10 +191,11 @@ The API follows a consistent pattern for organizing routes:
    - Feature-specific data types and utilities
 
 3. **Access Control**: Each route group applies appropriate middleware:
+
    ```go
    // Public routes
-   c.Group.GET("/detections", c.GetDetections) 
-   
+   c.Group.GET("/detections", c.GetDetections)
+
    // Protected routes
    detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
    ```
@@ -244,6 +246,7 @@ The API provides endpoints for managing and testing the BirdNET range filter, wh
    - Returns success status and updated species count
 
 Example test request:
+
 ```json
 {
   "latitude": 60.1699,
@@ -254,6 +257,7 @@ Example test request:
 ```
 
 Example response:
+
 ```json
 {
   "species": [
@@ -333,27 +337,27 @@ Each detection event contains all the same data as a database entry plus additio
 **Client Implementation Example:**
 
 ```javascript
-const eventSource = new EventSource('/api/v2/detections/stream');
+const eventSource = new EventSource("/api/v2/detections/stream");
 
-eventSource.addEventListener('connected', function(event) {
-    const data = JSON.parse(event.data);
-    console.log('Connected to detection stream:', data.clientId);
+eventSource.addEventListener("connected", function (event) {
+  const data = JSON.parse(event.data);
+  console.log("Connected to detection stream:", data.clientId);
 });
 
-eventSource.addEventListener('detection', function(event) {
-    const detection = JSON.parse(event.data);
-    console.log('New detection:', detection.commonName, detection.confidence);
-    // Process the detection data
-    displayDetection(detection);
+eventSource.addEventListener("detection", function (event) {
+  const detection = JSON.parse(event.data);
+  console.log("New detection:", detection.commonName, detection.confidence);
+  // Process the detection data
+  displayDetection(detection);
 });
 
-eventSource.addEventListener('heartbeat', function(event) {
-    const data = JSON.parse(event.data);
-    console.log('Heartbeat - clients:', data.clients);
+eventSource.addEventListener("heartbeat", function (event) {
+  const data = JSON.parse(event.data);
+  console.log("Heartbeat - clients:", data.clients);
 });
 
-eventSource.onerror = function(event) {
-    console.error('SSE connection error:', event);
+eventSource.onerror = function (event) {
+  console.error("SSE connection error:", event);
 };
 ```
 
@@ -394,11 +398,13 @@ Middleware is defined in the dedicated `middleware.go` file to maintain clean se
 Handlers follow a consistent pattern:
 
 1. **Method Signature**: Each handler is a method on the Controller struct:
+
    ```go
    func (c *Controller) GetDetection(ctx echo.Context) error {
    ```
 
 2. **Parameter Validation**: Always validate and sanitize input parameters:
+
    ```go
    if id <= 0 {
        return c.HandleError(ctx, err, "Invalid detection ID", http.StatusBadRequest)
@@ -406,11 +412,13 @@ Handlers follow a consistent pattern:
    ```
 
 3. **Error Handling**: Use the standardized error handler:
+
    ```go
    return c.HandleError(ctx, err, "Failed to fetch detection", http.StatusInternalServerError)
    ```
 
 4. **Response Structure**: Return JSON responses with consistent structures:
+
    ```go
    return ctx.JSON(http.StatusOK, detection)
    ```
@@ -531,17 +539,17 @@ import (
 func setupAPI() {
     // Initialize echo
     e := echo.New()
-    
+
     // Get dependencies
     ds := datastore.NewSQLiteDatastore("path/to/database")
     settings := conf.LoadSettings("path/to/config")
     imageCache := imageprovider.NewBirdImageCache()
     sunCalc := suncalc.New(settings.Location.Latitude, settings.Location.Longitude)
     controlChan := make(chan string)
-    
+
     // Create API controller
     apiController := api.New(e, ds, settings, imageCache, sunCalc, controlChan, nil)
-    
+
     // Start the server
     e.Start(":8080")
 }
@@ -580,10 +588,11 @@ When working with the API code, be mindful of these important considerations:
 - Never concatenate user input directly into file paths
 - Verify paths don't escape intended directories using path validation
 - Example:
+
   ```go
   // INCORRECT
   file := fmt.Sprintf("/some/dir/%s", userInput)
-  
+
   // CORRECT
   if strings.Contains(userInput, "..") || strings.Contains(userInput, "/") {
       return errors.New("invalid filename")
@@ -600,13 +609,14 @@ When working with the API code, be mindful of these important considerations:
 - Implement caching strategies for frequently requested data
 - Consider implementing token-based access with usage quotas even for public endpoints
 - Example:
+
   ```go
   // INCORRECT
   analyticsGroup.GET("/species-summary", c.GetSpeciesSummary)
-  
+
   // CORRECT
   analyticsGroup.GET("/species-summary", c.GetSpeciesSummary, middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
-  
+
   // In handler implementation
   func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
       // Parse request parameters
@@ -617,13 +627,13 @@ When working with the API code, be mindful of these important considerations:
       if limit > 1000 {
           limit = 1000 // Cap maximum to prevent abuse
       }
-      
+
       // Use caching when appropriate
       cacheKey := fmt.Sprintf("species-summary-%d", limit)
       if cached, found := c.cache.Get(cacheKey); found {
           return ctx.JSON(http.StatusOK, cached)
       }
-      
+
       // Rest of implementation
       // ...
   }
@@ -635,10 +645,11 @@ When working with the API code, be mindful of these important considerations:
 - Mask sensitive data in error messages and logs
 - Use dedicated logging middleware to automatically redact sensitive fields
 - Example:
+
   ```go
   // INCORRECT
   c.logger.Printf("Login attempt with credentials: %s:%s", username, password)
-  
+
   // CORRECT
   c.logger.Printf("Login attempt for user: %s", username)
   ```
@@ -651,11 +662,12 @@ When working with the API code, be mindful of these important considerations:
 - Log errors with appropriate context to help with debugging
 - Consider adding recovery mechanisms for failed I/O operations
 - Example:
+
   ```go
   // INCORRECT
   conn.SetWriteDeadline(time.Now().Add(writeWait))
   conn.WriteMessage(messageType, payload)
-  
+
   // CORRECT
   if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
       c.logger.Printf("Failed to set write deadline: %v", err)
@@ -673,10 +685,11 @@ When working with the API code, be mindful of these important considerations:
 - Handle timeouts properly to prevent resource leaks
 - Consider implementing retry mechanisms for transient errors
 - Example:
+
   ```go
   // INCORRECT
   conn.SetReadDeadline(time.Now().Add(pongWait))
-  
+
   // CORRECT
   if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
       c.logger.Printf("Failed to set read deadline: %v", err)
@@ -689,12 +702,13 @@ When working with the API code, be mindful of these important considerations:
 - When checking for specific error types, use errors.As() to handle wrapped errors
 - This ensures compatibility with error wrapping patterns
 - Example:
+
   ```go
   // INCORRECT
   if sqlErr, ok := err.(*sqlite3.Error); ok && sqlErr.Code == sqlite3.ErrConstraint {
       // Handle constraint violation
   }
-  
+
   // CORRECT
   var sqlErr *sqlite3.Error
   if errors.As(err, &sqlErr) && sqlErr.Code == sqlite3.ErrConstraint {
@@ -711,15 +725,16 @@ When working with the API code, be mindful of these important considerations:
 - Test under high concurrency to identify race conditions
 - Use `go build -race` during development to detect data races
 - Example:
+
   ```go
   // INCORRECT
   count++
-  
+
   // CORRECT - Using mutex
   mu.Lock()
   count++
   mu.Unlock()
-  
+
   // CORRECT - Using atomic
   atomic.AddInt64(&count, 1)
   ```
@@ -737,12 +752,13 @@ When working with the API code, be mindful of these important considerations:
 - Avoid copying heavy parameters; use pointers for large structs
 - Consider the cost of copies when designing function signatures
 - Example:
+
   ```go
   // INCORRECT - Copies the entire large struct
   func ProcessDetection(detection LargeDetectionStruct) error {
       // ...
   }
-  
+
   // CORRECT - Passes a pointer, avoiding a copy
   func ProcessDetection(detection *LargeDetectionStruct) error {
       // ...
@@ -754,6 +770,7 @@ When working with the API code, be mindful of these important considerations:
 - Prefer switch statements over complex if/else trees for better readability and performance
 - Use switch with no expression for boolean logic chains
 - Example:
+
   ```go
   // INCORRECT - Complex if/else tree
   if status == "pending" {
@@ -767,7 +784,7 @@ When working with the API code, be mindful of these important considerations:
   } else {
       // Handle unknown
   }
-  
+
   // CORRECT - Clean switch statement
   switch status {
   case "pending":
@@ -781,7 +798,7 @@ When working with the API code, be mindful of these important considerations:
   default:
       // Handle unknown
   }
-  
+
   // CORRECT - Switch with no expression for boolean logic
   switch {
   case err != nil && isTemporary(err):
@@ -818,4 +835,4 @@ go test -v ./internal/api/v2/...
 - The API implements CORS middleware
 - Authentication is required for system control operations
 - Properly manage API tokens with appropriate expiration policies
-- Implement rate limiting for public endpoints 
+- Implement rate limiting for public endpoints

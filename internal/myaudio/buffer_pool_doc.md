@@ -71,7 +71,7 @@ pool.Put(buf)
 
 // Check statistics
 stats := pool.GetStats()
-fmt.Printf("Hit rate: %.2f%%\n", 
+fmt.Printf("Hit rate: %.2f%%\n",
     float64(stats.Hits)/float64(stats.Hits+stats.Misses)*100)
 ```
 
@@ -85,6 +85,7 @@ fmt.Printf("Hit rate: %.2f%%\n",
 ## Monitoring
 
 The pool provides statistics via `GetStats()`:
+
 - `Hits`: Number of successful buffer reuses
 - `Misses`: Number of new allocations
 - `Discarded`: Number of buffers discarded due to size mismatch

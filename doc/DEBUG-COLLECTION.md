@@ -16,6 +16,7 @@ The debug collection scripts will check for Go and offer automatic installation 
 ### Automatic Installation
 
 When running the collection scripts, if Go is not installed, you'll be prompted:
+
 ```
 Would you like to install Go 1.24.4 automatically? (y/N):
 ```
@@ -27,6 +28,7 @@ Answering 'y' will download and install the latest Go version for your architect
 For apt-based Linux (Ubuntu/Debian/Raspberry Pi OS):
 
 **Option 1: Official Go Release (Recommended)**
+
 ```bash
 wget https://go.dev/dl/go1.24.4.linux-$(dpkg --print-architecture).tar.gz
 sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.4.linux-$(dpkg --print-architecture).tar.gz
@@ -35,11 +37,13 @@ source ~/.bashrc
 ```
 
 **Option 2: From APT Repository**
+
 ```bash
 sudo apt update && sudo apt install -y golang-go
 ```
 
 **Option 3: Use Docker (No Installation Required)**
+
 ```bash
 docker run --rm -v $PWD:/data -w /data golang:1.24 bash analyze.sh
 ```
@@ -68,6 +72,7 @@ BIRDNET_CONTAINER=my-birdnet-container ./scripts/collect-debug-data-docker.sh
 ```
 
 This will:
+
 - Check for Go installation (and offer automatic installation if missing)
 - Verify debug mode is enabled
 - Collect all profiling data
@@ -75,6 +80,7 @@ This will:
 - Generate an analysis script
 
 The collection takes about 2-3 minutes and creates:
+
 - System information
 - Memory profiles (heap, allocations)
 - CPU profile (30 seconds)
@@ -103,6 +109,7 @@ Upload the generated `.tar.gz` file to a file sharing service and share the link
 ## Docker-Specific Features
 
 The Docker collection script additionally collects:
+
 - Container configuration and resource limits
 - Container statistics (CPU, memory, network, disk I/O)
 - Container processes
@@ -165,9 +172,10 @@ go tool trace debug-data-*/trace.out
 
 - **heap.pprof**: Current memory usage and allocations
 - **allocs.pprof**: All memory allocations since program start
-- **time-series/heap-*.pprof**: Memory snapshots over time
+- **time-series/heap-\*.pprof**: Memory snapshots over time
 
 Look for:
+
 - Total memory usage (should be <500MB for typical usage)
 - Memory growth between snapshots
 - Large allocations by specific functions
@@ -175,6 +183,7 @@ Look for:
 ### CPU Profile
 
 Shows where CPU time is spent. Look for:
+
 - Functions consuming >10% CPU
 - High GC (garbage collection) overhead
 - Excessive syscall time
@@ -182,6 +191,7 @@ Shows where CPU time is spent. Look for:
 ### Goroutine Profile
 
 Shows all running goroutines. Look for:
+
 - Total count (should be <1000 for normal operation)
 - Blocked goroutines
 - Goroutine leaks (count growing over time)
@@ -189,6 +199,7 @@ Shows all running goroutines. Look for:
 ### Mutex/Block Profiles
 
 Shows contention and blocking. Look for:
+
 - High contention on specific mutexes
 - Long blocking operations
 
@@ -197,10 +208,12 @@ Shows contention and blocking. Look for:
 ### High Memory Usage
 
 Symptoms:
+
 - Heap profile shows >1GB usage
 - Memory growing over time
 
 Common causes:
+
 - Audio buffer accumulation
 - Image cache not being cleaned
 - Goroutine leaks
@@ -208,10 +221,12 @@ Common causes:
 ### High CPU Usage
 
 Symptoms:
+
 - CPU profile shows high usage
 - System feels sluggish
 
 Common causes:
+
 - Excessive audio processing
 - Too many concurrent operations
 - Inefficient algorithms
@@ -219,10 +234,12 @@ Common causes:
 ### Goroutine Leaks
 
 Symptoms:
+
 - Goroutine count >1000 and growing
 - Memory usage increasing
 
 Common causes:
+
 - Unclosed channels
 - Infinite loops in goroutines
 - Missing context cancellation
@@ -282,6 +299,7 @@ After collecting and analyzing data:
 5. Re-run collection to verify improvements
 
 For help interpreting results, please include:
+
 - The analysis report (analysis-report.md)
 - System specifications
 - BirdNET-Go configuration

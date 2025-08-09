@@ -7,6 +7,7 @@ This document describes the float32 pool implementation added to reduce memory a
 ## Problem Statement
 
 The `convert16BitToFloat32` function was allocating a new float32 slice on every audio buffer conversion. With 24/7 continuous audio processing, each 3-second buffer at 48kHz requires:
+
 - 144,384 float32 values (rounded up to nearest 2048 bytes)
 - ~577KB per allocation
 - Continuous allocations create GC pressure
@@ -41,6 +42,7 @@ BenchmarkAudioConversionComparison/WithPool-16   12789     93735 ns/op        69
 ```
 
 **Performance Improvements:**
+
 - **Memory allocation**: Reduced by 99.99% (581,651 bytes → 69 bytes)
 - **Processing speed**: 3.97x faster (372μs → 94μs)
 - **Pool hit rate**: 99.99% in steady state operation
@@ -94,6 +96,7 @@ ReturnFloat32Buffer(result)
 ## Monitoring
 
 The pool provides statistics via `GetStats()`:
+
 - `Hits`: Number of successful buffer reuses
 - `Misses`: Number of new allocations
 - `Discarded`: Number of buffers discarded due to size mismatch

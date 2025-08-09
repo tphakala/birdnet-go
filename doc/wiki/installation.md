@@ -14,12 +14,14 @@ There are four main ways to install BirdNET-Go:
 BirdNET-Go Docker images are available from two registries:
 
 ### GitHub Container Registry (Primary)
+
 - **Registry**: `ghcr.io/tphakala/birdnet-go`
 - **Advantages**: Tightly integrated with source code, automatic builds
 - **Tags**: `:nightly`, `:latest`, `:v1.2.3`
 
 ### Docker Hub (Mirror)
-- **Registry**: `tphakala/birdnet-go` 
+
+- **Registry**: `tphakala/birdnet-go`
 - **Advantages**: Familiar to Docker users, no GitHub account needed
 - **Tags**: `:nightly`, `:latest`, `:v1.2.3`
 
@@ -31,14 +33,14 @@ This script streamlines the installation process on compatible Linux systems (De
 
 **What the script does:**
 
-*   Checks system prerequisites (OS version, 64-bit architecture, Docker installation, user groups).
-*   Installs Docker and necessary dependencies (`alsa-utils`, `curl`, `jq`, etc.) if they are missing.
-*   Pulls the latest `nightly` BirdNET-Go Docker image (defaults to `ghcr.io/tphakala/birdnet-go:nightly`).
-*   Creates necessary directories (`~/birdnet-go-app/config` and `~/birdnet-go-app/data`) for persistent configuration and data storage.
-*   Downloads a base `config.yaml` file.
-*   Guides you through initial configuration (web port, audio input source, audio export format, locale, location, optional password protection).
-*   Optimizes performance settings (like `birdnet.overlap` for [Deep Detection](guide.md#deep-detection)) based on detected hardware (e.g., Raspberry Pi model).
-*   Creates and enables a systemd service (`birdnet-go.service`) for automatic startup and management.
+- Checks system prerequisites (OS version, 64-bit architecture, Docker installation, user groups).
+- Installs Docker and necessary dependencies (`alsa-utils`, `curl`, `jq`, etc.) if they are missing.
+- Pulls the latest `nightly` BirdNET-Go Docker image (defaults to `ghcr.io/tphakala/birdnet-go:nightly`).
+- Creates necessary directories (`~/birdnet-go-app/config` and `~/birdnet-go-app/data`) for persistent configuration and data storage.
+- Downloads a base `config.yaml` file.
+- Guides you through initial configuration (web port, audio input source, audio export format, locale, location, optional password protection).
+- Optimizes performance settings (like `birdnet.overlap` for [Deep Detection](guide.md#deep-detection)) based on detected hardware (e.g., Raspberry Pi model).
+- Creates and enables a systemd service (`birdnet-go.service`) for automatic startup and management.
 
 **How to run:**
 
@@ -55,18 +57,18 @@ This script streamlines the installation process on compatible Linux systems (De
 
 **After Installation:**
 
-*   BirdNET-Go will be running as a systemd service.
-*   Configuration is stored in `~/birdnet-go-app/config/config.yaml`.
-*   Data (database, clips) is stored in `~/birdnet-go-app/data`.
-*   You can access the web interface via `http://<your-ip-address>:<port>` (the script will display the correct URL, typically using port 8080 unless changed during setup).
-*   Manage the service using standard systemd commands:
-    *   Check status: `sudo systemctl status birdnet-go.service`
-    *   Stop service: `sudo systemctl stop birdnet-go.service`
-    *   Start service: `sudo systemctl start birdnet-go.service`
-    *   Restart service: `sudo systemctl restart birdnet-go.service`
-    *   View logs: `journalctl -u birdnet-go.service -f`
+- BirdNET-Go will be running as a systemd service.
+- Configuration is stored in `~/birdnet-go-app/config/config.yaml`.
+- Data (database, clips) is stored in `~/birdnet-go-app/data`.
+- You can access the web interface via `http://<your-ip-address>:<port>` (the script will display the correct URL, typically using port 8080 unless changed during setup).
+- Manage the service using standard systemd commands:
+  - Check status: `sudo systemctl status birdnet-go.service`
+  - Stop service: `sudo systemctl stop birdnet-go.service`
+  - Start service: `sudo systemctl start birdnet-go.service`
+  - Restart service: `sudo systemctl restart birdnet-go.service`
+  - View logs: `journalctl -u birdnet-go.service -f`
 
-*(See [Systemd Service Details](#systemd-service-details) below for more information on the service configuration)*.
+_(See [Systemd Service Details](#systemd-service-details) below for more information on the service configuration)_.
 
 **Updating an `install.sh` Installation:**
 
@@ -82,11 +84,11 @@ If you installed BirdNET-Go using the `install.sh` script, updating is straightf
     ```
 3.  The script will detect your existing installation and offer an option to "Check for updates".
 4.  Selecting this option will:
-    *   Stop the running BirdNET-Go service and container.
-    *   Pull the latest `nightly` Docker image.
-    *   Update the systemd service file if necessary.
-    *   Restart the BirdNET-Go service with the new image.
-    *   Your existing configuration and data in `~/birdnet-go-app/` will be preserved.
+    - Stop the running BirdNET-Go service and container.
+    - Pull the latest `nightly` Docker image.
+    - Update the systemd service file if necessary.
+    - Restart the BirdNET-Go service with the new image.
+    - Your existing configuration and data in `~/birdnet-go-app/` will be preserved.
 
 ## Using Docker Compose (Linux only)
 
@@ -122,6 +124,7 @@ docker run -ti --rm \\
 ```
 
 **Alternative using Docker Hub:**
+
 ```bash
 docker run -ti --rm \\
   --name birdnet-go \\
@@ -138,34 +141,34 @@ docker run -ti --rm \\
 
 **Parameters:**
 
-| Parameter                                   | Function                                                                                                                               | Example Value         |
-| :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------- | :-------------------- |
-| `-p <host_port>:8080`                       | Maps a port on your host machine to the container's web server port (8080).                                                              | `-p 8080:8080`        |
-| `--env TZ="<TZ identifier>"`                | Sets the timezone inside the container. See [Wikipedia list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List).         | `TZ="Europe/Berlin"`  |
-| `--env BIRDNET_UID=$(id -u)`                | Runs the container process with your host user's ID for correct file permissions.                                                      | *Keep as is*          |
-| `--env BIRDNET_GID=$(id -g)`                | Runs the container process with your host user's group ID.                                                                               | *Keep as is*          |
-| `--device /dev/snd`                         | Mounts host audio devices into the container. Required for sound card input.                                                           | *Keep as is*          |
-| `--add-host="host.docker.internal:host-gateway"` | Allows the container to potentially reach services running on the host machine itself.                                                   | *Keep as is*          |
-| `-v </path/on/host/to/config>:/config`      | Mounts a directory from your host for persistent configuration. BirdNET-Go will read/write `config.yaml` here.                           | `-v $HOME/bn-config:/config` |
-| `-v </path/on/host/to/data>:/data`          | Mounts a directory from your host for persistent data (database, audio clips, logs).                                                    | `-v $HOME/bn-data:/data`   |
-| `ghcr.io/tphakala/birdnet-go:nightly` or `tphakala/birdnet-go:nightly` | The BirdNET-Go Docker image to use. Available from GitHub Container Registry or Docker Hub. `:nightly` is recommended for latest features. `:latest` points to the most recent stable release. |                       |
+| Parameter                                                              | Function                                                                                                                                                                                       | Example Value                |
+| :--------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------- |
+| `-p <host_port>:8080`                                                  | Maps a port on your host machine to the container's web server port (8080).                                                                                                                    | `-p 8080:8080`               |
+| `--env TZ="<TZ identifier>"`                                           | Sets the timezone inside the container. See [Wikipedia list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List).                                                               | `TZ="Europe/Berlin"`         |
+| `--env BIRDNET_UID=$(id -u)`                                           | Runs the container process with your host user's ID for correct file permissions.                                                                                                              | _Keep as is_                 |
+| `--env BIRDNET_GID=$(id -g)`                                           | Runs the container process with your host user's group ID.                                                                                                                                     | _Keep as is_                 |
+| `--device /dev/snd`                                                    | Mounts host audio devices into the container. Required for sound card input.                                                                                                                   | _Keep as is_                 |
+| `--add-host="host.docker.internal:host-gateway"`                       | Allows the container to potentially reach services running on the host machine itself.                                                                                                         | _Keep as is_                 |
+| `-v </path/on/host/to/config>:/config`                                 | Mounts a directory from your host for persistent configuration. BirdNET-Go will read/write `config.yaml` here.                                                                                 | `-v $HOME/bn-config:/config` |
+| `-v </path/on/host/to/data>:/data`                                     | Mounts a directory from your host for persistent data (database, audio clips, logs).                                                                                                           | `-v $HOME/bn-data:/data`     |
+| `ghcr.io/tphakala/birdnet-go:nightly` or `tphakala/birdnet-go:nightly` | The BirdNET-Go Docker image to use. Available from GitHub Container Registry or Docker Hub. `:nightly` is recommended for latest features. `:latest` points to the most recent stable release. |                              |
 
 **Notes:**
 
-*   You need to create the host directories (`</path/on/host/to/config>`, `</path/on/host/to/data>`) before running the command.
-*   Ensure the user running the command has the correct permissions to access Docker and the specified host directories.
-*   You will need to manually create/edit the `config.yaml` file in your mapped config directory. Refer to the [Configuration](guide.md#configuration) section in the Wiki.
-*   You are responsible for managing the container's lifecycle (starting, stopping, updating).
+- You need to create the host directories (`</path/on/host/to/config>`, `</path/on/host/to/data>`) before running the command.
+- Ensure the user running the command has the correct permissions to access Docker and the specified host directories.
+- You will need to manually create/edit the `config.yaml` file in your mapped config directory. Refer to the [Configuration](guide.md#configuration) section in the Wiki.
+- You are responsible for managing the container's lifecycle (starting, stopping, updating).
 
 ## Manual Binary Installation (All platforms)
 
 This method does not use Docker but requires manual dependency installation.
 
 1.  **Download Binary:** Go to the [BirdNET-Go Releases page](https://github.com/tphakala/birdnet-go/releases) and download the pre-compiled binary suitable for your operating system (Linux, macOS, Windows) and architecture.
-2.  **Download TFLite Library:** Download the corresponding TensorFlow Lite C library from [tphakala/tflite\_c Releases](https://github.com/tphakala/tflite_c/releases). Follow the installation instructions there (copying the `.so`, `.dylib`, or `.dll` file to the correct system path or the BirdNET-Go executable directory). Version `v2.17.1` or newer is recommended for best performance (XNNPACK support).
+2.  **Download TFLite Library:** Download the corresponding TensorFlow Lite C library from [tphakala/tflite_c Releases](https://github.com/tphakala/tflite_c/releases). Follow the installation instructions there (copying the `.so`, `.dylib`, or `.dll` file to the correct system path or the BirdNET-Go executable directory). Version `v2.17.1` or newer is recommended for best performance (XNNPACK support).
 3.  **Install Dependencies:**
-    *   **FFmpeg:** Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and the [Live Audio Streaming](guide.md#live-audio-streaming) feature. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS).
-    *   **SoX:** Required for rendering spectrograms in the web interface. Install using your system's package manager (e.g., `sudo apt install sox` on Debian/Ubuntu, `brew install sox` on macOS).
+    - **FFmpeg:** Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and the [Live Audio Streaming](guide.md#live-audio-streaming) feature. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS).
+    - **SoX:** Required for rendering spectrograms in the web interface. Install using your system's package manager (e.g., `sudo apt install sox` on Debian/Ubuntu, `brew install sox` on macOS).
 4.  **Place Executable:** Extract the downloaded BirdNET-Go binary and place it in your desired directory.
 5.  **Run BirdNET-Go:** Open a terminal or command prompt, navigate to the directory containing the `birdnet-go` executable, and run it (e.g., `./birdnet-go`).
 6.  **Configuration:** On the first run, BirdNET-Go will create a default `config.yaml` file. Edit this file according to your needs. See the [Configuration](guide.md#configuration) section in the Wiki for details and default file locations per OS.
@@ -201,15 +204,15 @@ WantedBy=multi-user.target
 
 **Key Parts Explained:**
 
-*   `Restart=always`: Ensures the service restarts automatically if it stops unexpectedly.
-*   `ExecStart`: The command used to start the Docker container.
-    *   `--rm`: Automatically removes the container when it stops.
-    *   `--name birdnet-go`: Assigns a name to the container.
-    *   `-p <web_port>:8080`: Maps the host port chosen during installation to the container's port 8080.
-    *   `--env TZ`: Sets the container's timezone to match the host's.
-    *   `--env BIRDNET_UID/GID`: Ensures files created by the container (in mapped volumes) have the correct host user/group ownership.
-    *   `--add-host`: Allows the container to connect back to services potentially running on the host.
-    *   `--device /dev/snd`: Makes host sound devices available inside the container.
-    *   `-v ...:/config`, `-v ...:/data`: Mount the host directories for persistent configuration and data.
-    *   `ghcr.io/tphakala/birdnet-go:nightly`: Specifies the Docker image to run. Alternative: `tphakala/birdnet-go:nightly` from Docker Hub.
-*   `WantedBy=multi-user.target`: Ensures the service starts during the normal boot process.
+- `Restart=always`: Ensures the service restarts automatically if it stops unexpectedly.
+- `ExecStart`: The command used to start the Docker container.
+  - `--rm`: Automatically removes the container when it stops.
+  - `--name birdnet-go`: Assigns a name to the container.
+  - `-p <web_port>:8080`: Maps the host port chosen during installation to the container's port 8080.
+  - `--env TZ`: Sets the container's timezone to match the host's.
+  - `--env BIRDNET_UID/GID`: Ensures files created by the container (in mapped volumes) have the correct host user/group ownership.
+  - `--add-host`: Allows the container to connect back to services potentially running on the host.
+  - `--device /dev/snd`: Makes host sound devices available inside the container.
+  - `-v ...:/config`, `-v ...:/data`: Mount the host directories for persistent configuration and data.
+  - `ghcr.io/tphakala/birdnet-go:nightly`: Specifies the Docker image to run. Alternative: `tphakala/birdnet-go:nightly` from Docker Hub.
+- `WantedBy=multi-user.target`: Ensures the service starts during the normal boot process.

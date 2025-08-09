@@ -4,35 +4,35 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 
 ## BirdNET-Go Features
 
-* Audio analysis based on the BirdNET 2.4 tflite model
-* 24/7 real-time analysis of soundcard capture
-* Real-time analysis output compatible with OBS chat log input for wildlife streams
-* BirdWeather API support for real-time analysis
-* File analysis of WAV files
-* Analysis output options: Raven table, CSV file, SQLite, or MySQL database
-* Localized species labels, with extensive language support (over 30 languages)
-* Runs on Windows, Linux (including Raspberry Pi), and macOS
-* Minimal runtime dependencies; the BirdNET TensorFlow Lite model and other supporting files are embedded in the executable
-* Web dashboard with visualization capabilities
-* Weather integration through OpenWeather or Yr.no
-* MQTT support for IoT integration
-* Advanced audio processing with equalizer filters
-* Privacy and dog bark filtering capabilities
-* Dynamic threshold adjustment for better detection
-* OAuth2 authentication options for security
-* Optional privacy-first error tracking and telemetry with Prometheus-compatible endpoint
-* Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration and configurable debug logging (supports both sound card and RTSP sources)
+- Audio analysis based on the BirdNET 2.4 tflite model
+- 24/7 real-time analysis of soundcard capture
+- Real-time analysis output compatible with OBS chat log input for wildlife streams
+- BirdWeather API support for real-time analysis
+- File analysis of WAV files
+- Analysis output options: Raven table, CSV file, SQLite, or MySQL database
+- Localized species labels, with extensive language support (over 30 languages)
+- Runs on Windows, Linux (including Raspberry Pi), and macOS
+- Minimal runtime dependencies; the BirdNET TensorFlow Lite model and other supporting files are embedded in the executable
+- Web dashboard with visualization capabilities
+- Weather integration through OpenWeather or Yr.no
+- MQTT support for IoT integration
+- Advanced audio processing with equalizer filters
+- Privacy and dog bark filtering capabilities
+- Dynamic threshold adjustment for better detection
+- OAuth2 authentication options for security
+- Optional privacy-first error tracking and telemetry with Prometheus-compatible endpoint
+- Sound level monitoring in 1/3rd octave bands with MQTT/SSE/Prometheus integration and configurable debug logging (supports both sound card and RTSP sources)
 
 ## Supported Platforms
 
 BirdNET-Go has been successfully tested on:
 
-* Raspberry Pi 3B+ with 512MB RAM
-* Raspberry Pi 4B with 4GB RAM
-* Raspberry Pi 5 with 4GB RAM
-* Intel NUC running Windows 10
-* Intel desktop PC running Windows 11
-* Intel MacBook Pro
+- Raspberry Pi 3B+ with 512MB RAM
+- Raspberry Pi 4B with 4GB RAM
+- Raspberry Pi 5 with 4GB RAM
+- Intel NUC running Windows 10
+- Intel desktop PC running Windows 11
+- Intel MacBook Pro
 
 For 24/7 real-time detection, the Raspberry Pi 3B+ is more than sufficient. It can process 3-second segments in approximately 500ms.
 
@@ -52,12 +52,14 @@ bash ./install.sh
 ```
 
 **Container Registry Options:**
+
 - **GitHub Container Registry (Primary)**: `ghcr.io/tphakala/birdnet-go`
 - **Docker Hub (Mirror)**: `tphakala/birdnet-go`
 
 Both registries contain identical images. The installation script uses GitHub Container Registry by default.
 
 The script will:
+
 - Check system prerequisites and install required packages
 - Pull the latest BirdNET-Go Docker image from the primary registry
 - Guide you through configuration (audio input, location, language, etc.)
@@ -66,6 +68,7 @@ The script will:
 - Optionally configure privacy-first error tracking to help improve BirdNET-Go
 
 The installation script includes several features:
+
 - Support for both direct audio capture and RTSP stream sources
 - Multiple audio export formats (WAV, FLAC, AAC, MP3, Opus)
 - Automatic performance optimization based on detected hardware
@@ -95,9 +98,9 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
-* **TensorFlow Lite C library**: Required for the core audio analysis functionality
-* **FFmpeg**: Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and for the HLS live stream feature in the web interface
-* **SoX**: Required for rendering spectrograms in the web interface
+- **TensorFlow Lite C library**: Required for the core audio analysis functionality
+- **FFmpeg**: Required for RTSP stream capture, audio export to formats other than WAV (MP3, AAC, FLAC, Opus), and for the HLS live stream feature in the web interface
+- **SoX**: Required for rendering spectrograms in the web interface
 
 > **Note**: When using the Docker installation method, all these dependencies are already included in the Docker image, so you don't need to install them separately. This is one of the major advantages of using the Docker-based installation.
 
@@ -107,9 +110,9 @@ For manual installations, you'll need to install these dependencies separately o
 
 In addition to BirdNET-Go executable you also need TensorFlow Lite C library which is available for download at https://github.com/tphakala/tflite_c/releases. Download library for your target platform and install it in proper library path for your system:
 
-* On Linux copy **libtensorflowlite_c.so** to **/usr/local/lib** and run "**sudo ldconfig**"
-* On macOS **libtensorflowlite_c.dylib** to **/usr/local/lib**
-* On Windows copy **libtensorflowlite_c.so** to BirdNET-Go executable directory or any other directory in system PATH
+- On Linux copy **libtensorflowlite_c.so** to **/usr/local/lib** and run "**sudo ldconfig**"
+- On macOS **libtensorflowlite_c.dylib** to **/usr/local/lib**
+- On Windows copy **libtensorflowlite_c.so** to BirdNET-Go executable directory or any other directory in system PATH
 
 > **Note**: For optimal performance using the XNNPACK delegate (enabled by default via `usexnnpack: true` in config), ensure you have downloaded version `v2.17.1` or newer of the TensorFlow Lite C library. If a compatible library is not found, BirdNET-Go will fall back to standard CPU processing.
 
@@ -122,10 +125,12 @@ BirdNET-Go accepts several settings from command line but main configuration met
 Configuration file location is operating system dependent and there are alternative locations for user preference.
 
 On Linux and macOS:
+
 - Default and primary location: **$HOME/.config/birdnet-go/config.yaml**
 - Alternative location (system-wide): **/etc/birdnet-go/config.yaml**
 
 On Windows:
+
 - Default and primary location: **config.yaml** in the birdnet-go.exe installation directory
 - Secondary location: **C:\User\username\AppData\Local\birdnet-go\config.yaml**
 
@@ -137,237 +142,238 @@ The configuration file uses the YAML format, which does not recognize tabs as in
 # BirdNET-Go configuration
 # Paths support environment variables such as $HOME and %appdata%
 
-debug: false  # Enable debug messages for troubleshooting
+debug: false # Enable debug messages for troubleshooting
 
 # Main application settings
 main:
-  name: BirdNET-Go  # Name of this node, used to identify the source of notes
-  timeas24h: true   # true for 24-hour time format, false for 12-hour time format
+  name: BirdNET-Go # Name of this node, used to identify the source of notes
+  timeas24h: true # true for 24-hour time format, false for 12-hour time format
   log:
-    enabled: false  # Enable main application logging
-    path: logs/birdnet.log  # Path to log file
-    rotation: daily  # Log rotation type: daily, weekly, or size
-    maxsize: 10485760  # Maximum log size in bytes for size rotation (10MB)
-    rotationday: Sunday  # Day of the week for weekly rotation
+    enabled: false # Enable main application logging
+    path: logs/birdnet.log # Path to log file
+    rotation: daily # Log rotation type: daily, weekly, or size
+    maxsize: 10485760 # Maximum log size in bytes for size rotation (10MB)
+    rotationday: Sunday # Day of the week for weekly rotation
 
 # BirdNET model specific settings
 birdnet:
-  debug: false  # Enable debug mode for BirdNET functionality
-  sensitivity: 1.0  # Sigmoid sensitivity, 0.1 to 1.5
-  threshold: 0.8  # Threshold for prediction confidence to report, 0.0 to 1.0
-  overlap: 0.0  # Overlap between chunks, 0.0 to 2.9
-  latitude: 60.1699  # Latitude of recording location for prediction filtering
-  longitude: 24.9384  # Longitude of recording location for prediction filtering
-  threads: 0  # Number of CPU threads to use (0 = use all available, automatically optimized for P-cores if detected)
-  locale: en-uk  # Language to use for labels
-  modelpath: ""  # Path to external model file (empty for embedded)
-  labelpath: ""  # Path to external label file (empty for embedded)
-  usexnnpack: true  # Use XNNPACK delegate for inference acceleration
+  debug: false # Enable debug mode for BirdNET functionality
+  sensitivity: 1.0 # Sigmoid sensitivity, 0.1 to 1.5
+  threshold: 0.8 # Threshold for prediction confidence to report, 0.0 to 1.0
+  overlap: 0.0 # Overlap between chunks, 0.0 to 2.9
+  latitude: 60.1699 # Latitude of recording location for prediction filtering
+  longitude: 24.9384 # Longitude of recording location for prediction filtering
+  threads: 0 # Number of CPU threads to use (0 = use all available, automatically optimized for P-cores if detected)
+  locale: en-uk # Language to use for labels
+  modelpath: "" # Path to external model file (empty for embedded)
+  labelpath: "" # Path to external label file (empty for embedded)
+  usexnnpack: true # Use XNNPACK delegate for inference acceleration
   rangefilter:
-    debug: false  # Enable debug mode for range filter
-    model: ""  # Range filter model to use. "" (default) uses V2, "legacy" uses V1.
-    threshold: 0.01  # Range filter species occurrence threshold (0.0-1.0)
-                     # Default (0.01) is recommended for most users
-                     # Conservative values (0.05-0.1): Fewer species, higher occurrence probability
-                     # Strict values (0.1-0.3): Only species with strong occurrence probability
-                     # Very strict values (0.5+): Only the most common species for your area
+    debug: false # Enable debug mode for range filter
+    model: "" # Range filter model to use. "" (default) uses V2, "legacy" uses V1.
+    threshold:
+      0.01 # Range filter species occurrence threshold (0.0-1.0)
+      # Default (0.01) is recommended for most users
+      # Conservative values (0.05-0.1): Fewer species, higher occurrence probability
+      # Strict values (0.1-0.3): Only species with strong occurrence probability
+      # Very strict values (0.5+): Only the most common species for your area
 
 # Realtime processing settings
 realtime:
-  interval: 15  # Minimum interval between repeating detections in seconds
-  processingtime: false  # Report processing time for each prediction
-  
+  interval: 15 # Minimum interval between repeating detections in seconds
+  processingtime: false # Report processing time for each prediction
+
   # Audio settings
   audio:
-    source: ""  # Audio source to use for analysis
-    ffmpegpath: ""  # Path to ffmpeg (runtime value)
-    soxpath: ""  # Path to sox (runtime value)
-    streamtransport: auto  # Preferred transport for audio streaming: auto, sse, or ws
+    source: "" # Audio source to use for analysis
+    ffmpegpath: "" # Path to ffmpeg (runtime value)
+    soxpath: "" # Path to sox (runtime value)
+    streamtransport: auto # Preferred transport for audio streaming: auto, sse, or ws
     soundlevel:
-      enabled: false  # Enable sound level monitoring in 1/3rd octave bands
-      interval: 10  # Measurement interval in seconds (default: 10)
+      enabled: false # Enable sound level monitoring in 1/3rd octave bands
+      interval: 10 # Measurement interval in seconds (default: 10)
     export:
-      debug: false  # Enable audio export debug
-      enabled: false  # Export audio clips containing identified bird calls
-      path: clips/  # Path to audio clip export directory
-      type: wav  # Audio file type: wav, mp3, or flac
-      bitrate: 192k  # Bitrate for audio export
+      debug: false # Enable audio export debug
+      enabled: false # Export audio clips containing identified bird calls
+      path: clips/ # Path to audio clip export directory
+      type: wav # Audio file type: wav, mp3, or flac
+      bitrate: 192k # Bitrate for audio export
       retention:
-        debug: false  # Enable retention debug
-        policy: none  # Retention policy: none, age, or usage
-        maxage: 30d  # Maximum age of audio clips to keep
-        maxusage: 85%  # Maximum disk usage percentage before cleanup
-        minclips: 5  # Minimum number of clips per species to keep
+        debug: false # Enable retention debug
+        policy: none # Retention policy: none, age, or usage
+        maxage: 30d # Maximum age of audio clips to keep
+        maxusage: 85% # Maximum disk usage percentage before cleanup
+        minclips: 5 # Minimum number of clips per species to keep
     equalizer:
-      enabled: false  # Enable equalizer filters
+      enabled: false # Enable equalizer filters
       filters:
-        - type: LowPass  # Filter type: LowPass, HighPass, BandPass, etc.
-          frequency: 10000  # Filter frequency in Hz
-          q: 0.7  # Filter Q factor
-          gain: 0  # Filter gain (only for certain types)
-          width: 0  # Filter width (only for BandPass and BandReject)
-          passes: 1  # Filter passes for added attenuation or gain
-  
+        - type: LowPass # Filter type: LowPass, HighPass, BandPass, etc.
+          frequency: 10000 # Filter frequency in Hz
+          q: 0.7 # Filter Q factor
+          gain: 0 # Filter gain (only for certain types)
+          width: 0 # Filter width (only for BandPass and BandReject)
+          passes: 1 # Filter passes for added attenuation or gain
+
   # Web dashboard settings
   dashboard:
     thumbnails:
-      debug: false  # Enable debug mode for thumbnails
-      summary: true  # Show thumbnails on summary table
-      recent: true  # Show thumbnails on recent table
-    summarylimit: 20  # Limit for the number of species shown in the summary table
-  
+      debug: false # Enable debug mode for thumbnails
+      summary: true # Show thumbnails on summary table
+      recent: true # Show thumbnails on recent table
+    summarylimit: 20 # Limit for the number of species shown in the summary table
+
   # Dynamic threshold adjustment
   dynamicthreshold:
-    enabled: false  # Enable dynamic threshold adjustment
-    debug: false  # Enable debug mode for dynamic threshold
-    trigger: 0.5  # Trigger threshold for dynamic adjustment
-    min: 0.3  # Minimum threshold for dynamic adjustment
-    validhours: 24  # Number of hours to consider for dynamic threshold
-  
+    enabled: false # Enable dynamic threshold adjustment
+    debug: false # Enable debug mode for dynamic threshold
+    trigger: 0.5 # Trigger threshold for dynamic adjustment
+    min: 0.3 # Minimum threshold for dynamic adjustment
+    validhours: 24 # Number of hours to consider for dynamic threshold
+
   # OBS chat log settings
   log:
-    enabled: false  # Enable OBS chat log
-    path: birdnet.txt  # Path to OBS chat log
-  
+    enabled: false # Enable OBS chat log
+    path: birdnet.txt # Path to OBS chat log
+
   # BirdWeather API integration
   birdweather:
-    enabled: false  # Enable BirdWeather uploads
-    debug: false  # Enable debug mode for BirdWeather API
-    id: "00000"  # BirdWeather ID / Token
-    threshold: 0.9  # Threshold of prediction confidence for uploads
-    locationaccuracy: 10  # Accuracy of location in meters
+    enabled: false # Enable BirdWeather uploads
+    debug: false # Enable debug mode for BirdWeather API
+    id: "00000" # BirdWeather ID / Token
+    threshold: 0.9 # Threshold of prediction confidence for uploads
+    locationaccuracy: 10 # Accuracy of location in meters
     retrysettings:
-      enabled: true  # Enable retry mechanism
-      maxretries: 5  # Maximum number of retry attempts
-      initialdelay: 5  # Initial delay before first retry in seconds
-      maxdelay: 300  # Maximum delay between retries in seconds
-      backoffmultiplier: 2.0  # Multiplier for exponential backoff
-  
+      enabled: true # Enable retry mechanism
+      maxretries: 5 # Maximum number of retry attempts
+      initialdelay: 5 # Initial delay before first retry in seconds
+      maxdelay: 300 # Maximum delay between retries in seconds
+      backoffmultiplier: 2.0 # Multiplier for exponential backoff
+
   # Weather integration settings
   weather:
-    provider: "yrno"  # Weather provider: none, yrno, or openweather
-    pollinterval: 30  # Weather data polling interval in minutes
-    debug: false  # Enable debug mode for weather integration
+    provider: "yrno" # Weather provider: none, yrno, or openweather
+    pollinterval: 30 # Weather data polling interval in minutes
+    debug: false # Enable debug mode for weather integration
     openweather:
-      enabled: false  # Enable OpenWeather integration (legacy setting, use 'provider' above)
-      apikey: ""  # OpenWeather API key
-      endpoint: "https://api.openweathermap.org/data/2.5/weather"  # OpenWeather API endpoint
-      units: "metric"  # Units of measurement: standard, metric, or imperial
-      language: "en"  # Language code for the response
-  
+      enabled: false # Enable OpenWeather integration (legacy setting, use 'provider' above)
+      apikey: "" # OpenWeather API key
+      endpoint: "https://api.openweathermap.org/data/2.5/weather" # OpenWeather API endpoint
+      units: "metric" # Units of measurement: standard, metric, or imperial
+      language: "en" # Language code for the response
+
   # Privacy and filtering settings
   privacyfilter:
-    debug: false  # Enable debug mode for privacy filter
-    enabled: false  # Enable privacy filter
-    confidence: 0.8  # Confidence threshold for human detection
-  
+    debug: false # Enable debug mode for privacy filter
+    enabled: false # Enable privacy filter
+    confidence: 0.8 # Confidence threshold for human detection
+
   dogbarkfilter:
-    debug: false  # Enable debug mode for dog bark filter
-    enabled: false  # Enable dog bark filter to prevent misdetections during dog barking
-    confidence: 0.8  # Confidence threshold for dog bark detection
-    remember: 60  # How long to remember barks for filtering (in seconds)
-    species: ["Eurasian Eagle-Owl", "Hooded Crow"]  # Species prone to dog bark confusion
-  
+    debug: false # Enable debug mode for dog bark filter
+    enabled: false # Enable dog bark filter to prevent misdetections during dog barking
+    confidence: 0.8 # Confidence threshold for dog bark detection
+    remember: 60 # How long to remember barks for filtering (in seconds)
+    species: ["Eurasian Eagle-Owl", "Hooded Crow"] # Species prone to dog bark confusion
+
   # RTSP streaming settings
   rtsp:
-    transport: "tcp"  # RTSP Transport Protocol: tcp or udp
-    urls: []  # RTSP stream URLs
-  
+    transport: "tcp" # RTSP Transport Protocol: tcp or udp
+    urls: [] # RTSP stream URLs
+
   # MQTT integration
   mqtt:
-    enabled: false  # Enable MQTT
-    broker: "localhost:1883"  # MQTT broker URL (e.g., mqtt://host:port or mqtts://host:port)
-    topic: "birdnet/detections"  # MQTT topic
-    username: ""  # MQTT username
-    password: ""  # MQTT password
-    retain: false  # Retain messages (useful for Home Assistant)
+    enabled: false # Enable MQTT
+    broker: "localhost:1883" # MQTT broker URL (e.g., mqtt://host:port or mqtts://host:port)
+    topic: "birdnet/detections" # MQTT topic
+    username: "" # MQTT username
+    password: "" # MQTT password
+    retain: false # Retain messages (useful for Home Assistant)
     retrysettings:
-      enabled: true  # Enable retry mechanism
-      maxretries: 5  # Maximum number of retry attempts
-      initialdelay: 5  # Initial delay before first retry in seconds
-      maxdelay: 300  # Maximum delay between retries in seconds
-      backoffmultiplier: 2.0  # Multiplier for exponential backoff
-  
+      enabled: true # Enable retry mechanism
+      maxretries: 5 # Maximum number of retry attempts
+      initialdelay: 5 # Initial delay before first retry in seconds
+      maxdelay: 300 # Maximum delay between retries in seconds
+      backoffmultiplier: 2.0 # Multiplier for exponential backoff
+
   # Telemetry settings
   telemetry:
-    enabled: false  # Enable Prometheus compatible telemetry endpoint
-    listen: "localhost:9090"  # IP address and port to listen on (e.g., 0.0.0.0:9090)
-  
+    enabled: false # Enable Prometheus compatible telemetry endpoint
+    listen: "localhost:9090" # IP address and port to listen on (e.g., 0.0.0.0:9090)
+
   # Species-specific settings
   species:
-    include: []  # Always include these species, bypassing range/occurrence filters
-    exclude: []  # Always exclude these species, regardless of confidence
-    config:  # Per-species configuration overrides
+    include: [] # Always include these species, bypassing range/occurrence filters
+    exclude: [] # Always exclude these species, regardless of confidence
+    config: # Per-species configuration overrides
       "European Robin": # Use the exact species name from BirdNET labels
-        threshold: 0.75  # Custom confidence threshold for this species
-        actions:  # List of actions to execute on detection (currently only one action per species supported)
+        threshold: 0.75 # Custom confidence threshold for this species
+        actions: # List of actions to execute on detection (currently only one action per species supported)
           - type: ExecuteCommand # Action type (only ExecuteCommand supported currently)
             command: "/path/to/notify_script.sh" # Full path to the script/command
             parameters: ["CommonName", "Confidence"] # Parameters to pass to the command
-            executedefaults: true  # true: run default actions (DB, MQTT, etc.) AND this command. false: run ONLY this command.
+            executedefaults: true # true: run default actions (DB, MQTT, etc.) AND this command. false: run ONLY this command.
 
 # Web server settings
 webserver:
-  debug: false  # Enable debug mode for web server
-  enabled: true  # Enable web server
-  port: "8080"  # Port for web server
+  debug: false # Enable debug mode for web server
+  enabled: true # Enable web server
+  port: "8080" # Port for web server
   log:
-    enabled: false  # Enable web server logging
-    path: logs/webserver.log  # Path to log file
-    rotation: daily  # Log rotation type: daily, weekly, or size
-    maxsize: 10485760  # Maximum log size in bytes for size rotation (10MB)
-    rotationday: Sunday  # Day of the week for weekly rotation
+    enabled: false # Enable web server logging
+    path: logs/webserver.log # Path to log file
+    rotation: daily # Log rotation type: daily, weekly, or size
+    maxsize: 10485760 # Maximum log size in bytes for size rotation (10MB)
+    rotationday: Sunday # Day of the week for weekly rotation
 
 # Security settings
 security:
-  debug: false  # Enable debug mode for security features
-  host: ""  # Primary hostname used for TLS certificates and OAuth redirect URLs
-  autotls: false  # Enable automatic TLS certificate management using Let's Encrypt
-  redirecttohttps: true  # Redirect HTTP to HTTPS
+  debug: false # Enable debug mode for security features
+  host: "" # Primary hostname used for TLS certificates and OAuth redirect URLs
+  autotls: false # Enable automatic TLS certificate management using Let's Encrypt
+  redirecttohttps: true # Redirect HTTP to HTTPS
   allowsubnetbypass:
-    enabled: false  # Enable subnet bypass for authentication
-    subnet: "192.168.1.0/24"  # Subnet to bypass authentication
+    enabled: false # Enable subnet bypass for authentication
+    subnet: "192.168.1.0/24" # Subnet to bypass authentication
   basicauth:
-    enabled: false  # Enable password authentication
-    password: ""  # Password for admin interface
-    clientid: ""  # Client ID for OAuth2
-    clientsecret: ""  # Client secret for OAuth2
-    redirecturi: ""  # Redirect URI for OAuth2
-    authcodeexp: 10m  # Duration for authorization code
-    accesstokenexp: 1h  # Duration for access token
+    enabled: false # Enable password authentication
+    password: "" # Password for admin interface
+    clientid: "" # Client ID for OAuth2
+    clientsecret: "" # Client secret for OAuth2
+    redirecturi: "" # Redirect URI for OAuth2
+    authcodeexp: 10m # Duration for authorization code
+    accesstokenexp: 1h # Duration for access token
   googleauth:
-    enabled: false  # Enable Google OAuth2
-    clientid: ""  # Google client ID
-    clientsecret: ""  # Google client secret
-    redirecturi: ""  # Google redirect URI
-    userid: ""  # Valid Google user ID
+    enabled: false # Enable Google OAuth2
+    clientid: "" # Google client ID
+    clientsecret: "" # Google client secret
+    redirecturi: "" # Google redirect URI
+    userid: "" # Valid Google user ID
   githubauth:
-    enabled: false  # Enable GitHub OAuth2
-    clientid: ""  # GitHub client ID
-    clientsecret: ""  # GitHub client secret
-    redirecturi: ""  # GitHub redirect URI
-    userid: ""  # Valid GitHub user ID
-  sessionsecret: ""  # Secret for session cookie
+    enabled: false # Enable GitHub OAuth2
+    clientid: "" # GitHub client ID
+    clientsecret: "" # GitHub client secret
+    redirecturi: "" # GitHub redirect URI
+    userid: "" # Valid GitHub user ID
+  sessionsecret: "" # Secret for session cookie
 
 # Output settings
 # Error tracking and telemetry (optional)
 sentry:
-  enabled: false  # true to enable privacy-first error tracking (opt-in)
+  enabled: false # true to enable privacy-first error tracking (opt-in)
 
 output:
   # SQLite database output settings
   sqlite:
-    enabled: false  # Enable SQLite output
-    path: birdnet.db  # Path to SQLite database
-  
+    enabled: false # Enable SQLite output
+    path: birdnet.db # Path to SQLite database
+
   # MySQL database output settings
   mysql:
-    enabled: false  # Enable MySQL output
-    username: birdnet  # MySQL database username
-    password: secret  # MySQL database user password
-    database: birdnet  # MySQL database name
-    host: localhost  # MySQL database host
-    port: 3306  # MySQL database port
+    enabled: false # Enable MySQL output
+    username: birdnet # MySQL database username
+    password: secret # MySQL database user password
+    database: birdnet # MySQL database name
+    host: localhost # MySQL database host
+    port: 3306 # MySQL database port
 ```
 
 ### Command Line Interface
@@ -380,30 +386,30 @@ birdnet [command] [flags]
 
 **Available Commands:**
 
-*   `realtime`: (Default) Starts the real-time analysis using the configuration file.
-*   `file`: Analyzes a single audio file. Requires `-i <filepath>`.
-*   `directory`: Analyzes all audio files in a directory. Requires `-i <dirpath>`. Can optionally use `--recursive` and `--watch`.
-*   `benchmark`: Runs a performance benchmark on the current system.
-*   `range`: Manages the range filter database (used for location-based species filtering).
-    *   `range update`: Downloads or updates the range filter database.
-    *   `range info`: Displays information about the current range filter database.
-    *   `range print`: Shows all species that pass the current threshold for your location and date, with their probability scores.
-*   `support`: Generates a support bundle containing logs and configuration (with sensitive data masked) for troubleshooting.
-*   `authors`: Displays author information.
-*   `license`: Displays software license information.
-*   `help`: Shows help for any command.
+- `realtime`: (Default) Starts the real-time analysis using the configuration file.
+- `file`: Analyzes a single audio file. Requires `-i <filepath>`.
+- `directory`: Analyzes all audio files in a directory. Requires `-i <dirpath>`. Can optionally use `--recursive` and `--watch`.
+- `benchmark`: Runs a performance benchmark on the current system.
+- `range`: Manages the range filter database (used for location-based species filtering).
+  - `range update`: Downloads or updates the range filter database.
+  - `range info`: Displays information about the current range filter database.
+  - `range print`: Shows all species that pass the current threshold for your location and date, with their probability scores.
+- `support`: Generates a support bundle containing logs and configuration (with sensitive data masked) for troubleshooting.
+- `authors`: Displays author information.
+- `license`: Displays software license information.
+- `help`: Shows help for any command.
 
 **Global Flags (can be used with most commands):**
 
 Many configuration options can be overridden via command-line flags (e.g., `--threshold 0.7`, `--locale fr`). Run `birdnet [command] --help` to see all available flags for a specific command. Some common global flags include:
 
-*   `-d, --debug`: Enable debug output.
-*   `-s, --sensitivity`: Set sigmoid sensitivity (0.0 to 1.5).
-*   `-t, --threshold`: Set confidence threshold (0.1 to 1.0).
-*   `-j, --threads`: Set number of CPU threads (0 for auto).
-*   `--locale`: Set language for labels (e.g., `en-us`, `de`).
-*   `--latitude`, `--longitude`: Set location coordinates.
-*   `--overlap`: Set analysis overlap (0.0 to 2.9).
+- `-d, --debug`: Enable debug output.
+- `-s, --sensitivity`: Set sigmoid sensitivity (0.0 to 1.5).
+- `-t, --threshold`: Set confidence threshold (0.1 to 1.0).
+- `-j, --threads`: Set number of CPU threads (0 for auto).
+- `--locale`: Set language for labels (e.g., `en-us`, `de`).
+- `--latitude`, `--longitude`: Set location coordinates.
+- `--overlap`: Set analysis overlap (0.0 to 2.9).
 
 ### Supported Languages for Species Labels
 
@@ -528,6 +534,7 @@ sudo bash ./support.sh
 ```
 
 The script will:
+
 - Collect system information (hardware, OS, etc.)
 - Gather Docker configuration and logs
 - Retrieve BirdNET-Go configuration (with sensitive data masked)
@@ -599,7 +606,7 @@ The **Range Filter** acts as the primary gatekeeper, determining which species a
    - Species with configured custom actions are automatically included
    - Also assigned maximum probability score (1.0)
 
-4. **Location-Based Filtering** 
+4. **Location-Based Filtering**
    - Uses AI model trained on eBird data to determine species probability
    - Considers latitude, longitude, and week of year
    - Filtered by `birdnet.rangefilter.threshold` (default: 0.01)
@@ -610,7 +617,7 @@ birdnet:
   latitude: 60.1699
   longitude: 24.9384
   rangefilter:
-    threshold: 0.01  # Lower = more permissive, higher = more strict
+    threshold: 0.01 # Lower = more permissive, higher = more strict
 ```
 
 ### Stage 2: Confidence Threshold
@@ -620,22 +627,22 @@ After the range filter allows a species, individual detections must meet confide
 #### Confidence Sources (in order of precedence):
 
 1. **Custom Species Threshold** (Highest)
+
    ```yaml
    realtime:
      species:
        config:
          "European Robin":
-           threshold: 0.75  # Overrides global threshold
+           threshold: 0.75 # Overrides global threshold
    ```
 
 2. **Dynamic Threshold** (If enabled)
    - Automatically adjusts thresholds based on detection patterns
    - Can lower thresholds for frequently detected species
-   
 3. **Global BirdNET Threshold** (Default)
    ```yaml
    birdnet:
-     threshold: 0.8  # Default confidence requirement
+     threshold: 0.8 # Default confidence requirement
    ```
 
 ### Dynamic Threshold System
@@ -649,39 +656,39 @@ graph TD
     A[Bird Detection] --> B{Dynamic Threshold<br/>Enabled?}
     B -->|No| C[Use Base Threshold]
     B -->|Yes| D{Species Has<br/>Dynamic Threshold?}
-    
+
     D -->|No| E[Initialize Dynamic<br/>Threshold for Species]
     D -->|Yes| F{Confidence ><br/>Trigger Value?}
-    
+
     E --> F
-    
+
     F -->|Yes| G[High Confidence<br/>Detection!]
     F -->|No| H{Timer Expired?}
-    
+
     G --> I[Increment<br/>High Conf Count]
     I --> J[Reset Timer<br/>+ValidHours]
     J --> K{Check High<br/>Conf Count}
-    
+
     K -->|Count = 1| L[Level 1:<br/>Threshold × 0.75]
     K -->|Count = 2| M[Level 2:<br/>Threshold × 0.5]
     K -->|Count ≥ 3| N[Level 3:<br/>Threshold × 0.25]
-    
+
     H -->|Yes| O[Reset to<br/>Base Threshold]
     H -->|No| P[Keep Current<br/>Threshold]
-    
+
     L --> Q{Below Min<br/>Threshold?}
     M --> Q
     N --> Q
     O --> R[Apply Threshold]
     P --> R
-    
+
     Q -->|Yes| S[Use Min<br/>Threshold]
     Q -->|No| T[Use Calculated<br/>Threshold]
-    
+
     S --> R
     T --> R
     C --> R
-    
+
     R --> U[Detection Processed<br/>with Final Threshold]
 ```
 
@@ -690,11 +697,11 @@ graph TD
 ```yaml
 realtime:
   dynamicthreshold:
-    enabled: true       # Enable dynamic threshold adjustment (default: true)
-    debug: false        # Enable debug logging for threshold changes
-    trigger: 0.90       # Confidence level that triggers threshold reduction
-    min: 0.20          # Minimum allowed threshold (safety floor)
-    validhours: 24     # Hours before threshold resets to base value
+    enabled: true # Enable dynamic threshold adjustment (default: true)
+    debug: false # Enable debug logging for threshold changes
+    trigger: 0.90 # Confidence level that triggers threshold reduction
+    min: 0.20 # Minimum allowed threshold (safety floor)
+    validhours: 24 # Hours before threshold resets to base value
 ```
 
 #### Key Parameters Explained
@@ -719,30 +726,31 @@ realtime:
 The system uses a progressive adjustment based on the number of high-confidence detections:
 
 | High Conf Count | Level | Threshold Multiplier | Example (Base: 0.8) |
-|-----------------|-------|---------------------|-------------------|
-| 0               | 0     | 1.0× (base)         | 0.80             |
-| 1               | 1     | 0.75×               | 0.60             |
-| 2               | 2     | 0.50×               | 0.40             |
-| 3+              | 3     | 0.25×               | 0.20 (min limit) |
+| --------------- | ----- | -------------------- | ------------------- |
+| 0               | 0     | 1.0× (base)          | 0.80                |
+| 1               | 1     | 0.75×                | 0.60                |
+| 2               | 2     | 0.50×                | 0.40                |
+| 3+              | 3     | 0.25×                | 0.20 (min limit)    |
 
 #### Practical Example
 
 Let's walk through a scenario with these settings:
+
 ```yaml
 birdnet:
-  threshold: 0.8        # Base threshold
+  threshold: 0.8 # Base threshold
 realtime:
   dynamicthreshold:
     enabled: true
-    trigger: 0.9        # High trigger for quality
-    min: 0.2           # Safety floor
-    validhours: 24     # 24-hour window
+    trigger: 0.9 # High trigger for quality
+    min: 0.2 # Safety floor
+    validhours: 24 # 24-hour window
 ```
 
 **Scenario: Great Horned Owl Detection**
 
 1. **Initial State**: Great Horned Owl has no dynamic threshold, uses base 0.8
-2. **First Detection**: 
+2. **First Detection**:
    - 19:30 (dusk) - Great Horned Owl detected with 0.93 confidence (exceeds 0.9 trigger)
    - High confidence count: 1
    - New threshold: 0.8 × 0.75 = 0.6
@@ -781,15 +789,15 @@ realtime:
 3. **Monitor with Debug**: Enable debug mode initially to understand how thresholds change:
    ```yaml
    dynamicthreshold:
-     debug: true  # Logs threshold changes
+     debug: true # Logs threshold changes
    ```
 4. **Combine with Deep Detection**: For best results, use with deep detection to filter false positives:
    ```yaml
    birdnet:
-     overlap: 2.7      # Deep detection
+     overlap: 2.7 # Deep detection
    realtime:
      dynamicthreshold:
-       enabled: true   # Adaptive thresholds
+       enabled: true # Adaptive thresholds
    ```
 
 #### Important Notes
@@ -811,10 +819,11 @@ realtime:
 
 ```yaml
 birdnet:
-  overlap: 2.7  # Enable deep detection (requires more CPU power)
+  overlap: 2.7 # Enable deep detection (requires more CPU power)
 ```
 
 **Exact Minimum Detections Calculation:**
+
 ```
 segmentLength = max(0.1, 3.0 - overlap)
 minDetections = max(1, 3 / segmentLength)
@@ -822,7 +831,7 @@ minDetections = max(1, 3 / segmentLength)
 Examples:
 - overlap: 0.0  → segmentLength: 3.0  → minDetections: 1  (standard mode)
 - overlap: 1.5  → segmentLength: 1.5  → minDetections: 2
-- overlap: 2.7  → segmentLength: 0.3  → minDetections: 10 (deep detection)  
+- overlap: 2.7  → segmentLength: 0.3  → minDetections: 10 (deep detection)
 - overlap: 2.9  → segmentLength: 0.1  → minDetections: 30 (very strict)
 ```
 
@@ -846,24 +855,28 @@ Examples:
 Final stage filters that can discard detections based on environmental conditions:
 
 #### Privacy Filter
+
 ```yaml
 realtime:
   privacyfilter:
     enabled: true
-    confidence: 0.05  # Sensitivity to human voices
+    confidence: 0.05 # Sensitivity to human voices
 ```
+
 - Discards bird detections if human speech is detected after the initial detection
 - Protects privacy by preventing recordings during conversations
 
-#### Dog Bark Filter  
+#### Dog Bark Filter
+
 ```yaml
 realtime:
   dogbarkfilter:
     enabled: true
     confidence: 0.8
-    remember: 60  # Seconds to remember bark
-    species: ["Eurasian Eagle-Owl", "Hooded Crow"]  # Species prone to confusion with barks
+    remember: 60 # Seconds to remember bark
+    species: ["Eurasian Eagle-Owl", "Hooded Crow"] # Species prone to confusion with barks
 ```
+
 - **Problem Solved**: The BirdNET AI model frequently confuses dog barks with certain bird calls, especially owl vocalizations (very common: dog bark → Eurasian Eagle-Owl)
 - **How It Works**: When BirdNET detects dog barking above the confidence threshold, it temporarily disables detection of species listed in the filter for the specified duration
 - **Use Cases**: Prevents false detections during periods of constant dog barking, particularly for species that have acoustic similarities to canine vocalizations
@@ -874,7 +887,7 @@ realtime:
 **Highest to Lowest Precedence:**
 
 1. **Always Exclude Species** - Absolute veto power
-2. **Always Include Species** - Bypasses all location filtering  
+2. **Always Include Species** - Bypasses all location filtering
 3. **Custom Action Species** - Automatically included
 4. **Range Filter Threshold** - Location-based species filtering
 5. **Custom Species Confidence** - Overrides global threshold
@@ -887,18 +900,21 @@ realtime:
 ### Optimization Tips
 
 #### For Higher Accuracy (Fewer False Positives):
+
 - Increase `birdnet.threshold` (e.g., 0.9)
 - Enable deep detection with `overlap: 2.7`
 - Use stricter range filter threshold (e.g., 0.05)
 - Enable privacy and dog bark filters (especially for owl/crow confusion)
 
 #### For Higher Sensitivity (Catch More Species):
+
 - Lower `birdnet.threshold` (e.g., 0.6)
 - Use permissive range filter threshold (0.01)
 - Add rare species to "Always Include" list
 - Disable behavioral filters in quiet environments
 
 #### For Specific Species:
+
 - Use custom thresholds for problematic species
 - Add reliable local species to "Always Include"
 - Add problematic non-bird sounds to "Always Exclude"
@@ -914,7 +930,7 @@ Use these commands to inspect your current detection settings:
 # View all CLI options
 ./birdnet-go help
 
-# View range filter specific options  
+# View range filter specific options
 ./birdnet-go help range
 ```
 
@@ -929,7 +945,7 @@ The BirdNET Range Filter is an intelligent location and time-based filtering sys
 The range filter uses a secondary AI model trained on [eBird checklist frequency data](https://support.ebird.org/en/support/solutions/articles/48000948655-ebird-glossary#:~:text=frequency%3A%20as%20of%20a%20species,purple%20grid%20on%20species%20maps) to estimate the probability of bird species occurrence based on three factors:
 
 1. **Latitude** - Your geographic latitude coordinate
-2. **Longitude** - Your geographic longitude coordinate  
+2. **Longitude** - Your geographic longitude coordinate
 3. **Week of Year** - The current week (1-52) to account for seasonal migration patterns
 
 The model analyzes these inputs and assigns each species a probability score from 0.0 to 1.0, representing how likely that species is to occur in your location during that time period.
@@ -951,12 +967,12 @@ The range filter is configured in the `birdnet.rangefilter` section of your conf
 
 ```yaml
 birdnet:
-  latitude: 60.1699   # Your location latitude
-  longitude: 24.9384  # Your location longitude
+  latitude: 60.1699 # Your location latitude
+  longitude: 24.9384 # Your location longitude
   rangefilter:
-    debug: false      # Enable debug logging
-    model: ""         # "" for V2 (default), "legacy" for V1  
-    threshold: 0.01   # Species occurrence threshold (0.0-1.0)
+    debug: false # Enable debug logging
+    model: "" # "" for V2 (default), "legacy" for V1
+    threshold: 0.01 # Species occurrence threshold (0.0-1.0)
 ```
 
 > **Note**: The configuration uses `birdnet.rangefilter` in YAML, while CLI commands use the `range` group (e.g., `birdnet-go range print`). These refer to the same functionality.
@@ -975,38 +991,46 @@ The `threshold` parameter controls which species are included in analysis based 
 ### Configuration Examples
 
 #### Example 1: Default Permissive Filtering
+
 ```yaml
 rangefilter:
-  threshold: 0.01  # Default - good for most users
+  threshold: 0.01 # Default - good for most users
 ```
+
 - Includes species with ≥1% occurrence probability
 - Captures most potential species including occasional visitors
 - Balanced approach suitable for most locations
 
 #### Example 2: Conservative Filtering
+
 ```yaml
 rangefilter:
   threshold: 0.05
 ```
+
 - Includes species with ≥5% occurrence probability
 - Reduces potential false positives from very unlikely species
 - Good balance between coverage and accuracy
 
 #### Example 3: Strict Filtering
+
 ```yaml
 rangefilter:
   threshold: 0.1
 ```
+
 - Includes only species with ≥10% occurrence probability
 - Reduces false positives from unlikely species
 - Good for areas with excellent eBird coverage
 - May miss rare but possible species
 
 #### Example 4: Very Strict Filtering
+
 ```yaml
 rangefilter:
   threshold: 0.3
 ```
+
 - Includes only species with ≥30% occurrence probability
 - Focuses on common resident and seasonal species
 - Minimizes false positives
@@ -1019,7 +1043,7 @@ rangefilter:
 The range filter works alongside your manual species configuration:
 
 1. **Always Include Species**: Species in this list are **always** included regardless of range filter scores
-2. **Always Exclude Species**: Species in this list are **always** excluded regardless of range filter scores  
+2. **Always Exclude Species**: Species in this list are **always** excluded regardless of range filter scores
 3. **Custom Actions**: Species with configured actions are automatically included with maximum score
 
 #### Managing Species Lists via Web Interface
@@ -1059,18 +1083,23 @@ The V2 model generally provides better predictions and should be used unless you
 #### Common Issues and Solutions
 
 **Problem**: Too many false positives
+
 - **Solution**: Increase the `threshold` value (try 0.05 or 0.1)
 
-**Problem**: Missing obvious local species  
+**Problem**: Missing obvious local species
+
 - **Solution**: Add the species to the "Always Include Species" list via **Settings → Species** in the web interface, or lower the `threshold` value if many species are missing
 
 **Problem**: No location-based filtering occurring
+
 - **Solution**: Verify `latitude` and `longitude` are set correctly (non-zero values)
 
 **Problem**: Seasonal migrants not detected during migration
+
 - **Solution**: Lower the `threshold` temporarily during migration periods, or add specific migrants to the "Always Include Species" list
 
 **Problem**: Non-bird sounds being detected (dogs, sirens, etc.)
+
 - **Solution**: Add these to the "Always Exclude Species" list via **Settings → Species**
 
 ## Advanced Features
@@ -1078,6 +1107,7 @@ The V2 model generally provides better predictions and should be used unless you
 ### Web Dashboard
 
 BirdNET-Go includes a web dashboard that provides visualization and management capabilities. The dashboard features:
+
 - Summary views of detected species
 - Recent detections display
 - Optional thumbnails for visual identification
@@ -1100,6 +1130,7 @@ For detailed setup instructions and security best practices, see the dedicated [
 ### Weather Integration
 
 The application supports weather data integration from two providers:
+
 - Yr.no (default)
 - OpenWeather API (requires API key)
 
@@ -1108,6 +1139,7 @@ Weather data can be used to correlate bird activity with environmental condition
 ### Audio Processing
 
 BirdNET-Go offers advanced audio processing capabilities:
+
 - Support for various audio sources including direct soundcard capture and RTSP streams
 - Configurable equalizer with multiple filter types (LowPass, HighPass, BandPass, etc.)
 - Audio export in multiple formats (WAV, MP3, FLAC)
@@ -1121,17 +1153,18 @@ The cleanup task runs periodically (every few minutes) to check if clips need to
 
 Configure these options under `realtime.audio.export.retention` in your `config.yaml`:
 
-*   **`policy`**: Sets the retention strategy. Options are:
-    *   **`none`** (Default): No automatic deletion. You are responsible for managing the clip files.
-    *   **`age`**: Deletes clips older than the specified `maxage`.
-    *   **`usage`**: Deletes the oldest clips *only when* the disk usage of the partition containing the clips directory exceeds the `maxusage` percentage. This policy tries to keep at least `minclips` per species, deleting the oldest clips first when cleanup is needed.
-*   **`maxage`**: (Used with `policy: age`) Maximum age for clips (e.g., `30d` for 30 days, `7d` for 7 days, `24h` for 24 hours). Clips older than this will be deleted.
-*   **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (e.g., `85%`). Cleanup triggers when usage exceeds this threshold.
-*   **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species, even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
+- **`policy`**: Sets the retention strategy. Options are:
+  - **`none`** (Default): No automatic deletion. You are responsible for managing the clip files.
+  - **`age`**: Deletes clips older than the specified `maxage`.
+  - **`usage`**: Deletes the oldest clips _only when_ the disk usage of the partition containing the clips directory exceeds the `maxusage` percentage. This policy tries to keep at least `minclips` per species, deleting the oldest clips first when cleanup is needed.
+- **`maxage`**: (Used with `policy: age`) Maximum age for clips (e.g., `30d` for 30 days, `7d` for 7 days, `24h` for 24 hours). Clips older than this will be deleted.
+- **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (e.g., `85%`). Cleanup triggers when usage exceeds this threshold.
+- **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species, even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
 
 ### Security Features
 
 The application includes several security options:
+
 - Basic authentication with password protection
 - OAuth2 authentication through Google or GitHub
 - Automatic TLS certificate management via Let's Encrypt
@@ -1140,6 +1173,7 @@ The application includes several security options:
 ### Filtering Capabilities
 
 BirdNET-Go includes intelligent filtering mechanisms:
+
 - Privacy filter to ignore human voices
 - Dog bark filter to prevent misdetections when BirdNET confuses barking with owl/crow calls
 - Species-specific inclusion and exclusion lists
@@ -1154,29 +1188,29 @@ BirdNET-Go includes a "Deep Detection" feature designed to improve detection rel
 ```mermaid
 graph TD
     A[Species Detected<br/>by BirdNET] --> B{First Detection<br/>of This Species?}
-    
+
     B -->|Yes| C[⏱️ Start 15-Second<br/>Counting Window<br/>Count = 1]
     B -->|No| D[📈 Increment Counter<br/>Count = Count + 1]
-    
+
     C --> E[🎧 Continue Listening<br/>for More Audio]
     D --> E
-    
+
     E --> F{Same Species<br/>Detected Again?}
     F -->|Yes| G[⬆️ Add to Count]
     F -->|No| H{15 Seconds<br/>Elapsed?}
-    
+
     G --> H
     H -->|No| E
     H -->|Yes| I{Count ≥ Required<br/>Minimum?}
-    
+
     I -->|No| J[❌ Rejected<br/>False Positive]
     I -->|Yes| K{Final Safety<br/>Checks Pass?}
-    
+
     K -->|No| L[❌ Blocked by<br/>Privacy/Dog Filter]
     K -->|Yes| M[✅ Detection Approved<br/>Saved to Database]
-    
+
     J --> N[🗂️ Log: Not enough matches]
-    L --> O[🗂️ Log: Blocked by filter] 
+    L --> O[🗂️ Log: Blocked by filter]
     M --> P[🗂️ Log: Species confirmed]
 ```
 
@@ -1189,12 +1223,13 @@ graph TD
 3. **Counting Mechanism**: During the 15-second window, each additional detection of the same species increments a counter
 
 4. **Variable Threshold**: The number of required detections scales with the overlap setting:
+
    ```
    Required Detections = max(1, 3 / max(0.1, 3.0 - overlap))
-   
+
    Examples:
    - overlap: 0.0 → 1 detection required (standard mode)
-   - overlap: 2.4 → 5 detections required  
+   - overlap: 2.4 → 5 detections required
    - overlap: 2.7 → 10 detections required (typical deep detection)
    - overlap: 2.9 → 30 detections required (very strict)
    ```
@@ -1203,45 +1238,46 @@ graph TD
 
 #### Benefits and Use Cases
 
-*   **False Positive Reduction**: Eliminates single spurious detections that don't repeat
-*   **Lower Threshold Tolerance**: Allows using lower `birdnet.threshold` values (e.g., 0.3-0.6) while maintaining accuracy
-*   **Quality Selection**: Keeps the highest confidence detection from the 15-second window
-*   **Consistent Behavior**: All detections are held for exactly 15 seconds, providing predictable timing
+- **False Positive Reduction**: Eliminates single spurious detections that don't repeat
+- **Lower Threshold Tolerance**: Allows using lower `birdnet.threshold` values (e.g., 0.3-0.6) while maintaining accuracy
+- **Quality Selection**: Keeps the highest confidence detection from the 15-second window
+- **Consistent Behavior**: All detections are held for exactly 15 seconds, providing predictable timing
 
 #### System Requirements
 
-*   **CPU Load**: Significantly increases processing requirements due to higher analysis frequency
-*   **Recommended Hardware**: Raspberry Pi 4/5 or more powerful systems
-*   **Performance Monitoring**: Watch for `WARNING: BirdNET processing time exceeded buffer length` messages indicating the system cannot keep up
+- **CPU Load**: Significantly increases processing requirements due to higher analysis frequency
+- **Recommended Hardware**: Raspberry Pi 4/5 or more powerful systems
+- **Performance Monitoring**: Watch for `WARNING: BirdNET processing time exceeded buffer length` messages indicating the system cannot keep up
 
 #### Configuration
 
-*   **Docker Installation**: Deep Detection is **enabled by default** with the `install.sh` script, which benchmarks your hardware and sets appropriate overlap values
-*   **Manual Configuration**: Set `birdnet.overlap` in your `config.yaml`:
-    ```yaml
-    birdnet:
-      overlap: 2.7  # Enable deep detection (10 detections required)
-      threshold: 0.5  # Can use lower thresholds with deep detection
-    ```
-*   **Disabling**: Set `overlap: 0.0` for standard single-detection mode
+- **Docker Installation**: Deep Detection is **enabled by default** with the `install.sh` script, which benchmarks your hardware and sets appropriate overlap values
+- **Manual Configuration**: Set `birdnet.overlap` in your `config.yaml`:
+  ```yaml
+  birdnet:
+    overlap: 2.7 # Enable deep detection (10 detections required)
+    threshold: 0.5 # Can use lower thresholds with deep detection
+  ```
+- **Disabling**: Set `overlap: 0.0` for standard single-detection mode
 
 #### Reference
+
 [[GitHub Discussion #302](https://github.com/tphakala/birdnet-go/discussions/302)]
 
 ### Live Audio Streaming
 
 BirdNET-Go allows you to listen to the live audio feed directly from the web interface. This is useful for monitoring the audio quality, checking microphone placement, or simply listening to the ambient sounds.
 
-*   **How to Use:**
-    1.  Locate the microphone icon / audio level indicator in the web interface header.
-    2.  Click the icon to open the audio source dropdown.
-    3.  If you have multiple audio sources configured (e.g., a sound card and RTSP streams), select the source you wish to listen to.
-    4.  Click the play icon (▶️) next to the source name.
-    5.  Audio playback will begin using your browser's audio capabilities.
-    6.  Click the stop icon (⏹️) to end the stream.
-*   **Technology:** The live stream uses HLS (HTTP Live Streaming) for broad browser compatibility and efficient delivery.
-*   **Dependency:** This feature requires **FFmpeg** to be installed and accessible by BirdNET-Go. If FFmpeg is not found, the play button may not appear or function.
-*   **Server Interaction:** Starting the live stream initiates audio encoding on the server. The stream uses a heartbeat mechanism to stay active while you are listening. Stopping the stream or closing the browser tab/window signals the server to stop the encoding process, conserving server resources.
+- **How to Use:**
+  1.  Locate the microphone icon / audio level indicator in the web interface header.
+  2.  Click the icon to open the audio source dropdown.
+  3.  If you have multiple audio sources configured (e.g., a sound card and RTSP streams), select the source you wish to listen to.
+  4.  Click the play icon (▶️) next to the source name.
+  5.  Audio playback will begin using your browser's audio capabilities.
+  6.  Click the stop icon (⏹️) to end the stream.
+- **Technology:** The live stream uses HLS (HTTP Live Streaming) for broad browser compatibility and efficient delivery.
+- **Dependency:** This feature requires **FFmpeg** to be installed and accessible by BirdNET-Go. If FFmpeg is not found, the play button may not appear or function.
+- **Server Interaction:** Starting the live stream initiates audio encoding on the server. The stream uses a heartbeat mechanism to stay active while you are listening. Stopping the stream or closing the browser tab/window signals the server to stop the encoding process, conserving server resources.
 
 ### Sound Level Monitoring
 
@@ -1257,6 +1293,7 @@ BirdNET-Go includes an advanced sound level monitoring feature that provides det
 #### How It Works
 
 The sound level monitoring system:
+
 1. **Analyzes audio in 1/3rd octave bands** following the ISO 266 standard (25 Hz to 20 kHz)
 2. **Aggregates measurements over 10-second windows** to provide stable readings
 3. **Calculates min/max/mean values** for each frequency band within the window
@@ -1281,10 +1318,10 @@ Enable sound level monitoring in your `config.yaml`:
 realtime:
   audio:
     soundlevel:
-      enabled: true              # Enable sound level monitoring (default: false)
-      interval: 10               # Measurement interval in seconds (default: 10)
-      debug: false               # Enable debug logging (default: false)
-      debug_realtime_logging: false  # Enable per-sample debug logs (default: false)
+      enabled: true # Enable sound level monitoring (default: false)
+      interval: 10 # Measurement interval in seconds (default: 10)
+      debug: false # Enable debug logging (default: false)
+      debug_realtime_logging: false # Enable per-sample debug logs (default: false)
 ```
 
 > **Note**: Sound level monitoring is disabled by default to avoid performance overhead. Enable it only if you need this functionality.
@@ -1305,7 +1342,7 @@ Sound level data is published as JSON with the following structure:
       "min_db": -45.2,
       "max_db": -38.7,
       "mean_db": -42.1
-    },
+    }
     // ... additional frequency bands ...
   }
 }
@@ -1314,7 +1351,9 @@ Sound level data is published as JSON with the following structure:
 #### Integration Examples
 
 ##### MQTT Integration
+
 When MQTT is enabled, sound level data is published to the topic:
+
 ```
 <base_topic>/soundlevel
 ```
@@ -1513,6 +1552,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
 ```
 
 **Field Reference:**
+
 - `ts`: ISO8601 timestamp
 - `src`: Audio source identifier
 - `nm`: Human-readable name of the source
@@ -1525,6 +1565,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
   - `m`: Mean/average dB level (1 decimal place)
 
 Example Home Assistant configuration:
+
 ```yaml
 sensor:
   - platform: mqtt
@@ -1537,13 +1578,17 @@ sensor:
 ```
 
 ##### SSE Streaming
+
 Access real-time sound level data via the SSE endpoint:
+
 ```
 GET /api/v2/soundlevels/stream
 ```
 
 ##### Prometheus Metrics
+
 Sound level data is exposed as Prometheus metrics:
+
 - `birdnet_sound_level_db`: Current sound level for each octave band
 - `birdnet_sound_level_processing_duration_seconds`: Processing time histogram
 - `birdnet_sound_level_publishing_total`: Publishing success/error counters
@@ -1630,8 +1675,8 @@ For troubleshooting or detailed analysis:
 realtime:
   audio:
     soundlevel:
-      debug: true                    # Enable debug logging
-      debug_realtime_logging: true   # Enable per-sample logging (very verbose!)
+      debug: true # Enable debug logging
+      debug_realtime_logging: true # Enable per-sample logging (very verbose!)
 ```
 
 Debug logs are written to `logs/soundlevel.log`. Use `debug_realtime_logging` sparingly as it generates high log volume.
@@ -1661,12 +1706,14 @@ The species tracking system runs automatically in the background, analyzing each
 The system tracks three different types of "new" species appearances:
 
 ##### 🌟 **New Species** (Lifetime First)
+
 - **What it means**: A bird species detected for the very first time at your location
 - **Visual indicator**: Animated golden star that gently wiggles to catch your attention
 - **When shown**: For 7 days after the first detection (configurable)
 - **Perfect for**: Discovering birds that have never visited your area before, tracking range expansions, or celebrating truly rare visitors
 
 ##### 📅 **New This Year** (Annual First)
+
 - **What it means**: A bird species detected for the first time this calendar year
 - **Visual indicator**: Blue calendar icon
 - **When shown**: For 7 days after the first detection of the year (configurable)
@@ -1674,6 +1721,7 @@ The system tracks three different types of "new" species appearances:
 - **Perfect for**: Tracking yearly visitors, seasonal patterns, and migration timing
 
 ##### 🌿 **New This Season** (Seasonal First)
+
 - **What it means**: A bird species detected for the first time this season
 - **Visual indicator**: Green leaf icon
 - **When shown**: For 7 days after the first seasonal detection (configurable)
@@ -1711,17 +1759,20 @@ The species tracking system is enabled by default with sensible settings, but yo
 #### Practical Benefits
 
 **For Casual Birdwatchers**:
+
 - Never miss when a new species visits your yard
 - Easily spot seasonal patterns in bird activity
 - Get excited about first-of-the-year sightings
 
 **For Serious Birders**:
+
 - Track migration timing and patterns
-- Monitor range expansions and climate-related shifts  
+- Monitor range expansions and climate-related shifts
 - Document seasonal abundance changes
 - Build comprehensive species lists for your location
 
 **For Researchers**:
+
 - Collect systematic data on species occurrence patterns
 - Monitor long-term changes in bird communities
 - Track phenological shifts in migration and breeding timing
@@ -1738,16 +1789,18 @@ The species tracking system transforms your BirdNET-Go installation from a simpl
 ### Integration Options
 
 The application offers several integration points:
-  * **Server-Sent Events (SSE) API** for real-time detection streaming.
-    * Provides live bird detection data as it happens
-    * Compatible with any programming language or platform that supports SSE
-    * Includes species metadata, confidence scores, and thumbnail images
-    * No authentication required for read-only access
-    * Perfect for building custom dashboards, mobile apps, or integration with other systems
-- MQTT support for IoT ecosystems.
+
+- **Server-Sent Events (SSE) API** for real-time detection streaming.
+  - Provides live bird detection data as it happens
+  - Compatible with any programming language or platform that supports SSE
+  - Includes species metadata, confidence scores, and thumbnail images
+  - No authentication required for read-only access
+  - Perfect for building custom dashboards, mobile apps, or integration with other systems
+
+* MQTT support for IoT ecosystems.
   - The `retain` flag in MQTT settings is recommended for Home Assistant integration to ensure sensor states are preserved across restarts.
-- Telemetry endpoint compatible with Prometheus.
-- BirdWeather API integration for community data sharing.
+* Telemetry endpoint compatible with Prometheus.
+* BirdWeather API integration for community data sharing.
   - **About BirdWeather:** [BirdWeather.com](https://www.birdweather.com/) is a citizen science platform that collects bird vocalizations from stations around the world. It uses the BirdNET model (developed by Cornell Lab of Ornithology and Chemnitz University of Technology) for identification. Uploading data helps contribute to this global library.
   - **Getting a BirdWeather ID/Token:** To upload data, you need an ID (also referred to as a Token). This process is now automated:
     1. Create an account at [app.birdweather.com/login](https://app.birdweather.com/login).
@@ -1755,8 +1808,8 @@ The application offers several integration points:
     3. Create a new station, ensuring the Latitude and Longitude match your BirdNET-Go configuration (`birdnet.latitude` and `birdnet.longitude`).
     4. Copy the generated station ID/Token into the `realtime.birdweather.id` field in your BirdNET-Go configuration.
   - **Data Sharing Consent:** By configuring and enabling BirdWeather uploads with your ID/Token, you consent to sharing your soundscape snippets and detection data with BirdWeather.
-- Custom actions that can be triggered on species detection.
-- Built-in connection testers (via Web UI) for BirdWeather and MQTT to verify configuration.
+* Custom actions that can be triggered on species detection.
+* Built-in connection testers (via Web UI) for BirdWeather and MQTT to verify configuration.
   - The testers perform multi-stage checks (connectivity, authentication, test uploads/publishes) and provide feedback, including troubleshooting hints and rate limit information (for BirdWeather).
 
 ## Real-time Detection API (Server-Sent Events)
@@ -1787,6 +1840,7 @@ The endpoints include built-in rate limiting (10 requests per minute per IP) to 
 The SSE stream sends different types of events:
 
 #### 1. Connection Event
+
 Sent immediately when a client connects to confirm the connection is established.
 
 ```json
@@ -1797,6 +1851,7 @@ Sent immediately when a client connects to confirm the connection is established
 ```
 
 #### 2. Detection Event
+
 Sent when a new bird detection occurs and passes all filters.
 
 ```json
@@ -1828,6 +1883,7 @@ Sent when a new bird detection occurs and passes all filters.
 ```
 
 #### 3. Heartbeat Event
+
 Sent every 30 seconds to keep the connection alive and provide connection status.
 
 ```json
@@ -1855,64 +1911,68 @@ Returns information about the current SSE connection status:
 ### Integration Examples
 
 #### JavaScript/HTML
+
 Perfect for web dashboards or browser-based applications:
 
 ```html
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <title>BirdNET-Go Live Detections</title>
-</head>
-<body>
+  </head>
+  <body>
     <div id="detections"></div>
-    
+
     <script>
-        const eventSource = new EventSource('http://localhost:8080/api/v2/detections/stream');
-        const detectionsDiv = document.getElementById('detections');
-        
-        eventSource.addEventListener('connected', function(event) {
-            const data = JSON.parse(event.data);
-            console.log('Connected:', data.message);
-        });
-        
-        eventSource.addEventListener('detection', function(event) {
-            const detection = JSON.parse(event.data);
-            
-            // Create detection element
-            const detectionElement = document.createElement('div');
-            detectionElement.className = 'detection';
-                         detectionElement.innerHTML = `
+      const eventSource = new EventSource(
+        "http://localhost:8080/api/v2/detections/stream",
+      );
+      const detectionsDiv = document.getElementById("detections");
+
+      eventSource.addEventListener("connected", function (event) {
+        const data = JSON.parse(event.data);
+        console.log("Connected:", data.message);
+      });
+
+      eventSource.addEventListener("detection", function (event) {
+        const detection = JSON.parse(event.data);
+
+        // Create detection element
+        const detectionElement = document.createElement("div");
+        detectionElement.className = "detection";
+        detectionElement.innerHTML = `
                  <h3>${detection.commonName}</h3>
                  <p><em>${detection.scientificName}</em></p>
                  <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
                  <p>Time: ${detection.time}</p>
                  <p>Source: ${detection.source}</p>
-                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;">` : ''}
+                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;">` : ""}
              `;
-            
-            // Add to top of list
-            detectionsDiv.insertBefore(detectionElement, detectionsDiv.firstChild);
-            
-            // Keep only last 10 detections
-            while (detectionsDiv.children.length > 10) {
-                detectionsDiv.removeChild(detectionsDiv.lastChild);
-            }
-        });
-        
-        eventSource.addEventListener('heartbeat', function(event) {
-            const data = JSON.parse(event.data);
-            console.log(`Heartbeat - ${data.clients} clients connected`);
-        });
-        
-        eventSource.onerror = function(event) {
-            console.error('SSE connection error:', event);
-        };
+
+        // Add to top of list
+        detectionsDiv.insertBefore(detectionElement, detectionsDiv.firstChild);
+
+        // Keep only last 10 detections
+        while (detectionsDiv.children.length > 10) {
+          detectionsDiv.removeChild(detectionsDiv.lastChild);
+        }
+      });
+
+      eventSource.addEventListener("heartbeat", function (event) {
+        const data = JSON.parse(event.data);
+        console.log(`Heartbeat - ${data.clients} clients connected`);
+      });
+
+      eventSource.onerror = function (event) {
+        console.error("SSE connection error:", event);
+      };
     </script>
-</body>
+  </body>
 </html>
 ```
 
 #### Python
+
 Great for data processing, logging, or integration with other Python applications:
 
 ```python
@@ -1924,39 +1984,39 @@ import requests
 def listen_to_detections(base_url="http://localhost:8080"):
     """
     Listen to BirdNET-Go detection stream and process detections.
-    
+
     Requires: pip install sseclient-py requests
     """
     url = f"{base_url}/api/v2/detections/stream"
-    
+
     try:
         response = requests.get(url, stream=True, headers={'Accept': 'text/event-stream'})
         client = sseclient.SSEClient(response)
-        
+
         print("Connected to BirdNET-Go detection stream...")
-        
+
         for event in client.events():
             if event.event == 'connected':
                 data = json.loads(event.data)
                 print(f"✅ Connected: {data['message']}")
-                
+
             elif event.event == 'detection':
                 detection = json.loads(event.data)
-                
+
                 # Process the detection
                 print(f"🐦 {detection['commonName']} detected!")
                 print(f"   Scientific: {detection['scientificName']}")
                 print(f"   Confidence: {detection['confidence']:.2f}")
                 print(f"   Time: {detection['time']}")
                 print(f"   Source: {detection['source']}")
-                
+
                 # Your custom processing here
                 process_detection(detection)
-                
+
             elif event.event == 'heartbeat':
                 data = json.loads(event.data)
                 print(f"💓 Heartbeat - {data['clients']} clients connected")
-                
+
     except KeyboardInterrupt:
         print("\n👋 Disconnecting from stream...")
     except Exception as e:
@@ -1970,11 +2030,11 @@ def process_detection(detection):
     # Example: Save to file
     with open('detections.log', 'a') as f:
         f.write(f"{detection['time']},{detection['commonName']},{detection['confidence']}\n")
-    
+
     # Example: Send notification for high confidence detections
     if detection['confidence'] > 0.9:
         send_notification(f"High confidence detection: {detection['commonName']}")
-    
+
     # Example: Store in database
     # store_in_database(detection)
 
@@ -1987,69 +2047,68 @@ if __name__ == "__main__":
 ```
 
 #### Node.js
+
 Ideal for server-side applications or building APIs on top of BirdNET-Go:
 
 ```javascript
-const EventSource = require('eventsource');
+const EventSource = require("eventsource");
 
 class BirdNetGoClient {
-    constructor(baseUrl = 'http://localhost:8080') {
-        this.baseUrl = baseUrl;
-        this.eventSource = null;
+  constructor(baseUrl = "http://localhost:8080") {
+    this.baseUrl = baseUrl;
+    this.eventSource = null;
+  }
+
+  connect() {
+    const url = `${this.baseUrl}/api/v2/detections/stream`;
+    this.eventSource = new EventSource(url);
+
+    this.eventSource.addEventListener("connected", (event) => {
+      const data = JSON.parse(event.data);
+      console.log("✅ Connected:", data.message);
+    });
+
+    this.eventSource.addEventListener("detection", (event) => {
+      const detection = JSON.parse(event.data);
+      this.onDetection(detection);
+    });
+
+    this.eventSource.addEventListener("heartbeat", (event) => {
+      const data = JSON.parse(event.data);
+      console.log(`💓 Heartbeat - ${data.clients} clients connected`);
+    });
+
+    this.eventSource.onerror = (error) => {
+      console.error("❌ SSE Error:", error);
+    };
+
+    console.log("🔗 Connecting to BirdNET-Go detection stream...");
+  }
+
+  onDetection(detection) {
+    console.log(`🐦 ${detection.commonName} detected!`);
+    console.log(`   Confidence: ${(detection.confidence * 100).toFixed(1)}%`);
+    console.log(`   Time: ${detection.time}`);
+
+    // Your custom logic here
+    this.processDetection(detection);
+  }
+
+  processDetection(detection) {
+    // Example: Send to webhook
+    // this.sendWebhook(detection);
+    // Example: Store in external database
+    // this.storeInDatabase(detection);
+    // Example: Send push notification
+    // this.sendPushNotification(detection);
+  }
+
+  disconnect() {
+    if (this.eventSource) {
+      this.eventSource.close();
+      console.log("👋 Disconnected from stream");
     }
-    
-    connect() {
-        const url = `${this.baseUrl}/api/v2/detections/stream`;
-        this.eventSource = new EventSource(url);
-        
-        this.eventSource.addEventListener('connected', (event) => {
-            const data = JSON.parse(event.data);
-            console.log('✅ Connected:', data.message);
-        });
-        
-        this.eventSource.addEventListener('detection', (event) => {
-            const detection = JSON.parse(event.data);
-            this.onDetection(detection);
-        });
-        
-        this.eventSource.addEventListener('heartbeat', (event) => {
-            const data = JSON.parse(event.data);
-            console.log(`💓 Heartbeat - ${data.clients} clients connected`);
-        });
-        
-        this.eventSource.onerror = (error) => {
-            console.error('❌ SSE Error:', error);
-        };
-        
-        console.log('🔗 Connecting to BirdNET-Go detection stream...');
-    }
-    
-    onDetection(detection) {
-        console.log(`🐦 ${detection.commonName} detected!`);
-        console.log(`   Confidence: ${(detection.confidence * 100).toFixed(1)}%`);
-        console.log(`   Time: ${detection.time}`);
-        
-        // Your custom logic here
-        this.processDetection(detection);
-    }
-    
-    processDetection(detection) {
-        // Example: Send to webhook
-        // this.sendWebhook(detection);
-        
-        // Example: Store in external database
-        // this.storeInDatabase(detection);
-        
-        // Example: Send push notification
-        // this.sendPushNotification(detection);
-    }
-    
-    disconnect() {
-        if (this.eventSource) {
-            this.eventSource.close();
-            console.log('👋 Disconnected from stream');
-        }
-    }
+  }
 }
 
 // Usage
@@ -2057,13 +2116,14 @@ const client = new BirdNetGoClient();
 client.connect();
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-    client.disconnect();
-    process.exit(0);
+process.on("SIGINT", () => {
+  client.disconnect();
+  process.exit(0);
 });
 ```
 
 #### curl (Command Line)
+
 For testing or simple scripting:
 
 ```bash
@@ -2076,7 +2136,7 @@ while IFS= read -r line; do
     if [[ $line == data:* ]]; then
         # Extract JSON data
         json_data="${line#data: }"
-        
+
         # Parse with jq if available
         if command -v jq &> /dev/null; then
             # Check if it's a detection event
@@ -2084,12 +2144,12 @@ while IFS= read -r line; do
                 species=$(echo "$json_data" | jq -r '.commonName')
                 confidence=$(echo "$json_data" | jq -r '.confidence')
                 time=$(echo "$json_data" | jq -r '.time')
-                
+
                 echo "🐦 $time: $species (${confidence})"
-                
+
                 # Example: Log to file
                 echo "$time,$species,$confidence" >> detections.csv
-                
+
                 # Example: Send desktop notification (Linux)
                 # notify-send "Bird Detected" "$species detected with ${confidence} confidence"
             fi
@@ -2103,106 +2163,115 @@ done
 ### Connection Management
 
 #### Automatic Reconnection
+
 The SSE connection can be lost due to network issues or server restarts. Most SSE clients automatically handle reconnection, but you can implement custom reconnection logic:
 
 ```javascript
 function connectWithRetry(baseUrl, maxRetries = 5) {
-    let retryCount = 0;
-    
-    function connect() {
-        const eventSource = new EventSource(`${baseUrl}/api/v2/detections/stream`);
-        
-        eventSource.onopen = function() {
-            console.log('✅ Connected to detection stream');
-            retryCount = 0; // Reset retry count on successful connection
-        };
-        
-        eventSource.onerror = function(event) {
-            if (retryCount < maxRetries) {
-                retryCount++;
-                const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
-                console.log(`❌ Connection lost. Retrying in ${delay}ms... (attempt ${retryCount}/${maxRetries})`);
-                
-                setTimeout(() => {
-                    eventSource.close();
-                    connect();
-                }, delay);
-            } else {
-                console.error('❌ Max retries reached. Please check your connection.');
-            }
-        };
-        
-        return eventSource;
-    }
-    
-    return connect();
+  let retryCount = 0;
+
+  function connect() {
+    const eventSource = new EventSource(`${baseUrl}/api/v2/detections/stream`);
+
+    eventSource.onopen = function () {
+      console.log("✅ Connected to detection stream");
+      retryCount = 0; // Reset retry count on successful connection
+    };
+
+    eventSource.onerror = function (event) {
+      if (retryCount < maxRetries) {
+        retryCount++;
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Exponential backoff, max 30s
+        console.log(
+          `❌ Connection lost. Retrying in ${delay}ms... (attempt ${retryCount}/${maxRetries})`,
+        );
+
+        setTimeout(() => {
+          eventSource.close();
+          connect();
+        }, delay);
+      } else {
+        console.error("❌ Max retries reached. Please check your connection.");
+      }
+    };
+
+    return eventSource;
+  }
+
+  return connect();
 }
 ```
 
 ### Performance Considerations
 
-   * **Connection Limits**: The server can handle multiple concurrent SSE connections, but each connection consumes server resources
-   * **Network Bandwidth**: Each connected client receives all detection events, so bandwidth usage scales with the number of clients  
-   * **Client Processing**: Ensure your client application can process events fast enough to avoid missing detections
-   * **Heartbeat Monitoring**: Use heartbeat events to detect connection issues and implement automatic reconnection
+- **Connection Limits**: The server can handle multiple concurrent SSE connections, but each connection consumes server resources
+- **Network Bandwidth**: Each connected client receives all detection events, so bandwidth usage scales with the number of clients
+- **Client Processing**: Ensure your client application can process events fast enough to avoid missing detections
+- **Heartbeat Monitoring**: Use heartbeat events to detect connection issues and implement automatic reconnection
 
 ### Use Cases
 
 #### Real-time Dashboards
+
 Create web-based dashboards that display live bird activity, species counts, and detection trends in real-time.
 
 #### Mobile Applications
+
 Build mobile apps that notify users immediately when interesting species are detected in their area.
 
 #### Data Integration
+
 Stream detection data into time-series databases, data lakes, or analytics platforms for advanced analysis.
 
 #### Automation Systems
+
 Trigger actions in home automation systems, cameras, or other IoT devices based on specific bird detections.
 
 #### Research Applications
+
 Collect real-time data for ornithological research, citizen science projects, or ecological monitoring.
 
 #### Alert Systems
+
 Send notifications via email, SMS, push notifications, or other channels when rare or specific species are detected.
 
 ## Species-Specific Settings
 
 BirdNET-Go allows for fine-grained control over how individual species are handled through the `realtime.species` configuration section:
 
-*   **Include List (`include`):** A list of species names (matching the labels used by your BirdNET model/locale) that should *always* be processed and trigger actions if their confidence meets the required threshold. These species bypass any location-based range filtering.
-*   **Exclude List (`exclude`):** A list of species names that should *always* be ignored, regardless of their detection confidence. This is useful for filtering out consistently problematic species or non-bird sounds that might be misidentified.
-*   **Custom Configuration (`config`):** This section allows you to define specific settings for individual species:
-    *   **Custom Threshold:** You can set a unique `threshold` for a species, overriding the global `birdnet.threshold`. This is useful if you want to be more or less strict for specific birds.
-    *   **Custom Interval:** You can set a species-specific `interval` (in seconds) to control how frequently detections for that particular species are allowed. Useful for limiting overly vocal species without affecting detection rates for other birds. When set to 0 or omitted, the global `realtime.interval` value is used.
-    *   **Custom Actions (`actions`):** You can define a custom action to be triggered when a specific species is detected above its threshold. Currently, only one action per species is supported.
-        *   **Type:** The only supported type is `ExecuteCommand`.
-        *   **Command:** The full path to the script or executable to run.
-        *   **Parameters:** A list of values to pass as arguments to the command. Available values are:
-            *   `CommonName`: The common name of the detected species.
-            *   `ScientificName`: The scientific name of the detected species.
-            *   `Confidence`: The detection confidence score (0.0 to 1.0). Note: This is passed as a float; multiply by 100 in your script if you need a percentage.
-            *   `Time`: The time of the detection (format: HH:MM:SS).
-            *   `Source`: The audio source identifier (e.g., sound card name or RTSP stream URL).
-        *   **ExecuteDefaults:** A boolean value (`true` or `false`).
-            *   If `true` (default), BirdNET-Go will execute **both** your custom command **and** all other configured default actions (like saving to the database, uploading to BirdWeather, sending MQTT messages, etc.).
-            *   If `false`, BirdNET-Go will **only** execute your custom command for this specific species detection and will *skip* all default actions.
+- **Include List (`include`):** A list of species names (matching the labels used by your BirdNET model/locale) that should _always_ be processed and trigger actions if their confidence meets the required threshold. These species bypass any location-based range filtering.
+- **Exclude List (`exclude`):** A list of species names that should _always_ be ignored, regardless of their detection confidence. This is useful for filtering out consistently problematic species or non-bird sounds that might be misidentified.
+- **Custom Configuration (`config`):** This section allows you to define specific settings for individual species:
+  - **Custom Threshold:** You can set a unique `threshold` for a species, overriding the global `birdnet.threshold`. This is useful if you want to be more or less strict for specific birds.
+  - **Custom Interval:** You can set a species-specific `interval` (in seconds) to control how frequently detections for that particular species are allowed. Useful for limiting overly vocal species without affecting detection rates for other birds. When set to 0 or omitted, the global `realtime.interval` value is used.
+  - **Custom Actions (`actions`):** You can define a custom action to be triggered when a specific species is detected above its threshold. Currently, only one action per species is supported.
+    - **Type:** The only supported type is `ExecuteCommand`.
+    - **Command:** The full path to the script or executable to run.
+    - **Parameters:** A list of values to pass as arguments to the command. Available values are:
+      - `CommonName`: The common name of the detected species.
+      - `ScientificName`: The scientific name of the detected species.
+      - `Confidence`: The detection confidence score (0.0 to 1.0). Note: This is passed as a float; multiply by 100 in your script if you need a percentage.
+      - `Time`: The time of the detection (format: HH:MM:SS).
+      - `Source`: The audio source identifier (e.g., sound card name or RTSP stream URL).
+    - **ExecuteDefaults:** A boolean value (`true` or `false`).
+      - If `true` (default), BirdNET-Go will execute **both** your custom command **and** all other configured default actions (like saving to the database, uploading to BirdWeather, sending MQTT messages, etc.).
+      - If `false`, BirdNET-Go will **only** execute your custom command for this specific species detection and will _skip_ all default actions.
 
 Example `config` entry:
 
 ```yaml
 realtime:
-  interval: 15  # Default interval for most birds (15 seconds)
+  interval: 15 # Default interval for most birds (15 seconds)
   species:
     config:
       "Great Tit":
         threshold: 0.65
-        interval: 30  # 30 seconds between detections for this species
+        interval: 30 # 30 seconds between detections for this species
       "California Towhee":
-        interval: 300  # Limit detections to once every 5 minutes
+        interval: 300 # Limit detections to once every 5 minutes
       "Eurasian Magpie":
         threshold: 0.80
-        interval: 120  # 2 minutes between detections
+        interval: 120 # 2 minutes between detections
         actions:
           - type: ExecuteCommand
             command: "/home/user/scripts/magpie_alert.sh"
@@ -2213,6 +2282,7 @@ realtime:
 ## Log Rotation
 
 The application supports several log rotation strategies:
+
 - Daily rotation
 - Weekly rotation (on a specified day)
 - Size-based rotation (with configurable maximum size)

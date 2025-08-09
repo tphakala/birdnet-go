@@ -84,7 +84,7 @@ if err == nil && notif != nil {
         WithMetadata("disk_free_gb", 10).
         WithMetadata("disk_total_gb", 100).
         WithExpiry(1 * time.Hour)
-    
+
     service.store.Update(notif)
 }
 ```
@@ -197,17 +197,17 @@ graph TD
     C -->|High| E[Create High Priority]
     C -->|Medium| F[Create Medium Priority]
     C -->|Low| G[Create Low Priority]
-    
+
     D --> H[Notification Service]
     E --> H
     F --> H
     G --> H
-    
+
     H --> I[Subscribers]
     H --> J[Storage]
-    
+
     K[Rate Limiter] --> B
-    
+
     style B fill:#bbf,stroke:#333,stroke-width:4px
     style H fill:#9f9,stroke:#333,stroke-width:2px
 ```
@@ -215,6 +215,7 @@ graph TD
 ### NotificationWorker
 
 The notification package implements an `EventConsumer` that:
+
 - Receives error events from the event bus
 - Converts errors to appropriate notifications
 - Applies rate limiting to prevent spam
@@ -242,16 +243,17 @@ err := errors.New("API rate limit exceeded").
 
 Error categories are mapped to notification priorities:
 
-| Error Category | Notification Priority |
-|----------------|----------------------|
-| Critical errors | Critical |
-| Network/API failures | High |
-| Validation errors | Medium |
-| Info/Debug | Low |
+| Error Category       | Notification Priority |
+| -------------------- | --------------------- |
+| Critical errors      | Critical              |
+| Network/API failures | High                  |
+| Validation errors    | Medium                |
+| Info/Debug           | Low                   |
 
 ### Performance Impact
 
 The event bus integration ensures:
+
 - **Non-blocking**: Notifications never block error creation
 - **Batching**: Multiple errors can be batched
 - **Deduplication**: Prevents notification spam

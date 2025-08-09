@@ -16,11 +16,11 @@ graph TD
     D --> E[Consumer 1: Notifications]
     D --> F[Consumer 2: Telemetry]
     D --> G[Consumer N: ...]
-    
+
     H[Deduplicator] --> C
     I[Rate Limiter] --> E
     I --> F
-    
+
     style C fill:#f9f,stroke:#333,stroke-width:4px
     style D fill:#bbf,stroke:#333,stroke-width:2px
 ```
@@ -30,6 +30,7 @@ graph TD
 ### EventBus
 
 The main orchestrator that manages:
+
 - **Channel-based architecture**: Non-blocking event distribution
 - **Worker pool**: Configurable number of workers (default: 4)
 - **Consumer management**: Dynamic registration/unregistration
@@ -182,32 +183,32 @@ fmt.Printf("Consumer errors: %d\n", stats.ConsumerErrors)
 
 ## Performance Characteristics
 
-| Metric | Target | Actual |
-|--------|--------|--------|
-| Event publishing (no consumers) | < 10ns | 2.5ns |
-| Event publishing (with consumers) | < 1μs | 300ns |
-| Deduplication check | < 100ns | 95ns |
-| Channel send | < 500ns | 165-390ns |
-| Memory per event | < 1KB | ~200B |
+| Metric                            | Target  | Actual    |
+| --------------------------------- | ------- | --------- |
+| Event publishing (no consumers)   | < 10ns  | 2.5ns     |
+| Event publishing (with consumers) | < 1μs   | 300ns     |
+| Deduplication check               | < 100ns | 95ns      |
+| Channel send                      | < 500ns | 165-390ns |
+| Memory per event                  | < 1KB   | ~200B     |
 
 ## Configuration Options
 
 ### Event Bus Configuration
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| BufferSize | 10000 | Channel buffer size |
-| Workers | 4 | Number of worker goroutines |
-| Enabled | true | Enable/disable event bus |
+| Option     | Default | Description                 |
+| ---------- | ------- | --------------------------- |
+| BufferSize | 10000   | Channel buffer size         |
+| Workers    | 4       | Number of worker goroutines |
+| Enabled    | true    | Enable/disable event bus    |
 
 ### Deduplication Configuration
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| Enabled | true | Enable deduplication |
-| WindowSize | 1 minute | Time window for deduplication |
-| MaxEntries | 10000 | Max entries in dedup cache |
-| CleanupInterval | 5 minutes | Cache cleanup frequency |
+| Option          | Default   | Description                   |
+| --------------- | --------- | ----------------------------- |
+| Enabled         | true      | Enable deduplication          |
+| WindowSize      | 1 minute  | Time window for deduplication |
+| MaxEntries      | 10000     | Max entries in dedup cache    |
+| CleanupInterval | 5 minutes | Cache cleanup frequency       |
 
 ## Error Handling
 
@@ -250,6 +251,7 @@ go test -bench=. ./internal/events/
 ## Thread Safety
 
 All public methods are thread-safe:
+
 - Registration/unregistration uses mutex protection
 - Event publishing uses atomic operations for fast path
 - Metrics use atomic counters
