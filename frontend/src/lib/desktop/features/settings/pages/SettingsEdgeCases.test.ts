@@ -23,59 +23,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/sv
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions, speciesSettings } from '$lib/stores/settings';
 
-// Mock external dependencies
-vi.mock('$lib/utils/api', () => ({
-  api: {
-    get: vi.fn().mockResolvedValue({ data: { species: [] } }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-  },
-  ApiError: class ApiError extends Error {
-    status: number;
-    data?: unknown;
-    constructor(message: string, status: number, data?: unknown) {
-      super(message);
-      this.status = status;
-      this.data = data;
-    }
-  },
-}));
-
-vi.mock('$lib/stores/toast', () => ({
-  toastActions: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
-
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
-vi.mock('$lib/utils/logger', () => ({
-  loggers: {
-    settings: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-    audio: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-  },
-}));
-
-vi.mock('maplibre-gl', () => ({
-  default: {
-    Map: vi.fn(),
-    Marker: vi.fn(),
-  },
-}));
+// Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
 
 describe('Settings Pages - Edge Cases and Corner Cases', () => {
   beforeEach(() => {
@@ -171,7 +119,18 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       }
     });
 
-    it('All settings pages handle completely empty store', async () => {
+    // Pre-import all pages to avoid repeated I/O in individual tests
+    const pages = [
+      { name: 'MainSettingsPage', path: './MainSettingsPage.svelte' },
+      { name: 'AudioSettingsPage', path: './AudioSettingsPage.svelte' },
+      { name: 'FilterSettingsPage', path: './FilterSettingsPage.svelte' },
+      { name: 'SpeciesSettingsPage', path: './SpeciesSettingsPage.svelte' },
+      { name: 'SecuritySettingsPage', path: './SecuritySettingsPage.svelte' },
+      { name: 'IntegrationSettingsPage', path: './IntegrationSettingsPage.svelte' },
+      { name: 'UserInterfaceSettingsPage', path: './UserInterfaceSettingsPage.svelte' },
+    ];
+
+    it.each(pages)('$name handles completely empty store', async ({ path }) => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
@@ -183,25 +142,13 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         settingsActions.updateSection('realtime', {} as any);
         settingsActions.updateSection('security', {} as any);
 
-        const pages = [
-          './MainSettingsPage.svelte',
-          './AudioSettingsPage.svelte',
-          './FilterSettingsPage.svelte',
-          './SpeciesSettingsPage.svelte',
-          './SecuritySettingsPage.svelte',
-          './IntegrationSettingsPage.svelte',
-          './UserInterfaceSettingsPage.svelte',
-        ];
+        const Page = await import(path);
+        const { component, unmount } = render(Page.default);
 
-        for (const pagePath of pages) {
-          const Page = await import(pagePath);
-          const { component, unmount } = render(Page.default);
+        // Page should render without errors
+        expect(component).toBeTruthy();
 
-          // Each page should render without errors
-          expect(component).toBeTruthy();
-
-          unmount();
-        }
+        unmount();
 
         // Should not have any console errors
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -427,6 +374,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           ([msg]) => !msg?.toString().includes('toFixed')
         );
         // Component may log errors but should not crash
+        expect(unexpectedErrors.length).toBe(0);
       } finally {
         consoleSpy.mockRestore();
       }
@@ -496,6 +444,8 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       try {
         const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
         const { component } = render(SpeciesSettingsPage.default);
+
+        expect(component).toBeTruthy();
 
         // Perform rapid updates
         for (let i = 0; i < 10; i++) {
@@ -582,6 +532,8 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       try {
         const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
         const { component } = render(SpeciesSettingsPage.default);
+
+        expect(component).toBeTruthy();
 
         // Click add configuration button - use getAllByText since there might be multiple
         const addButtons = screen.queryAllByText(/Add Configuration/i);
@@ -693,6 +645,8 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       try {
         const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
         const { component } = render(SpeciesSettingsPage.default);
+
+        expect(component).toBeTruthy();
 
         // Start editing
         const addButton = screen.queryByText(/Add Configuration/i);

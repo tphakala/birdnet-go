@@ -25,59 +25,7 @@ import {
   securitySettings,
 } from '$lib/stores/settings';
 
-// Mock dependencies
-vi.mock('$lib/utils/api', () => ({
-  api: {
-    get: vi.fn().mockResolvedValue({ data: { species: [] } }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-  },
-  ApiError: class ApiError extends Error {
-    status: number;
-    data?: unknown;
-    constructor(message: string, status: number, data?: unknown) {
-      super(message);
-      this.status = status;
-      this.data = data;
-    }
-  },
-}));
-
-vi.mock('$lib/stores/toast', () => ({
-  toastActions: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
-
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
-  getLocale: vi.fn(() => 'en'),
-}));
-
-vi.mock('$lib/utils/logger', () => ({
-  loggers: {
-    settings: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-    audio: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    },
-  },
-}));
-
-vi.mock('maplibre-gl', () => ({
-  default: {
-    Map: vi.fn(),
-    Marker: vi.fn(),
-  },
-}));
+// Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
 
 describe('Settings Validation and Boundary Conditions', () => {
   beforeEach(() => {
@@ -438,15 +386,15 @@ describe('Settings Validation and Boundary Conditions', () => {
           await fireEvent.change(portInput, { target: { value: '65535' } });
           expect(portInput.value).toBe('65535');
 
-          // Invalid ports
+          // Invalid ports should be corrected to valid values
           await fireEvent.change(portInput, { target: { value: '0' } });
-          expect(Number(portInput.value)).toBeGreaterThan(0);
+          expect(Number(portInput.value)).toBe(1); // Should be corrected to minimum valid port
 
           await fireEvent.change(portInput, { target: { value: '65536' } });
-          expect(Number(portInput.value)).toBeLessThanOrEqual(65535);
+          expect(Number(portInput.value)).toBe(65535); // Should be corrected to maximum valid port
 
           await fireEvent.change(portInput, { target: { value: '-1' } });
-          expect(Number(portInput.value)).toBeGreaterThan(0);
+          expect(Number(portInput.value)).toBe(1); // Should be corrected to minimum valid port
         }
       });
     });
@@ -554,8 +502,8 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       // Should show validation error or warning
       const warnings = screen.queryAllByText(/required/i);
-      // OAuth should require credentials when enabled
-      expect(warnings.length).toBeGreaterThanOrEqual(0);
+      // OAuth should require credentials when enabled - expect at least one warning
+      expect(warnings.length).toBeGreaterThan(0);
     });
 
     it('validates MQTT broker dependencies', async () => {
@@ -615,11 +563,12 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       const config = (settings.formData as any)?.realtime?.species?.config?.TestBird;
 
-      // Actions with empty commands should be filtered or validated
+      // Actions with empty commands should be filtered out or have meaningful commands
       if (config?.actions?.length > 0) {
         const action = config.actions[0];
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy check for action command
-        expect(action.command || action).toBeTruthy();
+        // Test actual command content - should either be non-empty or action should be filtered
+        expect(typeof action.command).toBe('string');
+        expect(action.command.length).toBeGreaterThan(0);
       }
     });
   });
@@ -722,13 +671,15 @@ describe('Settings Validation and Boundary Conditions', () => {
       await waitFor(() => {
         const settings = get(audioSettings);
 
-        // Should constrain to reasonable values
+        // Should constrain to reasonable values for audio settings
         // Settings from get() always exist but test properties may not exist
         if ((settings as any).captureDuration !== undefined) {
-          expect((settings as any).captureDuration).toBeLessThan(Number.MAX_SAFE_INTEGER);
+          // Capture duration should be constrained to a reasonable maximum (e.g., 1 hour = 3600 seconds)
+          expect((settings as any).captureDuration).toBeLessThanOrEqual(3600);
         }
         if ((settings as any).bufferSize !== undefined) {
-          expect((settings as any).bufferSize).toBeLessThan(Number.MAX_VALUE);
+          // Buffer size should be constrained to reasonable memory limits (e.g., 64MB = 67108864 bytes)
+          expect((settings as any).bufferSize).toBeLessThanOrEqual(67108864);
         }
       });
     });

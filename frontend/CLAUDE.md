@@ -369,6 +369,157 @@ node tools/test-all-pages.js
 
 ## Testing Best Practices
 
+### Mock Organization and Shared Setup
+
+**Problem**: Duplicating identical `vi.mock()` blocks across multiple test files creates maintenance overhead and inconsistency.
+
+**Solution**: Use shared test setup files for common mocks.
+
+#### Shared Mock Setup Pattern
+
+1. **Extract common mocks to `src/test/setup.ts`**:
+
+```javascript
+// src/test/setup.ts
+import '@testing-library/jest-dom';
+import { vi } from 'vitest';
+
+// Mock API utilities (used across multiple test suites)
+vi.mock('$lib/utils/api', () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: { species: [] } }),
+    post: vi.fn().mockResolvedValue({ data: {} }),
+  },
+  ApiError: class ApiError extends Error {
+    constructor(message, status, data) {
+      super(message);
+      this.status = status;
+      this.data = data;
+    }
+  },
+}));
+
+// Mock toast notifications
+vi.mock('$lib/stores/toast', () => ({
+  toastActions: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
+// Mock internationalization
+vi.mock('$lib/i18n', () => ({
+  t: vi.fn(key => key),
+  getLocale: vi.fn(() => 'en'),
+}));
+```
+
+2. **Configure Vitest to load setup file** (`vite.config.js`):
+
+```javascript
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'], // ✅ Load shared TypeScript setup
+    include: ['src/**/*.{test,spec}.{js,ts}'],
+  },
+});
+```
+
+3. **Clean test files** - Remove duplicate mocks:
+
+```typescript
+// ❌ Before: Duplicate mocks in every test file
+import { vi } from 'vitest';
+
+vi.mock('$lib/utils/api', () => ({
+  /* duplicate */
+}));
+vi.mock('$lib/stores/toast', () => ({
+  /* duplicate */
+}));
+vi.mock('$lib/i18n', () => ({
+  /* duplicate */
+}));
+
+describe('Component Tests', () => {
+  // tests...
+});
+
+// ✅ After: Clean test file with shared setup
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/svelte';
+
+// Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
+
+describe('Component Tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); // Clear mock call history between tests
+  });
+
+  // tests...
+});
+```
+
+#### When to Use Shared vs File-Specific Mocks
+
+**✅ Use shared setup for**:
+
+- API utilities (`$lib/utils/api`)
+- Toast notifications (`$lib/stores/toast`)
+- Internationalization (`$lib/i18n`)
+- Global browser APIs (fetch, localStorage)
+- Third-party libraries (MapLibre, Chart.js)
+
+**✅ Use file-specific mocks for**:
+
+- Component-specific stores
+- Test-specific mock implementations
+- Mocks that need different behavior per test
+
+#### Setup File Best Practices
+
+**✅ Always use TypeScript for setup files** (`src/test/setup.ts`):
+
+- Provides type safety for mock definitions
+- Enables IntelliSense and better IDE support
+- Allows exporting typed test utilities
+- Consistent with codebase TypeScript standards
+
+**❌ Avoid JavaScript setup files** - they lack type safety and can't use TypeScript features needed for proper mock typing.
+
+#### Mock Reset Patterns
+
+```typescript
+describe('Component Tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); // Clear call history but keep implementation
+    settingsActions.resetAllSettings(); // Reset store state
+  });
+
+  afterEach(() => {
+    cleanup(); // Clean up DOM after each test
+  });
+});
+```
+
+#### Advanced Mock Patterns
+
+```typescript
+// Override shared mock for specific test
+beforeEach(() => {
+  const { api } = await import('$lib/utils/api');
+  vi.mocked(api.get).mockResolvedValue({ data: { customData: [] } });
+});
+
+// Restore original mock
+afterEach(() => {
+  vi.restoreAllMocks(); // Restore to setup.js defaults
+});
+```
+
 ### TypeScript in Test Files
 
 #### Handling `any` Types in Edge Case Testing
