@@ -1,6 +1,7 @@
 # Frontend Development Guide - Svelte 5
 
 ## Tech Stack
+
 - **Svelte 5** with Runes (`$state`, `$derived`, `$effect`)
 - **TypeScript** - NO `any` types without justification
 - **Tailwind 3** + **daisyUI 4** components
@@ -8,12 +9,14 @@
 - **i18n** - Custom implementation in `@i18n`
 
 ## Critical Rules
+
 - **NEVER use `any` type**
 - **NEVER create inline SVGs** - use `$lib/utils/icons`
 - **NEVER use `toISOString()` for dates** - use `getLocalDateString()`
 - **Run `npm run check:all` before EVERY commit**
 
 ## Structure
+
 ```
 frontend/
 ├── src/lib/
@@ -26,30 +29,34 @@ frontend/
 ```
 
 ## Commands
-| Command | Purpose | When |
-|---------|---------|------|
-| `npm run check:all` | Format + lint + typecheck | Before commit |
-| `npm run lint:fix` | Auto-fix JS/TS | After changes |
-| `npm run typecheck` | Validate types | Before PR |
-| `npm run test:a11y` | Accessibility tests | Before PR |
-| `npm run analyze:all` | Circular deps + duplication | Weekly |
+
+| Command               | Purpose                     | When          |
+| --------------------- | --------------------------- | ------------- |
+| `npm run check:all`   | Format + lint + typecheck   | Before commit |
+| `npm run lint:fix`    | Auto-fix JS/TS              | After changes |
+| `npm run typecheck`   | Validate types              | Before PR     |
+| `npm run test:a11y`   | Accessibility tests         | Before PR     |
+| `npm run analyze:all` | Circular deps + duplication | Weekly        |
 
 ## Svelte 5 Patterns
 
 ### State Management
+
 ```svelte
 <script lang="ts">
-  let count = $state(0);                    // Reactive state
-  let double = $derived(count * 2);         // Computed value
-  let items = $state<Item[]>([]);          // Typed arrays
-  
-  $effect(() => {                          // Side effects
+  let count = $state(0); // Reactive state
+  let double = $derived(count * 2); // Computed value
+  let items = $state<Item[]>([]); // Typed arrays
+
+  $effect(() => {
+    // Side effects
     console.log('Count changed:', count);
   });
 </script>
 ```
 
 ### Component Props
+
 ```svelte
 <script lang="ts">
   interface Props {
@@ -57,30 +64,32 @@ frontend/
     count?: number;
     children?: Snippet;
   }
-  
+
   let { title, count = 0, children }: Props = $props();
 </script>
 ```
 
 ### Snippets (not slots)
+
 ```svelte
+<!-- Child -->
+<script lang="ts">
+  let { header }: { header?: Snippet } = $props();
+</script>
+
 <!-- Parent -->
 <Card>
   {#snippet header()}
     <h2>Title</h2>
   {/snippet}
 </Card>
-
-<!-- Child -->
-<script lang="ts">
-  let { header }: { header?: Snippet } = $props();
-</script>
 {#if header}{@render header()}{/if}
 ```
 
 ## TypeScript Safety
 
 ### ✅ REQUIRED
+
 ```typescript
 // Proper type checking
 const value = map.get(key);
@@ -96,13 +105,15 @@ if (!result.done && result.value !== undefined) {
 ```
 
 ### ❌ FORBIDDEN
+
 ```typescript
-const value = map.get(key) as string;  // Type assertion
-const value = map.get(key)!;           // Non-null assertion
-let data: any;                         // Untyped
+const value = map.get(key) as string; // Type assertion
+const value = map.get(key)!; // Non-null assertion
+let data: any; // Untyped
 ```
 
 ## Icon Usage
+
 ```svelte
 <script>
   import { navigationIcons, actionIcons } from '$lib/utils/icons';
@@ -116,9 +127,10 @@ let data: any;                         // Untyped
 ```
 
 ## Logging
+
 ```typescript
 import { loggers } from '$lib/utils/logger';
-const logger = loggers.ui;  // Once per file
+const logger = loggers.ui; // Once per file
 
 logger.debug('State changed', { component: 'MyComponent' });
 logger.error('Failed', error, { action: 'save' });
@@ -127,17 +139,19 @@ logger.error('Failed', error, { action: 'save' });
 ```
 
 ## Date/Time Handling
+
 ```typescript
 import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
 
 // ✅ Correct - local timezone
-const today = getLocalDateString();  // "2024-01-15"
+const today = getLocalDateString(); // "2024-01-15"
 
 // ❌ Wrong - UTC conversion
 const wrong = new Date().toISOString().split('T')[0];
 ```
 
 ## SSE (Server-Sent Events)
+
 ```typescript
 import ReconnectingEventSource from 'reconnecting-eventsource';
 
@@ -155,11 +169,12 @@ eventSource.close();
 ```
 
 ## CSRF Protection
+
 ```typescript
 function getCsrfToken(): string | null {
   const meta = document.querySelector('meta[name="csrf-token"]');
   if (meta?.getAttribute('content')) return meta.getAttribute('content');
-  
+
   const match = document.cookie.match(/csrf=([^;]+)/);
   return match?.[1] || null;
 }
@@ -168,6 +183,7 @@ function getCsrfToken(): string | null {
 ## Accessibility Quick Reference
 
 ### Forms
+
 ```svelte
 <label for="field">Label</label>
 <input id="field" aria-describedby="field-help" />
@@ -175,6 +191,7 @@ function getCsrfToken(): string | null {
 ```
 
 ### Buttons
+
 ```svelte
 <button aria-label="Close dialog">
   {@html navigationIcons.close}
@@ -182,23 +199,26 @@ function getCsrfToken(): string | null {
 ```
 
 ### Status Updates
+
 ```svelte
 <div role="status" aria-live="polite">Loading...</div>
 <div role="alert" aria-live="assertive">Error occurred</div>
 ```
 
 ### Testing
+
 ```bash
 npm run test:a11y              # Run accessibility tests
 npm run test:a11y:watch       # Watch mode
 ```
 
 ## Settings Components
+
 ```svelte
 <script>
   import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  
+
   let hasChanges = $derived(hasSettingsChanged(original, current));
 </script>
 
@@ -210,16 +230,19 @@ npm run test:a11y:watch       # Watch mode
 ## Pre-Commit Workflow
 
 ### Automated (Husky)
+
 - lint-staged auto-formats staged files
 - svelte-check validates TypeScript
 
 ### Manual Checklist
+
 1. Check IDE Problems panel for errors
 2. Run `npm run check:all`
 3. Test affected functionality
 4. Review accessibility warnings
 
 ## Debug Tools
+
 ```bash
 # Screenshots
 cd tools/
@@ -233,6 +256,7 @@ node tools/test-all-pages.js
 ## Common Patterns
 
 ### Loading States
+
 ```svelte
 {#if loading}
   <div class="loading loading-spinner" />
@@ -244,6 +268,7 @@ node tools/test-all-pages.js
 ```
 
 ### Dynamic Lists
+
 ```svelte
 {#each items as item (item.id)}
   <Item {item} />
@@ -251,6 +276,7 @@ node tools/test-all-pages.js
 ```
 
 ## Resources
+
 - Svelte 5 docs available via MCP tool
 - WCAG: https://www.w3.org/WAI/WCAG21/quickref/
 - axe DevTools browser extension for testing
