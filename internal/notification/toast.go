@@ -19,6 +19,10 @@ const (
 	ToastTypeWarning ToastType = "warning"
 	// ToastTypeError for error messages
 	ToastTypeError ToastType = "error"
+	
+	// ToastNotificationTitle is the standard title for toast notifications
+	// This constant is used to identify toast notifications for filtering
+	ToastNotificationTitle = "Toast Message"
 )
 
 // Toast represents a temporary UI notification message
@@ -104,9 +108,9 @@ func (t *Toast) ToNotification() *Notification {
 	}
 	
 	// Create notification with toast metadata
-	notif := NewNotification(notifType, priority, "Toast Message", t.Message)
+	notif := NewNotification(notifType, priority, ToastNotificationTitle, t.Message)
 	notif.WithComponent(t.Component).
-		WithMetadata("isToast", true).
+		WithMetadata(MetadataKeyIsToast, true).
 		WithMetadata("toastType", string(t.Type)).
 		WithMetadata("toastId", t.ID)
 	

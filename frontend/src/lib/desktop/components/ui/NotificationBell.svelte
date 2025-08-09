@@ -9,6 +9,9 @@
 
   const logger = loggers.ui;
 
+  // Constant for toast notification title - must match backend ToastNotificationTitle
+  const TOAST_NOTIFICATION_TITLE = 'Toast Message';
+
   interface Notification {
     id: string;
     type: 'error' | 'warning' | 'info' | 'detection' | 'system';
@@ -65,9 +68,23 @@
     }))
   );
 
+  // Type guard to identify toast notifications
+  // Toast notifications are ephemeral and should only appear as temporary UI toasts
+  function isToastNotification(notification: Notification): boolean {
+    // Check if the notification has the standard toast title
+    // Note: Backend also filters by metadata.isToast, but metadata isn't sent to frontend
+    return notification.title === TOAST_NOTIFICATION_TITLE;
+  }
+
   // PERFORMANCE OPTIMIZATION: Pure utility functions for caching
   // These functions only depend on their parameters, not component state
-  function shouldShowNotification(_notification: Notification): boolean {
+  function shouldShowNotification(notification: Notification): boolean {
+    // Never show toast notifications in the bell
+    // Toast notifications are ephemeral and should only appear as toasts
+    if (isToastNotification(notification)) {
+      return false;
+    }
+
     // In debug mode, show all notifications including low priority
     if (debugMode) {
       return true;
