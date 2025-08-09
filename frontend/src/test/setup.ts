@@ -7,7 +7,7 @@
  * Automatically loaded by Vitest via setupFiles configuration.
  */
 
-import 'vitest-dom/extend-expect';
+import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
 // Note: API utilities are not mocked globally to allow their own tests to run

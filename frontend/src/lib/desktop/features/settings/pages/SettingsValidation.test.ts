@@ -40,14 +40,10 @@ describe('Settings Validation and Boundary Conditions', () => {
         const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
-        const latitudeInputs = screen
-          .queryAllByRole('spinbutton')
-          .filter(input => input.getAttribute('id')?.includes('latitude'));
-
-        // Ensure latitude input exists before proceeding with tests
-        expect(latitudeInputs.length).toBeGreaterThan(0);
-
-        const latInput = latitudeInputs[0] as HTMLInputElement;
+        // Query latitude input by label text - fails loudly if not found
+        const latInput = screen.getByLabelText(/latitude/i, {
+          selector: 'input[type="number"]',
+        }) as HTMLInputElement;
 
         // Test valid values
         await fireEvent.change(latInput, { target: { value: '45.5' } });
@@ -73,14 +69,10 @@ describe('Settings Validation and Boundary Conditions', () => {
         const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
-        const longitudeInputs = screen
-          .queryAllByRole('spinbutton')
-          .filter(input => input.getAttribute('id')?.includes('longitude'));
-
-        // Ensure longitude input exists before proceeding with tests
-        expect(longitudeInputs.length).toBeGreaterThan(0);
-
-        const lngInput = longitudeInputs[0] as HTMLInputElement;
+        // Query longitude input by label text - fails loudly if not found
+        const lngInput = screen.getByLabelText(/longitude/i, {
+          selector: 'input[type="number"]',
+        }) as HTMLInputElement;
 
         // Test valid values
         await fireEvent.change(lngInput, { target: { value: '120.5' } });
@@ -131,19 +123,17 @@ describe('Settings Validation and Boundary Conditions', () => {
         render(MainSettingsPage.default);
 
         // Update settings to test boundaries
-
         settingsActions.updateSection('birdnet', {
           sensitivity: 0.4, // Below minimum
         } as any);
 
         await waitFor(() => {
           const settings = get(birdnetSettings);
-          // Should constrain to valid range
 
-          if (settings?.sensitivity !== undefined) {
-            expect(settings.sensitivity).toBeGreaterThanOrEqual(0.5);
-            expect(settings.sensitivity).toBeLessThanOrEqual(1.5);
-          }
+          // Assert sensitivity is defined before checking bounds
+          expect(settings?.sensitivity).toBeDefined();
+          expect(settings.sensitivity).toBeGreaterThanOrEqual(0.5);
+          expect(settings.sensitivity).toBeLessThanOrEqual(1.5);
         });
       });
 
@@ -155,10 +145,10 @@ describe('Settings Validation and Boundary Conditions', () => {
         await waitFor(() => {
           const settings = get(birdnetSettings);
 
-          if (settings?.threshold !== undefined) {
-            expect(settings.threshold).toBeGreaterThanOrEqual(0);
-            expect(settings.threshold).toBeLessThanOrEqual(1);
-          }
+          // Assert threshold is defined before checking bounds
+          expect(settings?.threshold).toBeDefined();
+          expect(settings.threshold).toBeGreaterThanOrEqual(0);
+          expect(settings.threshold).toBeLessThanOrEqual(1);
         });
 
         settingsActions.updateSection('birdnet', {
@@ -168,9 +158,9 @@ describe('Settings Validation and Boundary Conditions', () => {
         await waitFor(() => {
           const settings = get(birdnetSettings);
 
-          if (settings?.threshold !== undefined) {
-            expect(settings.threshold).toBeLessThanOrEqual(1);
-          }
+          // Assert threshold is defined before checking bounds
+          expect(settings?.threshold).toBeDefined();
+          expect(settings.threshold).toBeLessThanOrEqual(1);
         });
       });
 
@@ -182,9 +172,9 @@ describe('Settings Validation and Boundary Conditions', () => {
         await waitFor(() => {
           const settings = get(birdnetSettings);
 
-          if (settings?.overlap !== undefined) {
-            expect(settings.overlap).toBeGreaterThanOrEqual(0);
-          }
+          // Assert overlap is defined before checking bounds
+          expect(settings?.overlap).toBeDefined();
+          expect(settings.overlap).toBeGreaterThanOrEqual(0);
         });
 
         settingsActions.updateSection('birdnet', {
@@ -194,9 +184,9 @@ describe('Settings Validation and Boundary Conditions', () => {
         await waitFor(() => {
           const settings = get(birdnetSettings);
 
-          if (settings?.overlap !== undefined) {
-            expect(settings.overlap).toBeLessThanOrEqual(100);
-          }
+          // Assert overlap is defined before checking bounds
+          expect(settings?.overlap).toBeDefined();
+          expect(settings.overlap).toBeLessThanOrEqual(100);
         });
       });
     });
@@ -405,33 +395,34 @@ describe('Settings Validation and Boundary Conditions', () => {
         const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
         render(IntegrationSettingsPage.default);
 
+        // Query port inputs directly and assert they exist
         const portInputs = screen
           .queryAllByRole('spinbutton')
           .filter(input => input.getAttribute('placeholder')?.includes('port'));
 
-        if (portInputs.length > 0) {
-          const portInput = portInputs[0] as HTMLInputElement;
+        // Assert port input exists before testing - fail loudly if not found
+        expect(portInputs.length).toBeGreaterThan(0);
+        const portInput = portInputs[0] as HTMLInputElement;
 
-          // Valid ports
-          await fireEvent.change(portInput, { target: { value: '8080' } });
-          expect(portInput.value).toBe('8080');
+        // Valid ports
+        await fireEvent.change(portInput, { target: { value: '8080' } });
+        expect(portInput.value).toBe('8080');
 
-          await fireEvent.change(portInput, { target: { value: '1' } });
-          expect(portInput.value).toBe('1');
+        await fireEvent.change(portInput, { target: { value: '1' } });
+        expect(portInput.value).toBe('1');
 
-          await fireEvent.change(portInput, { target: { value: '65535' } });
-          expect(portInput.value).toBe('65535');
+        await fireEvent.change(portInput, { target: { value: '65535' } });
+        expect(portInput.value).toBe('65535');
 
-          // Invalid ports should be corrected to valid values
-          await fireEvent.change(portInput, { target: { value: '0' } });
-          expect(Number(portInput.value)).toBe(1); // Should be corrected to minimum valid port
+        // Invalid ports should be corrected to valid values
+        await fireEvent.change(portInput, { target: { value: '0' } });
+        expect(Number(portInput.value)).toBe(1); // Should be corrected to minimum valid port
 
-          await fireEvent.change(portInput, { target: { value: '65536' } });
-          expect(Number(portInput.value)).toBe(65535); // Should be corrected to maximum valid port
+        await fireEvent.change(portInput, { target: { value: '65536' } });
+        expect(Number(portInput.value)).toBe(65535); // Should be corrected to maximum valid port
 
-          await fireEvent.change(portInput, { target: { value: '-1' } });
-          expect(Number(portInput.value)).toBe(1); // Should be corrected to minimum valid port
-        }
+        await fireEvent.change(portInput, { target: { value: '-1' } });
+        expect(Number(portInput.value)).toBe(1); // Should be corrected to minimum valid port
       });
     });
   });
@@ -456,23 +447,20 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       // Check if there's any limit enforcement or performance issue
       const settings = get(settingsStore);
-
       const speciesList = (settings.formData as any)?.realtime?.species?.include;
 
-      // Should handle large lists appropriately
+      // Assert species list exists and is an array
+      expect(speciesList).toBeDefined();
       expect(Array.isArray(speciesList)).toBe(true);
-
-      // Assert either all entries are retained or there's a reasonable maximum cap
-      const originalLength = largeList.length; // 1000 entries
       expect(speciesList.length).toBeGreaterThan(0);
 
-      if (speciesList.length < originalLength) {
-        // If there's a cap, it should be a reasonable maximum (e.g., 500 or similar)
-        expect(speciesList.length).toBeGreaterThanOrEqual(500);
-      } else {
-        // If no cap, all original entries should be preserved
-        expect(speciesList.length).toBe(originalLength);
-      }
+      // Test that the system handles large lists correctly
+      // Either all 1000 entries are preserved OR there's a reasonable cap (>= 500)
+      const originalLength = largeList.length; // 1000 entries
+      const isWithinReasonableRange =
+        speciesList.length === originalLength || speciesList.length >= 500;
+
+      expect(isWithinReasonableRange).toBe(true);
     });
 
     it('prevents duplicate entries in species lists', async () => {
