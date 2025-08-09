@@ -43,6 +43,7 @@ import { writable, derived, get } from 'svelte/store';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { toastActions } from './toast.js';
 import { safeGet, safeSpread } from '$lib/utils/security';
+import { coerceSettings } from '$lib/utils/settingsCoercion';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -707,10 +708,20 @@ export const settingsActions = {
       const data = await settingsAPI.load();
       const mergedData = { ...createEmptySettings(), ...data };
 
+      // Apply coercion to each section
+      const coercedData = { ...mergedData } as SettingsFormData;
+      for (const [section, sectionData] of Object.entries(mergedData)) {
+        if (sectionData && typeof sectionData === 'object') {
+          const coercedSection = coerceSettings(section, sectionData as Record<string, unknown>);
+          // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
+          (coercedData as unknown as Record<string, unknown>)[section] = coercedSection;
+        }
+      }
+
       settingsStore.update(state => ({
         ...state,
-        formData: mergedData,
-        originalData: JSON.parse(JSON.stringify(mergedData)),
+        formData: coercedData,
+        originalData: JSON.parse(JSON.stringify(coercedData)),
         isLoading: false,
       }));
     } catch (error) {
@@ -731,12 +742,20 @@ export const settingsActions = {
         section as string,
         {} as SettingsFormData[K]
       );
-      const newSectionData = safeSpread(currentSectionData, data) as SettingsFormData[K];
+      const mergedData = safeSpread(currentSectionData, data) as SettingsFormData[K];
+
+      // Apply coercion immediately to ensure values are always within valid ranges
+      // This is especially important for NumberField components that need instant validation
+      const coercedData = coerceSettings(
+        section as string,
+        mergedData as Record<string, unknown>
+      ) as SettingsFormData[K];
+
       return {
         ...state,
         formData: {
           ...state.formData,
-          [section]: newSectionData,
+          [section]: coercedData,
         },
       };
     });
@@ -747,7 +766,21 @@ export const settingsActions = {
     try {
       const currentState = get(settingsStore);
 
-      await settingsAPI.save(currentState.formData);
+      // Apply coercion to all sections before saving
+      const coercedFormData = { ...currentState.formData };
+      for (const [section, data] of Object.entries(coercedFormData)) {
+        if (data && typeof data === 'object') {
+          const key = section as keyof SettingsFormData;
+          // Use a type assertion to handle the assignment
+          // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
+          (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
+            section,
+            data as Record<string, unknown>
+          );
+        }
+      }
+
+      await settingsAPI.save(coercedFormData);
 
       // Check if UI locale changed and apply it
       const newLocale = currentState.formData.realtime?.dashboard?.locale;

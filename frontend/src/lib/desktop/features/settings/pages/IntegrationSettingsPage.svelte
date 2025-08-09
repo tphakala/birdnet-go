@@ -989,15 +989,15 @@
             <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
 
             <Checkbox
-              checked={settings.mqtt!.tls.enabled}
+              checked={settings.mqtt?.tls?.enabled ?? false}
               label={t('settings.integration.mqtt.tls.enable')}
               disabled={store.isLoading || store.isSaving}
               onchange={updateMQTTTLSEnabled}
             />
 
-            {#if settings.mqtt?.tls.enabled}
+            {#if settings.mqtt?.tls?.enabled}
               <Checkbox
-                checked={settings.mqtt!.tls.skipVerify}
+                checked={settings.mqtt?.tls?.skipVerify ?? false}
                 label={t('settings.integration.mqtt.tls.skipVerify')}
                 disabled={store.isLoading || store.isSaving}
                 onchange={updateMQTTTLSSkipVerify}

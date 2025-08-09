@@ -95,7 +95,7 @@ describe('NumberField', () => {
     expect(input).toHaveAttribute('step', '0.5');
   });
 
-  it('enforces minimum constraint during input', async () => {
+  it('clamps minimum constraint during input', async () => {
     const onUpdate = vi.fn();
 
     render(NumberField, {
@@ -112,11 +112,11 @@ describe('NumberField', () => {
     // Try to input a value below minimum
     await fireEvent.change(input, { target: { value: '-5' } });
 
-    // Should not call onUpdate for values below minimum
-    expect(onUpdate).not.toHaveBeenCalledWith(-5);
+    // Should clamp to minimum value
+    expect(onUpdate).toHaveBeenCalledWith(0);
   });
 
-  it('enforces maximum constraint during input', async () => {
+  it('clamps maximum constraint during input', async () => {
     const onUpdate = vi.fn();
 
     render(NumberField, {
@@ -133,8 +133,8 @@ describe('NumberField', () => {
     // Try to input a value above maximum
     await fireEvent.change(input, { target: { value: '15' } });
 
-    // Should not call onUpdate for values above maximum
-    expect(onUpdate).not.toHaveBeenCalledWith(15);
+    // Should clamp to maximum value
+    expect(onUpdate).toHaveBeenCalledWith(10);
   });
 
   it('allows valid values within min/max range', async () => {
@@ -362,7 +362,144 @@ describe('NumberField', () => {
     expect(onUpdate).toHaveBeenCalledWith(0.123456789012345);
   });
 
-  it('rejects infinite values', async () => {
+  it('handles infinite values when set programmatically', async () => {
+    const onUpdate = vi.fn();
+
+    const { rerender } = render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 0,
+        onUpdate,
+        min: 0,
+        max: 100,
+      },
+    });
+
+    // Simulate receiving Infinity from external source (e.g., API)
+    await rerender({
+      label: 'Test Number',
+      value: Infinity,
+      onUpdate,
+      min: 0,
+      max: 100,
+    });
+
+    const input = screen.getByRole('spinbutton');
+
+    // Trigger blur to ensure clamping occurs
+    await fireEvent.blur(input);
+
+    // Should clamp Infinity to min (0)
+    expect(onUpdate).toHaveBeenCalledWith(0);
+  });
+
+  it('handles NaN values when set programmatically', async () => {
+    const onUpdate = vi.fn();
+
+    const { rerender } = render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 0,
+        onUpdate,
+        min: 0,
+        max: 100,
+      },
+    });
+
+    // Simulate receiving NaN from external source (e.g., calculation result)
+    await rerender({
+      label: 'Test Number',
+      value: NaN,
+      onUpdate,
+      min: 0,
+      max: 100,
+    });
+
+    const input = screen.getByRole('spinbutton');
+
+    // Trigger blur to ensure clamping occurs
+    await fireEvent.blur(input);
+
+    // Should clamp NaN to min (0)
+    expect(onUpdate).toHaveBeenCalledWith(0);
+  });
+
+  it('handles negative infinity when set programmatically', async () => {
+    const onUpdate = vi.fn();
+
+    const { rerender } = render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 0,
+        onUpdate,
+        min: 0,
+        max: 100,
+      },
+    });
+
+    // Simulate receiving -Infinity from external source
+    await rerender({
+      label: 'Test Number',
+      value: -Infinity,
+      onUpdate,
+      min: 0,
+      max: 100,
+    });
+
+    const input = screen.getByRole('spinbutton');
+
+    // Trigger blur to ensure clamping occurs
+    await fireEvent.blur(input);
+
+    // Should clamp -Infinity to min (0)
+    expect(onUpdate).toHaveBeenCalledWith(0);
+  });
+
+  it('clamps values on blur event', async () => {
+    const onUpdate = vi.fn();
+
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 150, // Start with invalid value
+        onUpdate,
+        min: 0,
+        max: 100,
+      },
+    });
+
+    const input = screen.getByRole('spinbutton');
+
+    // Trigger blur event
+    await fireEvent.blur(input);
+
+    // Should clamp to max value
+    expect(onUpdate).toHaveBeenCalledWith(100);
+  });
+
+  it('shows clamping feedback message temporarily', async () => {
+    const onUpdate = vi.fn();
+
+    render(NumberField, {
+      props: {
+        label: 'Test Number',
+        value: 5,
+        onUpdate,
+        min: 0,
+        max: 10,
+      },
+    });
+
+    const input = screen.getByRole('spinbutton');
+
+    // Input value above maximum
+    await fireEvent.change(input, { target: { value: '15' } });
+
+    // Should show clamping message (check for the translated text with parameter placeholder)
+    expect(screen.getByText(/Value was adjusted to maximum \(\{value\}\)/)).toBeInTheDocument();
+  });
+
+  it('handles extremely large numbers by clamping', async () => {
     const onUpdate = vi.fn();
 
     render(NumberField, {
@@ -370,14 +507,16 @@ describe('NumberField', () => {
         label: 'Test Number',
         value: 0,
         onUpdate,
+        min: 0,
+        max: 1,
       },
     });
 
     const input = screen.getByRole('spinbutton');
 
-    // Test infinity - should not call onUpdate
-    await fireEvent.change(input, { target: { value: 'Infinity' } });
+    // Test extremely large number that should be clamped
+    await fireEvent.change(input, { target: { value: '99999999999999999999' } });
 
-    expect(onUpdate).not.toHaveBeenCalledWith(Number.POSITIVE_INFINITY);
+    expect(onUpdate).toHaveBeenCalledWith(1); // Should clamp to max
   });
 });

@@ -166,6 +166,7 @@
                   class="inline-flex items-center gap-1 hover:text-primary transition-colors"
                   onclick={() => handleSort(column)}
                   aria-label={getAriaLabel()}
+                  data-testid={`sort-${column.key}`}
                 >
                   {column.header}
                   <span class="inline-block w-4" aria-hidden="true">

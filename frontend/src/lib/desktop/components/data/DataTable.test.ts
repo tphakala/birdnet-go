@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import DataTable from './DataTable.svelte';
 import type { Column } from './DataTable.types';
 
@@ -11,6 +12,11 @@ interface TestData {
 }
 
 describe('DataTable', () => {
+  // Helper function to find sort button by column key
+  const getSortButton = (columnKey: string) => {
+    return screen.getByTestId(`sort-${columnKey}`);
+  };
+
   const mockData: TestData[] = [
     { id: 1, name: 'John Doe', age: 30, email: 'john@example.com' },
     { id: 2, name: 'Jane Smith', age: 25, email: 'jane@example.com' },
@@ -92,6 +98,7 @@ describe('DataTable', () => {
   });
 
   it('handles sorting when column is sortable', async () => {
+    const user = userEvent.setup();
     const onSort = vi.fn();
 
     renderDataTable({
@@ -100,13 +107,14 @@ describe('DataTable', () => {
       onSort,
     });
 
-    const nameHeader = screen.getByRole('button', { name: /Name/i });
-    await fireEvent.click(nameHeader);
+    const nameHeader = getSortButton('name');
+    await user.click(nameHeader);
 
     expect(onSort).toHaveBeenCalledWith('name', 'asc');
   });
 
   it('cycles through sort directions', async () => {
+    const user = userEvent.setup();
     const onSort = vi.fn();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,10 +128,10 @@ describe('DataTable', () => {
       },
     });
 
-    const nameHeader = screen.getByRole('button', { name: /Name/i });
+    const nameHeader = getSortButton('name');
 
     // Click to sort desc
-    await fireEvent.click(nameHeader);
+    await user.click(nameHeader);
     expect(onSort).toHaveBeenCalledWith('name', 'desc');
 
     // Update props to reflect new sort
@@ -136,7 +144,7 @@ describe('DataTable', () => {
     });
 
     // Click to remove sort
-    await fireEvent.click(nameHeader);
+    await user.click(nameHeader);
     expect(onSort).toHaveBeenCalledWith('name', null);
   });
 
@@ -236,7 +244,7 @@ describe('DataTable', () => {
       sortDirection: 'asc',
     });
 
-    const nameHeader = screen.getByRole('button', { name: /Name/i });
+    const nameHeader = getSortButton('name');
     const svg = nameHeader.querySelector('svg');
     expect(svg).toBeInTheDocument();
     expect(svg?.querySelector('path')).toBeInTheDocument(); // Check icon is rendered without relying on specific path data

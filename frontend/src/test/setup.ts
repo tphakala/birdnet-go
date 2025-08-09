@@ -61,19 +61,166 @@ vi.mock('$lib/stores/toast', () => ({
     success: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    warning: vi.fn(), // Added missing warning method
   },
 }));
 
-// Mock internationalization
+// Mock internationalization - map common keys to actual text for tests
+const translations: Record<string, string> = {
+  'dataDisplay.table.noData': 'No data available',
+  'dataDisplay.table.sortBy': 'Sort by',
+  'settings.species.customConfiguration.title': 'Custom Configuration',
+  'settings.species.customConfiguration.description': 'Configure custom settings for species',
+  'common.ui.loading': 'Loading...',
+  'common.close': 'Close',
+  'common.confirm': 'Confirm',
+  'common.cancel': 'Cancel',
+  'common.aria.closeNotification': 'Close notification',
+  'common.aria.closeModal': 'Close modal',
+  'forms.labels.showPassword': 'Show password',
+  'forms.labels.hidePassword': 'Hide password',
+  'forms.password.strength.label': 'Password Strength:',
+  'forms.password.strength.levels.weak': 'Weak',
+  'forms.password.strength.levels.fair': 'Fair',
+  'forms.password.strength.levels.good': 'Good',
+  'forms.password.strength.levels.strong': 'Strong',
+  'forms.password.strength.suggestions.title': 'Suggestions:',
+  'forms.password.strength.suggestions.minLength': 'At least 8 characters',
+  'forms.password.strength.suggestions.mixedCase': 'Use both uppercase and lowercase letters',
+  'forms.password.strength.suggestions.number': 'Include at least one number',
+  'forms.password.strength.suggestions.special': 'Include at least one special character',
+  'common.buttons.cancel': 'Cancel',
+  'common.buttons.confirm': 'Confirm',
+  'components.forms.numberField.adjustedToMinimum': 'Value was adjusted to minimum ({value})',
+  'components.forms.numberField.adjustedToMaximum': 'Value was adjusted to maximum ({value})',
+};
+
 vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string) => key),
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with predefined translations
+  t: vi.fn((key: string) => translations[key] || key),
   getLocale: vi.fn(() => 'en'),
+  setLocale: vi.fn(),
+  isValidLocale: vi.fn(() => true),
+}));
+
+// Mock settingsAPI for settings-related tests
+vi.mock('$lib/utils/settingsApi', () => ({
+  settingsAPI: {
+    load: vi.fn().mockResolvedValue({
+      main: { name: 'Test Node' },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.3,
+        overlap: 0.0,
+        locale: 'en',
+        threads: 4,
+        latitude: 0,
+        longitude: 0,
+        rangeFilter: {
+          threshold: 0.03,
+          speciesCount: null,
+          species: [],
+        },
+      },
+      realtime: {
+        interval: 15,
+        processingTime: false,
+        species: {
+          include: [],
+          exclude: [],
+          config: {},
+        },
+      },
+    }),
+    save: vi.fn().mockResolvedValue({}),
+    test: vi.fn().mockResolvedValue({ success: true }),
+  },
+}));
+
+// Mock SvelteKit navigation
+vi.mock('$app/navigation', () => ({
+  goto: vi.fn(),
+  invalidate: vi.fn(),
+  invalidateAll: vi.fn(),
+  preloadData: vi.fn(),
+  preloadCode: vi.fn(),
+  afterNavigate: vi.fn(),
+  beforeNavigate: vi.fn(),
+  onNavigate: vi.fn(),
+  pushState: vi.fn(),
+  replaceState: vi.fn(),
+}));
+
+// Mock SvelteKit stores
+vi.mock('$app/stores', () => ({
+  page: {
+    subscribe: vi.fn(callback => {
+      callback({
+        url: new URL('http://localhost:3000/'),
+        params: {},
+        route: { id: '/' },
+        status: 200,
+        error: null,
+        data: {},
+        form: undefined,
+        state: {},
+      });
+      return () => {};
+    }),
+  },
+  navigating: {
+    subscribe: vi.fn(callback => {
+      callback(null);
+      return () => {};
+    }),
+  },
+  updated: {
+    subscribe: vi.fn(callback => {
+      callback(false);
+      return () => {};
+    }),
+    check: vi.fn().mockResolvedValue(false),
+  },
 }));
 
 // Mock MapLibre GL - provide both default and named exports
 vi.mock('maplibre-gl', () => {
-  const MockMap = vi.fn();
-  const MockMarker = vi.fn();
+  const MockMap = vi.fn(() => ({
+    // Add methods that are used in the components
+    getZoom: vi.fn(() => 10),
+    setZoom: vi.fn(),
+    getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
+    setCenter: vi.fn(),
+    easeTo: vi.fn(),
+    flyTo: vi.fn(),
+    remove: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
+    addControl: vi.fn(),
+    removeControl: vi.fn(),
+    resize: vi.fn(),
+    getBounds: vi.fn(),
+    fitBounds: vi.fn(),
+    setPadding: vi.fn(),
+    project: vi.fn(),
+    unproject: vi.fn(),
+  }));
+
+  const MockMarker = vi.fn(() => ({
+    setLngLat: vi.fn().mockReturnThis(),
+    addTo: vi.fn().mockReturnThis(),
+    remove: vi.fn().mockReturnThis(),
+    getLngLat: vi.fn(() => ({ lng: 0, lat: 0 })),
+    setPopup: vi.fn().mockReturnThis(),
+    togglePopup: vi.fn().mockReturnThis(),
+    getPopup: vi.fn(),
+    setDraggable: vi.fn().mockReturnThis(),
+    isDraggable: vi.fn(() => false),
+    getElement: vi.fn(() => document.createElement('div')),
+  }));
 
   return {
     default: {
@@ -208,7 +355,9 @@ window.getComputedStyle = vi.fn().mockImplementation(() => {
   return style;
 });
 
-// Mock fetch for i18n translation loading
+// Note: CSRF token mocking is handled per-test as needed to avoid interfering with API tests
+
+// Mock fetch for i18n translation loading and API calls
 globalThis.fetch = vi.fn().mockImplementation(url => {
   // Mock translation files for i18n system
   if (url.includes('/ui/assets/messages/') && url.endsWith('.json')) {
@@ -243,8 +392,43 @@ globalThis.fetch = vi.fn().mockImplementation(url => {
     });
   }
 
+  // Mock API endpoints to prevent unmocked fetch warnings
+  if (url.includes('/api/')) {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({
+        'content-type': 'application/json',
+        'x-csrf-token': 'mock-csrf-token-123',
+      }),
+      json: () => Promise.resolve({ data: [] }),
+      text: () => Promise.resolve('{"data":[]}'),
+    });
+  }
+
   // Default mock for other fetch requests
   return Promise.reject(new Error(`Unmocked fetch call to: ${url}`));
+});
+
+// Mock window.location for navigation tests
+Object.defineProperty(window, 'location', {
+  writable: true,
+  value: {
+    href: 'http://localhost:3000/',
+    origin: 'http://localhost:3000',
+    protocol: 'http:',
+    host: 'localhost:3000',
+    hostname: 'localhost',
+    port: '3000',
+    pathname: '/',
+    search: '',
+    hash: '',
+    assign: vi.fn(),
+    replace: vi.fn(),
+    reload: vi.fn(),
+    toString: vi.fn(() => 'http://localhost:3000/'),
+  },
 });
 
 // Global test utilities
