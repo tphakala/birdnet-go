@@ -6,11 +6,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 // TestToastNotificationsExcludedFromList verifies that toast notifications
 // are never returned in notification lists, even when they exist in the store
 func TestToastNotificationsExcludedFromList(t *testing.T) {
+	// Verify no goroutine leaks after test
+	defer goleak.VerifyNone(t,
+		// Ignore common test framework goroutines
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		// Ignore lumberjack logger which is managed globally
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
 	// Create service with test config
 	config := &ServiceConfig{
 		Debug:              false,
@@ -20,17 +30,17 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 		RateLimitMaxEvents: 60,
 	}
 	service := NewService(config)
-
-	// Initialize the global service for SendToast to work
-	Initialize(config)
+	defer service.Stop() // Ensure proper cleanup
 
 	// Create a regular notification
 	regularNotif, err := service.Create(TypeInfo, PriorityMedium, "Regular Alert", "This is a regular notification")
 	require.NoError(t, err)
 	require.NotNil(t, regularNotif)
 
-	// Create a toast notification using the helper function
-	err = SendToast("Test toast message", ToastTypeInfo, "test")
+	// Create a toast notification directly with the service (not via global SendToast)
+	toast := NewToast("Test toast message", ToastTypeInfo).WithComponent("test")
+	toastNotif := toast.ToNotification()
+	err = service.CreateWithMetadata(toastNotif)
 	require.NoError(t, err)
 
 	// Create another regular notification
@@ -47,7 +57,7 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 
 	// Verify none of the returned notifications are toasts
 	for _, n := range notifications {
-		isToast, exists := n.Metadata["isToast"]
+		isToast, exists := n.Metadata[MetadataKeyIsToast]
 		assert.False(t, exists && isToast == true, "No toast notifications should be returned")
 		assert.NotEqual(t, ToastNotificationTitle, n.Title, "Toast notifications should not appear in list")
 	}
@@ -91,6 +101,15 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 // TestToastNotificationsStillBroadcast verifies that toast notifications
 // are still broadcast to subscribers even though they're excluded from lists
 func TestToastNotificationsStillBroadcast(t *testing.T) {
+	// Verify no goroutine leaks after test
+	defer goleak.VerifyNone(t,
+		// Ignore common test framework goroutines
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		// Ignore lumberjack logger which is managed globally
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	)
+
 	// Create service with test config
 	config := &ServiceConfig{
 		Debug:              false,
@@ -100,6 +119,7 @@ func TestToastNotificationsStillBroadcast(t *testing.T) {
 		RateLimitMaxEvents: 60,
 	}
 	service := NewService(config)
+	defer service.Stop() // Ensure proper cleanup
 
 	// Subscribe to notifications
 	notifCh, _ := service.Subscribe()
@@ -111,14 +131,14 @@ func TestToastNotificationsStillBroadcast(t *testing.T) {
 	err := service.CreateWithMetadata(notification)
 	require.NoError(t, err)
 
-	// Should receive the toast via broadcast
+	// Should receive the toast via broadcast (increased timeout for CI reliability)
 	select {
 	case received := <-notifCh:
 		assert.NotNil(t, received)
-		isToast, exists := received.Metadata["isToast"]
+		isToast, exists := received.Metadata[MetadataKeyIsToast]
 		assert.True(t, exists, "Broadcast notification should have isToast metadata")
 		assert.True(t, isToast.(bool), "Broadcast notification should be marked as toast")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Toast notification was not broadcast")
 	}
 

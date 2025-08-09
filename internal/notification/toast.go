@@ -110,7 +110,7 @@ func (t *Toast) ToNotification() *Notification {
 	// Create notification with toast metadata
 	notif := NewNotification(notifType, priority, ToastNotificationTitle, t.Message)
 	notif.WithComponent(t.Component).
-		WithMetadata("isToast", true).
+		WithMetadata(MetadataKeyIsToast, true).
 		WithMetadata("toastType", string(t.Type)).
 		WithMetadata("toastId", t.ID)
 	

@@ -199,7 +199,7 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 // processNotificationEvent processes a single notification event
 func (c *Controller) processNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
 	// Check if this is a toast notification
-	isToast, _ := notif.Metadata["isToast"].(bool)
+	isToast, _ := notif.Metadata[notification.MetadataKeyIsToast].(bool)
 	
 	if isToast {
 		return c.sendToastEvent(ctx, clientID, notif)

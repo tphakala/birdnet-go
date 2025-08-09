@@ -61,6 +61,22 @@ const (
 	StatusAcknowledged Status = "acknowledged"
 )
 
+// Metadata key constants for common notification metadata fields
+const (
+	// MetadataKeyIsToast identifies toast notifications in metadata
+	MetadataKeyIsToast = "isToast"
+)
+
+// isToastNotification checks if a notification is a toast notification
+// by examining its metadata for the isToast flag
+func isToastNotification(notif *Notification) bool {
+	if notif == nil || notif.Metadata == nil {
+		return false
+	}
+	isToast, ok := notif.Metadata[MetadataKeyIsToast].(bool)
+	return ok && isToast
+}
+
 // Notification represents a single notification event
 type Notification struct {
 	// ID is the unique identifier for the notification
@@ -342,8 +358,7 @@ func (s *InMemoryStore) removeOldest() {
 func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions) bool {
 	// Always exclude toast notifications from lists
 	// Toast notifications should only be sent via SSE as ephemeral messages
-	// They are identified by the isToast metadata flag
-	if isToast, ok := notif.Metadata["isToast"].(bool); ok && isToast {
+	if isToastNotification(notif) {
 		return false
 	}
 
