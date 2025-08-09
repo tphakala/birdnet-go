@@ -12,6 +12,11 @@ interface TestData {
 }
 
 describe('DataTable', () => {
+  // Helper function to find sort button by column key
+  const getSortButton = (columnKey: string) => {
+    return screen.getByTestId(`sort-${columnKey}`);
+  };
+
   const mockData: TestData[] = [
     { id: 1, name: 'John Doe', age: 30, email: 'john@example.com' },
     { id: 2, name: 'Jane Smith', age: 25, email: 'jane@example.com' },
@@ -102,7 +107,7 @@ describe('DataTable', () => {
       onSort,
     });
 
-    const nameHeader = screen.getByTestId('sort-name');
+    const nameHeader = getSortButton('name');
     await user.click(nameHeader);
 
     expect(onSort).toHaveBeenCalledWith('name', 'asc');
@@ -123,7 +128,7 @@ describe('DataTable', () => {
       },
     });
 
-    const nameHeader = screen.getByTestId('sort-name');
+    const nameHeader = getSortButton('name');
 
     // Click to sort desc
     await user.click(nameHeader);
@@ -239,7 +244,7 @@ describe('DataTable', () => {
       sortDirection: 'asc',
     });
 
-    const nameHeader = screen.getByTestId('sort-name');
+    const nameHeader = getSortButton('name');
     const svg = nameHeader.querySelector('svg');
     expect(svg).toBeInTheDocument();
     expect(svg?.querySelector('path')).toBeInTheDocument(); // Check icon is rendered without relying on specific path data

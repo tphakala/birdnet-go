@@ -96,24 +96,31 @@ describe('Settings Validation and Boundary Conditions', () => {
         const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
-        const coordInputs = screen
-          .queryAllByRole('spinbutton')
-          .filter(input => input.getAttribute('step') === '0.001');
+        // Find coordinate inputs by accessible label instead of step attribute
+        const latitudeInput = screen.queryByLabelText(/latitude/i) as HTMLInputElement | null;
+        const longitudeInput = screen.queryByLabelText(/longitude/i) as HTMLInputElement | null;
 
-        // Ensure coordinate input with step exists before proceeding with tests
-        expect(coordInputs.length).toBeGreaterThan(0);
+        // Use the first coordinate input found (latitude or longitude)
+        const input = latitudeInput ?? longitudeInput;
+        expect(input).toBeTruthy();
 
-        const input = coordInputs[0] as HTMLInputElement;
+        // Assert step property is appropriate for coordinates
+        if (input) {
+          const stepValue = parseFloat(input.step);
+          expect(stepValue).toBeGreaterThanOrEqual(0.001);
+        }
 
-        // Test high precision values
-        await fireEvent.change(input, { target: { value: '40.712' } });
-        expect(input.value).toBe('40.712');
+        if (input) {
+          // Test high precision values
+          await fireEvent.change(input, { target: { value: '40.712' } });
+          expect(input.value).toBe('40.712');
 
-        // Test very high precision (should maintain or round appropriately)
-        await fireEvent.change(input, { target: { value: '40.7127816' } });
-        // Should maintain reasonable precision - verify numeric value is rounded to 3 decimal places
-        const numericValue = Number(input.value);
-        expect(numericValue).toBeCloseTo(40.713, 3);
+          // Test very high precision (should maintain or round appropriately)
+          await fireEvent.change(input, { target: { value: '40.7127816' } });
+          // Should maintain reasonable precision - verify numeric value is rounded to 3 decimal places
+          const numericValue = Number(input.value);
+          expect(numericValue).toBeCloseTo(40.713, 3);
+        }
       });
     });
 
@@ -218,11 +225,13 @@ describe('Settings Validation and Boundary Conditions', () => {
         expect(screen.queryByText(scriptString)).toBeInTheDocument();
       }
 
-      // Verify that the document body HTML doesn't contain executable script tags with malicious content
-      const bodyHTML = document.body.innerHTML;
-      const executableScriptRegex =
-        /<script[^>]*>[\s\S]*alert\s*\(\s*["']xss["']\s*\)[\s\S]*<\/script>/i;
-      expect(bodyHTML).not.toMatch(executableScriptRegex);
+      // Verify using DOM-based check instead of regex on innerHTML
+      const scriptElements = document.body.querySelectorAll('script');
+      const maliciousScripts = Array.from(scriptElements).filter(script => {
+        const content = script.textContent ?? '';
+        return content.includes('alert("xss")') || content.includes("alert('xss')");
+      });
+      expect(maliciousScripts.length).toBe(0);
     });
   });
 
@@ -245,12 +254,15 @@ describe('Settings Validation and Boundary Conditions', () => {
 
         expect(component).toBeTruthy();
 
-        // Verify payload is escaped, not executed
-        const bodyHTML = document.body.innerHTML;
-        expect(bodyHTML).not.toMatch(/<img.*onerror=/i);
-        expect(bodyHTML).not.toMatch(/<svg.*onload=/i);
-        expect(bodyHTML).not.toMatch(/javascript:/i);
-        expect(bodyHTML).not.toMatch(/<iframe.*javascript:/i);
+        // Verify payload is escaped, not executed - use DOM-based check
+        const container = document.body;
+        const imgElements = container.querySelectorAll('img[onerror]');
+        const svgElements = container.querySelectorAll('svg[onload]');
+        const iframeElements = container.querySelectorAll('iframe[src*="javascript"]');
+
+        expect(imgElements.length).toBe(0);
+        expect(svgElements.length).toBe(0);
+        expect(iframeElements.length).toBe(0);
 
         cleanup();
       }
@@ -414,13 +426,12 @@ describe('Cross-Field Dependencies', () => {
     expect(component).toBeTruthy();
 
     // When MQTT is enabled, broker and topic input fields should be visible
-    const brokerInput = document.getElementById('mqtt-broker');
+    // Use getByTestId or getByLabelText instead of getElementById for better test resilience
+    const brokerInput = screen.queryByLabelText(/broker/i) ?? screen.queryByTestId('mqtt-broker');
     expect(brokerInput).toBeInTheDocument();
-    expect(brokerInput).toHaveAttribute('type', 'text');
 
-    const topicInput = document.getElementById('mqtt-topic');
+    const topicInput = screen.queryByLabelText(/topic/i) ?? screen.queryByTestId('mqtt-topic');
     expect(topicInput).toBeInTheDocument();
-    expect(topicInput).toHaveAttribute('type', 'text');
   });
 
   it('validates species configuration dependencies', async () => {

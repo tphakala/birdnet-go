@@ -25,6 +25,7 @@
   @component
 -->
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import {
     settingsStore,
@@ -51,14 +52,11 @@
   // PERFORMANCE OPTIMIZATION: Cache CSRF token once at component initialization
   let csrfToken = '';
 
-  // Initialize CSRF token once - no need to re-query on every render
-  $effect(() => {
-    if (!csrfToken) {
-      csrfToken =
-        (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute(
-          'content'
-        ) || '';
-    }
+  // Initialize CSRF token once on mount - prevents stale values across hot-reloads
+  onMount(() => {
+    csrfToken =
+      (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      '';
   });
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
@@ -213,6 +211,13 @@
 
   // PERFORMANCE OPTIMIZATION: Debounced prediction functions with memoization
   let debounceTimeouts = { include: 0, exclude: 0, config: 0 };
+
+  // Clean up timeouts on component destroy to prevent memory leaks
+  onDestroy(() => {
+    clearTimeout(debounceTimeouts.include);
+    clearTimeout(debounceTimeouts.exclude);
+    clearTimeout(debounceTimeouts.config);
+  });
 
   function updateIncludePredictions(input: string) {
     clearTimeout(debounceTimeouts.include);

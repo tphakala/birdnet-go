@@ -50,6 +50,28 @@
     ...rest
   }: Props = $props();
 
+  // Reactive state for showing clamping feedback
+  let wasClamped = $state(false);
+  let clampedMessage = $derived(
+    wasClamped
+      ? min !== undefined && value === min
+        ? `Value was adjusted to minimum (${min})`
+        : max !== undefined && value === max
+          ? `Value was adjusted to maximum (${max})`
+          : ''
+      : ''
+  );
+
+  // Clear clamping message after 3 seconds
+  $effect(() => {
+    if (wasClamped) {
+      const timeout = setTimeout(() => {
+        wasClamped = false;
+      }, 3000);
+      return () => clearTimeout(timeout);
+    }
+  });
+
   function handleChange(newValue: string | number | boolean | string[]) {
     // Explicitly handle different input types
     if (Array.isArray(newValue)) {
@@ -77,9 +99,12 @@
       // Clamp to min/max constraints if specified
       if (min !== undefined && numValue < min) {
         numValue = min;
-      }
-      if (max !== undefined && numValue > max) {
+        wasClamped = true;
+      } else if (max !== undefined && numValue > max) {
         numValue = max;
+        wasClamped = true;
+      } else {
+        wasClamped = false;
       }
 
       value = numValue;
@@ -105,12 +130,16 @@
     {required}
     {disabled}
     onChange={handleChange}
-    inputClassName={error ? 'input-error' : ''}
+    inputClassName={error || clampedMessage ? 'input-error' : ''}
   />
 
   {#if error}
     <div class="label">
       <span class="label-text-alt text-error">{error}</span>
+    </div>
+  {:else if clampedMessage}
+    <div class="label">
+      <span class="label-text-alt text-warning animate-pulse">{clampedMessage}</span>
     </div>
   {/if}
 </div>

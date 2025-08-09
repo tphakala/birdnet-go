@@ -42,11 +42,14 @@ export function coerceNumber(
   let num: number;
 
   if (typeof value === 'string') {
-    // Special case for string booleans
-    if (value === 'true' || value === '1') return Math.min(Math.max(1, min), max);
-    if (value === 'false' || value === '0') return Math.min(Math.max(0, min), max);
-
-    num = parseFloat(value);
+    // Special case for string booleans - convert first, then clamp
+    if (value === 'true' || value === '1') {
+      num = 1;
+    } else if (value === 'false' || value === '0') {
+      num = 0;
+    } else {
+      num = parseFloat(value);
+    }
   } else if (typeof value === 'boolean') {
     num = value ? 1 : 0;
   } else if (typeof value === 'number') {
@@ -283,16 +286,12 @@ export function coerceSecuritySettings(settings: PartialSecuritySettings): Parti
     };
   }
 
-  // Auto TLS
-  if (settings.autoTLS && typeof settings.autoTLS === 'object') {
-    const autoTLS = settings.autoTLS as UnknownSettings;
-    coerced.autoTLS = {
-      ...autoTLS,
-      enabled: coerceBoolean(autoTLS.enabled, false),
-    };
-  } else if ('autoTls' in settings) {
-    // Handle legacy property name
+  // Auto TLS - handle as boolean
+  if ('autoTls' in settings) {
     coerced.autoTls = coerceBoolean(settings.autoTls, false);
+  } else if ('autoTLS' in settings) {
+    // Handle legacy uppercase property name
+    coerced.autoTls = coerceBoolean(settings.autoTLS, false);
   }
 
   return coerced;
@@ -382,9 +381,10 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
     case 'birdnet':
       return coerceBirdNetSettings(data as PartialBirdNetSettings);
     case 'audio':
+      return coerceAudioSettings(data as PartialAudioSettings);
     case 'realtime':
       // Handle realtime.audio nested structure
-      if (section === 'realtime' && data.audio) {
+      if (data.audio) {
         return {
           ...data,
           audio: coerceAudioSettings(data.audio as PartialAudioSettings),
@@ -394,7 +394,7 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
             : data.species,
         };
       }
-      return coerceAudioSettings(data as PartialAudioSettings);
+      return data;
     case 'security':
       return coerceSecuritySettings(data as PartialSecuritySettings);
     case 'species':

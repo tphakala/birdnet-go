@@ -744,17 +744,13 @@ export const settingsActions = {
       );
       const mergedData = safeSpread(currentSectionData, data) as SettingsFormData[K];
 
-      // Apply coercion and validation
-      const coercedData = coerceSettings(
-        section as string,
-        mergedData as Record<string, unknown>
-      ) as SettingsFormData[K];
-
+      // Note: Coercion is now deferred until save to improve performance
+      // This avoids repeated deep-object processing on every keystroke
       return {
         ...state,
         formData: {
           ...state.formData,
-          [section]: coercedData,
+          [section]: mergedData,
         },
       };
     });
@@ -765,7 +761,20 @@ export const settingsActions = {
     try {
       const currentState = get(settingsStore);
 
-      await settingsAPI.save(currentState.formData);
+      // Apply coercion to all sections before saving
+      const coercedFormData = { ...currentState.formData };
+      for (const [section, data] of Object.entries(coercedFormData)) {
+        if (data && typeof data === 'object') {
+          const key = section as keyof SettingsFormData;
+          // Use a type assertion to handle the assignment
+          (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
+            section,
+            data as Record<string, unknown>
+          );
+        }
+      }
+
+      await settingsAPI.save(coercedFormData);
 
       // Check if UI locale changed and apply it
       const newLocale = currentState.formData.realtime?.dashboard?.locale;

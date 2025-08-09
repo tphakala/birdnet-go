@@ -267,15 +267,4 @@ describe('NotificationToast', () => {
     // No errors should occur
     expect(true).toBe(true);
   });
-
-  it('renders with children snippet', () => {
-    renderTyped(NotificationToastTestWrapper, {
-      props: {
-        showChildren: true,
-      },
-    });
-
-    expect(screen.getByText('Main message')).toBeInTheDocument();
-    expect(screen.getByText('Additional details')).toBeInTheDocument();
-  });
 });

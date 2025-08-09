@@ -522,18 +522,24 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
 
         expect(component).toBeTruthy();
 
-        // Click add configuration button - use specific test ID
-        const addConfigButton = screen.queryByTestId(
-          'add-configuration-button'
-        ) as HTMLButtonElement | null;
-        if (addConfigButton && !addConfigButton.disabled) {
-          await fireEvent.click(addConfigButton);
+        // Click add configuration button - use getByTestId for fast fail
+        try {
+          const addConfigButton = screen.getByTestId(
+            'add-configuration-button'
+          ) as HTMLButtonElement;
+          if (!addConfigButton.disabled) {
+            await fireEvent.click(addConfigButton);
 
-          // Try to save with empty fields - use specific test ID
-          const saveButton = screen.queryByTestId('save-config-button') as HTMLButtonElement | null;
-          if (saveButton && !saveButton.disabled) {
-            await fireEvent.click(saveButton);
+            // Try to save with empty fields - use getByTestId for fast fail
+            const saveButton = screen.getByTestId('save-config-button') as HTMLButtonElement;
+            if (!saveButton.disabled) {
+              await fireEvent.click(saveButton);
+            }
           }
+        } catch (error) {
+          // Elements not found - test should fail fast to make issue obvious
+          // Rethrow to ensure test failure
+          throw new Error(`Required test elements not found: ${error}`);
         }
 
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -568,7 +574,8 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         expect(safeContent).toBeTruthy(); // Should render as safe text
 
         // Ensure no actual script elements were created (XSS vulnerability check)
-        const scriptElements = document.querySelectorAll('script');
+        // Search within the document body, as component container not directly accessible
+        const scriptElements = document.body.querySelectorAll('script');
         const maliciousScripts = Array.from(scriptElements).filter(script =>
           script.textContent?.includes('alert("xss")')
         );
@@ -778,8 +785,11 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       for (const element of focusableElements) {
         element.focus();
         // In JSDOM test environment, focus simulation may not work exactly like real browser
-        // Just ensure the element can receive focus without errors
-        expect(element.tabIndex >= 0 || element.tagName.toLowerCase() === 'button').toBe(true);
+        // Ensure the element can receive focus and is not disabled
+        const isButton = element.tagName.toLowerCase() === 'button';
+        const isDisabled = element.hasAttribute('disabled');
+        const isFocusable = (element.tabIndex >= 0 || isButton) && !isDisabled;
+        expect(isFocusable).toBe(true);
       }
 
       // Ensure at least one element can be focused
