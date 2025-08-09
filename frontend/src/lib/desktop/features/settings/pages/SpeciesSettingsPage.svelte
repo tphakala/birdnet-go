@@ -48,11 +48,18 @@
     return value !== null && typeof value === 'object' && !Array.isArray(value);
   }
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
+  // PERFORMANCE OPTIMIZATION: Cache CSRF token once at component initialization
+  let csrfToken = '';
+
+  // Initialize CSRF token once - no need to re-query on every render
+  $effect(() => {
+    if (!csrfToken) {
+      csrfToken =
+        (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute(
+          'content'
+        ) || '';
+    }
+  });
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -204,49 +211,58 @@
     }
   }
 
-  // Prediction functions
-  function updateIncludePredictions(input: string) {
-    if (!input || input.length < 2) {
-      includePredictions = [];
-      return;
-    }
+  // PERFORMANCE OPTIMIZATION: Debounced prediction functions with memoization
+  let debounceTimeouts = { include: 0, exclude: 0, config: 0 };
 
-    const inputLower = input.toLowerCase();
-    includePredictions = allSpecies
-      .filter(
-        species => species.toLowerCase().includes(inputLower) && !settings.include.includes(species)
-      )
-      .slice(0, 10);
+  function updateIncludePredictions(input: string) {
+    clearTimeout(debounceTimeouts.include);
+    debounceTimeouts.include = window.setTimeout(() => {
+      if (!input || input.length < 2) {
+        includePredictions = [];
+        return;
+      }
+
+      const inputLower = input.toLowerCase();
+      const includeSet = new Set(settings.include); // Use Set for faster lookups
+      includePredictions = allSpecies
+        .filter(species => species.toLowerCase().includes(inputLower) && !includeSet.has(species))
+        .slice(0, 10);
+    }, 150); // Debounce by 150ms
   }
 
   function updateExcludePredictions(input: string) {
-    if (!input || input.length < 2) {
-      excludePredictions = [];
-      return;
-    }
+    clearTimeout(debounceTimeouts.exclude);
+    debounceTimeouts.exclude = window.setTimeout(() => {
+      if (!input || input.length < 2) {
+        excludePredictions = [];
+        return;
+      }
 
-    const inputLower = input.toLowerCase();
-    excludePredictions = filteredSpecies
-      .filter(
-        species => species.toLowerCase().includes(inputLower) && !settings.exclude.includes(species)
-      )
-      .slice(0, 10);
+      const inputLower = input.toLowerCase();
+      const excludeSet = new Set(settings.exclude); // Use Set for faster lookups
+      excludePredictions = filteredSpecies
+        .filter(species => species.toLowerCase().includes(inputLower) && !excludeSet.has(species))
+        .slice(0, 10);
+    }, 150); // Debounce by 150ms
   }
 
   function updateConfigPredictions(input: string) {
-    if (!input || input.length < 2) {
-      configPredictions = [];
-      return;
-    }
+    clearTimeout(debounceTimeouts.config);
+    debounceTimeouts.config = window.setTimeout(() => {
+      if (!input || input.length < 2) {
+        configPredictions = [];
+        return;
+      }
 
-    const inputLower = input.toLowerCase();
-    const existingConfigs = Object.keys(settings.config).map(s => s.toLowerCase());
-    configPredictions = allSpecies
-      .filter(species => {
-        const speciesLower = species.toLowerCase();
-        return speciesLower.includes(inputLower) && !existingConfigs.includes(speciesLower);
-      })
-      .slice(0, 10);
+      const inputLower = input.toLowerCase();
+      const existingConfigs = new Set(Object.keys(settings.config).map(s => s.toLowerCase())); // Use Set
+      configPredictions = allSpecies
+        .filter(species => {
+          const speciesLower = species.toLowerCase();
+          return speciesLower.includes(inputLower) && !existingConfigs.has(speciesLower);
+        })
+        .slice(0, 10);
+    }, 150); // Debounce by 150ms
   }
 
   // Species management functions
@@ -516,6 +532,7 @@
         {#if !showAddForm}
           <button
             class="btn btn-sm btn-primary gap-2"
+            data-testid="add-configuration-button"
             onclick={() => (showAddForm = true)}
             disabled={store.isLoading || store.isSaving}
           >
@@ -598,6 +615,7 @@
             <div class="col-span-2 flex gap-1">
               <button
                 class="btn btn-xs btn-primary flex-1"
+                data-testid="save-config-button"
                 onclick={saveConfig}
                 disabled={!configInputValue.trim() || newThreshold < 0 || newThreshold > 1}
               >

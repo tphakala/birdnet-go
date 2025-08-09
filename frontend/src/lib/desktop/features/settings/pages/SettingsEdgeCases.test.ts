@@ -552,19 +552,17 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
 
         expect(component).toBeTruthy();
 
-        // Click add configuration button - use getAllByText since there might be multiple
-        const addButtons = screen.queryAllByText(/Add Configuration/i);
-        if (addButtons.length > 0) {
-          // Click the first button element (not text in paragraph)
-          const buttonElement = addButtons.find(el => el.tagName === 'BUTTON');
-          if (buttonElement) {
-            await fireEvent.click(buttonElement);
+        // Click add configuration button - use specific test ID
+        const addConfigButton = screen.queryByTestId(
+          'add-configuration-button'
+        ) as HTMLButtonElement | null;
+        if (addConfigButton && !addConfigButton.disabled) {
+          await fireEvent.click(addConfigButton);
 
-            // Try to save with empty fields
-            const saveButton = screen.queryByText(/^Add$/);
-            if (saveButton && !saveButton.closest('button')?.disabled) {
-              await fireEvent.click(saveButton);
-            }
+          // Try to save with empty fields - use specific test ID
+          const saveButton = screen.queryByTestId('save-config-button') as HTMLButtonElement | null;
+          if (saveButton && !saveButton.disabled) {
+            await fireEvent.click(saveButton);
           }
         }
 
@@ -666,7 +664,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         expect(component).toBeTruthy();
 
         // Start editing
-        const addButton = screen.queryByText(/Add Configuration/i);
+        const addButton = screen.queryByTestId('add-configuration-button');
         if (addButton) {
           await fireEvent.click(addButton);
 
@@ -757,7 +755,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
       render(SpeciesSettingsPage.default);
 
-      const addButton = screen.queryByText(/Add Configuration/i);
+      const addButton = screen.queryByTestId('add-configuration-button');
       if (addButton) {
         // Focus on button
         addButton.focus();

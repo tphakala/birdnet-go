@@ -353,7 +353,9 @@ window.getComputedStyle = vi.fn().mockImplementation(() => {
   return style;
 });
 
-// Mock fetch for i18n translation loading
+// Note: CSRF token mocking is handled per-test as needed to avoid interfering with API tests
+
+// Mock fetch for i18n translation loading and API calls
 globalThis.fetch = vi.fn().mockImplementation(url => {
   // Mock translation files for i18n system
   if (url.includes('/ui/assets/messages/') && url.endsWith('.json')) {
@@ -385,6 +387,21 @@ globalThis.fetch = vi.fn().mockImplementation(url => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: () => Promise.resolve(mockTranslations),
       text: () => Promise.resolve(JSON.stringify(mockTranslations)),
+    });
+  }
+
+  // Mock API endpoints to prevent unmocked fetch warnings
+  if (url.includes('/api/')) {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({
+        'content-type': 'application/json',
+        'x-csrf-token': 'mock-csrf-token-123',
+      }),
+      json: () => Promise.resolve({ data: [] }),
+      text: () => Promise.resolve('{"data":[]}'),
     });
   }
 
