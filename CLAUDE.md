@@ -33,6 +33,19 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 3. Format markdown with prettier
 4. Address ALL review comments systematically
 
+### Testing Guidelines
+- **Goroutine Leak Detection**: Add to all tests that create services/goroutines:
+  ```go
+  defer goleak.VerifyNone(t,
+      goleak.IgnoreTopFunction("testing.(*T).Run"),
+      goleak.IgnoreTopFunction("runtime.gopark"),
+      goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+  )
+  ```
+- **Service Cleanup**: Always defer `service.Stop()` after creating services
+- **Test Isolation**: Use local service instances, not global singletons
+- **Timeouts**: Use 500ms+ for async operations to prevent CI flakiness
+
 ## Quick Reference
 - New APIs in v2 only
 - Branch from latest main
