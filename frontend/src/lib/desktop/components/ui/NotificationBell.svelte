@@ -67,7 +67,13 @@
 
   // PERFORMANCE OPTIMIZATION: Pure utility functions for caching
   // These functions only depend on their parameters, not component state
-  function shouldShowNotification(_notification: Notification): boolean {
+  function shouldShowNotification(notification: Notification): boolean {
+    // Never show toast notifications in the bell
+    // Toast notifications are ephemeral and should only appear as toasts
+    if (notification.title === 'Toast Message') {
+      return false;
+    }
+
     // In debug mode, show all notifications including low priority
     if (debugMode) {
       return true;

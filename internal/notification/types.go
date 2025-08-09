@@ -340,6 +340,12 @@ func (s *InMemoryStore) removeOldest() {
 
 // matchesFilter checks if a notification matches the filter criteria
 func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions) bool {
+	// Always exclude toast notifications from lists
+	// Toast notifications should only be sent via SSE as ephemeral messages
+	if isToast, ok := notif.Metadata["isToast"].(bool); ok && isToast {
+		return false
+	}
+
 	if filter == nil {
 		return true
 	}
