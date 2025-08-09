@@ -1,5 +1,13 @@
 # Go Coding Standards
 
+## Quick Reference
+- Use `internal/errors` package (never standard `errors`)
+- Structured logging with `internal/logging`
+- Test with `-race` flag always
+- No magic numbers - use constants
+- Document all exports
+- **Zero linter tolerance** - fix all issues before commit
+
 ## Import Rules
 - **Use** `"github.com/tphakala/birdnet-go/internal/errors"` (never standard `"errors"`)
 - **Use** `internal/logging` for structured logging
@@ -76,10 +84,124 @@
 - Check path traversal, injection attacks
 - Validate UUIDs properly
 
-## Checklist
-- Remove unused variables
-- Run gofmt before commit
-- Check nil before dereferencing
-- No magic numbers - use consts
-- Handle errors even after headers set
-- Mark test-only methods in comments
+## Goroutine Leak Detection
+Add to tests that create services/goroutines:
+```go
+defer goleak.VerifyNone(t,
+    goleak.IgnoreTopFunction("testing.(*T).Run"),
+    goleak.IgnoreTopFunction("runtime.gopark"),
+    goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+)
+```
+- Always `defer service.Stop()` after creating services
+- Use local service instances, not global singletons
+- Use 500ms+ timeouts for async operations (CI reliability)
+
+## Linter Compliance (Zero Tolerance)
+
+### Active Linters & Common Fixes
+
+| Linter | Purpose | Common Fixes |
+|--------|---------|--------------|
+| **errorlint** | Error handling | Use `errors.Is()`, `errors.As()` not `==` |
+| **errname** | Error naming | Prefix errors with `Err`: `var ErrNotFound` |
+| **nilerr** | Nil error returns | Don't return nil error with non-nil value |
+| **nilnil** | Nil returns | Avoid `return nil, nil` - return zero value |
+| **bodyclose** | HTTP bodies | Always `defer resp.Body.Close()` |
+| **ineffassign** | Unused assignments | Remove or use assigned values |
+| **staticcheck** | Static analysis | Fix all SA* warnings |
+| **gocritic** | Style/performance | Follow suggestions (rangeValCopy, etc.) |
+| **gocognit** | Complexity | Split functions >50 complexity |
+| **gocyclo** | Cyclomatic complexity | Refactor complex functions |
+| **dupl** | Duplication | Extract common code |
+| **misspell** | Spelling | Fix typos in comments/strings |
+| **unconvert** | Unnecessary conversions | Remove redundant type conversions |
+| **wastedassign** | Wasted assignments | Remove unused assignments |
+| **prealloc** | Slice preallocation | Use `make([]T, 0, cap)` when size known |
+| **exhaustive** | Switch exhaustiveness | Handle all enum cases or add default |
+| **testifylint** | Testify usage | Use `assert.Equal` not `assert.True(a == b)` |
+| **thelper** | Test helpers | Add `t.Helper()` to test functions |
+| **fatcontext** | Context usage | Don't store context in structs |
+| **iface** | Interface pollution | Accept interfaces, return structs |
+
+### Common Fixes by Category
+
+#### Error Handling
+```go
+// ❌ Wrong
+if err == io.EOF { }
+
+// ✅ Correct
+if errors.Is(err, io.EOF) { }
+
+// ❌ Wrong - nilerr
+if err != nil {
+    return nil, nil
+}
+
+// ✅ Correct
+if err != nil {
+    return nil, err
+}
+```
+
+#### Resource Management
+```go
+// ❌ Wrong - bodyclose
+resp, _ := http.Get(url)
+
+// ✅ Correct
+resp, err := http.Get(url)
+if err != nil {
+    return err
+}
+defer resp.Body.Close()
+```
+
+#### Test Helpers
+```go
+// ❌ Wrong - thelper
+func assertSomething(t *testing.T, val int) {
+    if val != 42 {
+        t.Errorf("expected 42")
+    }
+}
+
+// ✅ Correct
+func assertSomething(t *testing.T, val int) {
+    t.Helper() // Add this
+    if val != 42 {
+        t.Errorf("expected 42")
+    }
+}
+```
+
+#### Performance
+```go
+// ❌ Wrong - prealloc
+var results []string
+for _, item := range items {
+    results = append(results, item)
+}
+
+// ✅ Correct
+results := make([]string, 0, len(items))
+for _, item := range items {
+    results = append(results, item)
+}
+```
+
+## Pre-Commit Checklist
+- [ ] Run `golangci-lint run -v` - **MUST have zero errors**
+- [ ] Run `go test -race -v`
+- [ ] Check all linter categories above
+- [ ] No disabled linters with `//nolint` without justification
+- [ ] Document all exports
+- [ ] Handle all errors properly
+
+## Linter Configuration Notes
+- Config: `.golangci.yaml` (v2 format)
+- Complexity threshold: 50 (gocognit)
+- Disabled checks: commentFormatting, commentedOutCode (gocritic)
+- Exhaustive switches: `default` case marks as exhaustive
+- gosec disabled but configured for future use

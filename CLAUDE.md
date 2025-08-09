@@ -1,67 +1,40 @@
 # BirdNET-Go Development Guidelines
 
 ## Project Overview
-BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification with telemetry/observability.
+BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification aimed for non serious birders and home users. Open source project for fun.
 
-## Critical Rules
+## Quick Navigation
+- **Frontend**: See `frontend/CLAUDE.md` for Svelte 5, TypeScript, UI
+- **Backend**: See `internal/CLAUDE.md` for Go standards, testing
+- **API v2**: See `internal/api/v2/CLAUDE.md` for endpoints
 
-### Git Workflow
-- **Always start from an updated base branch**:
-  ```bash
-  git checkout <base-branch>  # main or feature branch
-  git pull origin <base-branch>
-  git checkout -b <new-branch-name>
-  ```
-- Check open/merged PRs before starting work to avoid conflicts
-- **Run `golangci-lint run -v` before EVERY commit**
-- Rebase regularly against your base branch
+## Universal Rules
 
-### API Development
-- **NEVER expand API v1** - All new endpoints go in `internal/api/v2/`
-- API v1 is deprecated - no new functionality
+### Critical Constraints
+- **NEVER expand API v1** - All new endpoints in `internal/api/v2/`
+- **Always lint before commit**: `golangci-lint run -v` (Go), `npm run check:all` (Frontend)
+- **Branch from updated main**: `git pull origin main && git checkout -b feature-name`
 
 ### Project Structure
-- `/cmd/` - Viper managed CLI commands
-- `/internal/` - Private packages (not importable externally)
-- `/pkg/` - Public reusable packages
-- `/internal/api/v2/` - New API endpoints
-- Follow Go's internal package conventions
+| Path | Purpose |
+|------|---------|
+| `/cmd/` | Viper CLI commands |
+| `/internal/` | Private packages |
+| `/pkg/` | Public packages |
+| `/frontend/` | Svelte 5 UI |
 
-### Build & Review Process
-1. Run `golangci-lint run -v` for entire module
-2. Run `go test -race -v`
-3. Format markdown with prettier
-4. Address ALL review comments systematically
+## Build Commands
+| Command | Purpose |
+|---------|---------|
+| `task` | Default build (auto-detects target) |
+| `task dev_server` | Development with hot reload |
+| `task frontend-build` | Frontend only |
+| `task clean` | Clean artifacts |
+| `task linux_amd64` | Cross-platform builds |
 
-### Testing Guidelines
-- **Goroutine Leak Detection**: Add to all tests that create services/goroutines:
-  ```go
-  defer goleak.VerifyNone(t,
-      goleak.IgnoreTopFunction("testing.(*T).Run"),
-      goleak.IgnoreTopFunction("runtime.gopark"),
-      goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-  )
-  ```
-- **Service Cleanup**: Always defer `service.Stop()` after creating services
-- **Test Isolation**: Use local service instances, not global singletons
-- **Timeouts**: Use 500ms+ for async operations to prevent CI flakiness
-
-## Quick Reference
-- New APIs in v2 only
-- Branch from latest main
-- Run linter before commit
-- Test with race detection
-- Document all exports
-
-## Build Instructions
-- **Default build** (detects target automatically): `task`
-- **Cross-platform builds**: `task linux_amd64`, `task darwin_arm64`, etc.
-- **Development server**: `task dev_server` (requires air) - check if already running first
-- **Clean build artifacts**: `task clean`
-- **Frontend only**: `task frontend-build`
-
-## Development Workflow
-- When running linter, run for full project: `golangci-lint run -v`
-
-## Go-Specific Guidelines
-See `internal/CLAUDE.md` for detailed Go coding standards and patterns.
+## Pre-Commit Checklist
+1. Run linters: `golangci-lint run -v` / `npm run check:all`
+2. Run tests: `go test -race -v` / `npm test`
+3. Check open PRs to avoid conflicts
+4. Format markdown with prettier
+5. Document all exports
