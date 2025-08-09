@@ -1,3 +1,20 @@
+<!--
+  NumberField.svelte
+  
+  A numeric input field with automatic value clamping and validation.
+  
+  Behavior:
+  - Values outside min/max bounds are automatically clamped to the nearest valid value
+  - For example: if min=0 and max=100:
+    - Entering -10 will automatically adjust to 0
+    - Entering 150 will automatically adjust to 100
+  - This provides immediate feedback and prevents invalid values from being submitted
+  
+  Props:
+  - min/max: Define valid range; values outside are clamped
+  - step: Increment/decrement step size
+  - onUpdate: Called with the clamped value after validation
+-->
 <script lang="ts">
   import FormField from './FormField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';

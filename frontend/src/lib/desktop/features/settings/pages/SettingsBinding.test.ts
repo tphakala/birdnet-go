@@ -15,6 +15,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
+import { INIT_TIMEOUT, STATE_UPDATE_TIMEOUT, wait } from '$lib/../test/constants';
 
 // Mock external dependencies to prevent network calls and complex integrations
 vi.mock('$lib/utils/api', () => ({
@@ -201,7 +203,7 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         render(MainSettingsPage.default);
 
         // Wait for component to fully initialize
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await wait(INIT_TIMEOUT);
 
         // Find number inputs - getAllByRole will fail if none found
         const numberInputs = screen.getAllByRole('spinbutton');
@@ -209,19 +211,18 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
 
         const numberInput = numberInputs[0] as HTMLInputElement;
 
-        // Trigger focus first to ensure the input is ready
-        await fireEvent.focus(numberInput);
+        // Use userEvent for more realistic user interaction
+        const user = userEvent.setup();
 
-        // Clear and set new value
-        await fireEvent.change(numberInput, { target: { value: '' } });
-        await fireEvent.input(numberInput, { target: { value: '42' } });
-        await fireEvent.change(numberInput, { target: { value: '42' } });
+        // Clear and type new value
+        await user.clear(numberInput);
+        await user.type(numberInput, '42');
 
-        // Trigger blur to complete the interaction
-        await fireEvent.blur(numberInput);
+        // Tab away to trigger blur
+        await user.tab();
 
         // Wait for all reactive updates to complete
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await wait(STATE_UPDATE_TIMEOUT);
 
         // Primary test: should not cause any console errors during binding interactions
         expect(consoleSpy).not.toHaveBeenCalled();
