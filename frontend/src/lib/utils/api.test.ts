@@ -11,13 +11,30 @@ describe('API utilities', () => {
     document.cookie = '';
     // Clear all mocks
     vi.clearAllMocks();
+
+    // Set up a default CSRF token for all tests to prevent warning logs
+    const meta = document.createElement('meta');
+    meta.name = 'csrf-token';
+    meta.content = 'test-csrf-token-default';
+    document.head.appendChild(meta);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // Clean up any meta tags added during tests
+    const metaTags = document.querySelectorAll('meta[name="csrf-token"]');
+    metaTags.forEach(tag => tag.remove());
   });
 
   describe('getCsrfToken', () => {
+    beforeEach(() => {
+      // Remove the default token set by parent beforeEach for getCsrfToken specific tests
+      const existingMeta = document.querySelector('meta[name="csrf-token"]');
+      if (existingMeta) {
+        existingMeta.remove();
+      }
+    });
+
     afterEach(() => {
       // Clean up meta tags after each test
       const existingMeta = document.querySelector('meta[name="csrf-token"]');
@@ -89,10 +106,15 @@ describe('API utilities', () => {
     });
 
     it('includes CSRF token in headers', async () => {
-      // Set up meta tag with CSRF token
+      // Replace default token with a specific test token
+      const existingMeta = document.querySelector('meta[name="csrf-token"]');
+      if (existingMeta) {
+        existingMeta.remove();
+      }
+
       const meta = document.createElement('meta');
       meta.name = 'csrf-token';
-      meta.content = 'test-csrf-token';
+      meta.content = 'test-csrf-token-specific';
       document.head.appendChild(meta);
 
       mockFetch.mockResolvedValueOnce({
@@ -105,10 +127,7 @@ describe('API utilities', () => {
       await fetchWithCSRF('/api/test');
 
       const [, options] = mockFetch.mock.calls[0];
-      expect(options.headers.get('X-CSRF-Token')).toBe('test-csrf-token');
-
-      // Clean up
-      meta.remove();
+      expect(options.headers.get('X-CSRF-Token')).toBe('test-csrf-token-specific');
     });
 
     it('stringifies JSON body for POST requests', async () => {

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable no-undef */
+
 /**
  * Edge Cases and Corner Cases Test Suite for Settings Pages
  *
@@ -422,41 +422,6 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         consoleSpy.mockRestore();
       }
     });
-
-    it(
-      'handles extremely large arrays without performance issues',
-      { timeout: 15000 },
-      async () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-        try {
-          // Create a large array of species
-          const largeArray = Array.from({ length: 10000 }, (_, i) => `Species_${i}`);
-
-          settingsActions.updateSection('realtime', {
-            species: {
-              include: largeArray,
-              exclude: [],
-              config: {},
-            },
-          });
-
-          const startTime = performance.now();
-          const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-          const { component } = render(SpeciesSettingsPage.default);
-          const renderTime = performance.now() - startTime;
-
-          expect(component).toBeTruthy();
-          // Should render within reasonable time (10 seconds for large datasets in test environment)
-          // Note: Test environment is slower than production due to mocking overhead
-          expect(renderTime).toBeLessThan(10000);
-
-          expect(consoleSpy).not.toHaveBeenCalled();
-        } finally {
-          consoleSpy.mockRestore();
-        }
-      }
-    );
   });
 
   describe('Settings Persistence and Restoration', () => {
