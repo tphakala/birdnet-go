@@ -267,9 +267,9 @@ rules:
       pattern: '$STATE1 === $STATE2'
       where:
         STATE1:
-          regex: '\$state'
+          pattern: '$state($$$)'
         STATE2:
-          regex: '\$state'
+          pattern: '$state($$$)'
     note: 'Compare specific properties instead'
 
   - id: spreading-reactive-object
@@ -280,7 +280,7 @@ rules:
       pattern: '{ ...$STATE }'
       where:
         STATE:
-          regex: '\$state'
+          pattern: '$state($$$)'
     note: 'Keep objects intact or use individual properties'
 
   - id: async-in-derived
@@ -326,7 +326,7 @@ rules:
       pattern: 'bind:$ATTR={$VAR}'
       where:
         VAR:
-          regex: '\$derived'
+          pattern: '$derived($$$)'
     note: 'Bindings require $state, not $derived'
 
   # Each Block Keys
@@ -335,7 +335,8 @@ rules:
     severity: info
     language: svelte
     rule:
-      pattern: '{#each $ITEMS as $ITEM}'
+      pattern: '{#each $ITEMS as $ITEM}$$$CONTENT{/each}'
       not:
-        pattern: '{#each $ITEMS as $ITEM ($KEY)}'
+        has:
+          pattern: '($KEY)'
     note: 'Add key: {#each items as item (item.id)}'

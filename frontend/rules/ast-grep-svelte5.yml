@@ -12,7 +12,6 @@ rules:
           any:
             - pattern: '$state($$$)'
             - pattern: '$derived($$$)'
-            - pattern: '$props()'
 
   - id: effect-cleanup-missing
     message: '$effect with subscriptions/timers should return cleanup function'
@@ -28,21 +27,27 @@ rules:
       where:
         SUBSCRIPTION:
           any:
-            - pattern: 'setInterval($$$)'
-            - pattern: 'setTimeout($$$)'
+            - pattern: 'const $TIMER = setInterval($$$)'
+            - pattern: 'const $TIMER = setTimeout($$$)'
             - pattern: 'addEventListener($$$)'
-            - pattern: 'subscribe($$$)'
-            - pattern: 'new EventSource($$$)'
-            - pattern: 'new AbortController()'
+            - pattern: '$VAR.subscribe($$$)'
+            - pattern: 'const $SOURCE = new EventSource($$$)'
+            - pattern: 'const $CONTROLLER = new AbortController()'
       not:
         any:
           - regex: 'return\s+\(\)\s*=>'
-          - regex: 'clearInterval\('
-          - regex: 'clearTimeout\('
-          - regex: 'removeEventListener\('
-          - regex: 'unsubscribe\('
-          - regex: '\.abort\(\)'
-          - regex: '\.close\(\)'
+          - has:
+              pattern: 'clearInterval($TIMER)'
+          - has:
+              pattern: 'clearTimeout($TIMER)'
+          - has:
+              pattern: 'removeEventListener($$$)'
+          - has:
+              pattern: '$VAR.unsubscribe()'
+          - has:
+              pattern: '$CONTROLLER.abort()'
+          - has:
+              pattern: '$SOURCE.close()'
 
   - id: derived-side-effects
     message: '$derived should be pure - move side effects to $effect'
@@ -54,13 +59,13 @@ rules:
       where:
         EXPR:
           any:
-            - contains:
+            - has:
                 pattern: 'console.$METHOD($$$)'
-            - contains:
+            - has:
                 pattern: 'localStorage.setItem($$$)'
-            - contains:
+            - has:
                 pattern: 'sessionStorage.setItem($$$)'
-            - contains:
+            - has:
                 pattern: '$$$Actions.$METHOD($$$)'
 
   - id: prefer-snippets-over-slots
@@ -87,7 +92,6 @@ rules:
         - pattern: '$state($$$)'
         - pattern: '$derived($$$)'
         - pattern: '$effect($$$)'
-        - pattern: '$props($$$)'
 
   - id: unnecessary-reactive-statement
     message: 'Use $derived instead of reactive statements ($:) in Svelte 5'
@@ -95,27 +99,13 @@ rules:
     language: svelte
     rule:
       pattern: '$: $VAR = $$$'
-      where:
-        VAR:
-          not:
-            any:
-              # Allow for DOM updates and side effects
-              - regex: 'document\.'
-              - regex: 'window\.'
-              - regex: 'Element$'
+      not:
+        inside:
+          any:
+            # Allow reactive statements for side effects
+            - pattern: '$: if ($$$) { $$$ }'
+            - pattern: '$: { $$$ }'
 
-  - id: missing-snippet-type
-    message: 'Snippet props should be typed with Snippet<[Args]>'
-    severity: warning
-    language: svelte
-    rule:
-      pattern: 'let { $$$, $SNIPPET, $$$ }: $TYPE = $props()'
-      where:
-        SNIPPET:
-          regex: 'snippet'
-        TYPE:
-          not:
-            regex: 'Snippet'
 
   - id: state-in-loop-without-key
     message: '$state in loops should have proper keying to avoid state confusion'

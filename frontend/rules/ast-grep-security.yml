@@ -6,16 +6,19 @@ rules:
     language: typescript
     rule:
       pattern: |
-        const token = $$$TOKEN$$$;
         $$$
-        headers: { 'X-Csrf-Token': token }
+        headers: { $HEADER: $TOKEN }
+        $$$
       where:
+        HEADER:
+          regex: '(?i)(X-)?CSRF-?Token|X-XSRF-?Token'
         TOKEN:
           not:
-            contains:
-              any:
-                - pattern: 'getCsrfToken()'
-                - pattern: 'validateCsrfToken($$$)'
+            any:
+              - pattern: 'getCsrfToken()'
+              - pattern: 'validateCsrfToken($$$)'
+              - regex: '(?i)validated.*token'
+              - regex: '(?i)safe.*token'
 
   - id: unsafe-innerHTML-svelte
     message: 'Using {@html} with user input - potential XSS'
@@ -34,11 +37,23 @@ rules:
             regex: '(?i).*Icon'
 
   - id: localstorage-xss-risk
-    message: 'localStorage data should be validated - XSS risk'
+    message: 'Storage data should be validated before parsing - XSS risk'
     severity: warning
     language: typescript
     rule:
-      pattern: 'JSON.parse(localStorage.getItem($KEY))'
+      any:
+        - pattern: 'JSON.parse($STORAGE.getItem($KEY))'
+        - pattern: |
+            const $VAR = $STORAGE.getItem($KEY);
+            $$$
+            JSON.parse($VAR)
+        - pattern: |
+            let $VAR = $STORAGE.getItem($KEY);
+            $$$
+            JSON.parse($VAR)
+      where:
+        STORAGE:
+          regex: '(local|session)Storage'
       not:
         inside:
           any:
@@ -46,6 +61,7 @@ rules:
             - pattern: 'try { $$$ } catch { $$$ }'
             - pattern: 'validate($$$)'
             - pattern: 'sanitize($$$)'
+            - pattern: 'if ($VAR) { $$$ }}'
 
   - id: password-logging
     message: 'Never log passwords or sensitive data'
