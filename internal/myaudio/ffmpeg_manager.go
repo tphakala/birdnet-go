@@ -56,6 +56,20 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			Build()
 	}
 
+	// Initialize buffers for the stream
+	if err := initializeBuffersForSource(url); err != nil {
+		managerLogger.Error("failed to initialize buffers for stream",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"operation", "start_stream_buffer_init")
+		return errors.New(fmt.Errorf("failed to initialize buffers: %w", err)).
+			Category(errors.CategorySystem).
+			Component("ffmpeg-manager").
+			Context("operation", "start_stream").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Build()
+	}
+
 	// Initialize sound level processor if enabled
 	if err := registerSoundLevelProcessorIfEnabled(url, managerLogger); err != nil {
 		managerLogger.Warn("sound level processor registration failed during stream start",
@@ -112,6 +126,26 @@ func (m *FFmpegManager) StopStream(url string) error {
 	managerLogger.Debug("unregistered sound level processor",
 		"url", privacy.SanitizeRTSPUrl(url),
 		"operation", "stop_stream")
+	
+	// Clean up buffers for the stream
+	// Wait a short time for any in-flight writes to complete
+	time.Sleep(100 * time.Millisecond)
+	
+	if err := RemoveAnalysisBuffer(url); err != nil {
+		managerLogger.Warn("failed to remove analysis buffer",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"operation", "stop_stream_buffer_cleanup")
+		log.Printf("⚠️ Warning: failed to remove analysis buffer for %s: %v", privacy.SanitizeRTSPUrl(url), err)
+	}
+	
+	if err := RemoveCaptureBuffer(url); err != nil {
+		managerLogger.Warn("failed to remove capture buffer",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"error", err,
+			"operation", "stop_stream_buffer_cleanup")
+		log.Printf("⚠️ Warning: failed to remove capture buffer for %s: %v", privacy.SanitizeRTSPUrl(url), err)
+	}
 	
 	managerLogger.Info("stopped FFmpeg stream",
 		"url", privacy.SanitizeRTSPUrl(url),
