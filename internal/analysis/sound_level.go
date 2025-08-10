@@ -40,10 +40,10 @@ const (
 
 // Package-level logger for sound level monitoring
 var (
-	soundLevelLogger *slog.Logger
-	soundLoggerOnce  sync.Once
-	serviceLevelVar  = new(slog.LevelVar) // Dynamic level control
-	closeLogger      func() error
+	soundLevelLogger     *slog.Logger
+	soundLoggerOnce      sync.Once
+	serviceLevelVar      = new(slog.LevelVar) // Dynamic level control
+	soundLevelCloseFunc  func() error
 )
 
 // getSoundLevelLogger returns the sound level logger, initializing it if necessary
@@ -60,7 +60,7 @@ func getSoundLevelLogger() *slog.Logger {
 		serviceLevelVar.Set(initialLevel)
 
 		// Initialize the service-specific file logger
-		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
+		soundLevelLogger, soundLevelCloseFunc, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
 		if err != nil {
 			// Fallback: Use main analysis logger and log the issue
 			mainLogger := GetLogger() // Get the main analysis logger
@@ -74,7 +74,7 @@ func getSoundLevelLogger() *slog.Logger {
 				// Ultimate fallback to default logger if even the main logger isn't available
 				soundLevelLogger = slog.Default().With("service", "analysis.soundlevel")
 			}
-			closeLogger = func() error { return nil } // No-op closer
+			soundLevelCloseFunc = func() error { return nil } // No-op closer
 		}
 	})
 	return soundLevelLogger
@@ -88,8 +88,8 @@ func getSoundLevelServiceLevelVar() *slog.LevelVar {
 // CloseSoundLevelLogger closes the sound level file logger and releases resources
 // This should be called during component shutdown to ensure proper cleanup of file handles
 func CloseSoundLevelLogger() error {
-	if closeLogger != nil {
-		return closeLogger()
+	if soundLevelCloseFunc != nil {
+		return soundLevelCloseFunc()
 	}
 	return nil
 }

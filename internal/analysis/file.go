@@ -436,7 +436,11 @@ func collectResults(
 			errHolder.setError(ctx.Err())
 			return
 		case notes := <-channels.resultChan:
-			logger.Debug("Received results for chunk", "chunk_number", atomic.LoadInt64(chunkCount))
+			// Sample logging: only log every 10th chunk to reduce overhead
+			currentChunkNum := atomic.LoadInt64(chunkCount)
+			if currentChunkNum % 10 == 0 || currentChunkNum == 1 {
+				logger.Debug("Received results for chunk", "chunk_number", currentChunkNum)
+			}
 			*allNotes = append(*allNotes, notes...)
 			atomic.AddInt64(chunkCount, 1)
 

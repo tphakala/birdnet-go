@@ -137,6 +137,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		return fmt.Errorf("cannot enqueue task with nil action")
 	}
 
+	// Cache logger for this function to avoid repeated GetLogger() calls
+	logger := GetLogger()
+
 	// Get action description for logging
 	actionDesc := task.Action.GetDescription()
 	// Sanitize description for error messages (in case it contains sensitive info)
@@ -154,7 +157,6 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		}
 
 		// Log the action description and species to provide more context
-		logger := GetLogger()
 		logger.Debug("Enqueuing task", 
 			"task_description", sanitizedDesc,
 			"species", speciesName,
@@ -170,7 +172,6 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		case strings.Contains(err.Error(), "queue is full"):
 			queueSize := p.JobQueue.GetMaxJobs()
 			// Log with action description for better context
-			logger := GetLogger()
 			logger.Warn("Job queue is full, dropping task", 
 				"queue_capacity", queueSize,
 				"task_description", sanitizedDesc)
@@ -181,7 +182,6 @@ func (p *Processor) EnqueueTask(task *Task) error {
 
 		case strings.Contains(err.Error(), "queue has been stopped"):
 			// Log with action description for better context
-			logger := GetLogger()
 			logger.Error("Cannot enqueue task, job queue has been stopped", 
 				"task_description", sanitizedDesc)
 			return fmt.Errorf("job queue has been stopped, cannot enqueue task '%s': %w",
@@ -193,7 +193,6 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			// Double-check that the error message is fully sanitized
 			sanitizedErrStr := sanitizeString(sanitizedErr.Error())
 			// Log with action description for better context
-			logger := GetLogger()
 			logger.Error("Failed to enqueue task", 
 				"task_description", sanitizedDesc,
 				"error", sanitizedErrStr)
@@ -208,7 +207,6 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		}
 
 		// Log with action description for better context
-		logger := GetLogger()
 		logger.Debug("Task enqueued successfully",
 			"task_description", sanitizedDesc,
 			"job_id", job.ID,

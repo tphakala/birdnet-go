@@ -48,10 +48,10 @@ func TestGetLogger(t *testing.T) {
 
 // TestLogJobEnqueued tests job enqueue logging
 func TestLogJobEnqueued(t *testing.T) {
-	buf, cleanup := setupTestLogger(slog.LevelDebug)
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
 	
-	LogJobEnqueued(context.TODO(), "job-123", "process", 5)
+	LogJobEnqueued(context.TODO(), "job-123", "process", true)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -62,8 +62,8 @@ func TestLogJobEnqueued(t *testing.T) {
 	if logEntry["action_type"] != "process" {
 		t.Errorf("Expected action_type 'process', got %v", logEntry["action_type"])
 	}
-	if logEntry["priority"] != float64(5) {
-		t.Errorf("Expected priority 5, got %v", logEntry["priority"])
+	if logEntry["retryable"] != true {
+		t.Errorf("Expected retryable true, got %v", logEntry["retryable"])
 	}
 	if logEntry["msg"] != "Job enqueued" {
 		t.Errorf("Expected message 'Job enqueued', got %v", logEntry["msg"])
@@ -72,10 +72,10 @@ func TestLogJobEnqueued(t *testing.T) {
 
 // TestLogJobStarted tests job start logging
 func TestLogJobStarted(t *testing.T) {
-	buf, cleanup := setupTestLogger(slog.LevelDebug)
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
 	
-	LogJobStarted(context.TODO(), "job-456", "analyze", 2)
+	LogJobStarted(context.TODO(), "job-456", "analyze")
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -85,9 +85,6 @@ func TestLogJobStarted(t *testing.T) {
 	}
 	if logEntry["action_type"] != "analyze" {
 		t.Errorf("Expected action_type 'analyze', got %v", logEntry["action_type"])
-	}
-	if logEntry["attempt"] != float64(2) {
-		t.Errorf("Expected attempt 2, got %v", logEntry["attempt"])
 	}
 	if logEntry["msg"] != "Job started" {
 		t.Errorf("Expected message 'Job started', got %v", logEntry["msg"])
@@ -142,14 +139,12 @@ func TestLogJobFailed(t *testing.T) {
 	if logEntry["max_retries"] != float64(5) {
 		t.Errorf("Expected max_retries 5, got %v", logEntry["max_retries"])
 	}
-	if logEntry["will_retry"] != true {
-		t.Errorf("Expected will_retry true, got %v", logEntry["will_retry"])
-	}
 	if !containsError(logEntry, "connection timeout") {
 		t.Errorf("Expected error containing 'connection timeout', got %v", logEntry["error"])
 	}
-	if logEntry["msg"] != "Job failed" {
-		t.Errorf("Expected message 'Job failed', got %v", logEntry["msg"])
+	// Should be Warn for retryable failure
+	if logEntry["msg"] != "Job failed, will retry" {
+		t.Errorf("Expected message 'Job failed, will retry', got %v", logEntry["msg"])
 	}
 	
 	// Test when no more retries (final failure - should log at Error level)
@@ -158,9 +153,6 @@ func TestLogJobFailed(t *testing.T) {
 	
 	logEntry2 := parseLogEntry(t, buf)
 	
-	if logEntry2["will_retry"] != false {
-		t.Errorf("Expected will_retry false when attempt equals max_retries, got %v", logEntry2["will_retry"])
-	}
 	if logEntry2["msg"] != "Job failed permanently" {
 		t.Errorf("Expected message 'Job failed permanently' for final failure, got %v", logEntry2["msg"])
 	}
@@ -188,29 +180,135 @@ func TestLogQueueStats(t *testing.T) {
 	if logEntry["failed"] != float64(2) {
 		t.Errorf("Expected failed 2, got %v", logEntry["failed"])
 	}
-	if logEntry["total"] != float64(65) {
-		t.Errorf("Expected total 65, got %v", logEntry["total"])
-	}
 	if logEntry["msg"] != "Queue statistics" {
 		t.Errorf("Expected message 'Queue statistics', got %v", logEntry["msg"])
 	}
 }
 
-// TestDebugLogSuppression tests that debug logs are suppressed at Info level
-func TestDebugLogSuppression(t *testing.T) {
+// TestLogJobDropped tests job dropped logging
+func TestLogJobDropped(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
 	
-	// Debug logs should not appear
-	LogJobEnqueued(context.TODO(), "job-debug", "test", 1)
-	if buf.Len() > 0 {
-		t.Error("Debug log should be suppressed at Info level")
+	LogJobDropped(context.TODO(), "job-dropped-1", "Upload to BirdWeather")
+	
+	logEntry := parseLogEntry(t, buf)
+	
+	// Assert JSON fields
+	if logEntry["job_id"] != "job-dropped-1" {
+		t.Errorf("Expected job_id 'job-dropped-1', got %v", logEntry["job_id"])
+	}
+	if logEntry["action_description"] != "Upload to BirdWeather" {
+		t.Errorf("Expected action_description 'Upload to BirdWeather', got %v", logEntry["action_description"])
+	}
+	if logEntry["reason"] != "queue_full" {
+		t.Errorf("Expected reason 'queue_full', got %v", logEntry["reason"])
+	}
+	if logEntry["msg"] != "Job dropped" {
+		t.Errorf("Expected message 'Job dropped', got %v", logEntry["msg"])
+	}
+}
+
+// TestLogQueueStopped tests queue stopped logging
+func TestLogQueueStopped(t *testing.T) {
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
+	
+	LogQueueStopped(context.TODO(), "manual shutdown", "pending_jobs", 5)
+	
+	logEntry := parseLogEntry(t, buf)
+	
+	// Assert JSON fields
+	if logEntry["reason"] != "manual shutdown" {
+		t.Errorf("Expected reason 'manual shutdown', got %v", logEntry["reason"])
+	}
+	if logEntry["pending_jobs"] != float64(5) {
+		t.Errorf("Expected pending_jobs 5, got %v", logEntry["pending_jobs"])
+	}
+	if logEntry["msg"] != "Queue processing stopped" {
+		t.Errorf("Expected message 'Queue processing stopped', got %v", logEntry["msg"])
+	}
+}
+
+// TestLogJobRetrying tests job retry logging
+func TestLogJobRetrying(t *testing.T) {
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
+	
+	LogJobRetrying(context.TODO(), "job-retry-1", "Send MQTT message", 2, 5)
+	
+	logEntry := parseLogEntry(t, buf)
+	
+	// Assert JSON fields
+	if logEntry["job_id"] != "job-retry-1" {
+		t.Errorf("Expected job_id 'job-retry-1', got %v", logEntry["job_id"])
+	}
+	if logEntry["action_description"] != "Send MQTT message" {
+		t.Errorf("Expected action_description 'Send MQTT message', got %v", logEntry["action_description"])
+	}
+	if logEntry["attempt"] != float64(2) {
+		t.Errorf("Expected attempt 2, got %v", logEntry["attempt"])
+	}
+	if logEntry["max_attempts"] != float64(5) {
+		t.Errorf("Expected max_attempts 5, got %v", logEntry["max_attempts"])
+	}
+	if logEntry["msg"] != "Job retrying" {
+		t.Errorf("Expected message 'Job retrying', got %v", logEntry["msg"])
+	}
+}
+
+// TestLogJobSuccess tests job success logging
+func TestLogJobSuccess(t *testing.T) {
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
+	
+	// Test first attempt success
+	LogJobSuccess(context.TODO(), "job-success-1", "Save to database", 1)
+	
+	logEntry := parseLogEntry(t, buf)
+	
+	// Assert JSON fields
+	if logEntry["job_id"] != "job-success-1" {
+		t.Errorf("Expected job_id 'job-success-1', got %v", logEntry["job_id"])
+	}
+	if logEntry["action_description"] != "Save to database" {
+		t.Errorf("Expected action_description 'Save to database', got %v", logEntry["action_description"])
+	}
+	if logEntry["attempt"] != float64(1) {
+		t.Errorf("Expected attempt 1, got %v", logEntry["attempt"])
+	}
+	if logEntry["first_attempt"] != true {
+		t.Errorf("Expected first_attempt true, got %v", logEntry["first_attempt"])
+	}
+	if logEntry["msg"] != "Job succeeded" {
+		t.Errorf("Expected message 'Job succeeded', got %v", logEntry["msg"])
 	}
 	
+	// Test retry success
 	buf.Reset()
-	LogJobStarted(context.TODO(), "job-debug", "test", 1)
-	if buf.Len() > 0 {
-		t.Error("Debug log should be suppressed at Info level")
+	LogJobSuccess(context.TODO(), "job-success-2", "Upload after retry", 3)
+	
+	logEntry2 := parseLogEntry(t, buf)
+	
+	if logEntry2["attempt"] != float64(3) {
+		t.Errorf("Expected attempt 3, got %v", logEntry2["attempt"])
+	}
+	if logEntry2["first_attempt"] != false {
+		t.Errorf("Expected first_attempt false for retry, got %v", logEntry2["first_attempt"])
+	}
+}
+
+// TestExtractTraceID tests trace ID extraction from context
+func TestExtractTraceID(t *testing.T) {
+	// Test with empty context
+	if traceID := extractTraceID(context.Background()); traceID != "" {
+		t.Errorf("Expected empty trace ID for empty context, got %q", traceID)
+	}
+	
+	// Test with string trace ID
+	ctx := context.WithValue(context.Background(), contextKeyTraceID, "trace-123")
+	if traceID := extractTraceID(ctx); traceID != "trace-123" {
+		t.Errorf("Expected trace ID 'trace-123', got %q", traceID)
 	}
 }
 
