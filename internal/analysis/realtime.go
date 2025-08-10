@@ -225,7 +225,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Start buffer monitors for each audio source only if we have active sources
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
-		bufferManager.UpdateMonitors(sources)
+		if err := bufferManager.UpdateMonitors(sources); err != nil {
+			log.Printf("⚠️  Warning: Buffer monitor setup completed with errors: %v", err)
+			// Note: We continue execution as buffer monitoring errors are not critical for startup
+		}
 	} else {
 		log.Println("⚠️  Starting without active audio sources. You can configure audio devices or RTSP streams through the web interface.")
 	}
