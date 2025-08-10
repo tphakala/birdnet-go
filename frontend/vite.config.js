@@ -93,6 +93,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    watch: false,
     setupFiles: ['./src/test/setup.ts'],
     // Exclude .svelte files from test discovery - they are test wrapper components, not test files
     // Added per CodeRabbit review to fix "No test suite found" errors for .test.svelte files
