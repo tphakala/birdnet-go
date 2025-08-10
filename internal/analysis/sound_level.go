@@ -22,7 +22,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
-	"golang.org/x/time/rate"
 )
 
 // Constants for sound level monitoring
@@ -569,39 +568,22 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 }
 
 // startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
+// This is a compatibility wrapper that converts done channel to context for the refactored function
 func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
-	wg.Add(1)
+	// Create context that gets canceled when done channel is closed
+	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Convert done channel to context cancellation
 	go func() {
-		defer wg.Done()
-		log.Println("📡 Started sound level SSE publisher")
-
-		// Create a rate limiter: 1 log per minute
-		errorLogLimiter := rate.NewLimiter(rate.Every(time.Minute), 1)
-
-		for {
-			select {
-			case <-doneChan:
-				log.Println("🔌 Stopping sound level SSE publisher")
-				return
-			case soundData := <-soundLevelChan:
-				// Log received sound level data if debug is enabled
-				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					if logger := getSoundLevelLogger(); logger != nil {
-						logger.Debug("SSE publisher received sound level data",
-							"source", soundData.Source,
-							"name", soundData.Name,
-							"timestamp", soundData.Timestamp)
-					}
-				}
-				if err := broadcastSoundLevelSSE(apiController, soundData); err != nil {
-					// Only log errors if rate limiter allows
-					if errorLogLimiter.Allow() {
-						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
-					}
-				}
-			}
+		select {
+		case <-doneChan:
+			cancel()
+		case <-ctx.Done():
 		}
 	}()
+	
+	// Call the refactored function with context and receive-only channel
+	startSoundLevelSSEPublisher(wg, ctx, apiController, soundLevelChan)
 }
 
 // broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics

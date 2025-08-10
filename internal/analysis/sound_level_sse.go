@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -20,7 +21,7 @@ func getSoundLevelMetrics(apiController *api.Controller) *metrics.SoundLevelMetr
 }
 
 // startSoundLevelSSEPublisher starts a goroutine to consume sound level data and publish via SSE
-func startSoundLevelSSEPublisher(wg *sync.WaitGroup, quitChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiController *api.Controller, soundLevelChan <-chan myaudio.SoundLevelData) {
 	if apiController == nil {
 		log.Println("⚠️ SSE API controller not available, sound level SSE publishing disabled")
 		return
@@ -34,7 +35,7 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, quitChan chan struct{}, api
 
 		for {
 			select {
-			case <-quitChan:
+			case <-ctx.Done():
 				log.Println("🔌 Stopping sound level SSE publisher")
 				return
 			case soundData := <-soundLevelChan:

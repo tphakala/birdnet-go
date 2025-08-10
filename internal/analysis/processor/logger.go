@@ -11,16 +11,22 @@ import (
 // Service name constant for the processor package
 const serviceName = "analysis.processor"
 
-// Note: The processor package uses a logger defined in new_species_tracker.go
+// Note: The processor package has dual logging configuration:
 // 
-// This logger is initialized as:
+// 1. Primary logger (defined in new_species_tracker.go):
 //   - Service name: "species-tracking"  
 //   - Log file: "logs/species-tracking.log"
 //   - Level: Dynamic (configurable via serviceLevelVar)
-//   - Fallback: slog.Default() if file logger fails
+//   - Purpose: Species-specific operations and tracking
 //
-// The logger is available throughout the processor package as the 
-// package-level variable `logger`.
+// 2. Fallback logger (used when primary logger fails):
+//   - Service name: "analysis.processor" (matches package function)
+//   - Source: logging.ForService(serviceName) with ultimate fallback to slog.Default()
+//   - Purpose: General processor operations when primary logger unavailable
+//
+// The primary logger is available throughout the processor package as the 
+// package-level variable `logger`. GetLogger() returns the primary logger
+// if available, otherwise returns the fallback logger.
 //
 // Usage example:
 //   logger.Info("Processing detection", "species", species, "confidence", conf)
@@ -43,6 +49,10 @@ func GetLogger() *slog.Logger {
 	// Initialize fallback logger only once if main logger is nil
 	fallbackLoggerOnce.Do(func() {
 		fallbackLogger = logging.ForService(serviceName)
+		// Ensure fallbackLogger is never nil to prevent panics
+		if fallbackLogger == nil {
+			fallbackLogger = slog.Default().With("service", serviceName)
+		}
 	})
 	
 	return fallbackLogger

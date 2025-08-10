@@ -117,29 +117,27 @@ func LogQueueStats(ctx context.Context, pending, running, completed, failed int)
 	logger.InfoContext(ctx, "Queue statistics", args...)
 }
 
-// extractTraceID attempts to extract a trace ID from the context
-// It looks for common trace ID keys used by various tracing systems
+// Context key types for safe context value retrieval
+type contextKey string
+
+const (
+	// traceIDKey is the typed context key for trace IDs
+	traceIDKey contextKey = "jobqueue.trace_id"
+)
+
+// WithTraceID adds a trace ID to the context using the typed key
+// External systems should use this function to normalize trace IDs at ingress points
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, traceIDKey, traceID)
+}
+
+// extractTraceID attempts to extract a trace ID from the context using typed keys
+// External systems should normalize their trace IDs to this typed key at ingress points
 func extractTraceID(ctx context.Context) string {
-	// Check for OpenTelemetry trace ID
-	if traceID := ctx.Value("trace-id"); traceID != nil {
+	if traceID := ctx.Value(traceIDKey); traceID != nil {
 		if id, ok := traceID.(string); ok {
 			return id
 		}
 	}
-
-	// Check for X-Trace-ID (common HTTP header)
-	if traceID := ctx.Value("x-trace-id"); traceID != nil {
-		if id, ok := traceID.(string); ok {
-			return id
-		}
-	}
-
-	// Check for request ID
-	if reqID := ctx.Value("request-id"); reqID != nil {
-		if id, ok := reqID.(string); ok {
-			return id
-		}
-	}
-
 	return ""
 }

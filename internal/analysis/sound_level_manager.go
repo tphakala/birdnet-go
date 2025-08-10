@@ -109,6 +109,11 @@ func (m *SoundLevelManager) Stop() {
 	settings := conf.Setting()
 	unregisterAllSoundLevelProcessors(settings)
 
+	// Close the sound level logger to release file handles
+	if err := CloseSoundLevelLogger(); err != nil {
+		log.Printf("Warning: Failed to close sound level logger: %v", err)
+	}
+
 	m.isRunning = false
 	m.doneChan = nil
 	log.Println("🔇 Sound level monitoring stopped")
