@@ -284,7 +284,10 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	}
 
 	// Update the analysis buffer monitors
-	cm.bufferManager.UpdateMonitors(sources)
+	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
+		log.Printf("\033[33m⚠️  Warning: Buffer monitor update completed with errors: %v\033[0m", err)
+		// Note: We continue execution as this is not critical for RTSP reconfiguration
+	}
 
 	// Reconfigure RTSP streams with proper goroutine cleanup
 	cm.unifiedAudioMutex.Lock()
