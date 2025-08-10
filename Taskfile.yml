@@ -201,6 +201,14 @@ tasks:
     cmds:
       - npm run format
       - npm run lint -- --fix
+      - npm run ast:fix
+
+  frontend-ast-fix:
+    desc: Auto-fix ast-grep detected issues
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - npm run ast:fix
 
   frontend-test:
     desc: Run frontend tests

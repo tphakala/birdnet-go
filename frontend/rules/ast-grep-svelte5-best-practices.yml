@@ -60,7 +60,7 @@ rules:
             - pattern: '.subscribe($$$)'
             - pattern: 'new $OBSERVER($$$)'
       not:
-        pattern: |  
+        pattern: |
           $effect(() => {
             $$$
             return () => $$$
@@ -105,10 +105,8 @@ rules:
     language: svelte
     rule:
       pattern: '{@render $SNIPPET()}'
-      where:
-        SNIPPET:
-          not:
-            regex: '\?'
+      not:
+        pattern: '{@render $SNIPPET?.()}'
     note: 'Use: {@render snippet?.()}'
 
   - id: children-without-optional
@@ -138,20 +136,20 @@ rules:
 
   # Event Handler Patterns
   - id: event-attribute-with-modifier-syntax
-    message: "Event modifiers don't work with event attributes"
+    message: "Event modifiers don't work with event attributes in Svelte 5"
     severity: error
     language: svelte
     rule:
-      pattern: 'on$EVENT|$MODIFIER={$$$}'
+      regex: 'on\w+\|\w+=[\{]'
     note: 'Handle modifiers inside the event handler function'
 
   - id: oncapture-event-syntax
-    message: "Use 'capture' suffix for capture phase events"
+    message: "Use 'capture' suffix for capture phase events in Svelte 5"
     severity: info
     language: svelte
     rule:
-      pattern: 'on:$EVENT|capture'
-    note: 'Use: on${EVENT}capture={handler}'
+      regex: 'on:\w+\|capture'
+    note: 'Use: on<event>capture={handler} (e.g., onclickcapture={handler})'
 
   # Component Patterns
   - id: uppercase-component-usage
@@ -163,12 +161,9 @@ rules:
       where:
         component:
           regex: '^[a-z]'
-      not:
-        # Allow HTML elements and special Svelte elements
-        where:
-          component:
+          not:
             any:
-              - regex: '^(div|span|button|input|select|textarea|form|section|article|header|footer|main|nav|aside|ul|ol|li|p|a|img|svg|path|g|circle|rect|line)$'
+              - regex: '^(div|span|button|input|select|textarea|form|section|article|header|footer|main|nav|aside|ul|ol|li|p|a|img|svg|path|g|circle|rect|line|table|thead|tbody|tr|td|th|h1|h2|h3|h4|h5|h6|pre|code|blockquote|em|strong|i|b|u|s|mark|small|sub|sup|br|hr|details|summary|dialog)$'
               - regex: '^svelte:'
               - regex: '\.'
     note: 'Use PascalCase for components: <MyComponent />'
@@ -204,6 +199,8 @@ rules:
     language: typescript
     rule:
       pattern: "from 'svelte/legacy'"
+    fix:
+      pattern: "from 'svelte' // TODO: Migrate from legacy"
     note: 'Migrate away from legacy helpers over time'
 
   - id: using-run-function
@@ -211,13 +208,15 @@ rules:
     severity: warning
     language: typescript
     rule:
-      pattern: 'run($$$)'
+      pattern: 'run($$$CALLBACK)'
+    fix:
+      pattern: '$effect(() => { /* TODO: Review and migrate */ $$$CALLBACK })'
     note: 'Use $effect() for client-side effects'
 
   # Type Safety
   - id: props-interface-missing
     message: 'Consider defining Props interface for type safety'
-    severity: info
+    severity: hint
     language: typescript
     rule:
       pattern: 'let { $$$PROPS } = $props()'
@@ -312,8 +311,10 @@ rules:
         inside:
           any:
             - pattern: "if (typeof window !== 'undefined')"
+            - pattern: "if (typeof document !== 'undefined')"
             - pattern: 'if (browser)'
             - pattern: '$effect($$$)'
+            - pattern: 'onMount($$$)'
     note: 'Check for browser environment or use in $effect'
 
   # Binding Patterns
@@ -325,7 +326,7 @@ rules:
       pattern: 'bind:$ATTR={$VAR}'
       where:
         VAR:
-          contains: '$derived'
+          regex: '\$derived'
     note: 'Bindings require $state, not $derived'
 
   # Each Block Keys

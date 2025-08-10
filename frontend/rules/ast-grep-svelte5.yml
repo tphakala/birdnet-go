@@ -10,9 +10,9 @@ rules:
       where:
         REACTIVE:
           any:
-            - matches: '$state($$$)'
-            - matches: '$derived($$$)'
-            - matches: '$props()'
+            - pattern: '$state($$$)'
+            - pattern: '$derived($$$)'
+            - pattern: '$props()'
 
   - id: effect-cleanup-missing
     message: '$effect with subscriptions/timers should return cleanup function'
@@ -28,14 +28,21 @@ rules:
       where:
         SUBSCRIPTION:
           any:
-            - matches: 'setInterval($$$)'
-            - matches: 'setTimeout($$$)'
-            - matches: 'addEventListener($$$)'
-            - matches: 'subscribe($$$)'
-            - matches: 'new EventSource($$$)'
+            - pattern: 'setInterval($$$)'
+            - pattern: 'setTimeout($$$)'
+            - pattern: 'addEventListener($$$)'
+            - pattern: 'subscribe($$$)'
+            - pattern: 'new EventSource($$$)'
+            - pattern: 'new AbortController()'
       not:
-        contains:
-          pattern: 'return () => { $$$ }'
+        any:
+          - regex: 'return\s+\(\)\s*=>'
+          - regex: 'clearInterval\('
+          - regex: 'clearTimeout\('
+          - regex: 'removeEventListener\('
+          - regex: 'unsubscribe\('
+          - regex: '\.abort\(\)'
+          - regex: '\.close\(\)'
 
   - id: derived-side-effects
     message: '$derived should be pure - move side effects to $effect'
@@ -70,8 +77,11 @@ rules:
     message: 'Svelte runes ($state, $derived, $effect) should only be used in .svelte files'
     severity: error
     language: typescript
-    file:
-      not: '*.svelte'
+    files:
+      - '**/*.ts'
+      - '**/*.js'
+      - '!**/*.svelte.ts'
+      - '!**/*.svelte.js'
     rule:
       any:
         - pattern: '$state($$$)'
@@ -90,23 +100,22 @@ rules:
           not:
             any:
               # Allow for DOM updates and side effects
-              - matches: 'document.$$$'
-              - matches: 'window.$$$'
-              - matches: '$$$Element'
+              - regex: 'document\.'
+              - regex: 'window\.'
+              - regex: 'Element$'
 
   - id: missing-snippet-type
     message: 'Snippet props should be typed with Snippet<[Args]>'
     severity: warning
-    language: typescript
+    language: svelte
     rule:
       pattern: 'let { $$$, $SNIPPET, $$$ }: $TYPE = $props()'
       where:
         SNIPPET:
-          matches: '$$$snippet$$$'
+          regex: 'snippet'
         TYPE:
           not:
-            contains:
-              pattern: 'Snippet'
+            regex: 'Snippet'
 
   - id: state-in-loop-without-key
     message: '$state in loops should have proper keying to avoid state confusion'

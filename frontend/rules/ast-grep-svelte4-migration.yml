@@ -121,7 +121,7 @@ rules:
 
   - id: legacy-multiple-handlers
     message: 'Multiple handlers for same event - combine into single handler'
-    severity: error  
+    severity: error
     language: svelte
     rule:
       pattern: '<$TAG $$$>'
