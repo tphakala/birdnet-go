@@ -3,8 +3,9 @@
 package jobqueue
 
 import (
-	"errors"
 	"time"
+	
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Constants for message length limits
@@ -16,11 +17,30 @@ const (
 
 // Common errors that can be returned by job queue operations
 var (
-	ErrNilAction     = errors.New("cannot enqueue nil action")
-	ErrQueueStopped  = errors.New("job queue has been stopped")
-	ErrJobNotFound   = errors.New("job not found in queue")
-	ErrInvalidStatus = errors.New("invalid job status")
-	ErrQueueFull     = errors.New("job queue is full")
+	ErrNilAction = errors.Newf("cannot enqueue nil action").
+		Component("analysis.jobqueue").
+		Category(errors.CategoryValidation).
+		Build()
+	
+	ErrQueueStopped = errors.Newf("job queue has been stopped").
+		Component("analysis.jobqueue").
+		Category(errors.CategoryState).
+		Build()
+	
+	ErrJobNotFound = errors.Newf("job not found in queue").
+		Component("analysis.jobqueue").
+		Category(errors.CategoryNotFound).
+		Build()
+	
+	ErrInvalidStatus = errors.Newf("invalid job status").
+		Component("analysis.jobqueue").
+		Category(errors.CategoryValidation).
+		Build()
+	
+	ErrQueueFull = errors.Newf("job queue is full").
+		Component("analysis.jobqueue").
+		Category(errors.CategoryLimit).
+		Build()
 )
 
 // RetryConfig holds the configuration for retry behavior of an action
