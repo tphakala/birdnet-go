@@ -93,6 +93,13 @@ const translations: Record<string, string> = {
   'common.buttons.confirm': 'Confirm',
   'components.forms.numberField.adjustedToMinimum': 'Value was adjusted to minimum ({value})',
   'components.forms.numberField.adjustedToMaximum': 'Value was adjusted to maximum ({value})',
+  // Audio Settings translations
+  'settings.audio.audioCapture.title': 'Audio Capture',
+  'settings.audio.audioCapture.description': 'Configure audio capture settings',
+  'settings.audio.audioCapture.rtspSource': 'RTSP Source',
+  'settings.audio.audioCapture.rtspUrlsLabel': 'RTSP URLs',
+  'settings.audio.audioCapture.rtspUrlsHelp': 'Enter RTSP stream URLs',
+  'settings.audio.errors.devicesLoadFailed': 'Failed to load audio devices',
 };
 
 vi.mock('$lib/i18n', () => ({
@@ -103,41 +110,8 @@ vi.mock('$lib/i18n', () => ({
   isValidLocale: vi.fn(() => true),
 }));
 
-// Mock settingsAPI for settings-related tests
-vi.mock('$lib/utils/settingsApi', () => ({
-  settingsAPI: {
-    load: vi.fn().mockResolvedValue({
-      main: { name: 'Test Node' },
-      birdnet: {
-        modelPath: '',
-        labelPath: '',
-        sensitivity: 1.0,
-        threshold: 0.3,
-        overlap: 0.0,
-        locale: 'en',
-        threads: 4,
-        latitude: 0,
-        longitude: 0,
-        rangeFilter: {
-          threshold: 0.03,
-          speciesCount: null,
-          species: [],
-        },
-      },
-      realtime: {
-        interval: 15,
-        processingTime: false,
-        species: {
-          include: [],
-          exclude: [],
-          config: {},
-        },
-      },
-    }),
-    save: vi.fn().mockResolvedValue({}),
-    test: vi.fn().mockResolvedValue({ success: true }),
-  },
-}));
+// Note: settingsAPI is not mocked globally to allow settings store tests to work properly
+// Component tests that need settingsAPI mocks should mock them individually
 
 // Mock SvelteKit navigation
 vi.mock('$app/navigation', () => ({
@@ -430,6 +404,9 @@ Object.defineProperty(window, 'location', {
     toString: vi.fn(() => 'http://localhost:3000/'),
   },
 });
+
+// Note: Utility modules are not mocked globally to allow their own tests to run properly
+// Component tests that need utility mocks should mock them individually
 
 // Global test utilities
 export const testUtils = {

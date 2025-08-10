@@ -36,7 +36,6 @@
     rtspSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { RTSPUrl } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
@@ -108,8 +107,8 @@
       },
     },
     rtsp: $rtspSettings || {
-      transport: 'tcp' as const,
-      urls: [] as RTSPUrl[],
+      transport: 'tcp',
+      urls: [] as string[], // Changed to string[] to match backend
     },
   });
   let store = $derived($settingsStore);
@@ -286,6 +285,19 @@
     keepSpectrograms: settings.audio.export?.retention?.keepSpectrograms || false,
   });
 
+  // Helper function to merge RTSP settings and avoid code duplication
+  function mergeRtsp(partialRtsp: Partial<{ transport: string; urls: string[] }>) {
+    const storeState = $settingsStore;
+    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
+
+    settingsActions.updateSection('realtime', {
+      rtsp: {
+        ...currentRtsp, // Preserve all existing fields
+        ...partialRtsp, // Apply partial updates
+      },
+    });
+  }
+
   // Update handlers
   function updateAudioSource(source: string) {
     settingsActions.updateSection('realtime', {
@@ -293,16 +305,12 @@
     });
   }
 
-  function updateRTSPTransport(transport: 'tcp' | 'udp') {
-    settingsActions.updateSection('realtime', {
-      rtsp: { ...settings.rtsp, transport },
-    });
+  function updateRTSPTransport(transport: string) {
+    mergeRtsp({ transport });
   }
 
-  function updateRTSPUrls(urls: RTSPUrl[]) {
-    settingsActions.updateSection('realtime', {
-      rtsp: { ...settings.rtsp, urls },
-    });
+  function updateRTSPUrls(urls: string[]) {
+    mergeRtsp({ urls });
   }
 
   function updateExportEnabled(enabled: boolean) {
@@ -522,7 +530,7 @@
               { value: 'udp', label: t('settings.audio.transport.udp') },
             ]}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateRTSPTransport(value as 'tcp' | 'udp')}
+            onchange={updateRTSPTransport}
           />
         </div>
 

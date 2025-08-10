@@ -120,11 +120,21 @@ export interface SoundLevelSettings {
   interval: number;
 }
 
-export interface RTSPSettings {
-  transport: 'tcp' | 'udp';
-  urls: RTSPUrl[];
+// RTSPHealthSettings matches backend RTSPHealthSettings
+export interface RTSPHealthSettings {
+  healthyDataThreshold: number; // seconds before stream considered unhealthy (default: 60)
+  monitoringInterval: number; // health check interval in seconds (default: 30)
 }
 
+// RTSPSettings matches backend RTSPSettings exactly
+export interface RTSPSettings {
+  transport: string; // RTSP Transport Protocol ("tcp" or "udp")
+  urls: string[]; // RTSP stream URLs - simple string array to match backend
+  health?: RTSPHealthSettings; // health monitoring settings
+  ffmpegParameters?: string[]; // optional custom FFmpeg parameters
+}
+
+// Deprecated - kept for backwards compatibility during migration
 export interface RTSPUrl {
   url: string;
   enabled: boolean;
