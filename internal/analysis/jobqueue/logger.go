@@ -3,9 +3,9 @@ package jobqueue
 
 import (
 	"context"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"log/slog"
 	"time"
-	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // Service name constant to reduce duplication and improve maintainability
@@ -18,7 +18,7 @@ func init() {
 	// Create service-specific logger for analysis job queue
 	// This provides dedicated logging for job queue operations
 	logger = logging.ForService(serviceName)
-	
+
 	// Defensive initialization for early startup scenarios
 	// This ensures we always have a working logger even if
 	// the logging system isn't fully initialized yet
@@ -93,7 +93,7 @@ func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxRet
 	if traceID := extractTraceID(ctx); traceID != "" {
 		args = append(args, "trace_id", traceID)
 	}
-	
+
 	// Use Error level for final failure, Warn for retryable failures
 	if attempt >= maxRetries {
 		logger.ErrorContext(ctx, "Job failed permanently", args...)
@@ -115,6 +115,61 @@ func LogQueueStats(ctx context.Context, pending, running, completed, failed int)
 		args = append(args, "trace_id", traceID)
 	}
 	logger.InfoContext(ctx, "Queue statistics", args...)
+}
+
+// LogJobDropped logs when a job is dropped due to queue being full
+func LogJobDropped(ctx context.Context, jobID, actionDesc string) {
+	args := []any{
+		"job_id", jobID,
+		"action_description", actionDesc,
+		"reason", "queue_full",
+	}
+	if traceID := extractTraceID(ctx); traceID != "" {
+		args = append(args, "trace_id", traceID)
+	}
+	logger.WarnContext(ctx, "Job dropped", args...)
+}
+
+// LogQueueStopped logs when the job queue processing is stopped
+func LogQueueStopped(ctx context.Context, reason string, details ...any) {
+	args := []any{
+		"reason", reason,
+	}
+	if len(details) > 0 && len(details)%2 == 0 {
+		args = append(args, details...)
+	}
+	if traceID := extractTraceID(ctx); traceID != "" {
+		args = append(args, "trace_id", traceID)
+	}
+	logger.InfoContext(ctx, "Queue processing stopped", args...)
+}
+
+// LogJobRetrying logs when a job is being retried
+func LogJobRetrying(ctx context.Context, jobID, actionDesc string, attempt, maxAttempts int) {
+	args := []any{
+		"job_id", jobID,
+		"action_description", actionDesc,
+		"attempt", attempt,
+		"max_attempts", maxAttempts,
+	}
+	if traceID := extractTraceID(ctx); traceID != "" {
+		args = append(args, "trace_id", traceID)
+	}
+	logger.InfoContext(ctx, "Job retrying", args...)
+}
+
+// LogJobSuccess logs when a job completes successfully
+func LogJobSuccess(ctx context.Context, jobID, actionDesc string, attempt int) {
+	args := []any{
+		"job_id", jobID,
+		"action_description", actionDesc,
+		"attempt", attempt,
+		"first_attempt", attempt == 1,
+	}
+	if traceID := extractTraceID(ctx); traceID != "" {
+		args = append(args, "trace_id", traceID)
+	}
+	logger.InfoContext(ctx, "Job succeeded", args...)
 }
 
 // Context key types for safe context value retrieval

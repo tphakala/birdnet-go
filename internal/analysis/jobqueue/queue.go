@@ -3,7 +3,6 @@ package jobqueue
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"strings"
 	"sync"
@@ -154,7 +153,7 @@ func getActionKey(action Action) string {
 }
 
 // Enqueue adds a job to the queue
-func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) (*Job, error) {
+func (q *JobQueue) Enqueue(action Action, data any, config RetryConfig) (*Job, error) {
 	if action == nil {
 		return nil, ErrNilAction
 	}
@@ -288,7 +287,7 @@ func (q *JobQueue) _dropOldestPendingJob() bool {
 	stats.Dropped++
 	q.stats.ActionStats[actionKey] = stats
 
-	log.Printf("🗑️ Dropped oldest pending job %s to make room for new job", oldestJob.ID)
+	LogJobDropped(context.Background(), oldestJob.ID, oldestJob.Action.GetDescription())
 	return true
 }
 
@@ -305,7 +304,7 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	// Check context immediately and periodically
 	checkCtx := func() bool {
 		if ctx.Err() != nil {
-			log.Printf("🛑 Job queue processing stopped via context: %v", ctx.Err())
+			LogQueueStopped(ctx, "context_cancelled", "error", ctx.Err())
 			return true
 		}
 		return false
@@ -319,10 +318,10 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	for {
 		select {
 		case <-q.stopCh:
-			log.Println("🛑 Job queue processing stopped via stop channel")
+			LogQueueStopped(ctx, "stop_channel")
 			return
 		case <-ctx.Done():
-			log.Printf("🛑 Job queue processing stopped via context: %v", ctx.Err())
+			LogQueueStopped(ctx, "context_done", "error", ctx.Err())
 			return
 		case <-ticker.C:
 			// Check context again before processing
@@ -532,8 +531,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 
 	// Log the attempt
 	if job.Attempts > 1 {
-		log.Printf("🔄️ Retrying %s: %s, attempt %d/%d",
-			job.ID, actionDesc, job.Attempts, job.MaxAttempts)
+		LogJobRetrying(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts)
 	}
 
 	// Create a timeout context for the job execution
@@ -641,8 +639,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			stats.Failed++
 			q.stats.ActionStats[actionKey] = stats
 
-			log.Printf("⚠️ Job %s: %s permanently failed after %d attempts: %v",
-				job.ID, actionDesc, job.Attempts, err)
+			LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
 		} else {
 			// Schedule for retry
 			job.Status = JobStatusRetrying
@@ -651,8 +648,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
 			job.NextRetryAt = q.clock.Now().Add(delay)
 
-			log.Printf("⚠️ Job %s: %s failed, will retry in %v (attempt %d/%d): %v",
-				job.ID, actionDesc, delay, job.Attempts, job.MaxAttempts, err)
+			LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
 		}
 	} else {
 		// Job succeeded
@@ -667,13 +663,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 
 		// Log success based on configuration
 		if job.Attempts > 1 || q.logAllSuccesses {
-			if job.Attempts > 1 {
-				log.Printf("✅ Job %s: %s succeeded after %d attempts",
-					job.ID, actionDesc, job.Attempts)
-			} else {
-				log.Printf("✅ Job %s: %s succeeded on first attempt",
-					job.ID, actionDesc)
-			}
+			LogJobSuccess(ctx, job.ID, actionDesc, job.Attempts)
 		}
 	}
 }
@@ -870,7 +860,7 @@ type typedActionAdapter[T any] struct {
 }
 
 // Execute implements the Action interface
-func (a *typedActionAdapter[T]) Execute(data interface{}) error {
+func (a *typedActionAdapter[T]) Execute(data any) error {
 	// If data is provided, ensure it's the correct type and use it
 	if data != nil {
 		if typedData, ok := data.(T); ok {

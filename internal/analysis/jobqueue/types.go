@@ -55,7 +55,7 @@ type RetryConfig struct {
 // Action defines the interface that must be implemented by any action
 // that can be executed by the job queue.
 type Action interface {
-	Execute(data interface{}) error
+	Execute(data any) error
 	GetDescription() string // Returns a human-readable description of the action
 }
 
