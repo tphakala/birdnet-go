@@ -114,6 +114,8 @@ describe('RTSPUrlInput', () => {
   });
 
   it('updates existing URL when modified', async () => {
+    // Use fake timers for debounce testing
+    vi.useFakeTimers();
     const onUpdate = vi.fn();
 
     render(RTSPUrlInput, {
@@ -126,13 +128,16 @@ describe('RTSPUrlInput', () => {
     const urlInput = screen.getByDisplayValue('rtsp://example.com/stream1');
     await fireEvent.input(urlInput, { target: { value: 'rtsp://modified.example.com/stream1' } });
 
-    // Wait for debounce delay (300ms)
-    await new Promise(resolve => setTimeout(resolve, 350));
+    // Advance timers by debounce delay (300ms)
+    vi.advanceTimersByTime(350);
 
     expect(onUpdate).toHaveBeenCalledWith([
       'rtsp://modified.example.com/stream1',
       'rtsp://example.com/stream2',
     ]);
+
+    // Restore real timers
+    vi.useRealTimers();
   });
 
   it('disables Add button when input is empty', () => {
@@ -225,7 +230,7 @@ describe('RTSPUrlInput', () => {
     const manyUrls = [
       'rtsp://cam1.example.com/stream',
       'rtsp://cam2.example.com/stream',
-      'rtsp://cam3.example.com/stream',
+      'rtsps://cam3.example.com/stream', // Add rtsps:// URL coverage
     ];
 
     render(RTSPUrlInput, {
@@ -237,9 +242,46 @@ describe('RTSPUrlInput', () => {
 
     expect(screen.getByDisplayValue('rtsp://cam1.example.com/stream')).toBeInTheDocument();
     expect(screen.getByDisplayValue('rtsp://cam2.example.com/stream')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('rtsp://cam3.example.com/stream')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('rtsps://cam3.example.com/stream')).toBeInTheDocument();
 
     const removeButtons = screen.getAllByText('Remove');
     expect(removeButtons).toHaveLength(3);
+  });
+
+  it('supports both rtsp:// and rtsps:// protocols', async () => {
+    const onUpdate = vi.fn();
+
+    const { rerender } = render(RTSPUrlInput, {
+      props: {
+        urls: [],
+        onUpdate,
+      },
+    });
+
+    const input = screen.getByPlaceholderText(/rtsp:/);
+    const addButton = screen.getByText('Add');
+
+    // Test rtsp:// protocol
+    await fireEvent.input(input, { target: { value: 'rtsp://example.com/stream' } });
+    await fireEvent.click(addButton);
+
+    expect(onUpdate).toHaveBeenCalledWith(['rtsp://example.com/stream']);
+
+    // Update component props to reflect the new URL was added
+    await rerender({
+      urls: ['rtsp://example.com/stream'],
+      onUpdate,
+    });
+
+    onUpdate.mockClear();
+
+    // Test rtsps:// protocol
+    await fireEvent.input(input, { target: { value: 'rtsps://secure.example.com/stream' } });
+    await fireEvent.click(addButton);
+
+    expect(onUpdate).toHaveBeenCalledWith([
+      'rtsp://example.com/stream',
+      'rtsps://secure.example.com/stream',
+    ]);
   });
 });

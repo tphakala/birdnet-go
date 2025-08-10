@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { loggers } from '$lib/utils/logger';
   import { validateProtocolURL } from '$lib/utils/security';
 
@@ -79,7 +80,12 @@
           onUpdate(updatedUrls);
         }
       } else {
-        logger.warn(`Invalid RTSP URL not applied: ${redactUrlCredentials(value)}`);
+        logger.warn('Invalid RTSP URL not applied', {
+          component: 'RTSPUrlInput',
+          action: 'updateUrl',
+          url: redactUrlCredentials(value),
+          index,
+        });
       }
 
       // Clean up timer reference
@@ -87,6 +93,16 @@
       delete updateTimers[index];
     }, 300); // 300ms debounce delay
   }
+
+  // Cleanup all outstanding debounce timers on component unmount
+  onDestroy(() => {
+    Object.values(updateTimers).forEach(timer => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+    updateTimers = {}; // Clear the timers object
+  });
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
