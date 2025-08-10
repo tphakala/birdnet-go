@@ -126,6 +126,9 @@ describe('RTSPUrlInput', () => {
     const urlInput = screen.getByDisplayValue('rtsp://example.com/stream1');
     await fireEvent.input(urlInput, { target: { value: 'rtsp://modified.example.com/stream1' } });
 
+    // Wait for debounce delay (300ms)
+    await new Promise(resolve => setTimeout(resolve, 350));
+
     expect(onUpdate).toHaveBeenCalledWith([
       'rtsp://modified.example.com/stream1',
       'rtsp://example.com/stream2',

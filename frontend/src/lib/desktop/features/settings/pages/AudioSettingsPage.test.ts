@@ -137,8 +137,13 @@ vi.mock('$lib/stores/settings', async () => {
 });
 
 describe('AudioSettingsPage - RTSP Stream Configuration', () => {
+  let originalFetch: typeof global.fetch;
+
   beforeEach(async () => {
     vi.clearAllMocks();
+
+    // Save original fetch before mocking
+    originalFetch = global.fetch;
 
     // Import the actual mocked stores
     const { settingsStore } = await import('$lib/stores/settings');
@@ -274,6 +279,8 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
   });
 
   afterEach(() => {
+    // Restore original fetch to prevent test interference
+    global.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 

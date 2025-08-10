@@ -56,13 +56,36 @@
     onUpdate(updatedUrls);
   }
 
+  // Debounce timers for each URL input to prevent excessive updates
+  let updateTimers = $state<Record<number, ReturnType<typeof setTimeout>>>({});
+
   function updateUrl(index: number, value: string) {
-    const updatedUrls = [...urls];
-    if (index >= 0 && index < updatedUrls.length) {
-      // eslint-disable-next-line security/detect-object-injection -- Safe: index is validated above
-      updatedUrls[index] = value;
+    // Clear existing timer for this index
+    // eslint-disable-next-line security/detect-object-injection -- Safe: index is validated number
+    if (updateTimers[index]) {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: index is validated number
+      clearTimeout(updateTimers[index]);
     }
-    onUpdate(updatedUrls);
+
+    // Set debounced update with validation
+    // eslint-disable-next-line security/detect-object-injection -- Safe: index is validated number
+    updateTimers[index] = setTimeout(() => {
+      // Only update if URL is valid or empty (allow clearing)
+      if (value.trim() === '' || isValidRtspUrl(value.trim())) {
+        const updatedUrls = [...urls];
+        if (index >= 0 && index < updatedUrls.length) {
+          // eslint-disable-next-line security/detect-object-injection -- Safe: index is validated above
+          updatedUrls[index] = value.trim();
+          onUpdate(updatedUrls);
+        }
+      } else {
+        logger.warn(`Invalid RTSP URL not applied: ${redactUrlCredentials(value)}`);
+      }
+
+      // Clean up timer reference
+      // eslint-disable-next-line security/detect-object-injection -- Safe: index is controlled
+      delete updateTimers[index];
+    }, 300); // 300ms debounce delay
   }
 
   function handleKeydown(event: KeyboardEvent) {

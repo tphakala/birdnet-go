@@ -285,6 +285,19 @@
     keepSpectrograms: settings.audio.export?.retention?.keepSpectrograms || false,
   });
 
+  // Helper function to merge RTSP settings and avoid code duplication
+  function mergeRtsp(partialRtsp: Partial<{ transport: string; urls: string[] }>) {
+    const storeState = $settingsStore;
+    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
+
+    settingsActions.updateSection('realtime', {
+      rtsp: {
+        ...currentRtsp, // Preserve all existing fields
+        ...partialRtsp, // Apply partial updates
+      },
+    });
+  }
+
   // Update handlers
   function updateAudioSource(source: string) {
     settingsActions.updateSection('realtime', {
@@ -293,29 +306,11 @@
   }
 
   function updateRTSPTransport(transport: string) {
-    // Read current RTSP settings directly from store to ensure URLs are preserved
-    const storeState = $settingsStore;
-    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
-
-    settingsActions.updateSection('realtime', {
-      rtsp: {
-        ...currentRtsp, // Preserve all existing fields including URLs
-        transport,
-      },
-    });
+    mergeRtsp({ transport });
   }
 
   function updateRTSPUrls(urls: string[]) {
-    // Read current RTSP settings directly from store to ensure transport is preserved
-    const storeState = $settingsStore;
-    const currentRtsp = storeState.formData.realtime?.rtsp || { transport: 'tcp', urls: [] };
-
-    settingsActions.updateSection('realtime', {
-      rtsp: {
-        ...currentRtsp, // Preserve all existing fields including transport
-        urls,
-      },
-    });
+    mergeRtsp({ urls });
   }
 
   function updateExportEnabled(enabled: boolean) {
