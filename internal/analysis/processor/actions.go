@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
@@ -333,7 +334,14 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 
 	// Safe check for nil BwClient
 	if a.BwClient == nil {
-		return fmt.Errorf("BirdWeather client is not initialized")
+		return errors.Newf("BirdWeather client is not initialized").
+			Component("analysis.processor").
+			Category(errors.CategoryIntegration).
+			Context("operation", "birdweather_upload").
+			Context("integration", "birdweather").
+			Context("retryable", false). // Configuration error - not retryable
+			Context("config_section", "realtime.birdweather").
+			Build()
 	}
 
 	// Copy data locally to reduce lock duration if needed
@@ -354,7 +362,16 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 			// Send notification for non-retryable failures
 			notification.NotifyIntegrationFailure("BirdWeather", err)
 		}
-		return fmt.Errorf("failed to upload %s to BirdWeather: %w", note.CommonName, err) // Return wrapped error with context
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryIntegration).
+			Context("operation", "birdweather_upload").
+			Context("species", note.CommonName).
+			Context("confidence", note.Confidence).
+			Context("clip_name", note.ClipName).
+			Context("integration", "birdweather").
+			Context("retryable", true). // Network/API errors are typically retryable
+			Build()
 	}
 
 	if a.Settings.Debug {
@@ -379,7 +396,13 @@ func (a *MqttAction) Execute(data interface{}) error {
 		log.Printf("🟡 MQTT client is not connected, skipping publish for %s (%s). Waiting for automatic reconnect.", a.Note.CommonName, a.Note.ScientificName)
 		// Return an error that indicates a retry might be useful later
 		// The job queue should handle retries based on this error.
-		return fmt.Errorf("MQTT client not connected")
+		return errors.Newf("MQTT client not connected").
+			Component("analysis.processor").
+			Category(errors.CategoryMQTTConnection).
+			Context("operation", "mqtt_publish").
+			Context("integration", "mqtt").
+			Context("retryable", true). // Connection issues are retryable
+			Build()
 	}
 
 	species := strings.ToLower(a.Note.CommonName)
@@ -391,7 +414,14 @@ func (a *MqttAction) Execute(data interface{}) error {
 
 	// Validate MQTT settings
 	if a.Settings.Realtime.MQTT.Topic == "" {
-		return fmt.Errorf("MQTT topic is not specified")
+		return errors.Newf("MQTT topic is not specified").
+			Component("analysis.processor").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "mqtt_publish").
+			Context("integration", "mqtt").
+			Context("retryable", false). // Configuration error - not retryable
+			Context("config_section", "realtime.mqtt.topic").
+			Build()
 	}
 
 	// Get bird image of detected bird
@@ -442,7 +472,17 @@ func (a *MqttAction) Execute(data interface{}) error {
 			// Send notification for non-retryable failures
 			notification.NotifyIntegrationFailure("MQTT", err)
 		}
-		return fmt.Errorf("failed to publish %s to MQTT topic %s: %w", a.Note.CommonName, a.Settings.Realtime.MQTT.Topic, err)
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryMQTTPublish).
+			Context("operation", "mqtt_publish").
+			Context("species", a.Note.CommonName).
+			Context("confidence", a.Note.Confidence).
+			Context("topic", a.Settings.Realtime.MQTT.Topic).
+			Context("clip_name", a.Note.ClipName).
+			Context("integration", "mqtt").
+			Context("retryable", true). // MQTT publish failures are typically retryable
+			Build()
 	}
 
 	if a.Settings.Debug {
@@ -542,7 +582,14 @@ func (a *SSEAction) Execute(data interface{}) error {
 			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s): %v\n",
 				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
 		}
-		return fmt.Errorf("failed to broadcast %s via SSE: %w", a.Note.CommonName, err)
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryBroadcast).
+			Context("operation", "sse_broadcast").
+			Context("species", a.Note.CommonName).
+			Context("confidence", a.Note.Confidence).
+			Context("clip_name", a.Note.ClipName).
+			Build()
 	}
 
 	if a.Settings.Debug {
@@ -583,7 +630,13 @@ func (a *SSEAction) waitForAudioFile() error {
 	}
 
 	// Timeout reached
-	return fmt.Errorf("audio file %s not ready after %v timeout", a.Note.ClipName, timeout)
+	return errors.Newf("audio file %s not ready after %v timeout", a.Note.ClipName, timeout).
+		Component("analysis.processor").
+		Category(errors.CategoryTimeout).
+		Context("operation", "wait_for_audio_file").
+		Context("clip_name", a.Note.ClipName).
+		Context("timeout_seconds", timeout.Seconds()).
+		Build()
 }
 
 // waitForDatabaseID waits for the Note to be saved to database and ID assigned
@@ -610,13 +663,24 @@ func (a *SSEAction) waitForDatabaseID() error {
 	}
 
 	// Timeout reached
-	return fmt.Errorf("database ID not assigned for %s after %v timeout", a.Note.CommonName, timeout)
+	return errors.Newf("database ID not assigned for %s after %v timeout", a.Note.CommonName, timeout).
+		Component("analysis.processor").
+		Category(errors.CategoryTimeout).
+		Context("operation", "wait_for_database_id").
+		Context("species", a.Note.CommonName).
+		Context("timeout_seconds", timeout.Seconds()).
+		Build()
 }
 
 // findNoteInDatabase searches for the note in database by unique characteristics
 func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	if a.Ds == nil {
-		return nil, fmt.Errorf("datastore not available")
+		return nil, errors.Newf("datastore not available").
+			Component("analysis.processor").
+			Category(errors.CategoryDatabase).
+			Context("operation", "find_note_in_database").
+			Context("retryable", false). // System configuration issue - not retryable
+			Build()
 	}
 
 	// Search for notes with matching characteristics
@@ -627,7 +691,12 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	// Search for notes, sorted by ID descending to get the most recent
 	notes, err := a.Ds.SearchNotes(query, false, 10, 0) // false = sort descending, limit 10, offset 0
 	if err != nil {
-		return nil, fmt.Errorf("failed to search for note: %w", err)
+		return nil, errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryDatabase).
+			Context("operation", "search_notes").
+			Context("query", query).
+			Build()
 	}
 
 	// Filter results to find the exact match based on date and time
@@ -641,5 +710,12 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("note not found in database")
+	return nil, errors.Newf("note not found in database").
+		Component("analysis.processor").
+		Category(errors.CategoryNotFound).
+		Context("operation", "find_note_in_database").
+		Context("species", a.Note.ScientificName).
+		Context("date", a.Note.Date).
+		Context("time", a.Note.Time).
+		Build()
 }

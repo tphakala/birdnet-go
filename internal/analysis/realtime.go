@@ -95,7 +95,15 @@ var audioDemuxManager = NewAudioDemuxManager()
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
-		return err
+		return errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategoryModelInit).
+			Context("operation", "initialize_birdnet").
+			Context("model_path", settings.BirdNET.ModelPath).
+			Context("label_path", settings.BirdNET.LabelPath).
+			Context("overlap", settings.BirdNET.Overlap).
+			Context("retryable", false). // Model initialization failure is not retryable
+			Build()
 	}
 
 	// Clean up any leftover HLS streaming files from previous runs
@@ -140,7 +148,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize Prometheus metrics manager
 	metrics, err := initializeMetrics()
 	if err != nil {
-		return err
+		return errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_metrics").
+			Build()
 	}
 	
 	// Update BirdNET model loaded metric now that metrics are available
@@ -186,7 +198,11 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize async services (event bus, notification workers, telemetry workers)
 	if err := telemetry.InitializeAsyncSystems(); err != nil {
 		log.Printf("Error: Failed to initialize async services: %v", err)
-		return err
+		return errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_async_systems").
+			Build()
 	}
 
 	// Initialize system monitor if monitoring is enabled
@@ -901,7 +917,16 @@ func initializeBuffers(sources []string) error {
 	}
 
 	if len(initErrors) > 0 {
-		return fmt.Errorf("buffer initialization errors: %s", strings.Join(initErrors, "; "))
+		return errors.Newf("buffer initialization errors: %s", strings.Join(initErrors, "; ")).
+			Component("analysis.realtime").
+			Category(errors.CategoryBuffer).
+			Context("operation", "initialize_buffers").
+			Context("error_count", len(initErrors)).
+			Context("source_count", len(sources)).
+			Context("buffer_size", conf.BufferSize*3).
+			Context("sample_rate", conf.SampleRate).
+			Context("retryable", false). // Buffer init failure is configuration/system issue
+			Build()
 	}
 
 	return nil
@@ -937,7 +962,11 @@ func cleanupHLSStreamingFiles() error {
 	// Get the HLS directory where all streaming files are stored
 	hlsDir, err := conf.GetHLSDirectory()
 	if err != nil {
-		return fmt.Errorf("failed to get HLS directory: %w", err)
+		return errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_hls_directory").
+			Build()
 	}
 
 	// Check if the directory exists
@@ -946,13 +975,23 @@ func cleanupHLSStreamingFiles() error {
 		// Directory doesn't exist yet, nothing to clean up
 		return nil
 	} else if err != nil {
-		return fmt.Errorf("failed to check HLS directory: %w", err)
+		return errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategoryFileIO).
+			Context("operation", "check_hls_directory").
+			Context("hls_dir", hlsDir).
+			Build()
 	}
 
 	// Read the directory entries
 	entries, err := os.ReadDir(hlsDir)
 	if err != nil {
-		return fmt.Errorf("failed to read HLS directory: %w", err)
+		return errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategoryFileIO).
+			Context("operation", "read_hls_directory").
+			Context("hls_dir", hlsDir).
+			Build()
 	}
 
 	var cleanupErrors []string
@@ -974,7 +1013,12 @@ func cleanupHLSStreamingFiles() error {
 
 	// Return a combined error if any cleanup operations failed
 	if len(cleanupErrors) > 0 {
-		return fmt.Errorf("failed to remove some HLS stream directories: %s", strings.Join(cleanupErrors, "; "))
+		return errors.Newf("failed to remove some HLS stream directories: %s", strings.Join(cleanupErrors, "; ")).
+			Component("analysis.realtime").
+			Category(errors.CategoryFileIO).
+			Context("operation", "cleanup_hls_directories").
+			Context("failed_cleanup_count", len(cleanupErrors)).
+			Build()
 	}
 
 	return nil
@@ -986,17 +1030,29 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 
 	stateManager, err := backup.NewStateManager(backupLogger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize backup state manager: %w", err)
+		return nil, nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_backup_state_manager").
+			Build()
 	}
 
 	// Use settings.Version for the app version
 	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize backup manager: %w", err)
+		return nil, nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_backup_manager").
+			Build()
 	}
 	backupScheduler, err := backup.NewScheduler(backupManager, backupLogger, stateManager)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize backup scheduler: %w", err)
+		return nil, nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_backup_scheduler").
+			Build()
 	}
 
 	// Load schedule for backupScheduler if backup is enabled
@@ -1062,7 +1118,11 @@ func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
 func initializeMetrics() (*observability.Metrics, error) {
 	metrics, err := observability.NewMetrics()
 	if err != nil {
-		return nil, fmt.Errorf("error initializing metrics: %w", err)
+		return nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_metrics").
+			Build()
 	}
 	return metrics, nil
 }

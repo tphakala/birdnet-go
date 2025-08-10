@@ -9,8 +9,10 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 type ExecuteCommandAction struct {
@@ -30,19 +32,34 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
 	if !ok {
-		return fmt.Errorf("ExecuteScriptAction requires Detections type, got %T", data)
+		return errors.Newf("ExecuteScriptAction requires Detections type, got %T", data).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "execute_command").
+			Context("expected_type", "Detections").
+			Build()
 	}
 
 	// Validate and resolve the command path
 	cmdPath, err := validateCommandPath(a.Command)
 	if err != nil {
-		return fmt.Errorf("invalid command path: %w", err)
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_command_path").
+			Context("command_type", "external_script").
+			Build()
 	}
 
 	// Building the command line arguments with validation
 	args, err := buildSafeArguments(a.Params, &detection.Note)
 	if err != nil {
-		return fmt.Errorf("error building arguments: %w", err)
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_command_arguments").
+			Context("param_count", len(a.Params)).
+			Build()
 	}
 
 	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
@@ -53,10 +70,27 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	// Set a clean environment
 	cmd.Env = getCleanEnvironment()
 
-	// Execute the command
+	// Execute the command with timing
+	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
+	executionDuration := time.Since(startTime)
+	
 	if err != nil {
-		return fmt.Errorf("error executing command: %w, output: %s", err, string(output))
+		// Get exit code if available
+		exitCode := -1
+		if cmd.ProcessState != nil {
+			exitCode = cmd.ProcessState.ExitCode()
+		}
+		
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryCommandExecution).
+			Context("operation", "execute_command").
+			Context("execution_duration_ms", executionDuration.Milliseconds()).
+			Context("exit_code", exitCode).
+			Context("output_size_bytes", len(output)).
+			Context("retryable", false). // Command execution failures are typically not retryable
+			Build()
 	}
 
 	logger.Info("Command executed successfully", "output", string(output))
@@ -70,19 +104,52 @@ func validateCommandPath(command string) (string, error) {
 
 	// Check if it's an absolute path
 	if !filepath.IsAbs(command) {
-		return "", fmt.Errorf("command must use absolute path: %s", command)
+		return "", errors.Newf("command must use absolute path").
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_command_path").
+			Context("security_check", "absolute_path_required").
+			Context("path_classification", "relative_path").
+			Context("validation_rule", "absolute_paths_only").
+			Context("retryable", false). // Path validation failure is permanent
+			Build()
 	}
 
 	// Verify the file exists and is executable
 	info, err := os.Stat(command)
 	if err != nil {
-		return "", fmt.Errorf("command not found: %w", err)
+		var classification string
+		switch {
+		case os.IsNotExist(err):
+			classification = "file_not_found"
+		case os.IsPermission(err):
+			classification = "permission_denied"
+		default:
+			classification = "file_access_error"
+		}
+		
+		return "", errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryFileIO).
+			Context("operation", "validate_command_path").
+			Context("security_check", "file_existence").
+			Context("error_classification", classification).
+			Context("retryable", false). // File existence issues are permanent
+			Build()
 	}
 
 	// Check file permissions
 	if runtime.GOOS != "windows" {
 		if info.Mode()&0o111 == 0 {
-			return "", fmt.Errorf("command is not executable: %s", command)
+			return "", errors.Newf("command is not executable").
+				Component("analysis.processor").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_command_path").
+				Context("security_check", "executable_permission").
+				Context("file_mode", info.Mode().String()).
+				Context("os_platform", runtime.GOOS).
+				Context("retryable", false). // Permission issues are permanent
+				Build()
 		}
 	}
 
@@ -97,7 +164,14 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 	for key, value := range params {
 		// Validate parameter name (allow only alphanumeric and _-)
 		if !isValidParamName(key) {
-			return nil, fmt.Errorf("invalid parameter name: %s", key)
+			return nil, errors.Newf("invalid parameter name").
+				Component("analysis.processor").
+				Category(errors.CategoryValidation).
+				Context("operation", "build_command_arguments").
+				Context("security_check", "parameter_name_validation").
+				Context("validation_rule", "alphanumeric_underscore_dash_only").
+				Context("retryable", false). // Parameter validation failure is permanent
+				Build()
 		}
 
 		// Get value from Note or use default
@@ -109,7 +183,14 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 		// Convert and validate the value
 		strValue, err := sanitizeValue(noteValue)
 		if err != nil {
-			return nil, fmt.Errorf("invalid value for parameter %s: %w", key, err)
+			return nil, errors.New(err).
+				Component("analysis.processor").
+				Category(errors.CategoryValidation).
+				Context("operation", "build_command_arguments").
+				Context("security_check", "value_sanitization").
+				Context("value_type", fmt.Sprintf("%T", noteValue)).
+				Context("retryable", false). // Value sanitization failure is permanent
+				Build()
 		}
 
 		// Handle quoting for values that need it
