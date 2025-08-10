@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"math"
@@ -50,12 +49,18 @@ func getSoundLevelLogger() *slog.Logger {
 		// Initialize the service-specific file logger
 		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "sound-level", serviceLevelVar)
 		if err != nil {
-			// Fallback: Log error to standard log and use stdout logger
-			log.Printf("WARNING: Failed to initialize sound level file logger at %s: %v. Using console logging.", logFilePath, err)
-			// Fallback to console logger
-			logging.Init()
-			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
-			soundLevelLogger = slog.New(fbHandler).With("service", "sound-level")
+			// Fallback: Use main analysis logger and log the issue
+			mainLogger := GetLogger() // Get the main analysis logger
+			if mainLogger != nil {
+				soundLevelLogger = mainLogger.With("subsystem", "sound-level")
+				soundLevelLogger.Warn("Failed to initialize sound level file logger, using fallback",
+					"error", err,
+					"log_path", logFilePath,
+					"service", "sound-level")
+			} else {
+				// Ultimate fallback to default logger if even the main logger isn't available
+				soundLevelLogger = slog.Default().With("service", "sound-level")
+			}
 			closeLogger = func() error { return nil } // No-op closer
 		}
 	})
@@ -187,46 +192,57 @@ func normalizeBandKey(key string) string {
 func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 	// Check timestamp is valid and not in the future
 	if data.Timestamp.IsZero() {
-		return errors.New(fmt.Errorf("invalid timestamp: zero time")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf("invalid timestamp: zero time").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_timestamp").
+			Context("source", data.Source).
+			Context("name", data.Name).
 			Build()
 	}
 
 	if data.Timestamp.After(time.Now().Add(5 * time.Minute)) {
-		return errors.New(fmt.Errorf("invalid timestamp: future time")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf("invalid timestamp: future time").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_timestamp").
 			Context("timestamp", data.Timestamp).
+			Context("current_time", time.Now()).
+			Context("source", data.Source).
+			Context("name", data.Name).
 			Build()
 	}
 
 	// Verify source and name are non-empty
 	if data.Source == "" {
-		return errors.New(fmt.Errorf("empty source field")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf("empty source field").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_fields").
+			Context("field", "source").
+			Context("name", data.Name).
 			Build()
 	}
 
 	if data.Name == "" {
-		return errors.New(fmt.Errorf("empty name field")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf("empty name field").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_fields").
+			Context("field", "name").
+			Context("source", data.Source).
 			Build()
 	}
 
 	// Ensure at least one octave band has data
 	if len(data.OctaveBands) == 0 {
-		return errors.New(fmt.Errorf("no octave band data")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf("no octave band data").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_octave_bands").
 			Context("source", data.Source).
+			Context("name", data.Name).
+			Context("duration", data.Duration).
 			Build()
 	}
 
@@ -235,11 +251,17 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 		if math.IsNaN(bandData.Min) || math.IsInf(bandData.Min, 0) ||
 			math.IsNaN(bandData.Max) || math.IsInf(bandData.Max, 0) ||
 			math.IsNaN(bandData.Mean) || math.IsInf(bandData.Mean, 0) {
-			return errors.Newf("non-finite values in band %s", band).
-				Component("realtime-analysis").
-				Category(errors.CategoryValidation).
-				Context("operation", "validate_sound_level_data").
+			return errors.Newf("non-finite values in octave band %s", band).
+				Component("analysis.soundlevel").
+				Category(errors.CategorySoundLevel).
+				Context("operation", "validate_octave_bands").
 				Context("band", band).
+				Context("center_freq", bandData.CenterFreq).
+				Context("min_value", bandData.Min).
+				Context("max_value", bandData.Max).
+				Context("mean_value", bandData.Mean).
+				Context("source", data.Source).
+				Context("name", data.Name).
 				Build()
 		}
 
@@ -247,14 +269,19 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 		if bandData.Min < -200 || bandData.Min > 20 ||
 			bandData.Max < -200 || bandData.Max > 20 ||
 			bandData.Mean < -200 || bandData.Mean > 20 {
-			return errors.Newf("dB values out of range in band %s", band).
-				Component("realtime-analysis").
-				Category(errors.CategoryValidation).
-				Context("operation", "validate_sound_level_data").
+			return errors.Newf("dB values out of range in octave band %s", band).
+				Component("analysis.soundlevel").
+				Category(errors.CategorySoundLevel).
+				Context("operation", "validate_octave_bands").
 				Context("band", band).
-				Context("min", bandData.Min).
-				Context("max", bandData.Max).
-				Context("mean", bandData.Mean).
+				Context("center_freq", bandData.CenterFreq).
+				Context("min_value", bandData.Min).
+				Context("max_value", bandData.Max).
+				Context("mean_value", bandData.Mean).
+				Context("valid_range_min", -200).
+				Context("valid_range_max", 20).
+				Context("source", data.Source).
+				Context("name", data.Name).
 				Build()
 		}
 	}
@@ -303,7 +330,7 @@ func toCompactFormat(data myaudio.SoundLevelData) CompactSoundLevelData {
 }
 
 // startSoundLevelMQTTPublisher starts a goroutine to consume sound level data and publish to MQTT
-func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, proc *processor.Processor) {
+func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -327,7 +354,10 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, pr
 				}
 				// Publish sound level data to MQTT
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
-					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
+						"error", err,
+						"source", soundData.Source,
+						"name", soundData.Name)
 				}
 			}
 		}
@@ -372,10 +402,13 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "marshal_error")
 		}
 		return errors.New(err).
-			Component("realtime-analysis").
-			Category(errors.CategoryNetwork).
-			Context("operation", "marshal_sound_level_data").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "marshal_compact_data").
 			Context("source", soundData.Source).
+			Context("name", soundData.Name).
+			Context("data_size_kb", float64(len(jsonData))/1024.0).
+			Context("octave_bands_count", len(compactData.Bands)).
 			Build()
 	}
 
@@ -390,11 +423,15 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "error")
 		}
 		return errors.New(err).
-			Component("realtime-analysis").
-			Category(errors.CategoryNetwork).
-			Context("operation", "publish_sound_level_mqtt").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "publish_mqtt").
 			Context("topic", topic).
 			Context("source", soundData.Source).
+			Context("name", soundData.Name).
+			Context("payload_size", len(jsonData)).
+			Context("timeout_seconds", 5).
+			Context("octave_bands_count", len(compactData.Bands)).
 			Build()
 	}
 
@@ -486,7 +523,10 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan stru
 				}
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
 					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
-					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
+						"error", err,
+						"source", soundData.Source,
+						"name", soundData.Name)
 				}
 			}
 		}
