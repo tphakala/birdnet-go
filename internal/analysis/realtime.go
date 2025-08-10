@@ -1028,6 +1028,7 @@ func cleanupHLSStreamingFiles() error {
 			Component("analysis.realtime").
 			Category(errors.CategoryFileIO).
 			Context("operation", "cleanup_hls_directories").
+			Context("hls_dir", hlsDir).
 			Context("failed_cleanup_count", len(cleanupErrors)).
 			Build()
 	}

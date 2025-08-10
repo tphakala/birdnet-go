@@ -225,6 +225,7 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 			Category(errors.CategorySoundLevel).
 			Context("operation", "validate_timestamp").
 			Context("sound_data", soundDataCtx).
+			Context("retryable", false). // Input validation errors are not retryable
 			Build()
 	}
 
@@ -238,6 +239,7 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 			Context("timestamp", data.Timestamp).
 			Context("current_time", currentTime).
 			Context("sound_data", soundDataCtx).
+			Context("retryable", false). // Input validation errors are not retryable
 			Build()
 	}
 
@@ -461,6 +463,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			Context("payload_size", len(jsonData)).
 			Context("timeout_seconds", 5).
 			Context("octave_bands_count", len(compactData.Bands)).
+			Context("retryable", true). // MQTT publish failures are typically retryable
 			Build()
 	}
 

@@ -600,6 +600,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			Context("species", a.Note.CommonName).
 			Context("confidence", a.Note.Confidence).
 			Context("clip_name", a.Note.ClipName).
+			Context("retryable", true). // SSE broadcast failures are typically retryable
 			Build()
 	}
 

@@ -2,12 +2,14 @@
 package processor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,7 +34,7 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
 	if !ok {
-		return errors.Newf("ExecuteScriptAction requires Detections type, got %T", data).
+		return errors.Newf("ExecuteCommandAction requires Detections type, got %T", data).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
 			Context("operation", "execute_command").
@@ -54,18 +56,28 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	// Building the command line arguments with validation
 	args, err := buildSafeArguments(a.Params, &detection.Note)
 	if err != nil {
+		// Extract parameter keys for better error context
+		var paramKeys []string
+		for key := range a.Params {
+			paramKeys = append(paramKeys, key)
+		}
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryValidation).
 			Context("operation", "build_command_arguments").
 			Context("param_count", len(a.Params)).
+			Context("param_keys", strings.Join(paramKeys, ", ")).
 			Build()
 	}
 
 	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
 
-	// Create command with validated path and arguments
-	cmd := exec.Command(cmdPath, args...)
+	// Create command with timeout to prevent hanging processes
+	// Use 5 minute timeout for external scripts
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	
+	cmd := exec.CommandContext(ctx, cmdPath, args...)
 
 	// Set a clean environment
 	cmd.Env = getCleanEnvironment()
@@ -99,7 +111,16 @@ func (a ExecuteCommandAction) Execute(data any) error {
 			Build()
 	}
 
-	logger.Info("Command executed successfully", "output", string(output))
+	// Log command success with size and truncated preview to avoid excessive log size
+	outputStr := string(output)
+	preview := outputStr
+	if len(outputStr) > 200 {
+		preview = outputStr[:200] + "... (truncated)"
+	}
+	logger.Info("Command executed successfully", 
+		"output_size_bytes", len(output),
+		"execution_duration_ms", executionDuration.Milliseconds(),
+		"output_preview", preview)
 	return nil
 }
 
@@ -174,7 +195,16 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 	// Pre-allocate slice with capacity for all parameters
 	args := make([]string, 0, len(params))
 
-	for key, value := range params {
+	// Get sorted keys for deterministic CLI argument order
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	for _, key := range keys {
+		value := params[key]
+		
 		// Validate parameter name (allow only alphanumeric and _-)
 		if !isValidParamName(key) {
 			return nil, errors.Newf("invalid parameter name").
@@ -183,6 +213,7 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 				Context("operation", "build_command_arguments").
 				Context("security_check", "parameter_name_validation").
 				Context("validation_rule", "alphanumeric_underscore_dash_only").
+				Context("param_name", key).
 				Context("retryable", false). // Parameter validation failure is permanent
 				Build()
 		}
@@ -202,6 +233,7 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 				Context("operation", "build_command_arguments").
 				Context("security_check", "value_sanitization").
 				Context("value_type", fmt.Sprintf("%T", noteValue)).
+				Context("param_name", key).
 				Context("retryable", false). // Value sanitization failure is permanent
 				Build()
 		}
