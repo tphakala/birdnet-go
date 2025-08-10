@@ -3,8 +3,8 @@ package processor
 
 import (
 	"context"
+	stderrors "errors"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -16,6 +16,14 @@ type TaskType int
 
 const (
 	TaskTypeAction TaskType = iota // Represents an action task type
+)
+
+// Timing constants for performance metrics and operations
+const (
+	// DefaultEnqueueTimeout is the default timeout for task enqueue operations
+	DefaultEnqueueTimeout = 5 * time.Second
+	// PerformanceLogInterval is the interval for logging performance metrics
+	PerformanceLogInterval = 100 * time.Millisecond
 )
 
 // Sentinel errors for processor operations
@@ -76,6 +84,19 @@ func (p *Processor) startWorkerPool() {
 		"operation", "worker_pool_start")
 }
 
+// Pre-compiled regex patterns for performance
+var (
+	// URL credential patterns
+	rtspRegex = regexp.MustCompile(`(?i)rtsp://[^:]+:[^@]+@`)
+	mqttRegex = regexp.MustCompile(`(?i)mqtt://[^:]+:[^@]+@`)
+	
+	// Security token patterns  
+	apiKeyRegex = regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
+	passwordRegex = regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
+	oauthRegex = regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
+	otherSensitiveRegex = regexp.MustCompile(`(?i)(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
+)
+
 // getJobQueueRetryConfig extracts the retry configuration from an action
 func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 	// Check if we have a test override (defined in workers_test.go)
@@ -97,31 +118,16 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 }
 
 // sanitizeString applies sanitization rules to remove sensitive information from strings
+// Uses pre-compiled regex patterns for better performance
 func sanitizeString(input string) string {
-	// Sanitize RTSP URLs with credentials
-	rtspRegex := regexp.MustCompile(`(?i)rtsp://[^:]+:[^@]+@`)
+	// Apply sanitization rules in order
 	result := rtspRegex.ReplaceAllString(input, "rtsp://[redacted]@")
-
-	// Sanitize MQTT credentials
-	mqttRegex := regexp.MustCompile(`(?i)mqtt://[^:]+:[^@]+@`)
 	result = mqttRegex.ReplaceAllString(result, "mqtt://[redacted]@")
-
-	// Sanitize API keys - made case-insensitive with (?i)
-	apiKeyRegex := regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
 	result = apiKeyRegex.ReplaceAllString(result, "$1=[REDACTED]")
-
-	// Sanitize passwords - expanded to include more variations and made case-insensitive
-	passwordRegex := regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
 	result = passwordRegex.ReplaceAllString(result, "$1=[REDACTED]")
-
-	// Sanitize OAuth tokens - made case-insensitive
-	oauthRegex := regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
 	result = oauthRegex.ReplaceAllString(result, "$1 [REDACTED]")
-
-	// Sanitize other potential sensitive information - made case-insensitive
-	otherSensitiveRegex := regexp.MustCompile(`(?i)(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
 	result = otherSensitiveRegex.ReplaceAllString(result, "$1=[REDACTED]")
-
+	
 	return result
 }
 
@@ -160,7 +166,44 @@ func sanitizeActionType(actionType string) string {
 }
 
 // EnqueueTask adds a task directly to the job queue for processing.
+// Uses context.Background() for backward compatibility.
 func (p *Processor) EnqueueTask(task *Task) error {
+	return p.EnqueueTaskCtx(context.Background(), task)
+}
+
+// EnqueueTaskCtx adds a task directly to the job queue for processing with context.
+//
+// This method respects the provided context for cancellation and timeouts.
+// If the context does not have a deadline, a default timeout of 
+// DefaultEnqueueTimeout (5 seconds) is automatically applied to prevent
+// indefinite blocking during enqueue operations.
+//
+// Context behavior:
+//   - If ctx is already cancelled, returns immediately with cancellation error
+//   - If ctx has a deadline, uses it as-is
+//   - If ctx has no deadline, wraps with DefaultEnqueueTimeout
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control
+//   - task: Task to enqueue (must not be nil, with non-nil Action)
+//
+// Returns error if:
+//   - Context is cancelled
+//   - Task or Task.Action is nil
+//   - Job queue is full or stopped
+//   - Enqueue operation fails
+func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
+	// Check if context is already cancelled before starting
+	if ctx.Err() != nil {
+		return errors.Newf("task enqueue cancelled: %w", ctx.Err()).
+			Component("analysis.processor").
+			Category(errors.CategoryCancellation).
+			Context("operation", "enqueue_task").
+			Context("cancelled_before_start", true).
+			Context("retryable", false).
+			Build()
+	}
+
 	// Performance metrics logging pattern
 	logger := GetLogger()
 	startTime := time.Now()
@@ -170,6 +213,13 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			"component", "analysis.processor",
 			"operation", "enqueue_task")
 	}()
+
+	// Add timeout if context doesn't have one
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultEnqueueTimeout)
+		defer cancel()
+	}
 
 	// Validate task parameter
 	if task == nil {
@@ -216,17 +266,16 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			"component", "analysis.processor")
 	}
 
-	// Enqueue the task to the job queue
-	ctx := context.Background()
+	// Enqueue the task to the job queue using provided context
 	job, err := p.JobQueue.Enqueue(ctx, &ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
 	if err != nil {
-		// Enhanced error handling with specific context
+		// Enhanced error handling with specific context using sentinel errors
 		switch {
-		case strings.Contains(err.Error(), "queue is full"):
+		case stderrors.Is(err, jobqueue.ErrQueueFull):
 			queueSize := p.JobQueue.GetMaxJobs()
 			
 			// Enhanced queue full error
-			enhancedErr := errors.New(err).
+			enhancedErr := errors.Newf("job queue is full (capacity: %d): %w", queueSize, err).
 				Component("analysis.processor").
 				Category(errors.CategoryWorker).
 				Context("operation", "enqueue_task").
@@ -245,9 +294,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 
 			return enhancedErr
 
-		case strings.Contains(err.Error(), "queue has been stopped"):
+		case stderrors.Is(err, jobqueue.ErrQueueStopped):
 			// Enhanced queue stopped error
-			enhancedErr := errors.New(err).
+			enhancedErr := errors.Newf("cannot enqueue task, job queue stopped: %w", err).
 				Component("analysis.processor").
 				Category(errors.CategoryWorker).
 				Context("operation", "enqueue_task").
@@ -266,7 +315,7 @@ func (p *Processor) EnqueueTask(task *Task) error {
 
 		default:
 			// Enhanced generic enqueue error
-			enhancedErr := errors.New(err).
+			enhancedErr := errors.Newf("failed to enqueue task: %w", err).
 				Component("analysis.processor").
 				Category(errors.CategoryWorker).
 				Context("operation", "enqueue_task").
