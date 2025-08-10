@@ -3,6 +3,7 @@ package processor
 
 import (
 	"log/slog"
+	"sync"
 )
 
 // Note: The processor package uses a logger defined in new_species_tracker.go
@@ -21,10 +22,23 @@ import (
 //   logger.Debug("Worker started", "worker_id", id, "total", total)
 //   logger.Error("Operation failed", "error", err)
 
+var (
+	fallbackLogger     *slog.Logger
+	fallbackLoggerOnce sync.Once
+)
+
 // GetLogger returns the processor package logger
 // This provides a uniform API for accessing the logger across packages
 func GetLogger() *slog.Logger {
-	// Return the logger from new_species_tracker.go
-	// Note: this assumes the logger is already initialized
-	return logger
+	// Return the logger from new_species_tracker.go if available
+	if logger != nil {
+		return logger
+	}
+	
+	// Initialize fallback logger only once if main logger is nil
+	fallbackLoggerOnce.Do(func() {
+		fallbackLogger = slog.Default().With("service", "analysis.processor")
+	})
+	
+	return fallbackLogger
 }

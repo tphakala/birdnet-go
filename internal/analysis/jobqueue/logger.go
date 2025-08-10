@@ -7,19 +7,22 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// Service name constant to reduce duplication and improve maintainability
+const serviceName = "analysis.jobqueue"
+
 // Package-level logger for job queue operations
 var logger *slog.Logger
 
 func init() {
 	// Create service-specific logger for analysis job queue
 	// This provides dedicated logging for job queue operations
-	logger = logging.ForService("analysis.jobqueue")
+	logger = logging.ForService(serviceName)
 	
 	// Defensive initialization for early startup scenarios
 	// This ensures we always have a working logger even if
 	// the logging system isn't fully initialized yet
 	if logger == nil {
-		logger = slog.Default().With("service", "analysis.jobqueue")
+		logger = slog.Default().With("service", serviceName)
 	}
 }
 
@@ -28,9 +31,9 @@ func init() {
 func GetLogger() *slog.Logger {
 	if logger == nil {
 		// Double-check initialization in case of race conditions
-		logger = logging.ForService("analysis.jobqueue")
+		logger = logging.ForService(serviceName)
 		if logger == nil {
-			logger = slog.Default().With("service", "analysis.jobqueue")
+			logger = slog.Default().With("service", serviceName)
 		}
 	}
 	return logger

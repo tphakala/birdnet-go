@@ -2,8 +2,8 @@ package analysis
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
-	"strings"
 	"testing"
 )
 
@@ -37,22 +37,27 @@ func TestLoggerOutput(t *testing.T) {
 	// Temporarily replace the package logger
 	oldLogger := logger
 	logger = testLogger
-	defer func() { logger = oldLogger }()
+	t.Cleanup(func() { logger = oldLogger })
 	
 	// Use GetLogger and write a log
 	l := GetLogger()
 	l.Info("test message", "key", "value", "number", 42)
 	
+	// Parse JSON output
+	var logEntry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
+		t.Fatalf("Failed to parse log JSON: %v", err)
+	}
+	
 	// Check output contains expected fields
-	output := buf.String()
-	if !strings.Contains(output, `"msg":"test message"`) {
-		t.Errorf("Log output missing message: %s", output)
+	if logEntry["msg"] != "test message" {
+		t.Errorf("Expected message 'test message', got %v", logEntry["msg"])
 	}
-	if !strings.Contains(output, `"key":"value"`) {
-		t.Errorf("Log output missing key field: %s", output)
+	if logEntry["key"] != "value" {
+		t.Errorf("Expected key 'value', got %v", logEntry["key"])
 	}
-	if !strings.Contains(output, `"number":42`) {
-		t.Errorf("Log output missing number field: %s", output)
+	if logEntry["number"] != float64(42) {
+		t.Errorf("Expected number 42, got %v", logEntry["number"])
 	}
 }
 
@@ -67,7 +72,7 @@ func TestLoggerLevels(t *testing.T) {
 	
 	oldLogger := logger
 	logger = testLogger
-	defer func() { logger = oldLogger }()
+	t.Cleanup(func() { logger = oldLogger })
 	
 	l := GetLogger()
 	
@@ -81,21 +86,31 @@ func TestLoggerLevels(t *testing.T) {
 	// Info should appear
 	buf.Reset()
 	l.Info("info message")
-	if !strings.Contains(buf.String(), "info message") {
+	var logEntry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
+		t.Fatalf("Failed to parse Info log JSON: %v", err)
+	}
+	if logEntry["msg"] != "info message" {
 		t.Error("Info message should appear at Info level")
 	}
 	
 	// Warn should appear
 	buf.Reset()
 	l.Warn("warn message")
-	if !strings.Contains(buf.String(), "warn message") {
+	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
+		t.Fatalf("Failed to parse Warn log JSON: %v", err)
+	}
+	if logEntry["msg"] != "warn message" {
 		t.Error("Warn message should appear at Info level")
 	}
 	
 	// Error should appear
 	buf.Reset()
 	l.Error("error message")
-	if !strings.Contains(buf.String(), "error message") {
+	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
+		t.Fatalf("Failed to parse Error log JSON: %v", err)
+	}
+	if logEntry["msg"] != "error message" {
 		t.Error("Error message should appear at Info level")
 	}
 }
@@ -103,7 +118,7 @@ func TestLoggerLevels(t *testing.T) {
 // TestConcurrentLoggerAccess tests thread-safe access
 func TestConcurrentLoggerAccess(t *testing.T) {
 	// Run multiple goroutines accessing the logger
-	done := make(chan bool, 10)
+	done := make(chan struct{}, 10)
 	
 	for i := 0; i < 10; i++ {
 		go func(id int) {
@@ -111,7 +126,7 @@ func TestConcurrentLoggerAccess(t *testing.T) {
 			if l == nil {
 				t.Error("GetLogger returned nil in goroutine")
 			}
-			done <- true
+			done <- struct{}{}
 		}(i)
 	}
 	

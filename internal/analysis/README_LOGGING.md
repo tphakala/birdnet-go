@@ -72,7 +72,6 @@ logger.Debug("Processing completed",
 
 ### Processor Package
 
-- `GetLogger()` - Returns the processor logger
 - Note: Processor logging is handled directly in `new_species_tracker.go` using the package-level logger
 
 ### JobQueue Package

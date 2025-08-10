@@ -82,9 +82,9 @@ func getEventType(event any) string {
 	case DetectionEvent:
 		return EventTypeDetection
 	default:
-		// For debugging unknown types, log the Go type
-		// In production, could return EventTypeUnknown
-		return fmt.Sprintf("%T", event) // fallback for unknown types
+		// Return generic constant to avoid exposing internal types
+		// Use EventTypeUnknown instead of Go type strings for security
+		return EventTypeUnknown
 	}
 }
 

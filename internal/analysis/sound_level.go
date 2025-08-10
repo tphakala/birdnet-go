@@ -61,7 +61,7 @@ func getSoundLevelLogger() *slog.Logger {
 		serviceLevelVar.Set(initialLevel)
 
 		// Initialize the service-specific file logger
-		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "sound-level", serviceLevelVar)
+		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
 		if err != nil {
 			// Fallback: Use main analysis logger and log the issue
 			mainLogger := GetLogger() // Get the main analysis logger
@@ -70,10 +70,10 @@ func getSoundLevelLogger() *slog.Logger {
 				soundLevelLogger.Warn("Failed to initialize sound level file logger, using fallback",
 					"error", err,
 					"log_path", logFilePath,
-					"service", "sound-level")
+					"service", "analysis.soundlevel")
 			} else {
 				// Ultimate fallback to default logger if even the main logger isn't available
-				soundLevelLogger = slog.Default().With("service", "sound-level")
+				soundLevelLogger = slog.Default().With("service", "analysis.soundlevel")
 			}
 			closeLogger = func() error { return nil } // No-op closer
 		}
@@ -220,13 +220,15 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 			Build()
 	}
 
-	if data.Timestamp.After(time.Now().Add(5 * time.Minute)) {
+	// Use a single time reference to avoid drift between validation and context
+	currentTime := time.Now()
+	if data.Timestamp.After(currentTime.Add(5 * time.Minute)) {
 		return errors.Newf(errMsgInvalidTimestamp, "future time").
 			Component("analysis.soundlevel").
 			Category(errors.CategorySoundLevel).
 			Context("operation", "validate_timestamp").
 			Context("timestamp", data.Timestamp).
-			Context("current_time", time.Now()).
+			Context("current_time", currentTime).
 			Context("sound_data", soundDataCtx).
 			Build()
 	}
