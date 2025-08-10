@@ -1471,6 +1471,14 @@ generate_systemd_service_content() {
         thermal_volume_line="-v /sys/class/thermal:/sys/class/thermal \\"
     fi
 
+    # Check if running on Raspberry Pi and add WiFi power save disable script
+    local wifi_power_save_script=""
+    if is_raspberry_pi; then
+        # Create the script that will be executed
+        wifi_power_save_script="# Disable WiFi power saving on Raspberry Pi to prevent connection drops
+ExecStartPre=/bin/bash -c 'for interface in /sys/class/net/wlan* /sys/class/net/wlp*; do if [ -d \"\$interface\" ]; then iface=\$(basename \"\$interface\"); (command -v iwconfig >/dev/null 2>&1 && iwconfig \"\$iface\" power off 2>/dev/null) || (command -v iw >/dev/null 2>&1 && iw dev \"\$iface\" set power_save off 2>/dev/null) || true; fi; done'"
+    fi
+
     cat << EOF
 [Unit]
 Description=BirdNET-Go
@@ -1486,6 +1494,7 @@ ExecStartPre=-/usr/bin/docker rm -f birdnet-go
 ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
 # Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
 ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
+${wifi_power_save_script}
 ExecStart=/usr/bin/docker run --rm \\
     --name birdnet-go \\
     -p ${WEB_PORT}:8080 \\
@@ -1854,6 +1863,89 @@ start_birdnet_go() {
     print_message "journalctl -fu birdnet-go.service" "$NC"
 }
 
+# Function to check if system is a Raspberry Pi
+is_raspberry_pi() {
+    if [ -f /proc/device-tree/model ]; then
+        local model
+        model=$(tr -d '\0' < /proc/device-tree/model)
+        if [[ "$model" == *"Raspberry Pi"* ]]; then
+            return 0  # True - is a Raspberry Pi
+        fi
+    fi
+    return 1  # False - not a Raspberry Pi
+}
+
+# Function to disable WiFi power saving for a specific interface
+disable_wifi_power_save_interface() {
+    local interface="$1"
+    
+    # Check if iwconfig is available
+    if command -v iwconfig >/dev/null 2>&1; then
+        # Try to disable power management using iwconfig
+        iwconfig "$interface" power off 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Disabled WiFi power saving on $interface (iwconfig)"
+            return 0
+        fi
+    fi
+    
+    # Check if iw is available (modern tool)
+    if command -v iw >/dev/null 2>&1; then
+        # Try to disable power management using iw
+        iw dev "$interface" set power_save off 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Disabled WiFi power saving on $interface (iw)"
+            return 0
+        fi
+    fi
+    
+    # Also try to set it via sysfs if available
+    local power_save_path="/sys/class/net/$interface/device/power/control"
+    if [ -f "$power_save_path" ]; then
+        echo "on" > "$power_save_path" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Disabled WiFi power saving on $interface (sysfs)"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# Function to disable WiFi power saving on all WLAN interfaces
+disable_wifi_power_save() {
+    local success=false
+    
+    # Find all wireless interfaces
+    for interface in /sys/class/net/wlan*; do
+        if [ -d "$interface" ]; then
+            interface_name=$(basename "$interface")
+            if disable_wifi_power_save_interface "$interface_name"; then
+                success=true
+            fi
+        fi
+    done
+    
+    # Also check for interfaces with different naming (e.g., wlp*)
+    for interface in /sys/class/net/wlp*; do
+        if [ -d "$interface" ]; then
+            interface_name=$(basename "$interface")
+            # Check if it's actually a wireless interface
+            if [ -d "$interface/wireless" ] || [ -d "$interface/phy80211" ]; then
+                if disable_wifi_power_save_interface "$interface_name"; then
+                    success=true
+                fi
+            fi
+        fi
+    done
+    
+    if [ "$success" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Function to detect Raspberry Pi model
 detect_rpi_model() {
     if [ -f /proc/device-tree/model ]; then
@@ -1893,6 +1985,11 @@ optimize_settings() {
     # enable XNNPACK delegate for inference acceleration
     sed -i 's/usexnnpack: false/usexnnpack: true/' "$CONFIG_FILE"
     print_message "✅ Enabled XNNPACK delegate for inference acceleration" "$GREEN"
+
+    # Check if system is Raspberry Pi and inform about WiFi power saving
+    if is_raspberry_pi; then
+        print_message "🔧 WiFi power saving will be disabled on startup to prevent connection drops" "$YELLOW"
+    fi
 
     # Detect RPi model
     detect_rpi_model
