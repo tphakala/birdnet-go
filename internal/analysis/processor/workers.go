@@ -3,9 +3,8 @@ package processor
 
 import (
 	"context"
-	"fmt"
 	"regexp"
-	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -16,6 +15,12 @@ type TaskType int
 
 const (
 	TaskTypeAction TaskType = iota // Represents an action task type
+)
+
+// Timing constants for operations
+const (
+	// DefaultEnqueueTimeout is the default timeout for task enqueue operations
+	DefaultEnqueueTimeout = 5 * time.Second
 )
 
 // Sentinel errors for processor operations
@@ -44,6 +49,22 @@ var testRetryConfigOverride func(action Action) (jobqueue.RetryConfig, bool)
 // startWorkerPool initializes the job queue for task processing.
 // This is kept for backward compatibility but now simply ensures the job queue is started.
 func (p *Processor) startWorkerPool() {
+	// Performance metrics logging pattern
+	logger := GetLogger()
+	startTime := time.Now()
+	defer func() {
+		logger.Debug("Worker pool initialization completed",
+			"duration_ms", time.Since(startTime).Milliseconds(),
+			"max_capacity", p.JobQueue.GetMaxJobs(),
+			"component", "analysis.processor",
+			"operation", "worker_pool_start")
+	}()
+
+	// State transition logging pattern
+	logger.Info("Starting worker pool",
+		"max_capacity", p.JobQueue.GetMaxJobs(),
+		"component", "analysis.processor")
+
 	// Create a cancellable context for the job queue
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -53,13 +74,25 @@ func (p *Processor) startWorkerPool() {
 	// Ensure the job queue is started with our context
 	p.JobQueue.StartWithContext(ctx)
 
-	logger := GetLogger()
-	logger.Info("Job queue started", 
+	// State transition logging - final state
+	logger.Info("Worker pool started successfully",
 		"max_capacity", p.JobQueue.GetMaxJobs(),
 		"component", "analysis.processor",
-		"operation", "job_queue_start",
-	)
+		"operation", "worker_pool_start")
 }
+
+// Pre-compiled regex patterns for performance
+var (
+	// URL credential patterns
+	rtspRegex = regexp.MustCompile(`(?i)rtsp://[^:]+:[^@]+@`)
+	mqttRegex = regexp.MustCompile(`(?i)mqtt://[^:]+:[^@]+@`)
+	
+	// Security token patterns  
+	apiKeyRegex = regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
+	passwordRegex = regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
+	oauthRegex = regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
+	otherSensitiveRegex = regexp.MustCompile(`(?i)(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
+)
 
 // getJobQueueRetryConfig extracts the retry configuration from an action
 func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
@@ -82,31 +115,16 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 }
 
 // sanitizeString applies sanitization rules to remove sensitive information from strings
+// Uses pre-compiled regex patterns for better performance
 func sanitizeString(input string) string {
-	// Sanitize RTSP URLs with credentials
-	rtspRegex := regexp.MustCompile(`(?i)rtsp://[^:]+:[^@]+@`)
+	// Apply sanitization rules in order
 	result := rtspRegex.ReplaceAllString(input, "rtsp://[redacted]@")
-
-	// Sanitize MQTT credentials
-	mqttRegex := regexp.MustCompile(`(?i)mqtt://[^:]+:[^@]+@`)
 	result = mqttRegex.ReplaceAllString(result, "mqtt://[redacted]@")
-
-	// Sanitize API keys - made case-insensitive with (?i)
-	apiKeyRegex := regexp.MustCompile(`(?i)(api[_-]?key|apikey|token|secret)[=:]["']?[a-zA-Z0-9_\-\.]{5,}["']?`)
 	result = apiKeyRegex.ReplaceAllString(result, "$1=[REDACTED]")
-
-	// Sanitize passwords - expanded to include more variations and made case-insensitive
-	passwordRegex := regexp.MustCompile(`(?i)(password|passwd|pwd)[=:]["']?[^&"'\s]+["']?`)
 	result = passwordRegex.ReplaceAllString(result, "$1=[REDACTED]")
-
-	// Sanitize OAuth tokens - made case-insensitive
-	oauthRegex := regexp.MustCompile(`(?i)(Bearer|OAuth|oauth_token|access_token)[\s=:]["']?[^&"'\s]+["']?`)
 	result = oauthRegex.ReplaceAllString(result, "$1 [REDACTED]")
-
-	// Sanitize other potential sensitive information - made case-insensitive
-	otherSensitiveRegex := regexp.MustCompile(`(?i)(private|sensitive|credential|auth)[=:]["']?[^&"'\s]+["']?`)
 	result = otherSensitiveRegex.ReplaceAllString(result, "$1=[REDACTED]")
-
+	
 	return result
 }
 
@@ -145,92 +163,183 @@ func sanitizeActionType(actionType string) string {
 }
 
 // EnqueueTask adds a task directly to the job queue for processing.
+// Uses context.Background() for backward compatibility.
 func (p *Processor) EnqueueTask(task *Task) error {
-	if task == nil {
-		return ErrNilTask
+	return p.EnqueueTaskCtx(context.Background(), task)
+}
+
+// EnqueueTaskCtx adds a task directly to the job queue for processing with context.
+//
+// This method respects the provided context for cancellation and timeouts.
+// If the context does not have a deadline, a default timeout of 
+// DefaultEnqueueTimeout (5 seconds) is automatically applied to prevent
+// indefinite blocking during enqueue operations.
+//
+// Context behavior:
+//   - If ctx is already cancelled, returns immediately with cancellation error
+//   - If ctx has a deadline, uses it as-is
+//   - If ctx has no deadline, wraps with DefaultEnqueueTimeout
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control
+//   - task: Task to enqueue (must not be nil, with non-nil Action)
+//
+// Returns error if:
+//   - Context is cancelled
+//   - Task or Task.Action is nil
+//   - Job queue is full or stopped
+//   - Enqueue operation fails
+func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
+	// Check if context is already cancelled before starting
+	if ctx.Err() != nil {
+		return errors.Newf("task enqueue cancelled: %w", ctx.Err()).
+			Component("analysis.processor").
+			Category(errors.CategoryCancellation).
+			Context("operation", "enqueue_task").
+			Context("cancelled_before_start", true).
+			Context("retryable", false).
+			Build()
 	}
 
-	// Validate the task
-	if task.Action == nil {
-		return ErrNilAction
-	}
-
-	// Cache logger for this function to avoid repeated GetLogger() calls
+	// Performance metrics logging pattern
 	logger := GetLogger()
+	startTime := time.Now()
+	defer func() {
+		logger.Debug("Task enqueue operation completed",
+			"duration_ms", time.Since(startTime).Milliseconds(),
+			"component", "analysis.processor",
+			"operation", "enqueue_task")
+	}()
 
-	// Get action description for logging
+	// Add timeout if context doesn't have one
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultEnqueueTimeout)
+		defer cancel()
+	}
+
+	// Validate task parameter
+	if task == nil {
+		return errors.New(ErrNilTask).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "enqueue_task").
+			Context("validation_type", "nil_task").
+			Context("retryable", false).
+			Build()
+	}
+
+	// Validate the task action
+	if task.Action == nil {
+		return errors.New(ErrNilAction).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "enqueue_task").
+			Context("validation_type", "nil_action").
+			Context("retryable", false).
+			Build()
+	}
+
+	// Get action description for logging and error context
 	actionDesc := task.Action.GetDescription()
-	// Sanitize description for error messages (in case it contains sensitive info)
 	sanitizedDesc := sanitizeString(actionDesc)
+	
+	// Get species name for enhanced context
+	speciesName := "unknown"
+	if task.Detection.Note.CommonName != "" {
+		speciesName = task.Detection.Note.CommonName
+	}
 
-	// Get retry configuration for the action directly as jobqueue.RetryConfig
+	// Get retry configuration for the action
 	jqRetryConfig := getJobQueueRetryConfig(task.Action)
 
-	// Log detailed information about the task being enqueued
+	// State transition logging - task received
 	if p.Settings.Debug {
-		// Get species name for more informative logging if available
-		speciesName := "unknown"
-		if task.Detection.Note.CommonName != "" {
-			speciesName = task.Detection.Note.CommonName
-		}
-
-		// Log the action description and species to provide more context
-		logger.Debug("Enqueuing task", 
+		logger.Debug("Task received for enqueueing",
 			"task_description", sanitizedDesc,
 			"species", speciesName,
 			"retry_enabled", jqRetryConfig.Enabled,
-			"max_retries", jqRetryConfig.MaxRetries)
+			"max_retries", jqRetryConfig.MaxRetries,
+			"component", "analysis.processor")
 	}
 
-	// Enqueue the task directly to the job queue
-	// TODO: Pass proper context when EnqueueTask signature is updated to accept context
-	ctx := context.Background()
+	// Enqueue the task to the job queue using provided context
 	job, err := p.JobQueue.Enqueue(ctx, &ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
 	if err != nil {
-		// Handle specific error types with appropriate messages
+		// Enhanced error handling with specific context using sentinel errors
 		switch {
-		case strings.Contains(err.Error(), "queue is full"):
+		case errors.Is(err, jobqueue.ErrQueueFull):
 			queueSize := p.JobQueue.GetMaxJobs()
-			// Log with action description for better context
-			logger.Warn("Job queue is full, dropping task", 
+			
+			// Enhanced queue full error
+			enhancedErr := errors.Newf("job queue is full (capacity: %d): %w", queueSize, err).
+				Component("analysis.processor").
+				Category(errors.CategoryWorker).
+				Context("operation", "enqueue_task").
+				Context("error_type", "queue_full").
+				Context("queue_capacity", queueSize).
+				Context("task_description", sanitizedDesc).
+				Context("species", speciesName).
+				Context("retryable", true).
+				Build()
+
+			logger.Warn("Job queue is full, dropping task",
 				"queue_capacity", queueSize,
-				"task_description", sanitizedDesc)
+				"task_description", sanitizedDesc,
+				"species", speciesName,
+				"component", "analysis.processor")
 
-			// Suggest increasing queue size if this happens frequently
-			return fmt.Errorf("job queue is full (capacity: %d), dropping task '%s': %w",
-				queueSize, sanitizedDesc, sanitizeError(err))
+			return enhancedErr
 
-		case strings.Contains(err.Error(), "queue has been stopped"):
-			// Log with action description for better context
-			logger.Error("Cannot enqueue task, job queue has been stopped", 
-				"task_description", sanitizedDesc)
-			return fmt.Errorf("job queue has been stopped, cannot enqueue task '%s': %w",
-				sanitizedDesc, sanitizeError(err))
+		case errors.Is(err, jobqueue.ErrQueueStopped):
+			// Enhanced queue stopped error
+			enhancedErr := errors.Newf("cannot enqueue task, job queue stopped: %w", err).
+				Component("analysis.processor").
+				Category(errors.CategoryWorker).
+				Context("operation", "enqueue_task").
+				Context("error_type", "queue_stopped").
+				Context("task_description", sanitizedDesc).
+				Context("species", speciesName).
+				Context("retryable", false).
+				Build()
+
+			logger.Error("Cannot enqueue task, job queue has been stopped",
+				"task_description", sanitizedDesc,
+				"species", speciesName,
+				"component", "analysis.processor")
+
+			return enhancedErr
 
 		default:
-			// Sanitize error before logging
-			sanitizedErr := sanitizeError(err)
-			// Double-check that the error message is fully sanitized
-			sanitizedErrStr := sanitizeString(sanitizedErr.Error())
-			// Log with action description for better context
-			logger.Error("Failed to enqueue task", 
+			// Enhanced generic enqueue error
+			enhancedErr := errors.Newf("failed to enqueue task: %w", err).
+				Component("analysis.processor").
+				Category(errors.CategoryWorker).
+				Context("operation", "enqueue_task").
+				Context("error_type", "enqueue_failure").
+				Context("task_description", sanitizedDesc).
+				Context("species", speciesName).
+				Context("retry_enabled", jqRetryConfig.Enabled).
+				Context("retryable", true).
+				Build()
+
+			logger.Error("Failed to enqueue task",
 				"task_description", sanitizedDesc,
-				"error", sanitizedErrStr)
-			return fmt.Errorf("failed to enqueue task '%s': %w", sanitizedDesc, sanitizeError(err))
+				"species", speciesName,
+				"error", sanitizeString(err.Error()),
+				"component", "analysis.processor")
+
+			return enhancedErr
 		}
 	}
 
+	// State transition logging - task successfully enqueued
 	if p.Settings.Debug {
-		speciesName := "unknown"
-		if task.Detection.Note.CommonName != "" {
-			speciesName = task.Detection.Note.CommonName
-		}
-
-		// Log with action description for better context
 		logger.Debug("Task enqueued successfully",
 			"task_description", sanitizedDesc,
 			"job_id", job.ID,
-			"species", speciesName)
+			"species", speciesName,
+			"component", "analysis.processor")
 	}
 
 	return nil

@@ -4,12 +4,27 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/errors"
+)
+
+// Configuration constants
+const (
+	// DefaultJobExecutionTimeout is the default timeout for job execution
+	DefaultJobExecutionTimeout = 30 * time.Second
+	
+	// MaxActionStatsEntries is the maximum number of action stats to keep in memory
+	// Older entries will be removed to prevent unbounded memory growth
+	MaxActionStatsEntries = 1000
+	
+	// ActionStatsTargetSize is the target size after cleanup (with hysteresis margin)
+	// Set to 80% of max to avoid repeated cleanup triggers
+	ActionStatsTargetSize = int(MaxActionStatsEntries * 0.8)
 )
 
 // JobQueue manages a queue of jobs that can be retried
@@ -532,7 +547,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 	}
 
 	// Create a timeout context for the job execution
-	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	execCtx, cancel := context.WithTimeout(ctx, DefaultJobExecutionTimeout)
 	defer cancel()
 
 	// Execute the job with proper context handling and error capture
@@ -578,11 +593,12 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 				Context("operation", "execute_job").
 				Context("job_id", job.ID).
 				Context("action_type", fmt.Sprintf("%T", job.Action)).
-				Context("timeout", "30s").
+				Context("timeout", DefaultJobExecutionTimeout.String()).
 				Context("attempt", job.Attempts).
 				Build()
 		} else {
-			err = errors.New(ctxErr).
+			// Context cancelled - preserve "cancelled" text for test compatibility
+			err = errors.Newf("job execution cancelled: %w", ctxErr).
 				Component("analysis.jobqueue").
 				Category(errors.CategoryCancellation).
 				Context("operation", "execute_job").
@@ -600,6 +616,11 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 	// Handle the result
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
+	// Check if we need to clean up old action stats to prevent memory growth
+	if len(q.stats.ActionStats) >= MaxActionStatsEntries {
+		q.cleanupOldActionStats()
+	}
 
 	// Update performance metrics
 	stats = q.stats.ActionStats[actionKey]
@@ -663,6 +684,41 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 		if job.Attempts > 1 || q.logAllSuccesses {
 			LogJobSuccess(ctx, job.ID, actionDesc, job.Attempts)
 		}
+	}
+}
+
+// cleanupOldActionStats removes the oldest action stats entries to prevent unbounded memory growth
+// This method must be called with q.mu locked
+func (q *JobQueue) cleanupOldActionStats() {
+	// Find the oldest entries by last execution time
+	type statEntry struct {
+		key  string
+		time time.Time
+	}
+	
+	entries := make([]statEntry, 0, len(q.stats.ActionStats))
+	for key := range q.stats.ActionStats {
+		stat := q.stats.ActionStats[key]
+		entries = append(entries, statEntry{
+			key:  key,
+			time: stat.LastExecutionTime,
+		})
+	}
+	
+	// Sort by time (oldest first) using standard library
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].time.Before(entries[j].time)
+	})
+	
+	// Calculate exact number to remove to reach target size with hysteresis margin
+	currentSize := len(entries)
+	toRemove := currentSize - ActionStatsTargetSize
+	if toRemove <= 0 {
+		toRemove = 1 // Always remove at least one entry to prevent repeated triggers
+	}
+	
+	for i := 0; i < toRemove && i < len(entries); i++ {
+		delete(q.stats.ActionStats, entries[i].key)
 	}
 }
 
