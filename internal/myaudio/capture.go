@@ -121,10 +121,8 @@ type UnifiedAudioData struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// activeStreams keeps track of currently active RTSP streams
-var activeStreams sync.Map
-
-// FFmpeg monitoring is now handled by the new FFmpegManager in the integration layer
+// FFmpeg monitoring is now handled by the FFmpegManager in the integration layer
+// The FFmpegManager maintains its own internal tracking of active streams
 
 // ListAudioSources returns a list of available audio capture devices.
 func ListAudioSources() ([]AudioDeviceInfo, error) {
@@ -178,49 +176,15 @@ func ListAudioSources() ([]AudioDeviceInfo, error) {
 
 // ReconfigureRTSPStreams handles dynamic reconfiguration of RTSP streams
 func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
-	// Use the new FFmpeg manager's sync function to handle configuration changes
+	// Use the FFmpeg manager's sync function to handle all configuration changes
+	// This will properly start/stop streams as needed based on the current configuration
 	if err := SyncRTSPStreamsWithConfig(unifiedAudioChan); err != nil {
 		log.Printf("❌ Error syncing RTSP streams with configuration: %v", err)
 	}
 	
-	// Clean up buffers for removed streams
-	// Get current configured URLs from settings
-	configuredMap := make(map[string]bool)
-	for _, url := range settings.Realtime.RTSP.URLs {
-		configuredMap[url] = true
-	}
-	
-	// Check activeStreams sync.Map for streams that need cleanup
-	var toCleanup []string
-	activeStreams.Range(func(key, value interface{}) bool {
-		url := key.(string)
-		if !configuredMap[url] {
-			toCleanup = append(toCleanup, url)
-		}
-		return true
-	})
-	
-	// Clean up buffers for removed streams
-	for _, url := range toCleanup {
-		activeStreams.Delete(url)
-		log.Printf("⬇️ Stream %s removed", url)
-		
-		// Wait a short time for any in-flight writes to complete
-		time.Sleep(100 * time.Millisecond)
-		
-		// Remove the buffers
-		if err := RemoveAnalysisBuffer(url); err != nil {
-			log.Printf("❌ Warning: failed to remove analysis buffer for %s: %v", url, err)
-		}
-		if err := RemoveCaptureBuffer(url); err != nil {
-			log.Printf("❌ Warning: failed to remove capture buffer for %s: %v", url, err)
-		}
-	}
-	
-	// Update activeStreams map with configured streams
-	for _, url := range settings.Realtime.RTSP.URLs {
-		activeStreams.Store(url, true)
-	}
+	// Note: Buffer management is handled by the FFmpegManager via the StartStream/StopStream
+	// methods which are called by SyncWithConfig. The activeStreams map is no longer needed
+	// as the FFmpegManager maintains its own internal stream tracking.
 }
 
 // initializeBuffersForSource handles the initialization of analysis and capture buffers for a given source
@@ -259,15 +223,10 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		return
 	}
 
-	// Initialize buffers for RTSP sources
+	// Initialize RTSP sources - the FFmpegManager will handle buffer initialization
 	if len(settings.Realtime.RTSP.URLs) > 0 {
 		for _, url := range settings.Realtime.RTSP.URLs {
-			if err := initializeBuffersForSource(url); err != nil {
-				log.Printf("❌ Failed to initialize buffers for RTSP source %s: %v", url, err)
-				continue
-			}
-
-			activeStreams.Store(url, true)
+			// CaptureAudioRTSP delegates to FFmpegManager which handles everything
 			go CaptureAudioRTSP(url, settings.Realtime.RTSP.Transport, wg, quitChan, restartChan, unifiedAudioChan)
 		}
 	}
