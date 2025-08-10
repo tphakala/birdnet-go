@@ -1,0 +1,124 @@
+# Svelte 5 specific patterns and best practices
+ruleDirs: []
+rules:
+  - id: destructure-reactive-breaks-reactivity
+    message: 'Destructuring $state objects breaks reactivity - access properties directly'
+    severity: error
+    language: typescript
+    rule:
+      pattern: 'const { $$$PROPS } = $REACTIVE'
+      where:
+        REACTIVE:
+          any:
+            - pattern: '$state($$$)'
+            - pattern: '$derived($$$)'
+
+  - id: effect-cleanup-missing
+    message: '$effect with subscriptions/timers should return cleanup function'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: |
+        $effect(() => {
+          $$$
+          $SUBSCRIPTION
+          $$$
+        })
+      where:
+        SUBSCRIPTION:
+          any:
+            - pattern: 'const $TIMER = setInterval($$$)'
+            - pattern: 'const $TIMER = setTimeout($$$)'
+            - pattern: 'addEventListener($$$)'
+            - pattern: '$VAR.subscribe($$$)'
+            - pattern: 'const $SOURCE = new EventSource($$$)'
+            - pattern: 'const $CONTROLLER = new AbortController()'
+      not:
+        any:
+          - regex: 'return\s+\(\)\s*=>'
+          - has:
+              pattern: 'clearInterval($TIMER)'
+          - has:
+              pattern: 'clearTimeout($TIMER)'
+          - has:
+              pattern: 'removeEventListener($$$)'
+          - has:
+              pattern: '$VAR.unsubscribe()'
+          - has:
+              pattern: '$CONTROLLER.abort()'
+          - has:
+              pattern: '$SOURCE.close()'
+
+  - id: derived-side-effects
+    message: '$derived should be pure - move side effects to $effect'
+    severity: error
+    language: typescript
+    rule:
+      pattern: |
+        $derived($$$EXPR$$$)
+      where:
+        EXPR:
+          any:
+            - has:
+                pattern: 'console.$METHOD($$$)'
+            - has:
+                pattern: 'localStorage.setItem($$$)'
+            - has:
+                pattern: 'sessionStorage.setItem($$$)'
+            - has:
+                pattern: '$$$Actions.$METHOD($$$)'
+
+  - id: prefer-snippets-over-slots
+    message: 'Svelte 5 uses snippets instead of slots'
+    severity: info
+    language: svelte
+    rule:
+      any:
+        - pattern: '<slot name="$NAME" />'
+        - pattern: '<slot name="$NAME">$$$</slot>'
+        - pattern: '<div slot="$NAME">$$$</div>'
+
+  - id: rune-in-non-svelte-file
+    message: 'Svelte runes ($state, $derived, $effect) should only be used in .svelte files'
+    severity: error
+    language: typescript
+    files:
+      - '**/*.ts'
+      - '**/*.js'
+      - '!**/*.svelte.ts'
+      - '!**/*.svelte.js'
+    rule:
+      any:
+        - pattern: '$state($$$)'
+        - pattern: '$derived($$$)'
+        - pattern: '$effect($$$)'
+
+  - id: unnecessary-reactive-statement
+    message: 'Use $derived instead of reactive statements ($:) in Svelte 5'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '$: $VAR = $$$'
+      not:
+        inside:
+          any:
+            # Allow reactive statements for side effects
+            - pattern: '$: if ($$$) { $$$ }'
+            - pattern: '$: { $$$ }'
+
+  - id: state-in-loop-without-key
+    message: '$state in loops should have proper keying to avoid state confusion'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: |
+        {#each $ITEMS as $ITEM}
+          $$$
+          $state($$$)
+          $$$
+        {/each}
+      not:
+        pattern: |
+          {#each $ITEMS as $ITEM ($KEY)}
+            $$$
+          {/each}

@@ -1,0 +1,32 @@
+# Ignore patterns for ast-grep
+node_modules/
+dist/
+build/
+.svelte-kit/
+package/
+
+# Test helper components (not actual code)
+*.test.svelte
+**/test-helpers/
+
+# Generated files
+src/lib/i18n/types.generated.ts
+src/vite-env.d.ts
+src/vitest-env.d.ts
+
+# Config files
+*.config.js
+*.config.ts
+vite.config.js
+svelte.config.js
+tailwind.config.js
+
+# Test setup
+src/test/setup.ts
+
+# Legacy or vendor files
+vendor/
+legacy/
+
+# Third-party type definitions
+src/lib/types/reconnecting-eventsource.d.ts

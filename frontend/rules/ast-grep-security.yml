@@ -1,0 +1,82 @@
+ruleDirs: []
+rules:
+  - id: csrf-token-validation
+    message: 'CSRF token should be validated before use'
+    severity: error
+    language: typescript
+    rule:
+      pattern: |
+        $$$
+        headers: { $HEADER: $TOKEN }
+        $$$
+      where:
+        HEADER:
+          regex: '(?i)(X-)?CSRF-?Token|X-XSRF-?Token'
+        TOKEN:
+          not:
+            any:
+              - pattern: 'getCsrfToken()'
+              - pattern: 'validateCsrfToken($$$)'
+              - regex: '(?i)validated.*token'
+              - regex: '(?i)safe.*token'
+
+  - id: unsafe-innerHTML-svelte
+    message: 'Using {@html} with user input - potential XSS'
+    severity: error
+    language: svelte
+    rule:
+      pattern: '{@html $VAR}'
+      where:
+        VAR:
+          any:
+            - regex: '(?i).*input.*'
+            - regex: '(?i).*user.*'
+            - regex: '(?i).*data\..*'
+            - regex: '(?i).*response\..*'
+          not:
+            regex: '(?i).*Icon'
+
+  - id: localstorage-xss-risk
+    message: 'Storage data should be validated before parsing - XSS risk'
+    severity: warning
+    language: typescript
+    rule:
+      any:
+        - pattern: 'JSON.parse($STORAGE.getItem($KEY))'
+        - pattern: |
+            const $VAR = $STORAGE.getItem($KEY);
+            $$$
+            JSON.parse($VAR)
+        - pattern: |
+            let $VAR = $STORAGE.getItem($KEY);
+            $$$
+            JSON.parse($VAR)
+      where:
+        STORAGE:
+          regex: '(local|session)Storage'
+      not:
+        inside:
+          any:
+            - pattern: 'try { $$$ } catch ($$$) { $$$ }'
+            - pattern: 'try { $$$ } catch { $$$ }'
+            - pattern: 'validate($$$)'
+            - pattern: 'sanitize($$$)'
+            - pattern: 'if ($VAR) { $$$ }}'
+
+  - id: password-logging
+    message: 'Never log passwords or sensitive data'
+    severity: error
+    language: typescript
+    rule:
+      any:
+        - pattern: 'console.log($$$, $PASSWORD, $$$)'
+        - pattern: 'logger.$METHOD($$$, $PASSWORD, $$$)'
+      where:
+        PASSWORD:
+          any:
+            - regex: '(?i)password'
+            - regex: '(?i).*password'
+            - regex: '(?i)token'
+            - regex: '(?i).*token'
+            - regex: '(?i)secret'
+            - regex: '(?i).*secret'

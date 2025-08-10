@@ -1,0 +1,9 @@
+id: test-console-detection
+language: typescript
+message: 'TEST RULE: Found console usage (this is expected for testing)'
+severity: info
+rule:
+  pattern: 'console.$METHOD($$$)'
+note: |
+  This is a test rule to verify ast-grep is working.
+  It should find console.* statements throughout the codebase.

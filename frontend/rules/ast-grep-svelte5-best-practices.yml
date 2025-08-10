@@ -1,0 +1,342 @@
+# Svelte 5 Best Practices and Common Mistakes
+# These rules enforce proper Svelte 5 rune usage and patterns
+ruleDirs: []
+rules:
+  # Rune Usage Rules
+  - id: state-destructuring-breaks-reactivity
+    message: 'Destructuring $state objects breaks reactivity - access properties directly'
+    severity: error
+    language: typescript
+    rule:
+      pattern: 'const { $$$PROPS } = $STATE'
+      where:
+        STATE:
+          any:
+            - pattern: '$state($$$)'
+            - pattern: '$state.raw($$$)'
+    note: |
+      Keep the object intact:
+      const obj = $state({ x: 1, y: 2 });
+      // Access as: obj.x, obj.y
+
+  - id: derived-with-side-effects
+    message: '$derived must be pure - no side effects allowed'
+    severity: error
+    language: typescript
+    rule:
+      pattern: '$derived($$$EXPR$$$)'
+      where:
+        EXPR:
+          any:
+            - regex: 'console\.'
+            - regex: 'localStorage'
+            - regex: 'sessionStorage'
+            - regex: '\.push\('
+            - regex: '\.pop\('
+            - regex: '\.shift\('
+            - regex: '\.unshift\('
+            - regex: '\.splice\('
+            - regex: 'alert\('
+            - regex: 'confirm\('
+    note: 'Move side effects to $effect(() => { ... })'
+
+  - id: effect-without-cleanup
+    message: '$effect with subscriptions should return cleanup function'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: |
+        $effect(() => {
+          $$$
+          $SUBSCRIPTION
+          $$$
+        })
+      where:
+        SUBSCRIPTION:
+          any:
+            - pattern: 'addEventListener($$$)'
+            - pattern: 'setInterval($$$)'
+            - pattern: 'setTimeout($$$)'
+            - pattern: '.subscribe($$$)'
+            - pattern: 'new $OBSERVER($$$)'
+      not:
+        pattern: |
+          $effect(() => {
+            $$$
+            return () => $$$
+          })
+    note: |
+      Return cleanup function:
+      $effect(() => {
+        const id = setInterval(...);
+        return () => clearInterval(id);
+      })
+
+  - id: props-without-destructuring
+    message: 'Consider destructuring $props() for clarity'
+    severity: info
+    language: typescript
+    rule:
+      pattern: 'let props = $props()'
+      not:
+        inside:
+          # Allow when followed by spreading or forwarding
+          pattern: |
+            let props = $props();
+            $$$
+            {...props}
+    note: 'Prefer: let { prop1, prop2, ...rest } = $props()'
+
+  - id: bindable-without-value
+    message: '$bindable prop needs initial value from parent when bound'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'let { $PROP = $bindable($DEFAULT) } = $props()'
+      where:
+        DEFAULT:
+          not:
+            pattern: 'undefined'
+    note: 'Parent must provide non-undefined value when using bind:'
+
+  - id: snippet-without-optional-chaining
+    message: 'Snippet props should use optional chaining when rendering'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '{@render $SNIPPET()}'
+      not:
+        pattern: '{@render $SNIPPET?.()}'
+    note: 'Use: {@render snippet?.()}'
+
+  - id: children-without-optional
+    message: 'children prop should be optional and use safe rendering'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '{@render children()}'
+    note: 'Use: {@render children?.()}'
+
+  # State Mutation Patterns
+  - id: array-mutation-without-reassignment
+    message: 'Array mutations need reassignment or use $state'
+    severity: info
+    language: typescript
+    rule:
+      pattern: '$ARR.$METHOD($$$)'
+      where:
+        METHOD:
+          regex: '^(push|pop|shift|unshift|splice|sort|reverse)$'
+      not:
+        inside:
+          pattern: '$ARR = $ARR'
+    note: |
+      With $state, mutations work directly.
+      Otherwise: arr.push(item); arr = arr;
+
+  # Event Handler Patterns
+  - id: event-attribute-with-modifier-syntax
+    message: "Event modifiers don't work with event attributes in Svelte 5"
+    severity: error
+    language: svelte
+    rule:
+      regex: 'on\w+\|\w+=[\{]'
+    note: 'Handle modifiers inside the event handler function'
+
+  - id: oncapture-event-syntax
+    message: "Use 'capture' suffix for capture phase events in Svelte 5"
+    severity: info
+    language: svelte
+    rule:
+      regex: 'on:\w+\|capture'
+    note: 'Use: on<event>capture={handler} (e.g., onclickcapture={handler})'
+
+  # Component Patterns
+  - id: uppercase-component-usage
+    message: 'Component names should be capitalized'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '<$component'
+      where:
+        component:
+          regex: '^[a-z]'
+          not:
+            any:
+              - regex: '^(div|span|button|input|select|textarea|form|section|article|header|footer|main|nav|aside|ul|ol|li|p|a|img|svg|path|g|circle|rect|line|table|thead|tbody|tr|td|th|h1|h2|h3|h4|h5|h6|pre|code|blockquote|em|strong|i|b|u|s|mark|small|sub|sup|br|hr|details|summary|dialog)$'
+              - regex: '^svelte:'
+              - regex: '\.'
+    note: 'Use PascalCase for components: <MyComponent />'
+
+  # Performance Patterns
+  - id: expensive-derived-inline
+    message: 'Complex derivations should use $derived.by() for clarity'
+    severity: info
+    language: typescript
+    rule:
+      pattern: '$derived($EXPR)'
+      where:
+        EXPR:
+          all:
+            - any:
+                - regex: '\.filter\('
+                - regex: '\.reduce\('
+                - regex: '\.sort\('
+                - regex: 'JSON\.parse\('
+                - regex: 'JSON\.stringify\('
+            # Only if expression is complex (contains chaining)
+            - regex: "\\)\\."
+    note: |
+      Use $derived.by() for complex computations:
+      const result = $derived.by(() => {
+        // complex logic here
+      })
+
+  # Migration Helpers Detection
+  - id: using-svelte-legacy
+    message: 'svelte/legacy imports should be migrated'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: "from 'svelte/legacy'"
+    fix:
+      pattern: "from 'svelte' // TODO: Migrate from legacy"
+    note: 'Migrate away from legacy helpers over time'
+
+  - id: using-run-function
+    message: 'run() from svelte/legacy should be migrated to $effect'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'run($$$CALLBACK)'
+    fix:
+      pattern: '$effect(() => { /* TODO: Review and migrate */ $$$CALLBACK })'
+    note: 'Use $effect() for client-side effects'
+
+  # Type Safety
+  - id: props-interface-missing
+    message: 'Consider defining Props interface for type safety'
+    severity: hint
+    language: typescript
+    rule:
+      pattern: 'let { $$$PROPS } = $props()'
+      not:
+        inside:
+          pattern: |
+            interface Props {
+              $$$
+            }
+            $$$
+            let { $$$PROPS }: Props = $props()
+    note: |
+      Define Props interface:
+      interface Props {
+        prop1: string;
+        prop2?: number;
+      }
+
+  # Snippet Type Safety
+  - id: snippet-without-type
+    message: 'Snippet props should be typed with Snippet<[Args]>'
+    severity: info
+    language: typescript
+    rule:
+      pattern: '$SNIPPET?: $TYPE'
+      where:
+        SNIPPET:
+          any:
+            - pattern: 'children'
+            - regex: 'snippet'
+            - regex: 'Snippet'
+        TYPE:
+          not:
+            regex: 'Snippet'
+    note: |
+      Import and use Snippet type:
+      import type { Snippet } from 'svelte';
+      interface Props {
+        content?: Snippet<[{ data: string }]>;
+      }
+
+  # Common Mistakes
+  - id: comparing-state-directly
+    message: 'Comparing $state objects directly may not work as expected'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: '$STATE1 === $STATE2'
+      where:
+        STATE1:
+          pattern: '$state($$$)'
+        STATE2:
+          pattern: '$state($$$)'
+    note: 'Compare specific properties instead'
+
+  - id: spreading-reactive-object
+    message: 'Spreading reactive objects loses reactivity'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: '{ ...$STATE }'
+      where:
+        STATE:
+          pattern: '$state($$$)'
+    note: 'Keep objects intact or use individual properties'
+
+  - id: async-in-derived
+    message: '$derived cannot be async - use $effect for async operations'
+    severity: error
+    language: typescript
+    rule:
+      pattern: '$derived(async $$$)'
+    note: |
+      Use $effect for async:
+      let data = $state();
+      $effect(async () => {
+        data = await fetchData();
+      })
+
+  # Browser-only Code
+  - id: browser-api-without-check
+    message: 'Browser APIs should be guarded in universal code'
+    severity: warning
+    language: typescript
+    rule:
+      any:
+        - pattern: 'window.$METHOD($$$)'
+        - pattern: 'document.$METHOD($$$)'
+        - pattern: 'localStorage.$METHOD($$$)'
+        - pattern: 'sessionStorage.$METHOD($$$)'
+      not:
+        inside:
+          any:
+            - pattern: "if (typeof window !== 'undefined')"
+            - pattern: "if (typeof document !== 'undefined')"
+            - pattern: 'if (browser)'
+            - pattern: '$effect($$$)'
+            - pattern: 'onMount($$$)'
+    note: 'Check for browser environment or use in $effect'
+
+  # Binding Patterns
+  - id: bind-to-derived
+    message: 'Cannot bind to derived values'
+    severity: error
+    language: svelte
+    rule:
+      pattern: 'bind:$ATTR={$VAR}'
+      where:
+        VAR:
+          pattern: '$derived($$$)'
+    note: 'Bindings require $state, not $derived'
+
+  # Each Block Keys
+  - id: each-without-key
+    message: 'Each blocks should have keys for better performance'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '{#each $ITEMS as $ITEM}$$$CONTENT{/each}'
+      not:
+        has:
+          pattern: '($KEY)'
+    note: 'Add key: {#each items as item (item.id)}'

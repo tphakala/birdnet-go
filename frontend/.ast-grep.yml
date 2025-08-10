@@ -1,0 +1,82 @@
+ruleDirs: []
+rules:
+  # Project Convention Enforcement
+  - id: prefer-icon-utils
+    message: 'Use icons from $lib/utils/icons instead of inline SVG'
+    severity: error
+    language: svelte
+    rule:
+      pattern: '<svg $$>$$</svg>'
+
+  - id: no-direct-date-methods
+    message: 'Use getLocalDateString() instead of toISOString() for dates'
+    severity: error
+    language: typescript
+    rule:
+      any:
+        - pattern: "$DATE.toISOString().split('T')[0]"
+        - pattern: 'new Date().toISOString()'
+
+  - id: require-logger-import
+    message: 'Use logger from $lib/utils/logger instead of console'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'console.$METHOD($$$)'
+      not:
+        inside:
+          pattern: "import { logger } from '$lib/utils/logger'"
+
+  - id: missing-error-context
+    message: 'Logger errors should include context object'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'logger.error($MSG, $ERROR)'
+      not:
+        pattern: 'logger.error($MSG, $ERROR, { $$$ })'
+
+  # Testing Patterns
+  - id: no-focused-tests-ast
+    message: 'Remove .only from tests before commit'
+    severity: error
+    language: typescript
+    rule:
+      any:
+        - pattern: 'describe.only($$$)'
+        - pattern: 'it.only($$$)'
+        - pattern: 'test.only($$$)'
+
+  # Performance Patterns
+  - id: expensive-derived-without-memo
+    message: 'Expensive operations in $derived should use $derived.by() for better performance'
+    severity: info
+    language: typescript
+    rule:
+      pattern: '$derived($$$EXPR)'
+      where:
+        EXPR:
+          any:
+            - regex: '\.filter\(.*\)\.map\('
+            - regex: '\.reduce\('
+            - regex: '\.sort\('
+            - regex: 'JSON\.parse\('
+            - regex: 'JSON\.stringify\('
+
+  # API Safety
+  - id: missing-error-handling-fetch
+    message: 'Fetch calls should have error handling'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: |
+        async function $NAME($$$) {
+          $$$
+          fetch($$$)
+          $$$
+        }
+      not:
+        contains:
+          any:
+            - pattern: 'try { $$$ } catch ($$$) { $$$ }'
+            - pattern: '.catch($$$)'

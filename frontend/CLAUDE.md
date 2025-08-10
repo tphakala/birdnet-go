@@ -30,13 +30,15 @@ frontend/
 
 ## Commands
 
-| Command               | Purpose                     | When          |
-| --------------------- | --------------------------- | ------------- |
-| `npm run check:all`   | Format + lint + typecheck   | Before commit |
-| `npm run lint:fix`    | Auto-fix JS/TS              | After changes |
-| `npm run typecheck`   | Validate types              | Before PR     |
-| `npm run test:a11y`   | Accessibility tests         | Before PR     |
-| `npm run analyze:all` | Circular deps + duplication | Weekly        |
+| Command                | Purpose                              | When          |
+| ---------------------- | ------------------------------------ | ------------- |
+| `npm run check:all`    | Format + lint + typecheck + ast-grep | Before commit |
+| `npm run lint:fix`     | Auto-fix JS/TS                       | After changes |
+| `npm run typecheck`    | Validate types                       | Before PR     |
+| `npm run test:a11y`    | Accessibility tests                  | Before PR     |
+| `npm run analyze:all`  | Circular deps + duplication          | Weekly        |
+| `npm run ast:all`      | Run all ast-grep rules               | Before commit |
+| `npm run ast:security` | Security vulnerability scan          | Before PR     |
 
 ## Svelte 5 Patterns
 
@@ -361,11 +363,46 @@ node tools/test-all-pages.js
 {/each}
 ```
 
+## Static Analysis with ast-grep
+
+### Quick Commands
+
+```bash
+npm run ast:migration    # Find Svelte 4 patterns to migrate
+npm run ast:best-practices # Check Svelte 5 rune usage
+npm run ast:security     # Security vulnerabilities (XSS, CSRF)
+npm run ast:all          # Run all checks (included in check:all)
+```
+
+### Key Rules Enforced
+
+- **Migration**: Detects `export let`, `$:`, slots, `on:` events
+- **Security**: XSS in `{@html}`, localStorage validation, password logging
+- **Best Practices**: No destructuring $state, pure $derived, effect cleanup
+- **Conventions**: Use icon utils, proper date formatting, logger over console
+
+### Using ast-grep vs grep/sed
+
+```bash
+# ❌ grep - fragile regex
+grep -r "export let" src/
+
+# ✅ ast-grep - syntax-aware
+sg scan --pattern "export let $PROP" src/
+
+# ❌ sed - can break code
+sed -i 's/export let/let/g' file.svelte
+
+# ✅ ast-grep - safe transformation
+sg scan --pattern "export let $PROP = $DEFAULT" --rewrite "let { $PROP = $DEFAULT } = $props()" src/
+```
+
 ## Resources
 
 - Svelte 5 docs available via MCP tool
 - WCAG: https://www.w3.org/WAI/WCAG21/quickref/
 - axe DevTools browser extension for testing
+- ast-grep docs: https://ast-grep.github.io/
 
 ## Testing Best Practices
 
