@@ -58,6 +58,23 @@ var (
 	ErrEventBusDisabled = errors.Newf("event bus is disabled").Component("events").Category(errors.CategoryNotFound).Build()
 )
 
+// getEventType returns a semantic event type string instead of Go type strings
+// This provides better observability in logs by showing meaningful event types
+func getEventType(event any) string {
+	switch event.(type) {
+	case *errors.EnhancedError:
+		return "error"
+	case ErrorEvent:
+		return "error"
+	case ResourceEvent:
+		return "resource"
+	case DetectionEvent:
+		return "detection"
+	default:
+		return fmt.Sprintf("%T", event) // fallback for unknown types
+	}
+}
+
 // EventBus provides asynchronous event processing with non-blocking guarantees
 type EventBus struct {
 	// Channels for different event types
@@ -293,7 +310,7 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 	// Debug logging for event publishing
 	if eb.config != nil && eb.config.Debug {
 		eb.logger.Debug("publishing event",
-			"event_type", fmt.Sprintf("%T", event),
+			"event_type", getEventType(event),
 			"component", event.GetComponent(),
 			"category", event.GetCategory(),
 			"error_buffer_used", len(eb.errorEventChan),
@@ -502,7 +519,7 @@ func (eb *EventBus) worker(id int) {
 				eb.processErrorEvent(event, logger)
 				duration := time.Since(start)
 				logger.Debug("error event processed",
-					"event_type", fmt.Sprintf("%T", event),
+					"event_type", getEventType(event),
 					"component", event.GetComponent(),
 					"duration_ms", duration.Milliseconds(),
 				)
@@ -522,7 +539,7 @@ func (eb *EventBus) worker(id int) {
 				eb.processResourceEvent(event, logger)
 				duration := time.Since(start)
 				logger.Debug("resource event processed",
-					"event_type", fmt.Sprintf("%T", event),
+					"event_type", getEventType(event),
 					"resource_type", event.GetResourceType(),
 					"severity", event.GetSeverity(),
 					"duration_ms", duration.Milliseconds(),
@@ -543,7 +560,7 @@ func (eb *EventBus) worker(id int) {
 				eb.processDetectionEvent(event, logger)
 				duration := time.Since(start)
 				logger.Debug("detection event processed",
-					"event_type", fmt.Sprintf("%T", event),
+					"event_type", getEventType(event),
 					"species", event.GetSpeciesName(),
 					"is_new_species", event.IsNewSpecies(),
 					"duration_ms", duration.Milliseconds(),
