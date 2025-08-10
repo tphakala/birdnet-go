@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"log"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -19,7 +18,8 @@ func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseT
 	// If it doesn't exist, initialize it
 	if !exists {
 		if p.Settings.Realtime.DynamicThreshold.Debug {
-			log.Printf("Initializing dynamic threshold for %s\n", speciesLowercase)
+			logger := GetLogger()
+			logger.Debug("Initializing dynamic threshold", "species", speciesLowercase)
 		}
 		p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
 			Level:         0,
@@ -112,7 +112,8 @@ func (p *Processor) cleanUpDynamicThresholds() {
 		if now.Sub(dt.Timer) > staleDuration {
 			// If debug mode is enabled, log the removal of the stale threshold
 			if p.Settings.Realtime.DynamicThreshold.Debug {
-				log.Printf("Removing stale dynamic threshold for %s", species)
+				logger := GetLogger()
+				logger.Debug("Removing stale dynamic threshold", "species", species)
 			}
 			// Remove the stale threshold from the map
 			delete(p.DynamicThresholds, species)

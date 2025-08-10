@@ -329,7 +329,7 @@ func TestStartWorkerPool(t *testing.T) {
 	}
 
 	// Call the function with a single worker
-	processor.startWorkerPool(1)
+	processor.startWorkerPool()
 
 	// Verify the cancel function was stored
 	if processor.workerCancel == nil {
