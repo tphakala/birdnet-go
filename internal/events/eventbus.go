@@ -53,12 +53,22 @@ func init() {
 	}
 }
 
-// Event type constants for logging
+// EventType represents the semantic type of an event for logging and categorization
+type EventType string
+
+// Event type constants for logging with semantic meanings
 const (
-	EventTypeError     = "error"
-	EventTypeResource  = "resource"
-	EventTypeDetection = "detection"
-	EventTypeUnknown   = "unknown"
+	// EventTypeError represents error events such as failures, exceptions, or operational issues
+	EventTypeError EventType = "error"
+	
+	// EventTypeResource represents resource-related events like file operations, disk usage, or memory events
+	EventTypeResource EventType = "resource"
+	
+	// EventTypeDetection represents bird detection events from the BirdNET analysis engine
+	EventTypeDetection EventType = "detection"
+	
+	// EventTypeUnknown represents events that cannot be categorized into the above types
+	EventTypeUnknown EventType = "unknown"
 )
 
 // Sentinel errors for event bus operations
@@ -66,10 +76,10 @@ var (
 	ErrEventBusDisabled = errors.Newf("event bus is disabled").Component("events").Category(errors.CategoryNotFound).Build()
 )
 
-// getEventType returns a semantic event type string instead of Go type strings
+// getEventType returns a semantic event type instead of Go type strings
 // This provides better observability in logs by showing meaningful event types.
 // The function is designed to be extensible - add new cases for future event types.
-func getEventType(event any) string {
+func getEventType(event any) EventType {
 	switch event.(type) {
 	// Concrete type checks first (more specific)
 	case *errors.EnhancedError:

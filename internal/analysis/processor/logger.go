@@ -4,7 +4,12 @@ package processor
 import (
 	"log/slog"
 	"sync"
+	
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
+
+// Service name constant for the processor package
+const serviceName = "analysis.processor"
 
 // Note: The processor package uses a logger defined in new_species_tracker.go
 // 
@@ -37,7 +42,7 @@ func GetLogger() *slog.Logger {
 	
 	// Initialize fallback logger only once if main logger is nil
 	fallbackLoggerOnce.Do(func() {
-		fallbackLogger = slog.Default().With("service", "analysis.processor")
+		fallbackLogger = logging.ForService(serviceName)
 	})
 	
 	return fallbackLogger

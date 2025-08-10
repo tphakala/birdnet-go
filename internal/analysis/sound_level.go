@@ -86,6 +86,15 @@ func getSoundLevelServiceLevelVar() *slog.LevelVar {
 	return serviceLevelVar
 }
 
+// CloseSoundLevelLogger closes the sound level file logger and releases resources
+// This should be called during component shutdown to ensure proper cleanup of file handles
+func CloseSoundLevelLogger() error {
+	if closeLogger != nil {
+		return closeLogger()
+	}
+	return nil
+}
+
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
 // and polishes the data to ensure JSON marshaling succeeds. This prevents errors when publishing
 // to MQTT, SSE, or other systems that require valid JSON.
@@ -525,17 +534,17 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Println("📡 Started sound level MQTT publisher")
+		getSoundLevelLogger().Info("Started sound level MQTT publisher")
 
 		for {
 			select {
 			case <-doneChan:
-				log.Println("🔌 Stopping sound level MQTT publisher")
+				getSoundLevelLogger().Info("Stopping sound level MQTT publisher")
 				return
 			case soundData, ok := <-soundLevelChan:
 				if !ok {
 					// Channel is closed, exit gracefully
-					log.Println("🔌 Sound level channel closed, stopping MQTT publisher")
+					getSoundLevelLogger().Info("Sound level channel closed, stopping MQTT publisher")
 					return
 				}
 				// Log received sound level data if debug is enabled

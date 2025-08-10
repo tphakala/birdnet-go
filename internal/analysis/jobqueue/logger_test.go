@@ -2,9 +2,11 @@ package jobqueue
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,7 +51,7 @@ func TestLogJobEnqueued(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelDebug)
 	t.Cleanup(cleanup)
 	
-	LogJobEnqueued("job-123", "process", 5)
+	LogJobEnqueued(context.TODO(), "job-123", "process", 5)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -73,7 +75,7 @@ func TestLogJobStarted(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelDebug)
 	t.Cleanup(cleanup)
 	
-	LogJobStarted("job-456", "analyze", 2)
+	LogJobStarted(context.TODO(), "job-456", "analyze", 2)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -98,7 +100,7 @@ func TestLogJobCompleted(t *testing.T) {
 	t.Cleanup(cleanup)
 	
 	duration := 150 * time.Millisecond
-	LogJobCompleted("job-789", "upload", duration)
+	LogJobCompleted(context.TODO(), "job-789", "upload", duration)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -123,7 +125,7 @@ func TestLogJobFailed(t *testing.T) {
 	t.Cleanup(cleanup)
 	
 	testErr := errors.New("connection timeout")
-	LogJobFailed("job-999", "download", 3, 5, testErr)
+	LogJobFailed(context.TODO(), "job-999", "download", 3, 5, testErr)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -150,14 +152,17 @@ func TestLogJobFailed(t *testing.T) {
 		t.Errorf("Expected message 'Job failed', got %v", logEntry["msg"])
 	}
 	
-	// Test when no more retries
+	// Test when no more retries (final failure - should log at Error level)
 	buf.Reset()
-	LogJobFailed("job-1000", "process", 5, 5, testErr)
+	LogJobFailed(context.TODO(), "job-1000", "process", 5, 5, testErr)
 	
 	logEntry2 := parseLogEntry(t, buf)
 	
 	if logEntry2["will_retry"] != false {
 		t.Errorf("Expected will_retry false when attempt equals max_retries, got %v", logEntry2["will_retry"])
+	}
+	if logEntry2["msg"] != "Job failed permanently" {
+		t.Errorf("Expected message 'Job failed permanently' for final failure, got %v", logEntry2["msg"])
 	}
 }
 
@@ -166,7 +171,7 @@ func TestLogQueueStats(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
 	
-	LogQueueStats(10, 3, 50, 2)
+	LogQueueStats(context.TODO(), 10, 3, 50, 2)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -197,13 +202,13 @@ func TestDebugLogSuppression(t *testing.T) {
 	t.Cleanup(cleanup)
 	
 	// Debug logs should not appear
-	LogJobEnqueued("job-debug", "test", 1)
+	LogJobEnqueued(context.TODO(), "job-debug", "test", 1)
 	if buf.Len() > 0 {
 		t.Error("Debug log should be suppressed at Info level")
 	}
 	
 	buf.Reset()
-	LogJobStarted("job-debug", "test", 1)
+	LogJobStarted(context.TODO(), "job-debug", "test", 1)
 	if buf.Len() > 0 {
 		t.Error("Debug log should be suppressed at Info level")
 	}
@@ -213,7 +218,8 @@ func TestDebugLogSuppression(t *testing.T) {
 func containsError(logEntry map[string]any, expectedText string) bool {
 	if errorVal, ok := logEntry["error"]; ok {
 		if errorStr, ok := errorVal.(string); ok {
-			return errorStr != "" // Just check that error is present and non-empty
+			// Check if the expectedText is a substring of the error string
+			return errorStr != "" && strings.Contains(errorStr, expectedText)
 		}
 	}
 	return false
