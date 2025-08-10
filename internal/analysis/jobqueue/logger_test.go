@@ -9,6 +9,26 @@ import (
 	"time"
 )
 
+// setupTestLogger sets up a test logger and returns the buffer and cleanup function
+func setupTestLogger(level slog.Level) (buf *bytes.Buffer, cleanup func()) {
+	buf = &bytes.Buffer{}
+	oldLogger := logger
+	logger = slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{
+		Level: level,
+	}))
+	return buf, func() { logger = oldLogger }
+}
+
+// parseLogEntry parses JSON log output into a map
+func parseLogEntry(t *testing.T, buf *bytes.Buffer) map[string]any {
+	t.Helper()
+	var logEntry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
+		t.Fatalf("Failed to parse log JSON: %v", err)
+	}
+	return logEntry
+}
+
 // TestGetLogger tests the GetLogger function
 func TestGetLogger(t *testing.T) {
 	logger := GetLogger()
@@ -26,22 +46,12 @@ func TestGetLogger(t *testing.T) {
 
 // TestLogJobEnqueued tests job enqueue logging
 func TestLogJobEnqueued(t *testing.T) {
-	var buf bytes.Buffer
-	
-	// Replace logger with test logger
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-	t.Cleanup(func() { logger = oldLogger })
+	buf, cleanup := setupTestLogger(slog.LevelDebug)
+	t.Cleanup(cleanup)
 	
 	LogJobEnqueued("job-123", "process", 5)
 	
-	// Parse JSON output
-	var logEntry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
-		t.Fatalf("Failed to parse log JSON: %v", err)
-	}
+	logEntry := parseLogEntry(t, buf)
 	
 	// Assert JSON fields
 	if logEntry["job_id"] != "job-123" {
@@ -60,21 +70,12 @@ func TestLogJobEnqueued(t *testing.T) {
 
 // TestLogJobStarted tests job start logging
 func TestLogJobStarted(t *testing.T) {
-	var buf bytes.Buffer
-	
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-	t.Cleanup(func() { logger = oldLogger })
+	buf, cleanup := setupTestLogger(slog.LevelDebug)
+	t.Cleanup(cleanup)
 	
 	LogJobStarted("job-456", "analyze", 2)
 	
-	// Parse JSON output
-	var logEntry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
-		t.Fatalf("Failed to parse log JSON: %v", err)
-	}
+	logEntry := parseLogEntry(t, buf)
 	
 	// Assert JSON fields including action_type
 	if logEntry["job_id"] != "job-456" {
@@ -93,22 +94,13 @@ func TestLogJobStarted(t *testing.T) {
 
 // TestLogJobCompleted tests job completion logging
 func TestLogJobCompleted(t *testing.T) {
-	var buf bytes.Buffer
-	
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	t.Cleanup(func() { logger = oldLogger })
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
 	
 	duration := 150 * time.Millisecond
 	LogJobCompleted("job-789", "upload", duration)
 	
-	// Parse JSON output
-	var logEntry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
-		t.Fatalf("Failed to parse log JSON: %v", err)
-	}
+	logEntry := parseLogEntry(t, buf)
 	
 	// Assert JSON fields
 	if logEntry["job_id"] != "job-789" {
@@ -127,22 +119,13 @@ func TestLogJobCompleted(t *testing.T) {
 
 // TestLogJobFailed tests job failure logging
 func TestLogJobFailed(t *testing.T) {
-	var buf bytes.Buffer
-	
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	t.Cleanup(func() { logger = oldLogger })
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
 	
 	testErr := errors.New("connection timeout")
 	LogJobFailed("job-999", "download", 3, 5, testErr)
 	
-	// Parse JSON output
-	var logEntry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
-		t.Fatalf("Failed to parse log JSON: %v", err)
-	}
+	logEntry := parseLogEntry(t, buf)
 	
 	// Assert JSON fields
 	if logEntry["job_id"] != "job-999" {
@@ -171,10 +154,7 @@ func TestLogJobFailed(t *testing.T) {
 	buf.Reset()
 	LogJobFailed("job-1000", "process", 5, 5, testErr)
 	
-	var logEntry2 map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &logEntry2); err != nil {
-		t.Fatalf("Failed to parse log JSON: %v", err)
-	}
+	logEntry2 := parseLogEntry(t, buf)
 	
 	if logEntry2["will_retry"] != false {
 		t.Errorf("Expected will_retry false when attempt equals max_retries, got %v", logEntry2["will_retry"])
@@ -183,21 +163,12 @@ func TestLogJobFailed(t *testing.T) {
 
 // TestLogQueueStats tests queue statistics logging
 func TestLogQueueStats(t *testing.T) {
-	var buf bytes.Buffer
-	
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	t.Cleanup(func() { logger = oldLogger })
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
 	
 	LogQueueStats(10, 3, 50, 2)
 	
-	// Parse JSON output
-	var logEntry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
-		t.Fatalf("Failed to parse log JSON: %v", err)
-	}
+	logEntry := parseLogEntry(t, buf)
 	
 	// Assert JSON fields
 	if logEntry["pending"] != float64(10) {
@@ -222,13 +193,8 @@ func TestLogQueueStats(t *testing.T) {
 
 // TestDebugLogSuppression tests that debug logs are suppressed at Info level
 func TestDebugLogSuppression(t *testing.T) {
-	var buf bytes.Buffer
-	
-	oldLogger := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	t.Cleanup(func() { logger = oldLogger })
+	buf, cleanup := setupTestLogger(slog.LevelInfo)
+	t.Cleanup(cleanup)
 	
 	// Debug logs should not appear
 	LogJobEnqueued("job-debug", "test", 1)
@@ -247,7 +213,7 @@ func TestDebugLogSuppression(t *testing.T) {
 func containsError(logEntry map[string]any, expectedText string) bool {
 	if errorVal, ok := logEntry["error"]; ok {
 		if errorStr, ok := errorVal.(string); ok {
-			return len(errorStr) > 0 // Just check that error is present and non-empty
+			return errorStr != "" // Just check that error is present and non-empty
 		}
 	}
 	return false
