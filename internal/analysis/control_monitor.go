@@ -286,6 +286,22 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	// Update the analysis buffer monitors
 	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
 		log.Printf("\033[33m⚠️  Warning: Buffer monitor update completed with errors: %v\033[0m", err)
+		
+		// Send warning notification to UI to inform users of partial failures
+		if cm.notificationChan != nil {
+			notification := handlers.Notification{
+				Type:    "warning", 
+				Message: fmt.Sprintf("Buffer Monitor Warning: Buffer monitor update completed with errors: %v", err),
+			}
+			
+			// Non-blocking send to avoid blocking reconfiguration
+			select {
+			case cm.notificationChan <- notification:
+			default:
+				log.Printf("Warning: Could not send buffer monitor error notification (channel full)")
+			}
+		}
+		
 		// Note: We continue execution as this is not critical for RTSP reconfiguration
 	}
 

@@ -3,7 +3,6 @@ package processor
 
 import (
 	"context"
-	stderrors "errors"
 	"regexp"
 	"time"
 
@@ -271,7 +270,7 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 	if err != nil {
 		// Enhanced error handling with specific context using sentinel errors
 		switch {
-		case stderrors.Is(err, jobqueue.ErrQueueFull):
+		case errors.Is(err, jobqueue.ErrQueueFull):
 			queueSize := p.JobQueue.GetMaxJobs()
 			
 			// Enhanced queue full error
@@ -294,7 +293,7 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 
 			return enhancedErr
 
-		case stderrors.Is(err, jobqueue.ErrQueueStopped):
+		case errors.Is(err, jobqueue.ErrQueueStopped):
 			// Enhanced queue stopped error
 			enhancedErr := errors.Newf("cannot enqueue task, job queue stopped: %w", err).
 				Component("analysis.processor").

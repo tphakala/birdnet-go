@@ -22,9 +22,9 @@ const (
 	// Older entries will be removed to prevent unbounded memory growth
 	MaxActionStatsEntries = 1000
 	
-	// ActionStatsCleanupPercentage defines what percentage of entries to remove
-	// when cleaning up old action stats (20% = 0.2)
-	ActionStatsCleanupPercentage = 0.2
+	// ActionStatsTargetSize is the target size after cleanup (with hysteresis margin)
+	// Set to 80% of max to avoid repeated cleanup triggers
+	ActionStatsTargetSize = int(MaxActionStatsEntries * 0.8)
 )
 
 // JobQueue manages a queue of jobs that can be retried
@@ -710,10 +710,11 @@ func (q *JobQueue) cleanupOldActionStats() {
 		return entries[i].time.Before(entries[j].time)
 	})
 	
-	// Remove the oldest entries based on cleanup percentage
-	toRemove := int(float64(len(entries)) * ActionStatsCleanupPercentage)
-	if toRemove == 0 {
-		toRemove = 1 // Always remove at least one entry
+	// Calculate exact number to remove to reach target size with hysteresis margin
+	currentSize := len(entries)
+	toRemove := currentSize - ActionStatsTargetSize
+	if toRemove <= 0 {
+		toRemove = 1 // Always remove at least one entry to prevent repeated triggers
 	}
 	
 	for i := 0; i < toRemove && i < len(entries); i++ {

@@ -226,6 +226,19 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Start buffer monitors for each audio source only if we have active sources
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if err := bufferManager.UpdateMonitors(sources); err != nil {
+			// Use structured logging to improve error visibility and triage
+			logger := GetLogger()
+			
+			// Extract error details from the enhanced error if available
+			errorStr := err.Error()
+			logger.Warn("Buffer monitor setup completed with errors",
+				"error", errorStr,
+				"source_count", len(sources),
+				"sources", sources,
+				"component", "analysis.realtime",
+				"operation", "buffer_monitor_setup")
+			
+			// Also log to console for immediate visibility during startup
 			log.Printf("⚠️  Warning: Buffer monitor setup completed with errors: %v", err)
 			// Note: We continue execution as buffer monitoring errors are not critical for startup
 		}

@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -164,7 +163,7 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 func (m *BufferManager) RemoveAllMonitors() []error {
 	var removalErrors []error
 	
-	m.monitors.Range(func(key, value interface{}) bool {
+	m.monitors.Range(func(key, value any) bool {
 		source := key.(string)
 		if err := m.RemoveMonitor(source); err != nil {
 			// Wrap the error with additional context
@@ -207,7 +206,7 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 	// Track existing monitors that should be removed
 	toRemove := make(map[string]bool)
 	currentCount := 0
-	m.monitors.Range(func(key, _ interface{}) bool {
+	m.monitors.Range(func(key, _ any) bool {
 		toRemove[key.(string)] = true
 		currentCount++
 		return true
@@ -281,7 +280,7 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 		allErrors = append(allErrors, removeErrors...)
 		
 		// Join all errors to preserve individual error details
-		combinedErr := stderrors.Join(allErrors...)
+		combinedErr := errors.Join(allErrors...)
 		
 		// Wrap with structured metadata
 		return errors.New(combinedErr).
