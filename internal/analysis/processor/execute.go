@@ -71,6 +71,7 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	cmd.Env = getCleanEnvironment()
 
 	// Execute the command with timing
+	// Timing information helps identify performance issues and hanging scripts
 	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
 	executionDuration := time.Since(startTime)
@@ -82,6 +83,11 @@ func (a ExecuteCommandAction) Execute(data any) error {
 			exitCode = cmd.ProcessState.ExitCode()
 		}
 		
+		// Command execution failures are not retryable because:
+		// - Script logic errors won't be fixed by retrying
+		// - Non-zero exit codes indicate the script ran but failed
+		// - Retrying could cause duplicate side effects (notifications, file writes)
+		// Context includes execution metrics for performance analysis
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryCommandExecution).
@@ -118,6 +124,9 @@ func validateCommandPath(command string) (string, error) {
 	// Verify the file exists and is executable
 	info, err := os.Stat(command)
 	if err != nil {
+		// Classify OS errors for better telemetry and debugging
+		// Using switch statement instead of if-else chain per gocritic best practices
+		// This pattern provides clearer intent and better performance for multiple conditions
 		var classification string
 		switch {
 		case os.IsNotExist(err):
@@ -128,6 +137,10 @@ func validateCommandPath(command string) (string, error) {
 			classification = "file_access_error"
 		}
 		
+		// File system errors are not retryable as they indicate permanent issues:
+		// - Missing files won't suddenly appear
+		// - Permission denials require manual intervention
+		// - Other file access errors typically indicate corruption or system issues
 		return "", errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryFileIO).

@@ -95,6 +95,11 @@ var audioDemuxManager = NewAudioDemuxManager()
 func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
+		// Model initialization failures are not retryable because they indicate:
+		// - Missing or corrupted model files
+		// - Insufficient system resources (memory, GPU)
+		// - Incompatible TensorFlow runtime
+		// These require manual intervention to resolve
 		return errors.New(err).
 			Component("analysis.realtime").
 			Category(errors.CategoryModelInit).
@@ -917,6 +922,12 @@ func initializeBuffers(sources []string) error {
 	}
 
 	if len(initErrors) > 0 {
+		// Buffer initialization errors are aggregated to provide a complete picture
+		// of all failed sources. These are not retryable because they indicate:
+		// - Invalid audio source configuration (wrong device names, URLs)
+		// - System resource limitations (can't allocate buffer memory)
+		// - Permission issues accessing audio devices
+		// Context includes buffer parameters to aid in troubleshooting memory issues
 		return errors.Newf("buffer initialization errors: %s", strings.Join(initErrors, "; ")).
 			Component("analysis.realtime").
 			Category(errors.CategoryBuffer).

@@ -334,6 +334,9 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 
 	// Safe check for nil BwClient
 	if a.BwClient == nil {
+		// Client initialization failures indicate configuration issues that require
+		// manual intervention (e.g., missing API keys, disabled service)
+		// Retrying won't fix these problems, so mark as non-retryable
 		return errors.Newf("BirdWeather client is not initialized").
 			Component("analysis.processor").
 			Category(errors.CategoryIntegration).
@@ -362,6 +365,11 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 			// Send notification for non-retryable failures
 			notification.NotifyIntegrationFailure("BirdWeather", err)
 		}
+		// Network and API errors are typically transient and may succeed on retry:
+		// - Temporary network outages
+		// - API rate limiting
+		// - Server-side temporary failures
+		// The job queue will handle exponential backoff for these retryable errors
 		return errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryIntegration).
@@ -394,8 +402,11 @@ func (a *MqttAction) Execute(data interface{}) error {
 	if !a.MqttClient.IsConnected() {
 		// Log slightly differently to indicate it's waiting for background reconnect
 		log.Printf("🟡 MQTT client is not connected, skipping publish for %s (%s). Waiting for automatic reconnect.", a.Note.CommonName, a.Note.ScientificName)
-		// Return an error that indicates a retry might be useful later
-		// The job queue should handle retries based on this error.
+		// MQTT connection failures are retryable because:
+		// - The MQTT client has automatic reconnection logic
+		// - Connection may be temporarily lost due to network issues
+		// - Broker may be temporarily unavailable
+		// The job queue retry mechanism complements the client's own reconnection
 		return errors.Newf("MQTT client not connected").
 			Component("analysis.processor").
 			Category(errors.CategoryMQTTConnection).
