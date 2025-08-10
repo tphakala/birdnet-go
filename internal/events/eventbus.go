@@ -53,10 +53,50 @@ func init() {
 	}
 }
 
+// EventType represents the semantic type of an event for logging and categorization
+type EventType string
+
+// Event type constants for logging with semantic meanings
+const (
+	// EventTypeError represents error events such as failures, exceptions, or operational issues
+	EventTypeError EventType = "error"
+	
+	// EventTypeResource represents resource-related events like file operations, disk usage, or memory events
+	EventTypeResource EventType = "resource"
+	
+	// EventTypeDetection represents bird detection events from the BirdNET analysis engine
+	EventTypeDetection EventType = "detection"
+	
+	// EventTypeUnknown represents events that cannot be categorized into the above types
+	EventTypeUnknown EventType = "unknown"
+)
+
 // Sentinel errors for event bus operations
 var (
 	ErrEventBusDisabled = errors.Newf("event bus is disabled").Component("events").Category(errors.CategoryNotFound).Build()
 )
+
+// getEventType returns a semantic event type instead of Go type strings
+// This provides better observability in logs by showing meaningful event types.
+// The function is designed to be extensible - add new cases for future event types.
+func getEventType(event any) EventType {
+	switch event.(type) {
+	// Concrete type checks first (more specific)
+	case *errors.EnhancedError:
+		return EventTypeError
+	// Interface checks (more general)
+	case ErrorEvent:
+		return EventTypeError
+	case ResourceEvent:
+		return EventTypeResource
+	case DetectionEvent:
+		return EventTypeDetection
+	default:
+		// Return generic constant to avoid exposing internal types
+		// Use EventTypeUnknown instead of Go type strings for security
+		return EventTypeUnknown
+	}
+}
 
 // EventBus provides asynchronous event processing with non-blocking guarantees
 type EventBus struct {
@@ -293,7 +333,7 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 	// Debug logging for event publishing
 	if eb.config != nil && eb.config.Debug {
 		eb.logger.Debug("publishing event",
-			"event_type", fmt.Sprintf("%T", event),
+			"event_type", getEventType(event),
 			"component", event.GetComponent(),
 			"category", event.GetCategory(),
 			"error_buffer_used", len(eb.errorEventChan),
@@ -502,7 +542,7 @@ func (eb *EventBus) worker(id int) {
 				eb.processErrorEvent(event, logger)
 				duration := time.Since(start)
 				logger.Debug("error event processed",
-					"event_type", fmt.Sprintf("%T", event),
+					"event_type", getEventType(event),
 					"component", event.GetComponent(),
 					"duration_ms", duration.Milliseconds(),
 				)
@@ -522,7 +562,7 @@ func (eb *EventBus) worker(id int) {
 				eb.processResourceEvent(event, logger)
 				duration := time.Since(start)
 				logger.Debug("resource event processed",
-					"event_type", fmt.Sprintf("%T", event),
+					"event_type", getEventType(event),
 					"resource_type", event.GetResourceType(),
 					"severity", event.GetSeverity(),
 					"duration_ms", duration.Milliseconds(),
@@ -543,7 +583,7 @@ func (eb *EventBus) worker(id int) {
 				eb.processDetectionEvent(event, logger)
 				duration := time.Since(start)
 				logger.Debug("detection event processed",
-					"event_type", fmt.Sprintf("%T", event),
+					"event_type", getEventType(event),
 					"species", event.GetSpeciesName(),
 					"is_new_species", event.IsNewSpecies(),
 					"duration_ms", duration.Milliseconds(),

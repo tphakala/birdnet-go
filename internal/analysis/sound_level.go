@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"math"
@@ -15,7 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
-	"github.com/tphakala/birdnet-go/internal/api/v2"
+	api "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
@@ -23,7 +22,20 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
-	"golang.org/x/time/rate"
+)
+
+// Constants for sound level monitoring
+const (
+	// dB value bounds for validation and sanitization
+	minValidDB = -200.0
+	maxValidDB = 20.0
+	
+	// Error message constants
+	errMsgEmptyField        = "empty %s field"
+	errMsgInvalidTimestamp  = "invalid timestamp: %s"
+	errMsgOutOfRange        = "dB values out of range in octave band %s"
+	errMsgNonFiniteValues   = "non-finite values in octave band %s"
+	errMsgNoOctaveBandData  = "no octave band data"
 )
 
 // Package-level logger for sound level monitoring
@@ -48,14 +60,20 @@ func getSoundLevelLogger() *slog.Logger {
 		serviceLevelVar.Set(initialLevel)
 
 		// Initialize the service-specific file logger
-		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "sound-level", serviceLevelVar)
+		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
 		if err != nil {
-			// Fallback: Log error to standard log and use stdout logger
-			log.Printf("WARNING: Failed to initialize sound level file logger at %s: %v. Using console logging.", logFilePath, err)
-			// Fallback to console logger
-			logging.Init()
-			fbHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: serviceLevelVar})
-			soundLevelLogger = slog.New(fbHandler).With("service", "sound-level")
+			// Fallback: Use main analysis logger and log the issue
+			mainLogger := GetLogger() // Get the main analysis logger
+			if mainLogger != nil {
+				soundLevelLogger = mainLogger.With("subsystem", "sound-level")
+				soundLevelLogger.Warn("Failed to initialize sound level file logger, using fallback",
+					"error", err,
+					"log_path", logFilePath,
+					"service", "analysis.soundlevel")
+			} else {
+				// Ultimate fallback to default logger if even the main logger isn't available
+				soundLevelLogger = slog.Default().With("service", "analysis.soundlevel")
+			}
 			closeLogger = func() error { return nil } // No-op closer
 		}
 	})
@@ -65,6 +83,15 @@ func getSoundLevelLogger() *slog.Logger {
 // getSoundLevelServiceLevelVar returns the service level var for dynamic log level control
 func getSoundLevelServiceLevelVar() *slog.LevelVar {
 	return serviceLevelVar
+}
+
+// CloseSoundLevelLogger closes the sound level file logger and releases resources
+// This should be called during component shutdown to ensure proper cleanup of file handles
+func CloseSoundLevelLogger() error {
+	if closeLogger != nil {
+		return closeLogger()
+	}
+	return nil
 }
 
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
@@ -185,48 +212,64 @@ func normalizeBandKey(key string) string {
 
 // validateSoundLevelData validates sound level data before publishing
 func validateSoundLevelData(data *myaudio.SoundLevelData) error {
+	// Common sound data context for error reporting
+	soundDataCtx := map[string]any{
+		"source": data.Source,
+		"name":   data.Name,
+	}
+	
 	// Check timestamp is valid and not in the future
 	if data.Timestamp.IsZero() {
-		return errors.New(fmt.Errorf("invalid timestamp: zero time")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf(errMsgInvalidTimestamp, "zero time").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_timestamp").
+			Context("sound_data", soundDataCtx).
 			Build()
 	}
 
-	if data.Timestamp.After(time.Now().Add(5 * time.Minute)) {
-		return errors.New(fmt.Errorf("invalid timestamp: future time")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+	// Use a single time reference to avoid drift between validation and context
+	currentTime := time.Now()
+	if data.Timestamp.After(currentTime.Add(5 * time.Minute)) {
+		return errors.Newf(errMsgInvalidTimestamp, "future time").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_timestamp").
 			Context("timestamp", data.Timestamp).
+			Context("current_time", currentTime).
+			Context("sound_data", soundDataCtx).
 			Build()
 	}
 
 	// Verify source and name are non-empty
 	if data.Source == "" {
-		return errors.New(fmt.Errorf("empty source field")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf(errMsgEmptyField, "source").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_fields").
+			Context("field", "source").
+			Context("name", data.Name).
 			Build()
 	}
 
 	if data.Name == "" {
-		return errors.New(fmt.Errorf("empty name field")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
+		return errors.Newf(errMsgEmptyField, "name").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_fields").
+			Context("field", "name").
+			Context("source", data.Source).
 			Build()
 	}
 
 	// Ensure at least one octave band has data
 	if len(data.OctaveBands) == 0 {
-		return errors.New(fmt.Errorf("no octave band data")).
-			Component("realtime-analysis").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sound_level_data").
-			Context("source", data.Source).
+		return errors.Newf(errMsgNoOctaveBandData).
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "validate_octave_bands").
+			Context("sound_data", soundDataCtx).
+			Context("duration", data.Duration).
 			Build()
 	}
 
@@ -235,26 +278,35 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 		if math.IsNaN(bandData.Min) || math.IsInf(bandData.Min, 0) ||
 			math.IsNaN(bandData.Max) || math.IsInf(bandData.Max, 0) ||
 			math.IsNaN(bandData.Mean) || math.IsInf(bandData.Mean, 0) {
-			return errors.Newf("non-finite values in band %s", band).
-				Component("realtime-analysis").
-				Category(errors.CategoryValidation).
-				Context("operation", "validate_sound_level_data").
+			return errors.Newf(errMsgNonFiniteValues, band).
+				Component("analysis.soundlevel").
+				Category(errors.CategorySoundLevel).
+				Context("operation", "validate_octave_bands").
 				Context("band", band).
+				Context("center_freq", bandData.CenterFreq).
+				Context("min_value", bandData.Min).
+				Context("max_value", bandData.Max).
+				Context("mean_value", bandData.Mean).
+				Context("sound_data", soundDataCtx).
 				Build()
 		}
 
-		// Check reasonable bounds (-200 to +20 dB)
-		if bandData.Min < -200 || bandData.Min > 20 ||
-			bandData.Max < -200 || bandData.Max > 20 ||
-			bandData.Mean < -200 || bandData.Mean > 20 {
-			return errors.Newf("dB values out of range in band %s", band).
-				Component("realtime-analysis").
-				Category(errors.CategoryValidation).
-				Context("operation", "validate_sound_level_data").
+		// Check reasonable bounds (minValidDB to maxValidDB)
+		if bandData.Min < minValidDB || bandData.Min > maxValidDB ||
+			bandData.Max < minValidDB || bandData.Max > maxValidDB ||
+			bandData.Mean < minValidDB || bandData.Mean > maxValidDB {
+			return errors.Newf(errMsgOutOfRange, band).
+				Component("analysis.soundlevel").
+				Category(errors.CategorySoundLevel).
+				Context("operation", "validate_octave_bands").
 				Context("band", band).
-				Context("min", bandData.Min).
-				Context("max", bandData.Max).
-				Context("mean", bandData.Mean).
+				Context("center_freq", bandData.CenterFreq).
+				Context("min_value", bandData.Min).
+				Context("max_value", bandData.Max).
+				Context("mean_value", bandData.Mean).
+				Context("valid_range_min", minValidDB).
+				Context("valid_range_max", maxValidDB).
+				Context("sound_data", soundDataCtx).
 				Build()
 		}
 	}
@@ -303,7 +355,7 @@ func toCompactFormat(data myaudio.SoundLevelData) CompactSoundLevelData {
 }
 
 // startSoundLevelMQTTPublisher starts a goroutine to consume sound level data and publish to MQTT
-func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, proc *processor.Processor) {
+func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan myaudio.SoundLevelData) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -312,7 +364,12 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, pr
 			select {
 			case <-quitChan:
 				return
-			case soundData := <-soundLevelChan:
+			case soundData, ok := <-soundLevelChan:
+				if !ok {
+					// Channel is closed, exit gracefully
+					getSoundLevelLogger().Info("Sound level channel closed, stopping MQTT publisher")
+					return
+				}
 				// Log received sound level data if debug is enabled
 				// This is logged at interval rate, not realtime
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
@@ -327,7 +384,10 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan chan struct{}, pr
 				}
 				// Publish sound level data to MQTT
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
-					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
+						"error", err,
+						"source", soundData.Source,
+						"name", soundData.Name)
 				}
 			}
 		}
@@ -372,10 +432,12 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "marshal_error")
 		}
 		return errors.New(err).
-			Component("realtime-analysis").
-			Category(errors.CategoryNetwork).
-			Context("operation", "marshal_sound_level_data").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "marshal_compact_data").
 			Context("source", soundData.Source).
+			Context("name", soundData.Name).
+			Context("octave_bands_count", len(compactData.Bands)).
 			Build()
 	}
 
@@ -390,11 +452,15 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "error")
 		}
 		return errors.New(err).
-			Component("realtime-analysis").
-			Category(errors.CategoryNetwork).
-			Context("operation", "publish_sound_level_mqtt").
+			Component("analysis.soundlevel").
+			Category(errors.CategorySoundLevel).
+			Context("operation", "publish_mqtt").
 			Context("topic", topic).
 			Context("source", soundData.Source).
+			Context("name", soundData.Name).
+			Context("payload_size", len(jsonData)).
+			Context("timeout_seconds", 5).
+			Context("octave_bands_count", len(compactData.Bands)).
 			Build()
 	}
 
@@ -463,18 +529,23 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 }
 
 // startSoundLevelMQTTPublisherWithDone starts MQTT publisher with a custom done channel
-func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan myaudio.SoundLevelData) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Println("📡 Started sound level MQTT publisher")
+		getSoundLevelLogger().Info("Started sound level MQTT publisher")
 
 		for {
 			select {
 			case <-doneChan:
-				log.Println("🔌 Stopping sound level MQTT publisher")
+				getSoundLevelLogger().Info("Stopping sound level MQTT publisher")
 				return
-			case soundData := <-soundLevelChan:
+			case soundData, ok := <-soundLevelChan:
+				if !ok {
+					// Channel is closed, exit gracefully
+					getSoundLevelLogger().Info("Sound level channel closed, stopping MQTT publisher")
+					return
+				}
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 					if logger := getSoundLevelLogger(); logger != nil {
@@ -486,7 +557,10 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan stru
 				}
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
 					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
-					log.Printf("❌ Error publishing sound level data to MQTT: %v", err)
+					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
+						"error", err,
+						"source", soundData.Source,
+						"name", soundData.Name)
 				}
 			}
 		}
@@ -494,39 +568,22 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan chan stru
 }
 
 // startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
+// This is a compatibility wrapper that converts done channel to context for the refactored function
 func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
-	wg.Add(1)
+	// Create context that gets canceled when done channel is closed
+	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Convert done channel to context cancellation
 	go func() {
-		defer wg.Done()
-		log.Println("📡 Started sound level SSE publisher")
-
-		// Create a rate limiter: 1 log per minute
-		errorLogLimiter := rate.NewLimiter(rate.Every(time.Minute), 1)
-
-		for {
-			select {
-			case <-doneChan:
-				log.Println("🔌 Stopping sound level SSE publisher")
-				return
-			case soundData := <-soundLevelChan:
-				// Log received sound level data if debug is enabled
-				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
-					if logger := getSoundLevelLogger(); logger != nil {
-						logger.Debug("SSE publisher received sound level data",
-							"source", soundData.Source,
-							"name", soundData.Name,
-							"timestamp", soundData.Timestamp)
-					}
-				}
-				if err := broadcastSoundLevelSSE(apiController, soundData); err != nil {
-					// Only log errors if rate limiter allows
-					if errorLogLimiter.Allow() {
-						log.Printf("⚠️ Error broadcasting sound level data via SSE: %v", err)
-					}
-				}
-			}
+		select {
+		case <-doneChan:
+			cancel()
+		case <-ctx.Done():
 		}
 	}()
+	
+	// Call the refactored function with context and receive-only channel
+	startSoundLevelSSEPublisher(wg, ctx, apiController, soundLevelChan)
 }
 
 // broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics

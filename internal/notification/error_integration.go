@@ -57,6 +57,8 @@ func getNotificationPriority(category, explicitPriority string) Priority {
 		return PriorityCritical // App cannot function without models
 	case string(errors.CategoryDatabase):
 		return PriorityCritical // Data integrity at risk
+	case string(errors.CategoryAudioAnalysis), string(errors.CategoryWorker):
+		return PriorityCritical // Core functionality failures
 	case string(errors.CategorySystem):
 		return PriorityHigh // System resources issues
 	case string(errors.CategoryConfiguration):
@@ -65,12 +67,24 @@ func getNotificationPriority(category, explicitPriority string) Priority {
 		return PriorityHigh // Integration failures need user attention
 	case string(errors.CategoryMQTTConnection), string(errors.CategoryMQTTAuth):
 		return PriorityHigh // Connection/auth failures need immediate attention
+	case string(errors.CategoryJobQueue), string(errors.CategoryBuffer):
+		return PriorityHigh // May impact processing pipeline
+	case string(errors.CategoryCommandExecution):
+		return PriorityHigh // User-configured actions failing
 	case string(errors.CategoryNetwork), string(errors.CategoryRTSP):
 		return PriorityMedium // Often transient
 	case string(errors.CategoryFileIO), string(errors.CategoryAudio), string(errors.CategoryAudioSource):
 		return PriorityMedium // Usually recoverable
+	case string(errors.CategoryThreshold), string(errors.CategorySpeciesTracking):
+		return PriorityMedium // Important but not critical
+	case string(errors.CategoryTimeout), string(errors.CategoryRetry):
+		return PriorityMedium // Transient issues
+	case string(errors.CategoryCancellation), string(errors.CategoryBroadcast), string(errors.CategoryIntegration):
+		return PriorityMedium // General operational issues
 	case string(errors.CategoryValidation):
 		return PriorityLow // User input issues
+	case string(errors.CategorySoundLevel), string(errors.CategoryEventTracking):
+		return PriorityLow // Monitoring/tracking issues
 	default:
 		return PriorityMedium
 	}

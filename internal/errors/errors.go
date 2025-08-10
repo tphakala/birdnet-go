@@ -50,6 +50,24 @@ const (
 	CategoryState          ErrorCategory = "state"
 	CategoryLimit          ErrorCategory = "limit"
 	CategoryResource       ErrorCategory = "resource"
+	
+	// Analysis package specific categories
+	CategoryAudioAnalysis    ErrorCategory = "audio-analysis"      // BirdNET prediction/analysis errors
+	CategoryBuffer          ErrorCategory = "audio-buffer"        // Audio buffer management
+	CategoryWorker          ErrorCategory = "worker-pool"         // Worker pool operations
+	CategoryJobQueue        ErrorCategory = "job-queue"           // Job queue operations
+	CategoryThreshold       ErrorCategory = "threshold-mgmt"      // Dynamic threshold management
+	CategoryEventTracking   ErrorCategory = "event-tracking"      // Event tracking operations
+	CategorySpeciesTracking ErrorCategory = "species-tracking"    // Species tracking operations
+	CategorySoundLevel      ErrorCategory = "sound-level"         // Sound level monitoring
+	CategoryCommandExecution ErrorCategory = "command-execution"   // External command execution
+	
+	// General categories useful across packages
+	CategoryTimeout         ErrorCategory = "timeout"             // Operation timeouts
+	CategoryCancellation    ErrorCategory = "cancellation"        // Cancelled operations
+	CategoryRetry          ErrorCategory = "retry"               // Retry-related errors
+	CategoryBroadcast      ErrorCategory = "broadcast"           // SSE/broadcast operations
+	CategoryIntegration    ErrorCategory = "integration"         // Third-party integrations
 )
 
 // Priority constants for error prioritization
@@ -367,6 +385,7 @@ func RegisterComponent(packagePattern, componentName string) {
 
 // init registers default component mappings
 func init() {
+	// Core components
 	RegisterComponent("birdnet", "birdnet")
 	RegisterComponent("myaudio", "myaudio")
 	RegisterComponent("ffmpeg-manager", "ffmpeg-manager")
@@ -384,6 +403,17 @@ func init() {
 	RegisterComponent("backup", "backup")
 	RegisterComponent("audiocore", "audiocore")
 	RegisterComponent("api", "api")
+	
+	// Analysis package components - use slash-separated paths for subpackages
+	RegisterComponent("analysis", "analysis")
+	RegisterComponent("analysis/processor", "analysis.processor")
+	RegisterComponent("analysis/jobqueue", "analysis.jobqueue")
+	// Components in main analysis package - use function name patterns
+	RegisterComponent("soundlevel", "analysis.soundlevel")
+	RegisterComponent("buffer", "analysis.buffer")
+	RegisterComponent("worker", "analysis.worker")
+	RegisterComponent("threshold", "analysis.threshold")
+	RegisterComponent("tracker", "analysis.tracker")
 }
 
 // Helper functions for auto-detection and categorization
