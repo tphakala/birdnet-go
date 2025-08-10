@@ -151,7 +151,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	p.startDetectionProcessor()
 
 	// Start the worker pool for action processing
-	p.startWorkerPool(10)
+	p.startWorkerPool()
 
 	// Start the held detection flusher
 	p.pendingDetectionsFlusher()
@@ -543,15 +543,6 @@ func (p *Processor) pendingDetectionsFlusher() {
 	}()
 }
 
-// Helper function to check if a slice contains a string (case-insensitive)
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if strings.EqualFold(s, item) {
-			return true
-		}
-	}
-	return false
-}
 
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(detection *Detections) []Action {

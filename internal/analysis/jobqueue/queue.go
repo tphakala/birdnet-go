@@ -3,7 +3,6 @@ package jobqueue
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"strings"
 	"sync"
@@ -154,7 +153,7 @@ func getActionKey(action Action) string {
 }
 
 // Enqueue adds a job to the queue
-func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) (*Job, error) {
+func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config RetryConfig) (*Job, error) {
 	if action == nil {
 		return nil, ErrNilAction
 	}
@@ -170,7 +169,7 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 	// Check if queue is full and handle accordingly
 	if len(q.jobs) >= q.maxJobs {
 		// If DropOldestOnFull is enabled, try to make room
-		if !q._dropOldestPendingJob() {
+		if !q._dropOldestPendingJob(ctx) {
 			// Could not drop any job, queue is full
 			q.droppedJobs++
 			q.stats.DroppedJobs++
@@ -189,13 +188,10 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 			q.stats.ActionStats[actionKey] = stats
 
 			return nil, errors.New(ErrQueueFull).
-				Component("analysis.jobqueue").
-				Category(errors.CategoryLimit).
 				Context("operation", "enqueue").
 				Context("max_jobs", q.maxJobs).
 				Context("current_jobs", len(q.jobs)).
-				Context("action_type", fmt.Sprintf("%T", action)).
-				Context("action_description", action.GetDescription()).
+				Context("action_type", action.GetDescription()).
 				Build()
 		}
 	}
@@ -245,7 +241,7 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 // _dropOldestPendingJob removes the oldest pending job from the queue
 // to make room for a new job. Returns true if a job was dropped.
 // IMPORTANT: This method must be called with q.mu already locked.
-func (q *JobQueue) _dropOldestPendingJob() bool {
+func (q *JobQueue) _dropOldestPendingJob(ctx context.Context) bool {
 	// For testing queue overflow, respect the global AllowJobDropping flag
 	if !AllowJobDropping {
 		return false
@@ -288,7 +284,7 @@ func (q *JobQueue) _dropOldestPendingJob() bool {
 	stats.Dropped++
 	q.stats.ActionStats[actionKey] = stats
 
-	log.Printf("🗑️ Dropped oldest pending job %s to make room for new job", oldestJob.ID)
+	LogJobDropped(ctx, oldestJob.ID, oldestJob.Action.GetDescription())
 	return true
 }
 
@@ -305,7 +301,7 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	// Check context immediately and periodically
 	checkCtx := func() bool {
 		if ctx.Err() != nil {
-			log.Printf("🛑 Job queue processing stopped via context: %v", ctx.Err())
+			LogQueueStopped(ctx, "context_cancelled", "error", ctx.Err())
 			return true
 		}
 		return false
@@ -319,10 +315,10 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	for {
 		select {
 		case <-q.stopCh:
-			log.Println("🛑 Job queue processing stopped via stop channel")
+			LogQueueStopped(ctx, "stop_channel")
 			return
 		case <-ctx.Done():
-			log.Printf("🛑 Job queue processing stopped via context: %v", ctx.Err())
+			LogQueueStopped(ctx, "context_done", "error", ctx.Err())
 			return
 		case <-ticker.C:
 			// Check context again before processing
@@ -532,8 +528,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 
 	// Log the attempt
 	if job.Attempts > 1 {
-		log.Printf("🔄️ Retrying %s: %s, attempt %d/%d",
-			job.ID, actionDesc, job.Attempts, job.MaxAttempts)
+		LogJobRetrying(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts)
 	}
 
 	// Create a timeout context for the job execution
@@ -641,8 +636,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			stats.Failed++
 			q.stats.ActionStats[actionKey] = stats
 
-			log.Printf("⚠️ Job %s: %s permanently failed after %d attempts: %v",
-				job.ID, actionDesc, job.Attempts, err)
+			LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
 		} else {
 			// Schedule for retry
 			job.Status = JobStatusRetrying
@@ -651,8 +645,8 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
 			job.NextRetryAt = q.clock.Now().Add(delay)
 
-			log.Printf("⚠️ Job %s: %s failed, will retry in %v (attempt %d/%d): %v",
-				job.ID, actionDesc, delay, job.Attempts, job.MaxAttempts, err)
+			// Log detailed retry scheduling information
+			LogJobRetryScheduled(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, delay, job.NextRetryAt, err)
 		}
 	} else {
 		// Job succeeded
@@ -667,13 +661,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 
 		// Log success based on configuration
 		if job.Attempts > 1 || q.logAllSuccesses {
-			if job.Attempts > 1 {
-				log.Printf("✅ Job %s: %s succeeded after %d attempts",
-					job.ID, actionDesc, job.Attempts)
-			} else {
-				log.Printf("✅ Job %s: %s succeeded on first attempt",
-					job.ID, actionDesc)
-			}
+			LogJobSuccess(ctx, job.ID, actionDesc, job.Attempts)
 		}
 	}
 }
@@ -831,16 +819,16 @@ func NewTypedJobQueue[T any]() *TypedJobQueue[T] {
 	}
 }
 
-// EnqueueTyped adds a typed job to the queue
-func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config RetryConfig) (*TypedJob[T], error) {
+// EnqueueTypedWithContext adds a typed job to the queue with context support
+func (q *TypedJobQueue[T]) EnqueueTypedWithContext(ctx context.Context, action TypedAction[T], data T, config RetryConfig) (*TypedJob[T], error) {
 	// Create an adapter that converts the typed action to a regular action
 	adapter := &typedActionAdapter[T]{
 		action: action,
 		data:   data,
 	}
 
-	// Enqueue the job using the adapter
-	job, err := q.Enqueue(adapter, nil, config)
+	// Enqueue the job using the adapter with provided context
+	job, err := q.Enqueue(ctx, adapter, nil, config)
 	if err != nil {
 		return nil, err
 	}
@@ -863,6 +851,11 @@ func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config Re
 	return typedJob, nil
 }
 
+// EnqueueTyped adds a typed job to the queue (backward compatibility)
+func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config RetryConfig) (*TypedJob[T], error) {
+	return q.EnqueueTypedWithContext(context.Background(), action, data, config)
+}
+
 // typedActionAdapter adapts a TypedAction to the Action interface
 type typedActionAdapter[T any] struct {
 	action TypedAction[T]
@@ -870,7 +863,7 @@ type typedActionAdapter[T any] struct {
 }
 
 // Execute implements the Action interface
-func (a *typedActionAdapter[T]) Execute(data interface{}) error {
+func (a *typedActionAdapter[T]) Execute(data any) error {
 	// If data is provided, ensure it's the correct type and use it
 	if data != nil {
 		if typedData, ok := data.(T); ok {

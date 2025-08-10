@@ -2,7 +2,10 @@
 package processor
 
 import (
+	"log"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -11,49 +14,48 @@ import (
 // Service name constant for the processor package
 const serviceName = "analysis.processor"
 
-// Note: The processor package has dual logging configuration:
-// 
-// 1. Primary logger (defined in new_species_tracker.go):
-//   - Service name: "species-tracking"  
-//   - Log file: "logs/species-tracking.log"
-//   - Level: Dynamic (configurable via serviceLevelVar)
-//   - Purpose: Species-specific operations and tracking
-//
-// 2. Fallback logger (used when primary logger fails):
-//   - Service name: "analysis.processor" (matches package function)
-//   - Source: logging.ForService(serviceName) with ultimate fallback to slog.Default()
-//   - Purpose: General processor operations when primary logger unavailable
-//
-// The primary logger is available throughout the processor package as the 
-// package-level variable `logger`. GetLogger() returns the primary logger
-// if available, otherwise returns the fallback logger.
-//
-// Usage example:
-//   logger.Info("Processing detection", "species", species, "confidence", conf)
-//   logger.Debug("Worker started", "worker_id", id, "total", total)
-//   logger.Error("Operation failed", "error", err)
-
 var (
-	fallbackLogger     *slog.Logger
-	fallbackLoggerOnce sync.Once
+	processorLogger     *slog.Logger
+	processorLoggerOnce sync.Once
+	processorLevelVar   = new(slog.LevelVar) // Dynamic level control
+	processorCloseFunc  func() error
 )
 
-// GetLogger returns the processor package logger
-// This provides a uniform API for accessing the logger across packages
-func GetLogger() *slog.Logger {
-	// Return the logger from new_species_tracker.go if available
-	if logger != nil {
-		return logger
-	}
+func init() {
+	var err error
+	// Define log file path for processor operations
+	logFilePath := filepath.Join("logs", "analysis-processor.log")
+	initialLevel := slog.LevelInfo // Default to Info level
+	processorLevelVar.Set(initialLevel)
 	
-	// Initialize fallback logger only once if main logger is nil
-	fallbackLoggerOnce.Do(func() {
-		fallbackLogger = logging.ForService(serviceName)
-		// Ensure fallbackLogger is never nil to prevent panics
-		if fallbackLogger == nil {
-			fallbackLogger = slog.Default().With("service", serviceName)
+	// Initialize the processor-specific file logger
+	processorLogger, processorCloseFunc, err = logging.NewFileLogger(logFilePath, serviceName, processorLevelVar)
+	if err != nil {
+		// Fallback: Log error to standard log and use console logging
+		log.Printf("Failed to initialize processor file logger at %s: %v. Using console logging.", logFilePath, err)
+		// Set logger to console handler for actual console output
+		fbHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: processorLevelVar})
+		processorLogger = slog.New(fbHandler).With("service", serviceName)
+		processorCloseFunc = func() error { return nil } // No-op closer
+	}
+}
+
+// GetLogger returns the processor package logger
+// This provides a uniform API for accessing the logger across packages.
+// Note: The species tracker has its own dedicated logger in new_species_tracker.go
+func GetLogger() *slog.Logger {
+	processorLoggerOnce.Do(func() {
+		if processorLogger == nil {
+			processorLogger = slog.Default().With("service", serviceName)
 		}
 	})
-	
-	return fallbackLogger
+	return processorLogger
+}
+
+// CloseProcessorLogger closes the processor log file and releases resources
+func CloseProcessorLogger() error {
+	if processorCloseFunc != nil {
+		return processorCloseFunc()
+	}
+	return nil
 }

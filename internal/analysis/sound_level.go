@@ -40,10 +40,10 @@ const (
 
 // Package-level logger for sound level monitoring
 var (
-	soundLevelLogger *slog.Logger
-	soundLoggerOnce  sync.Once
-	serviceLevelVar  = new(slog.LevelVar) // Dynamic level control
-	closeLogger      func() error
+	soundLevelLogger     *slog.Logger
+	soundLoggerOnce      sync.Once
+	serviceLevelVar      = new(slog.LevelVar) // Dynamic level control
+	soundLevelCloseFunc  func() error
 )
 
 // getSoundLevelLogger returns the sound level logger, initializing it if necessary
@@ -60,7 +60,7 @@ func getSoundLevelLogger() *slog.Logger {
 		serviceLevelVar.Set(initialLevel)
 
 		// Initialize the service-specific file logger
-		soundLevelLogger, closeLogger, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
+		soundLevelLogger, soundLevelCloseFunc, err = logging.NewFileLogger(logFilePath, "analysis.soundlevel", serviceLevelVar)
 		if err != nil {
 			// Fallback: Use main analysis logger and log the issue
 			mainLogger := GetLogger() // Get the main analysis logger
@@ -74,7 +74,7 @@ func getSoundLevelLogger() *slog.Logger {
 				// Ultimate fallback to default logger if even the main logger isn't available
 				soundLevelLogger = slog.Default().With("service", "analysis.soundlevel")
 			}
-			closeLogger = func() error { return nil } // No-op closer
+			soundLevelCloseFunc = func() error { return nil } // No-op closer
 		}
 	})
 	return soundLevelLogger
@@ -88,8 +88,8 @@ func getSoundLevelServiceLevelVar() *slog.LevelVar {
 // CloseSoundLevelLogger closes the sound level file logger and releases resources
 // This should be called during component shutdown to ensure proper cleanup of file handles
 func CloseSoundLevelLogger() error {
-	if closeLogger != nil {
-		return closeLogger()
+	if soundLevelCloseFunc != nil {
+		return soundLevelCloseFunc()
 	}
 	return nil
 }
@@ -469,8 +469,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 		proc.Metrics.SoundLevel.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "mqtt", "success")
 	}
 
-	log.Printf("📡 Published sound level data to MQTT topic: %s (source: %s, bands: %d)",
-		topic, soundData.Source, len(soundData.OctaveBands))
+	LogSoundLevelMQTTPublished(topic, soundData.Source, len(soundData.OctaveBands))
 
 	// Log detailed sound level data if debug is enabled
 	// These logs are for publishing events, not realtime processing
@@ -481,7 +480,9 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 				"source", soundData.Source,
 				"name", soundData.Name,
 				"json_size", len(jsonData),
-				"octave_bands", len(soundData.OctaveBands))
+				"octave_bands", len(soundData.OctaveBands),
+				"component", "analysis.soundlevel",
+				"operation", "publish_mqtt")
 
 			// Log each octave band's values only if realtime logging is enabled
 			if settings.Realtime.Audio.SoundLevel.DebugRealtimeLogging {
@@ -492,7 +493,9 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 						"min_db", data.Min,
 						"max_db", data.Max,
 						"mean_db", data.Mean,
-						"sample_count", data.SampleCount)
+						"sample_count", data.SampleCount,
+						"component", "analysis.soundlevel",
+						"operation", "log_octave_bands")
 				}
 			}
 		}
@@ -697,10 +700,10 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("source_type", "malgo").
 				Context("source_name", settings.Realtime.Audio.Source).
 				Build())
-			log.Printf("❌ Failed to register sound level processor for audio device %s: %v", settings.Realtime.Audio.Source, err)
+			LogSoundLevelProcessorRegistrationFailed(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel", err)
 		} else {
 			successCount++
-			log.Printf("🔊 Registered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
+			LogSoundLevelProcessorRegistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
 		}
 	}
 
@@ -732,13 +735,13 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("stream_running", streamRunning).
 				Context("stream_exists", streamExists). // indicates if stream was found in health map
 				Build())
-			log.Printf("❌ Failed to register sound level processor for RTSP source %s: %v", displayName, err)
+			LogSoundLevelProcessorRegistrationFailed(displayName, "rtsp_stream", "analysis.soundlevel", err)
 		} else {
 			successCount++
 			if _, isActive := activeStreams[url]; isActive {
-				log.Printf("🔊 Registered sound level processor for active RTSP source: %s", displayName)
+				LogSoundLevelProcessorRegistered(displayName, "rtsp_active", "analysis.soundlevel")
 			} else {
-				log.Printf("🔊 Registered sound level processor for configured RTSP source: %s", displayName)
+				LogSoundLevelProcessorRegistered(displayName, "rtsp_configured", "analysis.soundlevel")
 			}
 		}
 	}
@@ -746,36 +749,12 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	// Warn about active streams that aren't configured (shouldn't normally happen)
 	for url := range activeStreams {
 		if !configuredURLs[url] {
-			log.Printf("⚠️ Found active RTSP stream not in configuration: %s", conf.SanitizeRTSPUrl(url))
+			LogSoundLevelActiveStreamNotInConfig(conf.SanitizeRTSPUrl(url))
 		}
 	}
 
-	// Enhanced logging for different success scenarios
-	switch {
-	case len(errs) == 0:
-		// Complete success
-		log.Printf("✅ Successfully registered all %d sound level processors (active streams: %d)", 
-			totalSources, len(activeStreams))
-	case successCount > 0:
-		// Partial success - provide detailed breakdown
-		failureCount := len(errs)
-		log.Printf("⚠️ Partial success: %d/%d sound level processors registered successfully, %d failed (active streams: %d)", 
-			successCount, totalSources, failureCount, len(activeStreams))
-		
-		// Log failure details for troubleshooting
-		log.Printf("💡 Sound level monitoring will continue with available processors. Failed registrations:")
-		for i, err := range errs {
-			if i < 3 { // Limit to first 3 errors to avoid spam
-				log.Printf("   • Error %d: %v", i+1, err)
-			}
-		}
-		if len(errs) > 3 {
-			log.Printf("   • ... and %d more errors", len(errs)-3)
-		}
-	default:
-		// Complete failure
-		log.Printf("❌ Failed to register any sound level processors (%d total failures)", len(errs))
-	}
+	// Use structured logging for registration summary
+	LogSoundLevelRegistrationSummary(successCount, totalSources, len(activeStreams), successCount > 0 && successCount < totalSources, errs)
 
 	// Return error only if we have complete failure
 	// For partial success, we continue operating with available processors
@@ -790,12 +769,12 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 	// Unregister malgo source
 	if settings.Realtime.Audio.Source != "" {
 		myaudio.UnregisterSoundLevelProcessor("malgo")
-		log.Printf("🔇 Unregistered sound level processor for audio device: %s", settings.Realtime.Audio.Source)
+		LogSoundLevelProcessorUnregistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
 	}
 
 	// Unregister all RTSP sources
 	for _, url := range settings.Realtime.RTSP.URLs {
 		myaudio.UnregisterSoundLevelProcessor(url)
-		log.Printf("🔇 Unregistered sound level processor for RTSP source: %s", conf.SanitizeRTSPUrl(url))
+		LogSoundLevelProcessorUnregistered(conf.SanitizeRTSPUrl(url), "rtsp_stream", "analysis.soundlevel")
 	}
 }

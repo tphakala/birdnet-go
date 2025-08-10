@@ -214,7 +214,7 @@ func TestBasicQueueFunctionality(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, data, config)
+	job, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
@@ -279,7 +279,7 @@ func TestMultipleJobs(t *testing.T) {
 		data := &TestData{ID: fmt.Sprintf("test-%d", i), Data: fmt.Sprintf("test data %d", i)}
 
 		// Enqueue the job
-		_, err := queue.Enqueue(action, data, config)
+		_, err := queue.Enqueue(context.Background(), action, data, config)
 		require.NoError(t, err, "Failed to enqueue job")
 	}
 
@@ -370,7 +370,7 @@ func TestRetryProcess(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, data, config)
+	job, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
@@ -461,7 +461,7 @@ func TestRetryExhaustion(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, data, config)
+	job, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
@@ -565,7 +565,7 @@ func TestRetryBackoff(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, data, config)
+	job, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
@@ -694,7 +694,7 @@ func TestJobExpiration(t *testing.T) {
 			},
 		}
 		data := &TestData{ID: fmt.Sprintf("success-%d", i)}
-		_, err := queue.Enqueue(action, data, config)
+		_, err := queue.Enqueue(context.Background(), action, data, config)
 		require.NoError(t, err, "Failed to enqueue job")
 	}
 
@@ -706,7 +706,7 @@ func TestJobExpiration(t *testing.T) {
 			},
 		}
 		data := &TestData{ID: fmt.Sprintf("fail-%d", i)}
-		_, err := queue.Enqueue(action, data, config)
+		_, err := queue.Enqueue(context.Background(), action, data, config)
 		require.NoError(t, err, "Failed to enqueue job")
 	}
 
@@ -738,7 +738,7 @@ func TestJobExpiration(t *testing.T) {
 	// Enqueue a new job to verify that the active jobs list is empty
 	action := &MockAction{}
 	data := &TestData{ID: "new-job"}
-	_, err := queue.Enqueue(action, data, config)
+	_, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 
 	// Wait for the new job to be processed
@@ -777,7 +777,7 @@ func TestArchiveLimit(t *testing.T) {
 			},
 		}
 		data := &TestData{ID: fmt.Sprintf("job-%d", i)}
-		_, err := queue.Enqueue(action, data, config)
+		_, err := queue.Enqueue(context.Background(), action, data, config)
 		require.NoError(t, err, "Failed to enqueue job")
 	}
 
@@ -854,7 +854,7 @@ func TestQueueOverflow(t *testing.T) {
 	}
 
 	// First enqueue the blocking job
-	_, err := queue.Enqueue(blockingAction, &TestData{ID: "blocking-job"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), blockingAction, &TestData{ID: "blocking-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Failed to enqueue blocking job")
 
 	// Trigger processing to get the blocking job running
@@ -873,7 +873,7 @@ func TestQueueOverflow(t *testing.T) {
 	// so we need to enqueue queueCapacity-1 jobs to fill it
 	for i := 0; i < queueCapacity-1; i++ {
 		jobID := fmt.Sprintf("regular-job-%d", i)
-		_, err := queue.Enqueue(regularAction, &TestData{ID: jobID}, RetryConfig{Enabled: false})
+		_, err := queue.Enqueue(context.Background(), regularAction, &TestData{ID: jobID}, RetryConfig{Enabled: false})
 		require.NoError(t, err, "Failed to enqueue regular job %d", i)
 	}
 
@@ -881,7 +881,7 @@ func TestQueueOverflow(t *testing.T) {
 	close(queueFilled)
 
 	// Try to enqueue one more job, which should fail with ErrQueueFull
-	_, err = queue.Enqueue(regularAction, &TestData{ID: "overflow-job"}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), regularAction, &TestData{ID: "overflow-job"}, RetryConfig{Enabled: false})
 	require.ErrorIs(t, err, ErrQueueFull, "Enqueue should fail with ErrQueueFull when queue is full")
 
 	// Now unblock the first job to make room
@@ -892,7 +892,7 @@ func TestQueueOverflow(t *testing.T) {
 	time.Sleep(20 * time.Millisecond) // Allow time for job to complete
 
 	// Now we should be able to enqueue a new job
-	_, err = queue.Enqueue(regularAction, &TestData{ID: "after-freeing-space"}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), regularAction, &TestData{ID: "after-freeing-space"}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Should be able to enqueue a job after making room")
 
 	// Process remaining jobs to clean up
@@ -984,7 +984,7 @@ func TestDropOldestJob(t *testing.T) {
 	}
 
 	// First enqueue the blocking job (will be running, not pending)
-	_, err := queue.Enqueue(blockingAction, &TestData{ID: "blocking-job"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), blockingAction, &TestData{ID: "blocking-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Failed to enqueue blocking job")
 
 	// Trigger processing to get the blocking job running
@@ -1005,11 +1005,11 @@ func TestDropOldestJob(t *testing.T) {
 	}
 
 	// Enqueue the first pending job (will be dropped)
-	_, err = queue.Enqueue(regularAction, &TestData{ID: pendingJobIDs[0]}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), regularAction, &TestData{ID: pendingJobIDs[0]}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Failed to enqueue job %s", pendingJobIDs[0])
 
 	// Enqueue the second pending job (exempt from dropping)
-	job2, err := queue.Enqueue(regularAction, &TestData{ID: pendingJobIDs[1]}, RetryConfig{Enabled: false})
+	job2, err := queue.Enqueue(context.Background(), regularAction, &TestData{ID: pendingJobIDs[1]}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Failed to enqueue job %s", pendingJobIDs[1])
 
 	// Mark the second job as exempt from dropping
@@ -1022,7 +1022,7 @@ func TestDropOldestJob(t *testing.T) {
 
 	// Now try to add a new job, which should cause the oldest pending job to be dropped
 	newJobID := "new-job"
-	_, err = queue.Enqueue(regularAction, &TestData{ID: newJobID}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), regularAction, &TestData{ID: newJobID}, RetryConfig{Enabled: false})
 	require.NoError(t, err, "Should be able to enqueue job with job dropping enabled")
 
 	// Check that one job has been dropped
@@ -1091,7 +1091,7 @@ func TestHangingJobTimeout(t *testing.T) {
 	// Enqueue the job in a goroutine so we don't block the test
 	go func() {
 		// Enqueue the job
-		job, err := queue.Enqueue(action, data, config)
+		job, err := queue.Enqueue(context.Background(), action, data, config)
 		assert.NoError(t, err, "Failed to enqueue job")
 		assert.NotNil(t, job, "Job should not be nil")
 
@@ -1162,7 +1162,7 @@ func TestContextCancellation(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, data, config)
+	job, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 
@@ -1301,7 +1301,7 @@ func TestStressTest(t *testing.T) {
 		data := &TestData{ID: fmt.Sprintf("stress-test-%d", i)}
 
 		// Enqueue the job
-		_, err := queue.Enqueue(action, data, config)
+		_, err := queue.Enqueue(context.Background(), action, data, config)
 		require.NoError(t, err, "Failed to enqueue job %d", i)
 	}
 
@@ -1373,7 +1373,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 				data := &TestData{ID: fmt.Sprintf("goroutine-%d-job-%d", goroutineID, j)}
 				config := RetryConfig{Enabled: false}
 
-				_, err := queue.Enqueue(action, data, config)
+				_, err := queue.Enqueue(context.Background(), action, data, config)
 				assert.NoError(t, err)
 			}
 		}(i)
@@ -1420,11 +1420,11 @@ func TestRecoveryFromPanic(t *testing.T) {
 	}
 
 	// Enqueue panic job
-	_, err := queue.Enqueue(panicAction, &TestData{ID: "panic-job"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), panicAction, &TestData{ID: "panic-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Enqueue normal job
-	_, err = queue.Enqueue(normalAction, &TestData{ID: "normal-job"}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), normalAction, &TestData{ID: "normal-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the jobs
@@ -1469,7 +1469,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	}
 
 	// Enqueue the job
-	_, err := queue.Enqueue(action, &TestData{ID: "long-running-job"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), action, &TestData{ID: "long-running-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the job to start it
@@ -1528,7 +1528,7 @@ func TestRateLimiting(t *testing.T) {
 		data := &TestData{ID: fmt.Sprintf("job-%d", i)}
 		config := RetryConfig{Enabled: false}
 
-		_, err := queue.Enqueue(action, data, config)
+		_, err := queue.Enqueue(context.Background(), action, data, config)
 		switch {
 		case err == nil:
 			successCount.Add(1)
@@ -1571,7 +1571,7 @@ func TestJobCancellation(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, &TestData{ID: "cancel-test"}, RetryConfig{Enabled: false})
+	job, err := queue.Enqueue(context.Background(), action, &TestData{ID: "cancel-test"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the job to start it
@@ -1655,7 +1655,7 @@ func TestLongRunningJobs(t *testing.T) {
 	}
 
 	// Enqueue the long job first
-	_, err := queue.Enqueue(longAction, &TestData{ID: "long-job"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), longAction, &TestData{ID: "long-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the long job to start it
@@ -1666,7 +1666,7 @@ func TestLongRunningJobs(t *testing.T) {
 
 	// Enqueue the short jobs
 	for i, action := range shortActions {
-		_, err := queue.Enqueue(action, &TestData{ID: fmt.Sprintf("short-job-%d", i)}, RetryConfig{Enabled: false})
+		_, err := queue.Enqueue(context.Background(), action, &TestData{ID: fmt.Sprintf("short-job-%d", i)}, RetryConfig{Enabled: false})
 		require.NoError(t, err)
 	}
 
@@ -1740,7 +1740,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	}
 
 	// Enqueue jobs with different actions
-	_, err := queue.Enqueue(successAction, &TestData{ID: "success-job"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), successAction, &TestData{ID: "success-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the success job
@@ -1755,7 +1755,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	assert.Equal(t, "Success Action", stats.ActionStats[successType].Description, "Description should match")
 
 	// Enqueue fail job
-	_, err = queue.Enqueue(failAction, &TestData{ID: "fail-job"}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), failAction, &TestData{ID: "fail-job"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 
 	// Process the fail job
@@ -1773,7 +1773,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	assert.False(t, stats.ActionStats[failType].LastExecutionTime.IsZero(), "Last execution time should be set")
 
 	// Enqueue retry job
-	_, err = queue.Enqueue(retryAction, &TestData{ID: "retry-job"}, RetryConfig{
+	_, err = queue.Enqueue(context.Background(), retryAction, &TestData{ID: "retry-job"}, RetryConfig{
 		Enabled:      true,
 		MaxRetries:   1,
 		InitialDelay: 10 * time.Millisecond,
@@ -1866,7 +1866,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 		}
 		data := &TestData{ID: fmt.Sprintf("job-%d", i)}
 
-		_, err := queue.Enqueue(action, data, RetryConfig{Enabled: false})
+		_, err := queue.Enqueue(context.Background(), action, data, RetryConfig{Enabled: false})
 		require.NoError(t, err)
 
 		// Process in batches to avoid overwhelming the queue
@@ -1926,13 +1926,13 @@ func TestStatsToJSON(t *testing.T) {
 	}
 
 	// Enqueue and process the success job
-	_, err := queue.Enqueue(successAction, &TestData{ID: "json-success"}, RetryConfig{Enabled: false})
+	_, err := queue.Enqueue(context.Background(), successAction, &TestData{ID: "json-success"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 	queue.ProcessImmediately(ctx)
 	time.Sleep(50 * time.Millisecond)
 
 	// Enqueue and process the fail job
-	_, err = queue.Enqueue(failAction, &TestData{ID: "json-fail"}, RetryConfig{Enabled: false})
+	_, err = queue.Enqueue(context.Background(), failAction, &TestData{ID: "json-fail"}, RetryConfig{Enabled: false})
 	require.NoError(t, err)
 	queue.ProcessImmediately(ctx)
 	time.Sleep(50 * time.Millisecond)

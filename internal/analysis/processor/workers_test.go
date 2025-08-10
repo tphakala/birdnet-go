@@ -34,6 +34,7 @@ type MockJobQueue struct {
 
 // mockEnqueueCall tracks the arguments passed to Enqueue
 type mockEnqueueCall struct {
+	ctx    context.Context
 	action jobqueue.Action
 	data   any
 	config jobqueue.RetryConfig
@@ -71,12 +72,13 @@ func (m *MockJobQueue) StopWithTimeout(timeout time.Duration) error {
 	return nil
 }
 
-func (m *MockJobQueue) Enqueue(action jobqueue.Action, data any, config jobqueue.RetryConfig) (*jobqueue.Job, error) {
+func (m *MockJobQueue) Enqueue(ctx context.Context, action jobqueue.Action, data any, config jobqueue.RetryConfig) (*jobqueue.Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Record this call
 	m.enqueueCalls = append(m.enqueueCalls, mockEnqueueCall{
+		ctx:    ctx,
 		action: action,
 		data:   data,
 		config: config,
@@ -329,7 +331,7 @@ func TestStartWorkerPool(t *testing.T) {
 	}
 
 	// Call the function with a single worker
-	processor.startWorkerPool(1)
+	processor.startWorkerPool()
 
 	// Verify the cancel function was stored
 	if processor.workerCancel == nil {
@@ -592,8 +594,8 @@ func TestEnqueueTask(t *testing.T) {
 		err := stoppedProcessor.EnqueueTask(task)
 		if err == nil {
 			t.Errorf("Expected error when enqueueing to stopped queue, got nil")
-		} else if !strings.Contains(err.Error(), "job queue has been stopped") {
-			t.Errorf("Expected error to contain 'job queue has been stopped', got %v", err)
+		} else if !errors.Is(err, jobqueue.ErrQueueStopped) {
+			t.Errorf("Expected error to be ErrQueueStopped, got %v", err)
 		}
 	})
 
@@ -640,9 +642,9 @@ func TestEnqueueTask(t *testing.T) {
 				},
 			}
 
-			// Enqueue the task, but don't fail the test if we get a "queue full" error
+			// Enqueue the task, but don't fail the test if we get a queue full error
 			err := tinyProcessor.EnqueueTask(task)
-			if err != nil && !strings.Contains(err.Error(), "queue is full") {
+			if err != nil && !errors.Is(err, jobqueue.ErrQueueFull) {
 				t.Errorf("Unexpected error: %v", err)
 			}
 		}
@@ -730,8 +732,8 @@ func TestEnqueueTaskBasic(t *testing.T) {
 	err := processor.EnqueueTask(nil)
 	if err == nil {
 		t.Errorf("Expected error for nil task, got nil")
-	} else if !strings.Contains(err.Error(), "cannot enqueue nil task") {
-		t.Errorf("Expected error to contain 'cannot enqueue nil task', got %v", err)
+	} else if !errors.Is(err, ErrNilTask) {
+		t.Errorf("Expected error to be ErrNilTask, got %v", err)
 	}
 
 	// Test case 2: Nil action
@@ -743,8 +745,8 @@ func TestEnqueueTaskBasic(t *testing.T) {
 	err = processor.EnqueueTask(task)
 	if err == nil {
 		t.Errorf("Expected error for nil action, got nil")
-	} else if !strings.Contains(err.Error(), "cannot enqueue task with nil action") {
-		t.Errorf("Expected error to contain 'cannot enqueue task with nil action', got %v", err)
+	} else if !errors.Is(err, ErrNilAction) {
+		t.Errorf("Expected error to be ErrNilAction, got %v", err)
 	}
 
 	// Test case 3: Successful enqueue
@@ -1443,8 +1445,8 @@ func BenchmarkEnqueueTask(b *testing.B) {
 		// Get retry configuration for the action
 		retryConfig := getJobQueueRetryConfig(task.Action)
 
-		// Enqueue the task to our mock queue without locking
-		_, err := mockQueue.Enqueue(&ActionAdapter{action: task.Action}, task.Detection, retryConfig)
+		// Enqueue the task to our mock queue without locking  
+		_, err := mockQueue.Enqueue(context.Background(), &ActionAdapter{action: task.Action}, task.Detection, retryConfig)
 		return err
 	}
 

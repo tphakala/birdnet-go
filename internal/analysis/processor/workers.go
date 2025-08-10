@@ -4,11 +4,11 @@ package processor
 import (
 	"context"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TaskType defines types of tasks that can be handled by the worker.
@@ -16,6 +16,19 @@ type TaskType int
 
 const (
 	TaskTypeAction TaskType = iota // Represents an action task type
+)
+
+// Sentinel errors for processor operations
+var (
+	ErrNilTask = errors.Newf("cannot enqueue nil task").
+		Component("analysis.processor").
+		Category(errors.CategoryValidation).
+		Build()
+	
+	ErrNilAction = errors.Newf("cannot enqueue task with nil action").
+		Component("analysis.processor").
+		Category(errors.CategoryValidation).
+		Build()
 )
 
 // Task represents a unit of work, encapsulating the detection and the action to be performed.
@@ -30,7 +43,7 @@ var testRetryConfigOverride func(action Action) (jobqueue.RetryConfig, bool)
 
 // startWorkerPool initializes the job queue for task processing.
 // This is kept for backward compatibility but now simply ensures the job queue is started.
-func (p *Processor) startWorkerPool(numWorkers int) {
+func (p *Processor) startWorkerPool() {
 	// Create a cancellable context for the job queue
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -40,7 +53,12 @@ func (p *Processor) startWorkerPool(numWorkers int) {
 	// Ensure the job queue is started with our context
 	p.JobQueue.StartWithContext(ctx)
 
-	log.Printf("Job queue started with max capacity of %d jobs", p.JobQueue.GetMaxJobs())
+	logger := GetLogger()
+	logger.Info("Job queue started", 
+		"max_capacity", p.JobQueue.GetMaxJobs(),
+		"component", "analysis.processor",
+		"operation", "job_queue_start",
+	)
 }
 
 // getJobQueueRetryConfig extracts the retry configuration from an action
@@ -129,13 +147,16 @@ func sanitizeActionType(actionType string) string {
 // EnqueueTask adds a task directly to the job queue for processing.
 func (p *Processor) EnqueueTask(task *Task) error {
 	if task == nil {
-		return fmt.Errorf("cannot enqueue nil task")
+		return ErrNilTask
 	}
 
 	// Validate the task
 	if task.Action == nil {
-		return fmt.Errorf("cannot enqueue task with nil action")
+		return ErrNilAction
 	}
+
+	// Cache logger for this function to avoid repeated GetLogger() calls
+	logger := GetLogger()
 
 	// Get action description for logging
 	actionDesc := task.Action.GetDescription()
@@ -154,19 +175,26 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		}
 
 		// Log the action description and species to provide more context
-		log.Printf("📬 Enqueuing task '%s' for species '%s' with retry config: enabled=%v, maxRetries=%d",
-			sanitizedDesc, speciesName, jqRetryConfig.Enabled, jqRetryConfig.MaxRetries)
+		logger.Debug("Enqueuing task", 
+			"task_description", sanitizedDesc,
+			"species", speciesName,
+			"retry_enabled", jqRetryConfig.Enabled,
+			"max_retries", jqRetryConfig.MaxRetries)
 	}
 
 	// Enqueue the task directly to the job queue
-	job, err := p.JobQueue.Enqueue(&ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
+	// TODO: Pass proper context when EnqueueTask signature is updated to accept context
+	ctx := context.Background()
+	job, err := p.JobQueue.Enqueue(ctx, &ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
 	if err != nil {
 		// Handle specific error types with appropriate messages
 		switch {
 		case strings.Contains(err.Error(), "queue is full"):
 			queueSize := p.JobQueue.GetMaxJobs()
 			// Log with action description for better context
-			log.Printf("❌ Job queue is full (capacity: %d), dropping task '%s'", queueSize, sanitizedDesc)
+			logger.Warn("Job queue is full, dropping task", 
+				"queue_capacity", queueSize,
+				"task_description", sanitizedDesc)
 
 			// Suggest increasing queue size if this happens frequently
 			return fmt.Errorf("job queue is full (capacity: %d), dropping task '%s': %w",
@@ -174,7 +202,8 @@ func (p *Processor) EnqueueTask(task *Task) error {
 
 		case strings.Contains(err.Error(), "queue has been stopped"):
 			// Log with action description for better context
-			log.Printf("❌ Cannot enqueue task '%s': job queue has been stopped", sanitizedDesc)
+			logger.Error("Cannot enqueue task, job queue has been stopped", 
+				"task_description", sanitizedDesc)
 			return fmt.Errorf("job queue has been stopped, cannot enqueue task '%s': %w",
 				sanitizedDesc, sanitizeError(err))
 
@@ -184,7 +213,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 			// Double-check that the error message is fully sanitized
 			sanitizedErrStr := sanitizeString(sanitizedErr.Error())
 			// Log with action description for better context
-			log.Printf("❌ Failed to enqueue task '%s': %v", sanitizedDesc, sanitizedErrStr)
+			logger.Error("Failed to enqueue task", 
+				"task_description", sanitizedDesc,
+				"error", sanitizedErrStr)
 			return fmt.Errorf("failed to enqueue task '%s': %w", sanitizedDesc, sanitizeError(err))
 		}
 	}
@@ -196,8 +227,10 @@ func (p *Processor) EnqueueTask(task *Task) error {
 		}
 
 		// Log with action description for better context
-		log.Printf("✅ Task '%s' enqueued as job %s (species: %s)",
-			sanitizedDesc, job.ID, speciesName)
+		logger.Debug("Task enqueued successfully",
+			"task_description", sanitizedDesc,
+			"job_id", job.ID,
+			"species", speciesName)
 	}
 
 	return nil

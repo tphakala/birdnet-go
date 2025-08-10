@@ -3,7 +3,6 @@ package processor
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +15,7 @@ import (
 
 type ExecuteCommandAction struct {
 	Command string
-	Params  map[string]interface{}
+	Params  map[string]any
 }
 
 // GetDescription returns a description of the action
@@ -24,8 +23,9 @@ func (a ExecuteCommandAction) GetDescription() string {
 	return fmt.Sprintf("Execute command: %s", a.Command)
 }
 
-func (a ExecuteCommandAction) Execute(data interface{}) error {
-	log.Printf("[analysis/processor/execute] Executing command: %s params: %v\n", a.Command, a.Params)
+func (a ExecuteCommandAction) Execute(data any) error {
+	logger := GetLogger()
+	logger.Info("Executing command", "command", a.Command, "params", a.Params)
 
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
@@ -45,7 +45,7 @@ func (a ExecuteCommandAction) Execute(data interface{}) error {
 		return fmt.Errorf("error building arguments: %w", err)
 	}
 
-	log.Printf("[analysis/processor/execute] Command: %s, Args: %v\n", cmdPath, args)
+	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
 
 	// Create command with validated path and arguments
 	cmd := exec.Command(cmdPath, args...)
@@ -59,7 +59,7 @@ func (a ExecuteCommandAction) Execute(data interface{}) error {
 		return fmt.Errorf("error executing command: %w, output: %s", err, string(output))
 	}
 
-	log.Printf("[analysis/processor/execute] Command executed successfully: %s", string(output))
+	logger.Info("Command executed successfully", "output", string(output))
 	return nil
 }
 
@@ -90,7 +90,7 @@ func validateCommandPath(command string) (string, error) {
 }
 
 // buildSafeArguments creates a sanitized list of command arguments
-func buildSafeArguments(params map[string]interface{}, note *datastore.Note) ([]string, error) {
+func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, error) {
 	// Pre-allocate slice with capacity for all parameters
 	args := make([]string, 0, len(params))
 
@@ -140,7 +140,7 @@ func isValidParamName(name string) bool {
 }
 
 // sanitizeValue converts and validates a value to string
-func sanitizeValue(value interface{}) (string, error) {
+func sanitizeValue(value any) (string, error) {
 	// Convert to string and validate
 	str := fmt.Sprintf("%v", value)
 
@@ -175,7 +175,7 @@ func getCleanEnvironment() []string {
 }
 
 // getNoteValueByName retrieves a value from a Note by field name using reflection
-func getNoteValueByName(note *datastore.Note, paramName string) interface{} {
+func getNoteValueByName(note *datastore.Note, paramName string) any {
 	val := reflect.ValueOf(*note)
 	fieldVal := val.FieldByName(paramName)
 

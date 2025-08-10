@@ -169,9 +169,7 @@ func formatProgressLine(filename string, duration time.Duration, chunkCount, tot
 	availableSpace := termWidth - len(baseFormat) - colorCodesLen
 
 	// Ensure minimum width
-	if availableSpace < 10 {
-		availableSpace = 10
-	}
+	availableSpace = max(availableSpace, 10)
 
 	// Truncate filename if needed
 	truncatedFilename := truncateString(filename, availableSpace)
@@ -292,15 +290,12 @@ func processChunk(ctx context.Context, chunk audioChunk, settings *conf.Settings
 func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk,
 	resultChan chan []datastore.Note, errorChan chan error, settings *conf.Settings) {
 
-	for i := 0; i < numWorkers; i++ {
+	for workerID := range numWorkers {
 		go func(workerID int) {
-			if settings.Debug {
-				fmt.Printf("DEBUG: Worker %d started\n", workerID)
-			}
+			logger := GetLogger()
+			logger.Debug("Worker started", "worker_id", workerID, "component", "analysis.file", "operation", "worker_start")
 			defer func() {
-				if settings.Debug {
-					fmt.Printf("DEBUG: Worker %d finished\n", workerID)
-				}
+				logger.Debug("Worker finished", "worker_id", workerID, "component", "analysis.file", "operation", "worker_finish")
 			}()
 
 			for chunk := range chunkChan {
@@ -315,13 +310,11 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 				}
 
 				if err := processChunk(ctx, chunk, settings, resultChan, errorChan); err != nil {
-					if settings.Debug {
-						fmt.Printf("DEBUG: Worker %d encountered error: %v\n", workerID, err)
-					}
+					logger.Warn("Worker encountered error", "worker_id", workerID, "error", err, "component", "analysis.file", "operation", "process_chunk")
 					return
 				}
 			}
-		}(i)
+		}(workerID)
 	}
 }
 
@@ -347,9 +340,10 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	// Set number of workers to 1
 	numWorkers := 1
 
-	if settings.Debug {
-		fmt.Printf("DEBUG: Starting analysis with %d total chunks and %d workers\n", totalChunks, numWorkers)
-	}
+	logger.Debug("Starting analysis",
+		"total_chunks", totalChunks,
+		"num_workers", numWorkers,
+		"file", filename)
 
 	// Setup processing channels
 	processingChannels := setupProcessingChannels()
@@ -377,7 +371,6 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 	// Start the collector that manages analysis results and errors
 	go collectResults(
 		ctx,
-		settings,
 		totalChunks,
 		&chunkCount,
 		&eofReached,
@@ -395,23 +388,19 @@ func processAudioFile(settings *conf.Settings, audioInfo *myaudio.AudioInfo, ctx
 		errHolder,
 	)
 
-	if settings.Debug {
-		fmt.Println("DEBUG: Finished reading audio file")
-	}
+	logger.Debug("Finished reading audio file")
 	close(processingChannels.chunkChan)
 
-	if settings.Debug {
-		fmt.Println("DEBUG: Waiting for processing to complete")
-	}
+	logger.Debug("Waiting for processing to complete")
 	<-processingChannels.doneChan // Wait for processing to complete
 
 	// Handle errors
-	if err := handleProcessingErrors(err, errHolder.getError(), settings); err != nil {
+	if err := handleProcessingErrors(err, errHolder.getError()); err != nil {
 		return allNotes, err
 	}
 
 	// Display results
-	displayProcessingResults(settings, filename, duration, chunkCount, startTime)
+	displayProcessingResults(filename, duration, chunkCount, startTime)
 
 	return allNotes, nil
 }
@@ -430,7 +419,6 @@ func setupProcessingChannels() processingChannels {
 // collectResults collects and processes analysis results
 func collectResults(
 	ctx context.Context,
-	settings *conf.Settings,
 	expectedChunks int,
 	chunkCount *int64,
 	eofReached *int32,
@@ -439,9 +427,7 @@ func collectResults(
 	errHolder *errorHolder,
 	shutdown func(),
 ) {
-	if settings.Debug {
-		fmt.Println("DEBUG: Result collector started")
-	}
+	logger.Debug("Result collector started")
 	defer shutdown()
 
 	for i := 1; i <= expectedChunks; i++ {
@@ -450,8 +436,10 @@ func collectResults(
 			errHolder.setError(ctx.Err())
 			return
 		case notes := <-channels.resultChan:
-			if settings.Debug {
-				fmt.Printf("DEBUG: Received results for chunk #%d\n", atomic.LoadInt64(chunkCount))
+			// Sample logging: only log every 10th chunk to reduce overhead
+			currentChunkNum := atomic.LoadInt64(chunkCount)
+			if currentChunkNum % 10 == 0 || currentChunkNum == 1 {
+				logger.Debug("Received results for chunk", "chunk_number", currentChunkNum)
 			}
 			*allNotes = append(*allNotes, notes...)
 			atomic.AddInt64(chunkCount, 1)
@@ -459,10 +447,9 @@ func collectResults(
 			// If EOF was reached and we've processed all chunks we've sent, we're done
 			if atomic.LoadInt32(eofReached) == 1 &&
 				atomic.LoadInt64(chunkCount) > int64(i) {
-				if settings.Debug {
-					fmt.Printf("DEBUG: EOF reached and all chunks processed (actual chunks: %d, expected: %d)\n",
-						i, expectedChunks)
-				}
+				logger.Debug("EOF reached and all chunks processed",
+					"actual_chunks", i,
+					"expected_chunks", expectedChunks)
 				return
 			}
 
@@ -470,28 +457,22 @@ func collectResults(
 				return
 			}
 		case err := <-channels.errorChan:
-			if settings.Debug {
-				fmt.Printf("DEBUG: Collector received error: %v\n", err)
-			}
+			logger.Warn("Collector received error", "error", err)
 			errHolder.setError(err)
 			return
 		case <-channels.eofChan:
-			handleEOFSignal(settings, eofReached, chunkCount, i)
+			handleEOFSignal(eofReached, chunkCount, i)
 		case <-time.After(5 * time.Second):
-			handleTimeout(settings, eofReached, chunkCount, i, expectedChunks, errHolder)
+			handleTimeout(eofReached, chunkCount, i, expectedChunks, errHolder)
 			return
 		}
 	}
-	if settings.Debug {
-		fmt.Println("DEBUG: Collector finished normally")
-	}
+	logger.Debug("Collector finished normally")
 }
 
 // handleEOFSignal processes EOF notification
-func handleEOFSignal(settings *conf.Settings, eofReached *int32, chunkCount *int64, currentChunk int) bool {
-	if settings.Debug {
-		fmt.Printf("DEBUG: Received EOF signal, waiting for remaining chunks to process\n")
-	}
+func handleEOFSignal(eofReached *int32, chunkCount *int64, currentChunk int) bool {
+	logger.Debug("Received EOF signal, waiting for remaining chunks to process")
 	// Mark EOF as reached - we still need to process any chunks in flight
 	atomic.StoreInt32(eofReached, 1)
 
@@ -504,7 +485,6 @@ func handleEOFSignal(settings *conf.Settings, eofReached *int32, chunkCount *int
 
 // handleTimeout handles timeouts during processing
 func handleTimeout(
-	settings *conf.Settings,
 	eofReached *int32,
 	chunkCount *int64,
 	currentChunk int,
@@ -513,15 +493,11 @@ func handleTimeout(
 ) {
 	// If EOF was reached but we're still waiting for chunks, something is wrong
 	if atomic.LoadInt32(eofReached) == 1 {
-		if settings.Debug {
-			fmt.Printf("DEBUG: Timeout waiting after EOF, processed %d chunks\n", currentChunk-1)
-		}
+		logger.Warn("Timeout waiting after EOF", "processed_chunks", currentChunk-1)
 		return
 	}
 
-	if settings.Debug {
-		fmt.Printf("DEBUG: Timeout waiting for chunk %d results\n", currentChunk)
-	}
+	logger.Warn("Timeout waiting for chunk results", "chunk_number", currentChunk)
 	currentCount := atomic.LoadInt64(chunkCount)
 	errHolder.setError(fmt.Errorf("timeout waiting for analysis results (processed %d/%d chunks)", currentCount, totalChunks))
 }
@@ -543,7 +519,6 @@ func processAudioData(
 			chunkData,
 			isEOF,
 			filePosition,
-			settings,
 			channels,
 			errHolder,
 		)
@@ -556,7 +531,6 @@ func handleAudioChunk(
 	chunkData []float32,
 	isEOF bool,
 	filePosition time.Time,
-	settings *conf.Settings,
 	channels processingChannels,
 	errHolder *errorHolder,
 ) error {
@@ -564,9 +538,7 @@ func handleAudioChunk(
 	if isEOF && len(chunkData) == 0 {
 		select {
 		case channels.eofChan <- struct{}{}:
-			if settings.Debug {
-				fmt.Println("DEBUG: Sent EOF signal without data")
-			}
+			logger.Debug("Sent EOF signal without data")
 		default:
 			// Channel full, that's okay
 		}
@@ -588,9 +560,7 @@ func handleAudioChunk(
 			if isEOF {
 				select {
 				case channels.eofChan <- struct{}{}:
-					if settings.Debug {
-						fmt.Println("DEBUG: Sent EOF signal with data")
-					}
+					logger.Debug("Sent EOF signal with data")
 				default:
 					// Channel full, that's okay
 				}
@@ -611,11 +581,9 @@ func handleAudioChunk(
 }
 
 // handleProcessingErrors processes errors from audio analysis
-func handleProcessingErrors(err, processingError error, settings *conf.Settings) error {
+func handleProcessingErrors(err, processingError error) error {
 	if err != nil {
-		if settings.Debug {
-			fmt.Printf("DEBUG: File processing error: %v\n", err)
-		}
+		logger.Error("File processing error", "error", err)
 		if errors.Is(err, context.Canceled) {
 			return ErrAnalysisCanceled
 		}
@@ -623,9 +591,7 @@ func handleProcessingErrors(err, processingError error, settings *conf.Settings)
 	}
 
 	if processingError != nil {
-		if settings.Debug {
-			fmt.Printf("DEBUG: Processing error encountered: %v\n", processingError)
-		}
+		logger.Error("Processing error encountered", "error", processingError)
 		if errors.Is(processingError, context.Canceled) {
 			return ErrAnalysisCanceled
 		}
@@ -636,10 +602,11 @@ func handleProcessingErrors(err, processingError error, settings *conf.Settings)
 }
 
 // displayProcessingResults shows final processing statistics
-func displayProcessingResults(settings *conf.Settings, filename string, duration time.Duration, chunkCount int64, startTime time.Time) {
-	if settings.Debug {
-		fmt.Println("DEBUG: Analysis completed successfully")
-	}
+func displayProcessingResults(filename string, duration time.Duration, chunkCount int64, startTime time.Time) {
+	logger.Info("Analysis completed successfully",
+		"file", filename,
+		"duration", duration,
+		"processing_time", time.Since(startTime))
 
 	// Calculate actual processed chunks
 	actualChunks := int(atomic.LoadInt64(&chunkCount)) - 1

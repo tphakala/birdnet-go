@@ -4,7 +4,6 @@ package processor
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -57,7 +56,8 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 	mqttClient, err := mqtt.NewClient(settings, p.Metrics)
 	if err != nil {
 		// Log an error if client creation fails
-		log.Printf("failed to create MQTT client: %s", err)
+		logger := GetLogger()
+		logger.Error("Failed to create MQTT client", "error", err)
 		return
 	}
 
@@ -68,7 +68,8 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 	// Attempt to connect to the MQTT broker
 	if err := mqttClient.Connect(ctx); err != nil {
 		// Log an error if the connection attempt fails
-		log.Printf("failed to connect to MQTT broker: %s", err)
+		logger := GetLogger()
+		logger.Error("Failed to connect to MQTT broker", "error", err)
 		return
 	}
 

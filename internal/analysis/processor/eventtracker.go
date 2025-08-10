@@ -2,7 +2,6 @@
 package processor
 
 import (
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -155,8 +154,10 @@ func (et *EventTracker) TrackEvent(species string, eventType EventType) bool {
 			effectiveTimeout = time.Duration(speciesConfig.Interval) * time.Second
 		} else if speciesConfig.Interval < 0 {
 			// Log a warning for negative interval values
-			log.Printf("Warning: Negative interval (%d) configured for species '%s'. Using default interval instead.",
-				speciesConfig.Interval, species)
+			logger := GetLogger()
+			logger.Warn("Negative interval configured for species, using default interval instead",
+				"interval", speciesConfig.Interval,
+				"species", species)
 			// Continue using the default interval
 		}
 		// For zero interval, silently use the default interval (existing behavior)

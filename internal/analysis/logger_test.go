@@ -90,6 +90,9 @@ func TestLoggerLevels(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse Info log JSON: %v", err)
 	}
+	if logEntry["level"] != "INFO" {
+		t.Errorf("Expected level 'INFO', got %v", logEntry["level"])
+	}
 	if logEntry["msg"] != "info message" {
 		t.Error("Info message should appear at Info level")
 	}
@@ -100,6 +103,9 @@ func TestLoggerLevels(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse Warn log JSON: %v", err)
 	}
+	if logEntry["level"] != "WARN" {
+		t.Errorf("Expected level 'WARN', got %v", logEntry["level"])
+	}
 	if logEntry["msg"] != "warn message" {
 		t.Error("Warn message should appear at Info level")
 	}
@@ -109,6 +115,9 @@ func TestLoggerLevels(t *testing.T) {
 	l.Error("error message")
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse Error log JSON: %v", err)
+	}
+	if logEntry["level"] != "ERROR" {
+		t.Errorf("Expected level 'ERROR', got %v", logEntry["level"])
 	}
 	if logEntry["msg"] != "error message" {
 		t.Error("Error message should appear at Info level")
