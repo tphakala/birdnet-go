@@ -293,9 +293,9 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 	for workerID := range numWorkers {
 		go func(workerID int) {
 			logger := GetLogger()
-			logger.Debug("Worker started", "worker_id", workerID)
+			logger.Debug("Worker started", "worker_id", workerID, "component", "analysis.file", "operation", "worker_start")
 			defer func() {
-				logger.Debug("Worker finished", "worker_id", workerID)
+				logger.Debug("Worker finished", "worker_id", workerID, "component", "analysis.file", "operation", "worker_finish")
 			}()
 
 			for chunk := range chunkChan {
@@ -310,7 +310,7 @@ func startWorkers(ctx context.Context, numWorkers int, chunkChan chan audioChunk
 				}
 
 				if err := processChunk(ctx, chunk, settings, resultChan, errorChan); err != nil {
-					logger.Warn("Worker encountered error", "worker_id", workerID, "error", err)
+					logger.Warn("Worker encountered error", "worker_id", workerID, "error", err, "component", "analysis.file", "operation", "process_chunk")
 					return
 				}
 			}

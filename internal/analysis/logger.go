@@ -91,7 +91,7 @@ func LogSoundLevelProcessorRegistrationFailed(source, sourceType, component stri
 	GetLogger().Error("Failed to register sound level processor",
 		"source", source,
 		"source_type", sourceType,
-		"error", err.Error(),
+		"error", err,
 		"component", component,
 	)
 }
@@ -141,7 +141,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			}
 			GetLogger().Warn("Sound level processor registration error",
 				"error_number", i+1,
-				"error", err.Error(),
+				"error", err,
 				"component", "analysis.soundlevel",
 				"operation", "register_sound_level_processors",
 			)

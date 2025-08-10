@@ -819,17 +819,16 @@ func NewTypedJobQueue[T any]() *TypedJobQueue[T] {
 	}
 }
 
-// EnqueueTyped adds a typed job to the queue
-func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config RetryConfig) (*TypedJob[T], error) {
+// EnqueueTypedWithContext adds a typed job to the queue with context support
+func (q *TypedJobQueue[T]) EnqueueTypedWithContext(ctx context.Context, action TypedAction[T], data T, config RetryConfig) (*TypedJob[T], error) {
 	// Create an adapter that converts the typed action to a regular action
 	adapter := &typedActionAdapter[T]{
 		action: action,
 		data:   data,
 	}
 
-	// Enqueue the job using the adapter
-	// TODO: Update EnqueueTyped to accept context parameter in future version
-	job, err := q.Enqueue(context.Background(), adapter, nil, config)
+	// Enqueue the job using the adapter with provided context
+	job, err := q.Enqueue(ctx, adapter, nil, config)
 	if err != nil {
 		return nil, err
 	}
@@ -850,6 +849,11 @@ func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config Re
 	}
 
 	return typedJob, nil
+}
+
+// EnqueueTyped adds a typed job to the queue (backward compatibility)
+func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config RetryConfig) (*TypedJob[T], error) {
+	return q.EnqueueTypedWithContext(context.Background(), action, data, config)
 }
 
 // typedActionAdapter adapts a TypedAction to the Action interface

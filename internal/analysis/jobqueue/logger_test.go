@@ -162,8 +162,18 @@ func TestLogJobFailed(t *testing.T) {
 	
 	logEntry2 := parseLogEntry(t, buf)
 	
+	// Should be Error for permanent failure
+	if logEntry2["level"] != "ERROR" {
+		t.Errorf("Expected level 'ERROR' for permanent failure, got %v", logEntry2["level"])
+	}
 	if logEntry2["msg"] != "Job failed permanently" {
 		t.Errorf("Expected message 'Job failed permanently' for final failure, got %v", logEntry2["msg"])
+	}
+	if logEntry2["attempt"] != float64(5) {
+		t.Errorf("Expected attempt 5 for permanent failure, got %v", logEntry2["attempt"])
+	}
+	if logEntry2["max_attempts"] != float64(5) {
+		t.Errorf("Expected max_attempts 5 for permanent failure, got %v", logEntry2["max_attempts"])
 	}
 }
 
@@ -213,6 +223,9 @@ func TestLogJobDropped(t *testing.T) {
 	if logEntry["reason"] != "queue_full" {
 		t.Errorf("Expected reason 'queue_full', got %v", logEntry["reason"])
 	}
+	if logEntry["level"] != "WARN" {
+		t.Errorf("Expected level 'WARN' for dropped job, got %v", logEntry["level"])
+	}
 	if logEntry["msg"] != "Job dropped" {
 		t.Errorf("Expected message 'Job dropped', got %v", logEntry["msg"])
 	}
@@ -233,6 +246,9 @@ func TestLogQueueStopped(t *testing.T) {
 	}
 	if logEntry["pending_jobs"] != float64(5) {
 		t.Errorf("Expected pending_jobs 5, got %v", logEntry["pending_jobs"])
+	}
+	if logEntry["level"] != "INFO" {
+		t.Errorf("Expected level 'INFO' for queue stopped, got %v", logEntry["level"])
 	}
 	if logEntry["msg"] != "Queue processing stopped" {
 		t.Errorf("Expected message 'Queue processing stopped', got %v", logEntry["msg"])

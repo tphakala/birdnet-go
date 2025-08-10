@@ -53,7 +53,7 @@ func GetLogger() *slog.Logger {
 	once.Do(func() {
 		if logger == nil {
 			// Initialize logger with default if not already done
-			logger = slog.Default().With("service", serviceName)
+			logger = slog.Default().With("service", serviceName, "component", "jobqueue")
 		}
 	})
 	return logger
