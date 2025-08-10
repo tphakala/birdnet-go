@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // JobQueue manages a queue of jobs that can be retried
@@ -129,7 +130,12 @@ func (q *JobQueue) StopWithTimeout(timeout time.Duration) error {
 	case <-c:
 		return nil
 	case <-q.clock.After(timeout):
-		return fmt.Errorf("timed out waiting for jobs to complete after %v", timeout)
+		return errors.Newf("timed out waiting for jobs to complete after %v", timeout).
+			Component("analysis.jobqueue").
+			Category(errors.CategoryTimeout).
+			Context("operation", "stop_with_timeout").
+			Context("timeout", timeout).
+			Build()
 	}
 }
 
@@ -182,7 +188,15 @@ func (q *JobQueue) Enqueue(action Action, data interface{}, config RetryConfig) 
 			stats.Dropped++
 			q.stats.ActionStats[actionKey] = stats
 
-			return nil, fmt.Errorf("%w: maximum queue size (%d) reached", ErrQueueFull, q.maxJobs)
+			return nil, errors.New(ErrQueueFull).
+				Component("analysis.jobqueue").
+				Category(errors.CategoryLimit).
+				Context("operation", "enqueue").
+				Context("max_jobs", q.maxJobs).
+				Context("current_jobs", len(q.jobs)).
+				Context("action_type", fmt.Sprintf("%T", action)).
+				Context("action_description", action.GetDescription()).
+				Build()
 		}
 	}
 
@@ -537,7 +551,15 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 		defer func() {
 			if r := recover(); r != nil {
 				// Convert panic to error
-				resultChan <- result{err: fmt.Errorf("job execution panicked: %v", r)}
+				panicErr := errors.Newf("job execution panicked: %v", r).
+					Component("analysis.jobqueue").
+					Category(errors.CategoryProcessing).
+					Context("operation", "execute_job").
+					Context("job_id", job.ID).
+					Context("action_type", fmt.Sprintf("%T", job.Action)).
+					Context("panic_value", fmt.Sprintf("%v", r)).
+					Build()
+				resultChan <- result{err: panicErr}
 			}
 		}()
 
@@ -555,9 +577,24 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 		// Context timeout or cancellation
 		ctxErr := execCtx.Err()
 		if ctxErr == context.DeadlineExceeded {
-			err = fmt.Errorf("job execution timed out after 30 seconds: %w", ctxErr)
+			err = errors.New(ctxErr).
+				Component("analysis.jobqueue").
+				Category(errors.CategoryTimeout).
+				Context("operation", "execute_job").
+				Context("job_id", job.ID).
+				Context("action_type", fmt.Sprintf("%T", job.Action)).
+				Context("timeout", "30s").
+				Context("attempt", job.Attempts).
+				Build()
 		} else {
-			err = fmt.Errorf("job execution was cancelled: %w", ctxErr)
+			err = errors.New(ctxErr).
+				Component("analysis.jobqueue").
+				Category(errors.CategoryCancellation).
+				Context("operation", "execute_job").
+				Context("job_id", job.ID).
+				Context("action_type", fmt.Sprintf("%T", job.Action)).
+				Context("attempt", job.Attempts).
+				Build()
 		}
 	}
 
@@ -839,7 +876,13 @@ func (a *typedActionAdapter[T]) Execute(data interface{}) error {
 		if typedData, ok := data.(T); ok {
 			return a.action.Execute(typedData)
 		}
-		return fmt.Errorf("invalid data type: expected %T, got %T", a.data, data)
+		return errors.Newf("invalid data type: expected %T, got %T", a.data, data).
+			Component("analysis.jobqueue").
+			Category(errors.CategoryValidation).
+			Context("operation", "execute_typed_action").
+			Context("expected_type", fmt.Sprintf("%T", a.data)).
+			Context("actual_type", fmt.Sprintf("%T", data)).
+			Build()
 	}
 	return a.action.Execute(a.data)
 }
