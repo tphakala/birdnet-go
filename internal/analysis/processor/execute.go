@@ -2,15 +2,19 @@
 package processor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 type ExecuteCommandAction struct {
@@ -30,36 +34,93 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	// Type assertion to check if data is of type Detections
 	detection, ok := data.(Detections)
 	if !ok {
-		return fmt.Errorf("ExecuteScriptAction requires Detections type, got %T", data)
+		return errors.Newf("ExecuteCommandAction requires Detections type, got %T", data).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "execute_command").
+			Context("expected_type", "Detections").
+			Build()
 	}
 
 	// Validate and resolve the command path
 	cmdPath, err := validateCommandPath(a.Command)
 	if err != nil {
-		return fmt.Errorf("invalid command path: %w", err)
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_command_path").
+			Context("command_type", "external_script").
+			Build()
 	}
 
 	// Building the command line arguments with validation
 	args, err := buildSafeArguments(a.Params, &detection.Note)
 	if err != nil {
-		return fmt.Errorf("error building arguments: %w", err)
+		// Extract parameter keys for better error context
+		var paramKeys []string
+		for key := range a.Params {
+			paramKeys = append(paramKeys, key)
+		}
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_command_arguments").
+			Context("param_count", len(a.Params)).
+			Context("param_keys", strings.Join(paramKeys, ", ")).
+			Build()
 	}
 
 	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
 
-	// Create command with validated path and arguments
-	cmd := exec.Command(cmdPath, args...)
+	// Create command with timeout to prevent hanging processes
+	// Use 5 minute timeout for external scripts
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	
+	cmd := exec.CommandContext(ctx, cmdPath, args...)
 
 	// Set a clean environment
 	cmd.Env = getCleanEnvironment()
 
-	// Execute the command
+	// Execute the command with timing
+	// Timing information helps identify performance issues and hanging scripts
+	startTime := time.Now()
 	output, err := cmd.CombinedOutput()
+	executionDuration := time.Since(startTime)
+	
 	if err != nil {
-		return fmt.Errorf("error executing command: %w, output: %s", err, string(output))
+		// Get exit code if available
+		exitCode := -1
+		if cmd.ProcessState != nil {
+			exitCode = cmd.ProcessState.ExitCode()
+		}
+		
+		// Command execution failures are not retryable because:
+		// - Script logic errors won't be fixed by retrying
+		// - Non-zero exit codes indicate the script ran but failed
+		// - Retrying could cause duplicate side effects (notifications, file writes)
+		// Context includes execution metrics for performance analysis
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryCommandExecution).
+			Context("operation", "execute_command").
+			Context("execution_duration_ms", executionDuration.Milliseconds()).
+			Context("exit_code", exitCode).
+			Context("output_size_bytes", len(output)).
+			Context("retryable", false). // Command execution failures are typically not retryable
+			Build()
 	}
 
-	logger.Info("Command executed successfully", "output", string(output))
+	// Log command success with size and truncated preview to avoid excessive log size
+	outputStr := string(output)
+	preview := outputStr
+	if len(outputStr) > 200 {
+		preview = outputStr[:200] + "... (truncated)"
+	}
+	logger.Info("Command executed successfully", 
+		"output_size_bytes", len(output),
+		"execution_duration_ms", executionDuration.Milliseconds(),
+		"output_preview", preview)
 	return nil
 }
 
@@ -70,19 +131,59 @@ func validateCommandPath(command string) (string, error) {
 
 	// Check if it's an absolute path
 	if !filepath.IsAbs(command) {
-		return "", fmt.Errorf("command must use absolute path: %s", command)
+		return "", errors.Newf("command must use absolute path").
+			Component("analysis.processor").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_command_path").
+			Context("security_check", "absolute_path_required").
+			Context("path_classification", "relative_path").
+			Context("validation_rule", "absolute_paths_only").
+			Context("retryable", false). // Path validation failure is permanent
+			Build()
 	}
 
 	// Verify the file exists and is executable
 	info, err := os.Stat(command)
 	if err != nil {
-		return "", fmt.Errorf("command not found: %w", err)
+		// Classify OS errors for better telemetry and debugging
+		// Using switch statement instead of if-else chain per gocritic best practices
+		// This pattern provides clearer intent and better performance for multiple conditions
+		var classification string
+		switch {
+		case os.IsNotExist(err):
+			classification = "file_not_found"
+		case os.IsPermission(err):
+			classification = "permission_denied"
+		default:
+			classification = "file_access_error"
+		}
+		
+		// File system errors are not retryable as they indicate permanent issues:
+		// - Missing files won't suddenly appear
+		// - Permission denials require manual intervention
+		// - Other file access errors typically indicate corruption or system issues
+		return "", errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryFileIO).
+			Context("operation", "validate_command_path").
+			Context("security_check", "file_existence").
+			Context("error_classification", classification).
+			Context("retryable", false). // File existence issues are permanent
+			Build()
 	}
 
 	// Check file permissions
 	if runtime.GOOS != "windows" {
 		if info.Mode()&0o111 == 0 {
-			return "", fmt.Errorf("command is not executable: %s", command)
+			return "", errors.Newf("command is not executable").
+				Component("analysis.processor").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_command_path").
+				Context("security_check", "executable_permission").
+				Context("file_mode", info.Mode().String()).
+				Context("os_platform", runtime.GOOS).
+				Context("retryable", false). // Permission issues are permanent
+				Build()
 		}
 	}
 
@@ -94,10 +195,27 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 	// Pre-allocate slice with capacity for all parameters
 	args := make([]string, 0, len(params))
 
-	for key, value := range params {
+	// Get sorted keys for deterministic CLI argument order
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	for _, key := range keys {
+		value := params[key]
+		
 		// Validate parameter name (allow only alphanumeric and _-)
 		if !isValidParamName(key) {
-			return nil, fmt.Errorf("invalid parameter name: %s", key)
+			return nil, errors.Newf("invalid parameter name").
+				Component("analysis.processor").
+				Category(errors.CategoryValidation).
+				Context("operation", "build_command_arguments").
+				Context("security_check", "parameter_name_validation").
+				Context("validation_rule", "alphanumeric_underscore_dash_only").
+				Context("param_name", key).
+				Context("retryable", false). // Parameter validation failure is permanent
+				Build()
 		}
 
 		// Get value from Note or use default
@@ -109,7 +227,15 @@ func buildSafeArguments(params map[string]any, note *datastore.Note) ([]string, 
 		// Convert and validate the value
 		strValue, err := sanitizeValue(noteValue)
 		if err != nil {
-			return nil, fmt.Errorf("invalid value for parameter %s: %w", key, err)
+			return nil, errors.New(err).
+				Component("analysis.processor").
+				Category(errors.CategoryValidation).
+				Context("operation", "build_command_arguments").
+				Context("security_check", "value_sanitization").
+				Context("value_type", fmt.Sprintf("%T", noteValue)).
+				Context("param_name", key).
+				Context("retryable", false). // Value sanitization failure is permanent
+				Build()
 		}
 
 		// Handle quoting for values that need it
