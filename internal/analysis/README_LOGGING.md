@@ -120,7 +120,7 @@ func TestWithLogger(t *testing.T) {
     // Replace package logger for testing
     oldLogger := logger
     logger = testLogger
-    defer func() { logger = oldLogger }()
+    t.Cleanup(func() { logger = oldLogger })
     
     // Run test...
     
