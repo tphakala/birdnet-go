@@ -192,6 +192,7 @@ tasks:
     deps: [frontend-install]
     cmds:
       - npm run check:all
+      - npm run ast:all
 
   frontend-lint-fix:
     desc: Fix frontend linting issues automatically
@@ -221,6 +222,7 @@ tasks:
     deps: [frontend-install]
     cmds:
       - npm run check:all
+      - npm run ast:all
       - npm run test:ci
       - npm run audit:security
       - npm run analyze:circular

@@ -1,0 +1,65 @@
+ruleDirs: []
+rules:
+  - id: csrf-token-validation
+    message: 'CSRF token should be validated before use'
+    severity: error
+    language: typescript
+    rule:
+      pattern: |
+        const token = $$$TOKEN$$$;
+        $$$
+        headers: { 'X-Csrf-Token': token }
+      where:
+        TOKEN:
+          not:
+            contains:
+              any:
+                - pattern: 'getCsrfToken()'
+                - pattern: 'validateCsrfToken($$$)'
+
+  - id: unsafe-innerHTML-svelte
+    message: 'Using {@html} with user input - potential XSS'
+    severity: error
+    language: svelte
+    rule:
+      pattern: '{@html $VAR}'
+      where:
+        VAR:
+          any:
+            - matches: '$$$input$$$'
+            - matches: '$$$user$$$'
+            - matches: '$$$data.$$$'
+            - matches: '$$$response.$$$'
+          not:
+            matches: '$$$Icon'
+
+  - id: localstorage-xss-risk
+    message: 'localStorage data should be validated - XSS risk'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'JSON.parse(localStorage.getItem($KEY))'
+      not:
+        inside:
+          any:
+            - pattern: 'try { $$$ } catch { $$$ }'
+            - pattern: 'validate($$$)'
+            - pattern: 'sanitize($$$)'
+
+  - id: password-logging
+    message: 'Never log passwords or sensitive data'
+    severity: error
+    language: typescript
+    rule:
+      any:
+        - pattern: 'console.log($$$, $PASSWORD, $$$)'
+        - pattern: 'logger.$METHOD($$$, $PASSWORD, $$$)'
+      where:
+        PASSWORD:
+          any:
+            - matches: 'password'
+            - matches: '$$$Password'
+            - matches: 'token'
+            - matches: '$$$Token'
+            - matches: 'secret'
+            - matches: '$$$Secret'

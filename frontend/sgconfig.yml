@@ -1,0 +1,4 @@
+# ast-grep project configuration
+ruleDirs: []
+testConfigs: []
+utilDirs: []

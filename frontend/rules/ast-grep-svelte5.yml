@@ -1,0 +1,126 @@
+# Svelte 5 specific patterns and best practices
+ruleDirs: []
+rules:
+  - id: destructure-reactive-breaks-reactivity
+    message: 'Destructuring $state objects breaks reactivity - access properties directly'
+    severity: error
+    language: typescript
+    rule:
+      pattern: 'const { $$$PROPS } = $REACTIVE'
+      where:
+        REACTIVE:
+          any:
+            - matches: '$state($$$)'
+            - matches: '$derived($$$)'
+            - matches: '$props()'
+
+  - id: effect-cleanup-missing
+    message: '$effect with subscriptions/timers should return cleanup function'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: |
+        $effect(() => {
+          $$$
+          $SUBSCRIPTION
+          $$$
+        })
+      where:
+        SUBSCRIPTION:
+          any:
+            - matches: 'setInterval($$$)'
+            - matches: 'setTimeout($$$)'
+            - matches: 'addEventListener($$$)'
+            - matches: 'subscribe($$$)'
+            - matches: 'new EventSource($$$)'
+      not:
+        contains:
+          pattern: 'return () => { $$$ }'
+
+  - id: derived-side-effects
+    message: '$derived should be pure - move side effects to $effect'
+    severity: error
+    language: typescript
+    rule:
+      pattern: |
+        $derived($$$EXPR$$$)
+      where:
+        EXPR:
+          any:
+            - contains:
+                pattern: 'console.$METHOD($$$)'
+            - contains:
+                pattern: 'localStorage.setItem($$$)'
+            - contains:
+                pattern: 'sessionStorage.setItem($$$)'
+            - contains:
+                pattern: '$$$Actions.$METHOD($$$)'
+
+  - id: prefer-snippets-over-slots
+    message: 'Svelte 5 uses snippets instead of slots'
+    severity: info
+    language: svelte
+    rule:
+      any:
+        - pattern: '<slot name="$NAME" />'
+        - pattern: '<slot name="$NAME">$$$</slot>'
+        - pattern: '<div slot="$NAME">$$$</div>'
+
+  - id: rune-in-non-svelte-file
+    message: 'Svelte runes ($state, $derived, $effect) should only be used in .svelte files'
+    severity: error
+    language: typescript
+    file:
+      not: '*.svelte'
+    rule:
+      any:
+        - pattern: '$state($$$)'
+        - pattern: '$derived($$$)'
+        - pattern: '$effect($$$)'
+        - pattern: '$props($$$)'
+
+  - id: unnecessary-reactive-statement
+    message: 'Use $derived instead of reactive statements ($:) in Svelte 5'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '$: $VAR = $$$'
+      where:
+        VAR:
+          not:
+            any:
+              # Allow for DOM updates and side effects
+              - matches: 'document.$$$'
+              - matches: 'window.$$$'
+              - matches: '$$$Element'
+
+  - id: missing-snippet-type
+    message: 'Snippet props should be typed with Snippet<[Args]>'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'let { $$$, $SNIPPET, $$$ }: $TYPE = $props()'
+      where:
+        SNIPPET:
+          matches: '$$$snippet$$$'
+        TYPE:
+          not:
+            contains:
+              pattern: 'Snippet'
+
+  - id: state-in-loop-without-key
+    message: '$state in loops should have proper keying to avoid state confusion'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: |
+        {#each $ITEMS as $ITEM}
+          $$$
+          $state($$$)
+          $$$
+        {/each}
+      not:
+        pattern: |
+          {#each $ITEMS as $ITEM ($KEY)}
+            $$$
+          {/each}

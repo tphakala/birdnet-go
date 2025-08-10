@@ -1,0 +1,298 @@
+# Svelte 4 to Svelte 5 Migration Rules
+# These rules detect legacy Svelte 4 patterns that should be migrated to Svelte 5
+ruleDirs: []
+rules:
+  # Reactive Statements ($:) Detection
+  - id: legacy-reactive-statement
+    message: 'Legacy $: reactive statement - use $derived or $effect instead'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '$: $$$'
+    note: |
+      Svelte 5 replacement:
+      - For derived values: const value = $derived(...)
+      - For side effects: $effect(() => { ... })
+
+  - id: legacy-reactive-assignment
+    message: 'Legacy $: reactive assignment - use $derived instead'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '$: $VAR = $$$'
+    note: 'Use: const $VAR = $derived(...)'
+
+  # Export Let Detection
+  - id: legacy-export-let
+    message: "Legacy 'export let' - use $props() instead"
+    severity: warning
+    language: svelte
+    rule:
+      pattern: 'export let $PROP'
+    note: 'Use: let { $PROP } = $props()'
+
+  - id: legacy-export-let-default
+    message: "Legacy 'export let' with default - use $props() with destructuring default"
+    severity: warning
+    language: svelte
+    rule:
+      pattern: 'export let $PROP = $DEFAULT'
+    note: 'Use: let { $PROP = $DEFAULT } = $props()'
+
+  - id: legacy-export-rename
+    message: 'Legacy export renaming - use destructuring rename in $props()'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: 'export { $VAR as $ALIAS }'
+    note: 'Use: let { $ALIAS: $VAR } = $props()'
+
+  # Slot Detection
+  - id: legacy-slot-element
+    message: 'Legacy <slot> element - use snippets and {@render} instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<slot$$$>'
+    note: |
+      In child: {@render children?.()}
+      In parent: {#snippet children()}...{/snippet}
+
+  - id: legacy-named-slot
+    message: 'Legacy named slot - use snippet props instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<slot name="$NAME"$$$>'
+    note: |
+      In child: {@render $NAME?.()}
+      In parent: {#snippet $NAME()}...{/snippet}
+
+  - id: legacy-slot-attribute
+    message: 'Legacy slot attribute - use snippet definition instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<$TAG slot="$NAME"$$$>'
+    note: 'Use: {#snippet $NAME()}<$TAG>...{/snippet}'
+
+  - id: legacy-let-directive
+    message: 'Legacy let: directive - use snippet parameters instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: 'let:$VAR'
+    note: 'Use snippets with parameters: {#snippet item(data)}'
+
+  # Event Handler Detection
+  - id: legacy-on-directive
+    message: 'Legacy on: directive - use event attributes instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: 'on:$EVENT={$HANDLER}'
+    note: 'Use: on$EVENT={$HANDLER} (e.g., onclick={handler})'
+
+  - id: legacy-on-modifier
+    message: 'Legacy event modifier - handle in event function instead'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: 'on:$EVENT|$MODIFIER'
+    note: |
+      Move modifiers into handler:
+      - preventDefault: event.preventDefault() in handler
+      - stopPropagation: event.stopPropagation() in handler
+      - once: use wrapper function or import from svelte/legacy
+
+  - id: legacy-on-forward
+    message: 'Legacy event forwarding - use callback props instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: 'on:$EVENT'
+      where:
+        EVENT:
+          not:
+            regex: '='
+    note: 'Accept and spread event handlers as props'
+
+  - id: legacy-multiple-handlers
+    message: 'Multiple handlers for same event - combine into single handler'
+    severity: error
+    language: svelte
+    rule:
+      # This is tricky with ast-grep, but we can detect duplicates in same element
+      pattern: |
+        <$TAG $$$ATTRS1 on:$EVENT={$HANDLER1} $$$ATTRS2 on:$EVENT={$HANDLER2} $$$ATTRS3>
+    note: |
+      Combine handlers:
+      on$EVENT={(e) => { handler1(e); handler2(e); }}
+
+  # Component Event Detection
+  - id: legacy-create-event-dispatcher
+    message: 'Legacy createEventDispatcher - use callback props instead'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'createEventDispatcher'
+    note: |
+      Replace with callback props:
+      let { onEvent } = $props();
+      // Call as: onEvent?.(data)
+
+  - id: legacy-dispatch-usage
+    message: 'Legacy dispatch() call - use callback prop instead'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'dispatch($EVENT, $$$)'
+    note: 'Use callback props: onEvent?.(data)'
+
+  # Special Variables Detection
+  - id: legacy-double-dollar-props
+    message: 'Legacy $$props - use $props() without destructuring'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '$$props'
+    note: 'Use: let props = $props()'
+
+  - id: legacy-double-dollar-restprops
+    message: 'Legacy $$restProps - use rest in $props() destructuring'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '$$restProps'
+    note: 'Use: let { specific, ...rest } = $props()'
+
+  - id: legacy-double-dollar-slots
+    message: 'Legacy $$slots - check for snippet props instead'
+    severity: warning
+    language: svelte
+    rule:
+      pattern: '$$slots'
+    note: 'Check if snippets exist: if (snippetName) { ... }'
+
+  # Component Instantiation
+  - id: legacy-new-component
+    message: 'Legacy component instantiation - use mount() instead'
+    severity: error
+    language: typescript
+    rule:
+      pattern: 'new $COMPONENT({$$$})'
+      where:
+        COMPONENT:
+          regex: '^[A-Z]'
+    note: |
+      Use mount() from 'svelte':
+      import { mount } from 'svelte';
+      mount(Component, { target, props })
+
+  - id: legacy-component-methods
+    message: 'Legacy component methods - use new patterns'
+    severity: warning
+    language: typescript
+    rule:
+      any:
+        - pattern: '$component.$set($$$)'
+        - pattern: '$component.$on($$$)'
+        - pattern: '$component.$destroy()'
+    note: |
+      - $set: use reactive props with $state
+      - $on: pass event handlers as props
+      - $destroy: use unmount() from 'svelte'
+
+  # Svelte Options
+  - id: legacy-svelte-options-accessors
+    message: 'accessors option ignored in runes mode - use exports instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<svelte:options accessors$$$>'
+    note: 'Export functions to expose component API'
+
+  - id: legacy-svelte-options-immutable
+    message: 'immutable option ignored in runes mode'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<svelte:options immutable$$$>'
+    note: '$state handles immutability automatically'
+
+  # Store Patterns
+  - id: auto-subscription-store
+    message: '$ store auto-subscription - may need explicit subscription in runes mode'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '$$$STORE'
+      where:
+        STORE:
+          regex: "^\\$[a-z]"
+    note: 'In runes mode, stores need explicit subscription handling'
+
+  # Deprecated Elements
+  - id: legacy-svelte-component
+    message: 'svelte:component no longer necessary - components are dynamic by default'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<svelte:component this={$COMPONENT}$$$>'
+    note: 'Use: <$COMPONENT /> directly'
+
+  - id: legacy-svelte-fragment
+    message: 'svelte:fragment deprecated - use snippets instead'
+    severity: info
+    language: svelte
+    rule:
+      pattern: '<svelte:fragment$$$>'
+    note: 'No longer needed with snippets'
+
+  # Reactive Declarations at Wrong Level
+  - id: non-top-level-reactive-let
+    message: 'Reactive let only works at component top level - use $state() for nested reactivity'
+    severity: error
+    language: svelte
+    rule:
+      pattern: |
+        function $FUNC($$$) {
+          $$$
+          let $VAR = $$$
+          $$$
+        }
+    note: 'Use $state() for reactive values in functions'
+
+  # Lifecycle Hooks in Runes Mode
+  - id: legacy-before-update
+    message: 'beforeUpdate deprecated - use $effect.pre() instead'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'beforeUpdate($$$)'
+    note: 'Use $effect.pre(() => { ... })'
+
+  - id: legacy-after-update
+    message: 'afterUpdate deprecated - use $effect() instead'
+    severity: warning
+    language: typescript
+    rule:
+      pattern: 'afterUpdate($$$)'
+    note: 'Use $effect(() => { ... })'
+
+  # Attribute Syntax
+  - id: unquoted-complex-attribute
+    message: 'Complex attribute values must be quoted in Svelte 5'
+    severity: error
+    language: svelte
+    rule:
+      # Detect attributes with multiple segments not in quotes
+      pattern: '$ATTR=$PART1{$$$}$PART2'
+      where:
+        PART1:
+          not:
+            regex: '^"'
+        PART2:
+          not:
+            regex: '"$'
+    note: 'Wrap in quotes: attr="value{dynamic}text"'
