@@ -2,12 +2,12 @@
 package analysis
 
 import (
-	"io"
 	"log"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
-	
+
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -25,14 +25,14 @@ func init() {
 	logFilePath := filepath.Join("logs", "analysis.log")
 	initialLevel := slog.LevelInfo // Default to Info level
 	levelVar.Set(initialLevel)
-	
+
 	// Initialize the service-specific file logger
 	logger, closeLogger, err = logging.NewFileLogger(logFilePath, "analysis", levelVar)
 	if err != nil {
 		// Fallback: Log error to standard log and use console logging
 		log.Printf("Failed to initialize analysis file logger at %s: %v. Using console logging.", logFilePath, err)
-		// Set logger to a disabled handler to prevent nil panics, but respects level var
-		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: levelVar})
+		// Set logger to console handler for actual console output
+		fbHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: levelVar})
 		logger = slog.New(fbHandler).With("service", "analysis")
 		closeLogger = func() error { return nil } // No-op closer
 	}
@@ -57,4 +57,92 @@ func CloseLogger() error {
 		return closeLogger()
 	}
 	return nil
+}
+
+// Sound level structured logging functions
+
+// LogSoundLevelMQTTPublished logs successful MQTT publication of sound level data
+func LogSoundLevelMQTTPublished(topic, source string, bandCount int) {
+	GetLogger().Info("Published sound level data to MQTT",
+		"topic", topic,
+		"source", source,
+		"octave_bands", bandCount,
+		"component", "analysis.soundlevel",
+	)
+}
+
+// LogSoundLevelProcessorRegistered logs successful registration of sound level processor
+func LogSoundLevelProcessorRegistered(source, sourceType, component string) {
+	GetLogger().Info("Registered sound level processor",
+		"source", source,
+		"source_type", sourceType,
+		"component", "analysis.soundlevel",
+	)
+}
+
+// LogSoundLevelProcessorRegistrationFailed logs failed registration of sound level processor
+func LogSoundLevelProcessorRegistrationFailed(source, sourceType, component string, err error) {
+	GetLogger().Error("Failed to register sound level processor",
+		"source", source,
+		"source_type", sourceType,
+		"error", err.Error(),
+		"component", "analysis.soundlevel",
+	)
+}
+
+// LogSoundLevelProcessorUnregistered logs unregistration of sound level processor
+func LogSoundLevelProcessorUnregistered(source, sourceType, component string) {
+	GetLogger().Info("Unregistered sound level processor",
+		"source", source,
+		"source_type", sourceType,
+		"component", "analysis.soundlevel",
+	)
+}
+
+// LogSoundLevelRegistrationSummary logs the overall summary of sound level processor registrations
+func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams int, partialSuccess bool, errors []error) {
+	switch {
+	case successCount == totalCount:
+		GetLogger().Info("Successfully registered all sound level processors",
+			"registered_processors", successCount,
+			"active_streams", activeStreams,
+			"component", "analysis.soundlevel",
+		)
+	case successCount > 0:
+		GetLogger().Warn("Partially registered sound level processors",
+			"successful_processors", successCount,
+			"total_processors", totalCount,
+			"failed_processors", totalCount-successCount,
+			"active_streams", activeStreams,
+			"component", "analysis.soundlevel",
+		)
+		// Log first few errors for debugging
+		for i, err := range errors {
+			if i >= 3 {
+				GetLogger().Warn("Additional sound level processor registration errors",
+					"remaining_errors", len(errors)-3,
+					"component", "analysis.soundlevel",
+				)
+				break
+			}
+			GetLogger().Warn("Sound level processor registration error",
+				"error_number", i+1,
+				"error", err.Error(),
+				"component", "analysis.soundlevel",
+			)
+		}
+	default:
+		GetLogger().Error("Failed to register any sound level processors",
+			"total_failures", len(errors),
+			"component", "analysis.soundlevel",
+		)
+	}
+}
+
+// LogSoundLevelActiveStreamNotInConfig logs when an active RTSP stream is not in configuration
+func LogSoundLevelActiveStreamNotInConfig(url string) {
+	GetLogger().Warn("Found active RTSP stream not in configuration",
+		"rtsp_url", url,
+		"component", "analysis.soundlevel",
+	)
 }

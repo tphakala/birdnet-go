@@ -71,7 +71,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	}
 
 	// Enqueue the job
-	job, err := queue.Enqueue(action, data, config)
+	job, err := queue.Enqueue(context.Background(), action, data, config)
 	require.NoError(t, err, "Failed to enqueue job")
 	require.NotNil(t, job, "Job should not be nil")
 

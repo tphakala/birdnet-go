@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TaskType defines types of tasks that can be handled by the worker.
@@ -15,6 +16,19 @@ type TaskType int
 
 const (
 	TaskTypeAction TaskType = iota // Represents an action task type
+)
+
+// Sentinel errors for processor operations
+var (
+	ErrNilTask = errors.Newf("cannot enqueue nil task").
+		Component("analysis.processor").
+		Category(errors.CategoryValidation).
+		Build()
+	
+	ErrNilAction = errors.Newf("cannot enqueue task with nil action").
+		Component("analysis.processor").
+		Category(errors.CategoryValidation).
+		Build()
 )
 
 // Task represents a unit of work, encapsulating the detection and the action to be performed.
@@ -129,12 +143,12 @@ func sanitizeActionType(actionType string) string {
 // EnqueueTask adds a task directly to the job queue for processing.
 func (p *Processor) EnqueueTask(task *Task) error {
 	if task == nil {
-		return fmt.Errorf("cannot enqueue nil task")
+		return ErrNilTask
 	}
 
 	// Validate the task
 	if task.Action == nil {
-		return fmt.Errorf("cannot enqueue task with nil action")
+		return ErrNilAction
 	}
 
 	// Cache logger for this function to avoid repeated GetLogger() calls
@@ -165,7 +179,9 @@ func (p *Processor) EnqueueTask(task *Task) error {
 	}
 
 	// Enqueue the task directly to the job queue
-	job, err := p.JobQueue.Enqueue(&ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
+	// TODO: Pass proper context when EnqueueTask signature is updated to accept context
+	ctx := context.Background()
+	job, err := p.JobQueue.Enqueue(ctx, &ActionAdapter{action: task.Action}, task.Detection, jqRetryConfig)
 	if err != nil {
 		// Handle specific error types with appropriate messages
 		switch {

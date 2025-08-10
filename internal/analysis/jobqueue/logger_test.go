@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -246,14 +247,62 @@ func TestLogJobRetrying(t *testing.T) {
 	if logEntry["action_description"] != "Send MQTT message" {
 		t.Errorf("Expected action_description 'Send MQTT message', got %v", logEntry["action_description"])
 	}
-	if logEntry["attempt"] != float64(2) {
-		t.Errorf("Expected attempt 2, got %v", logEntry["attempt"])
+	if logEntry["current_attempt"] != float64(2) {
+		t.Errorf("Expected current_attempt 2, got %v", logEntry["current_attempt"])
 	}
 	if logEntry["max_attempts"] != float64(5) {
 		t.Errorf("Expected max_attempts 5, got %v", logEntry["max_attempts"])
 	}
-	if logEntry["msg"] != "Job retrying" {
-		t.Errorf("Expected message 'Job retrying', got %v", logEntry["msg"])
+	if logEntry["remaining_attempts"] != float64(3) { // 5 - 2 = 3
+		t.Errorf("Expected remaining_attempts 3, got %v", logEntry["remaining_attempts"])
+	}
+	if logEntry["msg"] != "Job retry execution starting" {
+		t.Errorf("Expected message 'Job retry execution starting', got %v", logEntry["msg"])
+	}
+}
+
+// TestLogJobRetryScheduled tests job retry scheduling logging
+func TestLogJobRetryScheduled(t *testing.T) {
+	buf, cleanup := setupTestLogger(slog.LevelWarn)
+	t.Cleanup(cleanup)
+	
+	// Create test data
+	nextRetryAt := time.Now().Add(30 * time.Second)
+	delay := 30 * time.Second
+	testErr := fmt.Errorf("connection timeout")
+	
+	LogJobRetryScheduled(context.TODO(), "job-retry-sched-1", "HTTP POST request", 2, 5, delay, nextRetryAt, testErr)
+	
+	logEntry := parseLogEntry(t, buf)
+	
+	// Assert JSON fields
+	if logEntry["job_id"] != "job-retry-sched-1" {
+		t.Errorf("Expected job_id 'job-retry-sched-1', got %v", logEntry["job_id"])
+	}
+	if logEntry["action_description"] != "HTTP POST request" {
+		t.Errorf("Expected action_description 'HTTP POST request', got %v", logEntry["action_description"])
+	}
+	if logEntry["failed_attempt"] != float64(2) {
+		t.Errorf("Expected failed_attempt 2, got %v", logEntry["failed_attempt"])
+	}
+	if logEntry["max_attempts"] != float64(5) {
+		t.Errorf("Expected max_attempts 5, got %v", logEntry["max_attempts"])
+	}
+	if logEntry["remaining_attempts"] != float64(3) { // 5 - 2 = 3
+		t.Errorf("Expected remaining_attempts 3, got %v", logEntry["remaining_attempts"])
+	}
+	if logEntry["retry_delay_ms"] != float64(30000) { // 30 seconds = 30000ms
+		t.Errorf("Expected retry_delay_ms 30000, got %v", logEntry["retry_delay_ms"])
+	}
+	if logEntry["error"] != "connection timeout" {
+		t.Errorf("Expected error 'connection timeout', got %v", logEntry["error"])
+	}
+	if logEntry["msg"] != "Job scheduled for retry after failure" {
+		t.Errorf("Expected message 'Job scheduled for retry after failure', got %v", logEntry["msg"])
+	}
+	// Note: next_retry_at is a formatted timestamp, we just check it exists
+	if _, exists := logEntry["next_retry_at"]; !exists {
+		t.Errorf("Expected next_retry_at field to exist")
 	}
 }
 

@@ -153,7 +153,7 @@ func getActionKey(action Action) string {
 }
 
 // Enqueue adds a job to the queue
-func (q *JobQueue) Enqueue(action Action, data any, config RetryConfig) (*Job, error) {
+func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config RetryConfig) (*Job, error) {
 	if action == nil {
 		return nil, ErrNilAction
 	}
@@ -169,7 +169,7 @@ func (q *JobQueue) Enqueue(action Action, data any, config RetryConfig) (*Job, e
 	// Check if queue is full and handle accordingly
 	if len(q.jobs) >= q.maxJobs {
 		// If DropOldestOnFull is enabled, try to make room
-		if !q._dropOldestPendingJob() {
+		if !q._dropOldestPendingJob(ctx) {
 			// Could not drop any job, queue is full
 			q.droppedJobs++
 			q.stats.DroppedJobs++
@@ -188,8 +188,6 @@ func (q *JobQueue) Enqueue(action Action, data any, config RetryConfig) (*Job, e
 			q.stats.ActionStats[actionKey] = stats
 
 			return nil, errors.New(ErrQueueFull).
-				Component("analysis.jobqueue").
-				Category(errors.CategoryLimit).
 				Context("operation", "enqueue").
 				Context("max_jobs", q.maxJobs).
 				Context("current_jobs", len(q.jobs)).
@@ -244,7 +242,7 @@ func (q *JobQueue) Enqueue(action Action, data any, config RetryConfig) (*Job, e
 // _dropOldestPendingJob removes the oldest pending job from the queue
 // to make room for a new job. Returns true if a job was dropped.
 // IMPORTANT: This method must be called with q.mu already locked.
-func (q *JobQueue) _dropOldestPendingJob() bool {
+func (q *JobQueue) _dropOldestPendingJob(ctx context.Context) bool {
 	// For testing queue overflow, respect the global AllowJobDropping flag
 	if !AllowJobDropping {
 		return false
@@ -287,7 +285,7 @@ func (q *JobQueue) _dropOldestPendingJob() bool {
 	stats.Dropped++
 	q.stats.ActionStats[actionKey] = stats
 
-	LogJobDropped(context.Background(), oldestJob.ID, oldestJob.Action.GetDescription())
+	LogJobDropped(ctx, oldestJob.ID, oldestJob.Action.GetDescription())
 	return true
 }
 
@@ -648,7 +646,8 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 			delay := calculateBackoffDelay(job.Config, job.Attempts, q.clock)
 			job.NextRetryAt = q.clock.Now().Add(delay)
 
-			LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
+			// Log detailed retry scheduling information
+			LogJobRetryScheduled(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, delay, job.NextRetryAt, err)
 		}
 	} else {
 		// Job succeeded
@@ -830,7 +829,8 @@ func (q *TypedJobQueue[T]) EnqueueTyped(action TypedAction[T], data T, config Re
 	}
 
 	// Enqueue the job using the adapter
-	job, err := q.Enqueue(adapter, nil, config)
+	// TODO: Update EnqueueTyped to accept context parameter in future version
+	job, err := q.Enqueue(context.Background(), adapter, nil, config)
 	if err != nil {
 		return nil, err
 	}

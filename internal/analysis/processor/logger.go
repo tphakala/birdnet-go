@@ -2,9 +2,9 @@
 package processor
 
 import (
-	"io"
 	"log"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	
@@ -33,8 +33,8 @@ func init() {
 	if err != nil {
 		// Fallback: Log error to standard log and use console logging
 		log.Printf("Failed to initialize processor file logger at %s: %v. Using console logging.", logFilePath, err)
-		// Set logger to a disabled handler to prevent nil panics, but respects level var
-		fbHandler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: processorLevelVar})
+		// Set logger to console handler for actual console output
+		fbHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: processorLevelVar})
 		processorLogger = slog.New(fbHandler).With("service", serviceName)
 		processorCloseFunc = func() error { return nil } // No-op closer
 	}
