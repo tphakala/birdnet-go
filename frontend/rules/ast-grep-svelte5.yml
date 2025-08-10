@@ -106,7 +106,6 @@ rules:
             - pattern: '$: if ($$$) { $$$ }'
             - pattern: '$: { $$$ }'
 
-
   - id: state-in-loop-without-key
     message: '$state in loops should have proper keying to avoid state confusion'
     severity: warning
