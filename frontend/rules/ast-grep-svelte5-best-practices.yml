@@ -12,8 +12,8 @@ rules:
       where:
         STATE:
           any:
-            - matches: '$state($$$)'
-            - matches: '$state.raw($$$)'
+            - pattern: '$state($$$)'
+            - pattern: '$state.raw($$$)'
     note: |
       Keep the object intact:
       const obj = $state({ x: 1, y: 2 });
@@ -28,16 +28,16 @@ rules:
       where:
         EXPR:
           any:
-            - contains: 'console.'
-            - contains: 'localStorage'
-            - contains: 'sessionStorage'
-            - contains: '.push('
-            - contains: '.pop('
-            - contains: '.shift('
-            - contains: '.unshift('
-            - contains: '.splice('
-            - contains: 'alert('
-            - contains: 'confirm('
+            - regex: 'console\.'
+            - regex: 'localStorage'
+            - regex: 'sessionStorage'
+            - regex: '\.push\('
+            - regex: '\.pop\('
+            - regex: '\.shift\('
+            - regex: '\.unshift\('
+            - regex: '\.splice\('
+            - regex: 'alert\('
+            - regex: 'confirm\('
     note: 'Move side effects to $effect(() => { ... })'
 
   - id: effect-without-cleanup
@@ -54,13 +54,17 @@ rules:
       where:
         SUBSCRIPTION:
           any:
-            - matches: 'addEventListener($$$)'
-            - matches: 'setInterval($$$)'
-            - matches: 'setTimeout($$$)'
-            - matches: '.subscribe($$$)'
-            - matches: 'new $OBSERVER($$$)'
+            - pattern: 'addEventListener($$$)'
+            - pattern: 'setInterval($$$)'
+            - pattern: 'setTimeout($$$)'
+            - pattern: '.subscribe($$$)'
+            - pattern: 'new $OBSERVER($$$)'
       not:
-        contains: 'return () =>'
+        pattern: |  
+          $effect(() => {
+            $$$
+            return () => $$$
+          })
     note: |
       Return cleanup function:
       $effect(() => {
@@ -92,7 +96,7 @@ rules:
       where:
         DEFAULT:
           not:
-            matches: 'undefined'
+            pattern: 'undefined'
     note: 'Parent must provide non-undefined value when using bind:'
 
   - id: snippet-without-optional-chaining
@@ -104,7 +108,7 @@ rules:
       where:
         SNIPPET:
           not:
-            contains: '?'
+            regex: '\?'
     note: 'Use: {@render snippet?.()}'
 
   - id: children-without-optional
@@ -124,14 +128,7 @@ rules:
       pattern: '$ARR.$METHOD($$$)'
       where:
         METHOD:
-          any:
-            - matches: 'push'
-            - matches: 'pop'
-            - matches: 'shift'
-            - matches: 'unshift'
-            - matches: 'splice'
-            - matches: 'sort'
-            - matches: 'reverse'
+          regex: '^(push|pop|shift|unshift|splice|sort|reverse)$'
       not:
         inside:
           pattern: '$ARR = $ARR'
@@ -173,7 +170,7 @@ rules:
             any:
               - regex: '^(div|span|button|input|select|textarea|form|section|article|header|footer|main|nav|aside|ul|ol|li|p|a|img|svg|path|g|circle|rect|line)$'
               - regex: '^svelte:'
-              - contains: '.'
+              - regex: '\.'
     note: 'Use PascalCase for components: <MyComponent />'
 
   # Performance Patterns
@@ -187,11 +184,11 @@ rules:
         EXPR:
           all:
             - any:
-                - contains: '.filter('
-                - contains: '.reduce('
-                - contains: '.sort('
-                - contains: 'JSON.parse('
-                - contains: 'JSON.stringify('
+                - regex: '\.filter\('
+                - regex: '\.reduce\('
+                - regex: '\.sort\('
+                - regex: 'JSON\.parse\('
+                - regex: 'JSON\.stringify\('
             # Only if expression is complex (contains chaining)
             - regex: "\\)\\."
     note: |
@@ -249,12 +246,12 @@ rules:
       where:
         SNIPPET:
           any:
-            - matches: 'children'
-            - contains: 'snippet'
-            - contains: 'Snippet'
+            - pattern: 'children'
+            - regex: 'snippet'
+            - regex: 'Snippet'
         TYPE:
           not:
-            contains: 'Snippet'
+            regex: 'Snippet'
     note: |
       Import and use Snippet type:
       import type { Snippet } from 'svelte';
@@ -271,9 +268,9 @@ rules:
       pattern: '$STATE1 === $STATE2'
       where:
         STATE1:
-          contains: '$state'
+          regex: '\$state'
         STATE2:
-          contains: '$state'
+          regex: '\$state'
     note: 'Compare specific properties instead'
 
   - id: spreading-reactive-object
@@ -284,7 +281,7 @@ rules:
       pattern: '{ ...$STATE }'
       where:
         STATE:
-          contains: '$state'
+          regex: '\$state'
     note: 'Keep objects intact or use individual properties'
 
   - id: async-in-derived

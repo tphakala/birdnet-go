@@ -26,12 +26,12 @@ rules:
       where:
         VAR:
           any:
-            - matches: '$$$input$$$'
-            - matches: '$$$user$$$'
-            - matches: '$$$data.$$$'
-            - matches: '$$$response.$$$'
+            - regex: '(?i).*input.*'
+            - regex: '(?i).*user.*'
+            - regex: '(?i).*data\..*'
+            - regex: '(?i).*response\..*'
           not:
-            matches: '$$$Icon'
+            regex: '(?i).*Icon'
 
   - id: localstorage-xss-risk
     message: 'localStorage data should be validated - XSS risk'
@@ -42,6 +42,7 @@ rules:
       not:
         inside:
           any:
+            - pattern: 'try { $$$ } catch ($$$) { $$$ }'
             - pattern: 'try { $$$ } catch { $$$ }'
             - pattern: 'validate($$$)'
             - pattern: 'sanitize($$$)'
@@ -57,9 +58,9 @@ rules:
       where:
         PASSWORD:
           any:
-            - matches: 'password'
-            - matches: '$$$Password'
-            - matches: 'token'
-            - matches: '$$$Token'
-            - matches: 'secret'
-            - matches: '$$$Secret'
+            - regex: '(?i)password'
+            - regex: '(?i).*password'
+            - regex: '(?i)token'
+            - regex: '(?i).*token'
+            - regex: '(?i)secret'
+            - regex: '(?i).*secret'

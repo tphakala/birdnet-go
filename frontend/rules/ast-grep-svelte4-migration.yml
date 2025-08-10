@@ -99,6 +99,8 @@ rules:
     language: svelte
     rule:
       pattern: 'on:$EVENT|$MODIFIER'
+    fix:
+      pattern: 'on$EVENT={(e) => { /* TODO: Apply $MODIFIER */ $HANDLER(e) }}'
     note: |
       Move modifiers into handler:
       - preventDefault: event.preventDefault() in handler
@@ -119,12 +121,14 @@ rules:
 
   - id: legacy-multiple-handlers
     message: 'Multiple handlers for same event - combine into single handler'
-    severity: error
+    severity: error  
     language: svelte
     rule:
-      # This is tricky with ast-grep, but we can detect duplicates in same element
-      pattern: |
-        <$TAG $$$ATTRS1 on:$EVENT={$HANDLER1} $$$ATTRS2 on:$EVENT={$HANDLER2} $$$ATTRS3>
+      pattern: '<$TAG $$$>'
+      has:
+        all:
+          - pattern: 'on:$EVENT={$HANDLER1}'
+          - pattern: 'on:$EVENT={$HANDLER2}'
     note: |
       Combine handlers:
       on$EVENT={(e) => { handler1(e); handler2(e); }}
@@ -239,7 +243,7 @@ rules:
     language: svelte
     rule:
       pattern: '<svelte:component this={$COMPONENT}$$$>'
-    note: 'Use: <$COMPONENT /> directly'
+    note: 'Use: <{component} /> where component is the variable or expression'
 
   - id: legacy-svelte-fragment
     message: 'svelte:fragment deprecated - use snippets instead'
@@ -250,15 +254,15 @@ rules:
     note: 'No longer needed with snippets'
 
   # Reactive Declarations at Wrong Level
-  - id: non-top-level-reactive-let
-    message: 'Reactive let only works at component top level - use $state() for nested reactivity'
+  - id: non-top-level-reactive-statement
+    message: 'Reactive statement only works at component top level - use $state() for nested reactivity'
     severity: error
     language: svelte
     rule:
       pattern: |
         function $FUNC($$$) {
           $$$
-          let $VAR = $$$
+          $: $ASSIGN
           $$$
         }
     note: 'Use $state() for reactive values in functions'

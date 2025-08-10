@@ -6,7 +6,7 @@ rules:
     severity: error
     language: svelte
     rule:
-      pattern: '<svg$$$>$$$</svg>'
+      pattern: '<svg $$>$$</svg>'
 
   - id: no-direct-date-methods
     message: 'Use getLocalDateString() instead of toISOString() for dates'
@@ -25,7 +25,7 @@ rules:
       pattern: 'console.$METHOD($$$)'
       not:
         inside:
-          pattern: "import { loggers } from '$lib/utils/logger'$$$"
+          pattern: "import { logger } from '$lib/utils/logger'"
 
   - id: missing-error-context
     message: 'Logger errors should include context object'
@@ -33,9 +33,6 @@ rules:
     language: typescript
     rule:
       pattern: 'logger.error($MSG, $ERROR)'
-      where:
-        ERROR:
-          matches: 'error'
       not:
         pattern: 'logger.error($MSG, $ERROR, { $$$ })'
 
@@ -60,11 +57,11 @@ rules:
       where:
         EXPR:
           any:
-            - matches: '$$$.filter($$$).map($$$)'
-            - matches: '$$$.reduce($$$)'
-            - matches: '$$$.sort($$$)'
-            - matches: 'JSON.parse($$$)'
-            - matches: 'JSON.stringify($$$)'
+            - regex: '\.filter\(.*\)\.map\('
+            - regex: '\.reduce\('
+            - regex: '\.sort\('
+            - regex: 'JSON\.parse\('
+            - regex: 'JSON\.stringify\('
 
   # API Safety
   - id: missing-error-handling-fetch
