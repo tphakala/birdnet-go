@@ -191,8 +191,7 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 				Context("operation", "enqueue").
 				Context("max_jobs", q.maxJobs).
 				Context("current_jobs", len(q.jobs)).
-				Context("action_type", fmt.Sprintf("%T", action)).
-				Context("action_description", action.GetDescription()).
+				Context("action_type", action.GetDescription()).
 				Build()
 		}
 	}

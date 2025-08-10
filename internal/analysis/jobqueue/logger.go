@@ -39,8 +39,11 @@ func init() {
 		log.Printf("Failed to initialize jobqueue file logger at %s: %v. Using console logging.", logFilePath, err)
 		// Set logger to console handler for actual console output
 		fbHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: levelVar})
-		logger = slog.New(fbHandler).With("service", serviceName)
+		logger = slog.New(fbHandler).With("service", serviceName, "component", "jobqueue")
 		closeLogger = func() error { return nil } // No-op closer
+	} else {
+		// Add component field to the successfully initialized file logger
+		logger = logger.With("component", "jobqueue")
 	}
 }
 
@@ -141,7 +144,7 @@ func LogQueueStats(ctx context.Context, pending, running, completed, failed int)
 func LogJobDropped(ctx context.Context, jobID, actionDesc string) {
 	args := []any{
 		"job_id", jobID,
-		"action_description", actionDesc,
+		"action_type", actionDesc,
 		"reason", "queue_full",
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
@@ -155,7 +158,11 @@ func LogQueueStopped(ctx context.Context, reason string, details ...any) {
 	args := []any{
 		"reason", reason,
 	}
-	if len(details) > 0 && len(details)%2 == 0 {
+	if len(details) > 0 {
+		if len(details)%2 != 0 {
+			// Append marker for odd length to prevent silent data loss
+			details = append(details, "missing_value")
+		}
 		args = append(args, details...)
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
@@ -169,8 +176,8 @@ func LogJobRetrying(ctx context.Context, jobID, actionDesc string, attempt, maxA
 	remainingAttempts := maxAttempts - attempt
 	args := []any{
 		"job_id", jobID,
-		"action_description", actionDesc,
-		"current_attempt", attempt,
+		"action_type", actionDesc,
+		"attempt", attempt,
 		"max_attempts", maxAttempts,
 		"remaining_attempts", remainingAttempts,
 	}
@@ -185,13 +192,13 @@ func LogJobRetryScheduled(ctx context.Context, jobID, actionDesc string, attempt
 	remainingAttempts := maxAttempts - attempt
 	args := []any{
 		"job_id", jobID,
-		"action_description", actionDesc,
-		"failed_attempt", attempt,
+		"action_type", actionDesc,
+		"attempt", attempt,
 		"max_attempts", maxAttempts,
 		"remaining_attempts", remainingAttempts,
 		"retry_delay_ms", delay.Milliseconds(),
-		"next_retry_at", nextRetryAt.Format(time.RFC3339),
-		"error", lastErr.Error(),
+		"next_retry_at", nextRetryAt,
+		"error", lastErr,
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
 		args = append(args, "trace_id", traceID)
@@ -203,7 +210,7 @@ func LogJobRetryScheduled(ctx context.Context, jobID, actionDesc string, attempt
 func LogJobSuccess(ctx context.Context, jobID, actionDesc string, attempt int) {
 	args := []any{
 		"job_id", jobID,
-		"action_description", actionDesc,
+		"action_type", actionDesc,
 		"attempt", attempt,
 		"first_attempt", attempt == 1,
 	}

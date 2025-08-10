@@ -117,6 +117,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			"active_streams", activeStreams,
 			"partial_success", false,
 			"component", "analysis.soundlevel",
+			"operation", "register_sound_level_processors",
 		)
 	case successCount > 0:
 		GetLogger().Warn("Partially registered sound level processors",
@@ -126,6 +127,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			"active_streams", activeStreams,
 			"partial_success", true,
 			"component", "analysis.soundlevel",
+			"operation", "register_sound_level_processors",
 		)
 		// Log first few errors for debugging
 		for i, err := range errors {
@@ -133,6 +135,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 				GetLogger().Warn("Additional sound level processor registration errors",
 					"remaining_errors", len(errors)-3,
 					"component", "analysis.soundlevel",
+					"operation", "register_sound_level_processors",
 				)
 				break
 			}
@@ -140,6 +143,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 				"error_number", i+1,
 				"error", err.Error(),
 				"component", "analysis.soundlevel",
+				"operation", "register_sound_level_processors",
 			)
 		}
 	default:
@@ -147,6 +151,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			"total_failures", len(errors),
 			"partial_success", false,
 			"component", "analysis.soundlevel",
+			"operation", "register_sound_level_processors",
 		)
 	}
 }

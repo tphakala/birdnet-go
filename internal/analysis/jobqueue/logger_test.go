@@ -207,8 +207,8 @@ func TestLogJobDropped(t *testing.T) {
 	if logEntry["job_id"] != "job-dropped-1" {
 		t.Errorf("Expected job_id 'job-dropped-1', got %v", logEntry["job_id"])
 	}
-	if logEntry["action_description"] != "Upload to BirdWeather" {
-		t.Errorf("Expected action_description 'Upload to BirdWeather', got %v", logEntry["action_description"])
+	if logEntry["action_type"] != "Upload to BirdWeather" {
+		t.Errorf("Expected action_type 'Upload to BirdWeather', got %v", logEntry["action_type"])
 	}
 	if logEntry["reason"] != "queue_full" {
 		t.Errorf("Expected reason 'queue_full', got %v", logEntry["reason"])
@@ -252,11 +252,11 @@ func TestLogJobRetrying(t *testing.T) {
 	if logEntry["job_id"] != "job-retry-1" {
 		t.Errorf("Expected job_id 'job-retry-1', got %v", logEntry["job_id"])
 	}
-	if logEntry["action_description"] != "Send MQTT message" {
-		t.Errorf("Expected action_description 'Send MQTT message', got %v", logEntry["action_description"])
+	if logEntry["action_type"] != "Send MQTT message" {
+		t.Errorf("Expected action_type 'Send MQTT message', got %v", logEntry["action_type"])
 	}
-	if logEntry["current_attempt"] != float64(2) {
-		t.Errorf("Expected current_attempt 2, got %v", logEntry["current_attempt"])
+	if logEntry["attempt"] != float64(2) {
+		t.Errorf("Expected attempt 2, got %v", logEntry["attempt"])
 	}
 	if logEntry["max_attempts"] != float64(5) {
 		t.Errorf("Expected max_attempts 5, got %v", logEntry["max_attempts"])
@@ -287,11 +287,11 @@ func TestLogJobRetryScheduled(t *testing.T) {
 	if logEntry["job_id"] != "job-retry-sched-1" {
 		t.Errorf("Expected job_id 'job-retry-sched-1', got %v", logEntry["job_id"])
 	}
-	if logEntry["action_description"] != "HTTP POST request" {
-		t.Errorf("Expected action_description 'HTTP POST request', got %v", logEntry["action_description"])
+	if logEntry["action_type"] != "HTTP POST request" {
+		t.Errorf("Expected action_type 'HTTP POST request', got %v", logEntry["action_type"])
 	}
-	if logEntry["failed_attempt"] != float64(2) {
-		t.Errorf("Expected failed_attempt 2, got %v", logEntry["failed_attempt"])
+	if logEntry["attempt"] != float64(2) {
+		t.Errorf("Expected attempt 2, got %v", logEntry["attempt"])
 	}
 	if logEntry["max_attempts"] != float64(5) {
 		t.Errorf("Expected max_attempts 5, got %v", logEntry["max_attempts"])
@@ -331,8 +331,8 @@ func TestLogJobSuccess(t *testing.T) {
 	if logEntry["job_id"] != "job-success-1" {
 		t.Errorf("Expected job_id 'job-success-1', got %v", logEntry["job_id"])
 	}
-	if logEntry["action_description"] != "Save to database" {
-		t.Errorf("Expected action_description 'Save to database', got %v", logEntry["action_description"])
+	if logEntry["action_type"] != "Save to database" {
+		t.Errorf("Expected action_type 'Save to database', got %v", logEntry["action_type"])
 	}
 	if logEntry["attempt"] != float64(1) {
 		t.Errorf("Expected attempt 1, got %v", logEntry["attempt"])
