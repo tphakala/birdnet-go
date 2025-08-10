@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 	
 	"github.com/tphakala/birdnet-go/internal/logging"
@@ -21,6 +22,7 @@ var (
 	logger       *slog.Logger
 	levelVar     = new(slog.LevelVar) // Dynamic level control
 	closeLogger  func() error
+	once         sync.Once            // Thread-safe initialization
 )
 
 func init() {
@@ -45,10 +47,12 @@ func init() {
 // GetLogger returns the jobqueue package logger
 // Useful for external packages that need access to jobqueue logging
 func GetLogger() *slog.Logger {
-	if logger == nil {
-		// Double-check initialization in case of race conditions
-		logger = slog.Default().With("service", serviceName)
-	}
+	once.Do(func() {
+		if logger == nil {
+			// Initialize logger with default if not already done
+			logger = slog.Default().With("service", serviceName)
+		}
+	})
 	return logger
 }
 
@@ -99,12 +103,12 @@ func LogJobCompleted(ctx context.Context, jobID, actionType string, duration tim
 }
 
 // LogJobFailed logs when a job fails
-func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxRetries int, err error) {
+func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxAttempts int, err error) {
 	args := []any{
 		"job_id", jobID,
 		"action_type", actionType,
 		"attempt", attempt,
-		"max_retries", maxRetries,
+		"max_attempts", maxAttempts,
 		"error", err,
 	}
 	if traceID := extractTraceID(ctx); traceID != "" {
@@ -112,7 +116,7 @@ func LogJobFailed(ctx context.Context, jobID, actionType string, attempt, maxRet
 	}
 
 	// Use Error level for final failure, Warn for retryable failures
-	if attempt >= maxRetries {
+	if attempt >= maxAttempts {
 		logger.ErrorContext(ctx, "Job failed permanently", args...)
 	} else {
 		logger.WarnContext(ctx, "Job failed, will retry", args...)

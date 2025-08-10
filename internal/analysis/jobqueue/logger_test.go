@@ -52,7 +52,9 @@ func TestLogJobEnqueued(t *testing.T) {
 	buf, cleanup := setupTestLogger(slog.LevelInfo)
 	t.Cleanup(cleanup)
 	
-	LogJobEnqueued(context.TODO(), "job-123", "process", true)
+	// Create context with trace ID for verification
+	ctx := WithTraceID(context.Background(), "trace-123")
+	LogJobEnqueued(ctx, "job-123", "process", true)
 	
 	logEntry := parseLogEntry(t, buf)
 	
@@ -65,6 +67,9 @@ func TestLogJobEnqueued(t *testing.T) {
 	}
 	if logEntry["retryable"] != true {
 		t.Errorf("Expected retryable true, got %v", logEntry["retryable"])
+	}
+	if logEntry["trace_id"] != "trace-123" {
+		t.Errorf("Expected trace_id 'trace-123', got %v", logEntry["trace_id"])
 	}
 	if logEntry["msg"] != "Job enqueued" {
 		t.Errorf("Expected message 'Job enqueued', got %v", logEntry["msg"])
@@ -137,13 +142,16 @@ func TestLogJobFailed(t *testing.T) {
 	if logEntry["attempt"] != float64(3) {
 		t.Errorf("Expected attempt 3, got %v", logEntry["attempt"])
 	}
-	if logEntry["max_retries"] != float64(5) {
-		t.Errorf("Expected max_retries 5, got %v", logEntry["max_retries"])
+	if logEntry["max_attempts"] != float64(5) {
+		t.Errorf("Expected max_attempts 5, got %v", logEntry["max_attempts"])
 	}
 	if !containsError(logEntry, "connection timeout") {
 		t.Errorf("Expected error containing 'connection timeout', got %v", logEntry["error"])
 	}
 	// Should be Warn for retryable failure
+	if logEntry["level"] != "WARN" {
+		t.Errorf("Expected level 'WARN' for retryable failure, got %v", logEntry["level"])
+	}
 	if logEntry["msg"] != "Job failed, will retry" {
 		t.Errorf("Expected message 'Job failed, will retry', got %v", logEntry["msg"])
 	}
@@ -297,6 +305,9 @@ func TestLogJobRetryScheduled(t *testing.T) {
 	if logEntry["error"] != "connection timeout" {
 		t.Errorf("Expected error 'connection timeout', got %v", logEntry["error"])
 	}
+	if logEntry["level"] != "WARN" {
+		t.Errorf("Expected level 'WARN' for retry scheduling, got %v", logEntry["level"])
+	}
 	if logEntry["msg"] != "Job scheduled for retry after failure" {
 		t.Errorf("Expected message 'Job scheduled for retry after failure', got %v", logEntry["msg"])
 	}
@@ -355,7 +366,7 @@ func TestExtractTraceID(t *testing.T) {
 	}
 	
 	// Test with string trace ID
-	ctx := context.WithValue(context.Background(), contextKeyTraceID, "trace-123")
+	ctx := WithTraceID(context.Background(), "trace-123")
 	if traceID := extractTraceID(ctx); traceID != "trace-123" {
 		t.Errorf("Expected trace ID 'trace-123', got %q", traceID)
 	}

@@ -73,29 +73,38 @@ func LogSoundLevelMQTTPublished(topic, source string, bandCount int) {
 
 // LogSoundLevelProcessorRegistered logs successful registration of sound level processor
 func LogSoundLevelProcessorRegistered(source, sourceType, component string) {
+	if component == "" {
+		component = "analysis.soundlevel"
+	}
 	GetLogger().Info("Registered sound level processor",
 		"source", source,
 		"source_type", sourceType,
-		"component", "analysis.soundlevel",
+		"component", component,
 	)
 }
 
 // LogSoundLevelProcessorRegistrationFailed logs failed registration of sound level processor
 func LogSoundLevelProcessorRegistrationFailed(source, sourceType, component string, err error) {
+	if component == "" {
+		component = "analysis.soundlevel"
+	}
 	GetLogger().Error("Failed to register sound level processor",
 		"source", source,
 		"source_type", sourceType,
 		"error", err.Error(),
-		"component", "analysis.soundlevel",
+		"component", component,
 	)
 }
 
 // LogSoundLevelProcessorUnregistered logs unregistration of sound level processor
 func LogSoundLevelProcessorUnregistered(source, sourceType, component string) {
+	if component == "" {
+		component = "analysis.soundlevel"
+	}
 	GetLogger().Info("Unregistered sound level processor",
 		"source", source,
 		"source_type", sourceType,
-		"component", "analysis.soundlevel",
+		"component", component,
 	)
 }
 
@@ -106,6 +115,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 		GetLogger().Info("Successfully registered all sound level processors",
 			"registered_processors", successCount,
 			"active_streams", activeStreams,
+			"partial_success", false,
 			"component", "analysis.soundlevel",
 		)
 	case successCount > 0:
@@ -114,6 +124,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			"total_processors", totalCount,
 			"failed_processors", totalCount-successCount,
 			"active_streams", activeStreams,
+			"partial_success", true,
 			"component", "analysis.soundlevel",
 		)
 		// Log first few errors for debugging
@@ -134,6 +145,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 	default:
 		GetLogger().Error("Failed to register any sound level processors",
 			"total_failures", len(errors),
+			"partial_success", false,
 			"component", "analysis.soundlevel",
 		)
 	}

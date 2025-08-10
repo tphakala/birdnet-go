@@ -480,7 +480,9 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 				"source", soundData.Source,
 				"name", soundData.Name,
 				"json_size", len(jsonData),
-				"octave_bands", len(soundData.OctaveBands))
+				"octave_bands", len(soundData.OctaveBands),
+				"component", "analysis.soundlevel",
+				"operation", "publish_mqtt")
 
 			// Log each octave band's values only if realtime logging is enabled
 			if settings.Realtime.Audio.SoundLevel.DebugRealtimeLogging {
@@ -491,7 +493,9 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 						"min_db", data.Min,
 						"max_db", data.Max,
 						"mean_db", data.Mean,
-						"sample_count", data.SampleCount)
+						"sample_count", data.SampleCount,
+						"component", "analysis.soundlevel",
+						"operation", "log_octave_bands")
 				}
 			}
 		}

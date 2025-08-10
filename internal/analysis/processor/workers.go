@@ -54,7 +54,11 @@ func (p *Processor) startWorkerPool() {
 	p.JobQueue.StartWithContext(ctx)
 
 	logger := GetLogger()
-	logger.Info("Job queue started", "max_capacity", p.JobQueue.GetMaxJobs())
+	logger.Info("Job queue started", 
+		"max_capacity", p.JobQueue.GetMaxJobs(),
+		"component", "analysis.processor",
+		"operation", "job_queue_start",
+	)
 }
 
 // getJobQueueRetryConfig extracts the retry configuration from an action
