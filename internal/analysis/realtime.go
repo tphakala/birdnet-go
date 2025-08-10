@@ -221,7 +221,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	var wg sync.WaitGroup
 
 	// Initialize the buffer manager
-	bufferManager := NewBufferManager(bn, quitChan, &wg)
+	bufferManager := MustNewBufferManager(bn, quitChan, &wg)
 
 	// Start buffer monitors for each audio source only if we have active sources
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {

@@ -17,12 +17,10 @@ const (
 	TaskTypeAction TaskType = iota // Represents an action task type
 )
 
-// Timing constants for performance metrics and operations
+// Timing constants for operations
 const (
 	// DefaultEnqueueTimeout is the default timeout for task enqueue operations
 	DefaultEnqueueTimeout = 5 * time.Second
-	// PerformanceLogInterval is the interval for logging performance metrics
-	PerformanceLogInterval = 100 * time.Millisecond
 )
 
 // Sentinel errors for processor operations

@@ -22,30 +22,39 @@ type BufferManager struct {
 
 // NewBufferManager creates a new buffer manager with validation.
 //
-// This constructor performs strict validation and panics with a descriptive
-// message if any required parameter is nil. This fail-fast behavior is
-// intentional to catch configuration errors during application startup
-// rather than allowing silent failures during runtime.
-//
-// Panics:
-//   - If bn (BirdNET instance) is nil
-//   - If quitChan is nil
-//   - If wg (WaitGroup) is nil
+// This constructor performs parameter validation and returns an error
+// if any required parameter is nil, following project guidelines.
 //
 // Parameters:
 //   - bn: BirdNET instance for audio analysis
 //   - quitChan: Channel for coordinated shutdown signaling
 //   - wg: WaitGroup for goroutine lifecycle management
-func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.WaitGroup) *BufferManager {
-	// Validate required parameters - fail fast if invalid
+//
+// Returns:
+//   - *BufferManager: New buffer manager instance
+//   - error: Validation error if any parameter is nil
+func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.WaitGroup) (*BufferManager, error) {
+	// Validate required parameters
 	if bn == nil {
-		panic("NewBufferManager: BirdNET instance cannot be nil")
+		return nil, errors.Newf("BirdNET instance cannot be nil").
+			Component("analysis.buffer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_manager").
+			Build()
 	}
 	if quitChan == nil {
-		panic("NewBufferManager: quit channel cannot be nil")
+		return nil, errors.Newf("quit channel cannot be nil").
+			Component("analysis.buffer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_manager").
+			Build()
 	}
 	if wg == nil {
-		panic("NewBufferManager: wait group cannot be nil")
+		return nil, errors.Newf("wait group cannot be nil").
+			Component("analysis.buffer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_manager").
+			Build()
 	}
 	
 	return &BufferManager{
@@ -53,7 +62,31 @@ func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.Wait
 		quitChan: quitChan,
 		wg:       wg,
 		logger:   GetLogger(),
+	}, nil
+}
+
+// MustNewBufferManager creates a new buffer manager and panics on error.
+//
+// This function preserves the original panic behavior for early initialization
+// contexts where error handling is not practical. It calls NewBufferManager
+// and panics if validation fails.
+//
+// Parameters:
+//   - bn: BirdNET instance for audio analysis
+//   - quitChan: Channel for coordinated shutdown signaling
+//   - wg: WaitGroup for goroutine lifecycle management
+//
+// Returns:
+//   - *BufferManager: New buffer manager instance
+//
+// Panics:
+//   - If any parameter validation fails
+func MustNewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.WaitGroup) *BufferManager {
+	bm, err := NewBufferManager(bn, quitChan, wg)
+	if err != nil {
+		panic(fmt.Sprintf("MustNewBufferManager: %v", err))
 	}
+	return bm
 }
 
 // AddMonitor safely adds a new analysis buffer monitor for a source
@@ -79,15 +112,18 @@ func (m *BufferManager) AddMonitor(source string) error {
 			Build()
 	}
 
-	// Check if monitor already exists
-	if _, exists := m.monitors.Load(source); exists {
-		// Not an error - monitor already running for this source
-		return nil
-	}
-
 	// Create a monitor-specific quit channel
 	monitorQuit := make(chan struct{})
-	m.monitors.Store(source, monitorQuit)
+	
+	// Use LoadOrStore to atomically check and store, preventing race conditions
+	actual, loaded := m.monitors.LoadOrStore(source, monitorQuit)
+	if loaded {
+		// Monitor already exists for this source - not an error
+		return nil
+	}
+	
+	// Use the channel we just stored (actual is our monitorQuit channel)
+	monitorQuit = actual.(chan struct{})
 
 	// Start the monitor with error handling
 	m.wg.Add(1)
@@ -193,14 +229,9 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 			"operation", "update_monitors")
 	}()
 
-	// Validate input
+	// Treat nil sources as empty slice to allow removing all monitors
 	if sources == nil {
-		return errors.Newf("sources list cannot be nil").
-			Component("analysis.buffer").
-			Category(errors.CategoryValidation).
-			Context("operation", "update_monitors").
-			Context("retryable", false).
-			Build()
+		sources = []string{}
 	}
 
 	// Track existing monitors that should be removed
