@@ -1,13 +1,17 @@
-// Package logger provides structured logging for the analysis package
+// Package analysis provides structured logging for the analysis package
 package analysis
 
 import (
 	"log/slog"
+	"sync"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
 // Package-level logger for analysis operations
-var logger *slog.Logger
+var (
+	logger         *slog.Logger
+	loggerInitOnce sync.Once
+)
 
 func init() {
 	// Create service-specific logger for analysis package
@@ -23,14 +27,16 @@ func init() {
 
 // GetLogger returns the package logger for use in subpackages
 // This allows other analysis subpackages to use the same logger
-// if they don't need their own dedicated logger
+// if they don't need their own dedicated logger. Thread-safe initialization
+// is guaranteed through sync.Once.
 func GetLogger() *slog.Logger {
-	if logger == nil {
-		// Double-check initialization in case of race conditions
-		logger = logging.ForService("analysis")
+	loggerInitOnce.Do(func() {
 		if logger == nil {
-			logger = slog.Default().With("service", "analysis")
+			logger = logging.ForService("analysis")
+			if logger == nil {
+				logger = slog.Default().With("service", "analysis")
+			}
 		}
-	}
+	})
 	return logger
 }

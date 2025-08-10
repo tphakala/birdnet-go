@@ -53,24 +53,37 @@ func init() {
 	}
 }
 
+// Event type constants for logging
+const (
+	EventTypeError     = "error"
+	EventTypeResource  = "resource"
+	EventTypeDetection = "detection"
+	EventTypeUnknown   = "unknown"
+)
+
 // Sentinel errors for event bus operations
 var (
 	ErrEventBusDisabled = errors.Newf("event bus is disabled").Component("events").Category(errors.CategoryNotFound).Build()
 )
 
 // getEventType returns a semantic event type string instead of Go type strings
-// This provides better observability in logs by showing meaningful event types
+// This provides better observability in logs by showing meaningful event types.
+// The function is designed to be extensible - add new cases for future event types.
 func getEventType(event any) string {
 	switch event.(type) {
+	// Concrete type checks first (more specific)
 	case *errors.EnhancedError:
-		return "error"
+		return EventTypeError
+	// Interface checks (more general)
 	case ErrorEvent:
-		return "error"
+		return EventTypeError
 	case ResourceEvent:
-		return "resource"
+		return EventTypeResource
 	case DetectionEvent:
-		return "detection"
+		return EventTypeDetection
 	default:
+		// For debugging unknown types, log the Go type
+		// In production, could return EventTypeUnknown
 		return fmt.Sprintf("%T", event) // fallback for unknown types
 	}
 }

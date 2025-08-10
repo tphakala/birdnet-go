@@ -404,15 +404,16 @@ func init() {
 	RegisterComponent("audiocore", "audiocore")
 	RegisterComponent("api", "api")
 	
-	// Analysis package components
+	// Analysis package components - use slash-separated paths for subpackages
 	RegisterComponent("analysis", "analysis")
-	RegisterComponent("analysis.processor", "analysis-processor")
-	RegisterComponent("analysis.jobqueue", "analysis-jobqueue")
-	RegisterComponent("analysis.soundlevel", "analysis-soundlevel")
-	RegisterComponent("analysis.buffer", "analysis-buffer")
-	RegisterComponent("analysis.worker", "analysis-worker")
-	RegisterComponent("analysis.threshold", "analysis-threshold")
-	RegisterComponent("analysis.tracker", "analysis-tracker")
+	RegisterComponent("analysis/processor", "analysis.processor")
+	RegisterComponent("analysis/jobqueue", "analysis.jobqueue")
+	// Components in main analysis package - use function name patterns
+	RegisterComponent("soundlevel", "analysis.soundlevel")
+	RegisterComponent("buffer", "analysis.buffer")
+	RegisterComponent("worker", "analysis.worker")
+	RegisterComponent("threshold", "analysis.threshold")
+	RegisterComponent("tracker", "analysis.tracker")
 }
 
 // Helper functions for auto-detection and categorization

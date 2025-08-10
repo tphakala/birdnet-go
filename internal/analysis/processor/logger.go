@@ -1,5 +1,9 @@
-// Package logger provides documentation for the processor package logging
+// Package processor provides documentation for the processor package logging
 package processor
+
+import (
+	"log/slog"
+)
 
 // Note: The processor package uses a logger defined in new_species_tracker.go
 // 
@@ -16,6 +20,11 @@ package processor
 //   logger.Info("Processing detection", "species", species, "confidence", conf)
 //   logger.Debug("Worker started", "worker_id", id, "total", total)
 //   logger.Error("Operation failed", "error", err)
-//
-// For external access, use the processor functions directly rather
-// than accessing the logger variable.
+
+// GetLogger returns the processor package logger
+// This provides a uniform API for accessing the logger across packages
+func GetLogger() *slog.Logger {
+	// Return the logger from new_species_tracker.go
+	// Note: this assumes the logger is already initialized
+	return logger
+}

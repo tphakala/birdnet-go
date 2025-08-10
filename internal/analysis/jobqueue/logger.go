@@ -1,8 +1,9 @@
-// Package logger provides structured logging for the jobqueue package
+// Package jobqueue provides structured logging for the jobqueue package
 package jobqueue
 
 import (
 	"log/slog"
+	"time"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -12,13 +13,13 @@ var logger *slog.Logger
 func init() {
 	// Create service-specific logger for analysis job queue
 	// This provides dedicated logging for job queue operations
-	logger = logging.ForService("analysis-jobqueue")
+	logger = logging.ForService("analysis.jobqueue")
 	
 	// Defensive initialization for early startup scenarios
 	// This ensures we always have a working logger even if
 	// the logging system isn't fully initialized yet
 	if logger == nil {
-		logger = slog.Default().With("service", "analysis-jobqueue")
+		logger = slog.Default().With("service", "analysis.jobqueue")
 	}
 }
 
@@ -27,9 +28,9 @@ func init() {
 func GetLogger() *slog.Logger {
 	if logger == nil {
 		// Double-check initialization in case of race conditions
-		logger = logging.ForService("analysis-jobqueue")
+		logger = logging.ForService("analysis.jobqueue")
 		if logger == nil {
-			logger = slog.Default().With("service", "analysis-jobqueue")
+			logger = slog.Default().With("service", "analysis.jobqueue")
 		}
 	}
 	return logger
@@ -52,11 +53,11 @@ func LogJobStarted(jobID, actionType string, attempt int) {
 }
 
 // LogJobCompleted logs when a job completes successfully
-func LogJobCompleted(jobID, actionType string, duration int64) {
+func LogJobCompleted(jobID, actionType string, duration time.Duration) {
 	logger.Info("Job completed",
 		"job_id", jobID,
 		"action_type", actionType,
-		"duration_ms", duration)
+		"duration_ms", duration.Milliseconds())
 }
 
 // LogJobFailed logs when a job fails
