@@ -242,12 +242,6 @@
 </script>
 
 <div class="col-span-12 p-4">
-  <!-- Page Header -->
-  <div class="mb-4">
-    <h1 class="text-3xl font-bold mb-2">{t('notifications.title')}</h1>
-    <p class="text-base-content/70">{t('notifications.subtitle')}</p>
-  </div>
-
   <!-- Filters and Actions -->
   <div class="card bg-base-100 shadow-sm mb-6">
     <div class="card-body">
