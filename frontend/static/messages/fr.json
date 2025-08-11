@@ -22,7 +22,6 @@
     "ok": "OK",
     "apply": "Appliquer",
     "clear": "Effacer",
-    "done": "Terminé",
     "goToDashboard": "Aller au tableau de bord",
     "reportIssue": "Signaler un problème",
     "loginToViewDetails": "Connectez-vous pour voir les détails",
@@ -113,7 +112,20 @@
       },
       "form": {
         "correctDetection": "Détection correcte",
-        "falsePositiveLabel": "Faux positif"
+        "falsePositiveLabel": "Faux positif",
+        "reviewDetectionTitle": "Revoir la détection",
+        "lockDetection": "Verrouiller cette détection après l'enregistrement",
+        "lockDetectionHelp": "Le verrouillage de cette détection empêchera sa suppression lors du nettoyage régulier.",
+        "unlockDetection": "Déverrouiller cette détection après l'enregistrement",
+        "unlockDetectionHel": "Le déverrouillage permettra la suppression de cette détection lors du nettoyage régulier.",
+        "ignoreSpecies": "Ignorer cette espèce",
+        "ignoreSpeciesHelp": "Ignorer cette espèce empêchera les détections futures de cette espèce. Cela ne supprimera pas les détections existantes.",
+        "detectionLocked": "Cette détection est actuellement verrouillée.",
+        "comment": "Commentaire",
+        "addComment": "Ajouter un commentaire",
+        "hideComment": "Masquer le commentaire",
+        "commentPlaceholder": "Ajoutez un commentaire à propos de cette détection...",
+        "commentCount": "({chars} caractères)"
       },
       "errors": {
         "saveFailed": "Échec de l'enregistrement de l'examen. Veuillez réessayer.",
@@ -361,6 +373,8 @@
       "headers": {
         "dateTime": "Date et heure",
         "commonName": "Nom commun",
+        "species": "Espèce",
+        "confidence": "Confiance",
         "thumbnail": "Miniature",
         "status": "Statut",
         "recording": "Enregistrement",
@@ -407,6 +421,7 @@
       "dateTime": "Date et heure",
       "weather": "Météo",
       "species": "Espèce",
+      "confidence": "Confiance",
       "thumbnail": "Miniature",
       "status": "Statut",
       "recording": "Enregistrement",
@@ -420,7 +435,29 @@
       "showing": "Affichage de {from} à {to} sur {total} résultats"
     },
     "weather": {
-      "noData": "Aucune donnée météo"
+      "noData": "Aucune donnée météo",
+      "units": {
+        "temperature": "°C",
+        "windSpeed": "m/s",
+        "humidity": "%"
+      },
+      "conditions": {
+        "clearsky_day": "Ciel clair",
+        "clearsky_night": "Ciel clair",
+        "fair_day": "Beau temps",
+        "fair_night": "Beau temps",
+        "partlycloudy_day": "Partiellement couvert",
+        "partlycloudy_night": "Partiellement couvert",
+        "cloudy": "Nuageux",
+        "rainshowers_day": "Averses ",
+        "rainshowers_night": "Averses",
+        "rain": "Pluie",
+        "thunder": "Orage",
+        "sleet": "Grésil",
+        "snow": "Neige",
+        "fog": "Brouillard",
+        "unknown": "Inconnu"
+      }
     },
     "row": {
       "viewDetails": "Voir les détails pour {species}"
@@ -583,7 +620,6 @@
     "loading": "Chargement des paramètres...",
     "sections": {
       "node": "Paramètres principaux",
-      "userinterface": "Interface utilisateur",
       "audio": "Paramètres audio",
       "filters": "Filtres de détection",
       "integration": "Intégrations",
@@ -738,42 +774,20 @@
         "userInterface": {
           "title": "Paramètres de l'interface utilisateur",
           "description": "Personnaliser l'interface utilisateur",
-          "interface": {
-            "title": "Paramètres d'interface",
-            "description": "Choisissez votre langue et version d'interface préférées",
-            "locale": {
-              "label": "Langue d'affichage",
-              "helpText": "Sélectionnez la langue de l'interface utilisateur"
-            },
-            "newUI": {
-              "label": "Utiliser l'interface moderne",
-              "helpText": "Active la nouvelle interface basée sur Svelte avec des performances et des fonctionnalités améliorées. Lorsque désactivée, utilise l'interface HTMX classique."
-            }
-          },
           "language": {
             "title": "Langue",
-            "description": "Configurer la langue d'affichage de l'interface utilisateur",
             "locale": {
               "label": "Langue de l'interface",
               "helpText": "Sélectionnez la langue de l'interface utilisateur"
             }
           },
           "dashboard": {
-            "title": "Affichage du tableau de bord",
-            "description": "Configurez l'affichage des détections sur le tableau de bord",
-            "general": {
-              "title": "Paramètres généraux"
-            },
+            "title": "Tableau de bord",
             "summaryLimit": {
               "label": "Nombre maximum d'espèces dans le tableau de résumé quotidien",
               "helpText": "Nombre maximum d'espèces affichées dans le tableau de résumé quotidien (valeur entre 10 et 1000)"
             },
-            "newUI": {
-              "label": "Utiliser la nouvelle interface utilisateur",
-              "helpText": "Activer la redirection de l'ancienne interface HTMX vers la nouvelle interface Svelte"
-            },
             "thumbnails": {
-              "title": "Affichage des vignettes",
               "summary": {
                 "label": "Afficher les miniatures dans le tableau de résumé quotidien",
                 "helpText": "Activer pour afficher les miniatures des espèces détectées dans le tableau de résumé quotidien"
@@ -1108,8 +1122,7 @@
         "description": "Configurer le nettoyage des clips audio",
         "policyLabel": "Politique de rétention",
         "maxAgeLabel": "Âge maximum",
-        "maxUsageLabel": "Utilisation maximale du disque (%)",
-        "maxUsageHelp": "Supprimer les clips les plus anciens lorsque le répertoire audio utilise plus de ce pourcentage de l'espace disque disponible.",
+        "maxUsageLabel": "Utilisation maximale (pourcentage)",
         "minClipsLabel": "Nombre minimum de clips",
         "keepSpectrograms": "Conserver les images de spectrogramme",
         "policies": {
@@ -1128,6 +1141,77 @@
       "transport": {
         "tcp": "TCP",
         "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Filtre passe-bas",
+        "highpass": "Filtre passe-haut",
+        "bandpass": "Filtre passe-bande",
+        "bandstop": "Filtre coupe-bande"
+      }
+    },
+    "security": {
+      "hostLabel": "Adresse de l'hôte",
+      "allowSubnetBypassLabel": "Autoriser les accès depuis le sous-réseau à contourner l'authentification",
+      "allowedSubnetsLabel": "Sous-réseaux autorisés",
+      "allowedSubnetsHelp": "Plages de réseau autorisées à contourner la connexion (notation CIDR, liste séparée par des virgules)",
+      "securityWarningTitle": "Avertissement de sécurité :",
+      "subnetWarningText": "Les appareils de ces sous-réseaux auront un accès illimité. N'incluez que des réseaux internes de confiance.",
+      "httpsSettingsTitle": "Paramètres HTTPS",
+      "httpsSettingsDescription": "Accès sécurisé avec chiffrement SSL/TLS",
+      "basicAuthTitle": "Authentification basique",
+      "basicAuthDescription": "Accès sécurisé avec un mot de passe simple",
+      "serverConfiguration": {
+        "title": "Configuration du serveur",
+        "description": "Configurer les paramètres HTTPS et SSL/TLS",
+        "autoTlsLabel": "Gestion automatique des certificats SSL (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "Exigences AutoTLS :",
+          "domainRequired": "Un nom de domaine enregistré est requis",
+          "domainPointing": "Le domaine doit pointer vers l'IP publique de ce serveur",
+          "portsAccessible": "Les ports 80 et 443 doivent être accessibles depuis Internet"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Authentification basique",
+        "description": "Accès sécurisé avec un mot de passe simple",
+        "enableLabel": "Activer l'authentification par mot de passe",
+        "passwordLabel": "Mot de passe",
+        "passwordHelpText": "Limiter l'accès aux paramètres avec un mot de passe."
+      },
+      "oauth": {
+        "title": "Authentification sociale OAuth2",
+        "description": "Authentification unique pour vous connecter avec votre compte existant",
+        "google": {
+          "title": "OAuth Google",
+          "enableLabel": "Autoriser la connexion OAuth2 via Google",
+          "redirectUriTitle": "URI de redirection pour Google Cloud Console :",
+          "getCredentialsLabel": "Obtenez vos identifiants depuis Google Cloud Console",
+          "clientIdLabel": "ID client",
+          "clientIdHelpText": "L'ID client OAuth 2.0 obtenu depuis Google Cloud Console lors de la configuration des identifiants OAuth.",
+          "clientSecretLabel": "Secret client",
+          "clientSecretHelpText": "Le secret client OAuth 2.0 obtenu depuis Google Cloud Console lors de la configuration des identifiants OAuth.",
+          "userIdLabel": "ID utilisateur"
+        },
+        "github": {
+          "title": "OAuth GitHub",
+          "enableLabel": "Autoriser la connexion OAuth2 via GitHub",
+          "redirectUriTitle": "URI de redirection pour les paramètres développeur GitHub :",
+          "getCredentialsLabel": "Obtenez vos identifiants depuis les paramètres développeur GitHub",
+          "clientIdLabel": "ID client",
+          "clientIdHelpText": "L'ID client OAuth 2.0 obtenu depuis les paramètres développeur GitHub lors de la configuration des identifiants OAuth.",
+          "clientSecretLabel": "Secret client",
+          "clientSecretHelpText": "Le secret client OAuth 2.0 obtenu depuis les paramètres développeur GitHub lors de la configuration des identifiants OAuth.",
+          "userIdLabel": "ID utilisateur"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Contourner l'authentification",
+        "description": "Autoriser l'accès aux paramètres sans authentification"
+      },
+      "placeholders": {
+        "host": "Par exemple, localhost:8080 ou example.domain.com",
+        "allowedUsers": "Entrez un ou plusieurs e-mails d'utilisateurs autorisés",
+        "subnet": "Entrez un sous-réseau CIDR (ex : 192.168.1.0/24)"
       }
     },
     "species": {
@@ -1214,71 +1298,6 @@
       "addSpeciesToExcludeLabel": "Ajouter de nouvelles espèces à exclure",
       "commandPathPlaceholder": "/chemin/vers/votre/commande",
       "parametersPlaceholder": "Les paramètres apparaîtront ici"
-    },
-    "security": {
-      "hostLabel": "Adresse de l'hôte",
-      "allowSubnetBypassLabel": "Autoriser les accès depuis le sous-réseau à contourner l'authentification",
-      "allowedSubnetsLabel": "Sous-réseaux autorisés",
-      "allowedSubnetsHelp": "Plages de réseau autorisées à contourner la connexion (notation CIDR, liste séparée par des virgules)",
-      "securityWarningTitle": "Avertissement de sécurité :",
-      "subnetWarningText": "Les appareils de ces sous-réseaux auront un accès illimité. N'incluez que des réseaux internes de confiance.",
-      "httpsSettingsTitle": "Paramètres HTTPS",
-      "httpsSettingsDescription": "Accès sécurisé avec chiffrement SSL/TLS",
-      "basicAuthTitle": "Authentification basique",
-      "basicAuthDescription": "Accès sécurisé avec un mot de passe simple",
-      "serverConfiguration": {
-        "title": "Configuration du serveur",
-        "description": "Configurer les paramètres HTTPS et SSL/TLS",
-        "autoTlsLabel": "Gestion automatique des certificats SSL (AutoTLS)",
-        "autoTlsRequirements": {
-          "title": "Exigences AutoTLS :",
-          "domainRequired": "Un nom de domaine enregistré est requis",
-          "domainPointing": "Le domaine doit pointer vers l'IP publique de ce serveur",
-          "portsAccessible": "Les ports 80 et 443 doivent être accessibles depuis Internet"
-        }
-      },
-      "basicAuthentication": {
-        "title": "Authentification basique",
-        "description": "Accès sécurisé avec un mot de passe simple",
-        "enableLabel": "Activer l'authentification par mot de passe",
-        "passwordLabel": "Mot de passe",
-        "passwordHelpText": "Limiter l'accès aux paramètres avec un mot de passe."
-      },
-      "oauth": {
-        "title": "Authentification sociale OAuth2",
-        "description": "Authentification unique pour vous connecter avec votre compte existant",
-        "google": {
-          "title": "OAuth Google",
-          "enableLabel": "Autoriser la connexion OAuth2 via Google",
-          "redirectUriTitle": "URI de redirection pour Google Cloud Console :",
-          "getCredentialsLabel": "Obtenez vos identifiants depuis Google Cloud Console",
-          "clientIdLabel": "ID client",
-          "clientIdHelpText": "L'ID client OAuth 2.0 obtenu depuis Google Cloud Console lors de la configuration des identifiants OAuth.",
-          "clientSecretLabel": "Secret client",
-          "clientSecretHelpText": "Le secret client OAuth 2.0 obtenu depuis Google Cloud Console lors de la configuration des identifiants OAuth.",
-          "userIdLabel": "ID utilisateur"
-        },
-        "github": {
-          "title": "OAuth GitHub",
-          "enableLabel": "Autoriser la connexion OAuth2 via GitHub",
-          "redirectUriTitle": "URI de redirection pour les paramètres développeur GitHub :",
-          "getCredentialsLabel": "Obtenez vos identifiants depuis les paramètres développeur GitHub",
-          "clientIdLabel": "ID client",
-          "clientIdHelpText": "L'ID client OAuth 2.0 obtenu depuis les paramètres développeur GitHub lors de la configuration des identifiants OAuth.",
-          "clientSecretLabel": "Secret client",
-          "clientSecretHelpText": "Le secret client OAuth 2.0 obtenu depuis les paramètres développeur GitHub lors de la configuration des identifiants OAuth.",
-          "userIdLabel": "ID utilisateur"
-        }
-      },
-      "bypassAuthentication": {
-        "title": "Contourner l'authentification",
-        "description": "Autoriser l'accès aux paramètres sans authentification"
-      },
-      "placeholders": {
-        "host": "Par exemple, localhost:8080 ou example.domain.com",
-        "allowedUsers": "Entrez un ou plusieurs e-mails d'utilisateurs autorisés",
-        "subnet": "Entrez un sous-réseau CIDR (ex : 192.168.1.0/24)"
-      }
     },
     "database": {
       "sqlitePlaceholder": "Entrez le chemin de la base de données SQLite",
@@ -1416,14 +1435,6 @@
       "filterControl": "Contrôle du filtre",
       "highPassFilter": "Contrôle du filtre passe-haut : {freq} Hz",
       "seekProgress": "Progression de la lecture audio : {current} / {total} secondes"
-    }
-  },
-  "components": {
-    "forms": {
-      "numberField": {
-        "adjustedToMinimum": "Valeur ajustée au minimum ({value})",
-        "adjustedToMaximum": "Valeur ajustée au maximum ({value})"
-      }
     }
   }
 }
