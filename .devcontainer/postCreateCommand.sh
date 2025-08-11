@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
 
 echo "Setting up BirdNET-Go development environment..."
 
@@ -57,7 +57,7 @@ cd frontend && npm ci && cd ..
 echo "Installing global frontend analysis tools..."
 # Note: ast-grep is already installed locally via npm ci in frontend/
 # The sg command conflicts with system shadow-utils, so we skip global install
-echo "ast-grep available via 'npx @ast-grep/cli' or 'npm run ast:*' commands"
+echo "ast-grep available via 'npx ast-grep' or 'npm run ast:*' commands"
 
 # Verify Go linter configuration
 echo "Verifying Go linting setup..."
@@ -80,7 +80,7 @@ npx eslint --version
 npx prettier --version
 npx stylelint --version
 npx svelte-check --version
-npx @ast-grep/cli --version || echo "Warning: ast-grep not available"
+npx ast-grep --version || echo "Warning: ast-grep not available"
 
 # Verify TypeScript configuration
 if [ -f tsconfig.json ]; then
@@ -120,7 +120,7 @@ echo "  - task frontend-lint       (ESLint + Prettier + Stylelint)"
 echo "  - task frontend-test       (run frontend tests)"
 echo "  - npm run typecheck        (TypeScript check only)"
 echo "  - npm run ast:all          (AST-grep security/pattern checks)"
-echo "  - npx @ast-grep/cli scan   (manual AST-grep usage)"
+echo "  - npx ast-grep scan        (manual AST-grep usage)"
 echo ""
 echo "Pre-commit checks:"
 echo "  - golangci-lint run        (before Go commits)"
@@ -154,3 +154,6 @@ echo "  - bash (default)    - zsh (with Oh My Zsh)    - fish    - pwsh (PowerShe
 echo "Switch shells: click terminal dropdown or use 'Ctrl+Shift+\`' in VS Code"
 echo ""
 echo "💡 Use 'Ctrl+Shift+P' and search for 'Go: Install/Update Tools' in VS Code for additional Go tools"
+echo ""
+echo "🚀 Setup complete! Open a new terminal in VS Code to start developing:"
+echo "   Terminal → New Terminal (Ctrl+Shift+\`) or click '+' in terminal panel"
