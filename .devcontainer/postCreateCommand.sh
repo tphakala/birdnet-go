@@ -55,7 +55,9 @@ cd frontend && npm ci && cd ..
 
 # Install global frontend tools that might be needed
 echo "Installing global frontend analysis tools..."
-sudo npm install -g @ast-grep/cli
+# Note: ast-grep is already installed locally via npm ci in frontend/
+# The sg command conflicts with system shadow-utils, so we skip global install
+echo "ast-grep available via 'npx @ast-grep/cli' or 'npm run ast:*' commands"
 
 # Verify Go linter configuration
 echo "Verifying Go linting setup..."
@@ -78,7 +80,7 @@ npx eslint --version
 npx prettier --version
 npx stylelint --version
 npx svelte-check --version
-sg --version || echo "Warning: ast-grep (sg) not available globally"
+npx @ast-grep/cli --version || echo "Warning: ast-grep not available"
 
 # Verify TypeScript configuration
 if [ -f tsconfig.json ]; then
@@ -118,6 +120,7 @@ echo "  - task frontend-lint       (ESLint + Prettier + Stylelint)"
 echo "  - task frontend-test       (run frontend tests)"
 echo "  - npm run typecheck        (TypeScript check only)"
 echo "  - npm run ast:all          (AST-grep security/pattern checks)"
+echo "  - npx @ast-grep/cli scan   (manual AST-grep usage)"
 echo ""
 echo "Pre-commit checks:"
 echo "  - golangci-lint run        (before Go commits)"
@@ -140,6 +143,7 @@ echo ""
 echo "Linting:"
 echo "  - golangci-lint run        (comprehensive Go linting)"
 echo "  - task frontend-lint       (frontend ESLint + Prettier + Stylelint)"
+echo "  - npm run ast:security     (AST-grep security scanning)"
 echo ""  
 echo "Build commands:"
 echo "  - task                     (default build - compiles Go with embedded frontend)"
