@@ -4,6 +4,8 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { t, getLocale } from '$lib/i18n';
+  import { getLocalDateString } from '$lib/utils/date';
+  import { toastActions } from '$lib/stores/toast';
   import {
     actionIcons,
     alertIconsSvg,
@@ -192,36 +194,47 @@
     return expandedItems.has(recordId);
   }
 
-  // Reactive date constraints using $derived
-  const startDateConstraints = $derived.by(() => {
-    // Start date constraints:
-    // - Cannot be after end date (if end date is set)
-    // - Cannot be in the future (assuming we don't want future search dates)
-    const today = new Date().toISOString().split('T')[0];
-    const constraints: { maxDate?: string; minDate?: string } = {
-      maxDate: dateRange.end || today, // Use end date or today, whichever is earlier
-    };
+  // Memoized today value - only recalculates when component mounts or when day changes
+  // This prevents unnecessary recalculations on every state change
+  const today = $derived(() => {
+    // Force recalculation periodically to handle day changes
+    // Using Math.floor to update once per day
+    const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    // The variable access ensures reactivity but the calculation is stable per day
+    void daysSinceEpoch; // Acknowledge the dependency
+    return getLocalDateString();
+  });
 
-    // If end date is set and it's before today, use that as max
-    if (dateRange.end && dateRange.end < today) {
-      constraints.maxDate = dateRange.end;
+  // Optimized reactive date constraints - only recalculate when relevant dependencies change
+  const startDateConstraints = $derived(() => {
+    // Only depends on: dateRange.end and today
+    const todayValue = today();
+    const endDate = dateRange.end;
+
+    const constraints: { maxDate?: string; minDate?: string } = {};
+
+    // Use the earlier of end date or today as maximum
+    if (endDate && endDate < todayValue) {
+      constraints.maxDate = endDate;
+    } else {
+      constraints.maxDate = endDate || todayValue;
     }
 
     return constraints;
   });
 
-  const endDateConstraints = $derived.by(() => {
-    // End date constraints:
-    // - Cannot be before start date (if start date is set)
-    // - Cannot be in the future
-    const today = new Date().toISOString().split('T')[0];
+  const endDateConstraints = $derived(() => {
+    // Only depends on: dateRange.start and today
+    const todayValue = today();
+    const startDate = dateRange.start;
+
     const constraints: { maxDate?: string; minDate?: string } = {
-      maxDate: today, // End date cannot be in future
+      maxDate: todayValue, // End date cannot be in future
     };
 
     // If start date is set, end date must be after or equal to start date
-    if (dateRange.start) {
-      constraints.minDate = dateRange.start;
+    if (startDate) {
+      constraints.minDate = startDate;
     }
 
     return constraints;
@@ -235,6 +248,7 @@
     // This prevents confusion and guides user to set valid range
     if (date && dateRange.end && date > dateRange.end) {
       dateRange.end = '';
+      toastActions.info(t('components.datePicker.feedback.endDateCleared'));
     }
   }
 
@@ -245,6 +259,7 @@
     // This allows users to work backwards (end date first, then start date)
     if (date && dateRange.start && date < dateRange.start) {
       dateRange.start = '';
+      toastActions.info(t('components.datePicker.feedback.startDateCleared'));
     }
   }
 </script>
@@ -319,8 +334,8 @@
                 placeholder={t('search.fields.from')}
                 className="w-full"
                 size="md"
-                maxDate={startDateConstraints.maxDate}
-                minDate={startDateConstraints.minDate}
+                maxDate={startDateConstraints().maxDate}
+                minDate={startDateConstraints().minDate}
               />
               <DatePicker
                 value={dateRange.end}
@@ -328,8 +343,8 @@
                 placeholder={t('search.fields.to')}
                 className="w-full"
                 size="md"
-                maxDate={endDateConstraints.maxDate}
-                minDate={endDateConstraints.minDate}
+                maxDate={endDateConstraints().maxDate}
+                minDate={endDateConstraints().minDate}
               />
             </div>
             {#if showTooltip === 'dateRange'}

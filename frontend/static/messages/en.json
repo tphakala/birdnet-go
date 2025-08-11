@@ -98,7 +98,14 @@
       "cancelEdit": "Cancel edit",
       "editSpecies": "Edit species",
       "removeSpecies": "Remove species",
-      "dismissError": "Dismiss error"
+      "dismissError": "Dismiss error",
+      "datePickerCalendar": "Date picker calendar",
+      "selectDate": "Select date",
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "selectToday": "Select today",
+      "dateSelected": "Date selected: {date}",
+      "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close"
     },
     "actions": {
       "back": "Back",
@@ -1559,6 +1566,28 @@
       "numberField": {
         "adjustedToMinimum": "Value was adjusted to minimum ({value})",
         "adjustedToMaximum": "Value was adjusted to maximum ({value})"
+      }
+    },
+    "datePicker": {
+      "feedback": {
+        "endDateCleared": "End date cleared to maintain valid range",
+        "startDateCleared": "Start date cleared to maintain valid range",
+        "invalidDateFormat": "Invalid date format. Please use YYYY-MM-DD format",
+        "dateOutOfRange": "Selected date is outside allowed range",
+        "futureDate": "Cannot select future dates",
+        "pastDate": "Cannot select past dates"
+      },
+      "aria": {
+        "dateSelected": "Date {date} selected",
+        "calendarOpened": "Calendar opened for date selection",
+        "calendarClosed": "Calendar closed",
+        "monthChanged": "Showing {month} {year}",
+        "dayUnavailable": "Day {day} is not available for selection",
+        "todayButton": "Select today's date: {today}"
+      },
+      "status": {
+        "loading": "Loading calendar...",
+        "error": "Error loading calendar"
       }
     }
   }
