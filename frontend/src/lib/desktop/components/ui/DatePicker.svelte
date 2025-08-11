@@ -3,6 +3,9 @@
   import { cn } from '$lib/utils/cn';
   import { navigationIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { getLocalDateString } from '$lib/utils/date';
+  import { t } from '$lib/i18n';
+
+  type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
   interface Props {
     value: string; // YYYY-MM-DD format
@@ -12,6 +15,7 @@
     className?: string;
     disabled?: boolean;
     placeholder?: string;
+    size?: ButtonSize;
   }
 
   let {
@@ -22,25 +26,86 @@
     className = '',
     disabled = false,
     placeholder = 'Select date',
+    size = 'sm',
   }: Props = $props();
 
+  // Date validation functions
+  function isValidDateFormat(dateString: string): boolean {
+    if (!dateString) return true; // Empty string is valid (no selection)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    return dateRegex.test(dateString);
+  }
+
+  function isValidDate(dateString: string): boolean {
+    if (!dateString) return true;
+    if (!isValidDateFormat(dateString)) return false;
+
+    const date = new Date(dateString + 'T12:00:00');
+    return !isNaN(date.getTime()) && dateString === getLocalDateString(date);
+  }
+
+  // Validation state
+  const isValueValid = $derived(isValidDate(value));
+  const validationError = $derived(() => {
+    if (!value) return null;
+    if (!isValidDateFormat(value)) {
+      return t('components.datePicker.feedback.invalidDateFormat');
+    }
+    if (!isValidDate(value)) {
+      return t('components.datePicker.feedback.dateOutOfRange');
+    }
+    return null;
+  });
+
   let showCalendar = $state(false);
-  let displayMonth = $state(value ? new Date(value + 'T12:00:00') : new Date());
+  let displayMonth = $state(
+    (() => {
+      if (value && isValueValid) {
+        try {
+          return new Date(value + 'T12:00:00');
+        } catch {
+          return new Date();
+        }
+      }
+      return new Date();
+    })()
+  );
   let calendarRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
+  // State for keyboard navigation focus
+  let focusedDate = $state<Date | null>(null);
+  let ariaMessage = $state<string>('');
+
   // Get the selected date as a Date object (use noon to avoid timezone shifts)
-  const selectedDate = $derived(value ? new Date(value + 'T12:00:00') : null);
+  const selectedDate = $derived(() => {
+    if (!value || !isValueValid) return null;
+    try {
+      return new Date(value + 'T12:00:00');
+    } catch {
+      return null;
+    }
+  });
 
   // Format the display text
   const displayText = $derived(() => {
-    if (!selectedDate) return placeholder;
-    return selectedDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (validationError()) {
+      return t('common.validation.invalid');
+    }
+    if (!selectedDate()) return placeholder;
+
+    try {
+      const date = selectedDate();
+      if (!date) return placeholder;
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return t('common.validation.invalid');
+    }
   });
 
   // Get month name for calendar header
@@ -89,8 +154,10 @@
 
   // Check if a date is selected
   function isDateSelected(date: Date): boolean {
-    if (!date || !selectedDate) return false;
-    return date.toDateString() === selectedDate.toDateString();
+    if (!date) return false;
+    const selected = selectedDate();
+    if (!selected) return false;
+    return date.toDateString() === selected.toDateString();
   }
 
   // Check if a date is today
@@ -99,13 +166,21 @@
     return date.toDateString() === new Date().toDateString();
   }
 
-  // Navigate months
+  // Navigate months with aria announcements
   function goToPreviousMonth() {
     displayMonth = new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1);
+    ariaMessage = t('components.datePicker.aria.monthChanged', {
+      month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+      year: displayMonth.getFullYear(),
+    });
   }
 
   function goToNextMonth() {
     displayMonth = new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1);
+    ariaMessage = t('components.datePicker.aria.monthChanged', {
+      month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+      year: displayMonth.getFullYear(),
+    });
   }
 
   // Select a date
@@ -123,20 +198,127 @@
     showCalendar = !showCalendar;
   }
 
-  // Handle keyboard navigation
+  // Enhanced keyboard navigation
   function handleKeyDown(event: KeyboardEvent) {
     if (!showCalendar) {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         toggleCalendar();
+        // Set initial focus to selected date or today
+        const initialFocus = selectedDate() || new Date();
+        focusedDate = initialFocus;
+        ariaMessage = t('components.datePicker.aria.calendarOpened');
       }
       return;
     }
 
-    if (event.key === 'Escape') {
+    // Handle keyboard navigation within calendar
+    const currentFocus = focusedDate || selectedDate() || new Date();
+    let newFocus: Date | null = null;
+    let handled = true;
+
+    switch (event.key) {
+      case 'Escape':
+        showCalendar = false;
+        buttonRef?.focus();
+        ariaMessage = t('components.datePicker.aria.calendarClosed');
+        break;
+
+      case 'ArrowLeft':
+        newFocus = new Date(currentFocus);
+        newFocus.setDate(newFocus.getDate() - 1);
+        break;
+
+      case 'ArrowRight':
+        newFocus = new Date(currentFocus);
+        newFocus.setDate(newFocus.getDate() + 1);
+        break;
+
+      case 'ArrowUp':
+        newFocus = new Date(currentFocus);
+        newFocus.setDate(newFocus.getDate() - 7);
+        break;
+
+      case 'ArrowDown':
+        newFocus = new Date(currentFocus);
+        newFocus.setDate(newFocus.getDate() + 7);
+        break;
+
+      case 'Home':
+        newFocus = new Date(currentFocus.getFullYear(), currentFocus.getMonth(), 1);
+        break;
+
+      case 'End':
+        newFocus = new Date(currentFocus.getFullYear(), currentFocus.getMonth() + 1, 0);
+        break;
+
+      case 'PageUp':
+        event.preventDefault();
+        if (event.shiftKey) {
+          // Shift + PageUp = Previous year
+          displayMonth = new Date(displayMonth.getFullYear() - 1, displayMonth.getMonth(), 1);
+          ariaMessage = t('components.datePicker.aria.monthChanged', {
+            month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+            year: displayMonth.getFullYear(),
+          });
+        } else {
+          // PageUp = Previous month
+          goToPreviousMonth();
+        }
+        break;
+
+      case 'PageDown':
+        event.preventDefault();
+        if (event.shiftKey) {
+          // Shift + PageDown = Next year
+          displayMonth = new Date(displayMonth.getFullYear() + 1, displayMonth.getMonth(), 1);
+          ariaMessage = t('components.datePicker.aria.monthChanged', {
+            month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+            year: displayMonth.getFullYear(),
+          });
+        } else {
+          // PageDown = Next month
+          goToNextMonth();
+        }
+        break;
+
+      case 'Enter':
+      case ' ':
+        if (focusedDate && isDateSelectable(focusedDate)) {
+          selectDate(focusedDate);
+          ariaMessage = t('components.datePicker.aria.dateSelected', {
+            date: focusedDate.toLocaleDateString(),
+          });
+        } else if (focusedDate) {
+          ariaMessage = t('components.datePicker.aria.dayUnavailable', {
+            day: focusedDate.getDate(),
+          });
+        }
+        break;
+
+      default:
+        handled = false;
+    }
+
+    if (handled) {
       event.preventDefault();
-      showCalendar = false;
-      buttonRef?.focus();
+    }
+
+    // Update focused date and ensure it's visible in current month
+    if (newFocus) {
+      // If navigation moves to different month, update display month
+      if (
+        newFocus.getMonth() !== displayMonth.getMonth() ||
+        newFocus.getFullYear() !== displayMonth.getFullYear()
+      ) {
+        displayMonth = new Date(newFocus.getFullYear(), newFocus.getMonth(), 1);
+        ariaMessage = t('components.datePicker.aria.monthChanged', {
+          month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+          year: displayMonth.getFullYear(),
+        });
+      }
+
+      focusedDate = newFocus;
     }
   }
 
@@ -160,6 +342,22 @@
 
   // Week day headers
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // Map size prop to CSS class
+  const sizeClass = $derived(() => {
+    switch (size) {
+      case 'xs':
+        return 'btn-xs';
+      case 'sm':
+        return 'btn-sm';
+      case 'md':
+        return 'btn';
+      case 'lg':
+        return 'btn-lg';
+      default:
+        return 'btn-sm';
+    }
+  });
 </script>
 
 <div class="relative datepicker-wrapper">
@@ -168,9 +366,12 @@
     bind:this={buttonRef}
     type="button"
     class={cn(
-      'btn btn-sm',
+      'btn',
+      sizeClass(),
       'flex items-center gap-2',
       'font-normal',
+      'min-w-[11rem]', // Consistent width to prevent layout shifts
+      'justify-start', // Left-align content within button
       disabled ? 'btn-disabled' : '',
       className
     )}
@@ -182,8 +383,34 @@
     aria-haspopup="true"
   >
     {@html systemIcons.calendar}
-    <span>{displayText()}</span>
+    <span class="truncate leading-normal">{displayText()}</span>
   </button>
+
+  <!-- Validation Error Display -->
+  {#if validationError()}
+    <div class="text-error text-xs mt-1" role="alert">
+      {validationError()}
+    </div>
+  {/if}
+
+  <!-- Enhanced Aria Live Region for Screen Reader Announcements -->
+  <div class="sr-only" aria-live="polite" aria-atomic="true">
+    {#if ariaMessage}
+      {ariaMessage}
+    {/if}
+  </div>
+
+  <!-- Keyboard Navigation Instructions -->
+  {#if showCalendar}
+    <div
+      class="sr-only"
+      id="calendar-instructions"
+      role="region"
+      aria-label={t('common.aria.calendarNavigation')}
+    >
+      {t('common.aria.calendarNavigation')}
+    </div>
+  {/if}
 
   <!-- Calendar Dropdown -->
   {#if showCalendar}
@@ -204,7 +431,7 @@
           {@html navigationIcons.arrowLeft}
         </button>
 
-        <h3 class="text-sm font-semibold">
+        <h3 id="month-year-heading" class="text-sm font-semibold">
           {monthYearText}
         </h3>
 
@@ -227,24 +454,54 @@
         {/each}
       </div>
 
-      <!-- Calendar Days -->
-      <div class="grid grid-cols-7 gap-1">
+      <!-- Calendar Days with Enhanced Keyboard Navigation -->
+      <div
+        class="grid grid-cols-7 gap-1"
+        role="grid"
+        aria-labelledby="month-year-heading"
+        aria-describedby="calendar-instructions"
+      >
         {#each calendarDays() as date}
           {#if date}
             <button
               type="button"
+              role="gridcell"
               class={cn(
                 'relative h-8 w-8 rounded text-sm transition-colors',
-                'hover:bg-base-200',
+                'hover:bg-base-200 focus:ring-2 focus:ring-primary focus:ring-offset-1',
                 isDateSelected(date) ? 'bg-primary text-primary-content font-semibold' : '',
                 isToday(date) && !isDateSelected(date) ? 'bg-base-200 font-semibold' : '',
                 !isDateSelectable(date)
                   ? 'text-base-content/30 cursor-not-allowed hover:bg-transparent'
-                  : 'cursor-pointer'
+                  : 'cursor-pointer',
+                // Focus indicator for keyboard navigation
+                focusedDate && focusedDate.toDateString() === date.toDateString()
+                  ? 'ring-2 ring-primary ring-offset-1'
+                  : ''
               )}
+              tabindex={// Only the focused date (or selected date, or today if no focus) should be tabbable
+              (focusedDate && focusedDate.toDateString() === date.toDateString()) ||
+              (!focusedDate && isDateSelected(date)) ||
+              (!focusedDate && !selectedDate() && isToday(date))
+                ? 0
+                : -1}
               onclick={() => selectDate(date)}
+              onkeydown={handleKeyDown}
               disabled={!isDateSelectable(date)}
-              aria-label={date.toLocaleDateString()}
+              aria-label={cn(
+                date.toLocaleDateString(),
+                isDateSelected(date)
+                  ? t('components.datePicker.aria.dateSelected', {
+                      date: date.toLocaleDateString(),
+                    })
+                  : '',
+                isToday(date) ? 'Today' : '',
+                !isDateSelectable(date)
+                  ? t('components.datePicker.aria.dayUnavailable', { day: date.getDate() })
+                  : ''
+              )}
+              aria-selected={isDateSelected(date)}
+              aria-current={isToday(date) ? 'date' : undefined}
             >
               {date.getDate()}
               {#if isToday(date)}
@@ -254,7 +511,7 @@
               {/if}
             </button>
           {:else}
-            <div class="h-8 w-8"></div>
+            <div class="h-8 w-8" role="gridcell" aria-hidden="true"></div>
           {/if}
         {/each}
       </div>

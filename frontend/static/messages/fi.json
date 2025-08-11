@@ -1415,5 +1415,35 @@
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia"
     }
+  },
+  "components": {
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Arvo säädetty minimiin ({value})",
+        "adjustedToMaximum": "Arvo säädetty maksimiin ({value})"
+      }
+    },
+    "datePicker": {
+      "feedback": {
+        "endDateCleared": "Loppupäivä tyhjennetty kelvollisen alueen säilyttämiseksi",
+        "startDateCleared": "Alkupäivä tyhjennetty kelvollisen alueen säilyttämiseksi",
+        "invalidDateFormat": "Virheellinen päivämäärämuoto. Käytä muotoa VVVV-KK-PP",
+        "dateOutOfRange": "Valittu päivämäärä on sallitun alueen ulkopuolella",
+        "futureDate": "Tulevia päivämääriä ei voi valita",
+        "pastDate": "Menneitä päivämääriä ei voi valita"
+      },
+      "aria": {
+        "dateSelected": "Päivämäärä {date} valittu",
+        "calendarOpened": "Kalenteri avattu päivämäärän valintaa varten",
+        "calendarClosed": "Kalenteri suljettu",
+        "monthChanged": "Näytetään {month} {year}",
+        "dayUnavailable": "Päivä {day} ei ole valittavissa",
+        "todayButton": "Valitse tämän päivän päivämäärä: {today}"
+      },
+      "status": {
+        "loading": "Ladataan kalenteria...",
+        "error": "Virhe kalenterin lataamisessa"
+      }
+    }
   }
 }

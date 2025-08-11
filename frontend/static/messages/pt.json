@@ -1429,6 +1429,28 @@
         "adjustedToMinimum": "Valor ajustado para mínimo ({value})",
         "adjustedToMaximum": "Valor ajustado para máximo ({value})"
       }
+    },
+    "datePicker": {
+      "feedback": {
+        "endDateCleared": "Data final limpa para manter intervalo válido",
+        "startDateCleared": "Data inicial limpa para manter intervalo válido",
+        "invalidDateFormat": "Formato de data inválido. Por favor use o formato AAAA-MM-DD",
+        "dateOutOfRange": "Data selecionada está fora do intervalo permitido",
+        "futureDate": "Não é possível selecionar datas futuras",
+        "pastDate": "Não é possível selecionar datas passadas"
+      },
+      "aria": {
+        "dateSelected": "Data {date} selecionada",
+        "calendarOpened": "Calendário aberto para seleção de data",
+        "calendarClosed": "Calendário fechado",
+        "monthChanged": "Mostrando {month} {year}",
+        "dayUnavailable": "O dia {day} não está disponível para seleção",
+        "todayButton": "Selecionar a data de hoje: {today}"
+      },
+      "status": {
+        "loading": "Carregando calendário...",
+        "error": "Erro ao carregar calendário"
+      }
     }
   }
 }

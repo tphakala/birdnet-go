@@ -1436,5 +1436,35 @@
       "highPassFilter": "Contrôle du filtre passe-haut : {freq} Hz",
       "seekProgress": "Progression de la lecture audio : {current} / {total} secondes"
     }
+  },
+  "components": {
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Valeur ajustée au minimum ({value})",
+        "adjustedToMaximum": "Valeur ajustée au maximum ({value})"
+      }
+    },
+    "datePicker": {
+      "feedback": {
+        "endDateCleared": "Date de fin effacée pour maintenir une plage valide",
+        "startDateCleared": "Date de début effacée pour maintenir une plage valide",
+        "invalidDateFormat": "Format de date invalide. Veuillez utiliser le format AAAA-MM-JJ",
+        "dateOutOfRange": "La date sélectionnée est en dehors de la plage autorisée",
+        "futureDate": "Impossible de sélectionner des dates futures",
+        "pastDate": "Impossible de sélectionner des dates passées"
+      },
+      "aria": {
+        "dateSelected": "Date {date} sélectionnée",
+        "calendarOpened": "Calendrier ouvert pour la sélection de date",
+        "calendarClosed": "Calendrier fermé",
+        "monthChanged": "Affichage {month} {year}",
+        "dayUnavailable": "Le jour {day} n'est pas disponible pour la sélection",
+        "todayButton": "Sélectionner la date d'aujourd'hui : {today}"
+      },
+      "status": {
+        "loading": "Chargement du calendrier...",
+        "error": "Erreur lors du chargement du calendrier"
+      }
+    }
   }
 }

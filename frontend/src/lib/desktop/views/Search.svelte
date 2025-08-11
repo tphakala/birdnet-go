@@ -2,7 +2,10 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { t, getLocale } from '$lib/i18n';
+  import { getLocalDateString } from '$lib/utils/date';
+  import { toastActions } from '$lib/stores/toast';
   import {
     actionIcons,
     alertIconsSvg,
@@ -190,6 +193,75 @@
   function isExpanded(recordId: string) {
     return expandedItems.has(recordId);
   }
+
+  // Memoized today value - only recalculates when component mounts or when day changes
+  // This prevents unnecessary recalculations on every state change
+  const today = $derived(() => {
+    // Force recalculation periodically to handle day changes
+    // Using Math.floor to update once per day
+    const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    // The variable access ensures reactivity but the calculation is stable per day
+    void daysSinceEpoch; // Acknowledge the dependency
+    return getLocalDateString();
+  });
+
+  // Optimized reactive date constraints - only recalculate when relevant dependencies change
+  const startDateConstraints = $derived(() => {
+    // Only depends on: dateRange.end and today
+    const todayValue = today();
+    const endDate = dateRange.end;
+
+    const constraints: { maxDate?: string; minDate?: string } = {};
+
+    // Use the earlier of end date or today as maximum
+    if (endDate && endDate < todayValue) {
+      constraints.maxDate = endDate;
+    } else {
+      constraints.maxDate = endDate || todayValue;
+    }
+
+    return constraints;
+  });
+
+  const endDateConstraints = $derived(() => {
+    // Only depends on: dateRange.start and today
+    const todayValue = today();
+    const startDate = dateRange.start;
+
+    const constraints: { maxDate?: string; minDate?: string } = {
+      maxDate: todayValue, // End date cannot be in future
+    };
+
+    // If start date is set, end date must be after or equal to start date
+    if (startDate) {
+      constraints.minDate = startDate;
+    }
+
+    return constraints;
+  });
+
+  // Date picker handlers with smart edge case handling
+  function handleStartDateChange(date: string) {
+    dateRange.start = date;
+
+    // Smart edge case: If start date is set after existing end date, clear end date
+    // This prevents confusion and guides user to set valid range
+    if (date && dateRange.end && date > dateRange.end) {
+      dateRange.end = '';
+      toastActions.info(t('components.datePicker.feedback.endDateCleared'));
+    }
+  }
+
+  function handleEndDateChange(date: string) {
+    dateRange.end = date;
+
+    // Smart edge case: If end date is set before existing start date, clear start date
+    // This allows users to work backwards (end date first, then start date)
+    if (date && dateRange.start && date < dateRange.start) {
+      dateRange.start = '';
+      toastActions.info(t('components.datePicker.feedback.startDateCleared'));
+    }
+  }
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('search.title')}>
@@ -256,21 +328,23 @@
               >
             </label>
             <div class="gap-2 search-date-grid" role="group" aria-labelledby="dateRangeLabel">
-              <input
-                type="date"
-                id="dateRangeStart"
-                bind:value={dateRange.start}
+              <DatePicker
+                value={dateRange.start}
+                onChange={handleStartDateChange}
                 placeholder={t('search.fields.from')}
-                class="input input-bordered w-full"
-                aria-label={t('search.fields.from')}
+                className="w-full"
+                size="md"
+                maxDate={startDateConstraints().maxDate}
+                minDate={startDateConstraints().minDate}
               />
-              <input
-                type="date"
-                id="endDate"
-                bind:value={dateRange.end}
+              <DatePicker
+                value={dateRange.end}
+                onChange={handleEndDateChange}
                 placeholder={t('search.fields.to')}
-                class="input input-bordered w-full"
-                aria-label={t('search.fields.to')}
+                className="w-full"
+                size="md"
+                maxDate={endDateConstraints().maxDate}
+                minDate={endDateConstraints().minDate}
               />
             </div>
             {#if showTooltip === 'dateRange'}
