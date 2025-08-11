@@ -39,12 +39,14 @@
 
   // State
   let notifications = $state<Notification[]>([]);
-  let unreadCount = $state(0);
   let dropdownOpen = $state(false);
   let loading = $state(true);
   let hasUnread = $state(false);
   let soundEnabled = $state(false);
   let isAuthenticated = $state(true); // Assume authenticated until proven otherwise
+
+  // Derived state - automatically updates when notifications change
+  let unreadCount = $derived(notifications.filter(n => !n.read).length);
 
   // Internal state
   let sseConnection: ReconnectingEventSource | null = null;
@@ -151,14 +153,12 @@
       // Apply deduplication to API-fetched notifications
       // This ensures consistent deduplication behavior between SSE and API
       notifications = mergeAndDeduplicateNotifications(notifications, apiNotifications);
-      updateUnreadCount();
     } catch (error) {
       // Handle authentication errors gracefully - expected for non-authenticated users
       if (error instanceof ApiError && error.status === 401) {
         // Silently fail for unauthenticated users - this is expected behavior
         isAuthenticated = false;
         notifications = [];
-        updateUnreadCount();
         return;
       }
 
@@ -385,7 +385,6 @@
 
     // Always perform merge to update timestamps and priority
     notifications = mergeAndDeduplicateNotifications(notifications, [notification]);
-    updateUnreadCount();
 
     // Only trigger UI effects for truly new notifications
     if (wasNewNotification) {
@@ -415,17 +414,11 @@
     }
   }
 
-  // Update unread count
-  function updateUnreadCount() {
-    unreadCount = notifications.filter(n => !n.read).length;
-  }
-
   // Mark notification as read
   async function markAsRead(notificationId: string) {
     try {
       await api.put(`/api/v2/notifications/${notificationId}/read`);
       notifications = notifications.map(n => (n.id === notificationId ? { ...n, read: true } : n));
-      updateUnreadCount();
     } catch (error) {
       // Show user feedback for failed mark-as-read since this is a user action
       if (error instanceof ApiError) {
@@ -531,10 +524,6 @@
     const index = notifications.findIndex(n => n.id === event.detail.id);
     if (index !== -1) {
       notifications = notifications.filter(n => n.id !== event.detail.id);
-
-      if (event.detail.wasUnread) {
-        updateUnreadCount();
-      }
     }
   }
 
