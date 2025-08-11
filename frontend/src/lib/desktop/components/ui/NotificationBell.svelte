@@ -146,9 +146,11 @@
       const data = await api.get<{ notifications?: Notification[] }>(
         '/api/v2/notifications?limit=20&status=unread'
       );
-      notifications = (data?.notifications || []).filter((n: Notification) =>
-        shouldShowNotification(n)
-      );
+      const apiNotifications = data?.notifications ?? [];
+
+      // Apply deduplication to API-fetched notifications
+      // This ensures consistent deduplication behavior between SSE and API
+      notifications = mergeAndDeduplicateNotifications(notifications, apiNotifications);
       updateUnreadCount();
     } catch (error) {
       // Handle authentication errors gracefully - expected for non-authenticated users
@@ -259,70 +261,157 @@
     }
   }
 
-  // Add new notification
-  function addNotification(notification: Notification) {
-    if (!shouldShowNotification(notification)) {
-      return;
-    }
+  // Runtime validation for notification shape
+  function isValidNotification(notification: unknown): notification is Notification {
+    return (
+      typeof notification === 'object' &&
+      notification !== null &&
+      'message' in notification &&
+      'title' in notification &&
+      'type' in notification &&
+      typeof (notification as Notification).message === 'string' &&
+      typeof (notification as Notification).title === 'string' &&
+      typeof (notification as Notification).type === 'string'
+    );
+  }
 
-    // Check for duplicate notification by matching message, title, and type
+  // Check if notification already exists in array
+  function isExistingNotification(
+    notification: Notification,
+    existingNotifications: Notification[]
+  ): boolean {
     const notificationKey = createNotificationKey(
       notification.message,
       notification.title,
       notification.type
     );
-    const existingIndex = notifications.findIndex(
+    return existingNotifications.some(
       n => createNotificationKey(n.message, n.title, n.type) === notificationKey
     );
+  }
 
-    if (existingIndex !== -1) {
-      // Duplicate found - update timestamp and move to top
-      // eslint-disable-next-line security/detect-object-injection
-      const existing = notifications[existingIndex];
-      const updated = {
-        ...existing,
-        timestamp: notification.timestamp,
-        // Preserve read status if the existing notification was already read
-        read: existing.read,
-        // Update priority if the new one is higher priority
-        priority: getHigherPriority(existing.priority, notification.priority),
-      };
-
-      // Remove from current position and add to beginning
-      notifications = [
-        updated,
-        ...notifications.slice(0, existingIndex),
-        ...notifications.slice(existingIndex + 1, 20),
-      ];
-    } else {
-      // No duplicate - add to beginning of array
-      notifications = [notification, ...notifications.slice(0, 20)];
+  // Merge and deduplicate notifications arrays
+  function mergeAndDeduplicateNotifications(
+    existingNotifications: Notification[],
+    newNotifications: Notification[],
+    limit: number = 20
+  ): Notification[] {
+    // Performance optimization: early return if no new notifications
+    if (!newNotifications.length) {
+      return existingNotifications;
     }
 
+    const result: Notification[] = [];
+    const processedKeys = new Set<string>();
+
+    // Process new notifications first (they get priority)
+    for (const newNotification of newNotifications) {
+      if (!shouldShowNotification(newNotification)) {
+        continue;
+      }
+
+      const notificationKey = createNotificationKey(
+        newNotification.message,
+        newNotification.title,
+        newNotification.type
+      );
+
+      if (processedKeys.has(notificationKey)) {
+        continue; // Skip if we've already processed this key
+      }
+
+      // Check for duplicate in existing notifications
+      const existingNotification = existingNotifications.find(
+        n => createNotificationKey(n.message, n.title, n.type) === notificationKey
+      );
+
+      if (existingNotification) {
+        // Merge with existing: update timestamp, preserve read status, upgrade priority
+        const merged = {
+          ...existingNotification,
+          timestamp: newNotification.timestamp,
+          read: existingNotification.read, // Preserve read status
+          priority: getHigherPriority(existingNotification.priority, newNotification.priority),
+        };
+        result.push(merged);
+      } else {
+        // Add new notification
+        result.push(newNotification);
+      }
+
+      processedKeys.add(notificationKey);
+    }
+
+    // Add remaining existing notifications that weren't duplicates
+    for (const existing of existingNotifications) {
+      const notificationKey = createNotificationKey(
+        existing.message,
+        existing.title,
+        existing.type
+      );
+
+      if (!processedKeys.has(notificationKey)) {
+        result.push(existing);
+        processedKeys.add(notificationKey);
+      }
+    }
+
+    // Sort by timestamp (newest first) for deterministic order
+    const sortedResult = result.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeB - timeA; // Descending order (newest first)
+    });
+
+    // Apply limit
+    return sortedResult.slice(0, limit);
+  }
+
+  // Add single notification (used for SSE)
+  function addNotification(notification: Notification) {
+    // Runtime validation to ensure notification has expected shape
+    if (!isValidNotification(notification)) {
+      logger.warn('Invalid notification received, skipping', null, {
+        component: 'NotificationBell',
+        action: 'addNotification',
+        notification:
+          typeof notification === 'object' ? JSON.stringify(notification) : String(notification),
+      });
+      return;
+    }
+
+    // Check if notification already exists BEFORE merging
+    const wasNewNotification = !isExistingNotification(notification, notifications);
+
+    // Always perform merge to update timestamps and priority
+    notifications = mergeAndDeduplicateNotifications(notifications, [notification]);
     updateUnreadCount();
 
-    // Wiggle animation
-    if (animationTimeout) {
-      globalThis.clearTimeout(animationTimeout);
-    }
+    // Only trigger UI effects for truly new notifications
+    if (wasNewNotification) {
+      // Wiggle animation
+      if (animationTimeout) {
+        globalThis.clearTimeout(animationTimeout);
+      }
 
-    hasUnread = true;
-    animationTimeout = globalThis.setTimeout(() => {
-      hasUnread = false;
-      animationTimeout = null;
-    }, 1000);
+      hasUnread = true;
+      animationTimeout = globalThis.setTimeout(() => {
+        hasUnread = false;
+        animationTimeout = null;
+      }, 1000);
 
-    // Play sound if enabled and notification is high priority
-    if (
-      soundEnabled &&
-      (notification.priority === 'critical' || notification.priority === 'high')
-    ) {
-      playNotificationSound();
-    }
+      // Play sound if enabled and notification is high priority
+      if (
+        soundEnabled &&
+        (notification.priority === 'critical' || notification.priority === 'high')
+      ) {
+        playNotificationSound();
+      }
 
-    // Show browser notification if permitted
-    if (notification.priority === 'critical') {
-      showBrowserNotification(notification);
+      // Show browser notification if permitted
+      if (notification.priority === 'critical') {
+        showBrowserNotification(notification);
+      }
     }
   }
 

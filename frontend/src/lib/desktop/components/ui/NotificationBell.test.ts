@@ -371,6 +371,9 @@ describe('NotificationBell Component', () => {
     });
 
     it('should update timestamp for duplicate notifications', async () => {
+      // Set up test with empty mock data to avoid interference
+      vi.mocked(api.get).mockResolvedValue({ notifications: [] });
+
       const { container } = render(NotificationBell);
 
       await waitFor(() => {
@@ -402,7 +405,7 @@ describe('NotificationBell Component', () => {
       const button = screen.getByRole('button', { name: /notifications/i });
       await fireEvent.click(button);
 
-      // Should show old timestamp
+      // Should show old timestamp initially
       expect(container.querySelector('time')?.textContent).toContain('h ago');
 
       // Send duplicate with new timestamp
@@ -416,9 +419,14 @@ describe('NotificationBell Component', () => {
       sseInstance.simulateMessage(notification2);
       await tick();
 
-      // Should show updated timestamp
+      // Should show updated timestamp - the notification now has the newer timestamp
+      // and should be sorted to maintain newest-first order
       const timeElement = container.querySelector('time');
       expect(timeElement?.textContent).toContain('just now');
+
+      // Verify there's still only one notification with this message (deduplicated)
+      const messages = screen.getAllByText('Testing timestamp update');
+      expect(messages.length).toBe(1);
     });
 
     it('should escalate priority for duplicate notifications', async () => {
