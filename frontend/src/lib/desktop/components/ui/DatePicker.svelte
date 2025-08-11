@@ -4,6 +4,8 @@
   import { navigationIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { getLocalDateString } from '$lib/utils/date';
 
+  type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
+
   interface Props {
     value: string; // YYYY-MM-DD format
     onChange: (_date: string) => void;
@@ -12,6 +14,7 @@
     className?: string;
     disabled?: boolean;
     placeholder?: string;
+    size?: ButtonSize;
   }
 
   let {
@@ -22,6 +25,7 @@
     className = '',
     disabled = false,
     placeholder = 'Select date',
+    size = 'sm',
   }: Props = $props();
 
   let showCalendar = $state(false);
@@ -160,6 +164,22 @@
 
   // Week day headers
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // Map size prop to CSS class
+  const sizeClass = $derived(() => {
+    switch (size) {
+      case 'xs':
+        return 'btn-xs';
+      case 'sm':
+        return 'btn-sm';
+      case 'md':
+        return 'btn';
+      case 'lg':
+        return 'btn-lg';
+      default:
+        return 'btn-sm';
+    }
+  });
 </script>
 
 <div class="relative datepicker-wrapper">
@@ -168,9 +188,12 @@
     bind:this={buttonRef}
     type="button"
     class={cn(
-      'btn btn-sm',
+      'btn',
+      sizeClass(),
       'flex items-center gap-2',
       'font-normal',
+      'min-w-[11rem]', // Consistent width to prevent layout shifts
+      'justify-start', // Left-align content within button
       disabled ? 'btn-disabled' : '',
       className
     )}
@@ -182,7 +205,7 @@
     aria-haspopup="true"
   >
     {@html systemIcons.calendar}
-    <span>{displayText()}</span>
+    <span class="truncate leading-normal">{displayText()}</span>
   </button>
 
   <!-- Calendar Dropdown -->

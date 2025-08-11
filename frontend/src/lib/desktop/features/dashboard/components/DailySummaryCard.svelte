@@ -137,7 +137,6 @@ Responsive Breakpoints:
     showThumbnails?: boolean;
     onPreviousDay: () => void;
     onNextDay: () => void;
-    onGoToToday: () => void;
     onDateChange: (_date: string) => void;
   }
 
@@ -149,7 +148,6 @@ Responsive Breakpoints:
     showThumbnails = true,
     onPreviousDay,
     onNextDay,
-    onGoToToday,
     onDateChange,
   }: Props = $props();
 
@@ -483,30 +481,24 @@ Responsive Breakpoints:
     <!-- Previous day button -->
     <button
       onclick={onPreviousDay}
-      class="btn btn-sm btn-ghost"
+      class="btn btn-sm btn-ghost flex-shrink-0"
       aria-label={t('dashboard.dailySummary.navigation.previousDay')}
     >
       {@html navigationIcons.arrowLeft}
     </button>
 
-    <!-- Date picker -->
-    <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2" />
+    <!-- Date picker with consistent width -->
+    <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2 flex-grow" />
 
     <!-- Next day button -->
     <button
       onclick={onNextDay}
-      class="btn btn-sm btn-ghost"
+      class="btn btn-sm btn-ghost flex-shrink-0"
       disabled={isToday}
       aria-label={t('dashboard.dailySummary.navigation.nextDay')}
     >
       {@html navigationIcons.arrowRight}
     </button>
-
-    {#if !isToday}
-      <button onclick={onGoToToday} class="btn btn-sm btn-primary"
-        >{t('dashboard.dailySummary.navigation.today')}</button
-      >
-    {/if}
   </div>
 {/snippet}
 

@@ -2,6 +2,7 @@
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
+  import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { t, getLocale } from '$lib/i18n';
   import {
     actionIcons,
@@ -190,6 +191,62 @@
   function isExpanded(recordId: string) {
     return expandedItems.has(recordId);
   }
+
+  // Reactive date constraints using $derived
+  const startDateConstraints = $derived.by(() => {
+    // Start date constraints:
+    // - Cannot be after end date (if end date is set)
+    // - Cannot be in the future (assuming we don't want future search dates)
+    const today = new Date().toISOString().split('T')[0];
+    const constraints: { maxDate?: string; minDate?: string } = {
+      maxDate: dateRange.end || today, // Use end date or today, whichever is earlier
+    };
+
+    // If end date is set and it's before today, use that as max
+    if (dateRange.end && dateRange.end < today) {
+      constraints.maxDate = dateRange.end;
+    }
+
+    return constraints;
+  });
+
+  const endDateConstraints = $derived.by(() => {
+    // End date constraints:
+    // - Cannot be before start date (if start date is set)
+    // - Cannot be in the future
+    const today = new Date().toISOString().split('T')[0];
+    const constraints: { maxDate?: string; minDate?: string } = {
+      maxDate: today, // End date cannot be in future
+    };
+
+    // If start date is set, end date must be after or equal to start date
+    if (dateRange.start) {
+      constraints.minDate = dateRange.start;
+    }
+
+    return constraints;
+  });
+
+  // Date picker handlers with smart edge case handling
+  function handleStartDateChange(date: string) {
+    dateRange.start = date;
+
+    // Smart edge case: If start date is set after existing end date, clear end date
+    // This prevents confusion and guides user to set valid range
+    if (date && dateRange.end && date > dateRange.end) {
+      dateRange.end = '';
+    }
+  }
+
+  function handleEndDateChange(date: string) {
+    dateRange.end = date;
+
+    // Smart edge case: If end date is set before existing start date, clear start date
+    // This allows users to work backwards (end date first, then start date)
+    if (date && dateRange.start && date < dateRange.start) {
+      dateRange.start = '';
+    }
+  }
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('search.title')}>
@@ -256,21 +313,23 @@
               >
             </label>
             <div class="gap-2 search-date-grid" role="group" aria-labelledby="dateRangeLabel">
-              <input
-                type="date"
-                id="dateRangeStart"
-                bind:value={dateRange.start}
+              <DatePicker
+                value={dateRange.start}
+                onChange={handleStartDateChange}
                 placeholder={t('search.fields.from')}
-                class="input input-bordered w-full"
-                aria-label={t('search.fields.from')}
+                className="w-full"
+                size="md"
+                maxDate={startDateConstraints.maxDate}
+                minDate={startDateConstraints.minDate}
               />
-              <input
-                type="date"
-                id="endDate"
-                bind:value={dateRange.end}
+              <DatePicker
+                value={dateRange.end}
+                onChange={handleEndDateChange}
                 placeholder={t('search.fields.to')}
-                class="input input-bordered w-full"
-                aria-label={t('search.fields.to')}
+                className="w-full"
+                size="md"
+                maxDate={endDateConstraints.maxDate}
+                minDate={endDateConstraints.minDate}
               />
             </div>
             {#if showTooltip === 'dateRange'}

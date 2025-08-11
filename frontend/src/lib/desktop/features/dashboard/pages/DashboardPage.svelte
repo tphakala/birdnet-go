@@ -530,12 +530,6 @@
     }
   }
 
-  function goToToday() {
-    selectedDate = getLocalDateString();
-    handleDateChangeWithCleanup();
-    fetchDailySummary();
-  }
-
   function handleDateChange(date: string) {
     selectedDate = date;
     handleDateChangeWithCleanup();
@@ -958,7 +952,6 @@
     {showThumbnails}
     onPreviousDay={previousDay}
     onNextDay={nextDay}
-    onGoToToday={goToToday}
     onDateChange={handleDateChange}
   />
 
