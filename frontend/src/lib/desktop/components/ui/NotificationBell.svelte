@@ -5,23 +5,15 @@
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
-  import { getHigherPriority, createNotificationKey, type Priority } from '$lib/utils/priority';
+  import {
+    type Notification,
+    mergeAndDeduplicateNotifications,
+    isValidNotification,
+    isExistingNotification,
+    shouldShowNotification,
+  } from '$lib/utils/notifications';
 
   const logger = loggers.ui;
-
-  // Constant for toast notification title - must match backend ToastNotificationTitle
-  const TOAST_NOTIFICATION_TITLE = 'Toast Message';
-
-  interface Notification {
-    id: string;
-    type: 'error' | 'warning' | 'info' | 'detection' | 'system';
-    title: string;
-    message: string;
-    timestamp: string;
-    read: boolean;
-    priority: Priority;
-    component?: string;
-  }
 
   interface SSEMessage {
     eventType: 'connected' | 'notification' | 'heartbeat' | 'toast';
@@ -56,7 +48,9 @@
 
   // PERFORMANCE OPTIMIZATION: Cache formatted notifications with $derived
   // Avoids repeated formatting computations and filtering in templates
-  const visibleNotifications = $derived(notifications.filter(n => shouldShowNotification(n)));
+  const visibleNotifications = $derived(
+    notifications.filter(n => shouldShowNotification(n, debugMode))
+  );
 
   // PERFORMANCE OPTIMIZATION: Cache formatted notification data for display
   // Prevents repeated date formatting and icon class computation
@@ -69,34 +63,6 @@
       priorityBadgeClass: getPriorityBadgeClass(notification.priority),
     }))
   );
-
-  // Type guard to identify toast notifications
-  // Toast notifications are ephemeral and should only appear as temporary UI toasts
-  function isToastNotification(notification: Notification): boolean {
-    // Check if the notification has the standard toast title
-    // Note: Backend also filters by metadata.isToast, but metadata isn't sent to frontend
-    return notification.title === TOAST_NOTIFICATION_TITLE;
-  }
-
-  // PERFORMANCE OPTIMIZATION: Pure utility functions for caching
-  // These functions only depend on their parameters, not component state
-  function shouldShowNotification(notification: Notification): boolean {
-    // Never show toast notifications in the bell
-    // Toast notifications are ephemeral and should only appear as toasts
-    if (isToastNotification(notification)) {
-      return false;
-    }
-
-    // In debug mode, show all notifications including low priority
-    if (debugMode) {
-      return true;
-    }
-
-    // Backend already filters low priority notifications
-    // Frontend receives only medium, high, and critical priority notifications
-    // No additional filtering needed here
-    return true;
-  }
 
   // PERFORMANCE OPTIMIZATION: Cache helper functions for display formatting
   function formatTimeAgo(timestamp: string): string {
@@ -152,7 +118,9 @@
 
       // Apply deduplication to API-fetched notifications
       // This ensures consistent deduplication behavior between SSE and API
-      notifications = mergeAndDeduplicateNotifications(notifications, apiNotifications);
+      notifications = mergeAndDeduplicateNotifications(notifications, apiNotifications, {
+        debugMode,
+      });
     } catch (error) {
       // Handle authentication errors gracefully - expected for non-authenticated users
       if (error instanceof ApiError && error.status === 401) {
@@ -261,112 +229,6 @@
     }
   }
 
-  // Runtime validation for notification shape
-  function isValidNotification(notification: unknown): notification is Notification {
-    return (
-      typeof notification === 'object' &&
-      notification !== null &&
-      'message' in notification &&
-      'title' in notification &&
-      'type' in notification &&
-      typeof (notification as Notification).message === 'string' &&
-      typeof (notification as Notification).title === 'string' &&
-      typeof (notification as Notification).type === 'string'
-    );
-  }
-
-  // Check if notification already exists in array
-  function isExistingNotification(
-    notification: Notification,
-    existingNotifications: Notification[]
-  ): boolean {
-    const notificationKey = createNotificationKey(
-      notification.message,
-      notification.title,
-      notification.type
-    );
-    return existingNotifications.some(
-      n => createNotificationKey(n.message, n.title, n.type) === notificationKey
-    );
-  }
-
-  // Merge and deduplicate notifications arrays
-  function mergeAndDeduplicateNotifications(
-    existingNotifications: Notification[],
-    newNotifications: Notification[],
-    limit: number = 20
-  ): Notification[] {
-    // Performance optimization: early return if no new notifications
-    if (!newNotifications.length) {
-      return existingNotifications;
-    }
-
-    const result: Notification[] = [];
-    const processedKeys = new Set<string>();
-
-    // Process new notifications first (they get priority)
-    for (const newNotification of newNotifications) {
-      if (!shouldShowNotification(newNotification)) {
-        continue;
-      }
-
-      const notificationKey = createNotificationKey(
-        newNotification.message,
-        newNotification.title,
-        newNotification.type
-      );
-
-      if (processedKeys.has(notificationKey)) {
-        continue; // Skip if we've already processed this key
-      }
-
-      // Check for duplicate in existing notifications
-      const existingNotification = existingNotifications.find(
-        n => createNotificationKey(n.message, n.title, n.type) === notificationKey
-      );
-
-      if (existingNotification) {
-        // Merge with existing: update timestamp, preserve read status, upgrade priority
-        const merged = {
-          ...existingNotification,
-          timestamp: newNotification.timestamp,
-          read: existingNotification.read, // Preserve read status
-          priority: getHigherPriority(existingNotification.priority, newNotification.priority),
-        };
-        result.push(merged);
-      } else {
-        // Add new notification
-        result.push(newNotification);
-      }
-
-      processedKeys.add(notificationKey);
-    }
-
-    // Add remaining existing notifications that weren't duplicates
-    for (const existing of existingNotifications) {
-      const notificationKey = createNotificationKey(
-        existing.message,
-        existing.title,
-        existing.type
-      );
-
-      if (!processedKeys.has(notificationKey)) {
-        result.push(existing);
-        processedKeys.add(notificationKey);
-      }
-    }
-
-    // Sort by timestamp (newest first) for deterministic order
-    const sortedResult = result.sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime();
-      const timeB = new Date(b.timestamp).getTime();
-      return timeB - timeA; // Descending order (newest first)
-    });
-
-    // Apply limit
-    return sortedResult.slice(0, limit);
-  }
-
   // Add single notification (used for SSE)
   function addNotification(notification: Notification) {
     // Runtime validation to ensure notification has expected shape
@@ -384,7 +246,9 @@
     const wasNewNotification = !isExistingNotification(notification, notifications);
 
     // Always perform merge to update timestamps and priority
-    notifications = mergeAndDeduplicateNotifications(notifications, [notification]);
+    notifications = mergeAndDeduplicateNotifications(notifications, [notification], {
+      debugMode,
+    });
 
     // Only trigger UI effects for truly new notifications
     if (wasNewNotification) {

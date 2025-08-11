@@ -3,6 +3,7 @@
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
+  import { deduplicateNotifications } from '$lib/utils/notifications';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -46,7 +47,11 @@
       const response = await fetch(`/api/v2/notifications?${params}`);
       if (response.ok) {
         const data = await response.json();
-        notifications = data.notifications || [];
+        // Apply deduplication to remove duplicate notifications
+        const rawNotifications = data.notifications || [];
+        notifications = deduplicateNotifications(rawNotifications, {
+          excludeToasts: false, // Show all notifications in the full view
+        });
         hasUnread = notifications.some(n => !n.read);
 
         // Calculate total pages
