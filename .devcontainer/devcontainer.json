@@ -1,31 +1,187 @@
 {
-	"name": "Go Build Environment",
+	"name": "BirdNET-Go Development Environment",
 	"dockerFile": "../Dockerfile",
-	"appPort": [8080],
 	"build": {
 		"context": "..",
 		"target": "buildenv"
 	},
+	"forwardPorts": [8080, 5173],
+	"portsAttributes": {
+		"8080": {
+			"label": "BirdNET-Go Server",
+			"onAutoForward": "notify"
+		},
+		"5173": {
+			"label": "Vite Dev Server",
+			"onAutoForward": "notify"
+		}
+	},
 	"containerEnv": {
 		"ALSA_CARD": "0",
 		"CGO_ENABLED": "1",
-		"CGO_CFLAGS": "-I /home/dev-user/src/tensorflow"
+		"CGO_CFLAGS": "-I /home/dev-user/src/tensorflow",
+		"NODE_ENV": "development",
+		"VITE_DEV_PORT": "5173"
 	},
-	"containerUser": "dev-user",
+	"remoteUser": "dev-user",
 	"updateRemoteUserUID": true,
 	"postCreateCommand": ".devcontainer/postCreateCommand.sh",
-	"postAttachCommand": ".devcontainer/start_dev_server.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"golang.go"
-			]
+				// Go development
+				"golang.go",
+				
+				// Frontend development
+				"ms-vscode.vscode-typescript-next",
+				"svelte.svelte-vscode",
+				"bradlc.vscode-tailwindcss",
+				
+				// Code formatting and linting
+				"esbenp.prettier-vscode",
+				"dbaeumer.vscode-eslint",
+				"stylelint.vscode-stylelint",
+				
+				// Security and quality
+				"ms-vscode.vscode-security",
+				
+				// File support
+				"ms-vscode.vscode-json",
+				"redhat.vscode-yaml",
+				"ms-vscode.vscode-markdown",
+				
+				// Testing and debugging
+				"ms-vscode.test-adapter-converter",
+				"hbenl.vscode-test-explorer",
+				"ms-playwright.playwright",
+				
+				// Development utilities
+				"usernamehw.errorlens",
+				"christian-kohler.path-intellisense",
+				"ms-vscode.vscode-github-copilot-extension-pack"
+			],
+			"settings": {
+				// Go settings aligned with .golangci.yaml
+				"go.toolsManagement.checkForUpdates": "local",
+				"go.useLanguageServer": true,
+				"go.formatTool": "goimports",
+				"go.lintTool": "golangci-lint",
+				"go.lintFlags": ["-v", "--config", ".golangci.yaml"],
+				"go.vetFlags": ["-all"],
+				"go.buildTags": "",
+				"go.testFlags": ["-race"],
+				
+				// TypeScript and Svelte settings
+				"typescript.preferences.importModuleSpecifier": "relative",
+				"typescript.suggest.autoImports": true,
+				"svelte.enable-ts-plugin": true,
+				"svelte.plugin.svelte.format.enable": true,
+				
+				// Formatting and linting
+				"editor.formatOnSave": true,
+				"editor.codeActionsOnSave": {
+					"source.fixAll.eslint": "explicit",
+					"source.fixAll.stylelint": "explicit",
+					"source.organizeImports": "explicit"
+				},
+				"editor.defaultFormatter": "esbenp.prettier-vscode",
+				"[go]": {
+					"editor.defaultFormatter": "golang.go",
+					"editor.codeActionsOnSave": {
+						"source.organizeImports": "explicit"
+					}
+				},
+				"[svelte]": {
+					"editor.defaultFormatter": "svelte.svelte-vscode"
+				},
+				"[typescript]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[javascript]": {
+					"editor.defaultFormatter": "esbenp.prettier-vscode"
+				},
+				"[css]": {
+					"editor.defaultFormatter": "stylelint.vscode-stylelint"
+				},
+				
+				// ESLint configuration
+				"eslint.validate": [
+					"javascript",
+					"javascriptreact",
+					"typescript",
+					"typescriptreact",
+					"svelte"
+				],
+				"eslint.workingDirectories": ["frontend"],
+				
+				// Stylelint configuration
+				"stylelint.validate": ["css", "scss", "svelte"],
+				"stylelint.configFile": "frontend/.stylelintrc.json",
+				
+				// Tailwind CSS IntelliSense
+				"tailwindCSS.experimental.classRegex": [
+					["class:\\s*?[\"'`]([^\"'`]*)[\"'`]", "\"([^\"]+)\""],
+					"clsx\\(([^)]*)\\)",
+					"cn\\(([^)]*)\\)"
+				],
+				"tailwindCSS.includeLanguages": {
+					"svelte": "html"
+				},
+				
+				// File associations and validation
+				"files.associations": {
+					"*.svelte": "svelte",
+					".golangci.yaml": "yaml",
+					".golangci.yml": "yaml"
+				},
+				
+				// Security and privacy
+				"security.workspace.trust.enabled": true,
+				"telemetry.telemetryLevel": "error",
+				
+				// Problem matcher and error display
+				"problems.showCurrentInStatus": true,
+				"errorLens.enabledDiagnosticLevels": ["error", "warning"],
+				"errorLens.excludeBySource": ["cSpell"],
+				
+				// Terminal and shell options
+				"terminal.integrated.defaultProfile.linux": "bash",
+				"terminal.integrated.profiles.linux": {
+					"bash": {
+						"path": "/bin/bash",
+						"icon": "terminal-bash"
+					},
+					"zsh": {
+						"path": "/bin/zsh",
+						"icon": "terminal"
+					},
+					"fish": {
+						"path": "/usr/bin/fish",
+						"icon": "terminal-fish"
+					},
+					"pwsh": {
+						"path": "/opt/microsoft/powershell/7/pwsh",
+						"icon": "terminal-powershell"
+					}
+				}
+			}
 		}
 	},
 	"features": {
 		"ghcr.io/devcontainers/features/go:1": {
-		  "version": "1.23.2"
+			"version": "1.24.6"
 		},
-		"ghcr.io/devcontainers/features/github-cli:1": {}
-	  }
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "20",
+			"nodeGypDependencies": true,
+			"nvmInstallLts": true
+		},
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"installZsh": true,
+			"installOhMyZsh": true,
+			"upgradePackages": true
+		},
+		"ghcr.io/devcontainers/features/powershell:1": {}
+	}
 }
