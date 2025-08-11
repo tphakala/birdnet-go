@@ -444,12 +444,12 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.40.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.41.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.42.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.43.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -464,17 +464,17 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.34.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.35.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.33.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.34.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.27.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.28.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -484,7 +484,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.244.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.246.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
@@ -526,3 +526,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.30.1/LICENSE
 Source: MIT
+
