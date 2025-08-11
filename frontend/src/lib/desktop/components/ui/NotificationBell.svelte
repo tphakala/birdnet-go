@@ -146,7 +146,7 @@
       const data = await api.get<{ notifications?: Notification[] }>(
         '/api/v2/notifications?limit=20&status=unread'
       );
-      const apiNotifications = data?.notifications || [];
+      const apiNotifications = data?.notifications ?? [];
 
       // Apply deduplication to API-fetched notifications
       // This ensures consistent deduplication behavior between SSE and API
@@ -261,68 +261,133 @@
     }
   }
 
+  // Runtime validation for notification shape
+  function isValidNotification(notification: unknown): notification is Notification {
+    return (
+      typeof notification === 'object' &&
+      notification !== null &&
+      'message' in notification &&
+      'title' in notification &&
+      'type' in notification &&
+      typeof (notification as Notification).message === 'string' &&
+      typeof (notification as Notification).title === 'string' &&
+      typeof (notification as Notification).type === 'string'
+    );
+  }
+
+  // Check if notification already exists in array
+  function isExistingNotification(
+    notification: Notification,
+    existingNotifications: Notification[]
+  ): boolean {
+    const notificationKey = createNotificationKey(
+      notification.message,
+      notification.title,
+      notification.type
+    );
+    return existingNotifications.some(
+      n => createNotificationKey(n.message, n.title, n.type) === notificationKey
+    );
+  }
+
   // Merge and deduplicate notifications arrays
   function mergeAndDeduplicateNotifications(
     existingNotifications: Notification[],
     newNotifications: Notification[],
     limit: number = 20
   ): Notification[] {
-    const result = [...existingNotifications];
+    // Performance optimization: early return if no new notifications
+    if (!newNotifications.length) {
+      return existingNotifications;
+    }
 
+    const result: Notification[] = [];
+    const processedKeys = new Set<string>();
+
+    // Process new notifications first (they get priority)
     for (const newNotification of newNotifications) {
       if (!shouldShowNotification(newNotification)) {
         continue;
       }
 
-      // Check for duplicate notification by matching message, title, and type
       const notificationKey = createNotificationKey(
         newNotification.message,
         newNotification.title,
         newNotification.type
       );
-      const existingIndex = result.findIndex(
+
+      if (processedKeys.has(notificationKey)) {
+        continue; // Skip if we've already processed this key
+      }
+
+      // Check for duplicate in existing notifications
+      const existingNotification = existingNotifications.find(
         n => createNotificationKey(n.message, n.title, n.type) === notificationKey
       );
 
-      if (existingIndex !== -1) {
-        // Duplicate found - update timestamp and move to top
-        // eslint-disable-next-line security/detect-object-injection
-        const existing = result[existingIndex];
-        const updated = {
-          ...existing,
+      if (existingNotification) {
+        // Merge with existing: update timestamp, preserve read status, upgrade priority
+        const merged = {
+          ...existingNotification,
           timestamp: newNotification.timestamp,
-          // Preserve read status if the existing notification was already read
-          read: existing.read,
-          // Update priority if the new one is higher priority
-          priority: getHigherPriority(existing.priority, newNotification.priority),
+          read: existingNotification.read, // Preserve read status
+          priority: getHigherPriority(existingNotification.priority, newNotification.priority),
         };
-
-        // Remove from current position and add to beginning
-        result.splice(existingIndex, 1);
-        result.unshift(updated);
+        result.push(merged);
       } else {
-        // No duplicate - add to beginning of array
-        result.unshift(newNotification);
+        // Add new notification
+        result.push(newNotification);
+      }
+
+      processedKeys.add(notificationKey);
+    }
+
+    // Add remaining existing notifications that weren't duplicates
+    for (const existing of existingNotifications) {
+      const notificationKey = createNotificationKey(
+        existing.message,
+        existing.title,
+        existing.type
+      );
+
+      if (!processedKeys.has(notificationKey)) {
+        result.push(existing);
+        processedKeys.add(notificationKey);
       }
     }
 
-    // Limit to specified number of notifications
-    return result.slice(0, limit);
+    // Sort by timestamp (newest first) for deterministic order
+    const sortedResult = result.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeB - timeA; // Descending order (newest first)
+    });
+
+    // Apply limit
+    return sortedResult.slice(0, limit);
   }
 
   // Add single notification (used for SSE)
   function addNotification(notification: Notification) {
+    // Runtime validation to ensure notification has expected shape
+    if (!isValidNotification(notification)) {
+      logger.warn('Invalid notification received, skipping', null, {
+        component: 'NotificationBell',
+        action: 'addNotification',
+        notification:
+          typeof notification === 'object' ? JSON.stringify(notification) : String(notification),
+      });
+      return;
+    }
+
+    // Check if notification already exists BEFORE merging
+    const wasNewNotification = !isExistingNotification(notification, notifications);
+
+    // Always perform merge to update timestamps and priority
     notifications = mergeAndDeduplicateNotifications(notifications, [notification]);
     updateUnreadCount();
 
-    // Only trigger UI effects for newly added notifications (not duplicates)
-    const wasNewNotification = !notifications.some(
-      (n, index) =>
-        index > 0 &&
-        createNotificationKey(n.message, n.title, n.type) ===
-          createNotificationKey(notification.message, notification.title, notification.type)
-    );
-
+    // Only trigger UI effects for truly new notifications
     if (wasNewNotification) {
       // Wiggle animation
       if (animationTimeout) {
