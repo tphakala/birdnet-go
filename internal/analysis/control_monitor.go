@@ -305,35 +305,56 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 		// Note: We continue execution as this is not critical for RTSP reconfiguration
 	}
 
-	// Reconfigure RTSP streams with proper goroutine cleanup
+	// IMPORTANT: Stop all RTSP streams properly with synchronization
+	logger := GetLogger()
+	logger.Info("Stopping existing RTSP streams before reconfiguration",
+		"component", "control-monitor",
+		"operation", "reconfigure_rtsp")
+	
+	// Stop all streams and wait for completion (5 second timeout)
+	if err := myaudio.StopAllRTSPStreamsAndWait(5 * time.Second); err != nil {
+		logger.Error("Failed to stop all RTSP streams",
+			"error", err,
+			"component", "control-monitor",
+			"operation", "reconfigure_rtsp")
+		// Continue anyway - better to reconfigure with some errors than to panic
+	}
+	
+	// Replace channels WITHOUT closing (avoids panic entirely)
 	cm.unifiedAudioMutex.Lock()
-
-	// Close previous goroutine if it exists
-	if cm.unifiedAudioDoneChan != nil {
-		close(cm.unifiedAudioDoneChan)
-		// Wait for the goroutine to fully exit using WaitGroup
-		cm.unifiedAudioMutex.Unlock()
-		cm.unifiedAudioWg.Wait()
-		cm.unifiedAudioMutex.Lock()
-	}
-
-	// Close previous channel if it exists
-	if cm.unifiedAudioChan != nil {
-		close(cm.unifiedAudioChan)
-	}
-
-	// Create new channels
+	
+	// Store old channels for cleanup
+	oldChan := cm.unifiedAudioChan
+	oldDoneChan := cm.unifiedAudioDoneChan
+	
+	// Create new channels (replacing, not closing)
 	cm.unifiedAudioChan = make(chan myaudio.UnifiedAudioData, 100)
 	cm.unifiedAudioDoneChan = make(chan struct{})
-
-	// Store references for cleanup
+	
+	// Store references for the new goroutine
 	doneChan := cm.unifiedAudioDoneChan
 	unifiedChan := cm.unifiedAudioChan
-
-	// Add to WaitGroup before starting the goroutine
+	
+	// Add to WaitGroup before starting the new goroutine
 	cm.unifiedAudioWg.Add(1)
-
+	
 	cm.unifiedAudioMutex.Unlock()
+	
+	// Clean up old goroutine if it exists
+	if oldDoneChan != nil {
+		close(oldDoneChan)
+		cm.unifiedAudioWg.Wait() // Wait for old goroutine to exit
+	}
+	
+	// Drain old channel in background (let GC handle it)
+	if oldChan != nil {
+		go func() {
+			// Drain any remaining data to prevent goroutine leaks
+			for range oldChan {
+				// Just drain, don't process
+			}
+		}()
+	}
 
 	go func() {
 		defer cm.unifiedAudioWg.Done()

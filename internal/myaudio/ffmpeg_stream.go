@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -217,8 +218,7 @@ type FFmpegStream struct {
 	cancelMu    sync.RWMutex // Protect cancel function access
 	restartChan chan struct{}
 	stopChan    chan struct{}
-	stopped     bool
-	stoppedMu   sync.RWMutex
+	running     atomic.Bool // Atomic flag for hot path performance
 
 	// Health tracking
 	lastDataTime   time.Time
@@ -281,7 +281,7 @@ func (w *threadSafeWriter) Write(p []byte) (n int, err error) {
 // The url parameter specifies the RTSP stream URL, transport specifies the RTSP transport protocol,
 // and audioChan is the channel where processed audio data will be sent.
 func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FFmpegStream {
-	return &FFmpegStream{
+	s := &FFmpegStream{
 		url:                            url,
 		transport:                      transport,
 		audioChan:                      audioChan,
@@ -295,6 +295,8 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		lastSoundLevelNotRegisteredLog: time.Now().Add(-dropLogInterval), // Allow immediate first log
 		streamCreatedAt:                time.Now(), // Track when stream was created
 	}
+	s.running.Store(true) // Stream starts in running state
+	return s
 }
 
 // Run starts and manages the FFmpeg process lifecycle.
@@ -351,11 +353,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			err := s.processAudio()
 
 			// Check if we should stop
-			s.stoppedMu.RLock()
-			stopped := s.stopped
-			s.stoppedMu.RUnlock()
-
-			if stopped {
+			if !s.running.Load() {
 				return
 			}
 
@@ -774,6 +772,12 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		}
 	}
 
+	// Fast path: single atomic check for performance
+	if !s.running.Load() {
+		// Stream is not running, don't send data
+		return nil
+	}
+	
 	// Send to audio channel (non-blocking)
 	select {
 	case s.audioChan <- unifiedData:
@@ -1049,9 +1053,10 @@ func (s *FFmpegStream) handleRestartBackoff() {
 // Stop gracefully stops the FFmpeg stream.
 // It signals the stream to stop, cancels the context, and cleans up the FFmpeg process.
 func (s *FFmpegStream) Stop() {
-	s.stoppedMu.Lock()
-	s.stopped = true
-	s.stoppedMu.Unlock()
+	// Atomic compare-and-swap prevents double stop
+	if !s.running.CompareAndSwap(true, false) {
+		return // Already stopped
+	}
 
 	// Signal stop
 	close(s.stopChan)
