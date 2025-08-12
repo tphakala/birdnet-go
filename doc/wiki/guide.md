@@ -524,6 +524,126 @@ If you installed BirdNET-Go using the recommended `install.sh` script, you can u
     ```
 3.  The script will detect your installation and offer an "Update" option. Selecting it will stop the service, pull the newest `nightly` image, update the service configuration if needed, and restart BirdNET-Go. Your configuration and data will be preserved.
 
+### Timezone Configuration
+
+BirdNET-Go uses timezone settings to ensure accurate timestamps for bird detections and proper scheduling of features. If you notice timestamp mismatches or scheduling issues, you may need to adjust the timezone configuration.
+
+#### For install.sh Deployments
+
+If you installed BirdNET-Go using the recommended `install.sh` script, the timezone is configured during installation and stored in the systemd service file.
+
+##### Checking Current Timezone
+
+To see what timezone BirdNET-Go is currently using:
+
+```bash
+# Check the timezone setting in the systemd service
+grep "TZ=" /etc/systemd/system/birdnet-go.service
+```
+
+This will show something like: `--env TZ="Europe/Helsinki"`
+
+##### Changing the Timezone
+
+To change the timezone for an existing installation:
+
+1. **Edit the systemd service file:**
+   ```bash
+   sudo nano /etc/systemd/system/birdnet-go.service
+   ```
+
+2. **Find the line containing `--env TZ=` and update it:**
+   ```bash
+   # Change from:
+   --env TZ="Europe/London" \
+   
+   # To your desired timezone, for example:
+   --env TZ="US/Eastern" \
+   ```
+
+3. **Reload systemd and restart the service:**
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart birdnet-go
+   ```
+
+4. **Verify the change took effect:**
+   ```bash
+   # Check logs to see timestamps
+   sudo journalctl -u birdnet-go -n 20
+   ```
+
+##### Common Timezone Examples
+
+- **United States:** `US/Eastern`, `US/Central`, `US/Mountain`, `US/Pacific`
+- **Europe:** `Europe/London`, `Europe/Berlin`, `Europe/Paris`, `Europe/Helsinki`
+- **Asia:** `Asia/Tokyo`, `Asia/Singapore`, `Asia/Dubai`, `Asia/Kolkata`
+- **Australia:** `Australia/Sydney`, `Australia/Melbourne`, `Australia/Perth`
+- **Other:** `UTC` (Coordinated Universal Time)
+
+##### Finding Your Timezone
+
+To find the correct timezone string for your location:
+
+```bash
+# List all available timezones
+timedatectl list-timezones
+
+# Search for a specific country/city
+timedatectl list-timezones | grep -i "york"
+```
+
+#### For Docker Compose Deployments
+
+If you're using Docker Compose, the timezone is typically set via an environment variable in your `docker-compose.yml` file:
+
+```yaml
+services:
+  birdnet-go:
+    environment:
+      - TZ=US/Eastern  # Change this to your timezone
+```
+
+After updating, restart the container:
+
+```bash
+docker-compose down
+docker-compose up -d
+```
+
+#### For Binary Installations
+
+If you're running BirdNET-Go directly as a binary (not using Docker), it uses the system timezone by default. To override it:
+
+```bash
+# Set timezone environment variable before running
+TZ="US/Eastern" ./birdnet-go realtime
+```
+
+Or add it to your startup script or systemd service file if you've created one manually.
+
+#### Important Notes
+
+> **⚠️ Custom Deployments:** The instructions above apply specifically to installations done via the official `install.sh` script. Custom Docker Compose setups or manual binary deployments may handle timezone configuration differently.
+
+> **💡 System vs Application Timezone:** BirdNET-Go can use a different timezone than your system. This is useful if you want your system in one timezone but want BirdNET-Go to record detections in another (e.g., UTC for standardized scientific data).
+
+> **🔄 After Updates:** When updating BirdNET-Go using the `install.sh` script, your timezone settings are preserved automatically as of recent versions.
+
+#### Troubleshooting Timezone Issues
+
+**Problem:** Bird detections show wrong timestamps
+
+**Solution:** Check that the timezone in the systemd service matches your actual location. The timezone affects both the displayed time and any time-based features.
+
+**Problem:** Scheduled features run at wrong times
+
+**Solution:** Ensure the TZ environment variable is set correctly. Some features like dynamic thresholds or scheduled exports rely on accurate time settings.
+
+**Problem:** Timezone reverts after update
+
+**Solution:** If you're using an older version of the install script, manually re-apply your timezone change after updates. The latest version preserves timezone settings during updates.
+
 ### Support Script
 
 For more comprehensive troubleshooting, BirdNET-Go provides a support script that collects diagnostic information while protecting your privacy:
