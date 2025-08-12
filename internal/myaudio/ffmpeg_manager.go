@@ -182,15 +182,8 @@ func (m *FFmpegManager) StopStreamAndWait(url string, timeout time.Duration) err
 	go func() {
 		stream.Stop()
 		
-		// Wait for stream to actually stop (check running state)
-		ticker := time.NewTicker(10 * time.Millisecond)
-		defer ticker.Stop()
-		
-		for range ticker.C {
-			if !stream.running.Load() {
-				break
-			}
-		}
+		// Wait for stream to fully stop using done channel (more efficient than polling)
+		<-stream.doneChan
 		
 		// Unregister sound level processor
 		UnregisterSoundLevelProcessor(url)

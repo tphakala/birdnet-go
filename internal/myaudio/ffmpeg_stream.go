@@ -218,6 +218,7 @@ type FFmpegStream struct {
 	cancelMu    sync.RWMutex // Protect cancel function access
 	restartChan chan struct{}
 	stopChan    chan struct{}
+	doneChan    chan struct{} // Closed when stream is fully stopped
 	running     atomic.Bool // Atomic flag for hot path performance
 
 	// Health tracking
@@ -287,6 +288,7 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		audioChan:                      audioChan,
 		restartChan:                    make(chan struct{}, 1),
 		stopChan:                       make(chan struct{}),
+		doneChan:                       make(chan struct{}),
 		backoffDuration:                defaultBackoffDuration,
 		maxBackoff:                     maxBackoffDuration,
 		lastDataTime:                   time.Time{}, // Zero time - no data received yet
@@ -314,6 +316,13 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			s.cancel()
 		}
 		s.cancelMu.Unlock()
+		// Signal that the stream is fully stopped
+		select {
+		case <-s.doneChan:
+			// Already closed
+		default:
+			close(s.doneChan)
+		}
 	}()
 
 	for {
