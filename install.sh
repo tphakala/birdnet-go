@@ -1241,6 +1241,108 @@ get_ip_location() {
     return 1
 }
 
+# Function to configure timezone
+configure_timezone() {
+    print_message "\n🕐 Timezone Configuration" "$GREEN"
+    print_message "BirdNET-Go needs to know your timezone for accurate timestamps and scheduling" "$YELLOW"
+    
+    # Get current system timezone
+    local system_tz=""
+    local detected_tz=""
+    
+    # Try multiple methods to detect timezone
+    if [ -f /etc/timezone ]; then
+        system_tz=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+    
+    # Fallback to timedatectl if available
+    if [ -z "$system_tz" ] && command_exists timedatectl; then
+        system_tz=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
+    fi
+    
+    # Fallback to readlink on /etc/localtime
+    if [ -z "$system_tz" ] && [ -L /etc/localtime ]; then
+        local tz_path=$(readlink -f /etc/localtime)
+        system_tz=${tz_path#/usr/share/zoneinfo/}
+    fi
+    
+    # Default to UTC if we couldn't detect
+    if [ -z "$system_tz" ]; then
+        system_tz="UTC"
+        print_message "⚠️ Could not detect system timezone, defaulting to UTC" "$YELLOW"
+    else
+        print_message "📍 System timezone detected: $system_tz" "$GREEN"
+    fi
+    
+    # Validate the detected timezone exists
+    if [ -f "/usr/share/zoneinfo/$system_tz" ]; then
+        detected_tz="$system_tz"
+        print_message "✅ Timezone '$system_tz' is valid" "$GREEN"
+    else
+        print_message "⚠️ System timezone '$system_tz' could not be validated" "$YELLOW"
+        detected_tz="UTC"
+    fi
+    
+    # Check for common timezone misconfigurations
+    local system_time=$(date +"%Y-%m-%d %H:%M:%S %Z")
+    print_message "🕐 Current system time: $system_time" "$YELLOW"
+    
+    # Ask user to confirm timezone
+    print_message "\n❓ Do you want to use the detected timezone '$detected_tz'? (y/n): " "$YELLOW" "nonewline"
+    read -r use_detected
+    
+    if [[ $use_detected != "y" ]]; then
+        print_message "\n📋 Common timezone examples:" "$YELLOW"
+        print_message "  • US/Eastern, US/Central, US/Mountain, US/Pacific" "$YELLOW"
+        print_message "  • Europe/London, Europe/Berlin, Europe/Paris" "$YELLOW"
+        print_message "  • Asia/Tokyo, Asia/Singapore, Asia/Dubai" "$YELLOW"
+        print_message "  • Australia/Sydney, Australia/Melbourne" "$YELLOW"
+        print_message "  • UTC (Coordinated Universal Time)" "$YELLOW"
+        
+        while true; do
+            print_message "\n❓ Enter your timezone (e.g., US/Eastern, Europe/London): " "$YELLOW" "nonewline"
+            read -r user_tz
+            
+            # Validate the timezone
+            if [ -f "/usr/share/zoneinfo/$user_tz" ]; then
+                detected_tz="$user_tz"
+                print_message "✅ Timezone '$user_tz' is valid" "$GREEN"
+                
+                # Show what time it would be in that timezone
+                local tz_time=$(TZ="$user_tz" date +"%Y-%m-%d %H:%M:%S %Z")
+                print_message "🕐 Time in $user_tz: $tz_time" "$YELLOW"
+                
+                print_message "❓ Is this the correct time for your location? (y/n): " "$YELLOW" "nonewline"
+                read -r confirm_time
+                
+                if [[ $confirm_time == "y" ]]; then
+                    break
+                else
+                    print_message "Let's try again with a different timezone" "$YELLOW"
+                fi
+            else
+                print_message "❌ Invalid timezone '$user_tz'" "$RED"
+                print_message "💡 Tip: You can list all available timezones with: timedatectl list-timezones" "$YELLOW"
+                print_message "   Or check /usr/share/zoneinfo/ directory" "$YELLOW"
+            fi
+        done
+    fi
+    
+    # Store the validated timezone for use in systemd service
+    CONFIGURED_TZ="$detected_tz"
+    
+    # Provide guidance on system timezone if it differs
+    if [ "$system_tz" != "$detected_tz" ] && [ "$system_tz" != "UTC" ]; then
+        print_message "\n⚠️ NOTE: Your system timezone ($system_tz) differs from the configured timezone ($detected_tz)" "$YELLOW"
+        print_message "BirdNET-Go will use: $detected_tz" "$YELLOW"
+        print_message "\nTo change your system timezone to match, you can run:" "$YELLOW"
+        print_message "  sudo timedatectl set-timezone $detected_tz" "$NC"
+        print_message "This ensures all system services use the same timezone" "$YELLOW"
+    fi
+    
+    print_message "\n✅ Timezone configuration complete: $detected_tz" "$GREEN"
+}
+
 # Function to configure location
 configure_location() {
     print_message "\n🌍 Location Configuration, this is used to limit bird species present in your region" "$GREEN"
@@ -1447,9 +1549,11 @@ configure_web_port() {
 
 # Generate systemd service content
 generate_systemd_service_content() {
-    # Get timezone
+    # Use configured timezone if available, otherwise fall back to system timezone
     local TZ
-    if [ -f /etc/timezone ]; then
+    if [ -n "$CONFIGURED_TZ" ]; then
+        TZ="$CONFIGURED_TZ"
+    elif [ -f /etc/timezone ]; then
         TZ=$(cat /etc/timezone)
     else
         TZ="UTC"
@@ -1600,6 +1704,15 @@ handle_container_update() {
     service_needs_update=$(check_systemd_service)
     
     print_message "🔄 Checking for updates..." "$YELLOW"
+    
+    # Extract existing timezone from systemd service file if updating
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] && [ -z "$CONFIGURED_TZ" ]; then
+        local existing_tz=$(grep -oP '(?<=--env TZ=")[^"]+' /etc/systemd/system/birdnet-go.service 2>/dev/null)
+        if [ -n "$existing_tz" ]; then
+            CONFIGURED_TZ="$existing_tz"
+            print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+        fi
+    fi
     
     # Stop the service and container
     stop_birdnet_service
@@ -2077,6 +2190,8 @@ WEB_PORT=8080  # Default web port
 AUDIO_ENV="--device /dev/snd"
 # Flag for fresh installation
 FRESH_INSTALL="false"
+# Configured timezone (will be set during configuration)
+CONFIGURED_TZ=""
 
 # Load telemetry configuration if it exists
 load_telemetry_config
@@ -2479,6 +2594,9 @@ configure_audio_input
 
 # Configure audio format
 configure_audio_format
+
+# Configure timezone
+configure_timezone
 
 # Configure locale
 configure_locale
