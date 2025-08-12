@@ -774,14 +774,41 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		}
 	}
 
-	// Send to audio channel (non-blocking)
-	select {
-	case s.audioChan <- unifiedData:
-		// Data sent successfully
-	default:
-		// Channel full, drop data to avoid blocking
-		s.logDroppedData()
+	// Check if stream is stopped before sending
+	s.stoppedMu.RLock()
+	stopped := s.stopped
+	s.stoppedMu.RUnlock()
+	
+	if stopped {
+		// Stream is stopped, don't send data
+		return nil
 	}
+	
+	// Send to audio channel (non-blocking) with panic recovery
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Channel was closed, log and return
+				streamLogger.Warn("attempted to send on closed audio channel",
+					"url", privacy.SanitizeRTSPUrl(s.url),
+					"panic", r,
+					"component", "ffmpeg-stream",
+					"operation", "handle_audio_data")
+				// Mark stream as stopped to prevent further sends
+				s.stoppedMu.Lock()
+				s.stopped = true
+				s.stoppedMu.Unlock()
+			}
+		}()
+		
+		select {
+		case s.audioChan <- unifiedData:
+			// Data sent successfully
+		default:
+			// Channel full, drop data to avoid blocking
+			s.logDroppedData()
+		}
+	}()
 
 	return nil
 }

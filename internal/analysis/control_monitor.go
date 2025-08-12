@@ -305,6 +305,17 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 		// Note: We continue execution as this is not critical for RTSP reconfiguration
 	}
 
+	// IMPORTANT: Stop all RTSP streams BEFORE closing the channel
+	// This prevents "send on closed channel" panics
+	logger := GetLogger()
+	logger.Info("Stopping existing RTSP streams before reconfiguration",
+		"component", "control-monitor",
+		"operation", "reconfigure_rtsp")
+	myaudio.StopAllRTSPStreams()
+	
+	// Small delay to ensure all streams have stopped sending data
+	time.Sleep(100 * time.Millisecond)
+	
 	// Reconfigure RTSP streams with proper goroutine cleanup
 	cm.unifiedAudioMutex.Lock()
 
@@ -317,7 +328,7 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 		cm.unifiedAudioMutex.Lock()
 	}
 
-	// Close previous channel if it exists
+	// Close previous channel if it exists (now safe as streams are stopped)
 	if cm.unifiedAudioChan != nil {
 		close(cm.unifiedAudioChan)
 	}

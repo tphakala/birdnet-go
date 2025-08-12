@@ -214,3 +214,41 @@ func ShutdownFFmpegManager() {
 	}
 }
 
+// StopAllRTSPStreams stops all currently running RTSP streams
+// This is useful when reconfiguring RTSP sources to prevent
+// "send on closed channel" panics
+func StopAllRTSPStreams() {
+	manager := getGlobalManager()
+	if manager == nil {
+		integrationLogger.Debug("No FFmpeg manager available, nothing to stop")
+		return
+	}
+	
+	// Get list of active streams
+	activeStreams := manager.GetActiveStreams()
+	integrationLogger.Info("Stopping all RTSP streams",
+		"count", len(activeStreams),
+		"component", "ffmpeg-integration",
+		"operation", "stop_all_streams")
+	
+	// Stop each stream
+	for _, url := range activeStreams {
+		if err := manager.StopStream(url); err != nil {
+			integrationLogger.Warn("Failed to stop RTSP stream",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err,
+				"component", "ffmpeg-integration",
+				"operation", "stop_stream")
+		} else {
+			integrationLogger.Debug("Stopped RTSP stream",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"component", "ffmpeg-integration",
+				"operation", "stop_stream")
+		}
+	}
+	
+	integrationLogger.Info("All RTSP streams stopped",
+		"component", "ffmpeg-integration",
+		"operation", "stop_all_streams_complete")
+}
+
