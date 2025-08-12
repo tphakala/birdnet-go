@@ -155,6 +155,75 @@ func (m *FFmpegManager) StopStream(url string) error {
 	return nil
 }
 
+// StopStreamAndWait stops a specific stream and waits for it to fully shutdown
+// with a timeout. This provides synchronization guarantees that the stream
+// has completely stopped before returning.
+func (m *FFmpegManager) StopStreamAndWait(url string, timeout time.Duration) error {
+	m.streamsMu.Lock()
+	stream, exists := m.streams[url]
+	if !exists {
+		m.streamsMu.Unlock()
+		return errors.New(fmt.Errorf("no stream found for URL: %s", url)).
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-manager").
+			Context("operation", "stop_stream_and_wait").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Build()
+	}
+	
+	// Remove from map immediately to prevent new operations
+	delete(m.streams, url)
+	m.streamsMu.Unlock()
+	
+	// Create channel to signal completion
+	done := make(chan struct{})
+	
+	// Stop stream in goroutine
+	go func() {
+		stream.Stop()
+		
+		// Wait for stream to actually stop (check running state)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		
+		for range ticker.C {
+			if !stream.running.Load() {
+				break
+			}
+		}
+		
+		// Unregister sound level processor
+		UnregisterSoundLevelProcessor(url)
+		
+		// Clean up buffers
+		time.Sleep(100 * time.Millisecond) // Allow in-flight writes
+		_ = RemoveAnalysisBuffer(url)
+		_ = RemoveCaptureBuffer(url)
+		
+		close(done)
+	}()
+	
+	// Wait with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	select {
+	case <-done:
+		managerLogger.Info("stopped FFmpeg stream with wait",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"operation", "stop_stream_and_wait")
+		return nil
+	case <-ctx.Done():
+		return errors.Newf("timeout waiting for stream to stop: %s", url).
+			Category(errors.CategoryRTSP).
+			Component("ffmpeg-manager").
+			Context("operation", "stop_stream_and_wait").
+			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Context("timeout", timeout).
+			Build()
+	}
+}
+
 // RestartStream restarts a specific stream
 func (m *FFmpegManager) RestartStream(url string) error {
 	m.streamsMu.RLock()

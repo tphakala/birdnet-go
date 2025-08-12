@@ -37,11 +37,8 @@ func TestFFmpegStream_Stop(t *testing.T) {
 	// Test stopping the stream
 	stream.Stop()
 
-	// Verify stopped flag is set
-	stream.stoppedMu.RLock()
-	stopped := stream.stopped
-	stream.stoppedMu.RUnlock()
-	assert.True(t, stopped)
+	// Verify running flag is unset
+	assert.False(t, stream.running.Load(), "Stream should be stopped")
 
 	// Verify stop channel is closed
 	select {

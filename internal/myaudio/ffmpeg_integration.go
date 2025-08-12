@@ -1,9 +1,12 @@
 package myaudio
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -214,41 +217,109 @@ func ShutdownFFmpegManager() {
 	}
 }
 
-// StopAllRTSPStreams stops all currently running RTSP streams
-// This is useful when reconfiguring RTSP sources to prevent
-// "send on closed channel" panics
-func StopAllRTSPStreams() {
+// StopAllRTSPStreamsAndWait stops all currently running RTSP streams and waits for completion
+// Returns an error if any streams fail to stop. This provides proper synchronization
+// to ensure all streams are fully stopped before proceeding.
+func StopAllRTSPStreamsAndWait(timeout time.Duration) error {
 	manager := getGlobalManager()
 	if manager == nil {
 		integrationLogger.Debug("No FFmpeg manager available, nothing to stop")
-		return
+		return nil
 	}
 	
 	// Get list of active streams
 	activeStreams := manager.GetActiveStreams()
+	if len(activeStreams) == 0 {
+		integrationLogger.Debug("No active streams to stop")
+		return nil
+	}
+	
 	integrationLogger.Info("Stopping all RTSP streams",
 		"count", len(activeStreams),
+		"timeout", timeout,
 		"component", "ffmpeg-integration",
 		"operation", "stop_all_streams")
 	
-	// Stop each stream
+	// Channel to collect results
+	type result struct {
+		url string
+		err error
+	}
+	results := make(chan result, len(activeStreams))
+	
+	// WaitGroup to track completion
+	var wg sync.WaitGroup
+	
+	// Context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	// Stop all streams concurrently
 	for _, url := range activeStreams {
-		if err := manager.StopStream(url); err != nil {
+		wg.Add(1)
+		go func(streamURL string) {
+			defer wg.Done()
+			
+			// Create a channel to signal completion
+			done := make(chan error, 1)
+			go func() {
+				done <- manager.StopStream(streamURL)
+			}()
+			
+			// Wait for stop or timeout
+			select {
+			case err := <-done:
+				results <- result{url: streamURL, err: err}
+				if err == nil {
+					integrationLogger.Debug("Stopped RTSP stream",
+						"url", privacy.SanitizeRTSPUrl(streamURL),
+						"component", "ffmpeg-integration",
+						"operation", "stop_stream")
+				}
+			case <-ctx.Done():
+				results <- result{url: streamURL, err: errors.Newf("timeout stopping stream").
+					Component("ffmpeg-integration").
+					Category(errors.CategoryRTSP).
+					Context("url", privacy.SanitizeRTSPUrl(streamURL)).
+					Context("timeout", timeout).
+					Build()}
+			}
+		}(url)
+	}
+	
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+	
+	// Collect errors
+	var errorList []string
+	for r := range results {
+		if r.err != nil {
+			errorList = append(errorList, fmt.Sprintf("%s: %v", privacy.SanitizeRTSPUrl(r.url), r.err))
 			integrationLogger.Warn("Failed to stop RTSP stream",
-				"url", privacy.SanitizeRTSPUrl(url),
-				"error", err,
-				"component", "ffmpeg-integration",
-				"operation", "stop_stream")
-		} else {
-			integrationLogger.Debug("Stopped RTSP stream",
-				"url", privacy.SanitizeRTSPUrl(url),
+				"url", privacy.SanitizeRTSPUrl(r.url),
+				"error", r.err,
 				"component", "ffmpeg-integration",
 				"operation", "stop_stream")
 		}
 	}
 	
-	integrationLogger.Info("All RTSP streams stopped",
+	if len(errorList) > 0 {
+		return errors.Newf("failed to stop %d stream(s): %s", len(errorList), strings.Join(errorList, "; ")).
+			Component("ffmpeg-integration").
+			Category(errors.CategoryRTSP).
+			Context("failed_count", len(errorList)).
+			Context("total_count", len(activeStreams)).
+			Build()
+	}
+	
+	integrationLogger.Info("All RTSP streams stopped successfully",
+		"count", len(activeStreams),
 		"component", "ffmpeg-integration",
 		"operation", "stop_all_streams_complete")
+	
+	return nil
 }
 
