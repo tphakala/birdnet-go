@@ -48,20 +48,32 @@
   const logger = loggers.settings;
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
-  let settings = $derived({
-    privacy: $privacyFilterSettings || {
-      enabled: false,
-      confidence: 0.5,
-      debug: false,
-    },
-    dogBark: $dogBarkFilterSettings || {
-      enabled: false,
-      confidence: 0.5,
-      remember: 30,
-      debug: false,
-      species: [],
-    },
-  });
+  let settings = $derived(
+    (() => {
+      const privacyBase = $privacyFilterSettings || {
+        enabled: false,
+        confidence: 0.5,
+        debug: false,
+      };
+
+      const dogBarkBase = $dogBarkFilterSettings || {
+        enabled: false,
+        confidence: 0.5,
+        remember: 30,
+        debug: false,
+        species: [],
+      };
+
+      // Ensure species is always an array even if dogBarkFilterSettings exists but has undefined/null species
+      return {
+        privacy: privacyBase,
+        dogBark: {
+          ...dogBarkBase,
+          species: dogBarkBase.species ?? [], // Always ensures species is an array
+        },
+      };
+    })()
+  );
 
   let store = $derived($settingsStore);
 

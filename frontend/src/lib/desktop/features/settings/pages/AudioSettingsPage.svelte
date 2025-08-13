@@ -81,36 +81,55 @@
   ]);
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
-  let settings = $derived({
-    audio: $audioSettings || {
-      source: '',
-      soundLevel: {
-        enabled: false,
-        interval: 60,
-      },
-      equalizer: {
-        enabled: false,
-        filters: [],
-      },
-      export: {
-        enabled: false,
-        path: 'clips/',
-        type: 'wav' as const,
-        bitrate: '96k',
-        retention: {
-          policy: 'none',
-          maxAge: '7d',
-          maxUsage: '80%',
-          minClips: 10,
-          keepSpectrograms: false,
+  let settings = $derived(
+    (() => {
+      const audioBase = $audioSettings || {
+        source: '',
+        soundLevel: {
+          enabled: false,
+          interval: 60,
         },
-      },
-    },
-    rtsp: $rtspSettings || {
-      transport: 'tcp',
-      urls: [] as string[], // Changed to string[] to match backend
-    },
-  });
+        equalizer: {
+          enabled: false,
+          filters: [],
+        },
+        export: {
+          enabled: false,
+          path: 'clips/',
+          type: 'wav' as const,
+          bitrate: '96k',
+          retention: {
+            policy: 'none',
+            maxAge: '7d',
+            maxUsage: '80%',
+            minClips: 10,
+            keepSpectrograms: false,
+          },
+        },
+      };
+
+      const rtspBase = $rtspSettings || {
+        transport: 'tcp',
+        urls: [],
+      };
+
+      // Ensure urls is always an array even if rtspSettings exists but has undefined/null urls
+      // Also ensure equalizer filters is always an array
+      return {
+        audio: {
+          ...audioBase,
+          equalizer: {
+            enabled: audioBase.equalizer?.enabled ?? false,
+            filters: audioBase.equalizer?.filters ?? [], // Always ensures filters is an array
+          },
+        },
+        rtsp: {
+          transport: rtspBase.transport || 'tcp',
+          urls: rtspBase.urls ?? [], // Always ensures urls is an array
+        },
+      };
+    })()
+  );
   let store = $derived($settingsStore);
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
