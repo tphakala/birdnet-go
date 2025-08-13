@@ -376,28 +376,41 @@
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    ctx.beginPath();
-    let firstPoint = true;
-
-    // Draw with higher resolution for smooth curve
+    // Draw with higher resolution for smooth curve, using alpha fade for extreme values
     const steps = plotWidth * 2; // Higher resolution
-    for (let step = 0; step <= steps; step++) {
+
+    // Draw curve in segments to handle alpha transparency changes
+    let lastCanvasX = margins.left;
+    let lastY = dbToY(calculateCombinedResponse(xToFreq(margins.left)));
+
+    for (let step = 1; step <= steps; step++) {
       const plotX = (step / steps) * plotWidth;
       const canvasX = margins.left + plotX;
       const freq = xToFreq(canvasX);
       const gain = calculateCombinedResponse(freq);
 
-      // Ensure Y coordinate stays within plot area bounds
-      const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
+      // Hard cutoff at minimum dB to eliminate horizontal line at bottom
+      const shouldDraw = gain > MIN_DB;
 
-      if (firstPoint) {
-        ctx.moveTo(canvasX, y);
-        firstPoint = false;
-      } else {
+      // Only draw if above minimum threshold
+      if (shouldDraw) {
+        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
+
+        // Draw line segment
+        ctx.beginPath();
+        ctx.moveTo(lastCanvasX, lastY);
         ctx.lineTo(canvasX, y);
+        ctx.stroke();
+
+        lastCanvasX = canvasX;
+        lastY = y;
+      } else {
+        // Skip drawing but update position for next segment
+        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
+        lastCanvasX = canvasX;
+        lastY = y;
       }
     }
-    ctx.stroke();
 
     // Add subtle text when no filters are present - professional styling
     if (filters.length === 0) {
@@ -475,8 +488,8 @@
 
       tooltip = {
         visible: true,
-        x: event.clientX,
-        y: event.clientY,
+        x: x, // Use canvas-relative coordinates
+        y: y, // Use canvas-relative coordinates
         freq,
         gain: Math.round(gain * 10) / 10,
       };
@@ -558,9 +571,9 @@
     {#if tooltip.visible}
       <div
         class="absolute z-10 px-3 py-2 text-xs bg-base-300 border border-base-content/20 rounded-lg shadow-lg pointer-events-none"
-        style:left="{tooltip.x}px"
-        style:top="{tooltip.y - 40}px"
-        style:transform="translateX(-50%)"
+        style:left="{tooltip.x + 10}px"
+        style:top="{tooltip.y - 10}px"
+        style:transform="translateY(-100%)"
       >
         <div class="font-semibold">{tooltip.freq} Hz</div>
         <div class={tooltip.gain > 0 ? 'text-success' : tooltip.gain < -12 ? 'text-error' : ''}>
