@@ -23,6 +23,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -311,6 +312,7 @@ func (c *Controller) initSystemRoutes() {
 	audioGroup := protectedGroup.Group("/audio")
 	audioGroup.GET("/devices", c.GetAudioDevices)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
+	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("System routes initialized successfully")
@@ -1431,5 +1433,18 @@ func skipFilesystem(fstype string) bool {
 	}
 
 	return false
+}
+
+// GetEqualizerConfig handles GET /api/v2/system/audio/equalizer/config
+func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Getting equalizer filter configuration",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	// Return the equalizer filter configuration
+	return ctx.JSON(http.StatusOK, conf.EqFilterConfig)
 }
 
