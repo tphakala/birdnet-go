@@ -194,9 +194,9 @@ export function coerceBirdNetSettings(settings: PartialBirdNetSettings): Partial
     coerced.longitude = coerceNumber(settings.longitude, -180, 180, 0);
   }
 
-  // Threads: 1 to 32
+  // Threads: 0 to 32 (0 means use all available threads in backend)
   if ('threads' in settings) {
-    coerced.threads = coerceNumber(settings.threads, 1, 32, 1);
+    coerced.threads = coerceNumber(settings.threads, 0, 32, 0);
   }
 
   // Dynamic threshold nested settings

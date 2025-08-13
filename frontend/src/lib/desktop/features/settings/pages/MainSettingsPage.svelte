@@ -511,18 +511,19 @@
       });
 
       // Enable zoom only when Ctrl/Cmd is pressed
-      const handleWheel = (e: Event) => {
-        const wheelEvent = e as Event & { deltaY: number; ctrlKey: boolean; metaKey: boolean };
-        if ((wheelEvent.ctrlKey || wheelEvent.metaKey) && map) {
-          wheelEvent.preventDefault();
-          if (wheelEvent.deltaY > 0) {
+      const handleWheel = (e: globalThis.WheelEvent) => {
+        if ((e.ctrlKey || e.metaKey) && map) {
+          e.preventDefault();
+          if (e.deltaY > 0) {
             map.zoomOut({ duration: 300 }); // Smooth zoom
           } else {
             map.zoomIn({ duration: 300 }); // Smooth zoom
           }
         }
       };
-      mapElement.addEventListener('wheel', handleWheel);
+      // Use passive: false since we need to preventDefault conditionally
+      // This is intentional for map zoom control with Ctrl/Cmd key
+      mapElement.addEventListener('wheel', handleWheel as globalThis.EventListener, false);
 
       // Add marker if coordinates exist (direct creation to avoid reactive loops)
       if ((initialLat !== 0 || initialLng !== 0) && maplibregl) {
@@ -677,14 +678,7 @@
     if (!modalMapElement || modalMap || !maplibregl) return;
 
     // Define handleModalWheel outside try block so it's accessible in cleanup
-    const handleModalWheel = (
-      e: Event & {
-        deltaY: number;
-        ctrlKey: boolean;
-        metaKey: boolean;
-        preventDefault: () => void;
-      }
-    ) => {
+    const handleModalWheel = (e: globalThis.WheelEvent) => {
       if (modalMap) {
         e.preventDefault();
         if (e.deltaY > 0) {
@@ -723,7 +717,13 @@
       if (modalMap) {
         modalMap.scrollZoom.enable();
       }
-      modalMapElement.addEventListener('wheel', handleModalWheel);
+      // Use passive: false since handleModalWheel needs to preventDefault for zoom control
+      // This is intentional for map interaction in the modal
+      modalMapElement.addEventListener(
+        'wheel',
+        handleModalWheel as globalThis.EventListener,
+        false
+      );
 
       // Add marker if coordinates exist
       if (currentLat !== 0 || currentLng !== 0) {
@@ -830,7 +830,11 @@
 
     // Return cleanup function
     return () => {
-      modalMapElement?.removeEventListener('wheel', handleModalWheel);
+      modalMapElement?.removeEventListener(
+        'wheel',
+        handleModalWheel as globalThis.EventListener,
+        false
+      );
       if (modalMap) {
         modalMap.remove();
         // Don't set modalMap = null here, it's handled by the reactive state in the effect
