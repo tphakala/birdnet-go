@@ -303,6 +303,21 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Guard against test environments with incomplete canvas context
+    const requiredMethods = [
+      'beginPath',
+      'stroke',
+      'clearRect',
+      'fillRect',
+      'moveTo',
+      'lineTo',
+      'createLinearGradient',
+    ] as const;
+    // eslint-disable-next-line security/detect-object-injection -- safe method name validation from const array
+    if (requiredMethods.some(method => typeof (ctx as any)[method] !== 'function')) {
+      return;
+    }
+
     // Clear entire canvas
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
@@ -330,7 +345,9 @@
     // Draw plot area border
     ctx.strokeStyle = colors.grid;
     ctx.lineWidth = 1;
-    ctx.strokeRect(margins.left, margins.top, plotWidth, plotHeight);
+    ctx.beginPath();
+    ctx.rect(margins.left, margins.top, plotWidth, plotHeight);
+    ctx.stroke();
 
     // Draw grid lines within plot area
     ctx.strokeStyle = colors.grid;
