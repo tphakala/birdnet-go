@@ -520,12 +520,12 @@
     });
 
     // Listen for window resize - with proper browser support check
-    // eslint-disable-next-line no-undef -- ResizeObserver is a browser API
+    // eslint-disable-next-line no-undef -- ResizeObserver checked via globalThis
     let resizeObserver: ResizeObserver | undefined;
-    // @ts-ignore - ResizeObserver availability checked at runtime
-    if (typeof window.ResizeObserver !== 'undefined' && containerElement) {
-      // @ts-ignore - ResizeObserver availability checked at runtime
-      resizeObserver = new window.ResizeObserver(() => {
+    if (typeof globalThis.ResizeObserver !== 'undefined' && containerElement) {
+      // eslint-disable-next-line no-undef -- ResizeObserver available via globalThis
+      const RO = globalThis.ResizeObserver as typeof ResizeObserver;
+      resizeObserver = new RO(() => {
         updateCanvasDimensions();
         drawGraph();
       });
@@ -568,11 +568,11 @@
       onmouseleave={handleMouseLeave}
     ></canvas>
 
-    {#if tooltip.visible}
+    {#if tooltip && tooltip.visible && tooltip.x != null && tooltip.y != null}
       <div
         class="absolute z-10 px-3 py-2 text-xs bg-base-300 border border-base-content/20 rounded-lg shadow-lg pointer-events-none"
-        style:left="{tooltip.x + 10}px"
-        style:top="{tooltip.y - 10}px"
+        style:left="{(tooltip.x ?? 0) + 10}px"
+        style:top="{(tooltip.y ?? 0) - 10}px"
         style:transform="translateY(-100%)"
       >
         <div class="font-semibold">{tooltip.freq} Hz</div>

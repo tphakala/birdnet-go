@@ -28,9 +28,7 @@ describe('AudioEqualizerSettings - Debug New Filter Creation', () => {
     })) as typeof document.querySelector;
   });
 
-  it('should debug what happens when adding new HighPass filter', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
+  it('should create HighPass filter with expected controls and callback', async () => {
     render(AudioEqualizerSettings, {
       props: {
         equalizerSettings: { enabled: true, filters: [] },
@@ -46,65 +44,58 @@ describe('AudioEqualizerSettings - Debug New Filter Creation', () => {
       ).toBeInTheDocument();
     });
 
-    // Log the current component state by checking what's actually rendered
-    // eslint-disable-next-line no-console -- intentional debug logging
-    console.log('=== DEBUGGING NEW FILTER CREATION ===');
-
     // Select HighPass filter type
     const filterTypeSelect = screen.getByDisplayValue(
       'settings.audio.audioFilters.selectFilterType'
     );
     await fireEvent.change(filterTypeSelect, { target: { value: 'HighPass' } });
 
-    // Wait a bit for the component to update
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Check if attenuation select appears and what its value is
-    try {
+    // Wait for the component to update
+    await waitFor(() => {
       const attenuationSelects = screen.getAllByRole('combobox');
-      // eslint-disable-next-line no-console -- intentional debug logging
-      console.log('Found selects:', attenuationSelects.length);
+      expect(attenuationSelects.length).toBe(2); // Filter type + attenuation select
+    });
 
-      attenuationSelects.forEach((select, index) => {
-        const htmlSelect = select as HTMLSelectElement;
-        // eslint-disable-next-line no-console -- intentional debug logging
-        console.log(`Select ${index}:`, {
-          value: htmlSelect.value,
-          options: Array.from(htmlSelect.options).map(opt => ({
-            value: opt.value,
-            text: opt.text,
-            selected: opt.selected,
-          })),
-        });
-      });
-    } catch (e) {
-      // eslint-disable-next-line no-console -- intentional debug logging
-      console.log('No selects found or error:', e instanceof Error ? e.message : String(e));
-    }
+    // Check that attenuation select appears with expected default value
+    const attenuationSelects = screen.getAllByRole('combobox');
+    const attenuationSelect = attenuationSelects.find(select => {
+      const htmlSelect = select as HTMLSelectElement;
+      return Array.from(htmlSelect.options).some(opt => opt.text.includes('dB'));
+    }) as HTMLSelectElement;
 
-    // Try to find Add Filter button
-    try {
-      const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
-      // eslint-disable-next-line no-console -- intentional debug logging
-      console.log('Add button found, enabled:', !addButton.hasAttribute('disabled'));
+    expect(attenuationSelect).toBeInTheDocument();
+    expect(attenuationSelect.value).toBe('1'); // Default to 12dB (1 pass)
 
-      // Click it and see what gets called
-      await fireEvent.click(addButton);
+    // Verify available options
+    const optionValues = Array.from(attenuationSelect.options).map(opt => opt.value);
+    expect(optionValues).toEqual(expect.arrayContaining(['0', '1', '2', '3', '4']));
 
-      // eslint-disable-next-line no-console -- intentional debug logging
-      console.log('Update callback called with:', mockUpdateCallback.mock.calls);
-    } catch (e) {
-      // eslint-disable-next-line no-console -- intentional debug logging
-      console.log('Add button not found:', e instanceof Error ? e.message : String(e));
-    }
+    // Check that Add Filter button is present and enabled
+    const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
+    expect(addButton).toBeInTheDocument();
+    expect(addButton).toBeEnabled();
 
-    consoleSpy.mockRestore();
+    // Click Add Filter button
+    await fireEvent.click(addButton);
+
+    // Assert the update callback was called with expected payload
+    expect(mockUpdateCallback).toHaveBeenCalledTimes(1);
+    expect(mockUpdateCallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        filters: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'HighPass',
+            frequency: 100, // Default frequency for HighPass
+            passes: 1, // Default to 12dB
+            q: 0.707, // Butterworth Q factor
+          }),
+        ]),
+      })
+    );
   });
 
-  it('should check the actual fallback config values', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    // We'll temporarily add a console.log inside the component to see the config
+  it('should use fallback config when API fails', async () => {
     render(AudioEqualizerSettings, {
       props: {
         equalizerSettings: { enabled: true, filters: [] },
@@ -113,17 +104,47 @@ describe('AudioEqualizerSettings - Debug New Filter Creation', () => {
       },
     });
 
+    // Wait for component to load with fallback config
     await waitFor(() => {
       expect(
         screen.getByDisplayValue('settings.audio.audioFilters.selectFilterType')
       ).toBeInTheDocument();
     });
 
-    // eslint-disable-next-line no-console -- intentional debug logging
-    console.log('=== CONFIG DEBUG ===');
-    // eslint-disable-next-line no-console -- intentional debug logging
-    console.log('Component rendered successfully, check console for config details');
+    // Verify fallback config is used by checking available filter types
+    const filterTypeSelect = screen.getByDisplayValue(
+      'settings.audio.audioFilters.selectFilterType'
+    ) as HTMLSelectElement;
 
-    consoleSpy.mockRestore();
+    const filterTypeOptions = Array.from(filterTypeSelect.options)
+      .map(opt => opt.value)
+      .filter(value => value !== ''); // Remove empty "select" option
+
+    expect(filterTypeOptions).toEqual(expect.arrayContaining(['LowPass', 'HighPass']));
+
+    // Select LowPass and verify fallback default values
+    await fireEvent.change(filterTypeSelect, { target: { value: 'LowPass' } });
+
+    await waitFor(() => {
+      // Should show frequency input with default 15000 Hz
+      const frequencyInput = screen.getByDisplayValue('15000');
+      expect(frequencyInput).toBeInTheDocument();
+    });
+
+    // Select HighPass and verify different default frequency
+    await fireEvent.change(filterTypeSelect, { target: { value: 'HighPass' } });
+
+    await waitFor(() => {
+      // Should show frequency input with default 100 Hz
+      const frequencyInput = screen.getByDisplayValue('100');
+      expect(frequencyInput).toBeInTheDocument();
+    });
+
+    // Verify onUpdate is not called on initial render
+    expect(mockUpdateCallback).not.toHaveBeenCalled();
+
+    // Verify form controls exist with expected fallback state
+    expect(screen.getByText('settings.audio.audioFilters.enableEqualizer')).toBeInTheDocument();
+    expect(screen.getByText('settings.audio.audioFilters.addFilter')).toBeInTheDocument();
   });
 });

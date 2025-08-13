@@ -26,6 +26,40 @@
 
   const logger = loggers.settings;
 
+  // Fallback configuration used when API fails or returns invalid data
+  const FALLBACK_EQ_FILTER_CONFIG = {
+    LowPass: {
+      Parameters: [
+        {
+          Name: 'Frequency',
+          Label: 'Cutoff Frequency',
+          Type: 'number',
+          Unit: 'Hz',
+          Min: 20,
+          Max: 20000,
+          Default: 15000,
+        },
+        { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
+        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
+      ],
+    },
+    HighPass: {
+      Parameters: [
+        {
+          Name: 'Frequency',
+          Label: 'Cutoff Frequency',
+          Type: 'number',
+          Unit: 'Hz',
+          Min: 20,
+          Max: 20000,
+          Default: 100,
+        },
+        { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
+        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
+      ],
+    },
+  };
+
   interface FilterParameter {
     Name: string;
     Label: string;
@@ -78,13 +112,25 @@
     passes: 1, // Default to 12dB attenuation
   });
 
-  // Load filter configuration from backend on mount
+  // Load filter configuration from backend on mount with cleanup
+  let abortController: AbortController | null = null;
+
   $effect(() => {
     loadFilterConfig();
+
+    return () => {
+      // Cleanup: abort any pending request
+      if (abortController) {
+        abortController.abort();
+      }
+    };
   });
 
   async function loadFilterConfig() {
     loadingConfig = true;
+
+    // Create new abort controller for this request
+    abortController = new AbortController();
 
     try {
       const csrfToken =
@@ -94,83 +140,36 @@
 
       const response = await fetch('/api/v2/system/audio/equalizer/config', {
         headers: { 'X-CSRF-Token': csrfToken },
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
         // If API doesn't exist, use fallback config
-        eqFilterConfig = {
-          LowPass: {
-            Parameters: [
-              {
-                Name: 'Frequency',
-                Label: 'Cutoff Frequency',
-                Type: 'number',
-                Unit: 'Hz',
-                Min: 20,
-                Max: 20000,
-                Default: 15000,
-              },
-              { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-              { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-            ],
-          },
-          HighPass: {
-            Parameters: [
-              {
-                Name: 'Frequency',
-                Label: 'Cutoff Frequency',
-                Type: 'number',
-                Unit: 'Hz',
-                Min: 20,
-                Max: 20000,
-                Default: 100,
-              },
-              { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-              { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-            ],
-          },
-        };
-      } else {
-        const data = await response.json();
-        eqFilterConfig = data || {};
+        eqFilterConfig = { ...FALLBACK_EQ_FILTER_CONFIG };
+        return;
       }
+
+      // Parse JSON with error handling
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        logger.error('Error parsing filter config JSON:', parseError);
+        eqFilterConfig = { ...FALLBACK_EQ_FILTER_CONFIG };
+        return;
+      }
+
+      eqFilterConfig = data || { ...FALLBACK_EQ_FILTER_CONFIG };
     } catch (error) {
-      logger.error('Error loading filter config:', error);
+      // Don't log abort errors as they're expected during cleanup
+      if (error instanceof Error && error.name !== 'AbortError') {
+        logger.error('Error loading filter config:', error);
+      }
       // Use fallback config
-      eqFilterConfig = {
-        LowPass: {
-          Parameters: [
-            {
-              Name: 'Frequency',
-              Label: 'Cutoff Frequency',
-              Type: 'number',
-              Unit: 'Hz',
-              Min: 20,
-              Max: 20000,
-              Default: 15000,
-            },
-            { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-            { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-          ],
-        },
-        HighPass: {
-          Parameters: [
-            {
-              Name: 'Frequency',
-              Label: 'Cutoff Frequency',
-              Type: 'number',
-              Unit: 'Hz',
-              Min: 20,
-              Max: 20000,
-              Default: 100,
-            },
-            { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-            { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
-          ],
-        },
-      };
+      eqFilterConfig = { ...FALLBACK_EQ_FILTER_CONFIG };
     } finally {
       loadingConfig = false;
+      abortController = null;
     }
   }
 
@@ -207,7 +206,7 @@
   }
 
   // Update a specific parameter of a filter
-  function updateFilterParameter(index: number, paramName: string, value: any) {
+  function updateFilterParameter(index: number, paramName: string, value: unknown) {
     const filters = [...equalizerSettings.filters];
     const currentFilter = safeArrayAccess(filters, index);
     if (!currentFilter) return;
@@ -217,10 +216,42 @@
 
     // Safe property assignment - whitelist allowed parameters
     const allowedParams = ['frequency', 'q', 'gain', 'passes'];
-    if (allowedParams.includes(normalizedParamName)) {
-      // eslint-disable-next-line security/detect-object-injection -- safe with whitelist
-      updatedFilter[normalizedParamName] = value;
+    if (!allowedParams.includes(normalizedParamName)) return;
+
+    // Get parameter configuration for validation
+    const filterParams = getEqFilterParameters(currentFilter.type);
+    const paramConfig = filterParams.find(p => p.Name.toLowerCase() === normalizedParamName);
+
+    // Validate and clamp numeric inputs
+    let validatedValue = value;
+
+    if (
+      normalizedParamName === 'frequency' ||
+      normalizedParamName === 'q' ||
+      normalizedParamName === 'gain' ||
+      normalizedParamName === 'passes'
+    ) {
+      const numericValue = Number(value);
+
+      // Return if invalid number
+      if (isNaN(numericValue)) return;
+
+      // For passes, ensure integer and clamp to bounds
+      if (normalizedParamName === 'passes') {
+        const intValue = Math.round(numericValue);
+        validatedValue = Math.max(0, Math.min(4, intValue));
+      } else if (paramConfig) {
+        // Use parameter bounds if available, otherwise use sensible defaults
+        const min = paramConfig.Min ?? 0;
+        const max = paramConfig.Max ?? (normalizedParamName === 'frequency' ? 20000 : 10);
+        validatedValue = Math.max(min, Math.min(max, numericValue));
+      } else {
+        validatedValue = numericValue;
+      }
     }
+
+    // eslint-disable-next-line security/detect-object-injection -- safe with whitelist validation
+    updatedFilter[normalizedParamName] = validatedValue;
 
     filters.splice(index, 1, updatedFilter);
     onUpdate({ ...equalizerSettings, filters });
@@ -396,7 +427,9 @@
                   <select
                     value={String(newFilter[param.Name.toLowerCase()] ?? 0)}
                     onchange={e => {
-                      newFilter[param.Name.toLowerCase()] = parseInt(e.currentTarget.value);
+                      const key = param.Name.toLowerCase();
+                      const value = parseInt(e.currentTarget.value, 10);
+                      newFilter = { ...newFilter, [key]: value };
                     }}
                     class="select select-bordered select-sm w-full"
                     {disabled}

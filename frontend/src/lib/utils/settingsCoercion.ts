@@ -14,6 +14,7 @@ import type {
   Action,
   MQTTSettings,
   OAuthSettings,
+  EqualizerFilter,
 } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
@@ -255,15 +256,27 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
           }
 
           const f = filter as UnknownSettings;
-          const coercedFilter: Record<string, unknown> = {
+
+          // Normalize and validate filter type
+          const allowedTypes = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
+          const rawType = coerceString(f.type, 'lowpass').toLowerCase();
+          const normalizedType = allowedTypes.includes(rawType) ? rawType : 'lowpass';
+
+          const coercedFilter: EqualizerFilter = {
             id: coerceString(
               f.id,
-              `filter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+              `filter_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
             ),
-            type: coerceString(f.type, 'lowpass'),
-            frequency: coerceNumber(f.frequency, 20, 20000, f.type === 'highpass' ? 100 : 15000),
+            type: normalizedType as EqualizerFilter['type'],
+            frequency: coerceNumber(
+              f.frequency,
+              20,
+              20000,
+              normalizedType === 'highpass' ? 100 : 15000
+            ),
             q: coerceNumber(f.q, 0.1, 10, 0.707),
             gain: coerceNumber(f.gain, -48, 12, 0),
+            passes: 1, // Default passes
           };
 
           // Set proper default passes based on filter type
@@ -271,17 +284,16 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
             coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
           } else {
             // Default to 1 pass (12dB) for HighPass/LowPass filters
-            if (coercedFilter.type === 'highpass' || coercedFilter.type === 'lowpass') {
+            if (normalizedType === 'highpass' || normalizedType === 'lowpass') {
               coercedFilter.passes = 1;
             } else {
               coercedFilter.passes = 0; // 0dB for other filter types initially
             }
           }
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Complex filter type coercion
-          return coercedFilter as any; // Type coercion for filter object
+          return coercedFilter;
         })
-        .filter(f => f !== null), // Remove invalid filters
+        .filter(Boolean) as EqualizerFilter[], // Remove falsy entries and ensure proper typing
     };
   }
 

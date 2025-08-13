@@ -1444,6 +1444,9 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 		)
 	}
 
+	// Set cache headers for static configuration data
+	ctx.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	
 	// Return the equalizer filter configuration
 	return ctx.JSON(http.StatusOK, conf.EqFilterConfig)
 }

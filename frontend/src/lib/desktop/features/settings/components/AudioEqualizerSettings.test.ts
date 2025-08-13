@@ -251,26 +251,4 @@ describe('AudioEqualizerSettings', () => {
     expect(attenuationSelect).toBeInTheDocument();
     expect((attenuationSelect as HTMLSelectElement).value).toBe('1');
   });
-
-  it('should debug the actual filter config being used', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-    render(AudioEqualizerSettings, {
-      props: {
-        equalizerSettings: defaultEqualizerSettings,
-        disabled: false,
-        onUpdate: mockUpdateCallback,
-      },
-    });
-
-    // Wait for config to load
-    await waitFor(() => {
-      expect(screen.getByText('settings.audio.audioFilters.selectFilterType')).toBeInTheDocument();
-    });
-
-    // The test will help us see what the actual config looks like
-    // We can add console.log in the component temporarily to debug
-
-    consoleSpy.mockRestore();
-  });
 });
