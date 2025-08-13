@@ -8,6 +8,7 @@
   - Add/remove audio filters (LowPass, HighPass)
   - Configure filter parameters (frequency, Q factor, passes)
   - Dynamic parameter inputs based on filter type from backend
+  - Real-time frequency response visualization
   
   Props:
   - equalizerSettings: Object containing equalizer enabled state and filters array
@@ -18,6 +19,7 @@
 -->
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import FilterResponseGraph from './FilterResponseGraph.svelte';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -255,6 +257,16 @@
   />
 
   {#if equalizerSettings.enabled && !loadingConfig}
+    <!-- Filter Response Visualization -->
+    {#if equalizerSettings.filters && equalizerSettings.filters.length > 0}
+      <div class="mb-6">
+        <h3 class="text-sm font-medium mb-2">
+          {t('settings.audio.audioFilters.frequencyResponse')}
+        </h3>
+        <FilterResponseGraph filters={equalizerSettings.filters} width={600} height={300} />
+      </div>
+    {/if}
+
     <div class="space-y-4">
       <!-- Existing filters -->
       {#each equalizerSettings.filters || [] as filter, index}
