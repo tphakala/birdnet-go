@@ -326,7 +326,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			if s.isCircuitOpen() {
 				// Wait before next attempt
 				select {
-				case <-time.After(30 * time.Second):
+				case <-time.After(circuitBreakerCooldown):
 					continue
 				case <-s.ctx.Done():
 					return
@@ -1286,10 +1286,12 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 
 	// Check if circuit was opened (circuitOpenTime is set) and we're still in cooldown
 	if !s.circuitOpenTime.IsZero() && time.Since(s.circuitOpenTime) < circuitBreakerCooldown {
+		remaining := circuitBreakerCooldown - time.Since(s.circuitOpenTime)
 		streamLogger.Warn("circuit breaker is open",
 			"url", privacy.SanitizeRTSPUrl(s.url),
 			"consecutive_failures", s.consecutiveFailures,
-			"cooldown_remaining", circuitBreakerCooldown-time.Since(s.circuitOpenTime),
+			"cooldown_remaining", remaining.Round(time.Second).String(),
+			"cooldown_total", circuitBreakerCooldown.String(),
 			"component", "ffmpeg-stream")
 		return true
 	}
@@ -1305,7 +1307,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 		streamLogger.Info("circuit breaker closed after cooldown",
 			"url", privacy.SanitizeRTSPUrl(s.url),
 			"previous_failures", previousFailures,
-			"open_duration_seconds", openDuration.Seconds(),
+			"open_duration", openDuration.Round(time.Second).String(),
+			"cooldown_period", circuitBreakerCooldown.String(),
 			"component", "ffmpeg-stream")
 
 		// Report circuit breaker closure to telemetry
@@ -1325,7 +1328,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 			streamLogger.Debug("circuit breaker closed after cooldown",
 				"url", privacy.SanitizeRTSPUrl(s.url),
 				"previous_failures", previousFailures,
-				"open_duration_seconds", openDuration.Seconds())
+				"open_duration", openDuration.Round(time.Second).String(),
+				"cooldown_period", circuitBreakerCooldown.String())
 		}
 		_ = errorWithContext // Keep for telemetry reporting when enabled
 	}
@@ -1404,11 +1408,12 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 		streamLogger.Error("circuit breaker opened",
 			"url", privacy.SanitizeRTSPUrl(s.url),
 			"consecutive_failures", s.consecutiveFailures,
-			"runtime_seconds", runtime.Seconds(),
+			"runtime", runtime.Round(time.Millisecond).String(),
 			"reason", reason,
+			"cooldown_period", circuitBreakerCooldown.String(),
 			"component", "ffmpeg-stream")
-		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %v)",
-			privacy.SanitizeRTSPUrl(s.url), s.consecutiveFailures, reason, runtime)
+		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %s, cooldown: %s)",
+			privacy.SanitizeRTSPUrl(s.url), s.consecutiveFailures, reason, runtime.Round(time.Millisecond), circuitBreakerCooldown)
 
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("RTSP stream circuit breaker opened: %s (runtime: %v)", reason, runtime).
