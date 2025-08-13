@@ -250,8 +250,21 @@
       }
     }
 
-    // eslint-disable-next-line security/detect-object-injection -- safe with whitelist validation
-    updatedFilter[normalizedParamName] = validatedValue;
+    // Apply validated value with explicit property assignment
+    switch (normalizedParamName) {
+      case 'frequency':
+        updatedFilter.frequency = validatedValue as number;
+        break;
+      case 'q':
+        updatedFilter.q = validatedValue as number;
+        break;
+      case 'gain':
+        updatedFilter.gain = validatedValue as number;
+        break;
+      case 'passes':
+        updatedFilter.passes = validatedValue as number;
+        break;
+    }
 
     filters.splice(index, 1, updatedFilter);
     onUpdate({ ...equalizerSettings, filters });
@@ -273,13 +286,22 @@
       passes: 1, // Default to 12dB attenuation
     };
 
+    // Apply parameter defaults with explicit property assignments
     parameters.forEach(param => {
       const paramName = param.Name.toLowerCase();
-      // Safe property assignment - whitelist allowed parameters
-      const allowedParams = ['frequency', 'q', 'gain', 'passes'];
-      if (allowedParams.includes(paramName)) {
-        // eslint-disable-next-line security/detect-object-injection -- safe with whitelist
-        updatedFilter[paramName] = param.Default;
+      switch (paramName) {
+        case 'frequency':
+          updatedFilter.frequency = param.Default;
+          break;
+        case 'q':
+          updatedFilter.q = param.Default;
+          break;
+        case 'gain':
+          updatedFilter.gain = param.Default;
+          break;
+        case 'passes':
+          updatedFilter.passes = param.Default;
+          break;
       }
     });
 
@@ -287,6 +309,7 @@
     if (filterType === 'HighPass' || filterType === 'LowPass') {
       updatedFilter.q = 0.707;
     }
+
     newFilter = updatedFilter;
   }
 
@@ -344,9 +367,7 @@
                 {#if param.Label === 'Attenuation'}
                   <!-- Select for Passes/Attenuation -->
                   <select
-                    value={String(
-                      filter[param.Name.toLowerCase()] ?? filter[param.Name] ?? param.Default ?? 1
-                    )}
+                    value={String(filter.passes ?? param.Default ?? 1)}
                     onchange={e =>
                       updateFilterParameter(index, param.Name, parseInt(e.currentTarget.value))}
                     class="select select-bordered select-sm w-full"
@@ -358,16 +379,42 @@
                     <option value="3">36dB</option>
                     <option value="4">48dB</option>
                   </select>
-                {:else}
-                  <!-- Input for other parameters -->
+                {:else if param.Name.toLowerCase() === 'frequency'}
+                  <!-- Frequency input -->
                   <input
-                    value={filter[param.Name.toLowerCase()] ?? filter[param.Name] ?? param.Default}
+                    value={filter.frequency ?? param.Default}
                     oninput={e =>
                       updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
                     type="number"
                     min={param.Min}
                     max={param.Max}
-                    step={param.Type === 'float' || param.Name === 'Q' ? 0.1 : 1}
+                    step="1"
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'q'}
+                  <!-- Q factor input -->
+                  <input
+                    value={filter.q ?? param.Default}
+                    oninput={e =>
+                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                    type="number"
+                    min={param.Min}
+                    max={param.Max}
+                    step="0.1"
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'gain'}
+                  <!-- Gain input -->
+                  <input
+                    value={filter.gain ?? param.Default}
+                    oninput={e =>
+                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                    type="number"
+                    min={param.Min}
+                    max={param.Max}
+                    step="0.1"
                     class="input input-bordered input-sm w-full"
                     {disabled}
                   />
@@ -425,11 +472,10 @@
                 {#if param.Label === 'Attenuation'}
                   <!-- Select for Passes/Attenuation -->
                   <select
-                    value={String(newFilter[param.Name.toLowerCase()] ?? 0)}
+                    value={String(newFilter.passes ?? 1)}
                     onchange={e => {
-                      const key = param.Name.toLowerCase();
                       const value = parseInt(e.currentTarget.value, 10);
-                      newFilter = { ...newFilter, [key]: value };
+                      newFilter = { ...newFilter, passes: value };
                     }}
                     class="select select-bordered select-sm w-full"
                     {disabled}
@@ -440,12 +486,46 @@
                     <option value="3">36dB</option>
                     <option value="4">48dB</option>
                   </select>
-                {:else}
-                  <!-- Input for other parameters -->
+                {:else if param.Name.toLowerCase() === 'frequency'}
+                  <!-- Frequency input -->
                   <input
-                    bind:value={newFilter[param.Name.toLowerCase()]}
+                    value={newFilter.frequency}
+                    oninput={e => {
+                      const value = parseFloat(e.currentTarget.value) || 0;
+                      newFilter = { ...newFilter, frequency: value };
+                    }}
                     type="number"
-                    step={param.Type === 'float' || param.Name === 'Q' ? 0.1 : 1}
+                    step="1"
+                    min={param.Min}
+                    max={param.Max}
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'q'}
+                  <!-- Q factor input -->
+                  <input
+                    value={newFilter.q ?? 0.707}
+                    oninput={e => {
+                      const value = parseFloat(e.currentTarget.value) || 0.707;
+                      newFilter = { ...newFilter, q: value };
+                    }}
+                    type="number"
+                    step="0.1"
+                    min={param.Min}
+                    max={param.Max}
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'gain'}
+                  <!-- Gain input -->
+                  <input
+                    value={newFilter.gain ?? 0}
+                    oninput={e => {
+                      const value = parseFloat(e.currentTarget.value) || 0;
+                      newFilter = { ...newFilter, gain: value };
+                    }}
+                    type="number"
+                    step="0.1"
                     min={param.Min}
                     max={param.Max}
                     class="input input-bordered input-sm w-full"

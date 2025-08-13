@@ -5,9 +5,7 @@ import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 // Mock all dependencies to focus on core logic
 vi.mock('$lib/i18n', () => ({ t: vi.fn(key => key) }));
 vi.mock('$lib/utils/security', () => ({
-  // eslint-disable-next-line security/detect-object-injection -- safe test mock
   safeGet: vi.fn((obj, key) => obj?.[key]),
-  // eslint-disable-next-line security/detect-object-injection -- safe test mock
   safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
 }));
 vi.mock('$lib/utils/logger', () => ({ loggers: { settings: { error: vi.fn() } } }));

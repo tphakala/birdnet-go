@@ -257,10 +257,16 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
           const f = filter as UnknownSettings;
 
-          // Normalize and validate filter type
-          const allowedTypes = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
-          const rawType = coerceString(f.type, 'lowpass').toLowerCase();
-          const normalizedType = allowedTypes.includes(rawType) ? rawType : 'lowpass';
+          // Normalize and validate filter type - backend expects proper case
+          const allowedTypesMap = {
+            lowpass: 'LowPass',
+            highpass: 'HighPass',
+            bandpass: 'BandPass',
+            bandstop: 'BandStop',
+          };
+          const rawType = coerceString(f.type, 'LowPass').toLowerCase();
+          const normalizedType =
+            allowedTypesMap[rawType as keyof typeof allowedTypesMap] || 'LowPass';
 
           const coercedFilter: EqualizerFilter = {
             id: coerceString(
@@ -272,7 +278,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
               f.frequency,
               20,
               20000,
-              normalizedType === 'highpass' ? 100 : 15000
+              normalizedType === 'HighPass' ? 100 : 15000
             ),
             q: coerceNumber(f.q, 0.1, 10, 0.707),
             gain: coerceNumber(f.gain, -48, 12, 0),
@@ -284,7 +290,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
             coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
           } else {
             // Default to 1 pass (12dB) for HighPass/LowPass filters
-            if (normalizedType === 'highpass' || normalizedType === 'lowpass') {
+            if (normalizedType === 'HighPass' || normalizedType === 'LowPass') {
               coercedFilter.passes = 1;
             } else {
               coercedFilter.passes = 0; // 0dB for other filter types initially
