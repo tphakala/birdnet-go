@@ -46,17 +46,20 @@ type SystemInfo struct {
 
 // ResourceInfo represents system resource usage data
 type ResourceInfo struct {
-	CPUUsage    float64 `json:"cpu_usage_percent"`
-	MemoryTotal uint64  `json:"memory_total"`
-	MemoryUsed  uint64  `json:"memory_used"`
-	MemoryFree  uint64  `json:"memory_free"`
-	MemoryUsage float64 `json:"memory_usage_percent"`
-	SwapTotal   uint64  `json:"swap_total"`
-	SwapUsed    uint64  `json:"swap_used"`
-	SwapFree    uint64  `json:"swap_free"`
-	SwapUsage   float64 `json:"swap_usage_percent"`
-	ProcessMem  float64 `json:"process_memory_mb"`
-	ProcessCPU  float64 `json:"process_cpu_percent"`
+	CPUUsage        float64 `json:"cpu_usage_percent"`
+	MemoryTotal     uint64  `json:"memory_total"`
+	MemoryUsed      uint64  `json:"memory_used"`
+	MemoryFree      uint64  `json:"memory_free"`
+	MemoryAvailable uint64  `json:"memory_available"`
+	MemoryBuffers   uint64  `json:"memory_buffers"`
+	MemoryCached    uint64  `json:"memory_cached"`
+	MemoryUsage     float64 `json:"memory_usage_percent"`
+	SwapTotal       uint64  `json:"swap_total"`
+	SwapUsed        uint64  `json:"swap_used"`
+	SwapFree        uint64  `json:"swap_free"`
+	SwapUsage       float64 `json:"swap_usage_percent"`
+	ProcessMem      float64 `json:"process_memory_mb"`
+	ProcessCPU      float64 `json:"process_cpu_percent"`
 }
 
 // DiskInfo represents information about a disk
@@ -552,16 +555,19 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 
 	// Create response
 	resourceInfo := ResourceInfo{
-		MemoryTotal: memInfo.Total,
-		MemoryUsed:  memInfo.Used,
-		MemoryFree:  memInfo.Free,
-		MemoryUsage: memInfo.UsedPercent,
-		SwapTotal:   swapInfo.Total,
-		SwapUsed:    swapInfo.Used,
-		SwapFree:    swapInfo.Free,
-		SwapUsage:   swapInfo.UsedPercent,
-		ProcessMem:  procMemMB,
-		ProcessCPU:  procCPU,
+		MemoryTotal:     memInfo.Total,
+		MemoryUsed:      memInfo.Used,
+		MemoryFree:      memInfo.Free,
+		MemoryAvailable: memInfo.Available,
+		MemoryBuffers:   memInfo.Buffers,
+		MemoryCached:    memInfo.Cached,
+		MemoryUsage:     memInfo.UsedPercent,
+		SwapTotal:       swapInfo.Total,
+		SwapUsed:        swapInfo.Used,
+		SwapFree:        swapInfo.Free,
+		SwapUsage:       swapInfo.UsedPercent,
+		ProcessMem:      procMemMB,
+		ProcessCPU:      procCPU,
 	}
 
 	// If we got CPU data, use the first value (total)
