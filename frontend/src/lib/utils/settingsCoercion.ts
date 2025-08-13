@@ -241,6 +241,50 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     );
   }
 
+  // Equalizer settings
+  if ('equalizer' in settings && settings.equalizer && typeof settings.equalizer === 'object') {
+    const eq = settings.equalizer as unknown as UnknownSettings;
+    coerced.equalizer = {
+      enabled: coerceBoolean(eq.enabled, false),
+      filters: coerceArray(eq.filters, [])
+        .map(filter => {
+          // Type guard for valid filter objects
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- filter could be null from coerceArray
+          if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
+            return null; // Will be filtered out
+          }
+
+          const f = filter as UnknownSettings;
+          const coercedFilter: Record<string, unknown> = {
+            id: coerceString(
+              f.id,
+              `filter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            ),
+            type: coerceString(f.type, 'lowpass'),
+            frequency: coerceNumber(f.frequency, 20, 20000, f.type === 'highpass' ? 100 : 15000),
+            q: coerceNumber(f.q, 0.1, 10, 0.707),
+            gain: coerceNumber(f.gain, -48, 12, 0),
+          };
+
+          // Set proper default passes based on filter type
+          if (typeof f.passes === 'number') {
+            coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
+          } else {
+            // Default to 1 pass (12dB) for HighPass/LowPass filters
+            if (coercedFilter.type === 'highpass' || coercedFilter.type === 'lowpass') {
+              coercedFilter.passes = 1;
+            } else {
+              coercedFilter.passes = 0; // 0dB for other filter types initially
+            }
+          }
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Complex filter type coercion
+          return coercedFilter as any; // Type coercion for filter object
+        })
+        .filter(f => f !== null), // Remove invalid filters
+    };
+  }
+
   return coerced;
 }
 

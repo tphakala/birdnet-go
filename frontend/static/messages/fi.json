@@ -948,6 +948,7 @@
         "selectFilterType": "Valitse suodatintyyppi",
         "addFilter": "Lisää suodatin",
         "remove": "Poista",
+        "frequencyResponse": "Taajuusvaste",
         "cutoffFrequency": "Rajataajuus",
         "qFactor": "Q-kerroin",
         "gain": "Vahvistus",

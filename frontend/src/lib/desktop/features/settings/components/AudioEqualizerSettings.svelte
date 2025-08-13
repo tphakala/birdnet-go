@@ -75,7 +75,7 @@
     frequency: 0,
     q: 0.707,
     gain: 0,
-    passes: 0,
+    passes: 1, // Default to 12dB attenuation
   });
 
   // Load filter configuration from backend on mount
@@ -111,7 +111,7 @@
                 Default: 15000,
               },
               { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-              { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 0 },
+              { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
             ],
           },
           HighPass: {
@@ -126,7 +126,7 @@
                 Default: 100,
               },
               { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-              { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 0 },
+              { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
             ],
           },
         };
@@ -150,7 +150,7 @@
               Default: 15000,
             },
             { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-            { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 0 },
+            { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
           ],
         },
         HighPass: {
@@ -165,7 +165,7 @@
               Default: 100,
             },
             { Name: 'Q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-            { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 0 },
+            { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
           ],
         },
       };
@@ -188,11 +188,16 @@
     // Remove empty id if it exists
     if (!filterToAdd.id) delete filterToAdd.id;
 
+    // Ensure HP/LP filters use Butterworth Q factor
+    if (filterToAdd.type === 'HighPass' || filterToAdd.type === 'LowPass') {
+      filterToAdd.q = 0.707;
+    }
+
     const filters = [...(equalizerSettings.filters || []), filterToAdd];
     onUpdate({ ...equalizerSettings, filters });
 
     // Reset new filter form
-    newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 0 };
+    newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 1 };
   }
 
   // Remove a filter by index
@@ -210,17 +215,21 @@
     const updatedFilter = { ...currentFilter };
     const normalizedParamName = paramName.toLowerCase();
 
-    // Directly set the property value
-    updatedFilter[normalizedParamName] = value;
-    filters.splice(index, 1, updatedFilter);
+    // Safe property assignment - whitelist allowed parameters
+    const allowedParams = ['frequency', 'q', 'gain', 'passes'];
+    if (allowedParams.includes(normalizedParamName)) {
+      // eslint-disable-next-line security/detect-object-injection -- safe with whitelist
+      updatedFilter[normalizedParamName] = value;
+    }
 
+    filters.splice(index, 1, updatedFilter);
     onUpdate({ ...equalizerSettings, filters });
   }
 
   // Set default values when filter type is selected
   function getFilterDefaults(filterType: string) {
     if (!filterType) {
-      newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 0 };
+      newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 1 };
       return;
     }
 
@@ -230,14 +239,23 @@
       frequency: 0,
       q: 0.707,
       gain: 0,
-      passes: 0,
+      passes: 1, // Default to 12dB attenuation
     };
 
     parameters.forEach(param => {
       const paramName = param.Name.toLowerCase();
-      updatedFilter[paramName] = param.Default;
+      // Safe property assignment - whitelist allowed parameters
+      const allowedParams = ['frequency', 'q', 'gain', 'passes'];
+      if (allowedParams.includes(paramName)) {
+        // eslint-disable-next-line security/detect-object-injection -- safe with whitelist
+        updatedFilter[paramName] = param.Default;
+      }
     });
 
+    // Force Q to 0.707 (Butterworth) for HP/LP filters
+    if (filterType === 'HighPass' || filterType === 'LowPass') {
+      updatedFilter.q = 0.707;
+    }
     newFilter = updatedFilter;
   }
 
@@ -257,15 +275,13 @@
   />
 
   {#if equalizerSettings.enabled && !loadingConfig}
-    <!-- Filter Response Visualization -->
-    {#if equalizerSettings.filters && equalizerSettings.filters.length > 0}
-      <div class="mb-6">
-        <h3 class="text-sm font-medium mb-2">
-          {t('settings.audio.audioFilters.frequencyResponse')}
-        </h3>
-        <FilterResponseGraph filters={equalizerSettings.filters} width={600} height={300} />
-      </div>
-    {/if}
+    <!-- Filter Response Visualization - Always visible to show current state -->
+    <div class="mb-6">
+      <h3 class="text-sm font-medium mb-2">
+        {t('settings.audio.audioFilters.frequencyResponse')}
+      </h3>
+      <FilterResponseGraph filters={equalizerSettings.filters || []} />
+    </div>
 
     <div class="space-y-4">
       <!-- Existing filters -->
@@ -286,44 +302,47 @@
 
           <!-- Dynamic parameters based on filter type -->
           {#each filterParams as param}
-            <div class="flex flex-col">
-              <div class="label pt-0">
-                <span class="label-text-alt">
-                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                </span>
+            <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
+            {#if !(param.Name === 'Q' && (filter.type === 'HighPass' || filter.type === 'LowPass'))}
+              <div class="flex flex-col">
+                <div class="label pt-0">
+                  <span class="label-text-alt">
+                    {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
+                  </span>
+                </div>
+                {#if param.Label === 'Attenuation'}
+                  <!-- Select for Passes/Attenuation -->
+                  <select
+                    value={String(
+                      filter[param.Name.toLowerCase()] ?? filter[param.Name] ?? param.Default ?? 1
+                    )}
+                    onchange={e =>
+                      updateFilterParameter(index, param.Name, parseInt(e.currentTarget.value))}
+                    class="select select-bordered select-sm w-full"
+                    {disabled}
+                  >
+                    <option value="0">0dB</option>
+                    <option value="1">12dB</option>
+                    <option value="2">24dB</option>
+                    <option value="3">36dB</option>
+                    <option value="4">48dB</option>
+                  </select>
+                {:else}
+                  <!-- Input for other parameters -->
+                  <input
+                    value={filter[param.Name.toLowerCase()] ?? filter[param.Name] ?? param.Default}
+                    oninput={e =>
+                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                    type="number"
+                    min={param.Min}
+                    max={param.Max}
+                    step={param.Type === 'float' || param.Name === 'Q' ? 0.1 : 1}
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {/if}
               </div>
-              {#if param.Label === 'Attenuation'}
-                <!-- Select for Passes/Attenuation -->
-                <select
-                  value={String(
-                    filter[param.Name.toLowerCase()] ?? filter[param.Name] ?? param.Default ?? 0
-                  )}
-                  onchange={e =>
-                    updateFilterParameter(index, param.Name, parseInt(e.currentTarget.value))}
-                  class="select select-bordered select-sm w-full"
-                  {disabled}
-                >
-                  <option value="0">0dB</option>
-                  <option value="1">12dB</option>
-                  <option value="2">24dB</option>
-                  <option value="3">36dB</option>
-                  <option value="4">48dB</option>
-                </select>
-              {:else}
-                <!-- Input for other parameters -->
-                <input
-                  value={filter[param.Name.toLowerCase()] ?? filter[param.Name] ?? param.Default}
-                  oninput={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
-                  type="number"
-                  min={param.Min}
-                  max={param.Max}
-                  step={param.Type === 'float' || param.Name === 'Q' ? 0.1 : 1}
-                  class="input input-bordered input-sm w-full"
-                  {disabled}
-                />
-              {/if}
-            </div>
+            {/if}
           {/each}
 
           <!-- Remove button -->
@@ -364,41 +383,44 @@
         <!-- New Audio Filter Parameters -->
         {#if newFilter.type}
           {#each getEqFilterParameters(newFilter.type) as param}
-            <div class="flex flex-col">
-              <div class="label">
-                <span class="label-text">
-                  {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
-                </span>
+            <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
+            {#if !(param.Name === 'Q' && (newFilter.type === 'HighPass' || newFilter.type === 'LowPass'))}
+              <div class="flex flex-col">
+                <div class="label">
+                  <span class="label-text">
+                    {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
+                  </span>
+                </div>
+                {#if param.Label === 'Attenuation'}
+                  <!-- Select for Passes/Attenuation -->
+                  <select
+                    value={String(newFilter[param.Name.toLowerCase()] ?? 0)}
+                    onchange={e => {
+                      newFilter[param.Name.toLowerCase()] = parseInt(e.currentTarget.value);
+                    }}
+                    class="select select-bordered select-sm w-full"
+                    {disabled}
+                  >
+                    <option value="0">0dB</option>
+                    <option value="1">12dB</option>
+                    <option value="2">24dB</option>
+                    <option value="3">36dB</option>
+                    <option value="4">48dB</option>
+                  </select>
+                {:else}
+                  <!-- Input for other parameters -->
+                  <input
+                    bind:value={newFilter[param.Name.toLowerCase()]}
+                    type="number"
+                    step={param.Type === 'float' || param.Name === 'Q' ? 0.1 : 1}
+                    min={param.Min}
+                    max={param.Max}
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {/if}
               </div>
-              {#if param.Label === 'Attenuation'}
-                <!-- Select for Passes/Attenuation -->
-                <select
-                  value={String(newFilter[param.Name.toLowerCase()] ?? 0)}
-                  onchange={e => {
-                    newFilter[param.Name.toLowerCase()] = parseInt(e.currentTarget.value);
-                  }}
-                  class="select select-bordered select-sm w-full"
-                  {disabled}
-                >
-                  <option value="0">0dB</option>
-                  <option value="1">12dB</option>
-                  <option value="2">24dB</option>
-                  <option value="3">36dB</option>
-                  <option value="4">48dB</option>
-                </select>
-              {:else}
-                <!-- Input for other parameters -->
-                <input
-                  bind:value={newFilter[param.Name.toLowerCase()]}
-                  type="number"
-                  step={param.Type === 'float' || param.Name === 'Q' ? 0.1 : 1}
-                  min={param.Min}
-                  max={param.Max}
-                  class="input input-bordered input-sm w-full"
-                  {disabled}
-                />
-              {/if}
-            </div>
+            {/if}
           {/each}
         {/if}
 

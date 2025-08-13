@@ -1084,6 +1084,7 @@
         "selectFilterType": "Sélectionner le type de filtre",
         "addFilter": "Ajouter un filtre",
         "remove": "Supprimer",
+        "frequencyResponse": "Réponse en fréquence",
         "cutoffFrequency": "Fréquence de coupure",
         "qFactor": "Facteur Q",
         "gain": "Gain",
