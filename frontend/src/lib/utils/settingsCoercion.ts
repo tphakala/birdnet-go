@@ -14,6 +14,7 @@ import type {
   Action,
   MQTTSettings,
   OAuthSettings,
+  EqualizerFilter,
 } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
@@ -239,6 +240,67 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     coerced.sampleRate = validRates.reduce((prev, curr) =>
       Math.abs(curr - rate) < Math.abs(prev - rate) ? curr : prev
     );
+  }
+
+  // Equalizer settings
+  if ('equalizer' in settings && settings.equalizer && typeof settings.equalizer === 'object') {
+    const eq = settings.equalizer as unknown as UnknownSettings;
+    coerced.equalizer = {
+      enabled: coerceBoolean(eq.enabled, false),
+      filters: coerceArray(eq.filters, [])
+        .map(filter => {
+          // Type guard for valid filter objects
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- filter could be null from coerceArray
+          if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
+            return null; // Will be filtered out
+          }
+
+          const f = filter as UnknownSettings;
+
+          // Normalize and validate filter type - backend expects proper case
+          const allowedTypesMap = {
+            lowpass: 'LowPass',
+            highpass: 'HighPass',
+            bandpass: 'BandPass',
+            bandstop: 'BandStop',
+          };
+          const rawType = coerceString(f.type, 'LowPass').toLowerCase();
+          const normalizedType =
+            allowedTypesMap[rawType as keyof typeof allowedTypesMap] || 'LowPass';
+
+          const coercedFilter: EqualizerFilter = {
+            id: coerceString(
+              f.id,
+              `filter_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+            ),
+            type: normalizedType as EqualizerFilter['type'],
+            frequency: coerceNumber(
+              f.frequency,
+              20,
+              20000,
+              normalizedType === 'HighPass' ? 100 : 15000
+            ),
+            q: coerceNumber(f.q, 0.1, 10, 0.707),
+            gain: coerceNumber(f.gain, -48, 12, 0),
+            passes: 1, // Default passes
+          };
+
+          // Set proper default passes based on filter type
+          if (typeof f.passes === 'number') {
+            coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
+          } else {
+            // Default to 1 pass (12dB) for HighPass/LowPass filters
+            if (normalizedType === 'HighPass' || normalizedType === 'LowPass') {
+              coercedFilter.passes = 1;
+            } else {
+              coercedFilter.passes = 0; // 0dB for other filter types initially
+            }
+          }
+
+          return coercedFilter;
+        })
+        .filter(Boolean) as EqualizerFilter[], // Remove falsy entries and ensure proper typing
+    };
   }
 
   return coerced;

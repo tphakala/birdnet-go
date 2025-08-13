@@ -216,6 +216,7 @@ routeInitializers := []struct {
 | GET    | `/system/temperature/cpu` | `GetSystemCPUTemperature` | ✅   | CPU temperature            |
 | GET    | `/system/audio/devices`   | `GetAudioDevices`         | ✅   | Available audio devices    |
 | GET    | `/system/audio/active`    | `GetActiveAudioDevice`    | ✅   | Active audio device        |
+| GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig` | ✅   | Audio equalizer filter configuration |
 
 ### Weather (`weather.go`)
 

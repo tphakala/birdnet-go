@@ -157,6 +157,7 @@ export interface EqualizerFilter {
   frequency: number;
   q?: number;
   gain?: number;
+  passes?: number; // Number of filter passes (1=12dB, 2=24dB, 3=36dB, 4=48dB)
 }
 
 export interface ExportSettings {

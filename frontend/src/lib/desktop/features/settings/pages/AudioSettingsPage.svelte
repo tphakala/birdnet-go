@@ -37,8 +37,8 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import { t } from '$lib/i18n';
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -193,71 +193,6 @@
     (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
       ''
   );
-
-  // Equalizer filter configuration (static from backend)
-  const eqFilterConfig: Record<
-    string,
-    {
-      Parameters: Array<{
-        Name: string;
-        Label: string;
-        Type: string;
-        Unit?: string;
-        Min: number;
-        Max: number;
-        Default: number;
-      }>;
-    }
-  > = {
-    lowpass: {
-      Parameters: [
-        {
-          Name: 'frequency',
-          Label: 'Cutoff Frequency',
-          Type: 'number',
-          Unit: 'Hz',
-          Min: 20,
-          Max: 20000,
-          Default: 15000,
-        },
-        { Name: 'q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-      ],
-    },
-    highpass: {
-      Parameters: [
-        {
-          Name: 'frequency',
-          Label: 'Cutoff Frequency',
-          Type: 'number',
-          Unit: 'Hz',
-          Min: 20,
-          Max: 20000,
-          Default: 100,
-        },
-        { Name: 'q', Label: 'Q Factor', Type: 'number', Min: 0.1, Max: 10, Default: 0.707 },
-      ],
-    },
-  };
-
-  // Helper function to get translated parameter label
-  function getParameterLabel(paramName: string): string {
-    const labelMap: Record<string, string> = {
-      frequency: t('settings.audio.audioFilters.cutoffFrequency'),
-      q: t('settings.audio.audioFilters.qFactor'),
-      gain: t('settings.audio.audioFilters.gain'),
-      attenuation: t('settings.audio.audioFilters.attenuation'),
-    };
-    return safeGet(labelMap, paramName.toLowerCase(), paramName);
-  }
-
-  // New filter state for adding filters
-  let newFilter = $state({
-    id: '',
-    type: '' as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop' | '',
-    frequency: 0,
-    q: 0,
-    gain: 0,
-  });
 
   // PERFORMANCE OPTIMIZATION: Load audio devices with proper state management
   $effect(() => {
@@ -416,87 +351,14 @@
     });
   }
 
-  // Equalizer functions
-  function getEqFilterParameters(filterType: string) {
-    const filterConfig = safeGet(eqFilterConfig, filterType);
-    return filterConfig?.Parameters || [];
-  }
-
-  function addNewFilter() {
-    if (!newFilter.type) return;
-
-    const filterWithId = {
-      ...newFilter,
-      id: `filter-${Date.now()}`,
-      type: newFilter.type as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop',
-    };
-
-    const filters = [...(settings.audio.equalizer.filters || []), filterWithId];
+  // Handle equalizer updates from the AudioEqualizerSettings component
+  function handleEqualizerUpdate(equalizerSettings: { enabled: boolean; filters: any[] }) {
     settingsActions.updateSection('realtime', {
       audio: {
         ...$audioSettings!,
-        equalizer: { ...settings.audio.equalizer, filters },
+        equalizer: equalizerSettings,
       },
     });
-
-    // Reset new filter form
-    newFilter = { id: '', type: '', frequency: 0, q: 0, gain: 0 };
-  }
-
-  function removeFilter(index: number) {
-    const filters = settings.audio.equalizer.filters.filter((_, i) => i !== index);
-    settingsActions.updateSection('realtime', {
-      audio: {
-        ...$audioSettings!,
-        equalizer: { ...settings.audio.equalizer, filters },
-      },
-    });
-  }
-
-  function updateFilterParameter(index: number, paramName: string, value: any) {
-    const filters = [...settings.audio.equalizer.filters];
-    const currentFilter = safeArrayAccess(filters, index);
-    if (!currentFilter) return;
-
-    const updatedFilter = { ...currentFilter };
-    const normalizedParamName = paramName.toLowerCase();
-
-    // Use Object.assign for safer property assignment
-    Object.assign(updatedFilter, { [normalizedParamName]: value });
-    filters.splice(index, 1, updatedFilter);
-
-    settingsActions.updateSection('realtime', {
-      audio: {
-        ...$audioSettings!,
-        equalizer: { ...settings.audio.equalizer, filters },
-      },
-    });
-  }
-
-  function getFilterDefaults(filterType: string) {
-    if (!filterType) {
-      newFilter = { id: '', type: '', frequency: 0, q: 0, gain: 0 };
-      return;
-    }
-
-    const parameters = getEqFilterParameters(filterType);
-    const updatedFilter = {
-      id: '',
-      type: filterType as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop',
-      frequency: 0,
-      q: 0,
-      gain: 0,
-    };
-
-    parameters.forEach(param => {
-      const paramName = param.Name.toLowerCase() as keyof typeof updatedFilter;
-      const currentValue = safeGet(updatedFilter, paramName);
-      if (currentValue !== undefined && typeof currentValue === 'number') {
-        Object.assign(updatedFilter, { [paramName]: param.Default });
-      }
-    });
-
-    newFilter = updatedFilter;
   }
 </script>
 
@@ -582,221 +444,11 @@
     defaultOpen={false}
     hasChanges={audioFiltersHasChanges}
   >
-    <div class="space-y-4">
-      <Checkbox
-        checked={settings.audio.equalizer.enabled}
-        label={t('settings.audio.audioFilters.enableEqualizer')}
-        helpText={t('settings.audio.audioFilters.enableEqualizerHelp')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={enabled =>
-          settingsActions.updateSection('realtime', {
-            audio: {
-              ...$audioSettings!,
-              equalizer: {
-                ...settings.audio.equalizer,
-                enabled,
-              },
-            },
-          })}
-      />
-
-      {#if settings.audio.equalizer.enabled}
-        <div class="space-y-4">
-          <!-- Existing filters -->
-          {#each settings.audio.equalizer.filters || [] as filter, index}
-            <div class="border border-base-300 rounded-lg p-4 bg-base-200">
-              <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <!-- Filter Type -->
-                <div class="flex flex-col">
-                  <div class="label">
-                    <span class="label-text">{t('settings.audio.audioFilters.filterType')}</span>
-                  </div>
-                  <div class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300">
-                    {t(`settings.audio.filterTypes.${filter.type}`)}
-                  </div>
-                </div>
-
-                <!-- Dynamic parameters based on filter type -->
-                {#each getEqFilterParameters(filter.type) as param}
-                  <div class="flex flex-col">
-                    {#if param.Name.toLowerCase() === 'attenuation'}
-                      <!-- Special handling for Attenuation (Passes) -->
-                      <SelectField
-                        id="filter-{index}-{param.Name}"
-                        value={safeGet(filter as any, param.Name.toLowerCase(), param.Default)}
-                        onchange={value =>
-                          updateFilterParameter(index, param.Name, parseInt(value))}
-                        options={[
-                          {
-                            value: '0',
-                            label: t('settings.audio.audioFilters.attenuationLevels.0db'),
-                          },
-                          {
-                            value: '1',
-                            label: t('settings.audio.audioFilters.attenuationLevels.12db'),
-                          },
-                          {
-                            value: '2',
-                            label: t('settings.audio.audioFilters.attenuationLevels.24db'),
-                          },
-                          {
-                            value: '3',
-                            label: t('settings.audio.audioFilters.attenuationLevels.36db'),
-                          },
-                          {
-                            value: '4',
-                            label: t('settings.audio.audioFilters.attenuationLevels.48db'),
-                          },
-                        ]}
-                        className="select-sm"
-                        disabled={store.isLoading || store.isSaving}
-                        label="{getParameterLabel(param.Name)}{param.Unit
-                          ? ` (${param.Unit})`
-                          : ''}"
-                      />
-                    {:else}
-                      <!-- Regular number input -->
-                      <NumberField
-                        value={safeGet(filter as any, param.Name.toLowerCase(), param.Default)}
-                        onUpdate={value => updateFilterParameter(index, param.Name, value)}
-                        min={param.Min}
-                        max={param.Max}
-                        step={param.Type === 'float' ? 0.1 : 1}
-                        disabled={store.isLoading || store.isSaving}
-                        label="{getParameterLabel(param.Name)}{param.Unit
-                          ? ` (${param.Unit})`
-                          : ''}"
-                      />
-                    {/if}
-                  </div>
-                {/each}
-
-                <!-- Remove button -->
-                <div class="flex flex-col items-end">
-                  <div class="label">
-                    <span class="label-text">&nbsp;</span>
-                  </div>
-                  <button
-                    type="button"
-                    class="btn btn-error btn-sm w-full md:w-24"
-                    onclick={() => removeFilter(index)}
-                    disabled={store.isLoading || store.isSaving}
-                  >
-                    {t('settings.audio.audioFilters.remove')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          {/each}
-
-          <!-- Add new filter -->
-          <div class="border border-dashed border-base-300 rounded-lg p-4">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-              <!-- New Filter Type -->
-              <div class="flex flex-col">
-                <SelectField
-                  id="new-filter-type"
-                  value={newFilter.type}
-                  onchange={value => {
-                    newFilter.type = value as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop' | '';
-                    getFilterDefaults(value);
-                  }}
-                  options={[]}
-                  placeholder={t('settings.audio.audioFilters.selectFilterType')}
-                  className="select-sm"
-                  disabled={store.isLoading || store.isSaving}
-                  label={t('settings.audio.audioFilters.newFilterType')}
-                >
-                  <option value="">{t('settings.audio.audioFilters.selectFilterType')}</option>
-                  {#each Object.keys(eqFilterConfig) as filterType}
-                    <option value={filterType}
-                      >{t(`settings.audio.filterTypes.${filterType}`)}</option
-                    >
-                  {/each}
-                </SelectField>
-              </div>
-
-              <!-- Dynamic parameters for new filter -->
-              {#if newFilter.type}
-                {#each getEqFilterParameters(newFilter.type) as param}
-                  <div class="flex flex-col">
-                    {#if param.Name.toLowerCase() === 'attenuation'}
-                      <!-- Special handling for Attenuation -->
-                      <SelectField
-                        id="new-filter-{param.Name}"
-                        value={safeGet(newFilter as any, param.Name.toLowerCase(), '')}
-                        onchange={value => {
-                          Object.assign(newFilter, {
-                            [param.Name.toLowerCase()]: parseInt(value),
-                          });
-                        }}
-                        options={[
-                          {
-                            value: '0',
-                            label: t('settings.audio.audioFilters.attenuationLevels.0db'),
-                          },
-                          {
-                            value: '1',
-                            label: t('settings.audio.audioFilters.attenuationLevels.12db'),
-                          },
-                          {
-                            value: '2',
-                            label: t('settings.audio.audioFilters.attenuationLevels.24db'),
-                          },
-                          {
-                            value: '3',
-                            label: t('settings.audio.audioFilters.attenuationLevels.36db'),
-                          },
-                          {
-                            value: '4',
-                            label: t('settings.audio.audioFilters.attenuationLevels.48db'),
-                          },
-                        ]}
-                        className="select-sm"
-                        disabled={store.isLoading || store.isSaving}
-                        label="{getParameterLabel(param.Name)}{param.Unit
-                          ? ` (${param.Unit})`
-                          : ''}"
-                      />
-                    {:else}
-                      <!-- Regular number input -->
-                      <NumberField
-                        value={safeGet(newFilter as any, param.Name.toLowerCase(), 0)}
-                        onUpdate={value => {
-                          Object.assign(newFilter, { [param.Name.toLowerCase()]: value });
-                        }}
-                        min={param.Min}
-                        max={param.Max}
-                        step={param.Type === 'float' ? 0.1 : 1}
-                        disabled={store.isLoading || store.isSaving}
-                        label="{getParameterLabel(param.Name)}{param.Unit
-                          ? ` (${param.Unit})`
-                          : ''}"
-                      />
-                    {/if}
-                  </div>
-                {/each}
-              {/if}
-
-              <!-- Add button -->
-              <div class="flex flex-col">
-                <div class="label">
-                  <span class="label-text">&nbsp;</span>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-primary btn-sm w-24"
-                  onclick={addNewFilter}
-                  disabled={!newFilter.type || store.isLoading || store.isSaving}
-                >
-                  {t('settings.audio.audioFilters.addFilter')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
-    </div>
+    <AudioEqualizerSettings
+      equalizerSettings={settings.audio.equalizer}
+      disabled={store.isLoading || store.isSaving}
+      onUpdate={handleEqualizerUpdate}
+    />
   </SettingsSection>
 
   <!-- Sound Level Monitoring Section -->

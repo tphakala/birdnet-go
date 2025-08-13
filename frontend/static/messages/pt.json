@@ -954,6 +954,7 @@
         "selectFilterType": "Selecionar tipo de filtro",
         "addFilter": "Adicionar filtro",
         "remove": "Remover",
+        "frequencyResponse": "Resposta de frequência",
         "cutoffFrequency": "Frequência de corte",
         "qFactor": "Fator Q",
         "gain": "Ganho",

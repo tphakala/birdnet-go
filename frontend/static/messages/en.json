@@ -1168,6 +1168,7 @@
         "selectFilterType": "Select filter type",
         "addFilter": "Add Filter",
         "remove": "Remove",
+        "frequencyResponse": "Frequency Response",
         "cutoffFrequency": "Cutoff Frequency",
         "cutoffFrequencyHelp": "Frequency at which the filter begins to attenuate signals. Bird calls typically range from 1-10 kHz.",
         "qFactor": "Q Factor",
