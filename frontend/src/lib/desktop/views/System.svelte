@@ -31,6 +31,8 @@
     used: number;
     free: number;
     available: number;
+    buffers: number;
+    cached: number;
     usedPercent: number;
   }
 
@@ -130,6 +132,10 @@
         used: memoryUsage.data.used,
         total: memoryUsage.data.total,
         usagePercent: memoryUsage.data.usedPercent,
+        free: memoryUsage.data.free,
+        available: memoryUsage.data.available,
+        buffers: memoryUsage.data.buffers,
+        cached: memoryUsage.data.cached,
       },
     ];
   });
@@ -211,7 +217,9 @@
         total: data.memory_total,
         used: data.memory_used,
         free: data.memory_free,
-        available: data.memory_free,
+        available: data.memory_available,
+        buffers: data.memory_buffers,
+        cached: data.memory_cached,
         usedPercent: data.memory_usage_percent,
       };
     } catch (error: unknown) {
@@ -307,7 +315,7 @@
 </script>
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('system.aria.dashboard')}>
-  <div class="gap-6 system-cards-grid">
+  <div class="system-cards-grid">
     <!-- System Information Card -->
     <SystemInfoCard
       title={t('system.systemInfo.title')}
@@ -372,18 +380,31 @@
 <style>
   .system-cards-grid {
     display: grid;
+    gap: 1.5rem;
+
+    /* Default: Single column for narrow viewports */
     grid-template-columns: 1fr;
   }
 
+  /* Tablets: 2 columns when there's enough space */
   @media (min-width: 768px) {
     .system-cards-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(350px, 1fr));
     }
   }
 
-  @media (min-width: 1024px) {
+  /* Desktop: 3 columns only when cards can be adequately wide */
+  @media (min-width: 1280px) {
     .system-cards-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(320px, 1fr));
+    }
+  }
+
+  /* Large desktop: Cap maximum card width for readability */
+  @media (min-width: 1920px) {
+    .system-cards-grid {
+      grid-template-columns: repeat(3, minmax(380px, 480px));
+      justify-content: center;
     }
   }
 </style>
