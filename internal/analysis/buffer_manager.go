@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // BufferManager handles the lifecycle of analysis buffer monitors
@@ -107,7 +108,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 			Component("analysis.buffer").
 			Category(errors.CategoryBuffer).
 			Context("operation", "add_monitor").
-			Context("source", source).
+			Context("source", privacy.SanitizeRTSPUrls(source)).
 			Context("retryable", false).
 			Build()
 	}
@@ -132,7 +133,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 			// Panic recovery for the monitor goroutine
 			if r := recover(); r != nil {
 				m.logger.Error("Monitor goroutine panicked",
-					"source", source,
+					"source", privacy.SanitizeRTSPUrls(source),
 					"panic", r,
 					"component", "analysis.buffer")
 			}
@@ -185,7 +186,7 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 		m.safeCloseChannel(quitChanTyped, source)
 	} else {
 		m.logger.Warn("Invalid quit channel type during monitor removal",
-			"source", source,
+			"source", privacy.SanitizeRTSPUrls(source),
 			"type", fmt.Sprintf("%T", quitChan),
 			"component", "analysis.buffer")
 	}
@@ -266,7 +267,7 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 						Category(errors.CategoryBuffer).
 						Context("operation", "update_monitors").
 						Context("failed_operation", "add_monitor").
-						Context("source", source).
+						Context("source", privacy.SanitizeRTSPUrls(source)).
 						Build()
 					addErrors = append(addErrors, wrappedErr)
 				} else {
@@ -285,7 +286,7 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 				Category(errors.CategoryBuffer).
 				Context("operation", "update_monitors").
 				Context("failed_operation", "remove_monitor").
-				Context("source", source).
+				Context("source", privacy.SanitizeRTSPUrls(source)).
 				Build()
 			removeErrors = append(removeErrors, wrappedErr)
 		} else {
@@ -337,7 +338,7 @@ func (m *BufferManager) safeCloseChannel(ch chan struct{}, source string) {
 		if r := recover(); r != nil {
 			// Double-close is expected in concurrent scenarios, log at debug level
 			m.logger.Debug("Channel already closed",
-				"source", source,
+				"source", privacy.SanitizeRTSPUrls(source),
 				"component", "analysis.buffer")
 		}
 	}()

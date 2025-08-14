@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Package-level logger for analysis operations
@@ -65,7 +66,7 @@ func CloseLogger() error {
 func LogSoundLevelMQTTPublished(topic, source string, bandCount int) {
 	GetLogger().Info("Published sound level data to MQTT",
 		"topic", topic,
-		"source", source,
+		"source", privacy.SanitizeRTSPUrls(source),
 		"octave_bands", bandCount,
 		"component", "analysis.soundlevel",
 	)
@@ -77,7 +78,7 @@ func LogSoundLevelProcessorRegistered(source, sourceType, component string) {
 		component = "analysis.soundlevel"
 	}
 	GetLogger().Info("Registered sound level processor",
-		"source", source,
+		"source", privacy.SanitizeRTSPUrls(source),
 		"source_type", sourceType,
 		"component", component,
 	)
@@ -89,7 +90,7 @@ func LogSoundLevelProcessorRegistrationFailed(source, sourceType, component stri
 		component = "analysis.soundlevel"
 	}
 	GetLogger().Error("Failed to register sound level processor",
-		"source", source,
+		"source", privacy.SanitizeRTSPUrls(source),
 		"source_type", sourceType,
 		"error", err,
 		"component", component,
@@ -102,7 +103,7 @@ func LogSoundLevelProcessorUnregistered(source, sourceType, component string) {
 		component = "analysis.soundlevel"
 	}
 	GetLogger().Info("Unregistered sound level processor",
-		"source", source,
+		"source", privacy.SanitizeRTSPUrls(source),
 		"source_type", sourceType,
 		"component", component,
 	)
@@ -159,7 +160,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 // LogSoundLevelActiveStreamNotInConfig logs when an active RTSP stream is not in configuration
 func LogSoundLevelActiveStreamNotInConfig(url string) {
 	GetLogger().Warn("Found active RTSP stream not in configuration",
-		"rtsp_url", url,
+		"rtsp_url", privacy.SanitizeRTSPUrl(url),
 		"component", "analysis.soundlevel",
 	)
 }
