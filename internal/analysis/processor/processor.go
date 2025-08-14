@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Processor represents the main processing unit for audio analysis.
@@ -59,6 +60,18 @@ type Processor struct {
 	backupManager   interface{} // Use interface{} to avoid import cycle
 	backupScheduler interface{} // Use interface{} to avoid import cycle
 	backupMutex     sync.RWMutex
+
+	// Log deduplication fields
+	lastLogState    map[string]*LogState // Track last logged state per source
+	logStateMutex   sync.RWMutex         // Mutex to protect lastLogState map
+}
+
+// LogState tracks the last logged state for a source to prevent duplicate logging
+type LogState struct {
+	LastRawCount      int       // Last logged raw results count
+	LastFilteredCount int       // Last logged filtered detections count
+	LastLogTime       time.Time // Last time we logged for this source
+	FirstLog          bool      // Whether this is the first log for this source
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -109,8 +122,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
-		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
-		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
+		lastLogState:        make(map[string]*LogState), // Initialize log deduplication map
+		controlChan:         make(chan string, 10),       // Buffered channel to prevent blocking
+		JobQueue:            jobqueue.NewJobQueue(),      // Initialize the job queue
 	}
 
 	// Initialize new species tracker if enabled
@@ -198,18 +212,32 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 // Start goroutine to process detections from the queue
 func (p *Processor) startDetectionProcessor() {
+	// Add structured logging for detection processor startup
+	GetLogger().Info("Starting detection processor",
+		"operation", "detection_processor_startup")
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range birdnet.ResultsQueue {
 			// Process directly without copying - we own this data
 			p.processDetections(&item)
 		}
+		// Add structured logging when processor stops
+		GetLogger().Info("Detection processor stopped",
+			"operation", "detection_processor_shutdown")
 	}()
 }
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
 func (p *Processor) processDetections(item *birdnet.Results) {
+	// Add structured logging for detection pipeline entry
+	GetLogger().Debug("Processing detections from queue",
+		"source", privacy.SanitizeRTSPUrls(item.Source),
+		"start_time", item.StartTime,
+		"results_count", len(item.Results),
+		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
+		"operation", "process_detections_entry")
+
 	// Delay before a detection is considered final and is flushed.
 	// TODO: make this configurable
 	const delay = 15 * time.Second
@@ -218,6 +246,10 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	detectionResults := p.processResults(item)
+	
+	// Log processing results with deduplication to prevent spam
+	p.logDetectionResultsWithDeduplication(item.Source, len(item.Results), len(detectionResults))
+
 	for i := 0; i < len(detectionResults); i++ {
 		detection := detectionResults[i]
 		commonName := strings.ToLower(detection.Note.CommonName)
@@ -228,16 +260,31 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 
 		if existing, exists := p.pendingDetections[commonName]; exists {
 			// Update the existing detection if it's already in pendingDetections map
+			oldConfidence := existing.Confidence
 			if confidence > existing.Confidence {
 				existing.Detection = detection
 				existing.Confidence = confidence
 				existing.Source = item.Source
 				existing.LastUpdated = time.Now()
+				// Add structured logging for confidence update
+				GetLogger().Debug("Updated pending detection with higher confidence",
+					"species", commonName,
+					"old_confidence", oldConfidence,
+					"new_confidence", confidence,
+					"count", existing.Count+1,
+					"operation", "update_pending_detection")
 			}
 			existing.Count++
 			p.pendingDetections[commonName] = existing
 		} else {
 			// Create a new pending detection if it doesn't exist
+			// Add structured logging for new pending detection
+			GetLogger().Info("Created new pending detection",
+				"species", commonName,
+				"confidence", confidence,
+				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"flush_deadline", item.StartTime.Add(delay),
+				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
@@ -358,6 +405,13 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 
 		// Skip processing if confidence is too low
 		if result.Confidence <= confidenceThreshold {
+			// Add structured logging for confidence filtering
+			GetLogger().Debug("Detection filtered out due to low confidence",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"threshold", confidenceThreshold,
+				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"operation", "confidence_filter")
 			continue
 		}
 
@@ -423,7 +477,7 @@ func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase s
 		GetLogger().Info("Dog detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
-			"source", item.Source,
+			"source", privacy.SanitizeRTSPUrls(item.Source),
 			"operation", "dog_bark_filter")
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
 		p.detectionMutex.Lock()
@@ -441,7 +495,7 @@ func (p *Processor) handleHumanDetection(item *birdnet.Results, speciesLowercase
 		GetLogger().Info("Human detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
-			"source", item.Source,
+			"source", privacy.SanitizeRTSPUrls(item.Source),
 			"operation", "privacy_filter")
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
@@ -504,6 +558,13 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
+		// Add structured logging for minimum count filtering
+		GetLogger().Debug("Detection discarded due to insufficient count",
+			"species", item.Detection.Note.CommonName,
+			"count", item.Count,
+			"minimum_required", minDetections,
+			"source", privacy.SanitizeRTSPUrls(item.Source),
+			"operation", "minimum_count_filter")
 		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
 	}
 
@@ -513,6 +574,13 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
 		p.detectionMutex.RUnlock()
 		if exists && lastHumanDetection.After(item.FirstDetected) {
+			// Add structured logging for privacy filter
+			GetLogger().Debug("Detection discarded by privacy filter",
+				"species", item.Detection.Note.CommonName,
+				"detection_time", item.FirstDetected,
+				"last_human_detection", lastHumanDetection,
+				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"operation", "privacy_filter")
 			return true, "privacy filter"
 		}
 	}
@@ -533,6 +601,13 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		p.detectionMutex.RUnlock()
 		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, lastDogDetection) ||
 			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
+			// Add structured logging for dog bark filter
+			GetLogger().Debug("Detection discarded by dog bark filter",
+				"species", item.Detection.Note.CommonName,
+				"detection_time", item.FirstDetected,
+				"last_dog_detection", lastDogDetection,
+				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"operation", "dog_bark_filter")
 			return true, "recent dog bark"
 		}
 	}
@@ -545,7 +620,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	// Add structured logging
 	GetLogger().Info("Approving detection",
 		"species", species,
-		"source", item.Source,
+		"source", privacy.SanitizeRTSPUrls(item.Source),
 		"match_count", item.Count,
 		"confidence", item.Detection.Results[0].Confidence,
 		"operation", "approve_detection")
@@ -591,6 +666,12 @@ func (p *Processor) pendingDetectionsFlusher() {
 	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
 	minDetections := int(math.Max(1, 3/segmentLength))
 
+	// Add structured logging for pending detections flusher startup
+	GetLogger().Info("Starting pending detections flusher",
+		"min_detections", minDetections,
+		"flush_interval_seconds", 1,
+		"operation", "pending_flusher_startup")
+
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -600,14 +681,17 @@ func (p *Processor) pendingDetectionsFlusher() {
 			now := time.Now()
 
 			p.pendingMutex.Lock()
+			pendingCount := len(p.pendingDetections)
+			flushableCount := 0
 			for species := range p.pendingDetections {
 				item := p.pendingDetections[species]
 				if now.After(item.FlushDeadline) {
+					flushableCount++
 					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
 						// Add structured logging
 					GetLogger().Info("Discarding detection",
 						"species", species,
-						"source", item.Source,
+						"source", privacy.SanitizeRTSPUrls(item.Source),
 						"reason", reason,
 						"count", item.Count,
 						"operation", "discard_detection")
@@ -620,6 +704,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 					p.processApprovedDetection(&item, species)
 					delete(p.pendingDetections, species)
 				}
+			}
+			// Add structured logging for flusher activity (only when there's activity)
+			if pendingCount > 0 || flushableCount > 0 {
+				GetLogger().Debug("Pending detections flusher cycle",
+					"pending_count", pendingCount,
+					"flushable_count", flushableCount,
+					"operation", "pending_flusher_cycle")
 			}
 			p.pendingMutex.Unlock()
 
@@ -679,6 +770,12 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
+	actionsCount := len(p.getDefaultActions(detection))
+	// Add structured logging for default actions
+	GetLogger().Debug("Using default actions for detection",
+		"species", strings.ToLower(detection.Note.CommonName),
+		"actions_count", actionsCount,
+		"operation", "get_default_actions")
 	return p.getDefaultActions(detection)
 }
 
@@ -794,6 +891,11 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
 	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
+		// Add structured logging
+		GetLogger().Info("Updating species range filter",
+			"last_updated", p.Settings.BirdNET.RangeFilter.LastUpdated,
+			"today", today,
+			"operation", "update_range_filter")
 		fmt.Println("Updating species range filter")
 		// Add UpdateRangeFilterAction if it hasn't been executed today
 		actions = append(actions, &UpdateRangeFilterAction{
