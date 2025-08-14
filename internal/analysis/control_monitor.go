@@ -274,66 +274,69 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	log.Printf("\033[32m🔄 Reconfiguring RTSP sources...\033[0m")
 	settings := conf.Setting()
 
-	// Prepare the list of active sources
-	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 {
-		sources = append(sources, settings.Realtime.RTSP.URLs...)
-	}
-	if settings.Realtime.Audio.Source != "" {
-		sources = append(sources, "malgo")
-	}
-
-	// Update the analysis buffer monitors
-	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
-		log.Printf("\033[33m⚠️  Warning: Buffer monitor update completed with errors: %v\033[0m", err)
-		
-		// Send warning notification to UI to inform users of partial failures
-		if cm.notificationChan != nil {
-			notification := handlers.Notification{
-				Type:    "warning", 
-				Message: fmt.Sprintf("Buffer Monitor Warning: Buffer monitor update completed with errors: %v", err),
-			}
-			
-			// Non-blocking send to avoid blocking reconfiguration
-			select {
-			case cm.notificationChan <- notification:
-			default:
-				log.Printf("Warning: Could not send buffer monitor error notification (channel full)")
-			}
-		}
-		
-		// Note: We continue execution as this is not critical for RTSP reconfiguration
+	// IMPORTANT: Stop all RTSP streams properly with synchronization
+	logger := GetLogger()
+	logger.Info("Stopping existing RTSP streams before reconfiguration",
+		"component", "control-monitor",
+		"operation", "reconfigure_rtsp")
+	
+	// Stop all streams and wait for completion (5 second timeout)
+	if err := myaudio.StopAllRTSPStreamsAndWait(5 * time.Second); err != nil {
+		logger.Error("Failed to stop all RTSP streams",
+			"error", err,
+			"component", "control-monitor",
+			"operation", "reconfigure_rtsp")
+		// Continue anyway - better to reconfigure with some errors than to panic
 	}
 
-	// Reconfigure RTSP streams with proper goroutine cleanup
+	// Replace channels WITHOUT closing (avoids panic entirely)
 	cm.unifiedAudioMutex.Lock()
-
-	// Close previous goroutine if it exists
-	if cm.unifiedAudioDoneChan != nil {
-		close(cm.unifiedAudioDoneChan)
-		// Wait for the goroutine to fully exit using WaitGroup
-		cm.unifiedAudioMutex.Unlock()
-		cm.unifiedAudioWg.Wait()
-		cm.unifiedAudioMutex.Lock()
-	}
-
-	// Close previous channel if it exists
-	if cm.unifiedAudioChan != nil {
-		close(cm.unifiedAudioChan)
-	}
-
-	// Create new channels
-	cm.unifiedAudioChan = make(chan myaudio.UnifiedAudioData, 100)
+	
+	// Store old channels for cleanup
+	oldChan := cm.unifiedAudioChan
+	oldDoneChan := cm.unifiedAudioDoneChan
+	
+	// Create new channels (replacing, not closing)
+	// Buffer size of 100 chosen to handle bursts from multiple RTSP streams
+	// without blocking. Typical RTSP stream at 25fps = ~40ms per frame,
+	// buffer provides ~4 seconds of tolerance for processing delays.
+	const unifiedAudioChanBuffer = 100
+	cm.unifiedAudioChan = make(chan myaudio.UnifiedAudioData, unifiedAudioChanBuffer)
 	cm.unifiedAudioDoneChan = make(chan struct{})
-
-	// Store references for cleanup
+	
+	// Store references for the new goroutine
 	doneChan := cm.unifiedAudioDoneChan
 	unifiedChan := cm.unifiedAudioChan
-
-	// Add to WaitGroup before starting the goroutine
+	
+	// Add to WaitGroup before starting the new goroutine
 	cm.unifiedAudioWg.Add(1)
-
+	
 	cm.unifiedAudioMutex.Unlock()
+	
+	// Clean up old goroutine if it exists
+	if oldDoneChan != nil {
+		close(oldDoneChan)
+		cm.unifiedAudioWg.Wait() // Wait for old goroutine to exit
+	}
+	
+	// Drain old channel with timeout to prevent goroutine leak
+	if oldChan != nil {
+		go func() {
+			// Use non-blocking drain with timeout
+			timeout := time.NewTimer(5 * time.Second)
+			defer timeout.Stop()
+			
+			for {
+				select {
+				case <-oldChan:
+					// Drain data
+				case <-timeout.C:
+					// Stop draining after timeout to prevent goroutine leak
+					return
+				}
+			}
+		}()
+	}
 
 	go func() {
 		defer cm.unifiedAudioWg.Done()
@@ -369,6 +372,38 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	}()
 
 	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
+
+	// Prepare the list of active sources for the new configuration
+	var sources []string
+	if len(settings.Realtime.RTSP.URLs) > 0 {
+		sources = append(sources, settings.Realtime.RTSP.URLs...)
+	}
+	if settings.Realtime.Audio.Source != "" {
+		sources = append(sources, "malgo")
+	}
+
+	// Update the analysis buffer monitors AFTER starting new streams
+	// This ensures buffers are allocated before monitors try to read them
+	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
+		log.Printf("\033[33m⚠️  Warning: Buffer monitor update completed with errors: %v\033[0m", err)
+		
+		// Send warning notification to UI to inform users of partial failures
+		if cm.notificationChan != nil {
+			notification := handlers.Notification{
+				Type:    "warning", 
+				Message: fmt.Sprintf("Buffer Monitor Warning: Buffer monitor update completed with errors: %v", err),
+			}
+			
+			// Non-blocking send to avoid blocking reconfiguration
+			select {
+			case cm.notificationChan <- notification:
+			default:
+				log.Printf("Warning: Could not send buffer monitor error notification (channel full)")
+			}
+		}
+		
+		// Note: We continue execution as this is not critical for RTSP reconfiguration
+	}
 
 	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
 	cm.notifySuccess("Audio capture reconfigured successfully")
