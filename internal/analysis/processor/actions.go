@@ -175,8 +175,21 @@ func (a *LogAction) Execute(data interface{}) error {
 	// Log note to file
 	if err := observation.LogNoteToFile(a.Settings, &a.Note); err != nil {
 		// If an error occurs when logging to a file, wrap and return the error.
+		// Add structured logging
+		GetLogger().Error("Failed to log note to file",
+			"error", err,
+			"species", a.Note.CommonName,
+			"confidence", a.Note.Confidence,
+			"clip_name", a.Note.ClipName,
+			"operation", "log_to_file")
 		log.Printf("❌ Failed to log note to file: %v", err)
 	}
+	// Add structured logging for console output
+	GetLogger().Info("Detection logged",
+		"species", a.Note.CommonName,
+		"confidence", a.Note.Confidence,
+		"time", a.Note.Time,
+		"operation", "console_output")
 	fmt.Printf("%s %s %.2f\n", a.Note.Time, a.Note.CommonName, a.Note.Confidence)
 
 	return nil
@@ -205,6 +218,14 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	
 	// Save note to database
 	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
+		// Add structured logging
+		GetLogger().Error("Failed to save note and results to database",
+			"error", err,
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"clip_name", a.Note.ClipName,
+			"operation", "database_save")
 		log.Printf("❌ Failed to save note and results to database: %v", err)
 		return err
 	}
@@ -217,6 +238,14 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		// export audio clip from capture buffer
 		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
 		if err != nil {
+			// Add structured logging
+			GetLogger().Error("Failed to read audio segment from buffer",
+				"error", err,
+				"species", a.Note.CommonName,
+				"source", a.Note.Source,
+				"begin_time", a.Note.BeginTime,
+				"duration_seconds", 15,
+				"operation", "read_audio_segment")
 			log.Printf("❌ Failed to read audio segment from buffer: %v", err)
 			return err
 		}
@@ -229,11 +258,25 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		}
 
 		if err := saveAudioAction.Execute(nil); err != nil {
+			// Add structured logging
+			GetLogger().Error("Failed to save audio clip",
+				"error", err,
+				"species", a.Note.CommonName,
+				"clip_name", a.Note.ClipName,
+				"operation", "save_audio_clip")
 			log.Printf("❌ Failed to save audio clip: %v", err)
 			return err
 		}
 
 		if a.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Saved audio clip successfully",
+				"species", a.Note.CommonName,
+				"clip_name", a.Note.ClipName,
+				"detection_time", a.Note.Time,
+				"begin_time", a.Note.BeginTime,
+				"end_time", time.Now(),
+				"operation", "save_audio_clip_debug")
 			log.Printf("✅ Saved audio clip to %s\n", a.Note.ClipName)
 			log.Printf("detection time %v, begin time %v, end time %v\n", a.Note.Time, a.Note.BeginTime, time.Now())
 		}
@@ -264,6 +307,14 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	)
 	if err != nil {
 		if a.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Failed to create detection event",
+				"error", err,
+				"species", a.Note.CommonName,
+				"scientific_name", a.Note.ScientificName,
+				"is_new_species", isNewSpecies,
+				"days_since_first_seen", daysSinceFirstSeen,
+				"operation", "create_detection_event")
 			log.Printf("❌ Failed to create detection event: %v", err)
 		}
 		return
@@ -272,6 +323,14 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		if a.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Published new species detection event",
+				"species", a.Note.CommonName,
+				"scientific_name", a.Note.ScientificName,
+				"confidence", a.Note.Confidence,
+				"is_new_species", isNewSpecies,
+				"days_since_first_seen", daysSinceFirstSeen,
+				"operation", "publish_detection_event")
 			log.Printf("🌟 Published new species detection event: %s", a.Note.CommonName)
 		}
 	}
@@ -287,17 +346,37 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 
 	// Ensure the directory exists
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		// Add structured logging
+		GetLogger().Error("Failed to create directory for audio clip",
+			"error", err,
+			"output_path", outputPath,
+			"clip_name", a.ClipName,
+			"operation", "create_directory")
 		log.Printf("❌ error creating directory for audio clip: %s\n", err)
 		return err
 	}
 
 	if a.Settings.Realtime.Audio.Export.Type == "wav" {
 		if err := myaudio.SavePCMDataToWAV(outputPath, a.pcmData); err != nil {
+			// Add structured logging
+			GetLogger().Error("Failed to save audio clip to WAV",
+				"error", err,
+				"output_path", outputPath,
+				"clip_name", a.ClipName,
+				"format", "wav",
+				"operation", "save_wav")
 			log.Printf("❌ error saving audio clip to WAV: %s\n", err)
 			return err
 		}
 	} else {
 		if err := myaudio.ExportAudioWithFFmpeg(a.pcmData, outputPath, &a.Settings.Realtime.Audio); err != nil {
+			// Add structured logging
+			GetLogger().Error("Failed to export audio clip with FFmpeg",
+				"error", err,
+				"output_path", outputPath,
+				"clip_name", a.ClipName,
+				"format", a.Settings.Realtime.Audio.Export.Type,
+				"operation", "ffmpeg_export")
 			log.Printf("❌ error exporting audio clip with FFmpeg: %s\n", err)
 			return err
 		}
@@ -326,6 +405,12 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 	// Add threshold check here
 	if a.Note.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
 		if a.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
+				"species", species,
+				"confidence", a.Note.Confidence,
+				"threshold", a.Settings.Realtime.Birdweather.Threshold,
+				"operation", "birdweather_threshold_check")
 			log.Printf("⛔ Skipping BirdWeather upload for %s: confidence %.2f below threshold %.2f\n",
 				species, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
 		}
@@ -356,6 +441,15 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := sanitizeError(err)
+		// Add structured logging
+		GetLogger().Error("Failed to upload to BirdWeather",
+			"error", sanitizedErr,
+			"species", note.CommonName,
+			"scientific_name", note.ScientificName,
+			"confidence", note.Confidence,
+			"clip_name", note.ClipName,
+			"retry_enabled", a.RetryConfig.Enabled,
+			"operation", "birdweather_upload")
 		if a.RetryConfig.Enabled {
 			log.Printf("❌ Error uploading %s (%s) to BirdWeather (confidence: %.2f, clip: %s) (will retry): %v\n",
 				note.CommonName, note.ScientificName, note.Confidence, note.ClipName, sanitizedErr)
@@ -383,6 +477,13 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 	}
 
 	if a.Settings.Debug {
+		// Add structured logging
+		GetLogger().Debug("Successfully uploaded to BirdWeather",
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"clip_name", a.Note.ClipName,
+			"operation", "birdweather_upload_success")
 		log.Printf("✅ Successfully uploaded %s to BirdWeather\n", a.Note.ClipName)
 	}
 	return nil
@@ -401,6 +502,13 @@ func (a *MqttAction) Execute(data interface{}) error {
 	// Rely on background reconnect; fail action if not currently connected.
 	if !a.MqttClient.IsConnected() {
 		// Log slightly differently to indicate it's waiting for background reconnect
+		// Add structured logging
+		GetLogger().Warn("MQTT client not connected, skipping publish",
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"operation", "mqtt_connection_check",
+			"status", "waiting_reconnect")
 		log.Printf("🟡 MQTT client is not connected, skipping publish for %s (%s). Waiting for automatic reconnect.", a.Note.CommonName, a.Note.ScientificName)
 		// MQTT connection failures are retryable because:
 		// - The MQTT client has automatic reconnection logic
@@ -442,11 +550,22 @@ func (a *MqttAction) Execute(data interface{}) error {
 		var err error
 		birdImage, err = a.BirdImageCache.Get(a.Note.ScientificName)
 		if err != nil {
+			// Add structured logging
+			GetLogger().Warn("Error getting bird image from cache",
+				"error", err,
+				"species", a.Note.CommonName,
+				"scientific_name", a.Note.ScientificName,
+				"operation", "get_bird_image")
 			log.Printf("⚠️ Error getting bird image from cache for %s: %v", a.Note.ScientificName, err)
 			// Continue with the default empty image
 		}
 	} else {
 		// Log if the cache is nil, maybe helpful for debugging setup issues
+		// Add structured logging
+		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"operation", "check_bird_image_cache")
 		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
@@ -460,6 +579,12 @@ func (a *MqttAction) Execute(data interface{}) error {
 	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(noteWithBirdImage)
 	if err != nil {
+		// Add structured logging
+		GetLogger().Error("Failed to marshal note to JSON",
+			"error", err,
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"operation", "json_marshal")
 		log.Printf("❌ Error marshalling note to JSON: %s\n", err)
 		return err
 	}
@@ -474,6 +599,16 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := sanitizeError(err)
+		// Add structured logging
+		GetLogger().Error("Failed to publish to MQTT",
+			"error", sanitizedErr,
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"clip_name", a.Note.ClipName,
+			"topic", a.Settings.Realtime.MQTT.Topic,
+			"retry_enabled", a.RetryConfig.Enabled,
+			"operation", "mqtt_publish")
 		if a.RetryConfig.Enabled {
 			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
 				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
@@ -497,6 +632,13 @@ func (a *MqttAction) Execute(data interface{}) error {
 	}
 
 	if a.Settings.Debug {
+		// Add structured logging
+		GetLogger().Debug("Successfully published to MQTT",
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"topic", a.Settings.Realtime.MQTT.Topic,
+			"operation", "mqtt_publish_success")
 		log.Printf("✅ Successfully published %s to MQTT topic %s\n",
 			a.Note.CommonName, a.Settings.Realtime.MQTT.Topic)
 	}
@@ -549,6 +691,12 @@ func (a *SSEAction) Execute(data interface{}) error {
 	if a.Note.ClipName != "" {
 		if err := a.waitForAudioFile(); err != nil {
 			// Log warning but don't fail the SSE broadcast
+			// Add structured logging
+			GetLogger().Warn("Audio file not ready for SSE broadcast",
+				"error", err,
+				"species", a.Note.CommonName,
+				"clip_name", a.Note.ClipName,
+				"operation", "sse_wait_audio_file")
 			log.Printf("⚠️ Audio file not ready for %s, broadcasting without waiting: %v", a.Note.CommonName, err)
 		}
 	}
@@ -558,6 +706,12 @@ func (a *SSEAction) Execute(data interface{}) error {
 	if a.Note.ID == 0 {
 		if err := a.waitForDatabaseID(); err != nil {
 			// Log warning but don't fail the SSE broadcast
+			// Add structured logging
+			GetLogger().Warn("Database ID not ready for SSE broadcast",
+				"error", err,
+				"species", a.Note.CommonName,
+				"note_id", a.Note.ID,
+				"operation", "sse_wait_database_id")
 			log.Printf("⚠️ Database ID not ready for %s, broadcasting with ID=0: %v", a.Note.CommonName, err)
 		}
 	}
@@ -569,11 +723,22 @@ func (a *SSEAction) Execute(data interface{}) error {
 		var err error
 		birdImage, err = a.BirdImageCache.Get(a.Note.ScientificName)
 		if err != nil {
+			// Add structured logging
+			GetLogger().Warn("Error getting bird image from cache",
+				"error", err,
+				"species", a.Note.CommonName,
+				"scientific_name", a.Note.ScientificName,
+				"operation", "get_bird_image")
 			log.Printf("⚠️ Error getting bird image from cache for %s: %v", a.Note.ScientificName, err)
 			// Continue with the default empty image
 		}
 	} else {
 		// Log if the cache is nil, maybe helpful for debugging setup issues
+		// Add structured logging
+		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"operation", "check_bird_image_cache")
 		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
@@ -586,6 +751,15 @@ func (a *SSEAction) Execute(data interface{}) error {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := sanitizeError(err)
+		// Add structured logging
+		GetLogger().Error("Failed to broadcast via SSE",
+			"error", sanitizedErr,
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"clip_name", a.Note.ClipName,
+			"retry_enabled", a.RetryConfig.Enabled,
+			"operation", "sse_broadcast")
 		if a.RetryConfig.Enabled {
 			log.Printf("❌ Error broadcasting %s (%s) via SSE (confidence: %.2f, clip: %s) (will retry): %v\n",
 				a.Note.CommonName, a.Note.ScientificName, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
@@ -605,6 +779,13 @@ func (a *SSEAction) Execute(data interface{}) error {
 	}
 
 	if a.Settings.Debug {
+		// Add structured logging
+		GetLogger().Debug("Successfully broadcasted via SSE",
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"confidence", a.Note.Confidence,
+			"clip_name", a.Note.ClipName,
+			"operation", "sse_broadcast_success")
 		log.Printf("✅ Successfully broadcasted %s via SSE\n", a.Note.CommonName)
 	}
 
@@ -631,7 +812,13 @@ func (a *SSEAction) waitForAudioFile() error {
 			// File exists, check if it has reasonable size (audio files should be > 1KB)
 			if info.Size() > 1024 {
 				if a.Settings.Debug {
-					log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
+					// Add structured logging
+				GetLogger().Debug("Audio file ready for SSE broadcast",
+					"clip_name", a.Note.ClipName,
+					"file_size_bytes", info.Size(),
+					"species", a.Note.CommonName,
+					"operation", "wait_audio_file_success")
+				log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
 				}
 				return nil
 			}
@@ -666,6 +853,12 @@ func (a *SSEAction) waitForDatabaseID() error {
 			// Found the note with an ID, update our copy
 			a.Note.ID = updatedNote.ID
 			if a.Settings.Debug {
+				// Add structured logging
+				GetLogger().Debug("Found database ID for SSE broadcast",
+					"database_id", updatedNote.ID,
+					"species", a.Note.CommonName,
+					"scientific_name", a.Note.ScientificName,
+					"operation", "wait_database_id_success")
 				log.Printf("🔍 Found database ID %d for SSE broadcast: %s", updatedNote.ID, a.Note.CommonName)
 			}
 			return nil

@@ -117,6 +117,10 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	if settings.Realtime.SpeciesTracking.Enabled {
 		// Validate species tracking configuration
 		if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
+			// Add structured logging
+			GetLogger().Error("Invalid species tracking configuration",
+				"error", err,
+				"operation", "species_tracking_validation")
 			log.Printf("Invalid species tracking configuration: %v", err)
 			// Continue with defaults or disable tracking
 			settings.Realtime.SpeciesTracking.Enabled = false
@@ -134,11 +138,22 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 			// Initialize species tracker from database
 			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
+				// Add structured logging
+				GetLogger().Error("Failed to initialize species tracker from database",
+					"error", err,
+					"operation", "species_tracker_init")
 				log.Printf("Failed to initialize species tracker from database: %v", err)
 				// Continue anyway - tracker will work for new detections
 			}
 
 			hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
+			// Add structured logging
+			GetLogger().Info("Species tracking enabled",
+				"window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
+				"sync_interval_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
+				"hemisphere", hemisphere,
+				"latitude", settings.BirdNET.Latitude,
+				"operation", "species_tracking_config")
 			log.Printf("Species tracking enabled: window=%d days, sync=%d minutes, hemisphere=%s (lat=%.2f)",
 				settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
 				settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
@@ -161,6 +176,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		var err error
 		bwClient, err := birdweather.New(settings)
 		if err != nil {
+			// Add structured logging
+			GetLogger().Error("Failed to create BirdWeather client",
+				"error", err,
+				"operation", "birdweather_client_init",
+				"integration", "birdweather")
 			log.Printf("failed to create Birdweather client: %s", err)
 		} else {
 			p.SetBwClient(bwClient) // Use setter for thread safety
@@ -258,7 +278,11 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 			p.lastSyncAttempt = time.Now()
 			go func() {
 				if err := tracker.SyncIfNeeded(); err != nil {
-					log.Printf("Failed to sync species tracker: %v", err)
+					// Add structured logging
+				GetLogger().Error("Failed to sync species tracker",
+					"error", err,
+					"operation", "species_tracker_sync")
+				log.Printf("Failed to sync species tracker: %v", err)
 				}
 			}()
 		}
@@ -276,6 +300,11 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		// Skip processing if we couldn't parse the species properly
 		if commonName == "" && scientificName == "" {
 			if p.Settings.Debug {
+				// Add structured logging
+				GetLogger().Debug("Skipping species with invalid format",
+					"species", result.Species,
+					"confidence", result.Confidence,
+					"operation", "species_format_validation")
 				log.Printf("Skipping species with invalid format: %s", result.Species)
 			}
 			continue
@@ -286,7 +315,13 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
 			// Check if the code looks like a placeholder (has the pattern XX or similar followed by 6 hex chars)
 			if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
-				log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
+				// Add structured logging
+			GetLogger().Debug("Using placeholder taxonomy code",
+				"taxonomy_code", speciesCode,
+				"scientific_name", scientificName,
+				"common_name", commonName,
+				"operation", "taxonomy_code_assignment")
+			log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
 			}
 		}
 
@@ -329,6 +364,11 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		// Match against location-based filter
 		if !p.Settings.IsSpeciesIncluded(result.Species) {
 			if p.Settings.Debug {
+				// Add structured logging
+				GetLogger().Debug("Species not on included list",
+					"species", result.Species,
+					"confidence", result.Confidence,
+					"operation", "species_inclusion_filter")
 				log.Printf("Species not on included list: %s\n", result.Species)
 			}
 			continue
@@ -379,6 +419,12 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
+		// Add structured logging
+		GetLogger().Info("Dog detection filtered",
+			"confidence", result.Confidence,
+			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
+			"source", item.Source,
+			"operation", "dog_bark_filter")
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
 		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source] = item.StartTime
@@ -391,6 +437,12 @@ func (p *Processor) handleHumanDetection(item *birdnet.Results, speciesLowercase
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
+		// Add structured logging
+		GetLogger().Info("Human detection filtered",
+			"confidence", result.Confidence,
+			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
+			"source", item.Source,
+			"operation", "privacy_filter")
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
@@ -405,6 +457,11 @@ func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 
 	// Check if species has a custom threshold in the new structure
 	if config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]; exists {
 		if p.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Using custom confidence threshold",
+				"species", speciesLowercase,
+				"threshold", config.Threshold,
+				"operation", "custom_threshold_lookup")
 			log.Printf("\nUsing custom confidence threshold of %.2f for %s\n", config.Threshold, speciesLowercase)
 		}
 		return float32(config.Threshold)
@@ -464,6 +521,10 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	if p.Settings.Realtime.DogBarkFilter.Enabled {
 		if p.Settings.Realtime.DogBarkFilter.Debug {
 			p.detectionMutex.RLock()
+			// Add structured logging
+			GetLogger().Debug("Last dog detection status",
+				"last_detections", p.LastDogDetection,
+				"operation", "dog_detection_debug")
 			log.Printf("Last dog detection: %s\n", p.LastDogDetection)
 			p.detectionMutex.RUnlock()
 		}
@@ -481,6 +542,13 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, species string) {
+	// Add structured logging
+	GetLogger().Info("Approving detection",
+		"species", species,
+		"source", item.Source,
+		"match_count", item.Count,
+		"confidence", item.Detection.Results[0].Confidence,
+		"operation", "approve_detection")
 	log.Printf("Approving detection of %s from source %s, matched %d times\n",
 		species, item.Source, item.Count)
 
@@ -491,9 +559,19 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 		if err := p.EnqueueTask(task); err != nil {
 			// Check error message instead of using errors.Is to avoid import cycle
 			if err.Error() == "worker queue is full" {
+				// Add structured logging
+				GetLogger().Warn("Worker queue is full, dropping task",
+					"species", species,
+					"operation", "enqueue_task",
+					"error", "queue_full")
 				log.Printf("❌ Worker queue is full, dropping task for %s", species)
 			} else {
 				sanitizedErr := sanitizeError(err)
+				// Add structured logging
+				GetLogger().Error("Failed to enqueue task",
+					"error", sanitizedErr,
+					"species", species,
+					"operation", "enqueue_task")
 				log.Printf("Failed to enqueue task for %s: %v", species, sanitizedErr)
 			}
 			continue
@@ -526,7 +604,14 @@ func (p *Processor) pendingDetectionsFlusher() {
 				item := p.pendingDetections[species]
 				if now.After(item.FlushDeadline) {
 					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
-						log.Printf("Discarding detection of %s from source %s due to %s\n",
+						// Add structured logging
+					GetLogger().Info("Discarding detection",
+						"species", species,
+						"source", item.Source,
+						"reason", reason,
+						"count", item.Count,
+						"operation", "discard_detection")
+					log.Printf("Discarding detection of %s from source %s due to %s\n",
 							species, item.Source, reason)
 						delete(p.pendingDetections, species)
 						continue
@@ -551,6 +636,10 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	// Check if species has custom configuration
 	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
 		if p.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Species config exists for custom actions",
+				"species", speciesName,
+				"operation", "custom_action_check")
 			log.Println("Species config exists for custom actions")
 		}
 
@@ -823,6 +912,11 @@ func (p *Processor) Shutdown() error {
 
 	// Stop the job queue with a timeout
 	if err := p.JobQueue.StopWithTimeout(30 * time.Second); err != nil {
+		// Add structured logging
+		GetLogger().Warn("Job queue shutdown timed out",
+			"error", err,
+			"timeout_seconds", 30,
+			"operation", "job_queue_shutdown")
 		log.Printf("Warning: job queue shutdown timed out: %v", err)
 	}
 
@@ -842,10 +936,17 @@ func (p *Processor) Shutdown() error {
 	
 	if tracker != nil {
 		if err := tracker.Close(); err != nil {
+			// Add structured logging
+			GetLogger().Warn("Failed to close species tracker logger",
+				"error", err,
+				"operation", "species_tracker_cleanup")
 			log.Printf("Warning: failed to close species tracker logger: %v", err)
 		}
 	}
 
+	// Add structured logging
+	GetLogger().Info("Processor shutdown complete",
+		"operation", "processor_shutdown")
 	log.Println("Processor shutdown complete")
 	return nil
 }
