@@ -1,0 +1,46 @@
+// source_migration.go - Auto-migration and backward compatibility layer
+package myaudio
+
+import (
+	"fmt"
+	"log"
+)
+
+// MigrateExistingSourceToID converts a legacy source identifier to a registry source ID
+// This ensures backward compatibility for existing code that uses connection strings directly
+// This function is thread-safe and prevents race conditions during concurrent migrations
+func MigrateExistingSourceToID(source string) string {
+	registry := GetRegistry()
+	
+	// Pass SourceTypeUnknown to indicate type detection should happen atomically inside the lock
+	// This prevents race conditions where multiple goroutines might detect different types
+	return registry.MigrateSourceAtomic(source, SourceTypeUnknown)
+}
+
+// Note: detectSourceType was moved to source_registry.go as detectSourceTypeFromString
+// to be used inside the atomic migration operation for thread safety
+
+// EnableMigrationLayer enables automatic migration for buffer operations
+// This should be called during application startup to ensure backward compatibility
+func EnableMigrationLayer() {
+	log.Printf("✅ Audio source migration layer available")
+	log.Printf("💡 Buffer functions will auto-migrate source identifiers")
+}
+
+// RegisterExistingRTSPSources registers RTSP sources from configuration
+// This should be called during application startup to register known sources
+func RegisterExistingRTSPSources(rtspURLs []string) {
+	registry := GetRegistry()
+	
+	for i, url := range rtspURLs {
+		config := SourceConfig{
+			ID:          fmt.Sprintf("rtsp_%03d", i+1),
+			DisplayName: fmt.Sprintf("RTSP Camera %d", i+1),
+			Type:        SourceTypeRTSP,
+		}
+		
+		if _, err := registry.RegisterSource(url, config); err != nil {
+			log.Printf("❌ Failed to register RTSP source %s: %v", url, err)
+		}
+	}
+}

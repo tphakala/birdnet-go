@@ -249,14 +249,31 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 
 // RemoveCaptureBuffer safely removes and cleans up an audio buffer for a single source.
 func RemoveCaptureBuffer(source string) error {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
 	cbMutex.Lock()
 	defer cbMutex.Unlock()
 
-	if _, exists := captureBuffers[source]; !exists {
-		return fmt.Errorf("no capture buffer found for source: %s", source)
+	if _, exists := captureBuffers[sourceID]; !exists {
+		return fmt.Errorf("no capture buffer found for source: %s (mapped to: %s)", source, sourceID)
 	}
 
-	delete(captureBuffers, source)
+	delete(captureBuffers, sourceID)
+	
+	// Only remove from registry if no other buffers are using this source
+	// This prevents double-removal errors when both buffer types are cleaned up
+	if !hasAnalysisBuffer(sourceID) {
+		registry := GetRegistry()
+		if err := registry.RemoveSource(sourceID); err != nil {
+			// Log but don't fail - buffer removal is more important
+			// This might happen if already removed, which is fine
+			if !strings.Contains(err.Error(), "not found") {
+				log.Printf("⚠️ Failed to remove source from registry: %v", err)
+			}
+		}
+	}
+	
 	return nil
 }
 
@@ -265,6 +282,15 @@ func HasCaptureBuffer(sourceID string) bool {
 	cbMutex.RLock()
 	defer cbMutex.RUnlock()
 	_, exists := captureBuffers[sourceID]
+	return exists
+}
+
+// hasAnalysisBuffer checks if an analysis buffer exists for the given source ID
+// This is used internally to coordinate cleanup between buffer types
+func hasAnalysisBuffer(sourceID string) bool {
+	abMutex.RLock()
+	defer abMutex.RUnlock()
+	_, exists := analysisBuffers[sourceID]
 	return exists
 }
 
@@ -293,12 +319,15 @@ func InitCaptureBuffers(durationSeconds, sampleRate, bytesPerSample int, sources
 
 // WriteToCaptureBuffer adds PCM audio data to the buffer for a given source.
 func WriteToCaptureBuffer(source string, data []byte) error {
+	// Auto-migrate legacy source identifiers to registry IDs
+	sourceID := MigrateExistingSourceToID(source)
+	
 	cbMutex.RLock()
-	cb, exists := captureBuffers[source]
+	cb, exists := captureBuffers[sourceID]
 	cbMutex.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("no capture buffer found for source: %s", source)
+		return fmt.Errorf("no capture buffer found for source: %s (mapped to: %s)", source, sourceID)
 	}
 
 	cb.Write(data)
@@ -307,12 +336,15 @@ func WriteToCaptureBuffer(source string, data []byte) error {
 
 // ReadSegmentFromCaptureBuffer extracts a segment of audio data from the buffer for a given source.
 func ReadSegmentFromCaptureBuffer(source string, requestedStartTime time.Time, duration int) ([]byte, error) {
+	// Auto-migrate legacy source identifiers to registry IDs
+	sourceID := MigrateExistingSourceToID(source)
+	
 	cbMutex.RLock()
-	cb, exists := captureBuffers[source]
+	cb, exists := captureBuffers[sourceID]
 	cbMutex.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("no capture buffer found for source: %s", source)
+		return nil, fmt.Errorf("no capture buffer found for source: %s (mapped to: %s)", source, sourceID)
 	}
 
 	return cb.ReadSegment(requestedStartTime, duration)

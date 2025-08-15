@@ -18,7 +18,7 @@ func TestFFmpegStream_NewStream(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
 
 	assert.NotNil(t, stream)
-	assert.Equal(t, "rtsp://test.example.com/stream", stream.url)
+	assert.Equal(t, "rtsp://test.example.com/stream", stream.source.GetConnectionString())
 	assert.Equal(t, "tcp", stream.transport)
 	assert.NotNil(t, stream.audioChan)
 	assert.NotNil(t, stream.restartChan)

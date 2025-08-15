@@ -194,21 +194,45 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 
 // RemoveAnalysisBuffer safely removes and cleans up a ring buffer for a single source.
 func RemoveAnalysisBuffer(source string) error {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
 	abMutex.Lock()
 	defer abMutex.Unlock()
 
-	ab, exists := analysisBuffers[source]
+	ab, exists := analysisBuffers[sourceID]
 	if !exists {
-		return fmt.Errorf("no ring buffer found for source: %s", source)
+		return fmt.Errorf("no ring buffer found for source: %s (mapped to: %s)", source, sourceID)
 	}
 
 	// Clean up the buffer
 	ab.Reset()
 
 	// Remove from all maps
-	delete(analysisBuffers, source)
-	delete(prevData, source)
-	delete(warningCounter, source)
+	delete(analysisBuffers, sourceID)
+	delete(prevData, sourceID)
+	delete(warningCounter, sourceID)
+	
+	// Clean up buffer pool if this was the last buffer (prevents memory leak)
+	if len(analysisBuffers) == 0 && readBufferPool != nil {
+		// Note: BufferPool doesn't have a Close method currently, but we can at least nil it
+		readBufferPool = nil
+		overlapSize = 0
+		readSize = 0
+	}
+	
+	// Only remove from registry if no capture buffer is using this source
+	// This prevents double-removal errors when both buffer types are cleaned up
+	if !HasCaptureBuffer(sourceID) {
+		registry := GetRegistry()
+		if err := registry.RemoveSource(sourceID); err != nil {
+			// Log but don't fail - buffer removal is more important
+			// This might happen if already removed, which is fine
+			if !strings.Contains(err.Error(), "not found") {
+				log.Printf("⚠️ Failed to remove source from registry: %v", err)
+			}
+		}
+	}
 
 	return nil
 }
@@ -242,14 +266,17 @@ func InitAnalysisBuffers(capacity int, sources []string) error {
 
 // WriteToAnalysisBuffer writes audio data into the ring buffer for a given stream.
 func WriteToAnalysisBuffer(stream string, data []byte) error {
+	// Auto-migrate legacy source identifiers to registry IDs
+	sourceID := MigrateExistingSourceToID(stream)
+	
 	start := time.Now()
 
 	abMutex.RLock()
-	ab, exists := analysisBuffers[stream]
+	ab, exists := analysisBuffers[sourceID]
 	abMutex.RUnlock()
 
 	if !exists {
-		enhancedErr := errors.Newf("no analysis buffer found for stream: %s", stream).
+		enhancedErr := errors.Newf("no analysis buffer found for stream: %s (mapped to: %s)", stream, sourceID).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "write_to_analysis_buffer").
@@ -258,8 +285,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferWrite("analysis", stream, "error")
-			m.RecordBufferWriteError("analysis", stream, "buffer_not_found")
+			m.RecordBufferWrite("analysis", sourceID, "error")
+			m.RecordBufferWriteError("analysis", sourceID, "buffer_not_found")
 		}
 		return enhancedErr
 	}
@@ -276,8 +303,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferWrite("analysis", stream, "error")
-			m.RecordBufferWriteError("analysis", stream, "zero_capacity")
+			m.RecordBufferWrite("analysis", sourceID, "error")
+			m.RecordBufferWriteError("analysis", sourceID, "zero_capacity")
 		}
 		return enhancedErr
 	}
@@ -287,36 +314,44 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	capacityUsed := float64(currentLength) / float64(capacity)
 
 	if m := getAnalysisMetrics(); m != nil {
-		m.UpdateBufferUtilization("analysis", stream, capacityUsed)
-		m.UpdateBufferSize("analysis", stream, currentLength)
+		m.UpdateBufferUtilization("analysis", sourceID, capacityUsed)
+		m.UpdateBufferSize("analysis", sourceID, currentLength)
 	}
 
 	if capacityUsed > warningCapacityThreshold {
-		warningCounter[stream]++
-		if warningCounter[stream]%32 == 1 {
+		warningCounter[sourceID]++
+		if warningCounter[sourceID]%32 == 1 {
 			log.Printf("⚠️ Analysis buffer for stream %s is %.2f%% full (used: %d/%d bytes)",
 				stream, capacityUsed*100, currentLength, capacity)
 		}
 
 		if m := getAnalysisMetrics(); m != nil && capacityUsed > 0.95 {
-			m.RecordBufferOverflow("analysis", stream)
+			m.RecordBufferOverflow("analysis", sourceID)
 		}
 	}
 
 	// Write data to the ring buffer with retry logic
 	var lastErr error
+	var n int
 	for retry := 0; retry < maxRetries; retry++ {
-		abMutex.Lock()           // Lock the mutex to prevent other goroutines from reading or writing to the buffer
-		n, err := ab.Write(data) // Write data to the ring buffer
-		abMutex.Unlock()         // Unlock the mutex
+		// Use anonymous function with defer to ensure mutex is always unlocked
+		// This prevents deadlocks even if ab.Write panics
+		err := func() error {
+			abMutex.Lock()
+			defer abMutex.Unlock() // Always unlock, even on panic
+			
+			var writeErr error
+			n, writeErr = ab.Write(data) // Write data to the ring buffer
+			return writeErr
+		}()
 
 		if err == nil {
 			// Record successful write metrics
 			if m := getAnalysisMetrics(); m != nil {
 				duration := time.Since(start).Seconds()
-				m.RecordBufferWrite("analysis", stream, "success")
-				m.RecordBufferWriteDuration("analysis", stream, duration)
-				m.RecordBufferWriteBytes("analysis", stream, n)
+				m.RecordBufferWrite("analysis", sourceID, "success")
+				m.RecordBufferWriteDuration("analysis", sourceID, duration)
+				m.RecordBufferWriteBytes("analysis", sourceID, n)
 			}
 
 			if n < len(data) {
@@ -325,7 +360,7 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 					n, len(data), stream, capacity, ab.Free())
 
 				if m := getAnalysisMetrics(); m != nil {
-					m.RecordBufferWrite("analysis", stream, "partial")
+					m.RecordBufferWrite("analysis", sourceID, "partial")
 				}
 			}
 
@@ -341,9 +376,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 		// Record retry metrics
 		if m := getAnalysisMetrics(); m != nil {
 			if errors.Is(err, ringbuffer.ErrIsFull) {
-				m.RecordBufferWriteRetry("analysis", stream, "buffer_full")
+				m.RecordBufferWriteRetry("analysis", sourceID, "buffer_full")
 			} else {
-				m.RecordBufferWriteRetry("analysis", stream, "unexpected_error")
+				m.RecordBufferWriteRetry("analysis", sourceID, "unexpected_error")
 			}
 		}
 
@@ -366,9 +401,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 
 	// Record data drop metrics
 	if m := getAnalysisMetrics(); m != nil {
-		m.RecordBufferWrite("analysis", stream, "error")
-		m.RecordBufferWriteError("analysis", stream, "retry_exhausted")
-		m.RecordAnalysisBufferDataDrop(stream, "retry_exhausted")
+		m.RecordBufferWrite("analysis", sourceID, "error")
+		m.RecordBufferWriteError("analysis", sourceID, "retry_exhausted")
+		m.RecordAnalysisBufferDataDrop(sourceID, "retry_exhausted")
 	}
 
 	enhancedErr := errors.New(lastErr).
@@ -390,14 +425,18 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 // ReadFromAnalysisBuffer reads a sliding chunk of audio data from the ring buffer for a given stream.
 func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 	start := time.Now()
+	
+	// Auto-migrate legacy source identifiers to registry IDs
+	// Do this BEFORE acquiring the lock to avoid potential deadlocks
+	sourceID := MigrateExistingSourceToID(stream)
 
 	abMutex.Lock()
 	defer abMutex.Unlock()
 
-	// Get the ring buffer for the given stream
-	ab, exists := analysisBuffers[stream]
+	// Get the ring buffer for the given stream using the migrated ID
+	ab, exists := analysisBuffers[sourceID]
 	if !exists {
-		enhancedErr := errors.Newf("no analysis buffer found for stream: %s", stream).
+		enhancedErr := errors.Newf("no analysis buffer found for stream: %s (mapped to: %s)", stream, sourceID).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "read_from_analysis_buffer").
@@ -405,8 +444,8 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferRead("analysis", stream, "error")
-			m.RecordBufferReadError("analysis", stream, "buffer_not_found")
+			m.RecordBufferRead("analysis", sourceID, "error")
+			m.RecordBufferReadError("analysis", sourceID, "buffer_not_found")
 		}
 		return nil, enhancedErr
 	}
@@ -416,8 +455,8 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 	if bytesWritten < readSize {
 		// Not enough data available - record metrics but return nil (not an error)
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferRead("analysis", stream, "insufficient_data")
-			m.RecordBufferUnderrun("analysis", stream)
+			m.RecordBufferRead("analysis", sourceID, "insufficient_data")
+			m.RecordBufferUnderrun("analysis", sourceID)
 		}
 		return nil, nil
 	}
@@ -446,8 +485,8 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferRead("analysis", stream, "error")
-			m.RecordBufferReadError("analysis", stream, "read_failed")
+			m.RecordBufferRead("analysis", sourceID, "error")
+			m.RecordBufferReadError("analysis", sourceID, "read_failed")
 		}
 		
 		// Return buffer to pool on error
@@ -459,8 +498,8 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 
 	// Join with previous data to ensure we're processing chunkSize bytes
 	var fullData []byte
-	prevData[stream] = append(prevData[stream], data...)
-	fullData = prevData[stream]
+	prevData[sourceID] = append(prevData[sourceID], data...)
+	fullData = prevData[sourceID]
 	
 	// Return buffer to pool after copying data
 	if readBufferPool != nil {
@@ -468,25 +507,25 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 	}
 	if len(fullData) >= conf.BufferSize {
 		// Update prevData for the next iteration
-		prevData[stream] = fullData[readSize:]
+		prevData[sourceID] = fullData[readSize:]
 		fullData = fullData[:conf.BufferSize]
 
 		// Record successful read metrics
 		if m := getAnalysisMetrics(); m != nil {
 			duration := time.Since(start).Seconds()
-			m.RecordBufferRead("analysis", stream, "success")
-			m.RecordBufferReadDuration("analysis", stream, duration)
-			m.RecordBufferReadBytes("analysis", stream, len(fullData))
+			m.RecordBufferRead("analysis", sourceID, "success")
+			m.RecordBufferReadDuration("analysis", sourceID, duration)
+			m.RecordBufferReadBytes("analysis", sourceID, len(fullData))
 		}
 
 		//log.Printf("✅ Read %d bytes from analysis buffer for stream %s", len(fullData), stream)
 		return fullData, nil
 	} else {
 		// If there isn't enough data even after appending, update prevData and return nil
-		prevData[stream] = fullData
+		prevData[sourceID] = fullData
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferRead("analysis", stream, "insufficient_data")
+			m.RecordBufferRead("analysis", sourceID, "insufficient_data")
 		}
 		return nil, nil
 	}
