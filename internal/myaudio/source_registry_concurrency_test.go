@@ -1,8 +1,9 @@
-// source_registry_fixes_test.go - Tests for critical fixes
+// source_registry_concurrency_test.go - Tests for concurrent operations and security validation
 package myaudio
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -191,7 +192,7 @@ func TestURLValidation(t *testing.T) {
 			name:       "Command injection attempt",
 			url:        "rtsp://test.com/stream; rm -rf /",
 			sourceType: SourceTypeRTSP,
-			shouldFail: false, // Semicolon is allowed in RTSP URLs
+			shouldFail: true, // Semicolons are rejected for security - this is command injection
 		},
 		{
 			name:       "Shell variable injection",
@@ -227,6 +228,12 @@ func TestURLValidation(t *testing.T) {
 			shouldFail: true,
 			errorContains: "directory traversal",
 		},
+		{
+			name:       "Test scheme for testing",
+			url:        "test://health-check-loop",
+			sourceType: SourceTypeRTSP,
+			shouldFail: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -238,7 +245,7 @@ func TestURLValidation(t *testing.T) {
 			if tc.shouldFail {
 				if err == nil {
 					t.Errorf("Expected validation to fail for %s", tc.url)
-				} else if tc.errorContains != "" && !contains(err.Error(), tc.errorContains) {
+				} else if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
 					t.Errorf("Expected error to contain '%s', got: %v", tc.errorContains, err)
 				}
 			} else {
@@ -297,15 +304,4 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || substr != "" && len(s) > len(substr) && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 1; i < len(s)-len(substr)+1; i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
+// Removed custom string helpers - use strings.Contains from standard library instead

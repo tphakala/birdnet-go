@@ -20,9 +20,9 @@ func TestCaptureBufferSingleAllocation(t *testing.T) {
 		sampleRate     int
 		bytesPerSample int
 	}{
-		{"standard_buffer", "test_source_1", 60, 48000, 2},
-		{"high_sample_rate", "test_source_2", 30, 96000, 2},
-		{"24bit_audio", "test_source_3", 60, 48000, 3},
+		{"standard_buffer", "hw:1,0", 60, 48000, 2},
+		{"high_sample_rate", "hw:2,0", 30, 96000, 2},
+		{"24bit_audio", "plughw:0,0", 60, 48000, 3},
 	}
 
 	for _, tc := range testCases {
@@ -77,7 +77,7 @@ func TestCaptureBufferReconnection(t *testing.T) {
 func TestCaptureBufferCleanup(t *testing.T) {
 	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
-	sources := []string{"source1", "source2", "source3"}
+	sources := []string{"hw:0,0", "hw:1,0", "default"}
 
 	// Allocate buffers for all sources
 	for _, source := range sources {
@@ -111,7 +111,7 @@ func TestConcurrentBufferAllocation(t *testing.T) {
 	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	const numGoroutines = 10
-	source := "concurrent_test_source"
+	source := "hw:3,0"
 
 	var wg sync.WaitGroup
 	successCount := 0
@@ -160,7 +160,7 @@ func TestBufferLifecycleWithErrors(t *testing.T) {
 		{"invalid_sample_rate", 60, 0, 2, "test3", true, "invalid sample rate"},
 		{"invalid_bytes_per_sample", 60, 48000, 0, "test4", true, "invalid bytes per sample"},
 		{"empty_source", 60, 48000, 2, "", true, "empty source name"},
-		{"valid_allocation", 60, 48000, 2, "valid_source", false, ""},
+		{"valid_allocation", 60, 48000, 2, "hw:0,0", false, ""},
 	}
 
 	for _, tc := range testCases {
@@ -184,7 +184,7 @@ func TestBufferLifecycleWithErrors(t *testing.T) {
 func TestInitCaptureBuffers(t *testing.T) {
 	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
-	sources := []string{"rtsp://cam1", "rtsp://cam2", "rtsp://cam3", "rtsp://cam4"}
+	sources := []string{"rtsp://cam1.local/stream", "rtsp://cam2.local/stream", "rtsp://cam3.local/stream", "rtsp://cam4.local/stream"}
 
 	// First initialization should succeed
 	err := InitCaptureBuffers(60, 48000, 2, sources)
@@ -216,7 +216,7 @@ func TestMemoryLeakPrevention(t *testing.T) {
 	// Do not use t.Parallel() - this test accesses global captureBuffers map
 
 	const iterations = 100
-	source := "leak_test_source"
+	source := "hw:4,0"
 
 	for i := 0; i < iterations; i++ {
 		// Allocate

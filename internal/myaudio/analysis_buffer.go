@@ -198,10 +198,9 @@ func RemoveAnalysisBuffer(source string) error {
 	sourceID := MigrateExistingSourceToID(source)
 	
 	abMutex.Lock()
-	defer abMutex.Unlock()
-
 	ab, exists := analysisBuffers[sourceID]
 	if !exists {
+		abMutex.Unlock()
 		return fmt.Errorf("no ring buffer found for source: %s (mapped to: %s)", source, sourceID)
 	}
 
@@ -220,14 +219,16 @@ func RemoveAnalysisBuffer(source string) error {
 		overlapSize = 0
 		readSize = 0
 	}
+	abMutex.Unlock() // Release lock before calling registry
 	
-	// Only remove from registry if no capture buffer is using this source
-	// This prevents double-removal errors when both buffer types are cleaned up
-	if !HasCaptureBuffer(sourceID) {
+	// Check if capture buffer exists (safe to call without holding abMutex)
+	hasCaptureBuffer := HasCaptureBuffer(sourceID)
+	
+	// Only remove from registry if no other buffer type is using this source
+	if !hasCaptureBuffer {
 		registry := GetRegistry()
 		if err := registry.RemoveSource(sourceID); err != nil {
-			// Log but don't fail - buffer removal is more important
-			// This might happen if already removed, which is fine
+			// Log but don't fail - buffer removal succeeded
 			if !strings.Contains(err.Error(), "not found") {
 				log.Printf("⚠️ Failed to remove source from registry: %v", err)
 			}
@@ -529,6 +530,19 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 		}
 		return nil, nil
 	}
+}
+
+// AnalysisBufferExists checks if an analysis buffer exists for the given source
+// Accepts either original source string or migrated source ID
+// This is a thread-safe exported function that encapsulates access to the internal buffer map
+func AnalysisBufferExists(source string) bool {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
+	abMutex.RLock()
+	defer abMutex.RUnlock()
+	_, exists := analysisBuffers[sourceID]
+	return exists
 }
 
 // AnalysisBufferMonitor monitors the buffer and processes audio data when enough data is present.

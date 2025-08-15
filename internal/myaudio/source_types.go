@@ -1,7 +1,10 @@
 // source_types.go - Core type definitions for audio source registry
 package myaudio
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // SourceType represents the type of audio source
 type SourceType string
@@ -36,9 +39,13 @@ type AudioSource struct {
 	ErrorCount int   `json:"errorCount"`
 }
 
-// GetConnectionString returns the original connection string (for internal use only)
-func (s *AudioSource) GetConnectionString() string {
-	return s.connectionString
+// GetConnectionString returns the raw connection string for external use (e.g., FFmpeg input)
+// Returns an error if the connection string is empty or invalid
+func (s *AudioSource) GetConnectionString() (string, error) {
+	if s.connectionString == "" {
+		return "", fmt.Errorf("connection string is empty for source %s (ID: %s)", s.DisplayName, s.ID)
+	}
+	return s.connectionString, nil
 }
 
 // String implements the Stringer interface to ensure safe logging

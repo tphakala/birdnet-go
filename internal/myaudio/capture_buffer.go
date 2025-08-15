@@ -63,17 +63,20 @@ func getCaptureMetrics() *metrics.MyAudioMetrics {
 // It returns nil if the buffer already exists or was successfully created.
 // This function is thread-safe and prevents race conditions during allocation.
 func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample int, source string) error {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
 	// Hold lock for entire operation to prevent race conditions
 	cbMutex.Lock()
 	defer cbMutex.Unlock()
 	
-	// Check if buffer already exists
-	if _, exists := captureBuffers[source]; exists {
+	// Check if buffer already exists using the migrated ID
+	if _, exists := captureBuffers[sourceID]; exists {
 		return nil
 	}
 	
 	// Buffer doesn't exist, allocate it while holding the lock
-	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, source)
+	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, sourceID)
 }
 
 // AllocateCaptureBuffer initializes an audio buffer for a single source.
@@ -86,11 +89,14 @@ func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample i
 //
 // To detect repeated allocation issues, monitor the "repeated_blocked" counter per source.
 func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, source string) error {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
 	// Lock once for the entire operation
 	cbMutex.Lock()
 	defer cbMutex.Unlock()
 	
-	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, source)
+	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, sourceID)
 }
 
 // allocateCaptureBufferInternal performs the actual buffer allocation.
@@ -211,6 +217,7 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 	}
 
 	// Check if buffer already exists (caller must hold cbMutex)
+	// Note: source parameter is now expected to be a migrated sourceID
 	if _, exists := captureBuffers[source]; exists {
 		// Log repeated allocation attempt
 		log.Printf("⚠️ Buffer allocation blocked: buffer already exists for source %s", source)
@@ -253,21 +260,22 @@ func RemoveCaptureBuffer(source string) error {
 	sourceID := MigrateExistingSourceToID(source)
 	
 	cbMutex.Lock()
-	defer cbMutex.Unlock()
-
 	if _, exists := captureBuffers[sourceID]; !exists {
+		cbMutex.Unlock()
 		return fmt.Errorf("no capture buffer found for source: %s (mapped to: %s)", source, sourceID)
 	}
 
 	delete(captureBuffers, sourceID)
+	cbMutex.Unlock() // Release lock before calling registry
 	
-	// Only remove from registry if no other buffers are using this source
-	// This prevents double-removal errors when both buffer types are cleaned up
-	if !hasAnalysisBuffer(sourceID) {
+	// Check if analysis buffer exists (safe to call without holding cbMutex)
+	hasAnalysisBuffer := AnalysisBufferExists(sourceID)
+	
+	// Only remove from registry if no other buffer type is using this source
+	if !hasAnalysisBuffer {
 		registry := GetRegistry()
 		if err := registry.RemoveSource(sourceID); err != nil {
-			// Log but don't fail - buffer removal is more important
-			// This might happen if already removed, which is fine
+			// Log but don't fail - buffer removal succeeded
 			if !strings.Contains(err.Error(), "not found") {
 				log.Printf("⚠️ Failed to remove source from registry: %v", err)
 			}
@@ -277,22 +285,20 @@ func RemoveCaptureBuffer(source string) error {
 	return nil
 }
 
-// HasCaptureBuffer checks if a capture buffer exists for the given source ID
-func HasCaptureBuffer(sourceID string) bool {
+// HasCaptureBuffer checks if a capture buffer exists for the given source
+// Accepts either original source string or migrated source ID
+func HasCaptureBuffer(source string) bool {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
 	cbMutex.RLock()
 	defer cbMutex.RUnlock()
 	_, exists := captureBuffers[sourceID]
 	return exists
 }
 
-// hasAnalysisBuffer checks if an analysis buffer exists for the given source ID
-// This is used internally to coordinate cleanup between buffer types
-func hasAnalysisBuffer(sourceID string) bool {
-	abMutex.RLock()
-	defer abMutex.RUnlock()
-	_, exists := analysisBuffers[sourceID]
-	return exists
-}
+// Note: hasAnalysisBuffer function removed to fix encapsulation violation.
+// Use the exported AnalysisBufferExists(sourceID) function instead.
 
 // InitCaptureBuffers initializes the capture buffers for each capture source.
 // It returns an error if initialization fails for any source.

@@ -30,9 +30,19 @@ func EnableMigrationLayer() {
 // RegisterExistingRTSPSources registers RTSP sources from configuration
 // This should be called during application startup to register known sources
 func RegisterExistingRTSPSources(rtspURLs []string) {
+	if len(rtspURLs) == 0 {
+		return
+	}
+	
 	registry := GetRegistry()
+	var errors []string
 	
 	for i, url := range rtspURLs {
+		if url == "" {
+			log.Printf("⚠️ Skipping empty RTSP URL at index %d", i)
+			continue
+		}
+		
 		config := SourceConfig{
 			ID:          fmt.Sprintf("rtsp_%03d", i+1),
 			DisplayName: fmt.Sprintf("RTSP Camera %d", i+1),
@@ -40,7 +50,13 @@ func RegisterExistingRTSPSources(rtspURLs []string) {
 		}
 		
 		if _, err := registry.RegisterSource(url, config); err != nil {
-			log.Printf("❌ Failed to register RTSP source %s: %v", url, err)
+			errMsg := fmt.Sprintf("source %d (%s): %v", i+1, url, err)
+			errors = append(errors, errMsg)
+			log.Printf("❌ Failed to register RTSP %s", errMsg)
 		}
+	}
+	
+	if len(errors) > 0 {
+		log.Printf("⚠️ Failed to register %d out of %d RTSP sources", len(errors), len(rtspURLs))
 	}
 }

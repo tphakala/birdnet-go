@@ -3,10 +3,12 @@ package myaudio
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"log"
 	"log/slog"
+	"math/big"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -277,6 +279,21 @@ func (w *threadSafeWriter) Write(p []byte) (n int, err error) {
 	return w.buf.Write(p)
 }
 
+// generateUniqueFallbackID generates a unique fallback ID to prevent collisions
+func generateUniqueFallbackID() string {
+	// Use timestamp + random component for uniqueness
+	timestamp := time.Now().Unix()
+	
+	// Generate random component
+	randomNum, err := rand.Int(rand.Reader, big.NewInt(10000))
+	if err != nil {
+		// Fallback to just timestamp if random fails
+		return fmt.Sprintf("fallback_rtsp_%d", timestamp)
+	}
+	
+	return fmt.Sprintf("fallback_rtsp_%d_%d", timestamp, randomNum.Int64())
+}
+
 // NewFFmpegStream creates a new FFmpeg stream handler.
 // The url parameter specifies the RTSP stream URL, transport specifies the RTSP transport protocol,
 // and audioChan is the channel where processed audio data will be sent.
@@ -286,10 +303,11 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 	source := registry.GetOrCreateSource(url, SourceTypeRTSP)
 	if source == nil {
 		log.Printf("❌ Failed to register RTSP source: %s", privacy.SanitizeRTSPUrl(url))
-		// Create a fallback source for robustness
+		// Create a fallback source for robustness with unique ID
+		fallbackID := generateUniqueFallbackID()
 		source = &AudioSource{
-			ID:               "fallback_rtsp",
-			DisplayName:      "RTSP Stream",
+			ID:               fallbackID,
+			DisplayName:      "RTSP Stream (Fallback)",
 			Type:             SourceTypeRTSP,
 			connectionString: url,
 			SafeString:       privacy.SanitizeRTSPUrl(url),
@@ -318,6 +336,12 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 // It runs in a loop, automatically restarting the process on failures with exponential backoff.
 // The function returns when the context is cancelled or Stop() is called.
 func (s *FFmpegStream) Run(parentCtx context.Context) {
+	// Nil check for critical fields
+	if s.source == nil {
+		log.Printf("❌ Cannot start FFmpeg stream: source is nil")
+		return
+	}
+	
 	// Set context and cancel function with proper locking
 	s.cancelMu.Lock()
 	s.ctx, s.cancel = context.WithCancel(parentCtx)
@@ -497,7 +521,20 @@ func (s *FFmpegStream) startProcess() error {
 
 	// Add input and output parameters
 	args = append(args,
-		"-i", s.source.GetConnectionString(),
+		"-i", func() string {
+			// Handle nil source gracefully
+			if s.source == nil {
+				return "" // This will cause FFmpeg to fail, which is appropriate
+			}
+			connStr, err := s.source.GetConnectionString()
+			if err != nil {
+				streamLogger.Error("failed to get connection string",
+					"error", err,
+					"operation", "start_process")
+				return "" // This will cause FFmpeg to fail, which is appropriate
+			}
+			return connStr
+		}(),
 		"-loglevel", "error",
 		"-vn",
 		"-f", format,
@@ -725,8 +762,8 @@ func (s *FFmpegStream) processAudio() error {
 
 // handleAudioData processes a chunk of audio data
 func (s *FFmpegStream) handleAudioData(data []byte) error {
-	// Write to analysis buffer
-	if err := WriteToAnalysisBuffer(s.source.SafeString, data); err != nil {
+	// Write to analysis buffer using source ID
+	if err := WriteToAnalysisBuffer(s.source.ID, data); err != nil {
 		return errors.New(fmt.Errorf("failed to write to analysis buffer: %w", err)).
 			Category(errors.CategoryAudio).
 			Component("ffmpeg-stream").
@@ -736,8 +773,8 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 			Build()
 	}
 
-	// Write to capture buffer
-	if err := WriteToCaptureBuffer(s.source.SafeString, data); err != nil {
+	// Write to capture buffer using source ID
+	if err := WriteToCaptureBuffer(s.source.ID, data); err != nil {
 		return errors.New(fmt.Errorf("failed to write to capture buffer: %w", err)).
 			Category(errors.CategoryAudio).
 			Component("ffmpeg-stream").
@@ -747,11 +784,11 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 			Build()
 	}
 
-	// Broadcast to WebSocket clients
-	broadcastAudioData(s.source.SafeString, data)
+	// Broadcast to WebSocket clients using source ID
+	broadcastAudioData(s.source.ID, data)
 
-	// Calculate audio level
-	audioLevel := calculateAudioLevel(data, s.source.SafeString, "")
+	// Calculate audio level using source ID
+	audioLevel := calculateAudioLevel(data, s.source.ID, "")
 
 	// Create unified audio data
 	unifiedData := UnifiedAudioData{
@@ -761,7 +798,7 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 
 	// Process sound level if enabled
 	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
-		if soundLevel, err := ProcessSoundLevelData(s.source.SafeString, data); err != nil {
+		if soundLevel, err := ProcessSoundLevelData(s.source.ID, data); err != nil {
 			// Log as warning if it's a registration issue, debug otherwise
 			// Skip logging for normal conditions (interval incomplete, no data)
 			if errors.Is(err, ErrSoundLevelProcessorNotRegistered) {

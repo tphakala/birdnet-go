@@ -38,7 +38,11 @@ func TestSourceRegistration(t *testing.T) {
 	if source.Type != SourceTypeRTSP {
 		t.Errorf("Expected type RTSP, got %s", source.Type)
 	}
-	if source.GetConnectionString() != rtspURL {
+	connStr, err := source.GetConnectionString()
+	if err != nil {
+		t.Fatalf("Failed to get connection string: %v", err)
+	}
+	if connStr != rtspURL {
 		t.Errorf("Connection string mismatch")
 	}
 
@@ -94,7 +98,11 @@ func TestRTSPCredentialSanitization(t *testing.T) {
 			}
 
 			// Original connection string should always be preserved
-			if source.GetConnectionString() != tc.input {
+			connStr, err := source.GetConnectionString()
+			if err != nil {
+				t.Fatalf("Failed to get connection string: %v", err)
+			}
+			if connStr != tc.input {
 				t.Errorf("Original connection string not preserved")
 			}
 		})
