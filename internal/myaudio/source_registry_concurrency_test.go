@@ -14,7 +14,8 @@ func TestRaceConditionFix(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
-		idCounter:     0,
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Test concurrent migrations of the same source
@@ -61,7 +62,8 @@ func TestMemoryLeakFix(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
-		idCounter:     0,
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Register multiple sources
@@ -108,7 +110,8 @@ func TestInactiveSourceCleanup(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
-		idCounter:     0,
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Register sources with different last seen times

@@ -175,6 +175,10 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 	analysisBuffers[source] = ab
 	prevData[source] = nil
 	warningCounter[source] = 0
+	
+	// Acquire reference to this source
+	registry := GetRegistry()
+	registry.AcquireSourceReference(source)
 
 	// Record successful allocation metrics
 	if m := getAnalysisMetrics(); m != nil {
@@ -221,17 +225,12 @@ func RemoveAnalysisBuffer(source string) error {
 	}
 	abMutex.Unlock() // Release lock before calling registry
 	
-	// Check if capture buffer exists (safe to call without holding abMutex)
-	hasCaptureBuffer := HasCaptureBuffer(sourceID)
-	
-	// Only remove from registry if no other buffer type is using this source
-	if !hasCaptureBuffer {
-		registry := GetRegistry()
-		if err := registry.RemoveSource(sourceID); err != nil {
-			// Log but don't fail - buffer removal succeeded
-			if !strings.Contains(err.Error(), "not found") {
-				log.Printf("⚠️ Failed to remove source from registry: %v", err)
-			}
+	// Release reference to this source - registry will auto-remove if count reaches zero
+	registry := GetRegistry()
+	if err := registry.ReleaseSourceReference(sourceID); err != nil {
+		// Log but don't fail - buffer removal succeeded
+		if !errors.Is(err, ErrSourceNotFound) {
+			log.Printf("⚠️ Failed to release source reference: %v", err)
 		}
 	}
 

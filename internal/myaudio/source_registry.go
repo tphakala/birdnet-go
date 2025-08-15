@@ -3,15 +3,29 @@ package myaudio
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+	ierr "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
+
+// SourceStats provides structured statistics about registered sources
+type SourceStats struct {
+	Total         int `json:"total_sources"`
+	Active        int `json:"active_sources"`
+	RTSP          int `json:"rtsp_sources"`
+	Device        int `json:"device_sources"`
+	File          int `json:"file_sources"`
+}
 
 // AudioSourceRegistry manages all audio sources in the system
 type AudioSourceRegistry struct {
@@ -19,25 +33,40 @@ type AudioSourceRegistry struct {
 	sources       map[string]*AudioSource // ID -> AudioSource
 	connectionMap map[string]string       // connectionString -> ID (for fast lookups)
 
+	// Reference counting for cleanup
+	refCounts     map[string]*int32       // sourceID -> reference count (pointer for atomic ops)
+
 	// Thread safety
 	mu sync.RWMutex
 
-	// ID generation
-	idCounter int
+	// Logger
+	logger *slog.Logger
 }
 
 var (
 	registry     *AudioSourceRegistry
 	registryOnce sync.Once
+	
+	// Sentinel errors for better error handling
+	ErrSourceNotFound = ierr.Newf("source not found").
+		Component("myaudio").
+		Category(ierr.CategoryValidation).
+		Build()
 )
 
 // GetRegistry returns the singleton registry instance
 func GetRegistry() *AudioSourceRegistry {
 	registryOnce.Do(func() {
+		logger := logging.ForService("myaudio")
+		if logger == nil {
+			// Fallback for tests or when logging is not initialized
+			logger = slog.Default()
+		}
 		registry = &AudioSourceRegistry{
 			sources:       make(map[string]*AudioSource),
 			connectionMap: make(map[string]string),
-			idCounter:     0,
+			refCounts:     make(map[string]*int32),
+			logger:        logger.With("component", "registry"),
 		}
 	})
 	return registry
@@ -93,7 +122,10 @@ func (r *AudioSourceRegistry) RegisterSource(connectionString string, config Sou
 	r.sources[source.ID] = source
 	r.connectionMap[connectionString] = source.ID
 
-	log.Printf("📝 Registered audio source: %s (%s) -> ID: %s", source.DisplayName, source.SafeString, source.ID)
+	r.logger.With("id", source.ID).
+		With("display_name", source.DisplayName).
+		With("safe", source.SafeString).
+		Info("Registered audio source")
 
 	return source, nil
 }
@@ -119,18 +151,23 @@ func (r *AudioSourceRegistry) GetSourceByConnection(connectionString string) (*A
 
 // GetOrCreateSource ensures a source exists and returns it
 func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceType SourceType) *AudioSource {
-	// For GetOrCreateSource, we auto-detect type if it seems wrong
+	// Auto-detect type if unknown or if detection yields a different type
 	actualType := sourceType
-	if sourceType == SourceTypeRTSP && !strings.HasPrefix(connectionString, "rtsp") {
-		// Auto-detect the actual type
+	if sourceType == SourceTypeUnknown {
 		actualType = detectSourceTypeFromString(connectionString)
+	} else {
+		// Check if detection yields a different type
+		detectedType := detectSourceTypeFromString(connectionString)
+		if detectedType != SourceTypeUnknown && detectedType != sourceType {
+			actualType = detectedType
+		}
 	}
 
 	source, err := r.RegisterSource(connectionString, SourceConfig{
 		Type: actualType,
 	})
 	if err != nil {
-		log.Printf("❌ Failed to register source: %v", err)
+		r.logger.With("error", err).Error("Failed to register source")
 		return nil
 	}
 	return source
@@ -195,8 +232,10 @@ func (r *AudioSourceRegistry) MigrateSourceAtomic(source string, sourceType Sour
 	// Do validation while holding the lock to ensure atomicity
 	if err := r.validateConnectionString(source, sourceType); err != nil {
 		// Security: reject invalid NEW sources completely
-		log.Printf("❌ Rejected invalid source during migration: %s (type: %v) - %v",
-			r.sanitizeConnectionString(source, sourceType), sourceType, err)
+		r.logger.With("safe", r.sanitizeConnectionString(source, sourceType)).
+			With("type", sourceType).
+			With("error", err).
+			Warn("Rejected invalid source during migration")
 		// Return the original source - it won't work but at least won't crash
 		// The calling code will handle the failure appropriately
 		return source
@@ -224,7 +263,9 @@ func (r *AudioSourceRegistry) MigrateSourceAtomic(source string, sourceType Sour
 	r.sources[audioSource.ID] = audioSource
 	r.connectionMap[source] = audioSource.ID
 
-	log.Printf("🔄 Auto-migrated source: %s -> %s", audioSource.SafeString, audioSource.ID)
+	r.logger.With("id", audioSource.ID).
+		With("safe", audioSource.SafeString).
+		Info("Auto-migrated source")
 
 	return audioSource.ID
 }
@@ -258,6 +299,51 @@ func (r *AudioSourceRegistry) UpdateSourceMetrics(sourceID string, bytesProcesse
 	}
 }
 
+// AcquireSourceReference increments the reference count for a source
+func (r *AudioSourceRegistry) AcquireSourceReference(sourceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	
+	if _, exists := r.sources[sourceID]; exists {
+		if r.refCounts[sourceID] == nil {
+			initialCount := int32(1)
+			r.refCounts[sourceID] = &initialCount
+		} else {
+			atomic.AddInt32(r.refCounts[sourceID], 1)
+		}
+	}
+}
+
+// ReleaseSourceReference decrements the reference count and removes source if count reaches zero
+func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	
+	source, exists := r.sources[sourceID]
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
+	}
+	
+	// Decrement reference count
+	var newCount int32
+	if r.refCounts[sourceID] != nil {
+		newCount = atomic.AddInt32(r.refCounts[sourceID], -1)
+	}
+	
+	// Remove source if no more references
+	if newCount <= 0 {
+		delete(r.sources, sourceID)
+		delete(r.connectionMap, source.connectionString)
+		delete(r.refCounts, sourceID)
+		
+		r.logger.With("id", sourceID).
+			With("safe", source.SafeString).
+			Info("Removed unreferenced audio source")
+	}
+	
+	return nil
+}
+
 // RemoveSource removes a source from the registry and cleans up associated resources
 // This prevents memory leaks when sources are no longer needed
 func (r *AudioSourceRegistry) RemoveSource(sourceID string) error {
@@ -266,14 +352,17 @@ func (r *AudioSourceRegistry) RemoveSource(sourceID string) error {
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return fmt.Errorf("source not found: %s", sourceID)
+		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
-	// Remove from both maps
+	// Remove from all maps
 	delete(r.sources, sourceID)
 	delete(r.connectionMap, source.connectionString)
+	delete(r.refCounts, sourceID)
 
-	log.Printf("🗑️ Removed audio source: %s (ID: %s)", source.SafeString, sourceID)
+	r.logger.With("id", sourceID).
+		With("safe", source.SafeString).
+		Info("Removed audio source")
 
 	return nil
 }
@@ -316,7 +405,7 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return RemoveSourceNotFound, fmt.Errorf("source not found: %s", sourceID)
+		return RemoveSourceNotFound, fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
 	// Check if source is in use by any buffer type
@@ -330,7 +419,9 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 	delete(r.sources, sourceID)
 	delete(r.connectionMap, source.connectionString)
 
-	log.Printf("🗑️ Removed unused audio source: %s (ID: %s)", source.SafeString, sourceID)
+	r.logger.With("id", sourceID).
+		With("safe", source.SafeString).
+		Info("Removed unused audio source")
 
 	return RemoveSourceSuccess, nil
 }
@@ -342,16 +433,21 @@ func (r *AudioSourceRegistry) RemoveSourceByConnection(connectionString string) 
 
 	sourceID, exists := r.connectionMap[connectionString]
 	if !exists {
-		return fmt.Errorf("source not found for connection: %s", connectionString)
+		// Sanitize connection string before including in error
+		safeString := r.sanitizeConnectionString(connectionString, SourceTypeUnknown)
+		return fmt.Errorf("%w: connection %s", ErrSourceNotFound, safeString)
 	}
 
 	source := r.sources[sourceID]
 
-	// Remove from both maps
+	// Remove from all maps
 	delete(r.sources, sourceID)
 	delete(r.connectionMap, connectionString)
+	delete(r.refCounts, sourceID)
 
-	log.Printf("🗑️ Removed audio source: %s (ID: %s)", source.SafeString, sourceID)
+	r.logger.With("id", sourceID).
+		With("safe", source.SafeString).
+		Info("Removed audio source by connection")
 
 	return nil
 }
@@ -369,13 +465,16 @@ func (r *AudioSourceRegistry) CleanupInactiveSources(inactiveDuration time.Durat
 			delete(r.sources, id)
 			delete(r.connectionMap, source.connectionString)
 			removedCount++
-			log.Printf("🗑️ Cleaned up inactive source: %s (ID: %s, last seen: %v)",
-				source.SafeString, id, source.LastSeen)
+			r.logger.With("id", id).
+				With("safe", source.SafeString).
+				With("last_seen", source.LastSeen).
+				Info("Cleaned up inactive source")
 		}
 	}
 
 	if removedCount > 0 {
-		log.Printf("✨ Cleaned up %d inactive audio sources", removedCount)
+		r.logger.With("count", removedCount).
+			Info("Cleaned up inactive audio sources")
 	}
 
 	return removedCount
@@ -419,7 +518,8 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 		return r.validateAudioDevice(connectionString)
 	default:
 		// Unknown types are allowed but logged
-		log.Printf("⚠️ Unknown source type for validation: %v", sourceType)
+		// Unknown types are allowed but logged
+		r.logger.Warn("Unknown source type for validation", "type", sourceType)
 		return nil
 	}
 }
@@ -462,9 +562,11 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 	}
 
 	// Check for absolute paths trying to access system directories
+	// Use exact match or proper path segment prefix to avoid false positives
 	systemDirs := []string{"/etc", "/sys", "/proc", "/dev", "/boot"}
 	for _, dir := range systemDirs {
-		if strings.HasPrefix(cleanPath, dir) {
+		// Check for exact match or true path segment prefix
+		if cleanPath == dir || strings.HasPrefix(cleanPath, dir+string(filepath.Separator)) {
 			return fmt.Errorf("access to system directory '%s' not allowed", dir)
 		}
 	}
@@ -506,30 +608,26 @@ func (r *AudioSourceRegistry) validateAudioDevice(device string) error {
 }
 
 // GetSourceStats returns summary statistics
-func (r *AudioSourceRegistry) GetSourceStats() map[string]interface{} {
+func (r *AudioSourceRegistry) GetSourceStats() SourceStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	stats := map[string]interface{}{
-		"total_sources":  len(r.sources),
-		"active_sources": 0,
-		"rtsp_sources":   0,
-		"device_sources": 0,
-		"file_sources":   0,
+	stats := SourceStats{
+		Total: len(r.sources),
 	}
 
 	for _, source := range r.sources {
 		if source.IsActive {
-			stats["active_sources"] = stats["active_sources"].(int) + 1
+			stats.Active++
 		}
 
 		switch source.Type {
 		case SourceTypeRTSP:
-			stats["rtsp_sources"] = stats["rtsp_sources"].(int) + 1
+			stats.RTSP++
 		case SourceTypeAudioCard:
-			stats["device_sources"] = stats["device_sources"].(int) + 1
+			stats.Device++
 		case SourceTypeFile:
-			stats["file_sources"] = stats["file_sources"].(int) + 1
+			stats.File++
 		case SourceTypeUnknown:
 			// Unknown sources shouldn't normally exist, but handle for completeness
 			// These would be sources that failed type detection
@@ -553,11 +651,12 @@ func (r *AudioSourceRegistry) sanitizeConnectionString(conn string, sourceType S
 	}
 }
 
-// generateID generates a new unique source ID
+// generateID generates a new unique source ID using UUID
 // IMPORTANT: This method is not thread-safe and must be called with r.mu held
 func (r *AudioSourceRegistry) generateID(sourceType SourceType) string {
-	r.idCounter++
-	return fmt.Sprintf("%s_%03d", sourceType, r.idCounter)
+	// Generate UUID and take first 8 characters for brevity
+	id := uuid.New().String()[:8]
+	return fmt.Sprintf("%s_%s", sourceType, id)
 }
 
 func (r *AudioSourceRegistry) generateDisplayName(source *AudioSource) string {
@@ -566,42 +665,127 @@ func (r *AudioSourceRegistry) generateDisplayName(source *AudioSource) string {
 		// Use SafeString (sanitized URL) as display name
 		return source.SafeString
 	case SourceTypeAudioCard:
-		// Parse ALSA device string to friendly name
-		return r.parseALSADeviceName(source.SafeString)
+		// Parse device string based on OS
+		return r.parseAudioDeviceName(source.SafeString)
 	case SourceTypeFile:
-		return fmt.Sprintf("Audio File %d", r.idCounter)
+		// Use filename without path
+		if source.SafeString != "" {
+			return fmt.Sprintf("Audio File: %s", filepath.Base(source.SafeString))
+		}
+		return "Audio File"
 	default:
-		return fmt.Sprintf("Audio Source %d", r.idCounter)
+		return "Audio Source"
 	}
 }
 
-// parseALSADeviceName converts ALSA device strings to user-friendly names
-func (r *AudioSourceRegistry) parseALSADeviceName(deviceString string) string {
+// parseAudioDeviceName converts device strings to user-friendly names based on OS
+func (r *AudioSourceRegistry) parseAudioDeviceName(deviceString string) string {
+	switch runtime.GOOS {
+	case "linux":
+		return r.parseLinuxDeviceName(deviceString)
+	case "darwin":
+		return r.parseDarwinDeviceName(deviceString)
+	case "windows":
+		return r.parseWindowsDeviceName(deviceString)
+	default:
+		// Fallback for unknown OS
+		return fmt.Sprintf("Audio Device (%s)", deviceString)
+	}
+}
+
+// parseLinuxDeviceName converts ALSA device strings to user-friendly names
+func (r *AudioSourceRegistry) parseLinuxDeviceName(deviceString string) string {
 	// Handle common simple cases first
 	switch deviceString {
 	case "default":
 		return "Default Audio Device"
 	case "malgo":
 		// Legacy malgo usage - use generic name
-		return fmt.Sprintf("Audio Device %d", r.idCounter)
+		return "Audio Device"
 	}
 
 	// Parse hw:CARD=Device,DEV=0 format
 	if strings.HasPrefix(deviceString, "hw:") {
-		return r.parseHWDeviceString(deviceString)
+		return r.parseLinuxHWDeviceString(deviceString)
 	}
 
 	// Parse plughw:CARD,DEV format  
 	if strings.HasPrefix(deviceString, "plughw:") {
-		return r.parsePlugHWDeviceString(deviceString)
+		return r.parseLinuxPlugHWDeviceString(deviceString)
 	}
 
 	// Fallback for unknown formats
 	return fmt.Sprintf("Audio Device (%s)", deviceString)
 }
 
-// parseHWDeviceString parses hardware device strings like "hw:CARD=Device,DEV=0"
-func (r *AudioSourceRegistry) parseHWDeviceString(deviceString string) string {
+// parseDarwinDeviceName converts macOS Core Audio device strings to user-friendly names
+func (r *AudioSourceRegistry) parseDarwinDeviceName(deviceString string) string {
+	// Common macOS audio device patterns
+	switch deviceString {
+	case "default":
+		return "Default Audio Device"
+	case "Built-in Microphone":
+		return "Built-in Microphone"
+	case "Built-in Output":
+		return "Built-in Output"
+	}
+	
+	// Check for common patterns
+	if strings.Contains(deviceString, "USB") {
+		return deviceString // USB devices usually have descriptive names
+	}
+	
+	if strings.Contains(deviceString, "Aggregate") {
+		return "Aggregate Device"
+	}
+	
+	if strings.Contains(deviceString, "Multi-Output") {
+		return "Multi-Output Device"
+	}
+	
+	// Return as-is for other cases (Core Audio names are usually descriptive)
+	return deviceString
+}
+
+// parseWindowsDeviceName converts Windows audio device strings to user-friendly names
+func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string {
+	// Common Windows audio device patterns
+	if deviceString == "default" {
+		return "Default Audio Device"
+	}
+	
+	// Windows WASAPI patterns
+	if strings.HasPrefix(deviceString, "wasapi:") {
+		// Remove wasapi: prefix and return the device name
+		name := strings.TrimPrefix(deviceString, "wasapi:")
+		if name != "" {
+			return name
+		}
+	}
+	
+	// Windows DirectSound patterns
+	if strings.HasPrefix(deviceString, "dsound:") {
+		name := strings.TrimPrefix(deviceString, "dsound:")
+		if name != "" {
+			return fmt.Sprintf("DirectSound: %s", name)
+		}
+	}
+	
+	// Check for GUID patterns (Windows device IDs)
+	if strings.Contains(deviceString, "{") && strings.Contains(deviceString, "}") {
+		// Extract device name if present before the GUID
+		if idx := strings.Index(deviceString, "{"); idx > 0 {
+			return strings.TrimSpace(deviceString[:idx])
+		}
+		return "Audio Device"
+	}
+	
+	// Return as-is for other cases
+	return deviceString
+}
+
+// parseLinuxHWDeviceString parses hardware device strings like "hw:CARD=Device,DEV=0"
+func (r *AudioSourceRegistry) parseLinuxHWDeviceString(deviceString string) string {
 	// Remove "hw:" prefix
 	params := strings.TrimPrefix(deviceString, "hw:")
 	
@@ -631,8 +815,8 @@ func (r *AudioSourceRegistry) parseHWDeviceString(deviceString string) string {
 	return fmt.Sprintf("Audio Device (%s)", deviceString)
 }
 
-// parsePlugHWDeviceString parses plugin hardware strings like "plughw:0,0"
-func (r *AudioSourceRegistry) parsePlugHWDeviceString(deviceString string) string {
+// parseLinuxPlugHWDeviceString parses plugin hardware strings like "plughw:0,0"
+func (r *AudioSourceRegistry) parseLinuxPlugHWDeviceString(deviceString string) string {
 	// Remove "plughw:" prefix
 	params := strings.TrimPrefix(deviceString, "plughw:")
 	

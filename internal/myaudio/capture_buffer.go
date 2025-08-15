@@ -238,6 +238,10 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 	}
 
 	captureBuffers[source] = cb
+	
+	// Acquire reference to this source
+	registry := GetRegistry()
+	registry.AcquireSourceReference(source)
 
 	// Record successful allocation metrics
 	if m := getCaptureMetrics(); m != nil {
@@ -268,17 +272,12 @@ func RemoveCaptureBuffer(source string) error {
 	delete(captureBuffers, sourceID)
 	cbMutex.Unlock() // Release lock before calling registry
 	
-	// Check if analysis buffer exists (safe to call without holding cbMutex)
-	hasAnalysisBuffer := AnalysisBufferExists(sourceID)
-	
-	// Only remove from registry if no other buffer type is using this source
-	if !hasAnalysisBuffer {
-		registry := GetRegistry()
-		if err := registry.RemoveSource(sourceID); err != nil {
-			// Log but don't fail - buffer removal succeeded
-			if !strings.Contains(err.Error(), "not found") {
-				log.Printf("⚠️ Failed to remove source from registry: %v", err)
-			}
+	// Release reference to this source - registry will auto-remove if count reaches zero
+	registry := GetRegistry()
+	if err := registry.ReleaseSourceReference(sourceID); err != nil {
+		// Log but don't fail - buffer removal succeeded
+		if !errors.Is(err, ErrSourceNotFound) {
+			log.Printf("⚠️ Failed to release source reference: %v", err)
 		}
 	}
 	

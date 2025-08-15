@@ -3,16 +3,28 @@ package myaudio
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
+	
+	"github.com/tphakala/birdnet-go/internal/logging"
 )
+
+func getTestLogger() *slog.Logger {
+	logger := logging.ForService("test")
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return logger
+}
 
 func TestSourceRegistration(t *testing.T) {
 	// Create a fresh registry for testing
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
-		idCounter:     0,
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Test RTSP source registration
@@ -113,7 +125,8 @@ func TestSourceIDGeneration(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
-		idCounter:     0,
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Test auto-generated IDs
@@ -207,7 +220,8 @@ func TestSourceStats(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
-		idCounter:     0,
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Create sources of different types
@@ -217,13 +231,13 @@ func TestSourceStats(t *testing.T) {
 
 	stats := registry.GetSourceStats()
 
-	if stats["total_sources"] != 3 {
-		t.Errorf("Expected 3 total sources, got %v", stats["total_sources"])
+	if stats.Total != 3 {
+		t.Errorf("Expected 3 total sources, got %v", stats.Total)
 	}
-	if stats["rtsp_sources"] != 2 {
-		t.Errorf("Expected 2 RTSP sources, got %v", stats["rtsp_sources"])
+	if stats.RTSP != 2 {
+		t.Errorf("Expected 2 RTSP sources, got %v", stats.RTSP)
 	}
-	if stats["device_sources"] != 1 {
-		t.Errorf("Expected 1 device source, got %v", stats["device_sources"])
+	if stats.Device != 1 {
+		t.Errorf("Expected 1 device source, got %v", stats.Device)
 	}
 }
