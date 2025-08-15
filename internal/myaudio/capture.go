@@ -189,29 +189,45 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 
 // initializeBuffersForSource handles the initialization of analysis and capture buffers for a given source
 func initializeBuffersForSource(sourceID string) error {
+	// Migrate source ID to check if buffers exist
+	migratedID := MigrateExistingSourceToID(sourceID)
+	
 	var abExists bool
 
-	// Check if analysis buffer exists
+	// Check if analysis buffer exists using the migrated ID
 	abMutex.RLock()
-	_, abExists = analysisBuffers[sourceID]
+	_, abExists = analysisBuffers[migratedID]
 	abMutex.RUnlock()
 
 	// Initialize analysis buffer if it doesn't exist
+	// Pass the ORIGINAL sourceID since AllocateAnalysisBuffer does its own migration
 	if !abExists {
 		if err := AllocateAnalysisBuffer(conf.BufferSize*3, sourceID); err != nil {
 			return fmt.Errorf("failed to initialize analysis buffer: %w", err)
 		}
+	} else {
+		log.Printf("✅ Reusing existing analysis buffer for source: %s (ID: %s)", sourceID, migratedID)
 	}
 
+	// Check if capture buffer exists using the migrated ID
+	cbMutex.RLock()
+	_, cbExists := captureBuffers[migratedID]
+	cbMutex.RUnlock()
+
 	// Initialize capture buffer if needed
-	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
-		// Clean up the analysis buffer if we just created it and capture buffer init fails
-		if !abExists {
-			if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
-				log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
+	// Pass the ORIGINAL sourceID since AllocateCaptureBufferIfNeeded does its own migration
+	if !cbExists {
+		if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
+			// Clean up the analysis buffer if we just created it and capture buffer init fails
+			if !abExists {
+				if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
+					log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
+				}
 			}
+			return fmt.Errorf("failed to initialize capture buffer: %w", err)
 		}
-		return fmt.Errorf("failed to initialize capture buffer: %w", err)
+	} else {
+		log.Printf("✅ Reusing existing capture buffer for source: %s (ID: %s)", sourceID, migratedID)
 	}
 
 	return nil
