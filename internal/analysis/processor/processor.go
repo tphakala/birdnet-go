@@ -346,8 +346,19 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 	for _, result := range item.Results {
 		// Parse and validate species information
 		scientificName, commonName, speciesCode, speciesLowercase := p.parseAndValidateSpecies(result, item)
-		if scientificName == "" && commonName == "" {
-			continue // Skip invalid species
+		// Skip if either scientific or common name is missing (partial/invalid parsing)
+		if scientificName == "" || commonName == "" {
+			if p.Settings.Debug {
+				GetLogger().Debug("Skipping partially parsed species",
+					"scientific_name", scientificName,
+					"common_name", commonName,
+					"species_code", speciesCode,
+					"species_lowercase", speciesLowercase,
+					"original_species", result.Species,
+					"confidence", result.Confidence,
+					"operation", "validate_species")
+			}
+			continue // Skip invalid or partially parsed species
 		}
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
@@ -384,8 +395,8 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdn
 	// Use BirdNET's EnrichResultWithTaxonomy to get species information
 	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
 
-	// Skip processing if we couldn't parse the species properly
-	if commonName == "" && scientificName == "" {
+	// Skip processing if we couldn't parse the species properly (either name missing)
+	if commonName == "" || scientificName == "" {
 		if p.Settings.Debug {
 			GetLogger().Debug("Skipping species with invalid format",
 				"species", result.Species,

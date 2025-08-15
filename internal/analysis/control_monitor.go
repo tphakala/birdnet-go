@@ -204,7 +204,10 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	}
 	
 	// Perform log deduplicator cleanup when range filter is rebuilt
-	// This helps prevent memory growth over time
+	// This coupling is for practicality - we wanted to avoid creating new goroutines
+	// and the range filter rebuild happens periodically, making it a convenient hook
+	// for maintenance tasks. Future maintainers: this is just opportunistic cleanup,
+	// not a functional requirement of range filter rebuilding.
 	if cm.proc != nil {
 		// Clean entries older than 1 hour
 		cm.proc.CleanupLogDeduplicator(time.Hour)

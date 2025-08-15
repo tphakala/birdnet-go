@@ -113,16 +113,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 
 	// Clean up any leftover HLS streaming files from previous runs
 	if err := cleanupHLSStreamingFiles(); err != nil {
-		// Add structured logging
-		GetLogger().Warn("Failed to clean up HLS streaming files",
-			"error", err,
-			"operation", "cleanup_hls_files")
-		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+		logHLSCleanup(err)
 	} else {
-		// Add structured logging
-		GetLogger().Info("Cleaned up leftover HLS streaming files",
-			"operation", "cleanup_hls_files")
-		log.Println("🧹 Cleaned up leftover HLS streaming files")
+		logHLSCleanup(nil)
 	}
 
 	// Initialize occurrence monitor to filter out repeated observations.
@@ -1401,6 +1394,22 @@ func cleanupHLSStreamingFiles() error {
 	}
 
 	return nil
+}
+
+// logHLSCleanup logs the result of HLS cleanup operation consistently
+func logHLSCleanup(err error) {
+	if err != nil {
+		// Add structured logging
+		GetLogger().Warn("Failed to clean up HLS streaming files",
+			"error", err,
+			"operation", "cleanup_hls_files")
+		log.Printf("⚠️ Warning: Failed to clean up HLS streaming files: %v", err)
+	} else {
+		// Add structured logging
+		GetLogger().Info("Cleaned up leftover HLS streaming files",
+			"operation", "cleanup_hls_files")
+		log.Println("🧹 Cleaned up leftover HLS streaming files")
+	}
 }
 
 // initializeBackupSystem sets up the backup manager and scheduler.
