@@ -545,7 +545,7 @@ func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase st
 			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
 			"source", item.Source,
 			"operation", "dog_bark_filter")
-		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
+		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, p.getDisplayNameForSource(item.Source))
 		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source] = item.StartTime
 		p.detectionMutex.Unlock()
@@ -565,7 +565,7 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
 			"source", item.Source,
 			"operation", "privacy_filter")
-		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
+		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, p.getDisplayNameForSource(item.Source))
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
 		p.detectionMutex.Lock()
@@ -700,7 +700,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 		"has_results", len(item.Detection.Results) > 0,
 		"operation", "approve_detection")
 	log.Printf("Approving detection of %s from source %s, matched %d times\n",
-		species, item.Source, item.Count)
+		species, p.getDisplayNameForSource(item.Source), item.Count)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
@@ -771,7 +771,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 						"count", item.Count,
 						"operation", "discard_detection")
 					log.Printf("Discarding detection of %s from source %s due to %s\n",
-							species, item.Source, reason)
+							species, p.getDisplayNameForSource(item.Source), reason)
 						delete(p.pendingDetections, species)
 						continue
 					}
@@ -888,6 +888,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			Settings:          p.Settings,
 			EventTracker:      p.GetEventTracker(),
 			NewSpeciesTracker: tracker,
+			processor:         p, // Add processor reference for source name resolution
 			Note:              detection.Note,
 			Results:           detection.Results,
 			Ds:                p.Ds})
@@ -1094,6 +1095,17 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 			"operation", "log_dedup_cleanup")
 	}
 	return removed
+}
+
+// getDisplayNameForSource converts a source ID to user-friendly DisplayName
+// Falls back to source ID if lookup fails (for debug/technical contexts)
+func (p *Processor) getDisplayNameForSource(sourceID string) string {
+	registry := myaudio.GetRegistry()
+	if source, exists := registry.GetSourceByID(sourceID); exists {
+		return source.DisplayName
+	}
+	// Fallback to source ID if not found in registry
+	return sourceID
 }
 
 // Shutdown gracefully stops all processor components

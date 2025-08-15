@@ -563,12 +563,120 @@ func (r *AudioSourceRegistry) generateID(sourceType SourceType) string {
 func (r *AudioSourceRegistry) generateDisplayName(source *AudioSource) string {
 	switch source.Type {
 	case SourceTypeRTSP:
-		return fmt.Sprintf("RTSP Camera %d", r.idCounter)
+		// Use SafeString (sanitized URL) as display name
+		return source.SafeString
 	case SourceTypeAudioCard:
-		return fmt.Sprintf("Audio Device %d", r.idCounter)
+		// Parse ALSA device string to friendly name
+		return r.parseALSADeviceName(source.SafeString)
 	case SourceTypeFile:
 		return fmt.Sprintf("Audio File %d", r.idCounter)
 	default:
 		return fmt.Sprintf("Audio Source %d", r.idCounter)
 	}
+}
+
+// parseALSADeviceName converts ALSA device strings to user-friendly names
+func (r *AudioSourceRegistry) parseALSADeviceName(deviceString string) string {
+	// Handle common simple cases first
+	switch deviceString {
+	case "default":
+		return "Default Audio Device"
+	case "malgo":
+		// Legacy malgo usage - use generic name
+		return fmt.Sprintf("Audio Device %d", r.idCounter)
+	}
+
+	// Parse hw:CARD=Device,DEV=0 format
+	if strings.HasPrefix(deviceString, "hw:") {
+		return r.parseHWDeviceString(deviceString)
+	}
+
+	// Parse plughw:CARD,DEV format  
+	if strings.HasPrefix(deviceString, "plughw:") {
+		return r.parsePlugHWDeviceString(deviceString)
+	}
+
+	// Fallback for unknown formats
+	return fmt.Sprintf("Audio Device (%s)", deviceString)
+}
+
+// parseHWDeviceString parses hardware device strings like "hw:CARD=Device,DEV=0"
+func (r *AudioSourceRegistry) parseHWDeviceString(deviceString string) string {
+	// Remove "hw:" prefix
+	params := strings.TrimPrefix(deviceString, "hw:")
+	
+	// Split by comma to get parameters
+	parts := strings.Split(params, ",")
+	
+	var cardName string
+	var devNum string
+	
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "CARD=") {
+			cardName = strings.TrimPrefix(part, "CARD=")
+		} else if strings.HasPrefix(part, "DEV=") {
+			devNum = strings.TrimPrefix(part, "DEV=")
+		}
+	}
+	
+	// If we extracted card name and device number
+	if cardName != "" && devNum != "" {
+		// Try to resolve the card name to a friendly name
+		friendlyCardName := r.resolveFriendlyCardName(cardName)
+		return fmt.Sprintf("%s #%s", friendlyCardName, devNum)
+	}
+	
+	// Fallback if parsing failed
+	return fmt.Sprintf("Audio Device (%s)", deviceString)
+}
+
+// parsePlugHWDeviceString parses plugin hardware strings like "plughw:0,0"
+func (r *AudioSourceRegistry) parsePlugHWDeviceString(deviceString string) string {
+	// Remove "plughw:" prefix
+	params := strings.TrimPrefix(deviceString, "plughw:")
+	
+	// Split by comma to get card and device numbers
+	parts := strings.Split(params, ",")
+	
+	if len(parts) >= 2 {
+		cardNum := strings.TrimSpace(parts[0])
+		devNum := strings.TrimSpace(parts[1])
+		return fmt.Sprintf("Audio Card %s Device %s", cardNum, devNum)
+	}
+	
+	// Fallback
+	return fmt.Sprintf("Audio Device (%s)", deviceString)
+}
+
+// resolveFriendlyCardName maps ALSA card identifiers to friendly names
+func (r *AudioSourceRegistry) resolveFriendlyCardName(cardID string) string {
+	// Common ALSA card ID to friendly name mappings
+	friendlyNames := map[string]string{
+		"Device":         "USB Audio Device",
+		"PCH":           "HDA Intel PCH", 
+		"HDMI":          "HDMI Audio",
+		"USB":           "USB Audio",
+		"Headset":       "USB Headset",
+		"Webcam":        "USB Webcam",
+		"Microphone":    "USB Microphone",
+		"Speaker":       "USB Speaker",
+	}
+	
+	// Look for exact match first
+	if friendlyName, exists := friendlyNames[cardID]; exists {
+		return friendlyName
+	}
+	
+	// Look for partial matches (case insensitive)
+	cardIDLower := strings.ToLower(cardID)
+	for key, value := range friendlyNames {
+		if strings.Contains(cardIDLower, strings.ToLower(key)) {
+			return value
+		}
+	}
+	
+	// If no friendly mapping found, use the card ID as-is
+	// This handles cases where the card ID is already descriptive
+	return cardID
 }

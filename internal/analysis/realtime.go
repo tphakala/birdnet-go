@@ -1532,7 +1532,16 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	var sources []string
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if len(settings.Realtime.RTSP.URLs) > 0 {
-			sources = settings.Realtime.RTSP.URLs
+			// Register RTSP sources in the registry and get their source IDs
+			myaudio.RegisterExistingRTSPSources(settings.Realtime.RTSP.URLs)
+			
+			// Get the source IDs from the registry instead of using raw URLs
+			registry := myaudio.GetRegistry()
+			for _, url := range settings.Realtime.RTSP.URLs {
+				if source, exists := registry.GetSourceByConnection(url); exists {
+					sources = append(sources, source.ID)
+				}
+			}
 		}
 		if settings.Realtime.Audio.Source != "" {
 			// We'll add malgo to sources only if device initialization succeeds

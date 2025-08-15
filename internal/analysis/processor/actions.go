@@ -47,6 +47,7 @@ type DatabaseAction struct {
 	Results           []datastore.Results
 	EventTracker      *EventTracker
 	NewSpeciesTracker *NewSpeciesTracker // Add reference to new species tracker
+	processor         *Processor         // Add reference to processor for source name resolution
 	Description       string
 	mu                sync.Mutex // Protect concurrent access to Note and Results
 }
@@ -303,11 +304,14 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
+	// Convert source ID to DisplayName for user-facing notifications
+	displayLocation := a.processor.getDisplayNameForSource(a.Note.Source)
+	
 	detectionEvent, err := events.NewDetectionEvent(
 		a.Note.CommonName,
 		a.Note.ScientificName,
 		float64(a.Note.Confidence),
-		a.Note.Source,
+		displayLocation,
 		isNewSpecies,
 		daysSinceFirstSeen,
 	)

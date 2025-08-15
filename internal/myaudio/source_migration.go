@@ -45,7 +45,7 @@ func RegisterExistingRTSPSources(rtspURLs []string) {
 		
 		config := SourceConfig{
 			ID:          fmt.Sprintf("rtsp_%03d", i+1),
-			DisplayName: fmt.Sprintf("RTSP Camera %d", i+1),
+			DisplayName: "", // Let auto-generation use SafeString
 			Type:        SourceTypeRTSP,
 		}
 		
