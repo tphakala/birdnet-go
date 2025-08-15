@@ -311,7 +311,158 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
 	}
 
-	// Sync species tracker if needed (non-blocking, rate-limited)
+	// Sync species tracker if needed
+	p.syncSpeciesTrackerIfNeeded()
+
+	// Process each result in item.Results
+	for _, result := range item.Results {
+		// Parse and validate species information
+		scientificName, commonName, speciesCode, speciesLowercase := p.parseAndValidateSpecies(result, item)
+		if scientificName == "" && commonName == "" {
+			continue // Skip invalid species
+		}
+
+		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
+		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
+		p.handleDogDetection(item, speciesLowercase, result)
+		p.handleHumanDetection(item, speciesLowercase, result)
+
+		// Determine confidence threshold and check filters
+		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
+		
+		// Check if detection should be filtered
+		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source)
+		if shouldSkip {
+			continue
+		}
+
+		// Add species to dynamic thresholds if enabled and passed filters
+		if p.Settings.Realtime.DynamicThreshold.Enabled {
+			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
+		}
+
+		// Create the detection
+		detection := p.createDetection(item, result, scientificName, commonName, speciesCode)
+		detections = append(detections, detection)
+	}
+
+	return detections
+}
+
+// parseAndValidateSpecies parses species information and validates it
+func (p *Processor) parseAndValidateSpecies(result datastore.Results, item *birdnet.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
+	// Use BirdNET's EnrichResultWithTaxonomy to get species information
+	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
+
+	// Skip processing if we couldn't parse the species properly
+	if commonName == "" && scientificName == "" {
+		if p.Settings.Debug {
+			GetLogger().Debug("Skipping species with invalid format",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"operation", "species_format_validation")
+			log.Printf("Skipping species with invalid format: %s", result.Species)
+		}
+		return "", "", "", ""
+	}
+
+	// Log placeholder taxonomy codes if using custom model
+	if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
+		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
+			GetLogger().Debug("Using placeholder taxonomy code",
+				"taxonomy_code", speciesCode,
+				"scientific_name", scientificName,
+				"common_name", commonName,
+				"operation", "taxonomy_code_assignment")
+			log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
+		}
+	}
+
+	// Convert species to lowercase for case-insensitive comparison
+	speciesLowercase = strings.ToLower(commonName)
+	if speciesLowercase == "" && scientificName != "" {
+		speciesLowercase = strings.ToLower(scientificName)
+	}
+
+	return
+}
+
+// shouldFilterDetection checks if a detection should be filtered out
+func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, speciesLowercase string, baseThreshold float32, source string) (shouldFilter bool, confidenceThreshold float32) {
+	// Check human detection privacy filter
+	if strings.Contains(strings.ToLower(commonName), "human") && result.Confidence > baseThreshold {
+		return true, 0 // Filter out human detections for privacy
+	}
+
+	// Determine confidence threshold
+	if p.Settings.Realtime.DynamicThreshold.Enabled {
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold)
+	} else {
+		confidenceThreshold = baseThreshold
+	}
+
+	// Check confidence threshold
+	if result.Confidence <= confidenceThreshold {
+		if p.Settings.Debug {
+			GetLogger().Debug("Detection filtered out due to low confidence",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"threshold", confidenceThreshold,
+				"source", source,
+				"operation", "confidence_filter")
+		}
+		return true, confidenceThreshold
+	}
+
+	// Check species inclusion filter
+	if !p.Settings.IsSpeciesIncluded(result.Species) {
+		if p.Settings.Debug {
+			GetLogger().Debug("Species not on included list",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"operation", "species_inclusion_filter")
+			log.Printf("Species not on included list: %s\n", result.Species)
+		}
+		return true, confidenceThreshold
+	}
+
+	return false, confidenceThreshold
+}
+
+// createDetection creates a detection object with all necessary information
+func (p *Processor) createDetection(item *birdnet.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
+	// Create file name for audio clip
+	clipName := p.generateClipName(scientificName, result.Confidence)
+
+	// Set begin and end time for note
+	beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
+
+	// Create the note
+	note := p.NewWithSpeciesInfo(
+		beginTime, endTime,
+		scientificName, commonName, speciesCode,
+		float64(result.Confidence),
+		item.Source, clipName,
+		item.ElapsedTime)
+
+	// Update species tracker if enabled
+	p.speciesTrackerMu.RLock()
+	tracker := p.NewSpeciesTracker
+	p.speciesTrackerMu.RUnlock()
+
+	if tracker != nil {
+		tracker.UpdateSpecies(scientificName, item.StartTime)
+	}
+
+	return Detections{
+		pcmData3s: item.PCMdata,
+		Note:      note,
+		Results:   item.Results,
+	}
+}
+
+// syncSpeciesTrackerIfNeeded syncs the species tracker if conditions are met
+func (p *Processor) syncSpeciesTrackerIfNeeded() {
 	p.speciesTrackerMu.RLock()
 	tracker := p.NewSpeciesTracker
 	p.speciesTrackerMu.RUnlock()
@@ -323,150 +474,15 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 			p.lastSyncAttempt = time.Now()
 			go func() {
 				if err := tracker.SyncIfNeeded(); err != nil {
-					// Add structured logging
-				GetLogger().Error("Failed to sync species tracker",
-					"error", err,
-					"operation", "species_tracker_sync")
-				log.Printf("Failed to sync species tracker: %v", err)
+					GetLogger().Error("Failed to sync species tracker",
+						"error", err,
+						"operation", "species_tracker_sync")
+					log.Printf("Failed to sync species tracker: %v", err)
 				}
 			}()
 		}
 		p.syncMutex.Unlock()
 	}
-
-	// Process each result in item.Results
-	for _, result := range item.Results {
-		var confidenceThreshold float32
-
-		// Use BirdNET's EnrichResultWithTaxonomy instead of ParseSpeciesString
-		// to ensure we get the correct species code from the taxonomy map
-		scientificName, commonName, speciesCode := p.Bn.EnrichResultWithTaxonomy(result.Species)
-
-		// Skip processing if we couldn't parse the species properly
-		if commonName == "" && scientificName == "" {
-			if p.Settings.Debug {
-				// Add structured logging
-				GetLogger().Debug("Skipping species with invalid format",
-					"species", result.Species,
-					"confidence", result.Confidence,
-					"operation", "species_format_validation")
-				log.Printf("Skipping species with invalid format: %s", result.Species)
-			}
-			continue
-		}
-
-		// If using a custom model and the species doesn't have a taxonomy code,
-		// a placeholder code may have been generated. Log this if in debug mode.
-		if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
-			// Check if the code looks like a placeholder (has the pattern XX or similar followed by 6 hex chars)
-			if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
-				// Add structured logging
-			GetLogger().Debug("Using placeholder taxonomy code",
-				"taxonomy_code", speciesCode,
-				"scientific_name", scientificName,
-				"common_name", commonName,
-				"operation", "taxonomy_code_assignment")
-			log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
-			}
-		}
-
-		// Convert species to lowercase for case-insensitive comparison
-		speciesLowercase := strings.ToLower(commonName)
-
-		// Fall back to using scientific name if common name is empty
-		if speciesLowercase == "" && scientificName != "" {
-			speciesLowercase = strings.ToLower(scientificName)
-		}
-
-		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
-		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(item, speciesLowercase, result)
-		p.handleHumanDetection(item, speciesLowercase, result)
-
-		// Determine base confidence threshold
-		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
-
-		// If result is human and detection exceeds base threshold, discard it
-		// due to privacy reasons we do not want human detections to reach actions stage
-		if strings.Contains(strings.ToLower(commonName), "human") &&
-			result.Confidence > baseThreshold {
-			continue
-		}
-
-		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			// Apply dynamic threshold adjustments
-			confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold)
-		} else {
-			// Use the base threshold if dynamic thresholds are disabled
-			confidenceThreshold = baseThreshold
-		}
-
-		// Skip processing if confidence is too low
-		if result.Confidence <= confidenceThreshold {
-			// Add structured logging for confidence filtering (only if debug is enabled)
-			if p.Settings.Debug {
-				GetLogger().Debug("Detection filtered out due to low confidence",
-					"species", result.Species,
-					"confidence", result.Confidence,
-					"threshold", confidenceThreshold,
-					"source", item.Source,
-					"operation", "confidence_filter")
-			}
-			continue
-		}
-
-		// Match against location-based filter
-		if !p.Settings.IsSpeciesIncluded(result.Species) {
-			if p.Settings.Debug {
-				// Add structured logging
-				GetLogger().Debug("Species not on included list",
-					"species", result.Species,
-					"confidence", result.Confidence,
-					"operation", "species_inclusion_filter")
-				log.Printf("Species not on included list: %s\n", result.Species)
-			}
-			continue
-		}
-
-		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			// Add species to dynamic thresholds if it passes the filter
-			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
-		}
-
-		// Create file name for audio clip
-		clipName := p.generateClipName(scientificName, result.Confidence)
-
-		// set begin and end time for note
-		// TODO: adjust end time based on detection pending delay
-		beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
-
-		// Use the new function to preserve the species code from the taxonomy lookup
-		note := p.NewWithSpeciesInfo(
-			beginTime, endTime,
-			scientificName, commonName, speciesCode,
-			float64(result.Confidence),
-			item.Source, clipName,
-			item.ElapsedTime)
-
-		// Update species tracker if enabled
-		p.speciesTrackerMu.RLock()
-		tracker := p.NewSpeciesTracker
-		p.speciesTrackerMu.RUnlock()
-
-		if tracker != nil {
-			// Update tracker with this detection (released lock to reduce contention)
-			tracker.UpdateSpecies(scientificName, item.StartTime)
-		}
-
-		// Detection passed all filters, process it
-		detections = append(detections, Detections{
-			pcmData3s: item.PCMdata,
-			Note:      note,
-			Results:   item.Results,
-		})
-	}
-
-	return detections
 }
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
