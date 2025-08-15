@@ -20,7 +20,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Processor represents the main processing unit for audio analysis.
@@ -61,17 +60,8 @@ type Processor struct {
 	backupScheduler interface{} // Use interface{} to avoid import cycle
 	backupMutex     sync.RWMutex
 
-	// Log deduplication fields
-	lastLogState    map[string]*LogState // Track last logged state per source
-	logStateMutex   sync.RWMutex         // Mutex to protect lastLogState map
-}
-
-// LogState tracks the last logged state for a source to prevent duplicate logging
-type LogState struct {
-	LastRawCount      int       // Last logged raw results count
-	LastFilteredCount int       // Last logged filtered detections count
-	LastLogTime       time.Time // Last time we logged for this source
-	FirstLog          bool      // Whether this is the first log for this source
+	// Log deduplication (extracted to separate type for SRP)
+	logDedup *LogDeduplicator // Handles log deduplication logic
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -122,10 +112,17 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
-		lastLogState:        make(map[string]*LogState), // Initialize log deduplication map
-		controlChan:         make(chan string, 10),       // Buffered channel to prevent blocking
-		JobQueue:            jobqueue.NewJobQueue(),      // Initialize the job queue
+		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
+		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
 	}
+
+	// Initialize log deduplicator with configuration
+	// This addresses separation of concerns by extracting deduplication logic
+	logConfig := DeduplicationConfig{
+		HealthCheckInterval: 60 * time.Second,
+		Enabled:             true, // Could be made configurable via settings
+	}
+	p.logDedup = NewLogDeduplicator(logConfig)
 
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
@@ -232,7 +229,7 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item *birdnet.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		"source", privacy.SanitizeRTSPUrls(item.Source),
+		"source", item.Source,
 		"start_time", item.StartTime,
 		"results_count", len(item.Results),
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
@@ -248,7 +245,7 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 	detectionResults := p.processResults(item)
 	
 	// Log processing results with deduplication to prevent spam
-	p.logDetectionResultsWithDeduplication(item.Source, len(item.Results), len(detectionResults))
+	p.logDetectionResults(item.Source, len(item.Results), len(detectionResults))
 
 	for i := 0; i < len(detectionResults); i++ {
 		detection := detectionResults[i]
@@ -282,7 +279,7 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 			GetLogger().Info("Created new pending detection",
 				"species", commonName,
 				"confidence", confidence,
-				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"source", item.Source,
 				"flush_deadline", item.StartTime.Add(delay),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
@@ -410,7 +407,7 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 				"species", result.Species,
 				"confidence", result.Confidence,
 				"threshold", confidenceThreshold,
-				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"source", item.Source,
 				"operation", "confidence_filter")
 			continue
 		}
@@ -477,7 +474,7 @@ func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase s
 		GetLogger().Info("Dog detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
-			"source", privacy.SanitizeRTSPUrls(item.Source),
+			"source", item.Source,
 			"operation", "dog_bark_filter")
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
 		p.detectionMutex.Lock()
@@ -495,7 +492,7 @@ func (p *Processor) handleHumanDetection(item *birdnet.Results, speciesLowercase
 		GetLogger().Info("Human detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
-			"source", privacy.SanitizeRTSPUrls(item.Source),
+			"source", item.Source,
 			"operation", "privacy_filter")
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
@@ -563,7 +560,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 			"species", item.Detection.Note.CommonName,
 			"count", item.Count,
 			"minimum_required", minDetections,
-			"source", privacy.SanitizeRTSPUrls(item.Source),
+			"source", item.Source,
 			"operation", "minimum_count_filter")
 		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
 	}
@@ -579,7 +576,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				"species", item.Detection.Note.CommonName,
 				"detection_time", item.FirstDetected,
 				"last_human_detection", lastHumanDetection,
-				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"source", item.Source,
 				"operation", "privacy_filter")
 			return true, "privacy filter"
 		}
@@ -606,7 +603,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				"species", item.Detection.Note.CommonName,
 				"detection_time", item.FirstDetected,
 				"last_dog_detection", lastDogDetection,
-				"source", privacy.SanitizeRTSPUrls(item.Source),
+				"source", item.Source,
 				"operation", "dog_bark_filter")
 			return true, "recent dog bark"
 		}
@@ -620,7 +617,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	// Add structured logging
 	GetLogger().Info("Approving detection",
 		"species", species,
-		"source", privacy.SanitizeRTSPUrls(item.Source),
+		"source", item.Source,
 		"match_count", item.Count,
 		"confidence", item.Detection.Results[0].Confidence,
 		"operation", "approve_detection")
@@ -691,7 +688,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 						// Add structured logging
 					GetLogger().Info("Discarding detection",
 						"species", species,
-						"source", privacy.SanitizeRTSPUrls(item.Source),
+						"source", item.Source,
 						"reason", reason,
 						"count", item.Count,
 						"operation", "discard_detection")
@@ -1096,5 +1093,21 @@ func (p *Processor) NewWithSpeciesInfo(
 		Sensitivity:    p.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration
 		ClipName:       clipName,                       // Name of the audio clip
 		ProcessingTime: elapsedTime,                    // Time taken to process the observation
+	}
+}
+
+// logDetectionResults logs detection processing results using the LogDeduplicator
+// to prevent repetitive logging while maintaining observability.
+func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
+	// Use the LogDeduplicator to determine if we should log
+	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
+	
+	if shouldLog {
+		GetLogger().Info("Detection processing results",
+			"source", source,
+			"raw_results_count", rawCount,
+			"filtered_detections_count", filteredCount,
+			"log_reason", reason,
+			"operation", "process_detections_summary")
 	}
 }

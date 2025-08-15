@@ -25,7 +25,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 type Action interface {
@@ -243,7 +242,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 			GetLogger().Error("Failed to read audio segment from buffer",
 				"error", err,
 				"species", a.Note.CommonName,
-				"source", privacy.SanitizeRTSPUrls(a.Note.Source),
+				"source", a.Note.Source,
 				"begin_time", a.Note.BeginTime,
 				"duration_seconds", 15,
 				"operation", "read_audio_segment")

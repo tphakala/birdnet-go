@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 var (
@@ -67,6 +68,10 @@ func ReturnFloat32Buffer(buffer []float32) {
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
 func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source string) error {
+	// Sanitize the source at entry point to remove any RTSP credentials
+	// This ensures all downstream code receives sanitized data
+	source = privacy.SanitizeRTSPUrls(source)
+	
 	// get current time to track processing time
 	predictStart := time.Now()
 

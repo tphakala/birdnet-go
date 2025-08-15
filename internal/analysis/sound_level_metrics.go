@@ -13,7 +13,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Package-level logger for sound level metrics
@@ -94,7 +93,7 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 		if logger := getMetricsLogger(); logger != nil {
 			logger.Debug("updating sound level metrics",
-				"source", privacy.SanitizeRTSPUrls(soundData.Source),
+				"source", soundData.Source,
 				"name", soundData.Name,
 				"timestamp", soundData.Timestamp,
 				"duration", soundData.Duration,
@@ -118,7 +117,7 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug && conf.Setting().Realtime.Audio.SoundLevel.DebugRealtimeLogging {
 			if logger := getMetricsLogger(); logger != nil {
 				logger.Debug("updated octave band metrics",
-					"source", privacy.SanitizeRTSPUrls(soundData.Source),
+					"source", soundData.Source,
 					"band", bandKey,
 					"min_db", bandData.Min,
 					"max_db", bandData.Max,
@@ -149,7 +148,7 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 			if logger := getMetricsLogger(); logger != nil {
 				logger.Debug("calculated overall sound level",
-					"source", privacy.SanitizeRTSPUrls(soundData.Source),
+					"source", soundData.Source,
 					"name", soundData.Name,
 					"overall_level_db", overallLevel,
 					"bands_averaged", len(soundData.OctaveBands))
@@ -165,7 +164,7 @@ func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observab
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 		if logger := getMetricsLogger(); logger != nil {
 			logger.Debug("sound level metrics update complete",
-				"source", privacy.SanitizeRTSPUrls(soundData.Source),
+				"source", soundData.Source,
 				"name", soundData.Name,
 				"processing_duration_seconds", processingDuration)
 		}

@@ -22,7 +22,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Constants for sound level monitoring
@@ -261,7 +260,7 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 			Category(errors.CategorySoundLevel).
 			Context("operation", "validate_fields").
 			Context("field", "name").
-			Context("source", privacy.SanitizeRTSPUrls(data.Source)).
+			Context("source", data.Source).
 			Build()
 	}
 
@@ -378,7 +377,7 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, 
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 					if logger := getSoundLevelLogger(); logger != nil {
 						logger.Debug("received sound level data",
-							"source", privacy.SanitizeRTSPUrls(soundData.Source),
+							"source", soundData.Source,
 							"name", soundData.Name,
 							"timestamp", soundData.Timestamp,
 							"duration", soundData.Duration,
@@ -389,7 +388,7 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, 
 				if err := publishSoundLevelToMQTT(soundData, proc); err != nil {
 					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
 						"error", err,
-						"source", privacy.SanitizeRTSPUrls(soundData.Source),
+						"source", soundData.Source,
 						"name", soundData.Name)
 				}
 			}
@@ -411,7 +410,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 		if settings.Realtime.Audio.SoundLevel.Debug {
 			if logger := getSoundLevelLogger(); logger != nil {
 				logger.Debug("sound level data validation failed",
-					"source", privacy.SanitizeRTSPUrls(soundData.Source),
+					"source", soundData.Source,
 					"error", err)
 			}
 		}
@@ -438,7 +437,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			Component("analysis.soundlevel").
 			Category(errors.CategorySoundLevel).
 			Context("operation", "marshal_compact_data").
-			Context("source", privacy.SanitizeRTSPUrls(soundData.Source)).
+			Context("source", soundData.Source).
 			Context("name", soundData.Name).
 			Context("octave_bands_count", len(compactData.Bands)).
 			Build()
@@ -459,7 +458,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 			Category(errors.CategorySoundLevel).
 			Context("operation", "publish_mqtt").
 			Context("topic", topic).
-			Context("source", privacy.SanitizeRTSPUrls(soundData.Source)).
+			Context("source", soundData.Source).
 			Context("name", soundData.Name).
 			Context("payload_size", len(jsonData)).
 			Context("timeout_seconds", 5).
@@ -481,7 +480,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 		if logger := getSoundLevelLogger(); logger != nil {
 			logger.Debug("published sound level data to MQTT",
 				"topic", topic,
-				"source", privacy.SanitizeRTSPUrls(soundData.Source),
+				"source", soundData.Source,
 				"name", soundData.Name,
 				"json_size", len(jsonData),
 				"octave_bands", len(soundData.OctaveBands),
@@ -557,7 +556,7 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 					if logger := getSoundLevelLogger(); logger != nil {
 						logger.Debug("MQTT publisher received sound level data",
-							"source", privacy.SanitizeRTSPUrls(soundData.Source),
+							"source", soundData.Source,
 							"name", soundData.Name,
 							"timestamp", soundData.Timestamp)
 					}
@@ -566,7 +565,7 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 					// Log with enhanced error (error already has telemetry context from publishSoundLevelToMQTT)
 					getSoundLevelLogger().Error("Failed to publish sound level data to MQTT",
 						"error", err,
-						"source", privacy.SanitizeRTSPUrls(soundData.Source),
+						"source", soundData.Source,
 						"name", soundData.Name)
 				}
 			}
@@ -601,7 +600,7 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 		if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 			if logger := getSoundLevelLogger(); logger != nil {
 				logger.Debug("sound level data validation failed for SSE",
-					"source", privacy.SanitizeRTSPUrls(soundData.Source),
+					"source", soundData.Source,
 					"error", err)
 			}
 		}
@@ -623,7 +622,7 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 			Component("realtime-analysis").
 			Category(errors.CategoryNetwork).
 			Context("operation", "broadcast_sound_level_sse").
-			Context("source", privacy.SanitizeRTSPUrls(soundData.Source)).
+			Context("source", soundData.Source).
 			Context("name", soundData.Name).
 			Context("bands_count", len(soundData.OctaveBands)).
 			Build()
@@ -638,7 +637,7 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 	if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 		if logger := getSoundLevelLogger(); logger != nil {
 			logger.Debug("successfully broadcast sound level data via SSE",
-				"source", privacy.SanitizeRTSPUrls(soundData.Source),
+				"source", soundData.Source,
 				"name", soundData.Name,
 				"bands_count", len(soundData.OctaveBands))
 		}
@@ -673,7 +672,7 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 					if logger := getSoundLevelLogger(); logger != nil {
 						logger.Debug("metrics publisher received sound level data",
-							"source", privacy.SanitizeRTSPUrls(soundData.Source),
+							"source", soundData.Source,
 							"name", soundData.Name,
 							"timestamp", soundData.Timestamp)
 					}
