@@ -128,9 +128,18 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// This addresses separation of concerns by extracting deduplication logic
 	healthCheckInterval := 60 * time.Second // default
 	
-	// Use settings if available
+	// Validate and use settings if available
 	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
-		healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
+		// Cap at reasonable maximum (1 hour) to prevent misconfiguration
+		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
+			healthCheckInterval = time.Hour
+			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
+				"requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds,
+				"capped_seconds", 3600,
+				"operation", "config_validation")
+		} else {
+			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
+		}
 	}
 	enabled := settings.Realtime.LogDeduplication.Enabled
 	
@@ -1058,6 +1067,22 @@ func (p *Processor) GetBackupScheduler() interface{} {
 	p.backupMutex.RLock()
 	defer p.backupMutex.RUnlock()
 	return p.backupScheduler
+}
+
+// CleanupLogDeduplicator removes stale log deduplication entries to prevent memory growth.
+// Returns the number of entries removed.
+func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
+	if p.logDedup == nil {
+		return 0
+	}
+	removed := p.logDedup.Cleanup(staleAfter)
+	if removed > 0 {
+		GetLogger().Debug("Cleaned stale log deduplication entries",
+			"removed_count", removed,
+			"stale_after", staleAfter,
+			"operation", "log_dedup_cleanup")
+	}
+	return removed
 }
 
 // Shutdown gracefully stops all processor components

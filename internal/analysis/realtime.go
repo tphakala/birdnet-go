@@ -221,10 +221,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize async services (event bus, notification workers, telemetry workers)
 	if err := telemetry.InitializeAsyncSystems(); err != nil {
 		// Add structured logging
-		GetLogger().Error("Failed to initialize async services",
+		GetLogger().Error("Failed to initialize critical async services (event bus, notifications, telemetry)",
 			"error", err,
 			"operation", "initialize_async_systems")
-		log.Printf("Error: Failed to initialize async services: %v", err)
+		log.Printf("Error: Failed to initialize critical async services: %v", err)
 		return errors.New(err).
 			Component("analysis.realtime").
 			Category(errors.CategorySystem).
@@ -728,6 +728,7 @@ func closeDataStore(store datastore.Interface) {
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
+// It also performs periodic cleanup of log deduplicator states to prevent memory growth.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	// Create a ticker that triggers every five minutes to perform cleanup
 	ticker := time.NewTicker(5 * time.Minute)

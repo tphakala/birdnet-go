@@ -177,15 +177,17 @@ func (a *LogAction) Execute(data interface{}) error {
 		// If an error occurs when logging to a file, wrap and return the error.
 		// Add structured logging
 		GetLogger().Error("Failed to log note to file",
+			"component", "analysis.processor.actions",
 			"error", err,
 			"species", a.Note.CommonName,
 			"confidence", a.Note.Confidence,
 			"clip_name", a.Note.ClipName,
 			"operation", "log_to_file")
-		log.Printf("❌ Failed to log note to file: %v", err)
+		log.Printf("❌ Failed to log note to file")
 	}
 	// Add structured logging for console output
 	GetLogger().Info("Detection logged",
+		"component", "analysis.processor.actions",
 		"species", a.Note.CommonName,
 		"confidence", a.Note.Confidence,
 		"time", a.Note.Time,
@@ -227,7 +229,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 			"confidence", a.Note.Confidence,
 			"clip_name", a.Note.ClipName,
 			"operation", "database_save")
-		log.Printf("❌ Failed to save note and results to database: %v", err)
+		log.Printf("❌ Failed to save note and results to database")
 		return err
 	}
 	
@@ -248,7 +250,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 				"begin_time", a.Note.BeginTime,
 				"duration_seconds", 15,
 				"operation", "read_audio_segment")
-			log.Printf("❌ Failed to read audio segment from buffer: %v", err)
+			log.Printf("❌ Failed to read audio segment from buffer")
 			return err
 		}
 
@@ -267,7 +269,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
 				"operation", "save_audio_clip")
-			log.Printf("❌ Failed to save audio clip: %v", err)
+			log.Printf("❌ Failed to save audio clip")
 			return err
 		}
 
@@ -359,7 +361,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 			"output_path", outputPath,
 			"clip_name", a.ClipName,
 			"operation", "create_directory")
-		log.Printf("❌ error creating directory for audio clip: %s\n", err)
+		log.Printf("❌ Error creating directory for audio clip")
 		return err
 	}
 
@@ -373,7 +375,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 				"clip_name", a.ClipName,
 				"format", "wav",
 				"operation", "save_wav")
-			log.Printf("❌ error saving audio clip to WAV: %s\n", err)
+			log.Printf("❌ Error saving audio clip to WAV")
 			return err
 		}
 	} else {
@@ -386,7 +388,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 				"clip_name", a.ClipName,
 				"format", a.Settings.Realtime.Audio.Export.Type,
 				"operation", "ffmpeg_export")
-			log.Printf("❌ error exporting audio clip with FFmpeg: %s\n", err)
+			log.Printf("❌ Error exporting audio clip with FFmpeg")
 			return err
 		}
 	}
@@ -416,6 +418,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		if a.Settings.Debug {
 			// Add structured logging
 			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
+				"component", "analysis.processor.actions",
 				"species", species,
 				"confidence", a.Note.Confidence,
 				"threshold", a.Settings.Realtime.Birdweather.Threshold,
@@ -452,6 +455,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		sanitizedErr := sanitizeError(err)
 		// Add structured logging
 		GetLogger().Error("Failed to upload to BirdWeather",
+			"component", "analysis.processor.actions",
 			"error", sanitizedErr,
 			"species", note.CommonName,
 			"scientific_name", note.ScientificName,
@@ -488,6 +492,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 	if a.Settings.Debug {
 		// Add structured logging
 		GetLogger().Debug("Successfully uploaded to BirdWeather",
+			"component", "analysis.processor.actions",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -513,6 +518,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Log slightly differently to indicate it's waiting for background reconnect
 		// Add structured logging
 		GetLogger().Warn("MQTT client not connected, skipping publish",
+			"component", "analysis.processor.actions",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -561,6 +567,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		if err != nil {
 			// Add structured logging
 			GetLogger().Warn("Error getting bird image from cache",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -572,6 +579,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Log if the cache is nil, maybe helpful for debugging setup issues
 		// Add structured logging
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
+			"component", "analysis.processor.actions",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"operation", "check_bird_image_cache")
@@ -582,19 +590,20 @@ func (a *MqttAction) Execute(data interface{}) error {
 	noteCopy := a.Note
 	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
 
-	// Wrap note with bird image
-	noteWithBirdImage := NoteWithBirdImage{Note: a.Note, BirdImage: birdImage}
+	// Wrap note with bird image (using sanitized copy)
+	noteWithBirdImage := NoteWithBirdImage{Note: noteCopy, BirdImage: birdImage}
 
 	// Create a JSON representation of the note
 	noteJson, err := json.Marshal(noteWithBirdImage)
 	if err != nil {
 		// Add structured logging
 		GetLogger().Error("Failed to marshal note to JSON",
+			"component", "analysis.processor.actions",
 			"error", err,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"operation", "json_marshal")
-		log.Printf("❌ Error marshalling note to JSON: %s\n", err)
+		log.Printf("❌ Error marshalling note to JSON")
 		return err
 	}
 
@@ -610,6 +619,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		sanitizedErr := sanitizeError(err)
 		// Add structured logging
 		GetLogger().Error("Failed to publish to MQTT",
+			"component", "analysis.processor.actions",
 			"error", sanitizedErr,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -643,6 +653,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 	if a.Settings.Debug {
 		// Add structured logging
 		GetLogger().Debug("Successfully published to MQTT",
+			"component", "analysis.processor.actions",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -702,6 +713,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			// Log warning but don't fail the SSE broadcast
 			// Add structured logging
 			GetLogger().Warn("Audio file not ready for SSE broadcast",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
@@ -717,7 +729,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			// Log warning but don't fail the SSE broadcast
 			// Add structured logging
 			GetLogger().Warn("Database ID not ready for SSE broadcast",
-				"component", "sse",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"note_id", a.Note.ID,
@@ -735,7 +747,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		if err != nil {
 			// Add structured logging
 			GetLogger().Warn("Error getting bird image from cache",
-				"component", "sse",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -747,7 +759,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		// Log if the cache is nil, maybe helpful for debugging setup issues
 		// Add structured logging
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
-			"component", "sse",
+			"component", "analysis.processor.actions",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"operation", "check_bird_image_cache")
@@ -765,6 +777,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		sanitizedErr := sanitizeError(err)
 		// Add structured logging
 		GetLogger().Error("Failed to broadcast via SSE",
+			"component", "analysis.processor.actions",
 			"error", sanitizedErr,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -793,6 +806,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 	if a.Settings.Debug {
 		// Add structured logging
 		GetLogger().Debug("Successfully broadcasted via SSE",
+			"component", "analysis.processor.actions",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -826,7 +840,7 @@ func (a *SSEAction) waitForAudioFile() error {
 				if a.Settings.Debug {
 					// Add structured logging
 				GetLogger().Debug("Audio file ready for SSE broadcast",
-					"component", "sse",
+					"component", "analysis.processor.actions",
 					"clip_name", a.Note.ClipName,
 					"file_size_bytes", info.Size(),
 					"species", a.Note.CommonName,
@@ -868,7 +882,7 @@ func (a *SSEAction) waitForDatabaseID() error {
 			if a.Settings.Debug {
 				// Add structured logging
 				GetLogger().Debug("Found database ID for SSE broadcast",
-					"component", "sse",
+					"component", "analysis.processor.actions",
 					"database_id", updatedNote.ID,
 					"species", a.Note.CommonName,
 					"scientific_name", a.Note.ScientificName,
