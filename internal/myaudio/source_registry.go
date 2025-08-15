@@ -494,18 +494,13 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 		return fmt.Errorf("connection string cannot be empty")
 	}
 
-	// Quick check for common safe patterns to avoid expensive validation
-	// This optimization helps for frequently used valid sources
+	// For audio devices, be more permissive since they're local
+	// and can have various formats depending on the system
 	if sourceType == SourceTypeAudioCard {
-		// Common audio devices are simple and safe
-		if connectionString == "default" || connectionString == "malgo" || strings.HasPrefix(connectionString, "hw:") {
-			if !strings.ContainsAny(connectionString, ";&|`$\n\r()") {
-				return r.validateAudioDevice(connectionString)
-			}
-		}
+		return r.validateAudioDevice(connectionString)
 	}
 
-	// Check for shell injection attempts - be strict for security
+	// For other types (RTSP, files), check for shell injection attempts - be strict for security
 	// Don't allow any shell metacharacters to prevent command injection
 	if strings.ContainsAny(connectionString, ";&|`$\n\r") ||
 		strings.Contains(connectionString, "$(") ||
@@ -585,37 +580,23 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 
 // validateAudioDevice validates audio device identifiers
 func (r *AudioSourceRegistry) validateAudioDevice(device string) error {
-	// Special case for legacy malgo identifier
-	if device == "malgo" {
-		return nil
+	// Just check that it's not empty
+	// We can't predict all possible device names across different systems
+	if device == "" {
+		return fmt.Errorf("audio device identifier cannot be empty")
 	}
 	
-	// Common audio device patterns
-	validPrefixes := []string{
-		"hw:", "plughw:", "default", "pulse", "alsa",
-		"sysdefault:", "dsnoop:",
+	// Only check for the most dangerous shell injection patterns
+	// Audio devices are local and users need flexibility
+	if strings.Contains(device, "$(") || 
+	   strings.Contains(device, "${") ||
+	   strings.Contains(device, "`") ||
+	   strings.Contains(device, "&&") ||
+	   strings.Contains(device, "||") ||
+	   strings.Contains(device, ";") && strings.Contains(device, "|") {
+		return fmt.Errorf("potentially dangerous pattern in audio device identifier")
 	}
-
-	isValid := false
-	for _, prefix := range validPrefixes {
-		if strings.HasPrefix(device, prefix) || device == "default" {
-			isValid = true
-			break
-		}
-	}
-
-	if !isValid {
-		// Check if it looks like a numeric device
-		// e.g., "0" or "1" for card numbers
-		if len(device) == 1 && device[0] >= '0' && device[0] <= '9' {
-			isValid = true
-		}
-	}
-
-	if !isValid {
-		return fmt.Errorf("invalid audio device identifier: %s", device)
-	}
-
+	
 	return nil
 }
 

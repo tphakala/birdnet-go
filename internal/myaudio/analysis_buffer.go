@@ -272,6 +272,14 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	// Auto-migrate legacy source identifiers to registry IDs
 	sourceID := MigrateExistingSourceToID(stream)
 	
+	// Get DisplayName for user-facing logs
+	displayName := stream // Default to stream if we can't get DisplayName
+	if registry := GetRegistry(); registry != nil {
+		if source, exists := registry.GetSourceByID(sourceID); exists {
+			displayName = source.DisplayName
+		}
+	}
+	
 	start := time.Now()
 
 	abMutex.RLock()
@@ -324,8 +332,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	if capacityUsed > warningCapacityThreshold {
 		warningCounter[sourceID]++
 		if warningCounter[sourceID]%32 == 1 {
-			log.Printf("⚠️ Analysis buffer for stream %s is %.2f%% full (used: %d/%d bytes)",
-				stream, capacityUsed*100, currentLength, capacity)
+			log.Printf("⚠️ Analysis buffer for %s is %.2f%% full (used: %d/%d bytes)",
+				displayName, capacityUsed*100, currentLength, capacity)
 		}
 
 		if m := getAnalysisMetrics(); m != nil && capacityUsed > 0.95 {
@@ -359,8 +367,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 
 			if n < len(data) {
 				// Partial write - log and record metrics
-				log.Printf("⚠️ Only wrote %d of %d bytes to buffer for stream %s (capacity: %d, free: %d)",
-					n, len(data), stream, capacity, ab.Free())
+				log.Printf("⚠️ Only wrote %d of %d bytes to buffer for %s (capacity: %d, free: %d)",
+					n, len(data), displayName, capacity, ab.Free())
 
 				if m := getAnalysisMetrics(); m != nil {
 					m.RecordBufferWrite("analysis", sourceID, "partial")
@@ -373,8 +381,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 		lastErr = err
 
 		// Log detailed buffer state
-		log.Printf("⚠️ Analysis buffer for stream %s has %d/%d bytes free (%d bytes used), tried to write %d bytes",
-			stream, ab.Free(), capacity, ab.Length(), len(data))
+		log.Printf("⚠️ Analysis buffer for %s has %d/%d bytes free (%d bytes used), tried to write %d bytes",
+			displayName, ab.Free(), capacity, ab.Length(), len(data))
 
 		// Record retry metrics
 		if m := getAnalysisMetrics(); m != nil {
@@ -386,9 +394,9 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 		}
 
 		if errors.Is(err, ringbuffer.ErrIsFull) {
-			log.Printf("⚠️ Analysis buffer for stream %s is full. Waiting before retry %d/%d", stream, retry+1, maxRetries)
+			log.Printf("⚠️ Analysis buffer for %s is full. Waiting before retry %d/%d", displayName, retry+1, maxRetries)
 		} else {
-			log.Printf("❌ Unexpected error writing to analysis buffer for stream %s: %v", stream, err)
+			log.Printf("❌ Unexpected error writing to analysis buffer for %s: %v", displayName, err)
 		}
 
 		// System resource utilization capture disabled to prevent disk space issues
@@ -399,8 +407,8 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	}
 
 	// If we've reached this point, we've failed all retries
-	log.Printf("❌ Failed to write to analysis buffer for stream %s after %d attempts. Dropping %d bytes of PCM data. Buffer state: capacity=%d, used=%d, free=%d",
-		stream, maxRetries, len(data), capacity, ab.Length(), ab.Free())
+	log.Printf("❌ Failed to write to analysis buffer for %s after %d attempts. Dropping %d bytes of PCM data. Buffer state: capacity=%d, used=%d, free=%d",
+		displayName, maxRetries, len(data), capacity, ab.Length(), ab.Free())
 
 	// Record data drop metrics
 	if m := getAnalysisMetrics(); m != nil {

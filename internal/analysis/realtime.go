@@ -1544,9 +1544,17 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			}
 		}
 		if settings.Realtime.Audio.Source != "" {
-			// We'll add malgo to sources only if device initialization succeeds
-			// This will be handled in CaptureAudio
-			sources = append(sources, "malgo")
+			// Register the audio device in the source registry and use its ID
+			// This ensures consistent UUID-based IDs like RTSP sources
+			registry := myaudio.GetRegistry()
+			source, err := registry.RegisterSource(settings.Realtime.Audio.Source, myaudio.SourceConfig{
+				Type: myaudio.SourceTypeAudioCard,
+			})
+			if err != nil {
+				log.Printf("⚠️  Failed to register audio device source: %v", err)
+			} else {
+				sources = append(sources, source.ID)
+			}
 		}
 
 		// Initialize buffers for all audio sources
