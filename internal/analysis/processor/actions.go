@@ -708,6 +708,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			// Log warning but don't fail the SSE broadcast
 			// Add structured logging
 			GetLogger().Warn("Database ID not ready for SSE broadcast",
+				"component", "sse",
 				"error", err,
 				"species", a.Note.CommonName,
 				"note_id", a.Note.ID,
@@ -725,6 +726,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		if err != nil {
 			// Add structured logging
 			GetLogger().Warn("Error getting bird image from cache",
+				"component", "sse",
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -736,6 +738,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		// Log if the cache is nil, maybe helpful for debugging setup issues
 		// Add structured logging
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
+			"component", "sse",
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"operation", "check_bird_image_cache")
@@ -814,6 +817,7 @@ func (a *SSEAction) waitForAudioFile() error {
 				if a.Settings.Debug {
 					// Add structured logging
 				GetLogger().Debug("Audio file ready for SSE broadcast",
+					"component", "sse",
 					"clip_name", a.Note.ClipName,
 					"file_size_bytes", info.Size(),
 					"species", a.Note.CommonName,
@@ -855,6 +859,7 @@ func (a *SSEAction) waitForDatabaseID() error {
 			if a.Settings.Debug {
 				// Add structured logging
 				GetLogger().Debug("Found database ID for SSE broadcast",
+					"component", "sse",
 					"database_id", updatedNote.ID,
 					"species", a.Note.CommonName,
 					"scientific_name", a.Note.ScientificName,

@@ -11,7 +11,6 @@ type LogState struct {
 	LastRawCount      int       // Last logged raw results count
 	LastFilteredCount int       // Last logged filtered detections count
 	LastLogTime       time.Time // Last time we logged for this source
-	FirstLog          bool      // Whether this is the first log for this source
 }
 
 // LogDeduplicator handles intelligent log deduplication for high-frequency messages.
@@ -63,7 +62,6 @@ func (d *LogDeduplicator) ShouldLog(source string, rawCount, filteredCount int) 
 			LastRawCount:      rawCount,
 			LastFilteredCount: filteredCount,
 			LastLogTime:       now,
-			FirstLog:          false, // Already logged, so set to false
 		}
 		return true, "first_log"
 	}

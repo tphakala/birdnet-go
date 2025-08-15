@@ -334,13 +334,12 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			go func() {
 				defer close(shutdownComplete)
 				
-				// Step 1: Stop accepting new work
+				// Step 1: Signal shutdown started (but don't close controlChan yet)
 				// Add structured logging
-				GetLogger().Info("Shutdown step 1: Stopping control channel",
+				GetLogger().Info("Shutdown step 1: Beginning shutdown sequence",
 					"step", 1,
-					"operation", "shutdown_control_channel")
-				log.Println("  1️⃣ Stopping control channel...")
-				close(controlChan)
+					"operation", "shutdown_begin")
+				log.Println("  1️⃣ Beginning shutdown sequence...")
 				
 				// Check context cancellation between steps
 				if ctx.Err() != nil {
@@ -425,6 +424,12 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 						log.Printf("  ⚠️ Warning: Error shutting down HTTP server: %v", err)
 					}
 				}
+				
+				// Now it's safe to close controlChan after HTTP server is down
+				// Add structured logging
+				GetLogger().Info("Closing control channel after producers shutdown",
+					"operation", "close_control_channel")
+				close(controlChan)
 				
 				if ctx.Err() != nil {
 					// Add structured logging
@@ -602,7 +607,6 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 			"audio_system", "audiocore",
 			"operation", "start_audio_capture")
 		log.Println("🎵 Using new audiocore audio capture system")
-			// Import needs to be added at the top of the file
 			adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, unifiedAudioChan)
 		}()
 	} else {

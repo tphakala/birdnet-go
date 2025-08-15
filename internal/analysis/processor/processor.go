@@ -215,8 +215,9 @@ func (p *Processor) startDetectionProcessor() {
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range birdnet.ResultsQueue {
-			// Process directly without copying - we own this data
-			p.processDetections(&item)
+			// Create local copy to avoid any potential issues with loop variable
+			itemCopy := item
+			p.processDetections(&itemCopy)
 		}
 		// Add structured logging when processor stops
 		GetLogger().Info("Detection processor stopped",
@@ -402,13 +403,15 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 
 		// Skip processing if confidence is too low
 		if result.Confidence <= confidenceThreshold {
-			// Add structured logging for confidence filtering
-			GetLogger().Debug("Detection filtered out due to low confidence",
-				"species", result.Species,
-				"confidence", result.Confidence,
-				"threshold", confidenceThreshold,
-				"source", item.Source,
-				"operation", "confidence_filter")
+			// Add structured logging for confidence filtering (only if debug is enabled)
+			if p.Settings.Debug {
+				GetLogger().Debug("Detection filtered out due to low confidence",
+					"species", result.Species,
+					"confidence", result.Confidence,
+					"threshold", confidenceThreshold,
+					"source", item.Source,
+					"operation", "confidence_filter")
+			}
 			continue
 		}
 
@@ -614,12 +617,19 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, species string) {
+	// Safely get confidence value
+	var confidence float64
+	if len(item.Detection.Results) > 0 {
+		confidence = float64(item.Detection.Results[0].Confidence)
+	}
+	
 	// Add structured logging
 	GetLogger().Info("Approving detection",
 		"species", species,
 		"source", item.Source,
 		"match_count", item.Count,
-		"confidence", item.Detection.Results[0].Confidence,
+		"confidence", confidence,
+		"has_results", len(item.Detection.Results) > 0,
 		"operation", "approve_detection")
 	log.Printf("Approving detection of %s from source %s, matched %d times\n",
 		species, item.Source, item.Count)
@@ -767,13 +777,13 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
-	actionsCount := len(p.getDefaultActions(detection))
+	defaultActions := p.getDefaultActions(detection)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
 		"species", strings.ToLower(detection.Note.CommonName),
-		"actions_count", actionsCount,
+		"actions_count", len(defaultActions),
 		"operation", "get_default_actions")
-	return p.getDefaultActions(detection)
+	return defaultActions
 }
 
 // Helper function to parse command parameters
@@ -1036,10 +1046,10 @@ func (p *Processor) Shutdown() error {
 	if tracker != nil {
 		if err := tracker.Close(); err != nil {
 			// Add structured logging
-			GetLogger().Warn("Failed to close species tracker logger",
+			GetLogger().Warn("Failed to close species tracker",
 				"error", err,
 				"operation", "species_tracker_cleanup")
-			log.Printf("Warning: failed to close species tracker logger: %v", err)
+			log.Printf("Warning: failed to close species tracker: %v", err)
 		}
 	}
 
