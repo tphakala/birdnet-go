@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -20,6 +21,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+)
+
+// Species identification constants for filtering
+const (
+	speciesDog   = "dog"
+	speciesHuman = "human"
 )
 
 // Processor represents the main processing unit for audio analysis.
@@ -38,6 +45,7 @@ type Processor struct {
 	speciesTrackerMu    sync.RWMutex         // Mutex to protect NewSpeciesTracker access
 	lastSyncAttempt     time.Time            // Last time sync was attempted
 	syncMutex           sync.Mutex           // Mutex to protect sync operations
+	syncInProgress      atomic.Bool          // Flag to prevent overlapping syncs
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
@@ -59,6 +67,9 @@ type Processor struct {
 	backupManager   interface{} // Use interface{} to avoid import cycle
 	backupScheduler interface{} // Use interface{} to avoid import cycle
 	backupMutex     sync.RWMutex
+
+	// Log deduplication (extracted to separate type for SRP)
+	logDedup *LogDeduplicator // Handles log deduplication logic
 }
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
@@ -113,10 +124,39 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
 	}
 
+	// Initialize log deduplicator with configuration from settings
+	// This addresses separation of concerns by extracting deduplication logic
+	healthCheckInterval := 60 * time.Second // default
+	
+	// Validate and use settings if available
+	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
+		// Cap at reasonable maximum (1 hour) to prevent misconfiguration
+		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
+			healthCheckInterval = time.Hour
+			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
+				"requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds,
+				"capped_seconds", 3600,
+				"operation", "config_validation")
+		} else {
+			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
+		}
+	}
+	enabled := settings.Realtime.LogDeduplication.Enabled
+	
+	logConfig := DeduplicationConfig{
+		HealthCheckInterval: healthCheckInterval,
+		Enabled:             enabled,
+	}
+	p.logDedup = NewLogDeduplicator(logConfig)
+
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
 		// Validate species tracking configuration
 		if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
+			// Add structured logging
+			GetLogger().Error("Invalid species tracking configuration",
+				"error", err,
+				"operation", "species_tracking_validation")
 			log.Printf("Invalid species tracking configuration: %v", err)
 			// Continue with defaults or disable tracking
 			settings.Realtime.SpeciesTracking.Enabled = false
@@ -134,11 +174,22 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 			// Initialize species tracker from database
 			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
+				// Add structured logging
+				GetLogger().Error("Failed to initialize species tracker from database",
+					"error", err,
+					"operation", "species_tracker_init")
 				log.Printf("Failed to initialize species tracker from database: %v", err)
 				// Continue anyway - tracker will work for new detections
 			}
 
 			hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
+			// Add structured logging
+			GetLogger().Info("Species tracking enabled",
+				"window_days", settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
+				"sync_interval_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
+				"hemisphere", hemisphere,
+				"latitude", settings.BirdNET.Latitude,
+				"operation", "species_tracking_config")
 			log.Printf("Species tracking enabled: window=%d days, sync=%d minutes, hemisphere=%s (lat=%.2f)",
 				settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
 				settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
@@ -161,6 +212,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		var err error
 		bwClient, err := birdweather.New(settings)
 		if err != nil {
+			// Add structured logging
+			GetLogger().Error("Failed to create BirdWeather client",
+				"error", err,
+				"operation", "birdweather_client_init",
+				"integration", "birdweather")
 			log.Printf("failed to create Birdweather client: %s", err)
 		} else {
 			p.SetBwClient(bwClient) // Use setter for thread safety
@@ -178,18 +234,34 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 // Start goroutine to process detections from the queue
 func (p *Processor) startDetectionProcessor() {
+	// Add structured logging for detection processor startup
+	GetLogger().Info("Starting detection processor",
+		"operation", "detection_processor_startup")
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range birdnet.ResultsQueue {
-			// Process directly without copying - we own this data
-			p.processDetections(&item)
+			// Pass by value since we own the data (see queue.go ownership comment)
+			p.processDetections(item)
 		}
+		// Add structured logging when processor stops
+		GetLogger().Info("Detection processor stopped",
+			"operation", "detection_processor_shutdown")
 	}()
 }
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
-func (p *Processor) processDetections(item *birdnet.Results) {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) processDetections(item birdnet.Results) {
+	// Add structured logging for detection pipeline entry
+	GetLogger().Debug("Processing detections from queue",
+		"source", item.Source,
+		"start_time", item.StartTime,
+		"results_count", len(item.Results),
+		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
+		"operation", "process_detections_entry")
+
 	// Delay before a detection is considered final and is flushed.
 	// TODO: make this configurable
 	const delay = 15 * time.Second
@@ -198,6 +270,10 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	detectionResults := p.processResults(item)
+	
+	// Log processing results with deduplication to prevent spam
+	p.logDetectionResults(item.Source, len(item.Results), len(detectionResults))
+
 	for i := 0; i < len(detectionResults); i++ {
 		detection := detectionResults[i]
 		commonName := strings.ToLower(detection.Note.CommonName)
@@ -208,16 +284,31 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 
 		if existing, exists := p.pendingDetections[commonName]; exists {
 			// Update the existing detection if it's already in pendingDetections map
+			oldConfidence := existing.Confidence
 			if confidence > existing.Confidence {
 				existing.Detection = detection
 				existing.Confidence = confidence
 				existing.Source = item.Source
 				existing.LastUpdated = time.Now()
+				// Add structured logging for confidence update
+				GetLogger().Debug("Updated pending detection with higher confidence",
+					"species", commonName,
+					"old_confidence", oldConfidence,
+					"new_confidence", confidence,
+					"count", existing.Count+1,
+					"operation", "update_pending_detection")
 			}
 			existing.Count++
 			p.pendingDetections[commonName] = existing
 		} else {
 			// Create a new pending detection if it doesn't exist
+			// Add structured logging for new pending detection
+			GetLogger().Info("Created new pending detection",
+				"species", commonName,
+				"confidence", confidence,
+				"source", item.Source,
+				"flush_deadline", item.StartTime.Add(delay),
+				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
@@ -237,7 +328,9 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
-func (p *Processor) processResults(item *birdnet.Results) []Detections {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) processResults(item birdnet.Results) []Detections {
 	// Pre-allocate slice with capacity for all results
 	detections := make([]Detections, 0, len(item.Results))
 
@@ -246,7 +339,173 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
 	}
 
-	// Sync species tracker if needed (non-blocking, rate-limited)
+	// Sync species tracker if needed
+	p.syncSpeciesTrackerIfNeeded()
+
+	// Process each result in item.Results
+	for _, result := range item.Results {
+		// Parse and validate species information
+		scientificName, commonName, speciesCode, speciesLowercase := p.parseAndValidateSpecies(result, item)
+		// Skip if either scientific or common name is missing (partial/invalid parsing)
+		if scientificName == "" || commonName == "" {
+			if p.Settings.Debug {
+				GetLogger().Debug("Skipping partially parsed species",
+					"scientific_name", scientificName,
+					"common_name", commonName,
+					"species_code", speciesCode,
+					"species_lowercase", speciesLowercase,
+					"original_species", result.Species,
+					"confidence", result.Confidence,
+					"operation", "validate_species")
+			}
+			continue // Skip invalid or partially parsed species
+		}
+
+		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
+		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
+		p.handleDogDetection(item, speciesLowercase, result)
+		p.handleHumanDetection(item, speciesLowercase, result)
+
+		// Determine confidence threshold and check filters
+		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
+		
+		// Check if detection should be filtered
+		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source)
+		if shouldSkip {
+			continue
+		}
+
+		// Add species to dynamic thresholds if enabled and passed filters
+		if p.Settings.Realtime.DynamicThreshold.Enabled {
+			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
+		}
+
+		// Create the detection
+		detection := p.createDetection(item, result, scientificName, commonName, speciesCode)
+		detections = append(detections, detection)
+	}
+
+	return detections
+}
+
+// parseAndValidateSpecies parses species information and validates it
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdnet.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
+	// Use BirdNET's EnrichResultWithTaxonomy to get species information
+	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
+
+	// Skip processing if we couldn't parse the species properly (either name missing)
+	if commonName == "" || scientificName == "" {
+		if p.Settings.Debug {
+			GetLogger().Debug("Skipping species with invalid format",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"operation", "species_format_validation")
+			log.Printf("Skipping species with invalid format: %s", result.Species)
+		}
+		return "", "", "", ""
+	}
+
+	// Log placeholder taxonomy codes if using custom model
+	if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
+		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
+			GetLogger().Debug("Using placeholder taxonomy code",
+				"taxonomy_code", speciesCode,
+				"scientific_name", scientificName,
+				"common_name", commonName,
+				"operation", "taxonomy_code_assignment")
+			log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
+		}
+	}
+
+	// Convert species to lowercase for case-insensitive comparison
+	speciesLowercase = strings.ToLower(commonName)
+	if speciesLowercase == "" && scientificName != "" {
+		speciesLowercase = strings.ToLower(scientificName)
+	}
+
+	return
+}
+
+// shouldFilterDetection checks if a detection should be filtered out
+func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, speciesLowercase string, baseThreshold float32, source string) (shouldFilter bool, confidenceThreshold float32) {
+	// Check human detection privacy filter
+	if strings.Contains(strings.ToLower(commonName), speciesHuman) && result.Confidence > baseThreshold {
+		return true, 0 // Filter out human detections for privacy
+	}
+
+	// Determine confidence threshold
+	if p.Settings.Realtime.DynamicThreshold.Enabled {
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold)
+	} else {
+		confidenceThreshold = baseThreshold
+	}
+
+	// Check confidence threshold
+	if result.Confidence <= confidenceThreshold {
+		if p.Settings.Debug {
+			GetLogger().Debug("Detection filtered out due to low confidence",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"threshold", confidenceThreshold,
+				"source", source,
+				"operation", "confidence_filter")
+		}
+		return true, confidenceThreshold
+	}
+
+	// Check species inclusion filter
+	if !p.Settings.IsSpeciesIncluded(result.Species) {
+		if p.Settings.Debug {
+			GetLogger().Debug("Species not on included list",
+				"species", result.Species,
+				"confidence", result.Confidence,
+				"operation", "species_inclusion_filter")
+			log.Printf("Species not on included list: %s\n", result.Species)
+		}
+		return true, confidenceThreshold
+	}
+
+	return false, confidenceThreshold
+}
+
+// createDetection creates a detection object with all necessary information
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) createDetection(item birdnet.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
+	// Create file name for audio clip
+	clipName := p.generateClipName(scientificName, result.Confidence)
+
+	// Set begin and end time for note
+	beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
+
+	// Create the note
+	note := p.NewWithSpeciesInfo(
+		beginTime, endTime,
+		scientificName, commonName, speciesCode,
+		float64(result.Confidence),
+		item.Source, clipName,
+		item.ElapsedTime)
+
+	// Update species tracker if enabled
+	p.speciesTrackerMu.RLock()
+	tracker := p.NewSpeciesTracker
+	p.speciesTrackerMu.RUnlock()
+
+	if tracker != nil {
+		tracker.UpdateSpecies(scientificName, item.StartTime)
+	}
+
+	return Detections{
+		pcmData3s: item.PCMdata,
+		Note:      note,
+		Results:   item.Results,
+	}
+}
+
+// syncSpeciesTrackerIfNeeded syncs the species tracker if conditions are met
+func (p *Processor) syncSpeciesTrackerIfNeeded() {
 	p.speciesTrackerMu.RLock()
 	tracker := p.NewSpeciesTracker
 	p.speciesTrackerMu.RUnlock()
@@ -255,130 +514,37 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 		// Rate limit sync operations to avoid excessive goroutines
 		p.syncMutex.Lock()
 		if time.Since(p.lastSyncAttempt) >= time.Minute {
-			p.lastSyncAttempt = time.Now()
-			go func() {
-				if err := tracker.SyncIfNeeded(); err != nil {
-					log.Printf("Failed to sync species tracker: %v", err)
-				}
-			}()
+			// Check if sync is already in progress
+			if !p.syncInProgress.Load() {
+				p.lastSyncAttempt = time.Now()
+				p.syncInProgress.Store(true) // Mark sync as in progress
+				go func() {
+					defer p.syncInProgress.Store(false) // Always clear the flag when done
+					if err := tracker.SyncIfNeeded(); err != nil {
+						GetLogger().Error("Failed to sync species tracker",
+							"error", err,
+							"operation", "species_tracker_sync")
+						log.Printf("Failed to sync species tracker: %v", err)
+					}
+				}()
+			}
 		}
 		p.syncMutex.Unlock()
 	}
-
-	// Process each result in item.Results
-	for _, result := range item.Results {
-		var confidenceThreshold float32
-
-		// Use BirdNET's EnrichResultWithTaxonomy instead of ParseSpeciesString
-		// to ensure we get the correct species code from the taxonomy map
-		scientificName, commonName, speciesCode := p.Bn.EnrichResultWithTaxonomy(result.Species)
-
-		// Skip processing if we couldn't parse the species properly
-		if commonName == "" && scientificName == "" {
-			if p.Settings.Debug {
-				log.Printf("Skipping species with invalid format: %s", result.Species)
-			}
-			continue
-		}
-
-		// If using a custom model and the species doesn't have a taxonomy code,
-		// a placeholder code may have been generated. Log this if in debug mode.
-		if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
-			// Check if the code looks like a placeholder (has the pattern XX or similar followed by 6 hex chars)
-			if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
-				log.Printf("Using placeholder taxonomy code %s for species %s (%s)", speciesCode, scientificName, commonName)
-			}
-		}
-
-		// Convert species to lowercase for case-insensitive comparison
-		speciesLowercase := strings.ToLower(commonName)
-
-		// Fall back to using scientific name if common name is empty
-		if speciesLowercase == "" && scientificName != "" {
-			speciesLowercase = strings.ToLower(scientificName)
-		}
-
-		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
-		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(item, speciesLowercase, result)
-		p.handleHumanDetection(item, speciesLowercase, result)
-
-		// Determine base confidence threshold
-		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
-
-		// If result is human and detection exceeds base threshold, discard it
-		// due to privacy reasons we do not want human detections to reach actions stage
-		if strings.Contains(strings.ToLower(commonName), "human") &&
-			result.Confidence > baseThreshold {
-			continue
-		}
-
-		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			// Apply dynamic threshold adjustments
-			confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold)
-		} else {
-			// Use the base threshold if dynamic thresholds are disabled
-			confidenceThreshold = baseThreshold
-		}
-
-		// Skip processing if confidence is too low
-		if result.Confidence <= confidenceThreshold {
-			continue
-		}
-
-		// Match against location-based filter
-		if !p.Settings.IsSpeciesIncluded(result.Species) {
-			if p.Settings.Debug {
-				log.Printf("Species not on included list: %s\n", result.Species)
-			}
-			continue
-		}
-
-		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			// Add species to dynamic thresholds if it passes the filter
-			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
-		}
-
-		// Create file name for audio clip
-		clipName := p.generateClipName(scientificName, result.Confidence)
-
-		// set begin and end time for note
-		// TODO: adjust end time based on detection pending delay
-		beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
-
-		// Use the new function to preserve the species code from the taxonomy lookup
-		note := p.NewWithSpeciesInfo(
-			beginTime, endTime,
-			scientificName, commonName, speciesCode,
-			float64(result.Confidence),
-			item.Source, clipName,
-			item.ElapsedTime)
-
-		// Update species tracker if enabled
-		p.speciesTrackerMu.RLock()
-		tracker := p.NewSpeciesTracker
-		p.speciesTrackerMu.RUnlock()
-
-		if tracker != nil {
-			// Update tracker with this detection (released lock to reduce contention)
-			tracker.UpdateSpecies(scientificName, item.StartTime)
-		}
-
-		// Detection passed all filters, process it
-		detections = append(detections, Detections{
-			pcmData3s: item.PCMdata,
-			Note:      note,
-			Results:   item.Results,
-		})
-	}
-
-	return detections
 }
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
-func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
-	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
+	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
+		// Add structured logging
+		GetLogger().Info("Dog detection filtered",
+			"confidence", result.Confidence,
+			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
+			"source", item.Source,
+			"operation", "dog_bark_filter")
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
 		p.detectionMutex.Lock()
 		p.LastDogDetection[item.Source] = item.StartTime
@@ -387,10 +553,18 @@ func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase s
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
-func (p *Processor) handleHumanDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
+		// Add structured logging
+		GetLogger().Info("Human detection filtered",
+			"confidence", result.Confidence,
+			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
+			"source", item.Source,
+			"operation", "privacy_filter")
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
@@ -405,6 +579,11 @@ func (p *Processor) getBaseConfidenceThreshold(speciesLowercase string) float32 
 	// Check if species has a custom threshold in the new structure
 	if config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]; exists {
 		if p.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Using custom confidence threshold",
+				"species", speciesLowercase,
+				"threshold", config.Threshold,
+				"operation", "custom_threshold_lookup")
 			log.Printf("\nUsing custom confidence threshold of %.2f for %s\n", config.Threshold, speciesLowercase)
 		}
 		return float32(config.Threshold)
@@ -447,6 +626,13 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
+		// Add structured logging for minimum count filtering
+		GetLogger().Debug("Detection discarded due to insufficient count",
+			"species", item.Detection.Note.CommonName,
+			"count", item.Count,
+			"minimum_required", minDetections,
+			"source", item.Source,
+			"operation", "minimum_count_filter")
 		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
 	}
 
@@ -456,6 +642,13 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
 		p.detectionMutex.RUnlock()
 		if exists && lastHumanDetection.After(item.FirstDetected) {
+			// Add structured logging for privacy filter
+			GetLogger().Debug("Detection discarded by privacy filter",
+				"species", item.Detection.Note.CommonName,
+				"detection_time", item.FirstDetected,
+				"last_human_detection", lastHumanDetection,
+				"source", item.Source,
+				"operation", "privacy_filter")
 			return true, "privacy filter"
 		}
 	}
@@ -464,6 +657,10 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	if p.Settings.Realtime.DogBarkFilter.Enabled {
 		if p.Settings.Realtime.DogBarkFilter.Debug {
 			p.detectionMutex.RLock()
+			// Add structured logging
+			GetLogger().Debug("Last dog detection status",
+				"last_detections", p.LastDogDetection,
+				"operation", "dog_detection_debug")
 			log.Printf("Last dog detection: %s\n", p.LastDogDetection)
 			p.detectionMutex.RUnlock()
 		}
@@ -472,6 +669,13 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		p.detectionMutex.RUnlock()
 		if p.CheckDogBarkFilter(item.Detection.Note.CommonName, lastDogDetection) ||
 			p.CheckDogBarkFilter(item.Detection.Note.ScientificName, lastDogDetection) {
+			// Add structured logging for dog bark filter
+			GetLogger().Debug("Detection discarded by dog bark filter",
+				"species", item.Detection.Note.CommonName,
+				"detection_time", item.FirstDetected,
+				"last_dog_detection", lastDogDetection,
+				"source", item.Source,
+				"operation", "dog_bark_filter")
 			return true, "recent dog bark"
 		}
 	}
@@ -481,6 +685,20 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, species string) {
+	// Safely get confidence value
+	var confidence float64
+	if len(item.Detection.Results) > 0 {
+		confidence = float64(item.Detection.Results[0].Confidence)
+	}
+	
+	// Add structured logging
+	GetLogger().Info("Approving detection",
+		"species", species,
+		"source", item.Source,
+		"match_count", item.Count,
+		"confidence", confidence,
+		"has_results", len(item.Detection.Results) > 0,
+		"operation", "approve_detection")
 	log.Printf("Approving detection of %s from source %s, matched %d times\n",
 		species, item.Source, item.Count)
 
@@ -491,9 +709,19 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 		if err := p.EnqueueTask(task); err != nil {
 			// Check error message instead of using errors.Is to avoid import cycle
 			if err.Error() == "worker queue is full" {
+				// Add structured logging
+				GetLogger().Warn("Worker queue is full, dropping task",
+					"species", species,
+					"operation", "enqueue_task",
+					"error", "queue_full")
 				log.Printf("❌ Worker queue is full, dropping task for %s", species)
 			} else {
 				sanitizedErr := sanitizeError(err)
+				// Add structured logging
+				GetLogger().Error("Failed to enqueue task",
+					"error", sanitizedErr,
+					"species", species,
+					"operation", "enqueue_task")
 				log.Printf("Failed to enqueue task for %s: %v", species, sanitizedErr)
 			}
 			continue
@@ -513,6 +741,12 @@ func (p *Processor) pendingDetectionsFlusher() {
 	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
 	minDetections := int(math.Max(1, 3/segmentLength))
 
+	// Add structured logging for pending detections flusher startup
+	GetLogger().Info("Starting pending detections flusher",
+		"min_detections", minDetections,
+		"flush_interval_seconds", 1,
+		"operation", "pending_flusher_startup")
+
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -522,11 +756,21 @@ func (p *Processor) pendingDetectionsFlusher() {
 			now := time.Now()
 
 			p.pendingMutex.Lock()
+			pendingCount := len(p.pendingDetections)
+			flushableCount := 0
 			for species := range p.pendingDetections {
 				item := p.pendingDetections[species]
 				if now.After(item.FlushDeadline) {
+					flushableCount++
 					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
-						log.Printf("Discarding detection of %s from source %s due to %s\n",
+						// Add structured logging
+					GetLogger().Info("Discarding detection",
+						"species", species,
+						"source", item.Source,
+						"reason", reason,
+						"count", item.Count,
+						"operation", "discard_detection")
+					log.Printf("Discarding detection of %s from source %s due to %s\n",
 							species, item.Source, reason)
 						delete(p.pendingDetections, species)
 						continue
@@ -535,6 +779,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 					p.processApprovedDetection(&item, species)
 					delete(p.pendingDetections, species)
 				}
+			}
+			// Add structured logging for flusher activity (only when there's activity)
+			if pendingCount > 0 || flushableCount > 0 {
+				GetLogger().Debug("Pending detections flusher cycle",
+					"pending_count", pendingCount,
+					"flushable_count", flushableCount,
+					"operation", "pending_flusher_cycle")
 			}
 			p.pendingMutex.Unlock()
 
@@ -551,6 +802,10 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	// Check if species has custom configuration
 	if speciesConfig, exists := p.Settings.Realtime.Species.Config[speciesName]; exists {
 		if p.Settings.Debug {
+			// Add structured logging
+			GetLogger().Debug("Species config exists for custom actions",
+				"species", speciesName,
+				"operation", "custom_action_check")
 			log.Println("Species config exists for custom actions")
 		}
 
@@ -590,7 +845,13 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
-	return p.getDefaultActions(detection)
+	defaultActions := p.getDefaultActions(detection)
+	// Add structured logging for default actions
+	GetLogger().Debug("Using default actions for detection",
+		"species", strings.ToLower(detection.Note.CommonName),
+		"actions_count", len(defaultActions),
+		"operation", "get_default_actions")
+	return defaultActions
 }
 
 // Helper function to parse command parameters
@@ -705,6 +966,11 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	// Check if UpdateRangeFilterAction needs to be executed for the day
 	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
 	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
+		// Add structured logging
+		GetLogger().Info("Updating species range filter",
+			"last_updated", p.Settings.BirdNET.RangeFilter.LastUpdated,
+			"today", today,
+			"operation", "update_range_filter")
 		fmt.Println("Updating species range filter")
 		// Add UpdateRangeFilterAction if it hasn't been executed today
 		actions = append(actions, &UpdateRangeFilterAction{
@@ -814,6 +1080,22 @@ func (p *Processor) GetBackupScheduler() interface{} {
 	return p.backupScheduler
 }
 
+// CleanupLogDeduplicator removes stale log deduplication entries to prevent memory growth.
+// Returns the number of entries removed.
+func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
+	if p.logDedup == nil {
+		return 0
+	}
+	removed := p.logDedup.Cleanup(staleAfter)
+	if removed > 0 {
+		GetLogger().Debug("Cleaned stale log deduplication entries",
+			"removed_count", removed,
+			"stale_after", staleAfter,
+			"operation", "log_dedup_cleanup")
+	}
+	return removed
+}
+
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
 	// Cancel all worker goroutines
@@ -823,6 +1105,11 @@ func (p *Processor) Shutdown() error {
 
 	// Stop the job queue with a timeout
 	if err := p.JobQueue.StopWithTimeout(30 * time.Second); err != nil {
+		// Add structured logging
+		GetLogger().Warn("Job queue shutdown timed out",
+			"error", err,
+			"timeout_seconds", 30,
+			"operation", "job_queue_shutdown")
 		log.Printf("Warning: job queue shutdown timed out: %v", err)
 	}
 
@@ -842,10 +1129,17 @@ func (p *Processor) Shutdown() error {
 	
 	if tracker != nil {
 		if err := tracker.Close(); err != nil {
-			log.Printf("Warning: failed to close species tracker logger: %v", err)
+			// Add structured logging
+			GetLogger().Warn("Failed to close species tracker",
+				"error", err,
+				"operation", "species_tracker_cleanup")
+			log.Printf("Warning: failed to close species tracker: %v", err)
 		}
 	}
 
+	// Add structured logging
+	GetLogger().Info("Processor shutdown complete",
+		"operation", "processor_shutdown")
 	log.Println("Processor shutdown complete")
 	return nil
 }
@@ -893,5 +1187,21 @@ func (p *Processor) NewWithSpeciesInfo(
 		Sensitivity:    p.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration
 		ClipName:       clipName,                       // Name of the audio clip
 		ProcessingTime: elapsedTime,                    // Time taken to process the observation
+	}
+}
+
+// logDetectionResults logs detection processing results using the LogDeduplicator
+// to prevent repetitive logging while maintaining observability.
+func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
+	// Use the LogDeduplicator to determine if we should log
+	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
+	
+	if shouldLog {
+		GetLogger().Info("Detection processing results",
+			"source", source,
+			"raw_results_count", rawCount,
+			"filtered_detections_count", filteredCount,
+			"log_reason", reason,
+			"operation", "process_detections_summary")
 	}
 }

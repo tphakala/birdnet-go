@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Package-level logger for analysis operations
@@ -159,7 +160,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 // LogSoundLevelActiveStreamNotInConfig logs when an active RTSP stream is not in configuration
 func LogSoundLevelActiveStreamNotInConfig(url string) {
 	GetLogger().Warn("Found active RTSP stream not in configuration",
-		"rtsp_url", url,
+		"rtsp_url", privacy.SanitizeRTSPUrl(url),
 		"component", "analysis.soundlevel",
 	)
 }

@@ -52,7 +52,7 @@ func InitFloat32Pool() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize float32 pool: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -78,13 +78,13 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 
 	// run BirdNET inference
 	results, err := bn.Predict(sampleData)
-	
+
 	// Return float32 buffer to pool after prediction
 	// This is safe because Predict copies the data to the input tensor
 	if conf.BitDepth == 16 && len(sampleData) > 0 && len(sampleData[0]) == Float32BufferSize {
 		ReturnFloat32Buffer(sampleData[0])
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("error predicting species: %w", err)
 	}
@@ -172,7 +172,7 @@ func ConvertToFloat32(sample []byte, bitDepth int) ([][]float32, error) {
 // convert16BitToFloat32 converts 16-bit sample to float32 values.
 func convert16BitToFloat32(sample []byte) []float32 {
 	length := len(sample) / 2
-	
+
 	// Try to get buffer from pool if available
 	var float32Data []float32
 	if float32Pool != nil && length == Float32BufferSize {
@@ -181,7 +181,7 @@ func convert16BitToFloat32(sample []byte) []float32 {
 		// Fallback to allocation for non-standard sizes or if pool not initialized
 		float32Data = make([]float32, length)
 	}
-	
+
 	divisor := float32(32768.0)
 
 	for i := 0; i < length; i++ {

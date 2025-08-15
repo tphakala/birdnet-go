@@ -83,6 +83,12 @@ func FileAnalysis(settings *conf.Settings, ctx context.Context) error {
 
 		// For other errors with partial results, write them
 		if len(notes) > 0 {
+			// Add structured logging
+			GetLogger().Info("Writing partial results before exiting due to error",
+				"component", "analysis.file",
+				"notes_count", len(notes),
+				"error", err,
+				"operation", "write_partial_results")
 			fmt.Printf("\n\033[33m⚠️  Writing partial results before exiting due to error\033[0m\n")
 			if writeErr := writeResults(settings, notes); writeErr != nil {
 				return fmt.Errorf("analysis error: %w; failed to write partial results: %w", err, writeErr)
@@ -124,6 +130,12 @@ func validateAudioFile(filePath string) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
+			// Add structured logging
+			GetLogger().Warn("Failed to close audio file",
+				"component", "analysis.file",
+				"error", err,
+				"file_path", filePath,
+				"operation", "close_audio_file")
 			log.Printf("Failed to close audio file: %v", err)
 		}
 	}()
@@ -631,6 +643,17 @@ func displayProcessingResults(filename string, duration time.Duration, chunkCoun
 		fmt.Sprintf("in %s", birdnet.FormatDuration(totalTime)),
 		width,
 	))
+	// Add structured logging
+	GetLogger().Info("File analysis completed",
+		"component", "analysis.file",
+		"filename", filename,
+		"duration", duration.String(),
+		"duration_ms", duration.Milliseconds(),
+		"chunks_processed", actualChunks,
+		"processing_time", totalTime.String(),
+		"processing_time_ms", totalTime.Milliseconds(),
+		"avg_chunks_per_sec", avgChunksPerSec,
+		"operation", "file_analysis_complete")
 	fmt.Println() // Add newline after completion
 }
 

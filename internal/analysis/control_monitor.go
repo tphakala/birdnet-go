@@ -202,6 +202,16 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 		log.Printf("\033[32m🔄 Range filter rebuilt successfully\033[0m")
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
+	
+	// Perform log deduplicator cleanup when range filter is rebuilt
+	// This coupling is for practicality - we wanted to avoid creating new goroutines
+	// and the range filter rebuild happens periodically, making it a convenient hook
+	// for maintenance tasks. Future maintainers: this is just opportunistic cleanup,
+	// not a functional requirement of range filter rebuilding.
+	if cm.proc != nil {
+		// Clean entries older than 1 hour
+		cm.proc.CleanupLogDeduplicator(time.Hour)
+	}
 }
 
 // handleReloadBirdnet reloads the BirdNET model
