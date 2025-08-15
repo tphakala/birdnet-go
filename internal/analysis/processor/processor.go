@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -20,6 +21,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+)
+
+// Species identification constants for filtering
+const (
+	speciesDog   = "dog"
+	speciesHuman = "human"
 )
 
 // Processor represents the main processing unit for audio analysis.
@@ -38,6 +45,7 @@ type Processor struct {
 	speciesTrackerMu    sync.RWMutex         // Mutex to protect NewSpeciesTracker access
 	lastSyncAttempt     time.Time            // Last time sync was attempted
 	syncMutex           sync.Mutex           // Mutex to protect sync operations
+	syncInProgress      atomic.Bool          // Flag to prevent overlapping syncs
 	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
 	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
@@ -116,11 +124,19 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
 	}
 
-	// Initialize log deduplicator with configuration
+	// Initialize log deduplicator with configuration from settings
 	// This addresses separation of concerns by extracting deduplication logic
+	healthCheckInterval := 60 * time.Second // default
+	
+	// Use settings if available
+	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
+		healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
+	}
+	enabled := settings.Realtime.LogDeduplication.Enabled
+	
 	logConfig := DeduplicationConfig{
-		HealthCheckInterval: 60 * time.Second,
-		Enabled:             true, // Could be made configurable via settings
+		HealthCheckInterval: healthCheckInterval,
+		Enabled:             enabled,
 	}
 	p.logDedup = NewLogDeduplicator(logConfig)
 
@@ -215,9 +231,8 @@ func (p *Processor) startDetectionProcessor() {
 	go func() {
 		// ResultsQueue is fed by myaudio.ProcessData()
 		for item := range birdnet.ResultsQueue {
-			// Create local copy to avoid any potential issues with loop variable
-			itemCopy := item
-			p.processDetections(&itemCopy)
+			// Pass by value since we own the data (see queue.go ownership comment)
+			p.processDetections(item)
 		}
 		// Add structured logging when processor stops
 		GetLogger().Info("Detection processor stopped",
@@ -227,7 +242,9 @@ func (p *Processor) startDetectionProcessor() {
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
-func (p *Processor) processDetections(item *birdnet.Results) {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) processDetections(item birdnet.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
 		"source", item.Source,
@@ -302,7 +319,9 @@ func (p *Processor) processDetections(item *birdnet.Results) {
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
-func (p *Processor) processResults(item *birdnet.Results) []Detections {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) processResults(item birdnet.Results) []Detections {
 	// Pre-allocate slice with capacity for all results
 	detections := make([]Detections, 0, len(item.Results))
 
@@ -350,7 +369,9 @@ func (p *Processor) processResults(item *birdnet.Results) []Detections {
 }
 
 // parseAndValidateSpecies parses species information and validates it
-func (p *Processor) parseAndValidateSpecies(result datastore.Results, item *birdnet.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdnet.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
 	// Use BirdNET's EnrichResultWithTaxonomy to get species information
 	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
 
@@ -390,7 +411,7 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item *bird
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, speciesLowercase string, baseThreshold float32, source string) (shouldFilter bool, confidenceThreshold float32) {
 	// Check human detection privacy filter
-	if strings.Contains(strings.ToLower(commonName), "human") && result.Confidence > baseThreshold {
+	if strings.Contains(strings.ToLower(commonName), speciesHuman) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
 	}
 
@@ -430,7 +451,9 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 }
 
 // createDetection creates a detection object with all necessary information
-func (p *Processor) createDetection(item *birdnet.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) createDetection(item birdnet.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
 	// Create file name for audio clip
 	clipName := p.generateClipName(scientificName, result.Confidence)
 
@@ -471,23 +494,30 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 		// Rate limit sync operations to avoid excessive goroutines
 		p.syncMutex.Lock()
 		if time.Since(p.lastSyncAttempt) >= time.Minute {
-			p.lastSyncAttempt = time.Now()
-			go func() {
-				if err := tracker.SyncIfNeeded(); err != nil {
-					GetLogger().Error("Failed to sync species tracker",
-						"error", err,
-						"operation", "species_tracker_sync")
-					log.Printf("Failed to sync species tracker: %v", err)
-				}
-			}()
+			// Check if sync is already in progress
+			if !p.syncInProgress.Load() {
+				p.lastSyncAttempt = time.Now()
+				p.syncInProgress.Store(true) // Mark sync as in progress
+				go func() {
+					defer p.syncInProgress.Store(false) // Always clear the flag when done
+					if err := tracker.SyncIfNeeded(); err != nil {
+						GetLogger().Error("Failed to sync species tracker",
+							"error", err,
+							"operation", "species_tracker_sync")
+						log.Printf("Failed to sync species tracker: %v", err)
+					}
+				}()
+			}
 		}
 		p.syncMutex.Unlock()
 	}
 }
 
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
-func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
-	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, "dog") &&
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
+	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		// Add structured logging
 		GetLogger().Info("Dog detection filtered",
@@ -503,7 +533,9 @@ func (p *Processor) handleDogDetection(item *birdnet.Results, speciesLowercase s
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
-func (p *Processor) handleHumanDetection(item *birdnet.Results, speciesLowercase string, result datastore.Results) {
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {

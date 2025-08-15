@@ -220,6 +220,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 		// Add structured logging
 		GetLogger().Error("Failed to save note and results to database",
+			"component", "analysis.processor.actions",
 			"error", err,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -240,6 +241,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		if err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to read audio segment from buffer",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"source", a.Note.Source,
@@ -260,6 +262,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		if err := saveAudioAction.Execute(nil); err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to save audio clip",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
@@ -271,6 +274,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		if a.Settings.Debug {
 			// Add structured logging
 			GetLogger().Debug("Saved audio clip successfully",
+				"component", "analysis.processor.actions",
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
 				"detection_time", a.Note.Time,
@@ -309,6 +313,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		if a.Settings.Debug {
 			// Add structured logging
 			GetLogger().Debug("Failed to create detection event",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -325,6 +330,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		if a.Settings.Debug {
 			// Add structured logging
 			GetLogger().Debug("Published new species detection event",
+				"component", "analysis.processor.actions",
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
 				"confidence", a.Note.Confidence,
@@ -348,6 +354,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		// Add structured logging
 		GetLogger().Error("Failed to create directory for audio clip",
+			"component", "analysis.processor.actions",
 			"error", err,
 			"output_path", outputPath,
 			"clip_name", a.ClipName,
@@ -360,6 +367,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 		if err := myaudio.SavePCMDataToWAV(outputPath, a.pcmData); err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to save audio clip to WAV",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"output_path", outputPath,
 				"clip_name", a.ClipName,
@@ -372,6 +380,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 		if err := myaudio.ExportAudioWithFFmpeg(a.pcmData, outputPath, &a.Settings.Realtime.Audio); err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to export audio clip with FFmpeg",
+				"component", "analysis.processor.actions",
 				"error", err,
 				"output_path", outputPath,
 				"clip_name", a.ClipName,

@@ -669,6 +669,7 @@ func monitorShutdownSignals(quitChan chan struct{}) {
 		sigChan := make(chan os.Signal, 1)
 		// Register to receive both SIGINT (Ctrl+C) and SIGTERM (Docker/systemd stop)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(sigChan) // Stop signal delivery when done to prevent leaks
 
 		sig := <-sigChan // Block until a signal is received
 
@@ -1544,7 +1545,7 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 
 // printSystemDetails prints system information and analyzer configuration
 func printSystemDetails(settings *conf.Settings) {
-	// Get system details with golps
+	// Get system details with gopsutil
 	info, err := host.Info()
 	if err != nil {
 		fmt.Printf("❌ Error retrieving host info: %v\n", err)

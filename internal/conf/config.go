@@ -247,6 +247,7 @@ type RealtimeSettings struct {
 		Enabled bool   `json:"enabled"` // true to enable OBS chat log
 		Path    string `json:"path"`    // path to OBS chat log
 	} `json:"log"`
+	LogDeduplication LogDeduplicationSettings `json:"logDeduplication"` // Log deduplication settings
 	Birdweather   BirdweatherSettings   `json:"birdweather"`   // Birdweather integration settings
 	EBird         EBirdSettings         `json:"ebird"`         // eBird integration settings
 	OpenWeather   OpenWeatherSettings   `yaml:"-" json:"-"`    // OpenWeather integration settings
@@ -281,6 +282,12 @@ type SpeciesSettings struct {
 	Include []string                 `yaml:"include" json:"include"` // Always include these species
 	Exclude []string                 `yaml:"exclude" json:"exclude"` // Always exclude these species
 	Config  map[string]SpeciesConfig `yaml:"config" json:"config"`   // Per-species configuration
+}
+
+// LogDeduplicationSettings contains settings for log deduplication
+type LogDeduplicationSettings struct {
+	Enabled              bool `json:"enabled"`              // true to enable log deduplication
+	HealthCheckIntervalSeconds int  `json:"healthCheckIntervalSeconds"` // Health check interval in seconds (default: 60)
 }
 
 // SpeciesTrackingSettings contains settings for tracking new species
