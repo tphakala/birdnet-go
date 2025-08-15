@@ -66,6 +66,9 @@ func SecondsToBytes(seconds float64) int {
 // AllocateAnalysisBuffer initializes a ring buffer for a single audio source.
 // It returns an error if memory allocation fails or if the input is invalid.
 func AllocateAnalysisBuffer(capacity int, source string) error {
+	// Auto-migrate to get the actual source ID
+	sourceID := MigrateExistingSourceToID(source)
+	
 	start := time.Now()
 
 	// Validate inputs
@@ -74,13 +77,13 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "allocate_analysis_buffer").
-			Context("source", source).
+			Context("source", sourceID).
 			Context("requested_capacity", capacity).
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferAllocation("analysis", source, "error")
-			m.RecordBufferAllocationError("analysis", source, "invalid_capacity")
+			m.RecordBufferAllocation("analysis", sourceID, "error")
+			m.RecordBufferAllocationError("analysis", sourceID, "invalid_capacity")
 		}
 		return enhancedErr
 	}
@@ -114,7 +117,7 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 					Component("myaudio").
 					Category(errors.CategorySystem).
 					Context("operation", "allocate_analysis_buffer").
-					Context("source", source).
+					Context("source", sourceID).
 					Context("buffer_pool_size", readSize).
 					Build()
 				return enhancedErr
@@ -129,13 +132,13 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 			Component("myaudio").
 			Category(errors.CategorySystem).
 			Context("operation", "allocate_analysis_buffer").
-			Context("source", source).
+			Context("source", sourceID).
 			Context("requested_capacity", capacity).
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferAllocation("analysis", source, "error")
-			m.RecordBufferAllocationError("analysis", source, "memory_allocation_failed")
+			m.RecordBufferAllocation("analysis", sourceID, "error")
+			m.RecordBufferAllocationError("analysis", sourceID, "memory_allocation_failed")
 		}
 		return enhancedErr
 	}
@@ -145,18 +148,18 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 	defer abMutex.Unlock()
 
 	// Check if buffer already exists
-	if _, exists := analysisBuffers[source]; exists {
+	if _, exists := analysisBuffers[sourceID]; exists {
 		ab.Reset() // Clean up the new buffer since we won't use it
-		enhancedErr := errors.Newf("analysis buffer already exists for source: %s", source).
+		enhancedErr := errors.Newf("analysis buffer already exists for source: %s", sourceID).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "allocate_analysis_buffer").
-			Context("source", source).
+			Context("source", sourceID).
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
-			m.RecordBufferAllocation("analysis", source, "error")
-			m.RecordBufferAllocationError("analysis", source, "already_exists")
+			m.RecordBufferAllocation("analysis", sourceID, "error")
+			m.RecordBufferAllocationError("analysis", sourceID, "already_exists")
 		}
 		return enhancedErr
 	}
@@ -172,22 +175,22 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 		warningCounter = make(map[string]int)
 	}
 
-	analysisBuffers[source] = ab
-	prevData[source] = nil
-	warningCounter[source] = 0
+	analysisBuffers[sourceID] = ab
+	prevData[sourceID] = nil
+	warningCounter[sourceID] = 0
 	
-	// Acquire reference to this source
+	// Acquire reference to this source using the migrated ID
 	registry := GetRegistry()
-	registry.AcquireSourceReference(source)
+	registry.AcquireSourceReference(sourceID)
 
 	// Record successful allocation metrics
 	if m := getAnalysisMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
-		m.RecordBufferAllocation("analysis", source, "success")
-		m.RecordBufferAllocationDuration("analysis", source, duration)
-		m.UpdateBufferCapacity("analysis", source, capacity)
-		m.UpdateBufferSize("analysis", source, 0) // Empty at start
-		m.UpdateBufferUtilization("analysis", source, 0.0)
+		m.RecordBufferAllocation("analysis", sourceID, "success")
+		m.RecordBufferAllocationDuration("analysis", sourceID, duration)
+		m.UpdateBufferCapacity("analysis", sourceID, capacity)
+		m.UpdateBufferSize("analysis", sourceID, 0) // Empty at start
+		m.UpdateBufferUtilization("analysis", sourceID, 0.0)
 	}
 
 	// Log the buffer creation for debugging
