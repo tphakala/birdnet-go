@@ -21,10 +21,11 @@ func getTestLogger() *slog.Logger {
 func TestSourceRegistration(t *testing.T) {
 	// Create a fresh registry for testing
 	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
+		sources:           make(map[string]*AudioSource),
+		connectionMap:     make(map[string]string),
+		refCounts:         make(map[string]*int32),
+		failedValidations: make(map[string]bool),
+		logger:            getTestLogger(),
 	}
 
 	// Test RTSP source registration
@@ -123,10 +124,11 @@ func TestRTSPCredentialSanitization(t *testing.T) {
 
 func TestSourceIDGeneration(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
+		sources:           make(map[string]*AudioSource),
+		connectionMap:     make(map[string]string),
+		refCounts:         make(map[string]*int32),
+		failedValidations: make(map[string]bool),
+		logger:            getTestLogger(),
 	}
 
 	// Test auto-generated IDs
@@ -218,10 +220,11 @@ func TestSourceMetricsUpdate(t *testing.T) {
 
 func TestSourceStats(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:       make(map[string]*AudioSource),
-		connectionMap: make(map[string]string),
-		refCounts:     make(map[string]*int32),
-		logger:        getTestLogger(),
+		sources:           make(map[string]*AudioSource),
+		connectionMap:     make(map[string]string),
+		refCounts:         make(map[string]*int32),
+		failedValidations: make(map[string]bool),
+		logger:            getTestLogger(),
 	}
 
 	// Create sources of different types

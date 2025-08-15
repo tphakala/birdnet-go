@@ -36,6 +36,9 @@ type AudioSourceRegistry struct {
 	// Reference counting for cleanup
 	refCounts     map[string]*int32       // sourceID -> reference count (pointer for atomic ops)
 
+	// Failed validation cache to prevent log spam
+	failedValidations map[string]bool    // connectionString -> true (prevents repeated warnings)
+
 	// Thread safety
 	mu sync.RWMutex
 
@@ -63,10 +66,11 @@ func GetRegistry() *AudioSourceRegistry {
 			logger = slog.Default()
 		}
 		registry = &AudioSourceRegistry{
-			sources:       make(map[string]*AudioSource),
-			connectionMap: make(map[string]string),
-			refCounts:     make(map[string]*int32),
-			logger:        logger.With("component", "registry"),
+			sources:           make(map[string]*AudioSource),
+			connectionMap:     make(map[string]string),
+			refCounts:         make(map[string]*int32),
+			failedValidations: make(map[string]bool),
+			logger:            logger.With("component", "registry"),
 		}
 	})
 	return registry
@@ -231,11 +235,14 @@ func (r *AudioSourceRegistry) MigrateSourceAtomic(source string, sourceType Sour
 	// NEW source - must pass validation for security
 	// Do validation while holding the lock to ensure atomicity
 	if err := r.validateConnectionString(source, sourceType); err != nil {
-		// Security: reject invalid NEW sources completely
-		r.logger.With("safe", r.sanitizeConnectionString(source, sourceType)).
-			With("type", sourceType).
-			With("error", err).
-			Warn("Rejected invalid source during migration")
+		// Only log once per unique source to prevent spam
+		if !r.failedValidations[source] {
+			r.failedValidations[source] = true
+			r.logger.With("safe", r.sanitizeConnectionString(source, sourceType)).
+				With("type", sourceType).
+				With("error", err).
+				Warn("Rejected invalid source during migration")
+		}
 		// Return the original source - it won't work but at least won't crash
 		// The calling code will handle the failure appropriately
 		return source
@@ -491,7 +498,7 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 	// This optimization helps for frequently used valid sources
 	if sourceType == SourceTypeAudioCard {
 		// Common audio devices are simple and safe
-		if connectionString == "default" || strings.HasPrefix(connectionString, "hw:") {
+		if connectionString == "default" || connectionString == "malgo" || strings.HasPrefix(connectionString, "hw:") {
 			if !strings.ContainsAny(connectionString, ";&|`$\n\r()") {
 				return r.validateAudioDevice(connectionString)
 			}
@@ -578,6 +585,11 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 
 // validateAudioDevice validates audio device identifiers
 func (r *AudioSourceRegistry) validateAudioDevice(device string) error {
+	// Special case for legacy malgo identifier
+	if device == "malgo" {
+		return nil
+	}
+	
 	// Common audio device patterns
 	validPrefixes := []string{
 		"hw:", "plughw:", "default", "pulse", "alsa",
