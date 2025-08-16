@@ -64,11 +64,9 @@ func SecondsToBytes(seconds float64) int {
 	return int(seconds * float64(conf.SampleRate) * float64(conf.BitDepth/8))
 }
 
-// AllocateAnalysisBuffer initializes a ring buffer for a single audio source.
+// AllocateAnalysisBuffer initializes a ring buffer for a single audio source ID.
 // It returns an error if memory allocation fails or if the input is invalid.
-func AllocateAnalysisBuffer(capacity int, source string) error {
-	// Auto-migrate to get the actual source ID
-	sourceID := MigrateExistingSourceToID(source)
+func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	
 	start := time.Now()
 
@@ -88,7 +86,7 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 		}
 		return enhancedErr
 	}
-	if source == "" {
+	if sourceID == "" {
 		enhancedErr := errors.Newf("empty source name provided for analysis buffer allocation").
 			Component("myaudio").
 			Category(errors.CategoryValidation).
@@ -205,16 +203,14 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 	return nil
 }
 
-// RemoveAnalysisBuffer safely removes and cleans up a ring buffer for a single source.
-func RemoveAnalysisBuffer(source string) error {
-	// Auto-migrate to get the actual source ID
-	sourceID := MigrateExistingSourceToID(source)
+// RemoveAnalysisBuffer safely removes and cleans up a ring buffer for a single source ID.
+func RemoveAnalysisBuffer(sourceID string) error {
 	
 	abMutex.Lock()
 	ab, exists := analysisBuffers[sourceID]
 	if !exists {
 		abMutex.Unlock()
-		return fmt.Errorf("no ring buffer found for source: %s (mapped to: %s)", source, sourceID)
+		return fmt.Errorf("no ring buffer found for source ID: %s", sourceID)
 	}
 
 	// Clean up the buffer
@@ -279,17 +275,18 @@ func InitAnalysisBuffers(capacity int, sources []string) error {
 	return nil
 }
 
-// WriteToAnalysisBuffer writes audio data into the ring buffer for a given stream.
-func WriteToAnalysisBuffer(stream string, data []byte) error {
-	// Auto-migrate legacy source identifiers to registry IDs
-	sourceID := MigrateExistingSourceToID(stream)
-	
-	// Get DisplayName for user-facing logs
-	displayName := stream // Default to stream if we can't get DisplayName
+// WriteToAnalysisBuffer writes audio data into the ring buffer for a given source ID.
+func WriteToAnalysisBuffer(sourceID string, data []byte) error {
+	// Get source info for enhanced logging (ID + DisplayName)
+	var displayName string
 	if registry := GetRegistry(); registry != nil {
 		if source, exists := registry.GetSourceByID(sourceID); exists {
 			displayName = source.DisplayName
 		}
+	}
+	// Default fallback if registry lookup fails
+	if displayName == "" {
+		displayName = sourceID
 	}
 	
 	start := time.Now()
@@ -299,11 +296,12 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	abMutex.RUnlock()
 
 	if !exists {
-		enhancedErr := errors.Newf("no analysis buffer found for stream: %s (mapped to: %s)", stream, sourceID).
+		enhancedErr := errors.Newf("no analysis buffer found for source ID: %s (%s)", sourceID, displayName).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "write_to_analysis_buffer").
-			Context("stream", stream).
+			Context("source_id", sourceID).
+			Context("display_name", displayName).
 			Context("data_size", len(data)).
 			Build()
 
@@ -317,11 +315,12 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	// Get buffer capacity information
 	capacity := ab.Capacity()
 	if capacity == 0 {
-		enhancedErr := errors.Newf("analysis buffer for stream %s has zero capacity", stream).
+		enhancedErr := errors.Newf("analysis buffer for source ID %s (%s) has zero capacity", sourceID, displayName).
 			Component("myaudio").
 			Category(errors.CategorySystem).
 			Context("operation", "write_to_analysis_buffer").
-			Context("stream", stream).
+			Context("source_id", sourceID).
+			Context("display_name", displayName).
 			Context("data_size", len(data)).
 			Build()
 
@@ -439,7 +438,7 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 		Component("myaudio").
 		Category(errors.CategorySystem).
 		Context("operation", "write_to_analysis_buffer").
-		Context("stream", stream).
+		Context("source_id", sourceID).
 		Context("data_size", len(data)).
 		Context("capacity", capacity).
 		Context("used_bytes", ab.Length()).
@@ -451,25 +450,33 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	return enhancedErr
 }
 
-// ReadFromAnalysisBuffer reads a sliding chunk of audio data from the ring buffer for a given stream.
-func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
+// ReadFromAnalysisBuffer reads a sliding chunk of audio data from the ring buffer for a given source ID.
+func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 	start := time.Now()
-	
-	// Auto-migrate legacy source identifiers to registry IDs
-	// Do this BEFORE acquiring the lock to avoid potential deadlocks
-	sourceID := MigrateExistingSourceToID(stream)
 
 	abMutex.Lock()
 	defer abMutex.Unlock()
 
-	// Get the ring buffer for the given stream using the migrated ID
+	// Get source info for enhanced logging (ID + DisplayName)
+	var displayName string
+	if registry := GetRegistry(); registry != nil {
+		if source, exists := registry.GetSourceByID(sourceID); exists {
+			displayName = source.DisplayName
+		}
+	}
+	if displayName == "" {
+		displayName = sourceID // Default fallback
+	}
+
+	// Get the ring buffer for the given source ID
 	ab, exists := analysisBuffers[sourceID]
 	if !exists {
-		enhancedErr := errors.Newf("no analysis buffer found for stream: %s (mapped to: %s)", stream, sourceID).
+		enhancedErr := errors.Newf("no analysis buffer found for source ID: %s (%s)", sourceID, displayName).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "read_from_analysis_buffer").
-			Context("stream", stream).
+			Context("source_id", sourceID).
+			Context("display_name", displayName).
 			Build()
 
 		if m := getAnalysisMetrics(); m != nil {
@@ -506,7 +513,7 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			Component("myaudio").
 			Category(errors.CategorySystem).
 			Context("operation", "read_from_analysis_buffer").
-			Context("stream", stream).
+			Context("source_id", sourceID).
 			Context("requested_bytes", readSize).
 			Context("bytes_read", bytesRead).
 			Context("buffer_length", ab.Length()).
@@ -547,7 +554,7 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 			m.RecordBufferReadBytes("analysis", sourceID, len(fullData))
 		}
 
-		//log.Printf("✅ Read %d bytes from analysis buffer for stream %s", len(fullData), stream)
+		//log.Printf("✅ Read %d bytes from analysis buffer for source ID %s (%s)", len(fullData), sourceID, displayName)
 		return fullData, nil
 	} else {
 		// If there isn't enough data even after appending, update prevData and return nil
@@ -563,9 +570,7 @@ func ReadFromAnalysisBuffer(stream string) ([]byte, error) {
 // AnalysisBufferExists checks if an analysis buffer exists for the given source
 // Accepts either original source string or migrated source ID
 // This is a thread-safe exported function that encapsulates access to the internal buffer map
-func AnalysisBufferExists(source string) bool {
-	// Auto-migrate to get the actual source ID
-	sourceID := MigrateExistingSourceToID(source)
+func AnalysisBufferExists(sourceID string) bool {
 	
 	abMutex.RLock()
 	defer abMutex.RUnlock()
@@ -574,7 +579,7 @@ func AnalysisBufferExists(source string) bool {
 }
 
 // AnalysisBufferMonitor monitors the buffer and processes audio data when enough data is present.
-func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, source string) {
+func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, sourceID string) {
 	// preRecordingTime is the time to subtract from the current time to get the start time of the detection
 	const preRecordingTime = -5000 * time.Millisecond
 
@@ -594,12 +599,12 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 			return
 
 		case <-ticker.C: // Wait for the next tick
-			data, err := ReadFromAnalysisBuffer(source)
+			data, err := ReadFromAnalysisBuffer(sourceID)
 			if err != nil {
 				log.Printf("❌ Buffer read error: %v", err)
 
 				if m := getAnalysisMetrics(); m != nil {
-					m.RecordAnalysisBufferPoll(source, "error")
+					m.RecordAnalysisBufferPoll(sourceID, "error")
 				}
 
 				time.Sleep(1 * time.Second) // Wait for 1 second before trying again
@@ -609,13 +614,13 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 			// if buffer has 3 seconds of data, process it
 			if len(data) == conf.BufferSize {
 				if m := getAnalysisMetrics(); m != nil {
-					m.RecordAnalysisBufferPoll(source, "data_available")
+					m.RecordAnalysisBufferPoll(sourceID, "data_available")
 				}
 
 				/*if err := validatePCMData(data); err != nil {
-					log.Printf("Invalid PCM data for source %s: %v", source, err)
+					log.Printf("Invalid PCM data for source %s: %v", sourceID, err)
 					if m := getAnalysisMetrics(); m != nil {
-						m.RecordAudioDataValidationError(source, "pcm_validation")
+						m.RecordAudioDataValidationError(sourceID, "pcm_validation")
 					}
 					continue
 				}*/
@@ -624,19 +629,19 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 				processingStart := time.Now()
 
 				// DEBUG
-				//log.Printf("Processing data for source %s", source)
-				err := ProcessData(bn, data, startTime, source)
+				//log.Printf("Processing data for source ID %s", sourceID)
+				err := ProcessData(bn, data, startTime, sourceID)
 
 				if m := getAnalysisMetrics(); m != nil {
 					processingDuration := time.Since(processingStart).Seconds()
-					m.RecordAnalysisBufferProcessingDuration(source, processingDuration)
+					m.RecordAnalysisBufferProcessingDuration(sourceID, processingDuration)
 				}
 
 				if err != nil {
-					log.Printf("❌ Error processing data for source %s: %v", source, err)
+					log.Printf("❌ Error processing data for source ID %s: %v", sourceID, err)
 				}
 			} else if m := getAnalysisMetrics(); m != nil {
-				m.RecordAnalysisBufferPoll(source, "insufficient_data")
+				m.RecordAnalysisBufferPoll(sourceID, "insufficient_data")
 			}
 		}
 	}

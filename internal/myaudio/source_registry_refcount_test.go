@@ -14,9 +14,8 @@ func createTestRegistry(tb testing.TB) *AudioSourceRegistry {
 	return &AudioSourceRegistry{
 		sources:           make(map[string]*AudioSource),
 		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 }
 

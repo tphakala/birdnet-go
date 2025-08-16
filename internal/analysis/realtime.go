@@ -1534,19 +1534,32 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if len(settings.Realtime.RTSP.URLs) > 0 {
 			// Register RTSP sources in the registry and get their source IDs
-			myaudio.RegisterExistingRTSPSources(settings.Realtime.RTSP.URLs)
-
-			// Get the source IDs from the registry instead of using raw URLs
 			registry := myaudio.GetRegistry()
+			if registry == nil {
+				return nil, fmt.Errorf("audio source registry not available")
+			}
+			
 			var failedSources []string
 			for _, url := range settings.Realtime.RTSP.URLs {
-				if source, exists := registry.GetSourceByConnection(url); exists {
-					sources = append(sources, source.ID)
-				} else {
-					// Log the failure to register this RTSP source
-					log.Printf("⚠️  Failed to register RTSP source: %s", privacy.SanitizeRTSPUrl(url))
-					failedSources = append(failedSources, privacy.SanitizeRTSPUrl(url))
+				if url == "" {
+					log.Printf("⚠️ Skipping empty RTSP URL")
+					continue
 				}
+				
+				// Register the source
+				source, err := registry.RegisterSource(url, myaudio.SourceConfig{
+					ID:          "", // Let registry generate UUID
+					DisplayName: "", // Let auto-generation use SafeString
+					Type:        myaudio.SourceTypeRTSP,
+				})
+				if err != nil {
+					safeURL := privacy.SanitizeRTSPUrl(url)
+					log.Printf("❌ Failed to register RTSP source %s: %v", safeURL, err)
+					failedSources = append(failedSources, safeURL)
+					continue
+				}
+				
+				sources = append(sources, source.ID)
 			}
 
 			// If some sources failed to register, log a summary

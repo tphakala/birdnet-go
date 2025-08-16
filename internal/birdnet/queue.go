@@ -8,12 +8,12 @@ import (
 
 // Results represents the data structure for storing BirdNET inference results
 type Results struct {
-	StartTime   time.Time           // Time when the analysis started
-	PCMdata     []byte              // Raw PCM audio data
-	Results     []datastore.Results // Slice of analysis results
-	ElapsedTime time.Duration       // Time taken for analysis
-	ClipName    string              // Name of the audio clip
-	Source      string              // Source of the audio data, RSTP URL or audio card name
+	StartTime   time.Time                // Time when the analysis started
+	PCMdata     []byte                   // Raw PCM audio data
+	Results     []datastore.Results      // Slice of analysis results
+	ElapsedTime time.Duration            // Time taken for analysis
+	ClipName    string                   // Name of the audio clip
+	Source      datastore.AudioSource    // Audio source with ID, SafeString, and DisplayName
 }
 
 // Default buffer size for the results queue

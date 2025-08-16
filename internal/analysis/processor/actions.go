@@ -25,7 +25,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 type Action interface {
@@ -241,14 +240,14 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
 		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, 15)
 		if err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to read audio segment from buffer",
 				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
-				"source", a.Note.Source,
+				"source", a.Note.Source.SafeString,
 				"begin_time", a.Note.BeginTime,
 				"duration_seconds", 15,
 				"operation", "read_audio_segment")
@@ -305,11 +304,8 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
-	// Convert source ID to DisplayName for user-facing notifications (nil-safe)
-	displayLocation := a.Note.Source
-	if a.processor != nil {
-		displayLocation = a.processor.getDisplayNameForSource(a.Note.Source)
-	}
+	// Use display name directly from the AudioSource struct for user-facing notifications
+	displayLocation := a.Note.Source.DisplayName
 
 	detectionEvent, err := events.NewDetectionEvent(
 		a.Note.CommonName,
@@ -594,11 +590,10 @@ func (a *MqttAction) Execute(data interface{}) error {
 		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
-	// Create a copy of the Note with sanitized RTSP URL
+	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
-	noteCopy.Source = privacy.SanitizeRTSPUrl(noteCopy.Source)
 
-	// Wrap note with bird image (using sanitized copy)
+	// Wrap note with bird image (using copy)
 	noteWithBirdImage := NoteWithBirdImage{Note: noteCopy, BirdImage: birdImage}
 
 	// Create a JSON representation of the note
@@ -774,9 +769,8 @@ func (a *SSEAction) Execute(data interface{}) error {
 		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
-	// Create a copy of the Note with sanitized RTSP URL
+	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
-	noteCopy.Source = privacy.SanitizeRTSPUrl(noteCopy.Source)
 
 	// Broadcast the detection with error handling
 	if err := a.SSEBroadcaster(&noteCopy, &birdImage); err != nil {

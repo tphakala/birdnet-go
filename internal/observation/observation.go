@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,11 +62,21 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 	detectionTime := now.Add(-2 * time.Second)
 	timeStr := detectionTime.Format("15:04:05")
 
-	var audioSource string
+	// Create AudioSource struct with proper fields
+	var audioSourceStruct datastore.AudioSource
 	if settings.Input.Path != "" {
-		audioSource = settings.Input.Path
+		audioSourceStruct = datastore.AudioSource{
+			ID:          source,                     // Use source as ID
+			SafeString:  settings.Input.Path,       // File path is safe to display
+			DisplayName: filepath.Base(settings.Input.Path), // Just the filename for display
+		}
 	} else {
-		audioSource = source
+		// For other sources, use basic structure
+		audioSourceStruct = datastore.AudioSource{
+			ID:          source,
+			SafeString:  source,      // For analysis mode, source is typically safe
+			DisplayName: source,      // Use as-is for display
+		}
 	}
 
 	// Round confidence to two decimal places
@@ -76,7 +87,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		SourceNode:     settings.Main.Name,           // From the provided configuration settings.
 		Date:           date,                         // Use ISO 8601 date format.
 		Time:           timeStr,                      // Use 24-hour time format.
-		Source:         audioSource,                  // From the provided configuration settings.
+		Source:         audioSourceStruct,            // Proper AudioSource struct
 		BeginTime:      beginTime,                    // Start time of the observation.
 		EndTime:        endTime,                      // End time of the observation.
 		SpeciesCode:    speciesCode,                  // Parsed species code or placeholder.
@@ -137,7 +148,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 
 		// Prepare the line for notes above the threshold, assuming note.BeginTime and note.EndTime are of type time.Time
 		line := fmt.Sprintf("%d\tSpectrogram 1\t1\t%s\t%s\t%s\t0\t15000\t%s\t%s\t%.4f\n",
-			i+1, notes[i].Source, notes[i].BeginTime.Format("15:04:05"), notes[i].EndTime.Format("15:04:05"),
+			i+1, notes[i].Source.SafeString, notes[i].BeginTime.Format("15:04:05"), notes[i].EndTime.Format("15:04:05"),
 			notes[i].SpeciesCode, notes[i].CommonName, notes[i].Confidence)
 
 		// Attempt to write the note

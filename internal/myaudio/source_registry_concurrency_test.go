@@ -9,14 +9,13 @@ import (
 	"time"
 )
 
-// TestRaceConditionFix verifies that MigrateSourceAtomic prevents race conditions
+// TestRaceConditionFix verifies that GetOrCreateSource prevents race conditions
 func TestRaceConditionFix(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:           make(map[string]*AudioSource),
-		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Test concurrent migrations of the same source
@@ -30,7 +29,11 @@ func TestRaceConditionFix(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			id := registry.MigrateSourceAtomic(testURL, SourceTypeRTSP)
+			source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
+			var id string
+			if source != nil {
+				id = source.ID
+			}
 			results <- id
 		}()
 	}
@@ -61,11 +64,10 @@ func TestRaceConditionFix(t *testing.T) {
 // TestMemoryLeakFix verifies that sources can be properly cleaned up
 func TestMemoryLeakFix(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:           make(map[string]*AudioSource),
-		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Register multiple sources
@@ -110,11 +112,10 @@ func TestMemoryLeakFix(t *testing.T) {
 // TestInactiveSourceCleanup verifies that inactive sources can be cleaned up
 func TestInactiveSourceCleanup(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:           make(map[string]*AudioSource),
-		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Register sources with different last seen times
@@ -281,7 +282,7 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
-			registry.MigrateSourceAtomic(url, SourceTypeRTSP)
+			registry.GetOrCreateSource(url, SourceTypeRTSP)
 		}(i)
 	}
 

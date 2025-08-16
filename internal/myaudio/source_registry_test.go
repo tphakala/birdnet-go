@@ -23,9 +23,8 @@ func TestSourceRegistration(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:           make(map[string]*AudioSource),
 		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Test RTSP source registration
@@ -126,9 +125,8 @@ func TestSourceIDGeneration(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:           make(map[string]*AudioSource),
 		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Test auto-generated IDs
@@ -177,21 +175,24 @@ func TestConcurrentSourceAccess(t *testing.T) {
 }
 
 func TestBackwardCompatibility(t *testing.T) {
-	// Test that migration works correctly
+	// Test that GetOrCreateSource works correctly
 	testURL := "rtsp://test.local/stream"
 	
 	// This should auto-register the source
-	migratedID := MigrateExistingSourceToID(testURL)
+	source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
+	if source == nil {
+		t.Fatal("GetOrCreateSource returned nil")
+	}
 	
-	// Should return a source ID, not the original URL
-	if migratedID == testURL {
-		t.Errorf("Migration should return source ID, not original URL")
+	// Should return a source with an ID, not the original URL
+	if source.ID == testURL {
+		t.Errorf("Source should have generated ID, not original URL")
 	}
 
-	// Second call should return the same ID
-	migratedID2 := MigrateExistingSourceToID(testURL)
-	if migratedID != migratedID2 {
-		t.Errorf("Migration should be idempotent: %s != %s", migratedID, migratedID2)
+	// Second call should return the same source
+	source2 := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
+	if source2 == nil || source.ID != source2.ID {
+		t.Errorf("GetOrCreateSource should be idempotent: %s != %s", source.ID, source2.ID)
 	}
 }
 
@@ -222,9 +223,8 @@ func TestSourceStats(t *testing.T) {
 	registry := &AudioSourceRegistry{
 		sources:           make(map[string]*AudioSource),
 		connectionMap:     make(map[string]string),
-		refCounts:         make(map[string]*int32),
-		failedValidations: make(map[string]bool),
-		logger:            getTestLogger(),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
 	}
 
 	// Create sources of different types

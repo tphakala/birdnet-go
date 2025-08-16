@@ -257,7 +257,7 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item birdnet.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		"source", p.getDisplayNameForSource(item.Source),
+		"source", item.Source.DisplayName,
 		"start_time", item.StartTime,
 		"results_count", len(item.Results),
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
@@ -273,7 +273,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	detectionResults := p.processResults(item)
 	
 	// Log processing results with deduplication to prevent spam
-	p.logDetectionResults(item.Source, len(item.Results), len(detectionResults))
+	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
 
 	for i := 0; i < len(detectionResults); i++ {
 		detection := detectionResults[i]
@@ -289,7 +289,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			if confidence > existing.Confidence {
 				existing.Detection = detection
 				existing.Confidence = confidence
-				existing.Source = item.Source
+				existing.Source = item.Source.ID
 				existing.LastUpdated = time.Now()
 				// Add structured logging for confidence update
 				GetLogger().Debug("Updated pending detection with higher confidence",
@@ -307,13 +307,13 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			GetLogger().Info("Created new pending detection",
 				"species", commonName,
 				"confidence", confidence,
-				"source", p.getDisplayNameForSource(item.Source),
+				"source", item.Source.DisplayName,
 				"flush_deadline", item.StartTime.Add(delay),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
-				Source:        item.Source,
+				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
 				FlushDeadline: item.StartTime.Add(delay),
 				Count:         1,
@@ -371,7 +371,7 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
 		
 		// Check if detection should be filtered
-		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source)
+		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source.ID)
 		if shouldSkip {
 			continue
 		}
@@ -486,7 +486,7 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
-		item.Source, clipName,
+		item.Source.ID, clipName,
 		item.ElapsedTime)
 
 	// Update species tracker if enabled
@@ -544,11 +544,11 @@ func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase st
 		GetLogger().Info("Dog detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
-			"source", p.getDisplayNameForSource(item.Source),
+			"source", item.Source.DisplayName,
 			"operation", "dog_bark_filter")
-		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, p.getDisplayNameForSource(item.Source))
+		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source.DisplayName)
 		p.detectionMutex.Lock()
-		p.LastDogDetection[item.Source] = item.StartTime
+		p.LastDogDetection[item.Source.ID] = item.StartTime
 		p.detectionMutex.Unlock()
 	}
 }
@@ -564,13 +564,13 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 		GetLogger().Info("Human detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
-			"source", p.getDisplayNameForSource(item.Source),
+			"source", item.Source.DisplayName,
 			"operation", "privacy_filter")
-		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, p.getDisplayNameForSource(item.Source))
+		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source.DisplayName)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
 		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source] = item.StartTime
+		p.LastHumanDetection[item.Source.ID] = item.StartTime
 		p.detectionMutex.Unlock()
 	}
 }
@@ -1100,6 +1100,7 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 
 // getDisplayNameForSource converts a source ID to user-friendly DisplayName
 // Falls back to sanitized source if lookup fails (prevents credential exposure)
+// TODO: Consider moving to AudioSource struct throughout the pipeline to eliminate this lookup
 func (p *Processor) getDisplayNameForSource(sourceID string) string {
 	registry := myaudio.GetRegistry()
 	if registry != nil {
@@ -1182,29 +1183,49 @@ func (p *Processor) NewWithSpeciesInfo(
 	detectionTime := now.Add(-2 * time.Second)
 	timeStr := detectionTime.Format("15:04:05")
 
-	var audioSource string
+	var sourceStruct datastore.AudioSource
 	if p.Settings.Input.Path != "" {
-		audioSource = p.Settings.Input.Path
+		// For file input, create simple source struct
+		sourceStruct = datastore.AudioSource{
+			ID:          source, // Use original source as ID for file operations
+			SafeString:  p.Settings.Input.Path,
+			DisplayName: filepath.Base(p.Settings.Input.Path),
+		}
 	} else {
-		// Use registry SafeString to sanitize RTSP credentials before logging/storing
+		// Use registry to get proper AudioSource struct with ID, SafeString, and DisplayName
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			// Try to get existing source by connection string to use its SafeString
+			// Try to get existing source by connection string
 			if existingSource, exists := registry.GetSourceByConnection(source); exists {
-				audioSource = existingSource.SafeString
+				sourceStruct = datastore.AudioSource{
+					ID:          existingSource.ID,          // Use source ID for buffer operations
+					SafeString:  existingSource.SafeString,  // Use sanitized string for logging
+					DisplayName: existingSource.DisplayName, // Use display name for UI
+				}
 			} else {
-				// Migration fallback - try to get by ID
-				migratedID := myaudio.MigrateExistingSourceToID(source)
-				if registrySource, exists := registry.GetSourceByID(migratedID); exists {
-					audioSource = registrySource.SafeString
+				// Try to get by ID directly
+				if registrySource, exists := registry.GetSourceByID(source); exists {
+					sourceStruct = datastore.AudioSource{
+						ID:          registrySource.ID,
+						SafeString:  registrySource.SafeString,
+						DisplayName: registrySource.DisplayName,
+					}
 				} else {
-					// Last resort: manual sanitization for safety
-					audioSource = privacy.SanitizeRTSPUrl(source)
+					// Last resort: create struct with manual sanitization for safety
+					sourceStruct = datastore.AudioSource{
+						ID:          source,                           // Use original as ID
+						SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
+						DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+					}
 				}
 			}
 		} else {
 			// Fallback when registry not available
-			audioSource = privacy.SanitizeRTSPUrl(source)
+			sourceStruct = datastore.AudioSource{
+				ID:          source,                           // Use original as ID
+				SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
+				DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+			}
 		}
 	}
 
@@ -1216,7 +1237,7 @@ func (p *Processor) NewWithSpeciesInfo(
 		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
 		Date:           date,                           // Use ISO 8601 date format
 		Time:           timeStr,                        // Use 24-hour time format
-		Source:         audioSource,                    // From the provided configuration settings
+		Source:         sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName
 		BeginTime:      beginTime,                      // Start time of the observation
 		EndTime:        endTime,                        // End time of the observation
 		SpeciesCode:    speciesCode,                    // Species code from taxonomy lookup

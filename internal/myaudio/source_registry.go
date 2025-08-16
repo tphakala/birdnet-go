@@ -36,9 +36,6 @@ type AudioSourceRegistry struct {
 	// Reference counting for cleanup
 	refCounts map[string]*int32 // sourceID -> reference count
 
-	// Failed validation cache to prevent log spam
-	failedValidations map[string]bool // connectionString -> true (prevents repeated warnings)
-
 	// Thread safety
 	mu sync.RWMutex
 
@@ -66,11 +63,10 @@ func GetRegistry() *AudioSourceRegistry {
 			logger = slog.Default()
 		}
 		registry = &AudioSourceRegistry{
-			sources:           make(map[string]*AudioSource),
-			connectionMap:     make(map[string]string),
-			refCounts:         make(map[string]*int32),
-			failedValidations: make(map[string]bool),
-			logger:            logger.With("component", "registry"),
+			sources:       make(map[string]*AudioSource),
+			connectionMap: make(map[string]string),
+			refCounts:     make(map[string]*int32),
+			logger:        logger.With("component", "registry"),
 		}
 	})
 	return registry
@@ -216,72 +212,6 @@ func detectSourceTypeFromString(connectionString string) SourceType {
 	return SourceTypeAudioCard
 }
 
-// MigrateSourceAtomic atomically migrates a source identifier to a registry ID
-// This prevents race conditions during concurrent migration attempts
-func (r *AudioSourceRegistry) MigrateSourceAtomic(source string, sourceType SourceType) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Check if it's already a source ID (avoid double migration)
-	if _, exists := r.sources[source]; exists {
-		return source
-	}
-
-	// Check if we have this connection string registered
-	if existingID, exists := r.connectionMap[source]; exists {
-		// Already registered, trust it (was validated on initial registration)
-		return existingID
-	}
-
-	// Detect source type if unknown (do this inside the lock for atomicity)
-	if sourceType == SourceTypeUnknown {
-		sourceType = detectSourceTypeFromString(source)
-	}
-
-	// NEW source - must pass validation for security
-	// Do validation while holding the lock to ensure atomicity
-	if err := r.validateConnectionString(source, sourceType); err != nil {
-		// Only log once per unique source to prevent spam
-		if !r.failedValidations[source] {
-			r.failedValidations[source] = true
-			r.logger.With("safe", r.sanitizeConnectionString(source, sourceType)).
-				With("type", sourceType).
-				With("error", err).
-				Warn("Rejected invalid source during migration")
-		}
-		// Return the original source - it won't work but at least won't crash
-		// The calling code will handle the failure appropriately
-		return source
-	}
-
-	// Need to create new source - do it while holding the lock
-	// Generate ID
-	id := r.generateID(sourceType)
-
-	// Create new source
-	audioSource := &AudioSource{
-		ID:               id,
-		DisplayName:      r.generateDisplayName(&AudioSource{ID: id, Type: sourceType, SafeString: r.sanitizeConnectionString(source, sourceType)}),
-		Type:             sourceType,
-		connectionString: source,
-		SafeString:       r.sanitizeConnectionString(source, sourceType),
-		RegisteredAt:     time.Now(),
-		LastSeen:         time.Now(),
-		IsActive:         true,
-		TotalBytes:       0,
-		ErrorCount:       0,
-	}
-
-	// Store in registry
-	r.sources[audioSource.ID] = audioSource
-	r.connectionMap[source] = audioSource.ID
-
-	r.logger.With("id", audioSource.ID).
-		With("safe", audioSource.SafeString).
-		Info("Auto-migrated source")
-
-	return audioSource.ID
-}
 
 // ListSources returns all registered sources (without connection strings) in deterministic order
 func (r *AudioSourceRegistry) ListSources() []*AudioSource {

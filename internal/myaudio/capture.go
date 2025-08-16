@@ -25,10 +25,10 @@ type AudioDataCallback func(sourceID string, data []byte)
 
 // Global callback registry for broadcasting audio data
 var (
-	broadcastCallbacks             map[string]AudioDataCallback // Map of sourceID -> callback
-	broadcastCallbackMutex         sync.RWMutex
-	lastCallbackLogTime            atomic.Int64 // Unix nano timestamp of last active callback log
-	lastMissingCallbackLogTime     atomic.Int64 // Unix nano timestamp of last missing callback log
+	broadcastCallbacks         map[string]AudioDataCallback // Map of sourceID -> callback
+	broadcastCallbackMutex     sync.RWMutex
+	lastCallbackLogTime        atomic.Int64 // Unix nano timestamp of last active callback log
+	lastMissingCallbackLogTime atomic.Int64 // Unix nano timestamp of last missing callback log
 )
 
 func init() {
@@ -40,7 +40,7 @@ func RegisterBroadcastCallback(sourceID string, callback AudioDataCallback) {
 	broadcastCallbackMutex.Lock()
 	defer broadcastCallbackMutex.Unlock()
 	broadcastCallbacks[sourceID] = callback
-	
+
 	// Get DisplayName for user-friendly logging
 	displayName := sourceID // Default to ID if we can't get DisplayName
 	if registry := GetRegistry(); registry != nil {
@@ -57,7 +57,7 @@ func UnregisterBroadcastCallback(sourceID string) {
 	broadcastCallbackMutex.Lock()
 	defer broadcastCallbackMutex.Unlock()
 	delete(broadcastCallbacks, sourceID)
-	
+
 	// Get DisplayName for user-friendly logging
 	displayName := sourceID // Default to ID if we can't get DisplayName
 	if registry := GetRegistry(); registry != nil {
@@ -213,7 +213,7 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 	if err := SyncRTSPStreamsWithConfig(unifiedAudioChan); err != nil {
 		log.Printf("❌ Error syncing RTSP streams with configuration: %v", err)
 	}
-	
+
 	// Note: Buffer management is handled by the FFmpegManager via the StartStream/StopStream
 	// methods which are called by SyncWithConfig. The activeStreams map is no longer needed
 	// as the FFmpegManager maintains its own internal stream tracking.
@@ -221,14 +221,11 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 
 // initializeBuffersForSource handles the initialization of analysis and capture buffers for a given source
 func initializeBuffersForSource(sourceID string) error {
-	// Migrate source ID to check if buffers exist
-	migratedID := MigrateExistingSourceToID(sourceID)
-	
 	var abExists bool
 
-	// Check if analysis buffer exists using the migrated ID
+	// Check if analysis buffer exists using the source ID
 	abMutex.RLock()
-	_, abExists = analysisBuffers[migratedID]
+	_, abExists = analysisBuffers[sourceID]
 	abMutex.RUnlock()
 
 	// Initialize analysis buffer if it doesn't exist
@@ -238,12 +235,12 @@ func initializeBuffersForSource(sourceID string) error {
 			return fmt.Errorf("failed to initialize analysis buffer: %w", err)
 		}
 	} else {
-		log.Printf("✅ Reusing existing analysis buffer for source: %s (ID: %s)", sourceID, migratedID)
+		log.Printf("✅ Reusing existing analysis buffer for source ID: %s", sourceID)
 	}
 
-	// Check if capture buffer exists using the migrated ID
+	// Check if capture buffer exists using the source ID
 	cbMutex.RLock()
-	_, cbExists := captureBuffers[migratedID]
+	_, cbExists := captureBuffers[sourceID]
 	cbMutex.RUnlock()
 
 	// Initialize capture buffer if needed
@@ -259,7 +256,7 @@ func initializeBuffersForSource(sourceID string) error {
 			return fmt.Errorf("failed to initialize capture buffer: %w", err)
 		}
 	} else {
-		log.Printf("✅ Reusing existing capture buffer for source: %s (ID: %s)", sourceID, migratedID)
+		log.Printf("✅ Reusing existing capture buffer for source: %s (ID: %s)", sourceID, sourceID)
 	}
 
 	return nil
@@ -301,7 +298,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			log.Printf("❌ Registry not available during audio capture initialization, unable to register source")
 			return
 		}
-		
+
 		source, err := registry.RegisterSource(settings.Realtime.Audio.Source, SourceConfig{
 			Type: SourceTypeAudioCard,
 		})
@@ -309,7 +306,6 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			log.Printf("❌ Failed to register audio device source: %v", err)
 			return
 		}
-
 
 		// Initialize buffers using the registry source ID (UUID-based)
 		// This ensures consistency with the AnalysisBufferMonitor
