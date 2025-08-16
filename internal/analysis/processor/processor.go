@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Species identification constants for filtering
@@ -256,7 +257,7 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item birdnet.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		"source", item.Source,
+		"source", item.Source.DisplayName,
 		"start_time", item.StartTime,
 		"results_count", len(item.Results),
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
@@ -272,7 +273,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	detectionResults := p.processResults(item)
 	
 	// Log processing results with deduplication to prevent spam
-	p.logDetectionResults(item.Source, len(item.Results), len(detectionResults))
+	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
 
 	for i := 0; i < len(detectionResults); i++ {
 		detection := detectionResults[i]
@@ -288,7 +289,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			if confidence > existing.Confidence {
 				existing.Detection = detection
 				existing.Confidence = confidence
-				existing.Source = item.Source
+				existing.Source = item.Source.ID
 				existing.LastUpdated = time.Now()
 				// Add structured logging for confidence update
 				GetLogger().Debug("Updated pending detection with higher confidence",
@@ -306,13 +307,13 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			GetLogger().Info("Created new pending detection",
 				"species", commonName,
 				"confidence", confidence,
-				"source", item.Source,
+				"source", item.Source.DisplayName,
 				"flush_deadline", item.StartTime.Add(delay),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
-				Source:        item.Source,
+				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
 				FlushDeadline: item.StartTime.Add(delay),
 				Count:         1,
@@ -370,7 +371,7 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
 		
 		// Check if detection should be filtered
-		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source)
+		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source.ID)
 		if shouldSkip {
 			continue
 		}
@@ -449,7 +450,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 				"species", result.Species,
 				"confidence", result.Confidence,
 				"threshold", confidenceThreshold,
-				"source", source,
+				"source", p.getDisplayNameForSource(source),
 				"operation", "confidence_filter")
 		}
 		return true, confidenceThreshold
@@ -485,7 +486,7 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
-		item.Source, clipName,
+		item.Source.ID, clipName,
 		item.ElapsedTime)
 
 	// Update species tracker if enabled
@@ -543,11 +544,11 @@ func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase st
 		GetLogger().Info("Dog detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
-			"source", item.Source,
+			"source", item.Source.DisplayName,
 			"operation", "dog_bark_filter")
-		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source)
+		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, item.Source.DisplayName)
 		p.detectionMutex.Lock()
-		p.LastDogDetection[item.Source] = item.StartTime
+		p.LastDogDetection[item.Source.ID] = item.StartTime
 		p.detectionMutex.Unlock()
 	}
 }
@@ -563,13 +564,13 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 		GetLogger().Info("Human detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
-			"source", item.Source,
+			"source", item.Source.DisplayName,
 			"operation", "privacy_filter")
-		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source)
+		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, item.Source.DisplayName)
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
 		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source] = item.StartTime
+		p.LastHumanDetection[item.Source.ID] = item.StartTime
 		p.detectionMutex.Unlock()
 	}
 }
@@ -631,7 +632,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 			"species", item.Detection.Note.CommonName,
 			"count", item.Count,
 			"minimum_required", minDetections,
-			"source", item.Source,
+			"source", p.getDisplayNameForSource(item.Source),
 			"operation", "minimum_count_filter")
 		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
 	}
@@ -647,7 +648,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				"species", item.Detection.Note.CommonName,
 				"detection_time", item.FirstDetected,
 				"last_human_detection", lastHumanDetection,
-				"source", item.Source,
+				"source", p.getDisplayNameForSource(item.Source),
 				"operation", "privacy_filter")
 			return true, "privacy filter"
 		}
@@ -674,7 +675,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				"species", item.Detection.Note.CommonName,
 				"detection_time", item.FirstDetected,
 				"last_dog_detection", lastDogDetection,
-				"source", item.Source,
+				"source", p.getDisplayNameForSource(item.Source),
 				"operation", "dog_bark_filter")
 			return true, "recent dog bark"
 		}
@@ -694,13 +695,13 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	// Add structured logging
 	GetLogger().Info("Approving detection",
 		"species", species,
-		"source", item.Source,
+		"source", p.getDisplayNameForSource(item.Source),
 		"match_count", item.Count,
 		"confidence", confidence,
 		"has_results", len(item.Detection.Results) > 0,
 		"operation", "approve_detection")
 	log.Printf("Approving detection of %s from source %s, matched %d times\n",
-		species, item.Source, item.Count)
+		species, p.getDisplayNameForSource(item.Source), item.Count)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
@@ -766,12 +767,12 @@ func (p *Processor) pendingDetectionsFlusher() {
 						// Add structured logging
 					GetLogger().Info("Discarding detection",
 						"species", species,
-						"source", item.Source,
+						"source", p.getDisplayNameForSource(item.Source),
 						"reason", reason,
 						"count", item.Count,
 						"operation", "discard_detection")
 					log.Printf("Discarding detection of %s from source %s due to %s\n",
-							species, item.Source, reason)
+							species, p.getDisplayNameForSource(item.Source), reason)
 						delete(p.pendingDetections, species)
 						continue
 					}
@@ -888,6 +889,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			Settings:          p.Settings,
 			EventTracker:      p.GetEventTracker(),
 			NewSpeciesTracker: tracker,
+			processor:         p, // Add processor reference for source name resolution
 			Note:              detection.Note,
 			Results:           detection.Results,
 			Ds:                p.Ds})
@@ -1096,6 +1098,28 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 	return removed
 }
 
+// getDisplayNameForSource converts a source ID to user-friendly DisplayName
+// Falls back to sanitized source if lookup fails (prevents credential exposure)
+// TODO: Consider moving to AudioSource struct throughout the pipeline to eliminate this lookup
+func (p *Processor) getDisplayNameForSource(sourceID string) string {
+	registry := myaudio.GetRegistry()
+	if registry != nil {
+		// Try lookup by ID first
+		if source, exists := registry.GetSourceByID(sourceID); exists {
+			return source.DisplayName
+		}
+		
+		// Try lookup by connection string (handles legacy case)
+		if source, exists := registry.GetSourceByConnection(sourceID); exists {
+			return source.DisplayName
+		}
+	}
+	
+	// Fallback: sanitize the source to prevent credential exposure in logs
+	// This handles cases where sourceID might be a raw RTSP URL
+	return privacy.SanitizeRTSPUrl(sourceID)
+}
+
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
 	// Cancel all worker goroutines
@@ -1159,11 +1183,50 @@ func (p *Processor) NewWithSpeciesInfo(
 	detectionTime := now.Add(-2 * time.Second)
 	timeStr := detectionTime.Format("15:04:05")
 
-	var audioSource string
+	var sourceStruct datastore.AudioSource
 	if p.Settings.Input.Path != "" {
-		audioSource = p.Settings.Input.Path
+		// For file input, create simple source struct
+		sourceStruct = datastore.AudioSource{
+			ID:          source, // Use original source as ID for file operations
+			SafeString:  p.Settings.Input.Path,
+			DisplayName: filepath.Base(p.Settings.Input.Path),
+		}
 	} else {
-		audioSource = source
+		// Use registry to get proper AudioSource struct with ID, SafeString, and DisplayName
+		registry := myaudio.GetRegistry()
+		if registry != nil {
+			// Try to get existing source by connection string
+			if existingSource, exists := registry.GetSourceByConnection(source); exists {
+				sourceStruct = datastore.AudioSource{
+					ID:          existingSource.ID,          // Use source ID for buffer operations
+					SafeString:  existingSource.SafeString,  // Use sanitized string for logging
+					DisplayName: existingSource.DisplayName, // Use display name for UI
+				}
+			} else {
+				// Try to get by ID directly
+				if registrySource, exists := registry.GetSourceByID(source); exists {
+					sourceStruct = datastore.AudioSource{
+						ID:          registrySource.ID,
+						SafeString:  registrySource.SafeString,
+						DisplayName: registrySource.DisplayName,
+					}
+				} else {
+					// Last resort: create struct with manual sanitization for safety
+					sourceStruct = datastore.AudioSource{
+						ID:          source,                           // Use original as ID
+						SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
+						DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+					}
+				}
+			}
+		} else {
+			// Fallback when registry not available
+			sourceStruct = datastore.AudioSource{
+				ID:          source,                           // Use original as ID
+				SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
+				DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
+			}
+		}
 	}
 
 	// Round confidence to two decimal places
@@ -1174,7 +1237,7 @@ func (p *Processor) NewWithSpeciesInfo(
 		SourceNode:     p.Settings.Main.Name,           // From the provided configuration settings
 		Date:           date,                           // Use ISO 8601 date format
 		Time:           timeStr,                        // Use 24-hour time format
-		Source:         audioSource,                    // From the provided configuration settings
+		Source:         sourceStruct,                   // Proper AudioSource struct with ID, SafeString, DisplayName
 		BeginTime:      beginTime,                      // Start time of the observation
 		EndTime:        endTime,                        // End time of the observation
 		SpeciesCode:    speciesCode,                    // Species code from taxonomy lookup
@@ -1198,7 +1261,7 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 	
 	if shouldLog {
 		GetLogger().Info("Detection processing results",
-			"source", source,
+			"source", p.getDisplayNameForSource(source),
 			"raw_results_count", rawCount,
 			"filtered_detections_count", filteredCount,
 			"log_reason", reason,

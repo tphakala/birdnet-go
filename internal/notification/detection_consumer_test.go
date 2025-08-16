@@ -1,13 +1,27 @@
 package notification
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/events"
+	"go.uber.org/goleak"
 )
+
+// TestMain provides goleak verification to detect goroutine leaks
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*Service).cleanupLoop"),
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*ResourceEventWorker).cleanupLoop"),
+	)
+	os.Exit(m.Run())
+}
 
 func TestDetectionNotificationConsumer(t *testing.T) {
 	t.Parallel()
@@ -99,7 +113,12 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	assert.Len(t, notifications, 1)
 }
 
-func TestDetectionNotificationConsumer_RTSPSanitization(t *testing.T) {
+// TestDetectionNotificationConsumer_PreSanitizedLocations verifies that the notification
+// consumer correctly handles pre-sanitized location data from the audio source registry.
+// In the new architecture, RTSP URL sanitization happens at the audio source registry level,
+// so detection events already contain sanitized display names. The notification layer should
+// pass these through unchanged without additional sanitization.
+func TestDetectionNotificationConsumer_PreSanitizedLocations(t *testing.T) {
 	t.Parallel()
 
 	// Create notification service
@@ -117,49 +136,52 @@ func TestDetectionNotificationConsumer_RTSPSanitization(t *testing.T) {
 	consumer := NewDetectionNotificationConsumer(service)
 	require.NotNil(t, consumer)
 
-	// Test cases for RTSP URL sanitization
+	// Test cases for pre-sanitized locations from audio source registry
+	// In the new architecture, detection events already contain sanitized display names
 	testCases := []struct {
 		name             string
-		rtspURL          string
-		expectedLocation string
+		displayLocation  string // Already-sanitized location from registry
+		expectedLocation string // Should pass through unchanged
 	}{
 		{
-			name:             "RTSP URL with credentials",
-			rtspURL:          "rtsp://admin:password123@192.168.1.100:554/stream1",
-			expectedLocation: "rtsp://192.168.1.100:554/stream1", // Path is now preserved for debugging
+			name:             "Pre-sanitized RTSP location",
+			displayLocation:  "rtsp://192.168.1.100:554/stream1", // Already sanitized by registry
+			expectedLocation: "rtsp://192.168.1.100:554/stream1", // Should pass through unchanged
 		},
 		{
-			name:             "RTSP URL without credentials",
-			rtspURL:          "rtsp://192.168.1.100:554/stream1",
-			expectedLocation: "rtsp://192.168.1.100:554/stream1", // Path is now preserved for debugging
+			name:             "Pre-sanitized IPv6 RTSP location",
+			displayLocation:  "rtsp://[2001:db8::1]:554/live", // Already sanitized by registry
+			expectedLocation: "rtsp://[2001:db8::1]:554/live", // Should pass through unchanged
 		},
 		{
-			name:             "RTSP URL with IPv6 and credentials",
-			rtspURL:          "rtsp://user:pass@[2001:db8::1]:554/live",
-			expectedLocation: "rtsp://[2001:db8::1]:554/live", // Path is now preserved for debugging
+			name:             "Audio device display name",
+			displayLocation:  "USB Audio Device #0", // Display name from registry
+			expectedLocation: "USB Audio Device #0", // Should pass through unchanged
 		},
 		{
-			name:             "Non-RTSP URL (should remain unchanged)",
-			rtspURL:          "backyard-camera",
-			expectedLocation: "backyard-camera",
+			name:             "Custom camera name",
+			displayLocation:  "Backyard Camera", // Custom display name from registry
+			expectedLocation: "Backyard Camera", // Should pass through unchanged
 		},
 		{
-			name:             "HTTP URL (should remain unchanged)",
-			rtspURL:          "http://example.com/stream",
-			expectedLocation: "http://example.com/stream",
+			name:             "File source display name",
+			displayLocation:  "Audio File: recording.wav", // Display name from registry
+			expectedLocation: "Audio File: recording.wav", // Should pass through unchanged
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a new species detection event with RTSP URL
+			// Create a new species detection event with pre-sanitized location
+			// This simulates how the real system works: detection events contain
+			// already-sanitized display names from the audio source registry
 			event, err := events.NewDetectionEvent(
 				"Blue Jay",
 				"Cyanocitta cristata",
 				0.95,
-				tc.rtspURL,
-				true, // isNewSpecies
-				0,    // daysSinceFirstSeen
+				tc.displayLocation, // Already-sanitized location from registry
+				true,               // isNewSpecies
+				0,                  // daysSinceFirstSeen
 			)
 			require.NoError(t, err)
 
@@ -177,14 +199,16 @@ func TestDetectionNotificationConsumer_RTSPSanitization(t *testing.T) {
 
 			notif := notifications[0]
 			
-			// Verify the location in message is sanitized
+			// Verify the location passes through unchanged
 			assert.Contains(t, notif.Message, tc.expectedLocation)
-			assert.NotContains(t, notif.Message, "password123")
-			assert.NotContains(t, notif.Message, "admin:")
-			assert.NotContains(t, notif.Message, "user:pass")
 			
-			// Verify the location in metadata is sanitized
+			// Verify the location in metadata passes through unchanged
 			assert.Equal(t, tc.expectedLocation, notif.Metadata["location"])
+			
+			// Verify that credentials never appear (they were removed at registry level)
+			assert.NotContains(t, notif.Message, "password")
+			assert.NotContains(t, notif.Message, "admin:")
+			assert.NotContains(t, notif.Message, "user:")
 		})
 	}
 }

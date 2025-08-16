@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -33,38 +33,55 @@ func (h *Handlers) initializeLevelsData(isAuthenticated bool) (levels map[string
 	lastUpdate = make(map[string]time.Time)
 	lastNonZero = make(map[string]time.Time)
 
+	registry := myaudio.GetRegistry()
+	// Guard against nil registry during initialization to prevent panic
+	if registry == nil {
+		// Return empty maps to keep SSE alive during startup
+		return levels, lastUpdate, lastNonZero
+	}
+	
+	now := time.Now()
+
 	// Add configured audio device if set
 	if h.Settings.Realtime.Audio.Source != "" {
-		sourceName := h.Settings.Realtime.Audio.Source
-		if !isAuthenticated {
-			sourceName = "audio-source-1"
+		// Get or create the audio source in the registry
+		source := registry.GetOrCreateSource(h.Settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
+		if source != nil {
+			var displayName string
+			if isAuthenticated {
+				displayName = source.DisplayName
+			} else {
+				displayName = "audio-source-1"
+			}
+			levels[source.ID] = myaudio.AudioLevelData{
+				Level:  0,
+				Name:   displayName,
+				Source: source.ID,
+			}
+			lastUpdate[source.ID] = now
+			lastNonZero[source.ID] = now
 		}
-		levels["malgo"] = myaudio.AudioLevelData{
-			Level:  0,
-			Name:   sourceName,
-			Source: "malgo",
-		}
-		now := time.Now()
-		lastUpdate["malgo"] = now
-		lastNonZero["malgo"] = now
 	}
 
 	// Add all configured RTSP sources
 	for i, url := range h.Settings.Realtime.RTSP.URLs {
-		var displayName string
-		if isAuthenticated {
-			displayName = conf.SanitizeRTSPUrl(url)
-		} else {
-			displayName = fmt.Sprintf("camera-%d", i+1)
+		// Get or create the RTSP source in the registry
+		source := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
+		if source != nil {
+			var displayName string
+			if isAuthenticated {
+				displayName = source.DisplayName
+			} else {
+				displayName = fmt.Sprintf("camera-%d", i+1)
+			}
+			levels[source.ID] = myaudio.AudioLevelData{
+				Level:  0,
+				Name:   displayName,
+				Source: source.ID,
+			}
+			lastUpdate[source.ID] = now
+			lastNonZero[source.ID] = now
 		}
-		levels[url] = myaudio.AudioLevelData{
-			Level:  0,
-			Name:   displayName,
-			Source: url,
-		}
-		now := time.Now()
-		lastUpdate[url] = now
-		lastNonZero[url] = now
 	}
 
 	return levels, lastUpdate, lastNonZero
@@ -91,22 +108,70 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 
 	now := time.Now()
 
-	if audioData.Source == "malgo" {
+	// Get the source from the registry to get proper DisplayName
+	registry := myaudio.GetRegistry()
+	if registry == nil {
+		// Registry not available during initialization - apply fallback naming directly
 		if isAuthenticated {
-			audioData.Name = h.Settings.Realtime.Audio.Source
+			audioData.Name = audioData.Source
 		} else {
-			audioData.Name = "audio-source-1"
+			// Apply anonymization logic without registry using source ID patterns
+			switch {
+			case strings.HasPrefix(audioData.Source, "audio_card_"):
+				audioData.Name = "audio-source-1"
+			case strings.HasPrefix(audioData.Source, "rtsp_"):
+				// Try O(1) lookup from pre-built anonymization map
+				if anonymizedName, exists := h.rtspAnonymMap[audioData.Source]; exists {
+					audioData.Name = anonymizedName
+				} else {
+					// Fallback if not found in anonymization map
+					// Safely handle IDs shorter than 8 characters
+					idPrefix := audioData.Source
+					if len(audioData.Source) > 8 {
+						idPrefix = audioData.Source[:8]
+					}
+					audioData.Name = fmt.Sprintf("camera-%s", idPrefix)
+				}
+			case strings.HasPrefix(audioData.Source, "file_"):
+				audioData.Name = "file-source"
+			default:
+				audioData.Name = "unknown-source"
+			}
+		}
+	} else if source, exists := registry.GetSourceByID(audioData.Source); exists {
+		// Use the DisplayName from the registry
+		if isAuthenticated {
+			audioData.Name = source.DisplayName
+		} else {
+			// For non-authenticated users, anonymize the source name
+			switch source.Type {
+			case myaudio.SourceTypeAudioCard:
+				audioData.Name = "audio-source-1"
+			case myaudio.SourceTypeRTSP:
+				// Use O(1) lookup from pre-built anonymization map
+				if anonymizedName, exists := h.rtspAnonymMap[source.ID]; exists {
+					audioData.Name = anonymizedName
+				} else {
+					// Fallback if not found in anonymization map
+					// Safely handle IDs shorter than 8 characters
+					idPrefix := source.ID
+					if len(source.ID) > 8 {
+						idPrefix = source.ID[:8]
+					}
+					audioData.Name = fmt.Sprintf("camera-%s", idPrefix)
+				}
+			case myaudio.SourceTypeFile:
+				audioData.Name = "file-source"
+			case myaudio.SourceTypeUnknown:
+				audioData.Name = "unknown-source"
+			}
 		}
 	} else {
+		// Fallback for sources not in registry (shouldn't happen)
 		if isAuthenticated {
-			audioData.Name = conf.SanitizeRTSPUrl(audioData.Source)
+			audioData.Name = audioData.Source
 		} else {
-			for i, url := range h.Settings.Realtime.RTSP.URLs {
-				if url == audioData.Source {
-					audioData.Name = fmt.Sprintf("camera-%d", i+1)
-					break
-				}
-			}
+			audioData.Name = "unknown-source"
 		}
 	}
 
@@ -310,7 +375,7 @@ func (h *Handlers) handleAudioUpdate(c echo.Context, audioData myaudio.AudioLeve
 
 	if h.debug {
 		if time.Since(lastLogTime) > 5*time.Second {
-			log.Printf("AudioLevelSSE: Received audio data from source %s: %+v", audioData.Source, audioData)
+			log.Printf("AudioLevelSSE: Received audio data from source %s (%s): %+v", audioData.Source, audioData.Name, audioData)
 			updatedLastLogTime = time.Now()
 		}
 	}

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
@@ -517,12 +516,6 @@ func IsSafePath(path string) bool {
 		len(path) < 512
 }
 */
-
-// SanitizeRTSPUrl removes sensitive information from RTSP URL and returns a display-friendly version
-// Delegates to the privacy package for consistent implementation
-func SanitizeRTSPUrl(source string) string {
-	return privacy.SanitizeRTSPUrl(source)
-}
 
 // GetHostIP returns the host IP address, resolving host.docker.internal if running in a container
 func GetHostIP() (net.IP, error) {

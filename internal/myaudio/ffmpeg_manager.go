@@ -56,10 +56,14 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			Build()
 	}
 
-	// Initialize buffers for the stream
-	if err := initializeBuffersForSource(url); err != nil {
+	// Create new stream first to get the source ID
+	stream := NewFFmpegStream(url, transport, audioChan)
+	
+	// Initialize buffers for the stream using the source ID, not the raw URL
+	if err := initializeBuffersForSource(stream.source.ID); err != nil {
 		managerLogger.Error("failed to initialize buffers for stream",
 			"url", privacy.SanitizeRTSPUrl(url),
+			"sourceID", stream.source.ID,
 			"error", err,
 			"operation", "start_stream_buffer_init")
 		return errors.New(fmt.Errorf("failed to initialize buffers: %w", err)).
@@ -67,6 +71,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			Component("ffmpeg-manager").
 			Context("operation", "start_stream").
 			Context("url", privacy.SanitizeRTSPUrl(url)).
+			Context("source_id", stream.source.ID).
 			Build()
 	}
 
@@ -81,8 +86,7 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 		// Continue with stream start - provides graceful degradation
 	}
 
-	// Create new stream
-	stream := NewFFmpegStream(url, transport, audioChan)
+	// Stream already created above
 	m.streams[url] = stream
 
 	// Start stream in goroutine

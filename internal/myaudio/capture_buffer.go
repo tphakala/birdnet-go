@@ -62,42 +62,44 @@ func getCaptureMetrics() *metrics.MyAudioMetrics {
 // AllocateCaptureBufferIfNeeded checks if a buffer exists and only allocates if needed.
 // It returns nil if the buffer already exists or was successfully created.
 // This function is thread-safe and prevents race conditions during allocation.
-func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample int, source string) error {
+func AllocateCaptureBufferIfNeeded(durationSeconds, sampleRate, bytesPerSample int, sourceID string) error {
+
 	// Hold lock for entire operation to prevent race conditions
 	cbMutex.Lock()
 	defer cbMutex.Unlock()
-	
-	// Check if buffer already exists
-	if _, exists := captureBuffers[source]; exists {
+
+	// Check if buffer already exists using the migrated ID
+	if _, exists := captureBuffers[sourceID]; exists {
 		return nil
 	}
-	
+
 	// Buffer doesn't exist, allocate it while holding the lock
-	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, source)
+	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, sourceID)
 }
 
 // AllocateCaptureBuffer initializes an audio buffer for a single source.
 // It returns an error if initialization fails or if the input is invalid.
-// 
+//
 // Metrics tracking:
 // - myaudio_buffer_allocation_attempts_total{result="first_allocation"} - successful first allocations
 // - myaudio_buffer_allocation_attempts_total{result="repeated_blocked"} - blocked repeated allocations
 // - myaudio_buffer_allocation_attempts_total{result="error"} - failed allocations due to validation errors
 //
 // To detect repeated allocation issues, monitor the "repeated_blocked" counter per source.
-func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, source string) error {
+func AllocateCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sourceID string) error {
+
 	// Lock once for the entire operation
 	cbMutex.Lock()
 	defer cbMutex.Unlock()
-	
-	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, source)
+
+	return allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample, sourceID)
 }
 
 // allocateCaptureBufferInternal performs the actual buffer allocation.
 // It must be called with cbMutex already held.
 func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample int, source string) error {
 	start := time.Now()
-	
+
 	// Track allocation attempt
 	if m := getCaptureMetrics(); m != nil {
 		m.RecordBufferAllocationAttempt("capture", source, "attempted")
@@ -190,7 +192,6 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 		return enhancedErr
 	}
 
-
 	// Create new buffer
 	cb := NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, source)
 	if cb == nil {
@@ -211,10 +212,11 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 	}
 
 	// Check if buffer already exists (caller must hold cbMutex)
+	// Note: source parameter is now expected to be a migrated sourceID
 	if _, exists := captureBuffers[source]; exists {
 		// Log repeated allocation attempt
 		log.Printf("⚠️ Buffer allocation blocked: buffer already exists for source %s", source)
-		
+
 		enhancedErr := errors.Newf("capture buffer already exists for source: %s", source).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
@@ -232,6 +234,15 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 
 	captureBuffers[source] = cb
 
+	// Acquire reference to this source
+	registry := GetRegistry()
+	// Guard against nil registry during initialization to prevent panic
+	if registry != nil {
+		registry.AcquireSourceReference(source)
+	} else {
+		log.Printf("⚠️ Registry not available during buffer allocation, skipping source reference for: %s", source)
+	}
+
 	// Record successful allocation metrics
 	if m := getCaptureMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
@@ -248,25 +259,46 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 }
 
 // RemoveCaptureBuffer safely removes and cleans up an audio buffer for a single source.
-func RemoveCaptureBuffer(source string) error {
-	cbMutex.Lock()
-	defer cbMutex.Unlock()
+func RemoveCaptureBuffer(sourceID string) error {
 
-	if _, exists := captureBuffers[source]; !exists {
-		return fmt.Errorf("no capture buffer found for source: %s", source)
+	cbMutex.Lock()
+	if _, exists := captureBuffers[sourceID]; !exists {
+		cbMutex.Unlock()
+		return fmt.Errorf("no capture buffer found for source: %s", sourceID)
 	}
 
-	delete(captureBuffers, source)
+	delete(captureBuffers, sourceID)
+	cbMutex.Unlock() // Release lock before calling registry
+
+	// Release reference to this source - registry will auto-remove if count reaches zero
+	registry := GetRegistry()
+	// Guard against nil registry during shutdown to prevent panic
+	if registry != nil {
+		if err := registry.ReleaseSourceReference(sourceID); err != nil {
+			// Log but don't fail - buffer removal succeeded
+			if !errors.Is(err, ErrSourceNotFound) {
+				log.Printf("⚠️ Failed to release source reference: %v", err)
+			}
+		}
+	} else {
+		log.Printf("⚠️ Registry not available during buffer cleanup, skipping source reference release for: %s", sourceID)
+	}
+
 	return nil
 }
 
-// HasCaptureBuffer checks if a capture buffer exists for the given source ID
+// HasCaptureBuffer checks if a capture buffer exists for the given source
+// Accepts either original source string or migrated source ID
 func HasCaptureBuffer(sourceID string) bool {
+
 	cbMutex.RLock()
 	defer cbMutex.RUnlock()
 	_, exists := captureBuffers[sourceID]
 	return exists
 }
+
+// Note: hasAnalysisBuffer function removed to fix encapsulation violation.
+// Use the exported AnalysisBufferExists(sourceID) function instead.
 
 // InitCaptureBuffers initializes the capture buffers for each capture source.
 // It returns an error if initialization fails for any source.
@@ -291,28 +323,28 @@ func InitCaptureBuffers(durationSeconds, sampleRate, bytesPerSample int, sources
 	return nil
 }
 
-// WriteToCaptureBuffer adds PCM audio data to the buffer for a given source.
-func WriteToCaptureBuffer(source string, data []byte) error {
+// WriteToCaptureBuffer adds PCM audio data to the buffer for a given source ID.
+func WriteToCaptureBuffer(sourceID string, data []byte) error {
 	cbMutex.RLock()
-	cb, exists := captureBuffers[source]
+	cb, exists := captureBuffers[sourceID]
 	cbMutex.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("no capture buffer found for source: %s", source)
+		return fmt.Errorf("no capture buffer found for source ID: %s", sourceID)
 	}
 
 	cb.Write(data)
 	return nil
 }
 
-// ReadSegmentFromCaptureBuffer extracts a segment of audio data from the buffer for a given source.
-func ReadSegmentFromCaptureBuffer(source string, requestedStartTime time.Time, duration int) ([]byte, error) {
+// ReadSegmentFromCaptureBuffer extracts a segment of audio data from the buffer for a given source ID.
+func ReadSegmentFromCaptureBuffer(sourceID string, requestedStartTime time.Time, duration int) ([]byte, error) {
 	cbMutex.RLock()
-	cb, exists := captureBuffers[source]
+	cb, exists := captureBuffers[sourceID]
 	cbMutex.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("no capture buffer found for source: %s", source)
+		return nil, fmt.Errorf("no capture buffer found for source ID: %s", sourceID)
 	}
 
 	return cb.ReadSegment(requestedStartTime, duration)

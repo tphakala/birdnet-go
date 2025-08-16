@@ -27,8 +27,8 @@ type AudioDataCallback func(sourceID string, data []byte)
 var (
 	broadcastCallbacks         map[string]AudioDataCallback // Map of sourceID -> callback
 	broadcastCallbackMutex     sync.RWMutex
-	lastCallbackLogTime        time.Time // Last time we logged active callbacks
-	lastMissingCallbackLogTime time.Time // Last time we logged missing callbacks
+	lastCallbackLogTime        atomic.Int64 // Unix nano timestamp of last active callback log
+	lastMissingCallbackLogTime atomic.Int64 // Unix nano timestamp of last missing callback log
 )
 
 func init() {
@@ -40,8 +40,16 @@ func RegisterBroadcastCallback(sourceID string, callback AudioDataCallback) {
 	broadcastCallbackMutex.Lock()
 	defer broadcastCallbackMutex.Unlock()
 	broadcastCallbacks[sourceID] = callback
+
+	// Get DisplayName for user-friendly logging
+	displayName := sourceID // Default to ID if we can't get DisplayName
+	if registry := GetRegistry(); registry != nil {
+		if source, exists := registry.GetSourceByID(sourceID); exists {
+			displayName = source.DisplayName
+		}
+	}
 	log.Printf("🎧 Registered audio callback for source: %s, total callbacks: %d",
-		sourceID, len(broadcastCallbacks))
+		displayName, len(broadcastCallbacks))
 }
 
 // UnregisterBroadcastCallback removes a callback function for a specific source
@@ -49,8 +57,16 @@ func UnregisterBroadcastCallback(sourceID string) {
 	broadcastCallbackMutex.Lock()
 	defer broadcastCallbackMutex.Unlock()
 	delete(broadcastCallbacks, sourceID)
+
+	// Get DisplayName for user-friendly logging
+	displayName := sourceID // Default to ID if we can't get DisplayName
+	if registry := GetRegistry(); registry != nil {
+		if source, exists := registry.GetSourceByID(sourceID); exists {
+			displayName = source.DisplayName
+		}
+	}
 	log.Printf("🎧 Unregistered audio callback for source: %s, remaining callbacks: %d",
-		sourceID, len(broadcastCallbacks))
+		displayName, len(broadcastCallbacks))
 }
 
 // broadcastAudioData sends audio data to all registered callbacks
@@ -59,15 +75,23 @@ func broadcastAudioData(sourceID string, data []byte) {
 	callback, exists := broadcastCallbacks[sourceID]
 
 	// Debug log: log registered callbacks less frequently (every 5 minutes)
-	// Use a proper timestamp comparison instead of modulus which can cause spurious logging
-	if time.Since(lastCallbackLogTime) > 5*time.Minute {
-		// Create a list of registered callback keys to show what sources are registered
+	// Use atomic operations for thread-safe timestamp access
+	lastLogNano := lastCallbackLogTime.Load()
+	if time.Since(time.Unix(0, lastLogNano)) > 5*time.Minute {
+		// Create a list of registered callback keys with DisplayNames
+		registry := GetRegistry()
 		var keys []string
 		for k := range broadcastCallbacks {
-			keys = append(keys, k)
+			displayName := k // Default to ID if we can't get DisplayName
+			if registry != nil {
+				if source, exists := registry.GetSourceByID(k); exists {
+					displayName = source.DisplayName
+				}
+			}
+			keys = append(keys, displayName)
 		}
 		log.Printf("🔊 Active audio broadcast callbacks: %v", keys)
-		lastCallbackLogTime = time.Now()
+		lastCallbackLogTime.Store(time.Now().UnixNano())
 	}
 
 	broadcastCallbackMutex.RUnlock()
@@ -75,10 +99,18 @@ func broadcastAudioData(sourceID string, data []byte) {
 	// If no callback registered for this source, skip all processing
 	if !exists {
 		// Log much less frequently to avoid log spam (once every 5 minutes)
-		if time.Since(lastMissingCallbackLogTime) > 5*time.Minute {
+		lastMissingLogNano := lastMissingCallbackLogTime.Load()
+		if time.Since(time.Unix(0, lastMissingLogNano)) > 5*time.Minute {
+			// Get DisplayName for user-friendly logging
+			displayName := sourceID // Default to ID if we can't get DisplayName
+			if registry := GetRegistry(); registry != nil {
+				if source, exists := registry.GetSourceByID(sourceID); exists {
+					displayName = source.DisplayName
+				}
+			}
 			log.Printf("⚠️ No broadcast callback registered for source: %s, data length: %d bytes",
-				sourceID, len(data))
-			lastMissingCallbackLogTime = time.Now()
+				displayName, len(data))
+			lastMissingCallbackLogTime.Store(time.Now().UnixNano())
 		}
 		return
 	}
@@ -181,7 +213,7 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 	if err := SyncRTSPStreamsWithConfig(unifiedAudioChan); err != nil {
 		log.Printf("❌ Error syncing RTSP streams with configuration: %v", err)
 	}
-	
+
 	// Note: Buffer management is handled by the FFmpegManager via the StartStream/StopStream
 	// methods which are called by SyncWithConfig. The activeStreams map is no longer needed
 	// as the FFmpegManager maintains its own internal stream tracking.
@@ -191,27 +223,40 @@ func ReconfigureRTSPStreams(settings *conf.Settings, wg *sync.WaitGroup, quitCha
 func initializeBuffersForSource(sourceID string) error {
 	var abExists bool
 
-	// Check if analysis buffer exists
+	// Check if analysis buffer exists using the source ID
 	abMutex.RLock()
 	_, abExists = analysisBuffers[sourceID]
 	abMutex.RUnlock()
 
 	// Initialize analysis buffer if it doesn't exist
+	// Pass the ORIGINAL sourceID since AllocateAnalysisBuffer does its own migration
 	if !abExists {
 		if err := AllocateAnalysisBuffer(conf.BufferSize*3, sourceID); err != nil {
 			return fmt.Errorf("failed to initialize analysis buffer: %w", err)
 		}
+	} else {
+		log.Printf("✅ Reusing existing analysis buffer for source ID: %s", sourceID)
 	}
 
+	// Check if capture buffer exists using the source ID
+	cbMutex.RLock()
+	_, cbExists := captureBuffers[sourceID]
+	cbMutex.RUnlock()
+
 	// Initialize capture buffer if needed
-	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
-		// Clean up the analysis buffer if we just created it and capture buffer init fails
-		if !abExists {
-			if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
-				log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
+	// Pass the ORIGINAL sourceID since AllocateCaptureBufferIfNeeded does its own migration
+	if !cbExists {
+		if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
+			// Clean up the analysis buffer if we just created it and capture buffer init fails
+			if !abExists {
+				if cleanupErr := RemoveAnalysisBuffer(sourceID); cleanupErr != nil {
+					log.Printf("❌ Failed to cleanup analysis buffer after capture buffer init failure for %s: %v", sourceID, cleanupErr)
+				}
 			}
+			return fmt.Errorf("failed to initialize capture buffer: %w", err)
 		}
-		return fmt.Errorf("failed to initialize capture buffer: %w", err)
+	} else {
+		log.Printf("✅ Reusing existing capture buffer for source: %s (ID: %s)", sourceID, sourceID)
 	}
 
 	return nil
@@ -245,14 +290,32 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			return
 		}
 
-		// Initialize buffers for local audio device
-		if err := initializeBuffersForSource("malgo"); err != nil {
+		// Register the audio source in the registry using the original settings value
+		// This ensures consistency with realtime.go registration
+		registry := GetRegistry()
+		// Guard against nil registry during initialization to prevent panic
+		if registry == nil {
+			log.Printf("❌ Registry not available during audio capture initialization, unable to register source")
+			return
+		}
+
+		source, err := registry.RegisterSource(settings.Realtime.Audio.Source, SourceConfig{
+			Type: SourceTypeAudioCard,
+		})
+		if err != nil {
+			log.Printf("❌ Failed to register audio device source: %v", err)
+			return
+		}
+
+		// Initialize buffers using the registry source ID (UUID-based)
+		// This ensures consistency with the AnalysisBufferMonitor
+		if err := initializeBuffersForSource(source.ID); err != nil {
 			log.Printf("❌ Failed to initialize buffers for device capture: %v", err)
 			return
 		}
 
-		// Device audio capture
-		go captureAudioMalgo(settings, selectedSource, wg, quitChan, restartChan, unifiedAudioChan)
+		// Device audio capture - pass source ID for buffer operations
+		go captureAudioMalgo(settings, selectedSource, source.ID, wg, quitChan, restartChan, unifiedAudioChan)
 	}
 }
 
@@ -462,6 +525,7 @@ func processAudioFrame(
 	convertBuffer []byte, // Can be nil, used if provided
 	settings *conf.Settings,
 	source captureSource,
+	sourceID string, // Registry source ID for buffer operations
 	unifiedAudioChan chan UnifiedAudioData,
 ) (finalBufferPtr *[]byte, fromPool bool, err error) { // Updated return signature
 
@@ -535,21 +599,21 @@ func processAudioFrame(
 		}
 	}
 
-	// Write to buffers (use the safe bufferToUse)
-	if writeErr := WriteToAnalysisBuffer("malgo", bufferToUse); writeErr != nil {
+	// Write to buffers using source ID (use the safe bufferToUse)
+	if writeErr := WriteToAnalysisBuffer(sourceID, bufferToUse); writeErr != nil {
 		log.Printf("❌ Error writing to analysis buffer: %v", writeErr)
 		// Potentially non-fatal, log and continue
 	}
-	if writeErr := WriteToCaptureBuffer("malgo", bufferToUse); writeErr != nil {
+	if writeErr := WriteToCaptureBuffer(sourceID, bufferToUse); writeErr != nil {
 		log.Printf("❌ Error writing to capture buffer: %v", writeErr)
 		// Potentially non-fatal, log and continue
 	}
 
-	// Broadcast audio data (use the safe bufferToUse)
-	broadcastAudioData("malgo", bufferToUse)
+	// Broadcast audio data using source ID (use the safe bufferToUse)
+	broadcastAudioData(sourceID, bufferToUse)
 
 	// Calculate audio level (use the safe bufferToUse)
-	audioLevelData := calculateAudioLevel(bufferToUse, "malgo", source.Name)
+	audioLevelData := calculateAudioLevel(bufferToUse, sourceID, source.Name)
 
 	// Create unified audio data structure
 	unifiedData := UnifiedAudioData{
@@ -559,7 +623,7 @@ func processAudioFrame(
 
 	// Process sound level data if enabled (use the safe bufferToUse) - this may be nil if 10-second window isn't complete
 	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
-		if soundLevelData, err := ProcessSoundLevelData("malgo", bufferToUse); err != nil {
+		if soundLevelData, err := ProcessSoundLevelData(sourceID, bufferToUse); err != nil {
 			// Only log actual errors, not normal conditions
 			if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
 				log.Printf("❌ Error processing sound level data: %v", err)
@@ -626,12 +690,12 @@ func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan st
 	}
 }
 
-func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
+func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID string, wg *sync.WaitGroup, quitChan, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	wg.Add(1)
 	defer wg.Done()
 
 	// Clean up sound level processor when function exits
-	defer UnregisterSoundLevelProcessor("malgo")
+	defer UnregisterSoundLevelProcessor(sourceID)
 
 	if settings.Debug {
 		fmt.Println("Initializing context")
@@ -674,7 +738,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 
 	// Initialize sound level processor for this source if enabled
 	if settings.Realtime.Audio.SoundLevel.Enabled {
-		if err := RegisterSoundLevelProcessor("malgo", source.Name); err != nil {
+		if err := RegisterSoundLevelProcessor(sourceID, source.Name); err != nil {
 			log.Printf("❌ Error initializing sound level processor: %v", err)
 		}
 	}
@@ -688,7 +752,7 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, wg *sync.W
 		// processAudioFrame now handles pooling internally and returns buffer info
 		// Pass scratchBuffer as the potential destination for conversion
 		finalBufferPtr, fromPool, err := processAudioFrame(
-			pSamples, formatType, scratchBuffer, settings, source, unifiedAudioChan,
+			pSamples, formatType, scratchBuffer, settings, source, sourceID, unifiedAudioChan,
 		)
 		if err != nil {
 			// Error already logged in processAudioFrame

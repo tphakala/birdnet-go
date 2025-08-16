@@ -284,13 +284,33 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	log.Printf("\033[32m🔄 Reconfiguring RTSP sources...\033[0m")
 	settings := conf.Setting()
 
-	// Prepare the list of active sources
+	// Prepare the list of active sources (using source IDs, not raw URLs)
 	var sources []string
 	if len(settings.Realtime.RTSP.URLs) > 0 {
-		sources = append(sources, settings.Realtime.RTSP.URLs...)
+		registry := myaudio.GetRegistry()
+		if registry != nil {
+			for _, url := range settings.Realtime.RTSP.URLs {
+				if rtspSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP); rtspSource != nil {
+					sources = append(sources, rtspSource.ID)
+				} else {
+					log.Printf("⚠️ Failed to get RTSP source ID from registry for URL during reconfiguration")
+				}
+			}
+		} else {
+			log.Printf("⚠️ Registry not available during RTSP reconfiguration, skipping RTSP sources")
+		}
 	}
 	if settings.Realtime.Audio.Source != "" {
-		sources = append(sources, "malgo")
+		// Get the audio source from registry instead of hardcoded "malgo"
+		if registry := myaudio.GetRegistry(); registry != nil {
+			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
+				sources = append(sources, audioSource.ID)
+			} else {
+				log.Printf("⚠️ Failed to get audio source from registry during RTSP reconfiguration")
+			}
+		} else {
+			log.Printf("⚠️ Registry not available during RTSP reconfiguration, skipping audio source")
+		}
 	}
 
 	// Update the analysis buffer monitors
