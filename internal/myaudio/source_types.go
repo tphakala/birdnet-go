@@ -2,8 +2,9 @@
 package myaudio
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // SourceType represents the type of audio source
@@ -43,7 +44,14 @@ type AudioSource struct {
 // Returns an error if the connection string is empty or invalid
 func (s *AudioSource) GetConnectionString() (string, error) {
 	if s.connectionString == "" {
-		return "", fmt.Errorf("connection string is empty for source %s (ID: %s)", s.DisplayName, s.ID)
+		return "", errors.Newf("connection string is empty for source %s (ID: %s)", s.DisplayName, s.ID).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_connection_string").
+			Context("source_id", s.ID).
+			Context("display_name", s.DisplayName).
+			Context("source_type", s.Type).
+			Build()
 	}
 	return s.connectionString, nil
 }

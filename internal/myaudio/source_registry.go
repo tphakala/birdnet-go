@@ -80,7 +80,13 @@ func GetRegistry() *AudioSourceRegistry {
 func (r *AudioSourceRegistry) RegisterSource(connectionString string, config SourceConfig) (*AudioSource, error) {
 	// Validate connection string before acquiring lock
 	if err := r.validateConnectionString(connectionString, config.Type); err != nil {
-		return nil, fmt.Errorf("invalid connection string: %w", err)
+		return nil, errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "register_source").
+			Context("source_type", config.Type).
+			Context("validation_stage", "connection_string").
+			Build()
 	}
 
 	r.mu.Lock()
@@ -341,7 +347,12 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
+		return errors.Newf("source not found: %s", sourceID).
+			Component("myaudio").
+			Category(errors.CategoryNotFound).
+			Context("operation", "release_source_reference").
+			Context("source_id", sourceID).
+			Build()
 	}
 
 	// Decrement reference count (no need for atomic since we hold the mutex)
@@ -373,7 +384,12 @@ func (r *AudioSourceRegistry) RemoveSource(sourceID string) error {
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
+		return errors.Newf("source not found: %s", sourceID).
+		Component("myaudio").
+		Category(errors.CategoryNotFound).
+		Context("operation", "remove_source").
+		Context("source_id", sourceID).
+		Build()
 	}
 
 	// Remove from all maps
@@ -426,13 +442,24 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return RemoveSourceNotFound, fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
+		return RemoveSourceNotFound, errors.Newf("source not found: %s", sourceID).
+		Component("myaudio").
+		Category(errors.CategoryNotFound).
+		Context("operation", "remove_source_if_unused").
+		Context("source_id", sourceID).
+		Build()
 	}
 
 	// Check if source is in use by any buffer type
 	for _, checker := range checkers {
 		if checker(sourceID) {
-			return RemoveSourceInUse, fmt.Errorf("source %s is still in use", sourceID)
+			return RemoveSourceInUse, errors.Newf("source %s is still in use", sourceID).
+			Component("myaudio").
+			Category(errors.CategoryState).
+			Context("operation", "remove_source_if_unused").
+			Context("source_id", sourceID).
+			Context("reason", "buffer_checker_reported_in_use").
+			Build()
 		}
 	}
 
@@ -456,7 +483,12 @@ func (r *AudioSourceRegistry) RemoveSourceByConnection(connectionString string) 
 	if !exists {
 		// Sanitize connection string before including in error
 		safeString := r.sanitizeConnectionString(connectionString, SourceTypeUnknown)
-		return fmt.Errorf("%w: connection %s", ErrSourceNotFound, safeString)
+		return errors.Newf("source not found for connection: %s", safeString).
+			Component("myaudio").
+			Category(errors.CategoryNotFound).
+			Context("operation", "remove_source_by_connection").
+			Context("safe_connection", safeString).
+			Build()
 	}
 
 	source := r.sources[sourceID]
@@ -505,7 +537,12 @@ func (r *AudioSourceRegistry) CleanupInactiveSources(inactiveDuration time.Durat
 func (r *AudioSourceRegistry) validateConnectionString(connectionString string, sourceType SourceType) error {
 	// Basic validation - non-empty
 	if connectionString == "" {
-		return fmt.Errorf("connection string cannot be empty")
+		return errors.Newf("connection string cannot be empty").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_connection_string").
+			Context("source_type", sourceType).
+			Build()
 	}
 
 	// For audio devices, be more permissive since they're local
@@ -521,7 +558,13 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 		strings.Contains(connectionString, "${") ||
 		strings.Contains(connectionString, "<(") ||
 		strings.Contains(connectionString, ">(") {
-		return fmt.Errorf("dangerous pattern detected in connection string")
+		return errors.Newf("dangerous pattern detected in connection string").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_connection_string").
+			Context("source_type", sourceType).
+			Context("reason", "shell_injection_prevention").
+			Build()
 	}
 
 	// Type-specific validation
@@ -545,12 +588,23 @@ func (r *AudioSourceRegistry) validateRTSPURL(rtspURL string) error {
 	// Parse URL
 	u, err := url.Parse(rtspURL)
 	if err != nil {
-		return fmt.Errorf("invalid RTSP URL: %w", err)
+		return errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryRTSP).
+			Context("operation", "validate_rtsp_url").
+			Context("reason", "url_parse_failed").
+			Build()
 	}
 
 	// Check scheme (allow test scheme for testing)
 	if u.Scheme != "rtsp" && u.Scheme != "rtsps" && u.Scheme != "test" {
-		return fmt.Errorf("invalid scheme '%s', expected rtsp, rtsps, or test", u.Scheme)
+		return errors.Newf("invalid scheme '%s', expected rtsp, rtsps, or test", u.Scheme).
+			Component("myaudio").
+			Category(errors.CategoryRTSP).
+			Context("operation", "validate_rtsp_url").
+			Context("scheme", u.Scheme).
+			Context("expected_schemes", "rtsp,rtsps,test").
+			Build()
 	}
 
 	// Check for localhost/private network access (optional, depending on security policy)
@@ -561,7 +615,12 @@ func (r *AudioSourceRegistry) validateRTSPURL(rtspURL string) error {
 
 	// Validate host exists
 	if u.Host == "" {
-		return fmt.Errorf("RTSP URL must have a host")
+		return errors.Newf("RTSP URL must have a host").
+			Component("myaudio").
+			Category(errors.CategoryRTSP).
+			Context("operation", "validate_rtsp_url").
+			Context("reason", "missing_host").
+			Build()
 	}
 
 	return nil
@@ -574,7 +633,12 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 
 	// Check for directory traversal attempts
 	if strings.Contains(cleanPath, "..") {
-		return fmt.Errorf("directory traversal detected in file path")
+		return errors.Newf("directory traversal detected in file path").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_file_path").
+			Context("reason", "security_violation").
+			Build()
 	}
 
 	// Check for absolute paths trying to access system directories
@@ -583,7 +647,13 @@ func (r *AudioSourceRegistry) validateFilePath(filePath string) error {
 	for _, dir := range systemDirs {
 		// Check for exact match or true path segment prefix
 		if cleanPath == dir || strings.HasPrefix(cleanPath, dir+string(filepath.Separator)) {
-			return fmt.Errorf("access to system directory '%s' not allowed", dir)
+			return errors.Newf("access to system directory '%s' not allowed", dir).
+				Component("myaudio").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_file_path").
+				Context("system_dir", dir).
+				Context("reason", "security_restriction").
+				Build()
 		}
 	}
 
@@ -597,12 +667,22 @@ func (r *AudioSourceRegistry) validateAudioDevice(device string) error {
 	// Just check that it's not empty
 	// We can't predict all possible device names across different systems
 	if device == "" {
-		return fmt.Errorf("audio device identifier cannot be empty")
+		return errors.Newf("audio device identifier cannot be empty").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_audio_device").
+			Build()
 	}
 
 	// Reject known invalid paths that are not audio devices
 	if device == "/dev/null" || device == "/dev/zero" || device == "/dev/random" || device == "/dev/urandom" {
-		return fmt.Errorf("invalid audio device: %s is not an audio device", device)
+		return errors.Newf("invalid audio device: %s is not an audio device", device).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_audio_device").
+			Context("device", device).
+			Context("reason", "not_audio_device").
+			Build()
 	}
 
 	// Only check for the most dangerous shell injection patterns
@@ -613,7 +693,12 @@ func (r *AudioSourceRegistry) validateAudioDevice(device string) error {
 		strings.Contains(device, "&&") ||
 		strings.Contains(device, "||") ||
 		strings.Contains(device, ";") && strings.Contains(device, "|") {
-		return fmt.Errorf("potentially dangerous pattern in audio device identifier")
+		return errors.Newf("potentially dangerous pattern in audio device identifier").
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_audio_device").
+			Context("reason", "shell_injection_prevention").
+			Build()
 	}
 
 	return nil

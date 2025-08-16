@@ -4,6 +4,8 @@ package myaudio
 import (
 	"fmt"
 	"log"
+
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // MigrateExistingSourceToID converts a legacy source identifier to a registry source ID
@@ -50,7 +52,8 @@ func RegisterExistingRTSPSources(rtspURLs []string) {
 		}
 		
 		if _, err := registry.RegisterSource(url, config); err != nil {
-			errMsg := fmt.Sprintf("source %d (%s): %v", i+1, url, err)
+			safeURL := privacy.SanitizeRTSPUrl(url)
+			errMsg := fmt.Sprintf("source %d (%s): %v", i+1, safeURL, err)
 			errors = append(errors, errMsg)
 			log.Printf("❌ Failed to register RTSP %s", errMsg)
 		}
