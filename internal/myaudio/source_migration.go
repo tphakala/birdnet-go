@@ -13,7 +13,7 @@ import (
 // This function is thread-safe and prevents race conditions during concurrent migrations
 func MigrateExistingSourceToID(source string) string {
 	registry := GetRegistry()
-	
+
 	// Pass SourceTypeUnknown to indicate type detection should happen atomically inside the lock
 	// This prevents race conditions where multiple goroutines might detect different types
 	return registry.MigrateSourceAtomic(source, SourceTypeUnknown)
@@ -24,9 +24,15 @@ func MigrateExistingSourceToID(source string) string {
 
 // EnableMigrationLayer enables automatic migration for buffer operations
 // This should be called during application startup to ensure backward compatibility
-func EnableMigrationLayer() {
+func EnableMigrationLayer() bool {
+	registry := GetRegistry()
+	if registry == nil {
+		log.Printf("❌ Audio source migration layer not available")
+		return false
+	}
 	log.Printf("✅ Audio source migration layer available")
 	log.Printf("💡 Buffer functions will auto-migrate source identifiers")
+	return true
 }
 
 // RegisterExistingRTSPSources registers RTSP sources from configuration
@@ -35,31 +41,31 @@ func RegisterExistingRTSPSources(rtspURLs []string) {
 	if len(rtspURLs) == 0 {
 		return
 	}
-	
+
 	registry := GetRegistry()
-	var errors []string
-	
+	var errs []string
+
 	for i, url := range rtspURLs {
 		if url == "" {
 			log.Printf("⚠️ Skipping empty RTSP URL at index %d", i)
 			continue
 		}
-		
+
 		config := SourceConfig{
 			ID:          fmt.Sprintf("rtsp_%03d", i+1),
 			DisplayName: "", // Let auto-generation use SafeString
 			Type:        SourceTypeRTSP,
 		}
-		
+
 		if _, err := registry.RegisterSource(url, config); err != nil {
 			safeURL := privacy.SanitizeRTSPUrl(url)
 			errMsg := fmt.Sprintf("source %d (%s): %v", i+1, safeURL, err)
-			errors = append(errors, errMsg)
+			errs = append(errs, errMsg)
 			log.Printf("❌ Failed to register RTSP %s", errMsg)
 		}
 	}
-	
-	if len(errors) > 0 {
-		log.Printf("⚠️ Failed to register %d out of %d RTSP sources", len(errors), len(rtspURLs))
+
+	if len(errs) > 0 {
+		log.Printf("⚠️ Failed to register %d out of %d RTSP sources", len(errs), len(rtspURLs))
 	}
 }

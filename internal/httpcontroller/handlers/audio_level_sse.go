@@ -109,18 +109,15 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 			audioData.Name = source.DisplayName
 		} else {
 			// For non-authenticated users, anonymize the source name
-			if source.Type == myaudio.SourceTypeAudioCard {
+			switch source.Type {
+			case myaudio.SourceTypeAudioCard:
 				audioData.Name = "audio-source-1"
-			} else if source.Type == myaudio.SourceTypeRTSP {
-				// Find the index of this RTSP source
-				for i, url := range h.Settings.Realtime.RTSP.URLs {
-					if sourceByConn, exists := registry.GetSourceByConnection(url); exists && sourceByConn.ID == source.ID {
-						audioData.Name = fmt.Sprintf("camera-%d", i+1)
-						break
-					}
-				}
-				// Fallback if not found in settings
-				if audioData.Name == "" {
+			case myaudio.SourceTypeRTSP:
+				// Use O(1) lookup from pre-built anonymization map
+				if anonymizedName, exists := h.rtspAnonymMap[source.ID]; exists {
+					audioData.Name = anonymizedName
+				} else {
+					// Fallback if not found in anonymization map
 					// Safely handle IDs shorter than 8 characters
 					idPrefix := source.ID
 					if len(source.ID) > 8 {
@@ -128,6 +125,10 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 					}
 					audioData.Name = fmt.Sprintf("camera-%s", idPrefix)
 				}
+			case myaudio.SourceTypeFile:
+				audioData.Name = "file-source"
+			case myaudio.SourceTypeUnknown:
+				audioData.Name = "unknown-source"
 			}
 		}
 	} else {

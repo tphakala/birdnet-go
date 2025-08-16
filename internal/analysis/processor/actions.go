@@ -305,8 +305,11 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
-	// Convert source ID to DisplayName for user-facing notifications
-	displayLocation := a.processor.getDisplayNameForSource(a.Note.Source)
+	// Convert source ID to DisplayName for user-facing notifications (nil-safe)
+	displayLocation := a.Note.Source
+	if a.processor != nil {
+		displayLocation = a.processor.getDisplayNameForSource(a.Note.Source)
+	}
 
 	detectionEvent, err := events.NewDetectionEvent(
 		a.Note.CommonName,

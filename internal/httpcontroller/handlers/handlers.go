@@ -42,6 +42,7 @@ type Handlers struct {
 	Server            serviceapi.ServerFacade // Server facade providing security and processor access
 	Telemetry         *TelemetryMiddleware    // Telemetry middleware for metrics and enhanced error handling
 	Metrics           *observability.Metrics  // Shared metrics instance
+	rtspAnonymMap     map[string]string       // Maps RTSP URLs to anonymized names for O(1) lookups
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -89,6 +90,9 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 	}
 
+	// Build RTSP anonymization map for O(1) lookups
+	rtspAnonymMap := buildRTSPAnonymizationMap(settings)
+
 	return &Handlers{
 		baseHandler: baseHandler{
 			errorHandler: defaultErrorHandler,
@@ -108,7 +112,39 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 		Server:            server,
 		Telemetry:         NewTelemetryMiddleware(httpMetrics),
 		Metrics:           metricsInstance,
+		rtspAnonymMap:     rtspAnonymMap,
 	}
+}
+
+// buildRTSPAnonymizationMap creates a lookup map for O(1) RTSP URL anonymization
+// Maps source IDs to their anonymized names (camera-1, camera-2, etc.)
+func buildRTSPAnonymizationMap(settings *conf.Settings) map[string]string {
+	anonymMap := make(map[string]string)
+	
+	if settings == nil || len(settings.Realtime.RTSP.URLs) == 0 {
+		return anonymMap
+	}
+	
+	// Get the audio source registry to map URLs to source IDs
+	registry := myaudio.GetRegistry()
+	if registry == nil {
+		return anonymMap
+	}
+	
+	// Build the mapping from source ID to anonymized name
+	for i, url := range settings.Realtime.RTSP.URLs {
+		if url == "" {
+			continue
+		}
+		
+		// Get the source from registry to get its ID
+		if source, exists := registry.GetSourceByConnection(url); exists {
+			anonymizedName := fmt.Sprintf("camera-%d", i+1)
+			anonymMap[source.ID] = anonymizedName
+		}
+	}
+	
+	return anonymMap
 }
 
 // defaultErrorHandler is the default implementation of error handling.

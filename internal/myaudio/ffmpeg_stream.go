@@ -527,22 +527,42 @@ func (s *FFmpegStream) startProcess() error {
 		args = append(args, rtspSettings.FFmpegParameters...)
 	}
 
+	// Validate input source before building command to prevent empty input errors
+	if s.source == nil {
+		return errors.Newf("FFmpeg source is nil, cannot start process").
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-stream").
+			Context("operation", "start_process").
+			Build()
+	}
+	
+	// Get and validate connection string
+	connStr, err := s.source.GetConnectionString()
+	if err != nil {
+		return errors.New(fmt.Errorf("failed to get connection string: %w", err)).
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-stream").
+			Context("operation", "start_process").
+			Context("source_id", s.source.ID).
+			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+			Build()
+	}
+	
+	// Prevent FFmpeg from starting with empty input which causes hard-to-debug restart loops
+	if connStr == "" {
+		return errors.Newf("connection string is empty for source %s, cannot start FFmpeg", s.source.ID).
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-stream").
+			Context("operation", "start_process").
+			Context("source_id", s.source.ID).
+			Context("source_type", string(s.source.Type)).
+			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+			Build()
+	}
+
 	// Add input and output parameters
 	args = append(args,
-		"-i", func() string {
-			// Handle nil source gracefully
-			if s.source == nil {
-				return "" // This will cause FFmpeg to fail, which is appropriate
-			}
-			connStr, err := s.source.GetConnectionString()
-			if err != nil {
-				streamLogger.Error("failed to get connection string",
-					"error", err,
-					"operation", "start_process")
-				return "" // This will cause FFmpeg to fail, which is appropriate
-			}
-			return connStr
-		}(),
+		"-i", connStr,
 		"-loglevel", "error",
 		"-vn",
 		"-f", format,
@@ -567,7 +587,6 @@ func (s *FFmpegStream) startProcess() error {
 	s.cmd.Stderr = &threadSafeWriter{buf: &s.stderr, mu: &s.stderrMu}
 
 	// Get stdout pipe
-	var err error
 	s.stdout, err = s.cmd.StdoutPipe()
 	if err != nil {
 		return errors.New(fmt.Errorf("failed to create stdout pipe: %w", err)).
