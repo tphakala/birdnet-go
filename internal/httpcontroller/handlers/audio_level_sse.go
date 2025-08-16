@@ -375,7 +375,7 @@ func (h *Handlers) handleAudioUpdate(c echo.Context, audioData myaudio.AudioLeve
 
 	if h.debug {
 		if time.Since(lastLogTime) > 5*time.Second {
-			log.Printf("AudioLevelSSE: Received audio data from source %s: %+v", audioData.Source, audioData)
+			log.Printf("AudioLevelSSE: Received audio data from source %s (%s): %+v", audioData.Source, audioData.Name, audioData)
 			updatedLastLogTime = time.Now()
 		}
 	}

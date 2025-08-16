@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Species identification constants for filtering
@@ -256,7 +257,7 @@ func (p *Processor) startDetectionProcessor() {
 func (p *Processor) processDetections(item birdnet.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
-		"source", item.Source,
+		"source", p.getDisplayNameForSource(item.Source),
 		"start_time", item.StartTime,
 		"results_count", len(item.Results),
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
@@ -306,7 +307,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			GetLogger().Info("Created new pending detection",
 				"species", commonName,
 				"confidence", confidence,
-				"source", item.Source,
+				"source", p.getDisplayNameForSource(item.Source),
 				"flush_deadline", item.StartTime.Add(delay),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
@@ -449,7 +450,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 				"species", result.Species,
 				"confidence", result.Confidence,
 				"threshold", confidenceThreshold,
-				"source", source,
+				"source", p.getDisplayNameForSource(source),
 				"operation", "confidence_filter")
 		}
 		return true, confidenceThreshold
@@ -543,7 +544,7 @@ func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase st
 		GetLogger().Info("Dog detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.DogBarkFilter.Confidence,
-			"source", item.Source,
+			"source", p.getDisplayNameForSource(item.Source),
 			"operation", "dog_bark_filter")
 		log.Printf("Dog detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.DogBarkFilter.Confidence, p.getDisplayNameForSource(item.Source))
 		p.detectionMutex.Lock()
@@ -563,7 +564,7 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 		GetLogger().Info("Human detection filtered",
 			"confidence", result.Confidence,
 			"threshold", p.Settings.Realtime.PrivacyFilter.Confidence,
-			"source", item.Source,
+			"source", p.getDisplayNameForSource(item.Source),
 			"operation", "privacy_filter")
 		log.Printf("Human detected with confidence %.3f/%.3f from source %s", result.Confidence, p.Settings.Realtime.PrivacyFilter.Confidence, p.getDisplayNameForSource(item.Source))
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
@@ -631,7 +632,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 			"species", item.Detection.Note.CommonName,
 			"count", item.Count,
 			"minimum_required", minDetections,
-			"source", item.Source,
+			"source", p.getDisplayNameForSource(item.Source),
 			"operation", "minimum_count_filter")
 		return true, fmt.Sprintf("false positive, matched %d/%d times", item.Count, minDetections)
 	}
@@ -647,7 +648,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				"species", item.Detection.Note.CommonName,
 				"detection_time", item.FirstDetected,
 				"last_human_detection", lastHumanDetection,
-				"source", item.Source,
+				"source", p.getDisplayNameForSource(item.Source),
 				"operation", "privacy_filter")
 			return true, "privacy filter"
 		}
@@ -674,7 +675,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 				"species", item.Detection.Note.CommonName,
 				"detection_time", item.FirstDetected,
 				"last_dog_detection", lastDogDetection,
-				"source", item.Source,
+				"source", p.getDisplayNameForSource(item.Source),
 				"operation", "dog_bark_filter")
 			return true, "recent dog bark"
 		}
@@ -694,7 +695,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	// Add structured logging
 	GetLogger().Info("Approving detection",
 		"species", species,
-		"source", item.Source,
+		"source", p.getDisplayNameForSource(item.Source),
 		"match_count", item.Count,
 		"confidence", confidence,
 		"has_results", len(item.Detection.Results) > 0,
@@ -766,7 +767,7 @@ func (p *Processor) pendingDetectionsFlusher() {
 						// Add structured logging
 					GetLogger().Info("Discarding detection",
 						"species", species,
-						"source", item.Source,
+						"source", p.getDisplayNameForSource(item.Source),
 						"reason", reason,
 						"count", item.Count,
 						"operation", "discard_detection")
@@ -1098,14 +1099,24 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 }
 
 // getDisplayNameForSource converts a source ID to user-friendly DisplayName
-// Falls back to source ID if lookup fails (for debug/technical contexts)
+// Falls back to sanitized source if lookup fails (prevents credential exposure)
 func (p *Processor) getDisplayNameForSource(sourceID string) string {
 	registry := myaudio.GetRegistry()
-	if source, exists := registry.GetSourceByID(sourceID); exists {
-		return source.DisplayName
+	if registry != nil {
+		// Try lookup by ID first
+		if source, exists := registry.GetSourceByID(sourceID); exists {
+			return source.DisplayName
+		}
+		
+		// Try lookup by connection string (handles legacy case)
+		if source, exists := registry.GetSourceByConnection(sourceID); exists {
+			return source.DisplayName
+		}
 	}
-	// Fallback to source ID if not found in registry
-	return sourceID
+	
+	// Fallback: sanitize the source to prevent credential exposure in logs
+	// This handles cases where sourceID might be a raw RTSP URL
+	return privacy.SanitizeRTSPUrl(sourceID)
 }
 
 // Shutdown gracefully stops all processor components
@@ -1175,7 +1186,26 @@ func (p *Processor) NewWithSpeciesInfo(
 	if p.Settings.Input.Path != "" {
 		audioSource = p.Settings.Input.Path
 	} else {
-		audioSource = source
+		// Use registry SafeString to sanitize RTSP credentials before logging/storing
+		registry := myaudio.GetRegistry()
+		if registry != nil {
+			// Try to get existing source by connection string to use its SafeString
+			if existingSource, exists := registry.GetSourceByConnection(source); exists {
+				audioSource = existingSource.SafeString
+			} else {
+				// Migration fallback - try to get by ID
+				migratedID := myaudio.MigrateExistingSourceToID(source)
+				if registrySource, exists := registry.GetSourceByID(migratedID); exists {
+					audioSource = registrySource.SafeString
+				} else {
+					// Last resort: manual sanitization for safety
+					audioSource = privacy.SanitizeRTSPUrl(source)
+				}
+			}
+		} else {
+			// Fallback when registry not available
+			audioSource = privacy.SanitizeRTSPUrl(source)
+		}
 	}
 
 	// Round confidence to two decimal places
@@ -1210,7 +1240,7 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 	
 	if shouldLog {
 		GetLogger().Info("Detection processing results",
-			"source", source,
+			"source", p.getDisplayNameForSource(source),
 			"raw_results_count", rawCount,
 			"filtered_detections_count", filteredCount,
 			"log_reason", reason,
