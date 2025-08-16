@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 type Action interface {
@@ -218,7 +219,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		// when multiple detections of the same species arrive concurrently
 		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, time.Now())
 	}
-	
+
 	// Save note to database
 	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 		// Add structured logging
@@ -233,7 +234,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		log.Printf("❌ Failed to save note and results to database")
 		return err
 	}
-	
+
 	// After successful save, publish detection event for new species
 	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
@@ -306,7 +307,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 	// Convert source ID to DisplayName for user-facing notifications
 	displayLocation := a.processor.getDisplayNameForSource(a.Note.Source)
-	
+
 	detectionEvent, err := events.NewDetectionEvent(
 		a.Note.CommonName,
 		a.Note.ScientificName,
@@ -592,7 +593,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 
 	// Create a copy of the Note with sanitized RTSP URL
 	noteCopy := a.Note
-	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
+	noteCopy.Source = privacy.SanitizeRTSPUrl(noteCopy.Source)
 
 	// Wrap note with bird image (using sanitized copy)
 	noteWithBirdImage := NoteWithBirdImage{Note: noteCopy, BirdImage: birdImage}
@@ -772,7 +773,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 
 	// Create a copy of the Note with sanitized RTSP URL
 	noteCopy := a.Note
-	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
+	noteCopy.Source = privacy.SanitizeRTSPUrl(noteCopy.Source)
 
 	// Broadcast the detection with error handling
 	if err := a.SSEBroadcaster(&noteCopy, &birdImage); err != nil {
@@ -830,7 +831,7 @@ func (a *SSEAction) waitForAudioFile() error {
 
 	// Build the full path to the audio file using the configured export path
 	audioPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.Note.ClipName)
-	
+
 	// Wait up to 5 seconds for file to be written
 	timeout := 5 * time.Second
 	deadline := time.Now().Add(timeout)
@@ -843,19 +844,19 @@ func (a *SSEAction) waitForAudioFile() error {
 			if info.Size() > 1024 {
 				if a.Settings.Debug {
 					// Add structured logging
-				GetLogger().Debug("Audio file ready for SSE broadcast",
-					"component", "analysis.processor.actions",
-					"clip_name", a.Note.ClipName,
-					"file_size_bytes", info.Size(),
-					"species", a.Note.CommonName,
-					"operation", "wait_audio_file_success")
-				log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
+					GetLogger().Debug("Audio file ready for SSE broadcast",
+						"component", "analysis.processor.actions",
+						"clip_name", a.Note.ClipName,
+						"file_size_bytes", info.Size(),
+						"species", a.Note.CommonName,
+						"operation", "wait_audio_file_success")
+					log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
 				}
 				return nil
 			}
 			// File exists but might still be writing, wait a bit more
 		}
-		
+
 		time.Sleep(checkInterval)
 	}
 
@@ -895,7 +896,7 @@ func (a *SSEAction) waitForDatabaseID() error {
 			}
 			return nil
 		}
-		
+
 		time.Sleep(checkInterval)
 	}
 
@@ -924,7 +925,7 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	// The SearchNotes method expects a search query string that will match against
 	// common_name or scientific_name fields
 	query := a.Note.ScientificName
-	
+
 	// Search for notes, sorted by ID descending to get the most recent
 	notes, err := a.Ds.SearchNotes(query, false, 10, 0) // false = sort descending, limit 10, offset 0
 	if err != nil {
@@ -940,9 +941,9 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	for i := range notes {
 		note := &notes[i]
 		// Check if this note matches our expected characteristics
-		if note.Date == a.Note.Date && 
-		   note.ScientificName == a.Note.ScientificName &&
-		   note.Time == a.Note.Time { // Exact time match
+		if note.Date == a.Note.Date &&
+			note.ScientificName == a.Note.ScientificName &&
+			note.Time == a.Note.Time { // Exact time match
 			return note, nil
 		}
 	}

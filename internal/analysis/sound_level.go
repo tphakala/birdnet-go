@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Constants for sound level monitoring
@@ -29,21 +30,21 @@ const (
 	// dB value bounds for validation and sanitization
 	minValidDB = -200.0
 	maxValidDB = 20.0
-	
+
 	// Error message constants
-	errMsgEmptyField        = "empty %s field"
-	errMsgInvalidTimestamp  = "invalid timestamp: %s"
-	errMsgOutOfRange        = "dB values out of range in octave band %s"
-	errMsgNonFiniteValues   = "non-finite values in octave band %s"
-	errMsgNoOctaveBandData  = "no octave band data"
+	errMsgEmptyField       = "empty %s field"
+	errMsgInvalidTimestamp = "invalid timestamp: %s"
+	errMsgOutOfRange       = "dB values out of range in octave band %s"
+	errMsgNonFiniteValues  = "non-finite values in octave band %s"
+	errMsgNoOctaveBandData = "no octave band data"
 )
 
 // Package-level logger for sound level monitoring
 var (
-	soundLevelLogger     *slog.Logger
-	soundLoggerOnce      sync.Once
-	serviceLevelVar      = new(slog.LevelVar) // Dynamic level control
-	soundLevelCloseFunc  func() error
+	soundLevelLogger    *slog.Logger
+	soundLoggerOnce     sync.Once
+	serviceLevelVar     = new(slog.LevelVar) // Dynamic level control
+	soundLevelCloseFunc func() error
 )
 
 // getSoundLevelLogger returns the sound level logger, initializing it if necessary
@@ -217,7 +218,7 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 		"source": data.Source,
 		"name":   data.Name,
 	}
-	
+
 	// Check timestamp is valid and not in the future
 	if data.Timestamp.IsZero() {
 		return errors.Newf(errMsgInvalidTimestamp, "zero time").
@@ -578,7 +579,7 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
 	// Create context that gets canceled when done channel is closed
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Convert done channel to context cancellation
 	go func() {
 		select {
@@ -587,7 +588,7 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 		case <-ctx.Done():
 		}
 	}()
-	
+
 	// Call the refactored function with context and receive-only channel
 	startSoundLevelSSEPublisher(wg, ctx, apiController, soundLevelChan)
 }
@@ -724,13 +725,13 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 	// Get actually running RTSP streams to ensure we only register for active streams
 	activeStreams := myaudio.GetRTSPStreamHealth()
-	
+
 	// Register for each configured RTSP source, but prioritize actually running streams
 	configuredURLs := make(map[string]bool)
 	for _, url := range settings.Realtime.RTSP.URLs {
 		configuredURLs[url] = true
 		totalSources++
-		
+
 		// Get or create the RTSP source in the registry
 		registry := myaudio.GetRegistry()
 		audioSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
@@ -739,12 +740,12 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
 				Context("operation", "get_or_create_rtsp_source").
-				Context("url", conf.SanitizeRTSPUrl(url)).
+				Context("url", privacy.SanitizeRTSPUrl(url)).
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(conf.SanitizeRTSPUrl(url), "rtsp", "analysis.soundlevel", fmt.Errorf("failed to get/create RTSP source"))
+			LogSoundLevelProcessorRegistrationFailed(privacy.SanitizeRTSPUrl(url), "rtsp", "analysis.soundlevel", fmt.Errorf("failed to get/create RTSP source"))
 			continue
 		}
-		
+
 		if err := myaudio.RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
 			// Safely check stream health status
 			var streamRunning bool
@@ -753,7 +754,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				streamRunning = streamHealth.IsHealthy
 				streamExists = true
 			}
-			
+
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
@@ -779,7 +780,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	// Warn about active streams that aren't configured (shouldn't normally happen)
 	for url := range activeStreams {
 		if !configuredURLs[url] {
-			LogSoundLevelActiveStreamNotInConfig(conf.SanitizeRTSPUrl(url))
+			LogSoundLevelActiveStreamNotInConfig(privacy.SanitizeRTSPUrl(url))
 		}
 	}
 
@@ -805,6 +806,6 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 	// Unregister all RTSP sources
 	for _, url := range settings.Realtime.RTSP.URLs {
 		myaudio.UnregisterSoundLevelProcessor(url)
-		LogSoundLevelProcessorUnregistered(conf.SanitizeRTSPUrl(url), "rtsp_stream", "analysis.soundlevel")
+		LogSoundLevelProcessorUnregistered(privacy.SanitizeRTSPUrl(url), "rtsp_stream", "analysis.soundlevel")
 	}
 }

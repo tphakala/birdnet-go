@@ -222,7 +222,8 @@ func RemoveAnalysisBuffer(source string) error {
 	
 	// Clean up buffer pool if this was the last buffer (prevents memory leak)
 	if len(analysisBuffers) == 0 && readBufferPool != nil {
-		// Note: BufferPool doesn't have a Close method currently, but we can at least nil it
+		// Clear the buffer pool to release all cached buffers
+		readBufferPool.Clear()
 		readBufferPool = nil
 		overlapSize = 0
 		readSize = 0

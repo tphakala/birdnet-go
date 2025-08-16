@@ -19,8 +19,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
 // HLSStreamInfo contains information about a streaming session
@@ -183,7 +184,7 @@ func (h *Handlers) validateHLSRequest(c echo.Context) (sourceID, clientID, hlsBa
 
 	// Check if source exists and has a valid capture buffer using the decoded source ID
 	if !myaudio.HasCaptureBuffer(sourceID) {
-		log.Printf("❌ Audio source not found for HLS stream - source: %s, IP: %s", conf.SanitizeRTSPUrl(sourceID), clientIP)
+		log.Printf("❌ Audio source not found for HLS stream - source: %s, IP: %s", privacy.SanitizeRTSPUrl(sourceID), clientIP)
 		return "", "", "", echo.NewHTTPError(http.StatusNotFound, "Audio source not found")
 	}
 
@@ -240,7 +241,7 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 	updateStreamActivity(stream.SourceID, "", "playlist_request")
 
 	if hlsVerboseLogging {
-		log.Printf("📄 Updated activity timestamp for stream %s due to playlist request", conf.SanitizeRTSPUrl(stream.SourceID))
+		log.Printf("📄 Updated activity timestamp for stream %s due to playlist request", privacy.SanitizeRTSPUrl(stream.SourceID))
 	}
 
 	// Sanitize the path
@@ -277,13 +278,13 @@ func (h *Handlers) servePlaylistFile(c echo.Context, stream *HLSStreamInfo, hlsB
 		hlsStreamMutex.Unlock()
 
 		if !streamExists {
-			log.Printf("❌ HLS stream no longer exists for source %s", conf.SanitizeRTSPUrl(stream.SourceID))
+			log.Printf("❌ HLS stream no longer exists for source %s", privacy.SanitizeRTSPUrl(stream.SourceID))
 			return echo.NewHTTPError(http.StatusNotFound, "Stream no longer exists")
 		}
 
 		// Send a temporary empty playlist to avoid client errors
 		// This will cause the client to retry after a short delay
-		log.Printf("⏳ Sending temporary empty playlist for source %s (real playlist not ready yet)", conf.SanitizeRTSPUrl(stream.SourceID))
+		log.Printf("⏳ Sending temporary empty playlist for source %s (real playlist not ready yet)", privacy.SanitizeRTSPUrl(stream.SourceID))
 
 		// Create a basic empty HLS playlist
 		// Important: DO NOT include EXT-X-ENDLIST tag which signals the end of the stream
@@ -560,7 +561,7 @@ func getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo,
 	}
 
 	// Stream doesn't exist, we need to create it
-	log.Printf("🎬 Creating new HLS stream for source: %s", conf.SanitizeRTSPUrl(sourceID))
+	log.Printf("🎬 Creating new HLS stream for source: %s", privacy.SanitizeRTSPUrl(sourceID))
 
 	// Generate a filesystem-safe name for directory creation
 	filesystemSafeSourceID := generateFilesystemSafeName(sourceID)
@@ -834,7 +835,7 @@ func cleanupStream(sourceID string) {
 		return
 	}
 
-	log.Printf("🧹 Cleaning up HLS stream for source: %s", conf.SanitizeRTSPUrl(sourceID))
+	log.Printf("🧹 Cleaning up HLS stream for source: %s", privacy.SanitizeRTSPUrl(sourceID))
 
 	// Remove from map first, then release lock
 	delete(hlsStreams, sourceID)
@@ -862,12 +863,12 @@ func setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(),
 
 	// Register callback
 	myaudio.RegisterBroadcastCallback(sourceID, callback)
-	log.Printf("🎧 Registered audio callback for source: %s", conf.SanitizeRTSPUrl(sourceID))
+	log.Printf("🎧 Registered audio callback for source: %s", privacy.SanitizeRTSPUrl(sourceID))
 
 	// Create cleanup function
 	cleanup = func() {
 		myaudio.UnregisterBroadcastCallback(sourceID)
-		log.Printf("🧹 Unregistered audio callback for source %s", conf.SanitizeRTSPUrl(sourceID))
+		log.Printf("🧹 Unregistered audio callback for source %s", privacy.SanitizeRTSPUrl(sourceID))
 	}
 
 	return audioChan, cleanup, nil
@@ -908,7 +909,7 @@ func processFIFOData(ctx context.Context, sourceID string, fifo *os.File, audioC
 			}
 
 			if !dataWritten {
-				log.Printf("✅ First audio data successfully written to FIFO for source %s", conf.SanitizeRTSPUrl(sourceID))
+				log.Printf("✅ First audio data successfully written to FIFO for source %s", privacy.SanitizeRTSPUrl(sourceID))
 				dataWritten = true
 			}
 		}
@@ -919,7 +920,7 @@ func processFIFOData(ctx context.Context, sourceID string, fifo *os.File, audioC
 func feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	// sourceID here is already sanitized if called from getOrCreateHLSStream
 	// But let's sanitize just in case it's called elsewhere in the future or if the caller forgets
-	sanitizedSourceID := conf.SanitizeRTSPUrl(sourceID)
+	sanitizedSourceID := privacy.SanitizeRTSPUrl(sourceID)
 	log.Printf("🎵 Starting audio feed for source %s to pipe %s", sanitizedSourceID, pipePath)
 
 	// Get HLS directory for path validation
@@ -1322,7 +1323,7 @@ func (h *Handlers) checkPlaylistReady(c echo.Context, sourceID string, stream *H
 		for retryCount < 30 { // Allow up to 30 seconds with 1 second intervals
 			select {
 			case <-playlistCtx.Done():
-				log.Printf("⚠️ Playlist check cancelled or timed out for source: %s", conf.SanitizeRTSPUrl(sourceID))
+				log.Printf("⚠️ Playlist check cancelled or timed out for source: %s", privacy.SanitizeRTSPUrl(sourceID))
 				return
 			default:
 				// Check if playlist exists
@@ -1342,7 +1343,7 @@ func (h *Handlers) checkPlaylistReady(c echo.Context, sourceID string, stream *H
 				hlsStreamMutex.Unlock()
 
 				if !streamExists {
-					log.Printf("❌ Stream was terminated while waiting for playlist: %s", conf.SanitizeRTSPUrl(sourceID))
+					log.Printf("❌ Stream was terminated while waiting for playlist: %s", privacy.SanitizeRTSPUrl(sourceID))
 					return
 				}
 
@@ -1384,9 +1385,9 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 
 		// Log the disconnection
 		remainingClients := len(clients)
-		log.Printf("👋 Client %s disconnected from HLS stream for source: %s", clientID, conf.SanitizeRTSPUrl(sourceID))
+		log.Printf("👋 Client %s disconnected from HLS stream for source: %s", clientID, privacy.SanitizeRTSPUrl(sourceID))
 		if !lastClient {
-			log.Printf("📊 HLS stream for source %s still has %d active clients", conf.SanitizeRTSPUrl(sourceID), remainingClients)
+			log.Printf("📊 HLS stream for source %s still has %d active clients", privacy.SanitizeRTSPUrl(sourceID), remainingClients)
 		}
 	}
 	hlsStreamClientMutex.Unlock()
@@ -1396,7 +1397,7 @@ func (h *Handlers) StopHLSClientStream(c echo.Context, sourceID string) error {
 		hlsStreamMutex.Lock()
 		stream, exists := hlsStreams[sourceID]
 		if exists {
-			log.Printf("🧹 Last client disconnected, stopping FFmpeg for source: %s", conf.SanitizeRTSPUrl(sourceID))
+			log.Printf("🧹 Last client disconnected, stopping FFmpeg for source: %s", privacy.SanitizeRTSPUrl(sourceID))
 
 			// Remove from map immediately to prevent new clients
 			delete(hlsStreams, sourceID)
@@ -1521,7 +1522,7 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 			if time.Since(lastTime) < 10*time.Second {
 				isRecentConnection = true
 				log.Printf("⚠️ Ignoring premature disconnect from client %s for stream %s (too soon after connect)",
-					clientID, conf.SanitizeRTSPUrl(heartbeat.SourceID))
+					clientID, privacy.SanitizeRTSPUrl(heartbeat.SourceID))
 			}
 		}
 		hlsStreamActivityMutex.Unlock()
@@ -1534,7 +1535,7 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 		}
 
 		log.Printf("👋 Client %s announced disconnection from stream %s",
-			clientID, conf.SanitizeRTSPUrl(heartbeat.SourceID))
+			clientID, privacy.SanitizeRTSPUrl(heartbeat.SourceID))
 
 		// Remove client from tracking
 		hlsStreamClientMutex.Lock()
@@ -1545,7 +1546,7 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 			// Log remaining clients
 			remainingClients := len(clients)
 			log.Printf("👋 Client %s disconnected from HLS stream %s (%d clients remaining)",
-				clientID, conf.SanitizeRTSPUrl(heartbeat.SourceID), remainingClients)
+				clientID, privacy.SanitizeRTSPUrl(heartbeat.SourceID), remainingClients)
 		}
 		hlsStreamClientMutex.Unlock()
 
@@ -1562,7 +1563,7 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 		// Don't update activity for non-existent streams
 		if hlsVerboseLogging {
 			log.Printf("⚠️ Ignoring heartbeat from %s for non-existent stream %s",
-				clientID, conf.SanitizeRTSPUrl(heartbeat.SourceID))
+				clientID, privacy.SanitizeRTSPUrl(heartbeat.SourceID))
 		}
 		// Don't write the response - let the route handler do it
 		return nil
@@ -1589,7 +1590,7 @@ func (h *Handlers) ProcessHLSHeartbeat(c echo.Context) error {
 	if hlsVerboseLogging && !previousActivity.IsZero() {
 		timeSinceLastActivity := time.Since(previousActivity)
 		log.Printf("⏱️ Heartbeat extended stream lifetime by %0.0f seconds for %s",
-			timeSinceLastActivity.Seconds(), conf.SanitizeRTSPUrl(heartbeat.SourceID))
+			timeSinceLastActivity.Seconds(), privacy.SanitizeRTSPUrl(heartbeat.SourceID))
 	}
 
 	// Don't write the response - let the route handler do it
@@ -1624,7 +1625,7 @@ func init() {
 // performStreamCleanup provides a centralized cleanup function for HLS streams
 // to reduce code duplication across different cleanup scenarios
 func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string) {
-	log.Printf("🧹 Cleaning up HLS stream for source %s: %s", conf.SanitizeRTSPUrl(sourceID), reason)
+	log.Printf("🧹 Cleaning up HLS stream for source %s: %s", privacy.SanitizeRTSPUrl(sourceID), reason)
 
 	// Cancel the context to terminate the FFmpeg process
 	if stream.cancel != nil {
@@ -1641,7 +1642,7 @@ func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string)
 	if cmd != nil && cmd.Process != nil {
 		go func() {
 			_, _ = cmd.Process.Wait()
-			log.Printf("🛑 FFmpeg process for source %s has terminated", conf.SanitizeRTSPUrl(sourceID))
+			log.Printf("🛑 FFmpeg process for source %s has terminated", privacy.SanitizeRTSPUrl(sourceID))
 		}()
 	}
 
@@ -1690,7 +1691,7 @@ func performStreamCleanup(sourceID string, stream *HLSStreamInfo, reason string)
 	}
 	hlsStreamActivityMutex.Unlock()
 
-	log.Printf("✅ HLS stream for source %s fully cleaned up", conf.SanitizeRTSPUrl(sourceID))
+	log.Printf("✅ HLS stream for source %s fully cleaned up", privacy.SanitizeRTSPUrl(sourceID))
 }
 
 // updateStreamActivity records any activity for a stream and its clients
@@ -1720,7 +1721,7 @@ func updateStreamActivity(sourceID, clientID, activityType string, gracePeriod .
 	if len(gracePeriod) > 0 {
 		extraTime = gracePeriod[0]
 		if hlsVerboseLogging && extraTime > 0 {
-			log.Printf("⏱️ Adding grace period of %v to stream %s activity timestamp", extraTime, conf.SanitizeRTSPUrl(sourceID))
+			log.Printf("⏱️ Adding grace period of %v to stream %s activity timestamp", extraTime, privacy.SanitizeRTSPUrl(sourceID))
 		}
 	}
 
@@ -1746,7 +1747,7 @@ func isStreamActive(sourceID string) bool {
 
 	if hlsVerboseLogging && !isActive {
 		log.Printf("⚠️ Stream %s inactive: %0.0f seconds > %0.0f seconds timeout",
-			conf.SanitizeRTSPUrl(sourceID), timeSinceActivity.Seconds(), streamInactivityTimeout.Seconds())
+			privacy.SanitizeRTSPUrl(sourceID), timeSinceActivity.Seconds(), streamInactivityTimeout.Seconds())
 	}
 
 	return isActive
@@ -1818,7 +1819,7 @@ func (h *Handlers) CleanupIdleHLSStreams() {
 		}
 
 		if shouldCleanup {
-			log.Printf("🧹 Cleaning up stream %s: %s", conf.SanitizeRTSPUrl(sourceID), cleanupReason)
+			log.Printf("🧹 Cleaning up stream %s: %s", privacy.SanitizeRTSPUrl(sourceID), cleanupReason)
 
 			// Get stream for cleanup
 			hlsStreamMutex.Lock()
@@ -1845,7 +1846,7 @@ func (h *Handlers) CleanupIdleHLSStreams() {
 
 		if oldestStreamID != "" && maxStreamAge > 0 {
 			log.Printf("📊 Oldest active stream: %s (inactive for %v)",
-				conf.SanitizeRTSPUrl(oldestStreamID), maxStreamAge)
+				privacy.SanitizeRTSPUrl(oldestStreamID), maxStreamAge)
 		}
 	} else {
 		log.Printf("✅ HLS cleanup task completed: no active streams")
