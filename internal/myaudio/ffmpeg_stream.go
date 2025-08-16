@@ -343,16 +343,18 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 	}
 	
 	// Set context and cancel function with proper locking
-	s.cancelMu.Lock()
-	s.ctx, s.cancel = context.WithCancel(parentCtx)
-	s.cancelMu.Unlock()
+	func() {
+		s.cancelMu.Lock()
+		defer s.cancelMu.Unlock()
+		s.ctx, s.cancel = context.WithCancel(parentCtx)
+	}()
 
 	defer func() {
 		s.cancelMu.Lock()
+		defer s.cancelMu.Unlock()
 		if s.cancel != nil {
 			s.cancel()
 		}
-		s.cancelMu.Unlock()
 	}()
 
 	for {
@@ -402,9 +404,11 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 
 			// Handle process exit
 			// Get process start time safely
-			s.cmdMu.Lock()
-			processStartTime := s.processStartTime
-			s.cmdMu.Unlock()
+			processStartTime := func() time.Time {
+				s.cmdMu.Lock()
+				defer s.cmdMu.Unlock()
+				return s.processStartTime
+			}()
 			runtime := time.Since(processStartTime)
 			if err != nil && !errors.Is(err, context.Canceled) {
 				// Record failure for circuit breaker
@@ -426,15 +430,19 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 
 				// Reset restart count for silence timeouts as they're expected
 				if isSilenceTimeout {
-					s.restartCountMu.Lock()
-					s.restartCount = 0
-					s.restartCountMu.Unlock()
+					func() {
+						s.restartCountMu.Lock()
+						defer s.restartCountMu.Unlock()
+						s.restartCount = 0
+					}()
 					// Don't count silence timeouts as failures for circuit breaker
-					s.circuitMu.Lock()
-					if s.consecutiveFailures > 0 {
-						s.consecutiveFailures--
-					}
-					s.circuitMu.Unlock()
+					func() {
+						s.circuitMu.Lock()
+						defer s.circuitMu.Unlock()
+						if s.consecutiveFailures > 0 {
+							s.consecutiveFailures--
+						}
+					}()
 				}
 			} else {
 				// Log normal exit
@@ -551,9 +559,11 @@ func (s *FFmpegStream) startProcess() error {
 	setupProcessGroup(s.cmd)
 
 	// Capture stderr with thread-safe writer
-	s.stderrMu.Lock()
-	s.stderr.Reset()
-	s.stderrMu.Unlock()
+	func() {
+		s.stderrMu.Lock()
+		defer s.stderrMu.Unlock()
+		s.stderr.Reset()
+	}()
 	s.cmd.Stderr = &threadSafeWriter{buf: &s.stderr, mu: &s.stderrMu}
 
 	// Get stdout pipe
@@ -595,10 +605,12 @@ func (s *FFmpegStream) startProcess() error {
 	}
 
 	// Update process metrics
-	s.processMetricsMu.Lock()
-	s.totalProcessCount++
-	currentTotal := s.totalProcessCount
-	s.processMetricsMu.Unlock()
+	currentTotal := func() int64 {
+		s.processMetricsMu.Lock()
+		defer s.processMetricsMu.Unlock()
+		s.totalProcessCount++
+		return s.totalProcessCount
+	}()
 
 	// NOTE: Removed premature failure reset - failures should only be reset
 	// after the process has proven stable operation with actual data reception

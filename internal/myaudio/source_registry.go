@@ -7,23 +7,24 @@ import (
 	"net/url"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	ierr "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // SourceStats provides structured statistics about registered sources
 type SourceStats struct {
-	Total         int `json:"total_sources"`
-	Active        int `json:"active_sources"`
-	RTSP          int `json:"rtsp_sources"`
-	Device        int `json:"device_sources"`
-	File          int `json:"file_sources"`
+	Total  int `json:"total_sources"`
+	Active int `json:"active_sources"`
+	RTSP   int `json:"rtsp_sources"`
+	Device int `json:"device_sources"`
+	File   int `json:"file_sources"`
 }
 
 // AudioSourceRegistry manages all audio sources in the system
@@ -33,10 +34,10 @@ type AudioSourceRegistry struct {
 	connectionMap map[string]string       // connectionString -> ID (for fast lookups)
 
 	// Reference counting for cleanup
-	refCounts     map[string]*int32       // sourceID -> reference count
+	refCounts map[string]*int32 // sourceID -> reference count
 
 	// Failed validation cache to prevent log spam
-	failedValidations map[string]bool    // connectionString -> true (prevents repeated warnings)
+	failedValidations map[string]bool // connectionString -> true (prevents repeated warnings)
 
 	// Thread safety
 	mu sync.RWMutex
@@ -48,12 +49,12 @@ type AudioSourceRegistry struct {
 var (
 	registry     *AudioSourceRegistry
 	registryOnce sync.Once
-	
+
 	// Sentinel errors for better error handling
-	ErrSourceNotFound = ierr.Newf("source not found").
-		Component("myaudio").
-		Category(ierr.CategoryValidation).
-		Build()
+	ErrSourceNotFound = errors.Newf("source not found").
+				Component("myaudio").
+				Category(errors.CategoryValidation).
+				Build()
 )
 
 // GetRegistry returns the singleton registry instance
@@ -179,9 +180,9 @@ func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceT
 // detectSourceTypeFromString determines source type from connection string
 func detectSourceTypeFromString(connectionString string) SourceType {
 	// RTSP URLs (including test URLs for testing)
-	if strings.HasPrefix(connectionString, "rtsp://") || 
-	   strings.HasPrefix(connectionString, "rtsps://") ||
-	   strings.HasPrefix(connectionString, "test://") {
+	if strings.HasPrefix(connectionString, "rtsp://") ||
+		strings.HasPrefix(connectionString, "rtsps://") ||
+		strings.HasPrefix(connectionString, "test://") {
 		return SourceTypeRTSP
 	}
 
@@ -276,13 +277,25 @@ func (r *AudioSourceRegistry) MigrateSourceAtomic(source string, sourceType Sour
 	return audioSource.ID
 }
 
-// ListSources returns all registered sources (without connection strings)
+// ListSources returns all registered sources (without connection strings) in deterministic order
 func (r *AudioSourceRegistry) ListSources() []*AudioSource {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	sources := make([]*AudioSource, 0, len(r.sources))
-	for _, source := range r.sources {
+
+	// Collect all source IDs for sorting
+	sourceIDs := make([]string, 0, len(r.sources))
+	for id := range r.sources {
+		sourceIDs = append(sourceIDs, id)
+	}
+
+	// Sort IDs for deterministic ordering
+	sort.Strings(sourceIDs)
+
+	// Build result in sorted order
+	for _, id := range sourceIDs {
+		source := r.sources[id]
 		// Create a copy without the connection string for safety
 		sourceCopy := *source
 		sourceCopy.connectionString = "" // Never expose connection string
@@ -309,7 +322,7 @@ func (r *AudioSourceRegistry) UpdateSourceMetrics(sourceID string, bytesProcesse
 func (r *AudioSourceRegistry) AcquireSourceReference(sourceID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	if _, exists := r.sources[sourceID]; exists {
 		if r.refCounts[sourceID] == nil {
 			initialCount := int32(1)
@@ -325,30 +338,30 @@ func (r *AudioSourceRegistry) AcquireSourceReference(sourceID string) {
 func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	source, exists := r.sources[sourceID]
 	if !exists {
 		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
-	
+
 	// Decrement reference count (no need for atomic since we hold the mutex)
 	var newCount int32
 	if r.refCounts[sourceID] != nil {
 		*r.refCounts[sourceID]--
 		newCount = *r.refCounts[sourceID]
 	}
-	
+
 	// Remove source if no more references
 	if newCount <= 0 {
 		delete(r.sources, sourceID)
 		delete(r.connectionMap, source.connectionString)
 		delete(r.refCounts, sourceID)
-		
+
 		r.logger.With("id", sourceID).
 			With("safe", source.SafeString).
 			Info("Removed unreferenced audio source")
 	}
-	
+
 	return nil
 }
 
@@ -586,18 +599,23 @@ func (r *AudioSourceRegistry) validateAudioDevice(device string) error {
 	if device == "" {
 		return fmt.Errorf("audio device identifier cannot be empty")
 	}
-	
+
+	// Reject known invalid paths that are not audio devices
+	if device == "/dev/null" || device == "/dev/zero" || device == "/dev/random" || device == "/dev/urandom" {
+		return fmt.Errorf("invalid audio device: %s is not an audio device", device)
+	}
+
 	// Only check for the most dangerous shell injection patterns
 	// Audio devices are local and users need flexibility
-	if strings.Contains(device, "$(") || 
-	   strings.Contains(device, "${") ||
-	   strings.Contains(device, "`") ||
-	   strings.Contains(device, "&&") ||
-	   strings.Contains(device, "||") ||
-	   strings.Contains(device, ";") && strings.Contains(device, "|") {
+	if strings.Contains(device, "$(") ||
+		strings.Contains(device, "${") ||
+		strings.Contains(device, "`") ||
+		strings.Contains(device, "&&") ||
+		strings.Contains(device, "||") ||
+		strings.Contains(device, ";") && strings.Contains(device, "|") {
 		return fmt.Errorf("potentially dangerous pattern in audio device identifier")
 	}
-	
+
 	return nil
 }
 
@@ -648,8 +666,20 @@ func (r *AudioSourceRegistry) sanitizeConnectionString(conn string, sourceType S
 // generateID generates a new unique source ID using UUID
 // IMPORTANT: This method is not thread-safe and must be called with r.mu held
 func (r *AudioSourceRegistry) generateID(sourceType SourceType) string {
-	// Generate UUID and take first 8 characters for brevity
-	id := uuid.New().String()[:8]
+	// Generate UUID with error handling
+	u, err := uuid.NewRandom()
+	if err != nil {
+		// Fallback to timestamp-based ID if UUID generation fails
+		// This is extremely rare but provides a safety net
+		r.logger.Error("Failed to generate UUID, using timestamp fallback",
+			"error", err,
+			"source_type", sourceType)
+		// Use nanosecond timestamp for uniqueness
+		id := fmt.Sprintf("%d", time.Now().UnixNano())[:8]
+		return fmt.Sprintf("%s_%s", sourceType, id)
+	}
+	// Take first 8 characters for brevity
+	id := u.String()[:8]
 	return fmt.Sprintf("%s_%s", sourceType, id)
 }
 
@@ -703,7 +733,7 @@ func (r *AudioSourceRegistry) parseLinuxDeviceName(deviceString string) string {
 		return r.parseLinuxHWDeviceString(deviceString)
 	}
 
-	// Parse plughw:CARD,DEV format  
+	// Parse plughw:CARD,DEV format
 	if strings.HasPrefix(deviceString, "plughw:") {
 		return r.parseLinuxPlugHWDeviceString(deviceString)
 	}
@@ -723,20 +753,20 @@ func (r *AudioSourceRegistry) parseDarwinDeviceName(deviceString string) string 
 	case "Built-in Output":
 		return "Built-in Output"
 	}
-	
+
 	// Check for common patterns
 	if strings.Contains(deviceString, "USB") {
 		return deviceString // USB devices usually have descriptive names
 	}
-	
+
 	if strings.Contains(deviceString, "Aggregate") {
 		return "Aggregate Device"
 	}
-	
+
 	if strings.Contains(deviceString, "Multi-Output") {
 		return "Multi-Output Device"
 	}
-	
+
 	// Return as-is for other cases (Core Audio names are usually descriptive)
 	return deviceString
 }
@@ -747,7 +777,7 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 	if deviceString == "default" {
 		return "Default Audio Device"
 	}
-	
+
 	// Windows WASAPI patterns
 	if strings.HasPrefix(deviceString, "wasapi:") {
 		// Remove wasapi: prefix and return the device name
@@ -756,7 +786,7 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 			return name
 		}
 	}
-	
+
 	// Windows DirectSound patterns
 	if strings.HasPrefix(deviceString, "dsound:") {
 		name := strings.TrimPrefix(deviceString, "dsound:")
@@ -764,7 +794,7 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 			return fmt.Sprintf("DirectSound: %s", name)
 		}
 	}
-	
+
 	// Check for GUID patterns (Windows device IDs)
 	if strings.Contains(deviceString, "{") && strings.Contains(deviceString, "}") {
 		// Extract device name if present before the GUID
@@ -773,7 +803,7 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 		}
 		return "Audio Device"
 	}
-	
+
 	// Return as-is for other cases
 	return deviceString
 }
@@ -782,13 +812,13 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 func (r *AudioSourceRegistry) parseLinuxHWDeviceString(deviceString string) string {
 	// Remove "hw:" prefix
 	params := strings.TrimPrefix(deviceString, "hw:")
-	
+
 	// Split by comma to get parameters
 	parts := strings.Split(params, ",")
-	
+
 	var cardName string
 	var devNum string
-	
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "CARD=") {
@@ -797,14 +827,14 @@ func (r *AudioSourceRegistry) parseLinuxHWDeviceString(deviceString string) stri
 			devNum = strings.TrimPrefix(part, "DEV=")
 		}
 	}
-	
+
 	// If we extracted card name and device number
 	if cardName != "" && devNum != "" {
 		// Try to resolve the card name to a friendly name
 		friendlyCardName := r.resolveFriendlyCardName(cardName)
 		return fmt.Sprintf("%s #%s", friendlyCardName, devNum)
 	}
-	
+
 	// Fallback if parsing failed
 	return fmt.Sprintf("Audio Device (%s)", deviceString)
 }
@@ -813,16 +843,16 @@ func (r *AudioSourceRegistry) parseLinuxHWDeviceString(deviceString string) stri
 func (r *AudioSourceRegistry) parseLinuxPlugHWDeviceString(deviceString string) string {
 	// Remove "plughw:" prefix
 	params := strings.TrimPrefix(deviceString, "plughw:")
-	
+
 	// Split by comma to get card and device numbers
 	parts := strings.Split(params, ",")
-	
+
 	if len(parts) >= 2 {
 		cardNum := strings.TrimSpace(parts[0])
 		devNum := strings.TrimSpace(parts[1])
 		return fmt.Sprintf("Audio Card %s Device %s", cardNum, devNum)
 	}
-	
+
 	// Fallback
 	return fmt.Sprintf("Audio Device (%s)", deviceString)
 }
@@ -831,21 +861,21 @@ func (r *AudioSourceRegistry) parseLinuxPlugHWDeviceString(deviceString string) 
 func (r *AudioSourceRegistry) resolveFriendlyCardName(cardID string) string {
 	// Common ALSA card ID to friendly name mappings
 	friendlyNames := map[string]string{
-		"Device":         "USB Audio Device",
-		"PCH":           "HDA Intel PCH", 
-		"HDMI":          "HDMI Audio",
-		"USB":           "USB Audio",
-		"Headset":       "USB Headset",
-		"Webcam":        "USB Webcam",
-		"Microphone":    "USB Microphone",
-		"Speaker":       "USB Speaker",
+		"Device":     "USB Audio Device",
+		"PCH":        "HDA Intel PCH",
+		"HDMI":       "HDMI Audio",
+		"USB":        "USB Audio",
+		"Headset":    "USB Headset",
+		"Webcam":     "USB Webcam",
+		"Microphone": "USB Microphone",
+		"Speaker":    "USB Speaker",
 	}
-	
+
 	// Look for exact match first
 	if friendlyName, exists := friendlyNames[cardID]; exists {
 		return friendlyName
 	}
-	
+
 	// Look for partial matches (case insensitive)
 	cardIDLower := strings.ToLower(cardID)
 	for key, value := range friendlyNames {
@@ -853,7 +883,7 @@ func (r *AudioSourceRegistry) resolveFriendlyCardName(cardID string) string {
 			return value
 		}
 	}
-	
+
 	// If no friendly mapping found, use the card ID as-is
 	// This handles cases where the card ID is already descriptive
 	return cardID
