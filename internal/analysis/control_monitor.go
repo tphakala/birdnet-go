@@ -290,7 +290,17 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 		sources = append(sources, settings.Realtime.RTSP.URLs...)
 	}
 	if settings.Realtime.Audio.Source != "" {
-		sources = append(sources, "malgo")
+		// Get the audio source from registry instead of hardcoded "malgo"
+		registry := myaudio.GetRegistry()
+		if registry != nil {
+			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
+				sources = append(sources, audioSource.ID)
+			} else {
+				log.Printf("⚠️ Failed to get audio source from registry during RTSP reconfiguration")
+			}
+		} else {
+			log.Printf("⚠️ Registry not available during RTSP reconfiguration, skipping audio source")
+		}
 	}
 
 	// Update the analysis buffer monitors

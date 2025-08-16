@@ -797,10 +797,20 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 // unregisterAllSoundLevelProcessors unregisters all sound level processors
 func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
-	// Unregister malgo source
+	// Unregister audio source
 	if settings.Realtime.Audio.Source != "" {
-		myaudio.UnregisterSoundLevelProcessor("malgo")
-		LogSoundLevelProcessorUnregistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
+		// Get the audio source from registry instead of hardcoded "malgo"
+		registry := myaudio.GetRegistry()
+		if registry != nil {
+			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
+				myaudio.UnregisterSoundLevelProcessor(audioSource.ID)
+				LogSoundLevelProcessorUnregistered(audioSource.DisplayName, "audio_device", "analysis.soundlevel")
+			} else {
+				log.Printf("⚠️ Failed to get audio source from registry during sound level processor unregistration")
+			}
+		} else {
+			log.Printf("⚠️ Registry not available during sound level processor unregistration")
+		}
 	}
 
 	// Unregister all RTSP sources
