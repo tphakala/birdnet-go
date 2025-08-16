@@ -893,53 +893,56 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 	return deviceString
 }
 
-// parseLinuxHWDeviceString parses hardware device strings like "hw:CARD=Device,DEV=0"
-func (r *AudioSourceRegistry) parseLinuxHWDeviceString(deviceString string) string {
-	// Remove "hw:" prefix
-	params := strings.TrimPrefix(deviceString, "hw:")
-
+// parseLinuxDeviceParams parses Linux audio device parameters after prefix removal
+// It handles both "CARD=Name,DEV=0" format and "0,0" format
+func (r *AudioSourceRegistry) parseLinuxDeviceParams(params, deviceString string) string {
 	// Split by comma to get parameters
 	parts := strings.Split(params, ",")
-
-	var cardName string
-	var devNum string
-
+	
+	// Check if it's CARD=...,DEV=... format
+	var cardName, devNum string
+	hasCardFormat := false
+	
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "CARD=") {
 			cardName = strings.TrimPrefix(part, "CARD=")
+			hasCardFormat = true
 		} else if strings.HasPrefix(part, "DEV=") {
 			devNum = strings.TrimPrefix(part, "DEV=")
+			hasCardFormat = true
 		}
 	}
-
-	// If we extracted card name and device number
-	if cardName != "" && devNum != "" {
-		// Try to resolve the card name to a friendly name
+	
+	// Handle CARD=...,DEV=... format
+	if hasCardFormat && cardName != "" && devNum != "" {
 		friendlyCardName := r.resolveFriendlyCardName(cardName)
 		return fmt.Sprintf("%s #%s", friendlyCardName, devNum)
 	}
-
-	// Fallback if parsing failed
-	return fmt.Sprintf("Audio Device (%s)", deviceString)
-}
-
-// parseLinuxPlugHWDeviceString parses plugin hardware strings like "plughw:0,0"
-func (r *AudioSourceRegistry) parseLinuxPlugHWDeviceString(deviceString string) string {
-	// Remove "plughw:" prefix
-	params := strings.TrimPrefix(deviceString, "plughw:")
-
-	// Split by comma to get card and device numbers
-	parts := strings.Split(params, ",")
-
-	if len(parts) >= 2 {
+	
+	// Handle simple numeric format like "0,0"
+	if !hasCardFormat && len(parts) >= 2 {
 		cardNum := strings.TrimSpace(parts[0])
 		devNum := strings.TrimSpace(parts[1])
 		return fmt.Sprintf("Audio Card %s Device %s", cardNum, devNum)
 	}
-
+	
 	// Fallback
 	return fmt.Sprintf("Audio Device (%s)", deviceString)
+}
+
+// parseLinuxHWDeviceString parses hardware device strings like "hw:CARD=Device,DEV=0"
+func (r *AudioSourceRegistry) parseLinuxHWDeviceString(deviceString string) string {
+	// Remove "hw:" prefix and use shared parser
+	params := strings.TrimPrefix(deviceString, "hw:")
+	return r.parseLinuxDeviceParams(params, deviceString)
+}
+
+// parseLinuxPlugHWDeviceString parses plugin hardware strings like "plughw:0,0"
+func (r *AudioSourceRegistry) parseLinuxPlugHWDeviceString(deviceString string) string {
+	// Remove "plughw:" prefix and use shared parser
+	params := strings.TrimPrefix(deviceString, "plughw:")
+	return r.parseLinuxDeviceParams(params, deviceString)
 }
 
 // resolveFriendlyCardName maps ALSA card identifiers to friendly names

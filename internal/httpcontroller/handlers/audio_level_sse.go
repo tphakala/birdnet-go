@@ -121,7 +121,12 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 				}
 				// Fallback if not found in settings
 				if audioData.Name == "" {
-					audioData.Name = fmt.Sprintf("camera-%s", source.ID[:8])
+					// Safely handle IDs shorter than 8 characters
+					idPrefix := source.ID
+					if len(source.ID) > 8 {
+						idPrefix = source.ID[:8]
+					}
+					audioData.Name = fmt.Sprintf("camera-%s", idPrefix)
 				}
 			}
 		}

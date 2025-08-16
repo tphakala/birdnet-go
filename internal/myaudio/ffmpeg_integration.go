@@ -55,6 +55,14 @@ func UpdateFFmpegLogLevel() {
 // consistent registration behavior across different stream initialization paths.
 // Returns an error if registration fails, nil if disabled or successful.
 func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) error {
+	// Ensure we have a non-nil logger to prevent panics
+	if logger == nil {
+		logger = integrationLogger
+		if logger == nil {
+			logger = slog.Default()
+		}
+	}
+	
 	settings := conf.Setting()
 	if !settings.Realtime.Audio.SoundLevel.Enabled {
 		return nil // Not enabled, no error

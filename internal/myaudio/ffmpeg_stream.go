@@ -616,6 +616,7 @@ func (s *FFmpegStream) startProcess() error {
 	// after the process has proven stable operation with actual data reception
 
 	streamLogger.Info("FFmpeg process started",
+		"source_id", s.source.ID,
 		"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 		"pid", s.cmd.Process.Pid,
 		"transport", s.transport,
@@ -623,8 +624,8 @@ func (s *FFmpegStream) startProcess() error {
 		"component", "ffmpeg-stream",
 		"operation", "start_process")
 
-	log.Printf("✅ FFmpeg started for %s (PID: %d, Process #%d, Restart #%d)",
-		privacy.SanitizeRTSPUrl(s.source.SafeString), s.cmd.Process.Pid, currentTotal, s.restartCount)
+	log.Printf("✅ FFmpeg started for %s (source_id: %s, PID: %d, Process #%d, Restart #%d)",
+		privacy.SanitizeRTSPUrl(s.source.SafeString), s.source.ID, s.cmd.Process.Pid, currentTotal, s.restartCount)
 	return nil
 }
 

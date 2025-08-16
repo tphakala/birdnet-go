@@ -6,12 +6,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 // Helper function to create an isolated test registry
-func createTestRegistry(t *testing.T) *AudioSourceRegistry {
-	t.Helper()
+func createTestRegistry(tb testing.TB) *AudioSourceRegistry {
+	tb.Helper()
 	return &AudioSourceRegistry{
 		sources:           make(map[string]*AudioSource),
 		connectionMap:     make(map[string]string),
@@ -255,25 +254,35 @@ func TestConcurrentReferenceOperations(t *testing.T) {
 	
 	const numGoroutines = 100
 	var wg sync.WaitGroup
+	startBarrier := make(chan struct{})
 	
-	// Half acquire, half release (with slight delay)
+	// First, acquire references to ensure there's something to release
+	for i := 0; i < numGoroutines/2; i++ {
+		registry.AcquireSourceReference(source.ID)
+	}
+	
+	// Launch concurrent operations
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		if i%2 == 0 {
 			// Acquire reference
 			go func() {
 				defer wg.Done()
+				<-startBarrier // Wait for signal to start
 				registry.AcquireSourceReference(source.ID)
 			}()
 		} else {
-			// Release reference with small delay to ensure some acquires happen first
+			// Release reference
 			go func() {
 				defer wg.Done()
-				time.Sleep(5 * time.Millisecond)
+				<-startBarrier // Wait for signal to start
 				_ = registry.ReleaseSourceReference(source.ID) // Ignore error
 			}()
 		}
 	}
+	
+	// Signal all goroutines to start simultaneously
+	close(startBarrier)
 	
 	wg.Wait()
 	
@@ -528,7 +537,7 @@ func TestDynamicSourceLifecycle(t *testing.T) {
 
 // BenchmarkReferenceOperations benchmarks reference counting operations
 func BenchmarkReferenceOperations(b *testing.B) {
-	registry := createTestRegistry(&testing.T{})
+	registry := createTestRegistry(b)
 	
 	// Pre-create sources
 	sources := make([]*AudioSource, 10)
@@ -543,13 +552,15 @@ func BenchmarkReferenceOperations(b *testing.B) {
 	b.ResetTimer()
 	
 	b.Run("Acquire", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		b.ReportAllocs()
+		for i := range b.N {
 			source := sources[i%10]
 			registry.AcquireSourceReference(source.ID)
 		}
 	})
 	
 	b.Run("Release", func(b *testing.B) {
+		b.ReportAllocs()
 		// Pre-acquire references
 		for i := 0; i < b.N; i++ {
 			source := sources[i%10]
@@ -557,14 +568,15 @@ func BenchmarkReferenceOperations(b *testing.B) {
 		}
 		
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			source := sources[i%10]
 			_ = registry.ReleaseSourceReference(source.ID)
 		}
 	})
 	
 	b.Run("AcquireRelease", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		b.ReportAllocs()
+		for i := range b.N {
 			source := sources[i%10]
 			registry.AcquireSourceReference(source.ID)
 			_ = registry.ReleaseSourceReference(source.ID)

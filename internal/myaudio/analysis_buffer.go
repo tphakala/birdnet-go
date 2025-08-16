@@ -373,6 +373,7 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 
 			if n < len(data) {
 				// Partial write - log and record metrics
+				// Note: ringbuffer's Free() method is thread-safe
 				log.Printf("⚠️ Only wrote %d of %d bytes to buffer for %s (capacity: %d, free: %d)",
 					n, len(data), displayName, capacity, ab.Free())
 
@@ -387,6 +388,7 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 		lastErr = err
 
 		// Log detailed buffer state
+		// Note: ringbuffer's Free() and Length() methods are thread-safe
 		log.Printf("⚠️ Analysis buffer for %s has %d/%d bytes free (%d bytes used), tried to write %d bytes",
 			displayName, ab.Free(), capacity, ab.Length(), len(data))
 
