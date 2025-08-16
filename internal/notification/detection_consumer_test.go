@@ -1,13 +1,27 @@
 package notification
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/events"
+	"go.uber.org/goleak"
 )
+
+// TestMain provides goleak verification to detect goroutine leaks
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*Service).cleanupLoop"),
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*ResourceEventWorker).cleanupLoop"),
+	)
+	os.Exit(m.Run())
+}
 
 func TestDetectionNotificationConsumer(t *testing.T) {
 	t.Parallel()

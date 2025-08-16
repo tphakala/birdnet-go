@@ -296,6 +296,12 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		// Register the audio source in the registry using the original settings value
 		// This ensures consistency with realtime.go registration
 		registry := GetRegistry()
+		// Guard against nil registry during initialization to prevent panic
+		if registry == nil {
+			log.Printf("❌ Registry not available during audio capture initialization, unable to register source")
+			return
+		}
+		
 		source, err := registry.RegisterSource(settings.Realtime.Audio.Source, SourceConfig{
 			Type: SourceTypeAudioCard,
 		})

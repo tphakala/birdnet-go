@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +34,12 @@ func (h *Handlers) initializeLevelsData(isAuthenticated bool) (levels map[string
 	lastNonZero = make(map[string]time.Time)
 
 	registry := myaudio.GetRegistry()
+	// Guard against nil registry during initialization to prevent panic
+	if registry == nil {
+		// Return empty maps to keep SSE alive during startup
+		return levels, lastUpdate, lastNonZero
+	}
+	
 	now := time.Now()
 
 	// Add configured audio device if set
@@ -103,7 +110,35 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 
 	// Get the source from the registry to get proper DisplayName
 	registry := myaudio.GetRegistry()
-	if source, exists := registry.GetSourceByID(audioData.Source); exists {
+	if registry == nil {
+		// Registry not available during initialization - apply fallback naming directly
+		if isAuthenticated {
+			audioData.Name = audioData.Source
+		} else {
+			// Apply anonymization logic without registry using source ID patterns
+			switch {
+			case strings.HasPrefix(audioData.Source, "audio_card_"):
+				audioData.Name = "audio-source-1"
+			case strings.HasPrefix(audioData.Source, "rtsp_"):
+				// Try O(1) lookup from pre-built anonymization map
+				if anonymizedName, exists := h.rtspAnonymMap[audioData.Source]; exists {
+					audioData.Name = anonymizedName
+				} else {
+					// Fallback if not found in anonymization map
+					// Safely handle IDs shorter than 8 characters
+					idPrefix := audioData.Source
+					if len(audioData.Source) > 8 {
+						idPrefix = audioData.Source[:8]
+					}
+					audioData.Name = fmt.Sprintf("camera-%s", idPrefix)
+				}
+			case strings.HasPrefix(audioData.Source, "file_"):
+				audioData.Name = "file-source"
+			default:
+				audioData.Name = "unknown-source"
+			}
+		}
+	} else if source, exists := registry.GetSourceByID(audioData.Source); exists {
 		// Use the DisplayName from the registry
 		if isAuthenticated {
 			audioData.Name = source.DisplayName

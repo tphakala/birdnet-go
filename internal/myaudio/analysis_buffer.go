@@ -182,7 +182,12 @@ func AllocateAnalysisBuffer(capacity int, source string) error {
 	
 	// Acquire reference to this source using the migrated ID
 	registry := GetRegistry()
-	registry.AcquireSourceReference(sourceID)
+	// Guard against nil registry during initialization to prevent panic
+	if registry != nil {
+		registry.AcquireSourceReference(sourceID)
+	} else {
+		log.Printf("⚠️ Registry not available during analysis buffer allocation, skipping source reference for: %s", sourceID)
+	}
 
 	// Record successful allocation metrics
 	if m := getAnalysisMetrics(); m != nil {
@@ -232,11 +237,16 @@ func RemoveAnalysisBuffer(source string) error {
 	
 	// Release reference to this source - registry will auto-remove if count reaches zero
 	registry := GetRegistry()
-	if err := registry.ReleaseSourceReference(sourceID); err != nil {
-		// Log but don't fail - buffer removal succeeded
-		if !errors.Is(err, ErrSourceNotFound) {
-			log.Printf("⚠️ Failed to release source reference: %v", err)
-		}
+	// Guard against nil registry during shutdown to prevent panic
+	if registry != nil {
+			if err := registry.ReleaseSourceReference(sourceID); err != nil {
+				// Log but don't fail - buffer removal succeeded
+				if !errors.Is(err, ErrSourceNotFound) {
+					log.Printf("⚠️ Failed to release source reference: %v", err)
+				}
+			}
+	} else {
+		log.Printf("⚠️ Registry not available during analysis buffer cleanup, skipping source reference release for: %s", sourceID)
 	}
 
 	return nil

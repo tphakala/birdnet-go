@@ -241,7 +241,12 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 	
 	// Acquire reference to this source
 	registry := GetRegistry()
-	registry.AcquireSourceReference(source)
+	// Guard against nil registry during initialization to prevent panic
+	if registry != nil {
+		registry.AcquireSourceReference(source)
+	} else {
+		log.Printf("⚠️ Registry not available during buffer allocation, skipping source reference for: %s", source)
+	}
 
 	// Record successful allocation metrics
 	if m := getCaptureMetrics(); m != nil {
@@ -274,11 +279,16 @@ func RemoveCaptureBuffer(source string) error {
 	
 	// Release reference to this source - registry will auto-remove if count reaches zero
 	registry := GetRegistry()
-	if err := registry.ReleaseSourceReference(sourceID); err != nil {
-		// Log but don't fail - buffer removal succeeded
-		if !errors.Is(err, ErrSourceNotFound) {
-			log.Printf("⚠️ Failed to release source reference: %v", err)
-		}
+	// Guard against nil registry during shutdown to prevent panic
+	if registry != nil {
+			if err := registry.ReleaseSourceReference(sourceID); err != nil {
+				// Log but don't fail - buffer removal succeeded
+				if !errors.Is(err, ErrSourceNotFound) {
+					log.Printf("⚠️ Failed to release source reference: %v", err)
+				}
+			}
+	} else {
+		log.Printf("⚠️ Registry not available during buffer cleanup, skipping source reference release for: %s", sourceID)
 	}
 	
 	return nil

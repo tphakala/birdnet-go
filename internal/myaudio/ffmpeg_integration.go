@@ -70,6 +70,18 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 	
 	// Get or create the source in the registry to get proper ID and DisplayName
 	registry := GetRegistry()
+	// Guard against nil registry during initialization to prevent panic
+	if registry == nil {
+		logger.Warn("registry not available during sound level processor registration",
+			"url", privacy.SanitizeRTSPUrl(source),
+			"operation", "register_sound_level")
+		return errors.Newf("registry not available during initialization").
+			Component("ffmpeg-integration").
+			Category(errors.CategorySystem).
+			Context("operation", "register_sound_level").
+			Build()
+	}
+	
 	audioSource := registry.GetOrCreateSource(source, SourceTypeRTSP)
 	if audioSource == nil {
 		logger.Warn("failed to get/create audio source for sound level processor",

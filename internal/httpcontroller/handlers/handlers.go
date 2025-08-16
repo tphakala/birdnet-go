@@ -42,7 +42,7 @@ type Handlers struct {
 	Server            serviceapi.ServerFacade // Server facade providing security and processor access
 	Telemetry         *TelemetryMiddleware    // Telemetry middleware for metrics and enhanced error handling
 	Metrics           *observability.Metrics  // Shared metrics instance
-	rtspAnonymMap     map[string]string       // Maps RTSP URLs to anonymized names for O(1) lookups
+	rtspAnonymMap     map[string]string       // Maps source IDs to anonymized names for O(1) lookups
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.

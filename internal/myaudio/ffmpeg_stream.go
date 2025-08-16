@@ -300,10 +300,11 @@ func generateUniqueFallbackID() string {
 func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FFmpegStream {
 	// Register or get existing source from registry
 	registry := GetRegistry()
-	source := registry.GetOrCreateSource(url, SourceTypeRTSP)
-	if source == nil {
-		log.Printf("❌ Failed to register RTSP source: %s", privacy.SanitizeRTSPUrl(url))
-		// Create a fallback source for robustness with unique ID
+	var source *AudioSource
+	
+	if registry == nil {
+		log.Printf("⚠️ Registry not available during startup, creating fallback source: %s", privacy.SanitizeRTSPUrl(url))
+		// Create fallback source when registry is unavailable
 		fallbackID := generateUniqueFallbackID()
 		source = &AudioSource{
 			ID:               fallbackID,
@@ -313,6 +314,22 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 			SafeString:       privacy.SanitizeRTSPUrl(url),
 			RegisteredAt:     time.Now(),
 			IsActive:         true,
+		}
+	} else {
+		source = registry.GetOrCreateSource(url, SourceTypeRTSP)
+		if source == nil {
+			log.Printf("❌ Failed to register RTSP source: %s", privacy.SanitizeRTSPUrl(url))
+			// Create a fallback source for robustness with unique ID
+			fallbackID := generateUniqueFallbackID()
+			source = &AudioSource{
+				ID:               fallbackID,
+				DisplayName:      "RTSP Stream (Fallback)",
+				Type:             SourceTypeRTSP,
+				connectionString: url,
+				SafeString:       privacy.SanitizeRTSPUrl(url),
+				RegisteredAt:     time.Now(),
+				IsActive:         true,
+			}
 		}
 	}
 

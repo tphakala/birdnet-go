@@ -13,6 +13,12 @@ import (
 // This function is thread-safe and prevents race conditions during concurrent migrations
 func MigrateExistingSourceToID(source string) string {
 	registry := GetRegistry()
+	
+	// Guard against nil registry during initialization to prevent panic
+	if registry == nil {
+		log.Printf("⚠️ Registry not available during migration, returning original source: %s", source)
+		return source
+	}
 
 	// Pass SourceTypeUnknown to indicate type detection should happen atomically inside the lock
 	// This prevents race conditions where multiple goroutines might detect different types
@@ -43,6 +49,12 @@ func RegisterExistingRTSPSources(rtspURLs []string) {
 	}
 
 	registry := GetRegistry()
+	// Guard against nil registry during initialization to prevent panic
+	if registry == nil {
+		log.Printf("⚠️ Registry not available during RTSP source registration, skipping %d URLs", len(rtspURLs))
+		return
+	}
+	
 	var errs []string
 
 	for i, url := range rtspURLs {
