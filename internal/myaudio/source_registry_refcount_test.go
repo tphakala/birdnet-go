@@ -11,6 +11,7 @@ import (
 
 // Helper function to create an isolated test registry
 func createTestRegistry(t *testing.T) *AudioSourceRegistry {
+	t.Helper()
 	return &AudioSourceRegistry{
 		sources:           make(map[string]*AudioSource),
 		connectionMap:     make(map[string]string),
