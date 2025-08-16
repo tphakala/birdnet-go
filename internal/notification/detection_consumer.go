@@ -53,7 +53,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		return nil
 	}
 
-	// Get the display location (already contains sanitized DisplayName from detection event)
+	// Get the display location (already sanitized in the audio source registry)
 	displayLocation := event.GetLocation()
 
 	// Create notification for new species
