@@ -29,6 +29,7 @@ var (
 	prevData            map[string][]byte                 // prevData is a map to store the previous data for each audio source
 	abMutex             sync.RWMutex                      // Mutex to protect access to the analysisBuffers and prevData maps
 	warningCounter      map[string]int
+	warningCounterMutex sync.Mutex              // Mutex to protect access to warningCounter map
 	analysisMetrics     *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
 	analysisMetricsMutex sync.RWMutex            // Mutex for thread-safe access to analysisMetrics
 	analysisMetricsOnce  sync.Once               // Ensures metrics are only set once
@@ -330,8 +331,12 @@ func WriteToAnalysisBuffer(stream string, data []byte) error {
 	}
 
 	if capacityUsed > warningCapacityThreshold {
+		warningCounterMutex.Lock()
 		warningCounter[sourceID]++
-		if warningCounter[sourceID]%32 == 1 {
+		shouldLog := warningCounter[sourceID]%32 == 1
+		warningCounterMutex.Unlock()
+		
+		if shouldLog {
 			log.Printf("⚠️ Analysis buffer for %s is %.2f%% full (used: %d/%d bytes)",
 				displayName, capacityUsed*100, currentLength, capacity)
 		}

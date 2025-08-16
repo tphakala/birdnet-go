@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,7 +33,7 @@ type AudioSourceRegistry struct {
 	connectionMap map[string]string       // connectionString -> ID (for fast lookups)
 
 	// Reference counting for cleanup
-	refCounts     map[string]*int32       // sourceID -> reference count (pointer for atomic ops)
+	refCounts     map[string]*int32       // sourceID -> reference count
 
 	// Failed validation cache to prevent log spam
 	failedValidations map[string]bool    // connectionString -> true (prevents repeated warnings)
@@ -316,7 +315,8 @@ func (r *AudioSourceRegistry) AcquireSourceReference(sourceID string) {
 			initialCount := int32(1)
 			r.refCounts[sourceID] = &initialCount
 		} else {
-			atomic.AddInt32(r.refCounts[sourceID], 1)
+			// No need for atomic since we hold the mutex
+			*r.refCounts[sourceID]++
 		}
 	}
 }
@@ -331,10 +331,11 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 	
-	// Decrement reference count
+	// Decrement reference count (no need for atomic since we hold the mutex)
 	var newCount int32
 	if r.refCounts[sourceID] != nil {
-		newCount = atomic.AddInt32(r.refCounts[sourceID], -1)
+		*r.refCounts[sourceID]--
+		newCount = *r.refCounts[sourceID]
 	}
 	
 	// Remove source if no more references

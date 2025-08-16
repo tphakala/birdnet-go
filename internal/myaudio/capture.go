@@ -25,10 +25,10 @@ type AudioDataCallback func(sourceID string, data []byte)
 
 // Global callback registry for broadcasting audio data
 var (
-	broadcastCallbacks         map[string]AudioDataCallback // Map of sourceID -> callback
-	broadcastCallbackMutex     sync.RWMutex
-	lastCallbackLogTime        time.Time // Last time we logged active callbacks
-	lastMissingCallbackLogTime time.Time // Last time we logged missing callbacks
+	broadcastCallbacks             map[string]AudioDataCallback // Map of sourceID -> callback
+	broadcastCallbackMutex         sync.RWMutex
+	lastCallbackLogTime            atomic.Int64 // Unix nano timestamp of last active callback log
+	lastMissingCallbackLogTime     atomic.Int64 // Unix nano timestamp of last missing callback log
 )
 
 func init() {
@@ -75,8 +75,9 @@ func broadcastAudioData(sourceID string, data []byte) {
 	callback, exists := broadcastCallbacks[sourceID]
 
 	// Debug log: log registered callbacks less frequently (every 5 minutes)
-	// Use a proper timestamp comparison instead of modulus which can cause spurious logging
-	if time.Since(lastCallbackLogTime) > 5*time.Minute {
+	// Use atomic operations for thread-safe timestamp access
+	lastLogNano := lastCallbackLogTime.Load()
+	if time.Since(time.Unix(0, lastLogNano)) > 5*time.Minute {
 		// Create a list of registered callback keys with DisplayNames
 		registry := GetRegistry()
 		var keys []string
@@ -90,7 +91,7 @@ func broadcastAudioData(sourceID string, data []byte) {
 			keys = append(keys, displayName)
 		}
 		log.Printf("🔊 Active audio broadcast callbacks: %v", keys)
-		lastCallbackLogTime = time.Now()
+		lastCallbackLogTime.Store(time.Now().UnixNano())
 	}
 
 	broadcastCallbackMutex.RUnlock()
@@ -98,7 +99,8 @@ func broadcastAudioData(sourceID string, data []byte) {
 	// If no callback registered for this source, skip all processing
 	if !exists {
 		// Log much less frequently to avoid log spam (once every 5 minutes)
-		if time.Since(lastMissingCallbackLogTime) > 5*time.Minute {
+		lastMissingLogNano := lastMissingCallbackLogTime.Load()
+		if time.Since(time.Unix(0, lastMissingLogNano)) > 5*time.Minute {
 			// Get DisplayName for user-friendly logging
 			displayName := sourceID // Default to ID if we can't get DisplayName
 			if registry := GetRegistry(); registry != nil {
@@ -108,7 +110,7 @@ func broadcastAudioData(sourceID string, data []byte) {
 			}
 			log.Printf("⚠️ No broadcast callback registered for source: %s, data length: %d bytes",
 				displayName, len(data))
-			lastMissingCallbackLogTime = time.Now()
+			lastMissingCallbackLogTime.Store(time.Now().UnixNano())
 		}
 		return
 	}
