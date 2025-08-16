@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -33,38 +32,49 @@ func (h *Handlers) initializeLevelsData(isAuthenticated bool) (levels map[string
 	lastUpdate = make(map[string]time.Time)
 	lastNonZero = make(map[string]time.Time)
 
+	registry := myaudio.GetRegistry()
+	now := time.Now()
+
 	// Add configured audio device if set
 	if h.Settings.Realtime.Audio.Source != "" {
-		sourceName := h.Settings.Realtime.Audio.Source
-		if !isAuthenticated {
-			sourceName = "audio-source-1"
+		// Get or create the audio source in the registry
+		source := registry.GetOrCreateSource(h.Settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
+		if source != nil {
+			var displayName string
+			if isAuthenticated {
+				displayName = source.DisplayName
+			} else {
+				displayName = "audio-source-1"
+			}
+			levels[source.ID] = myaudio.AudioLevelData{
+				Level:  0,
+				Name:   displayName,
+				Source: source.ID,
+			}
+			lastUpdate[source.ID] = now
+			lastNonZero[source.ID] = now
 		}
-		levels["malgo"] = myaudio.AudioLevelData{
-			Level:  0,
-			Name:   sourceName,
-			Source: "malgo",
-		}
-		now := time.Now()
-		lastUpdate["malgo"] = now
-		lastNonZero["malgo"] = now
 	}
 
 	// Add all configured RTSP sources
 	for i, url := range h.Settings.Realtime.RTSP.URLs {
-		var displayName string
-		if isAuthenticated {
-			displayName = conf.SanitizeRTSPUrl(url)
-		} else {
-			displayName = fmt.Sprintf("camera-%d", i+1)
+		// Get or create the RTSP source in the registry
+		source := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
+		if source != nil {
+			var displayName string
+			if isAuthenticated {
+				displayName = source.DisplayName
+			} else {
+				displayName = fmt.Sprintf("camera-%d", i+1)
+			}
+			levels[source.ID] = myaudio.AudioLevelData{
+				Level:  0,
+				Name:   displayName,
+				Source: source.ID,
+			}
+			lastUpdate[source.ID] = now
+			lastNonZero[source.ID] = now
 		}
-		levels[url] = myaudio.AudioLevelData{
-			Level:  0,
-			Name:   displayName,
-			Source: url,
-		}
-		now := time.Now()
-		lastUpdate[url] = now
-		lastNonZero[url] = now
 	}
 
 	return levels, lastUpdate, lastNonZero
@@ -91,22 +101,36 @@ func (h *Handlers) updateAudioLevels(audioData myaudio.AudioLevelData, levels ma
 
 	now := time.Now()
 
-	if audioData.Source == "malgo" {
+	// Get the source from the registry to get proper DisplayName
+	registry := myaudio.GetRegistry()
+	if source, exists := registry.GetSourceByID(audioData.Source); exists {
+		// Use the DisplayName from the registry
 		if isAuthenticated {
-			audioData.Name = h.Settings.Realtime.Audio.Source
+			audioData.Name = source.DisplayName
 		} else {
-			audioData.Name = "audio-source-1"
-		}
-	} else {
-		if isAuthenticated {
-			audioData.Name = conf.SanitizeRTSPUrl(audioData.Source)
-		} else {
-			for i, url := range h.Settings.Realtime.RTSP.URLs {
-				if url == audioData.Source {
-					audioData.Name = fmt.Sprintf("camera-%d", i+1)
-					break
+			// For non-authenticated users, anonymize the source name
+			if source.Type == myaudio.SourceTypeAudioCard {
+				audioData.Name = "audio-source-1"
+			} else if source.Type == myaudio.SourceTypeRTSP {
+				// Find the index of this RTSP source
+				for i, url := range h.Settings.Realtime.RTSP.URLs {
+					if sourceByConn, exists := registry.GetSourceByConnection(url); exists && sourceByConn.ID == source.ID {
+						audioData.Name = fmt.Sprintf("camera-%d", i+1)
+						break
+					}
+				}
+				// Fallback if not found in settings
+				if audioData.Name == "" {
+					audioData.Name = fmt.Sprintf("camera-%s", source.ID[:8])
 				}
 			}
+		}
+	} else {
+		// Fallback for sources not in registry (shouldn't happen)
+		if isAuthenticated {
+			audioData.Name = audioData.Source
+		} else {
+			audioData.Name = "unknown-source"
 		}
 	}
 

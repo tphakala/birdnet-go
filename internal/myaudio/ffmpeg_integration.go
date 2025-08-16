@@ -60,22 +60,40 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 		return nil // Not enabled, no error
 	}
 	
-	displayName := privacy.SanitizeRTSPUrl(source)
-	if err := RegisterSoundLevelProcessor(source, displayName); err != nil {
+	// Get or create the source in the registry to get proper ID and DisplayName
+	registry := GetRegistry()
+	audioSource := registry.GetOrCreateSource(source, SourceTypeRTSP)
+	if audioSource == nil {
+		logger.Warn("failed to get/create audio source for sound level processor",
+			"url", privacy.SanitizeRTSPUrl(source),
+			"operation", "register_sound_level")
+		return errors.Newf("failed to get/create audio source").
+			Component("ffmpeg-integration").
+			Category(errors.CategorySystem).
+			Context("operation", "register_sound_level_processor").
+			Context("source", privacy.SanitizeRTSPUrl(source)).
+			Build()
+	}
+	
+	// Register the sound level processor using source ID and DisplayName
+	if err := RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
 		logger.Warn("failed to register sound level processor",
-			"url", displayName,
+			"id", audioSource.ID,
+			"display_name", audioSource.DisplayName,
 			"error", err,
 			"operation", "register_sound_level")
-		log.Printf("⚠️ Error registering sound level processor for %s: %v", displayName, err)
+		log.Printf("⚠️ Error registering sound level processor for %s: %v", audioSource.DisplayName, err)
 		return errors.New(err).
 			Component("ffmpeg-integration").
 			Category(errors.CategorySystem).
 			Context("operation", "register_sound_level_processor").
-			Context("source", displayName).
+			Context("source_id", audioSource.ID).
+			Context("display_name", audioSource.DisplayName).
 			Build()
 	} else if conf.Setting().Debug {
 		logger.Debug("registered sound level processor",
-			"url", displayName,
+			"id", audioSource.ID,
+			"display_name", audioSource.DisplayName,
 			"operation", "register_sound_level")
 	}
 	return nil

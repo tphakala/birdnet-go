@@ -787,8 +787,8 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 	// Broadcast to WebSocket clients using source ID
 	broadcastAudioData(s.source.ID, data)
 
-	// Calculate audio level using source ID
-	audioLevel := calculateAudioLevel(data, s.source.ID, "")
+	// Calculate audio level using source ID and DisplayName
+	audioLevel := calculateAudioLevel(data, s.source.ID, s.source.DisplayName)
 
 	// Create unified audio data
 	unifiedData := UnifiedAudioData{

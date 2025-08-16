@@ -692,21 +692,33 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	successCount := 0
 	totalSources := 0
 
-	// Register for malgo source if active
+	// Register for audio device source if active
 	if settings.Realtime.Audio.Source != "" {
 		totalSources++
-		if err := myaudio.RegisterSoundLevelProcessor("malgo", settings.Realtime.Audio.Source); err != nil {
+		// Get or create the audio source in the registry
+		registry := myaudio.GetRegistry()
+		audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
+		if audioSource == nil {
+			errs = append(errs, errors.Newf("failed to get/create audio source").
+				Component("realtime-analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "get_or_create_audio_source").
+				Context("source", settings.Realtime.Audio.Source).
+				Build())
+			LogSoundLevelProcessorRegistrationFailed(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel", fmt.Errorf("failed to get/create audio source"))
+		} else if err := myaudio.RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
 				Category(errors.CategorySystem).
 				Context("operation", "register_sound_level_processor").
-				Context("source_type", "malgo").
-				Context("source_name", settings.Realtime.Audio.Source).
+				Context("source_type", "audio_device").
+				Context("source_id", audioSource.ID).
+				Context("display_name", audioSource.DisplayName).
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel", err)
+			LogSoundLevelProcessorRegistrationFailed(audioSource.DisplayName, "audio_device", "analysis.soundlevel", err)
 		} else {
 			successCount++
-			LogSoundLevelProcessorRegistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
+			LogSoundLevelProcessorRegistered(audioSource.DisplayName, "audio_device", "analysis.soundlevel")
 		}
 	}
 
@@ -718,9 +730,22 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	for _, url := range settings.Realtime.RTSP.URLs {
 		configuredURLs[url] = true
 		totalSources++
-		displayName := conf.SanitizeRTSPUrl(url)
 		
-		if err := myaudio.RegisterSoundLevelProcessor(url, displayName); err != nil {
+		// Get or create the RTSP source in the registry
+		registry := myaudio.GetRegistry()
+		audioSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
+		if audioSource == nil {
+			errs = append(errs, errors.Newf("failed to get/create RTSP source").
+				Component("realtime-analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "get_or_create_rtsp_source").
+				Context("url", conf.SanitizeRTSPUrl(url)).
+				Build())
+			LogSoundLevelProcessorRegistrationFailed(conf.SanitizeRTSPUrl(url), "rtsp", "analysis.soundlevel", fmt.Errorf("failed to get/create RTSP source"))
+			continue
+		}
+		
+		if err := myaudio.RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
 			// Safely check stream health status
 			var streamRunning bool
 			var streamExists bool
@@ -734,17 +759,19 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Category(errors.CategorySystem).
 				Context("operation", "register_sound_level_processor").
 				Context("source_type", "rtsp").
+				Context("source_id", audioSource.ID).
+				Context("display_name", audioSource.DisplayName).
 				Context("source_url", url).
 				Context("stream_running", streamRunning).
 				Context("stream_exists", streamExists). // indicates if stream was found in health map
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(displayName, "rtsp_stream", "analysis.soundlevel", err)
+			LogSoundLevelProcessorRegistrationFailed(audioSource.DisplayName, "rtsp_stream", "analysis.soundlevel", err)
 		} else {
 			successCount++
 			if _, isActive := activeStreams[url]; isActive {
-				LogSoundLevelProcessorRegistered(displayName, "rtsp_active", "analysis.soundlevel")
+				LogSoundLevelProcessorRegistered(audioSource.DisplayName, "rtsp_active", "analysis.soundlevel")
 			} else {
-				LogSoundLevelProcessorRegistered(displayName, "rtsp_configured", "analysis.soundlevel")
+				LogSoundLevelProcessorRegistered(audioSource.DisplayName, "rtsp_configured", "analysis.soundlevel")
 			}
 		}
 	}
