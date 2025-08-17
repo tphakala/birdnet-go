@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,7 +67,7 @@ func TestSSEConnectionCleanup(t *testing.T) {
 	)
 
 	for _, config := range sseTestConfigs {
-		config := config // Capture loop variable
+		// Loop variable capture no longer needed in Go 1.22+
 		t.Run(fmt.Sprintf("endpoint_%s", strings.ReplaceAll(config.endpoint, "/", "_")), func(t *testing.T) {
 			t.Parallel()
 			testSSEEndpointCleanup(t, config)
@@ -76,6 +77,7 @@ func TestSSEConnectionCleanup(t *testing.T) {
 
 // testSSEEndpointCleanup tests a specific SSE endpoint for proper cleanup
 func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
+	t.Helper()
 	// Create test server
 	server, controller := setupSSETestServer(t)
 	defer server.Close()
@@ -101,13 +103,14 @@ func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
 // testSingleConnectionManualDisconnect verifies that manually closing an SSE connection
 // properly cleans up goroutines
 func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	t.Helper()
 	// Create HTTP client
 	client := &http.Client{
 		Timeout: config.testTimeout,
 	}
 
 	// Make SSE request
-	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, nil)
+	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
@@ -123,6 +126,7 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 	// Read first event (connection established)
 	scanner := bufio.NewScanner(resp.Body)
 	connected := false
+	start := time.Now()
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "connected") || strings.Contains(line, "Connected") {
@@ -130,14 +134,14 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 			break
 		}
 		// Don't wait too long for connection event
-		if time.Now().Add(-time.Second).After(time.Now()) {
+		if time.Since(start) > time.Second {
 			break
 		}
 	}
 	require.True(t, connected, "Should receive connection event")
 
 	// Close connection manually
-	resp.Body.Close()
+	_ = resp.Body.Close() // Ignore close error in test
 
 	// Wait briefly for cleanup
 	time.Sleep(200 * time.Millisecond)
@@ -149,6 +153,7 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 // testSingleConnectionContextCancellation verifies that canceling the context
 // properly cleans up the SSE connection
 func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	t.Helper()
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -158,12 +163,17 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 	}
 
 	// Make SSE request with context
-	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v2"+config.endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer func() {
+		if resp != nil {
+			_ = resp.Body.Close() // Ignore close error in test
+		}
+	}()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Start reading in goroutine
@@ -190,7 +200,7 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 		t.Error("Connection did not close within expected time after context cancellation")
 	}
 
-	resp.Body.Close()
+	// Response body will be closed by defer
 
 	// Wait for cleanup
 	time.Sleep(200 * time.Millisecond)
@@ -199,6 +209,7 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 // testMultipleConcurrentConnections verifies that multiple concurrent SSE connections
 // are all properly cleaned up
 func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	t.Helper()
 	var wg sync.WaitGroup
 	var connectionsEstablished int32
 
@@ -212,7 +223,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 				Timeout: config.testTimeout,
 			}
 
-			req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, nil)
+			req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
 			if err != nil {
 				t.Errorf("Connection %d: Failed to create request: %v", connID, err)
 				return
@@ -224,10 +235,10 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 				// May fail due to rate limiting, which is acceptable
 				return
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode == http.StatusOK {
-				connectionsEstablished++
+				atomic.AddInt32(&connectionsEstablished, 1)
 				
 				// Read a few events
 				scanner := bufio.NewScanner(resp.Body)
@@ -246,13 +257,14 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 	time.Sleep(300 * time.Millisecond)
 
 	// At least one connection should have been established
-	require.Greater(t, int(connectionsEstablished), 0, 
+	require.Positive(t, int(atomic.LoadInt32(&connectionsEstablished)), 
 		"At least one connection should have been established")
 }
 
 // testConnectionTimeout verifies that connections are properly cleaned up
 // when they reach the maximum duration timeout
 func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	t.Helper()
 	// This test would require modifying the timeout constants for testing
 	// For now, we'll test the behavior with a short-lived connection
 	
@@ -260,7 +272,7 @@ func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETest
 		Timeout: config.connectionTimeout,
 	}
 
-	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, nil)
+	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
 
@@ -269,7 +281,7 @@ func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETest
 		// Timeout is expected behavior
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read until timeout
 	scanner := bufio.NewScanner(resp.Body)
@@ -305,8 +317,8 @@ func TestSSEUnbufferedChannelFix(t *testing.T) {
 
 	// Create multiple rapid connections and disconnections to stress test
 	// the Done channel handling
-	for i := 0; i < 5; i++ {
-		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", nil)
+	for range 5 {
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", http.NoBody)
 		require.NoError(t, err)
 		req.Header.Set("Accept", "text/event-stream")
 
@@ -316,7 +328,7 @@ func TestSSEUnbufferedChannelFix(t *testing.T) {
 		}
 
 		// Immediately close to trigger the disconnect handler
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 
 		// Small delay between connections
 		time.Sleep(50 * time.Millisecond)
@@ -352,8 +364,8 @@ func TestSSERateLimiting(t *testing.T) {
 	var successCount, rateLimitedCount int
 
 	// Make many rapid requests to trigger rate limiting
-	for i := 0; i < 15; i++ { // More than the rate limit of 10
-		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", nil)
+	for range 15 { // More than the rate limit of 10
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", http.NoBody)
 		require.NoError(t, err)
 		req.Header.Set("Accept", "text/event-stream")
 
@@ -362,18 +374,19 @@ func TestSSERateLimiting(t *testing.T) {
 			continue
 		}
 
-		if resp.StatusCode == http.StatusOK {
+		switch resp.StatusCode {
+		case http.StatusOK:
 			successCount++
-		} else if resp.StatusCode == http.StatusTooManyRequests {
+		case http.StatusTooManyRequests:
 			rateLimitedCount++
 		}
 
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 	}
 
 	// Should have some successful connections and some rate limited
-	require.Greater(t, successCount, 0, "Should have some successful connections")
-	require.Greater(t, rateLimitedCount, 0, "Should have some rate limited connections")
+	require.Positive(t, successCount, "Should have some successful connections")
+	require.Positive(t, rateLimitedCount, "Should have some rate limited connections")
 
 	// Wait for cleanup
 	time.Sleep(300 * time.Millisecond)
@@ -381,6 +394,7 @@ func TestSSERateLimiting(t *testing.T) {
 
 // setupSSETestServer creates a test server with SSE endpoints configured
 func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
+	t.Helper()
 	// Create Echo instance
 	e := echo.New()
 
@@ -439,8 +453,8 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 
 	b.ResetTimer()
 	
-	for i := 0; i < b.N; i++ {
-		req, err := http.NewRequest("GET", server.URL+"/api/v2/notifications/stream", nil)
+	for range b.N {
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/notifications/stream", http.NoBody)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -455,16 +469,18 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 			// Read one event then close
 			scanner := bufio.NewScanner(resp.Body)
 			if scanner.Scan() {
-				// Got one event
+				// Read and discard one event for testing
+				_ = scanner.Text()
 			}
 		}
 
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 	}
 }
 
 // setupSSETestServerForBench creates a test server for benchmarking
 func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
+	b.Helper()
 	e := echo.New()
 	mockDS := new(MockDataStore)
 	settings := &conf.Settings{

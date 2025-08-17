@@ -44,6 +44,7 @@ func TestV1SSEConnectionCleanup(t *testing.T) {
 
 // testSSEHandlerCleanup tests the general v1 SSE handler cleanup
 func testSSEHandlerCleanup(t *testing.T) {
+	t.Helper()
 	// Create Echo instance and SSE handler
 	e := echo.New()
 	// Create SSE handler directly instead of using NewSSEHandler() to avoid config dependency
@@ -71,7 +72,7 @@ func testSSEHandlerCleanup(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		
-		req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/sse", nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/sse", http.NoBody)
 		if err != nil {
 			connectionDone <- err
 			return
@@ -90,7 +91,7 @@ func testSSEHandlerCleanup(t *testing.T) {
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Scan() // Try to read one line (will block until data or context cancellation)
 		
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 		connectionDone <- nil
 	}()
 
@@ -108,7 +109,7 @@ func testSSEHandlerCleanup(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.Equal(t, "text/event-stream; charset=utf-8", resp.Header.Get("Content-Type"))
 		require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 	case <-time.After(3 * time.Second):
 		t.Error("Connection test timed out")
 	}
@@ -119,6 +120,7 @@ func testSSEHandlerCleanup(t *testing.T) {
 
 // testAudioLevelSSECleanup tests the audio level SSE handler cleanup
 func testAudioLevelSSECleanup(t *testing.T) {
+	t.Helper()
 	// Create Echo instance
 	e := echo.New()
 	
@@ -147,12 +149,17 @@ func testAudioLevelSSECleanup(t *testing.T) {
 	// Test connection with context cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/audio-level", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/audio-level", http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer func() {
+		if resp != nil {
+			_ = resp.Body.Close() // Ignore close error in test
+		}
+	}()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Start reading
@@ -167,7 +174,7 @@ func testAudioLevelSSECleanup(t *testing.T) {
 
 	// Send some test audio data
 	go func() {
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			select {
 			case handlers.AudioLevelChan <- myaudio.AudioLevelData{
 				Level:  i * 10,
@@ -193,7 +200,7 @@ func testAudioLevelSSECleanup(t *testing.T) {
 		t.Error("Connection did not close within expected time")
 	}
 
-	resp.Body.Close()
+	// Response body will be closed by defer
 	close(handlers.AudioLevelChan)
 
 	// Wait for final cleanup
@@ -209,6 +216,8 @@ func TestV1SSEConnectionRaceConditions(t *testing.T) {
 		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
 	)
 
 	// Create Echo instance and SSE handler
@@ -230,8 +239,8 @@ func TestV1SSEConnectionRaceConditions(t *testing.T) {
 	}
 
 	// Create multiple rapid connections to test race conditions
-	for i := 0; i < 5; i++ {
-		req, err := http.NewRequest("GET", server.URL+"/api/v1/sse", nil)
+	for range 5 {
+		req, err := http.NewRequest("GET", server.URL+"/api/v1/sse", http.NoBody)
 		require.NoError(t, err)
 		req.Header.Set("Accept", "text/event-stream")
 
@@ -241,7 +250,7 @@ func TestV1SSEConnectionRaceConditions(t *testing.T) {
 		}
 
 		// Immediately close to stress test the cleanup logic
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 
 		// Small delay between requests
 		time.Sleep(20 * time.Millisecond)
@@ -260,6 +269,8 @@ func TestV1AudioLevelSSEDuplicateConnections(t *testing.T) {
 		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
 		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
 	)
 
 	// Create Echo instance
@@ -285,7 +296,7 @@ func TestV1AudioLevelSSEDuplicateConnections(t *testing.T) {
 	}
 
 	// Make first connection
-	req1, err := http.NewRequest("GET", server.URL+"/api/v1/audio-level", nil)
+	req1, err := http.NewRequest("GET", server.URL+"/api/v1/audio-level", http.NoBody)
 	require.NoError(t, err)
 	req1.Header.Set("Accept", "text/event-stream")
 	req1.Header.Set("X-Forwarded-For", "192.168.1.100") // Set specific IP
@@ -295,7 +306,7 @@ func TestV1AudioLevelSSEDuplicateConnections(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp1.StatusCode)
 
 	// Make second connection from same IP (should be rejected)
-	req2, err := http.NewRequest("GET", server.URL+"/api/v1/audio-level", nil)
+	req2, err := http.NewRequest("GET", server.URL+"/api/v1/audio-level", http.NoBody)
 	require.NoError(t, err)
 	req2.Header.Set("Accept", "text/event-stream")
 	req2.Header.Set("X-Forwarded-For", "192.168.1.100") // Same IP
@@ -304,10 +315,10 @@ func TestV1AudioLevelSSEDuplicateConnections(t *testing.T) {
 	if err == nil {
 		// If no error, should be rejected with 429
 		require.Equal(t, http.StatusTooManyRequests, resp2.StatusCode)
-		resp2.Body.Close()
+		_ = resp2.Body.Close() // Ignore close error in test
 	}
 
-	resp1.Body.Close()
+	_ = resp1.Body.Close() // Ignore close error in test
 
 	// Wait for cleanup
 	time.Sleep(300 * time.Millisecond)
@@ -350,8 +361,8 @@ func BenchmarkV1SSEConnection(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		req, err := http.NewRequest("GET", server.URL+"/api/v1/sse", nil)
+	for range b.N {
+		req, err := http.NewRequest("GET", server.URL+"/api/v1/sse", http.NoBody)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -366,10 +377,11 @@ func BenchmarkV1SSEConnection(b *testing.B) {
 		if resp.StatusCode == http.StatusOK {
 			scanner := bufio.NewScanner(resp.Body)
 			if scanner.Scan() {
-				// Read one line
+				// Read and discard one line for testing
+				_ = scanner.Text()
 			}
 		}
 
-		resp.Body.Close()
+		_ = resp.Body.Close() // Ignore close error in test
 	}
 }
