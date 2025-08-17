@@ -293,21 +293,32 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numOperations * 2)
 
+	// Create start barrier for coordinating creators and removers
+	startCh := make(chan struct{})
+	var creatorsStarted sync.WaitGroup
+	creatorsStarted.Add(numOperations)
+
 	// Half the goroutines create sources
 	for i := 0; i < numOperations; i++ {
 		go func(id int) {
 			defer wg.Done()
+			defer creatorsStarted.Done() // Signal that this creator has started
 			url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
 			registry.GetOrCreateSource(url, SourceTypeRTSP)
 		}(i)
 	}
 
-	// Other half try to remove sources
+	// Wait for all creators to start, then release removers
+	go func() {
+		creatorsStarted.Wait()
+		close(startCh) // Release all removers
+	}()
+
+	// Other half try to remove sources - wait for start signal
 	for i := 0; i < numOperations; i++ {
 		go func(id int) {
 			defer wg.Done()
-			// Small delay to let some sources be created first
-			time.Sleep(time.Millisecond)
+			<-startCh // Wait for creators to start before proceeding
 			url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
 			_ = registry.RemoveSourceByConnection(url)
 		}(i)
@@ -317,12 +328,22 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 
 	// The registry should be in a consistent state
 	// Some sources may remain (those created after removal attempts)
-	for id, source := range registry.sources {
-		// Verify connection map is consistent
-		if mappedID, exists := registry.connectionMap[source.connectionString]; !exists {
-			t.Errorf("Source %s exists but not in connectionMap", id)
-		} else if mappedID != id {
-			t.Errorf("Inconsistent mapping: source ID %s mapped to %s", id, mappedID)
+	// Use safe accessors instead of direct map iteration to avoid race conditions
+	sources := registry.ListSources()
+	for _, source := range sources {
+		// Get the connection string safely and verify mapping consistency
+		connStr, err := source.GetConnectionString()
+		if err != nil {
+			t.Errorf("Failed to get connection string for source %s: %v", source.ID, err)
+			continue
+		}
+		
+		// Verify the source can be found by its connection string
+		foundSource, exists := registry.GetSourceByConnection(connStr)
+		if !exists {
+			t.Errorf("Source %s exists but not found by connection string %s", source.ID, source.SafeString)
+		} else if foundSource.ID != source.ID {
+			t.Errorf("Inconsistent mapping: source ID %s mapped to %s", source.ID, foundSource.ID)
 		}
 	}
 }

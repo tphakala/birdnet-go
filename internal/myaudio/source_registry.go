@@ -280,22 +280,23 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
-	// Check if refCount entry exists - if not, don't proceed with deletion
+	// Handle reference counting - if no refCount entry exists, treat as 0 and remove immediately
 	refCountPtr, refCountExists := r.refCounts[sourceID]
+	var newCount int32
+	
 	if !refCountExists {
-		// No refCount entry means this source was not properly reference-counted
-		// Log and return without deletion
+		// No refCount entry means this source was never acquired, treat as 0 and remove
+		newCount = -1 // This will trigger removal below
 		r.logger.With("id", sourceID).
 			With("safe", source.SafeString).
 			Warn("Attempted to release reference for source without refCount entry")
-		return nil
+	} else {
+		// Decrement reference count (no need for atomic since we hold the mutex)
+		*refCountPtr--
+		newCount = *refCountPtr
 	}
 
-	// Decrement reference count (no need for atomic since we hold the mutex)
-	*refCountPtr--
-	newCount := *refCountPtr
-
-	// Remove source if no more references
+	// Remove source if no more references (including the case where no refCount existed)
 	if newCount <= 0 {
 		delete(r.sources, sourceID)
 		delete(r.connectionMap, source.connectionString)
