@@ -396,7 +396,10 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 			return c.runSSEEventLoop(ctx, client, clientID, detectionStreamEndpoint, 
 				func() (any, bool) {
 					select {
-					case detection := <-client.Channel:
+					case detection, ok := <-client.Channel:
+						if !ok {
+							return nil, false // Channel closed, no more data
+						}
 						return detection, true
 					default:
 						return nil, false
@@ -419,7 +422,10 @@ func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
 			return c.runSSEEventLoop(ctx, client, clientID, soundLevelStreamEndpoint,
 				func() (any, bool) {
 					select {
-					case soundLevel := <-client.SoundLevelChan:
+					case soundLevel, ok := <-client.SoundLevelChan:
+						if !ok {
+							return nil, false // Channel closed, no more data
+						}
 						return soundLevel, true
 					default:
 						return nil, false
