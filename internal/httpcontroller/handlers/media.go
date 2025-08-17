@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
 	"html"
@@ -30,6 +31,11 @@ const MaxClipNameLength = 255
 
 // AllowedCharacters is a regex pattern for allowed characters in clip names
 const AllowedCharacters = `^[a-zA-Z0-9_/.-]+$`
+
+// Embed the spectrogram placeholder SVG to avoid CWD-dependent file access
+//
+//go:embed spectrogram-placeholder.svg
+var spectrogramPlaceholderSVG []byte
 
 var (
 	ErrEmptyClipName     = errors.New("empty clip name")
@@ -368,8 +374,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			slog.Duration("request_duration", time.Since(startTime)),
 		)
 		h.Debug("ServeSpectrogram: Error sanitizing clip name: %v", err)
-		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+		return serveSpectrogramPlaceholder(c)
 	}
 	logger.Debug("Clip name sanitized successfully",
 		slog.String("raw_clip_name", clipName),
@@ -394,8 +399,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			slog.Duration("request_duration", time.Since(startTime)),
 		)
 		h.Debug("ServeSpectrogram: Error checking audio file: %v", err)
-		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+		return serveSpectrogramPlaceholder(c)
 	}
 	if !exists {
 		logger.Debug("Audio file not found, serving placeholder",
@@ -403,8 +407,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			slog.Duration("request_duration", time.Since(startTime)),
 		)
 		h.Debug("ServeSpectrogram: Audio file not found: %s", fullPath)
-		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+		return serveSpectrogramPlaceholder(c)
 	}
 	logger.Debug("Audio file verified successfully",
 		slog.String("full_path", fullPath),
@@ -422,8 +425,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			slog.Duration("request_duration", time.Since(startTime)),
 		)
 		h.Debug("ServeSpectrogram: Error getting spectrogram path: %v", err)
-		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+		return serveSpectrogramPlaceholder(c)
 	}
 	logger.Debug("Spectrogram path generated successfully",
 		slog.String("audio_path", fullPath),
@@ -441,8 +443,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			slog.Duration("request_duration", time.Since(startTime)),
 		)
 		h.Debug("ServeSpectrogram: Error checking spectrogram file: %v", err)
-		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+		return serveSpectrogramPlaceholder(c)
 	}
 	if !exists {
 		logger.Debug("Spectrogram not found, initiating generation",
@@ -484,8 +485,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 				slog.Duration("total_request_duration", time.Since(startTime)),
 			)
 			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
-			c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-			return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+			return serveSpectrogramPlaceholder(c)
 		}
 		generationDuration := time.Since(generationStartTime)
 		logger.Debug("Spectrogram generated successfully",
@@ -510,8 +510,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			slog.Duration("total_request_duration", time.Since(startTime)),
 		)
 		h.Debug("ServeSpectrogram: Spectrogram still not found after creation attempt: %s", spectrogramPath)
-		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
+		return serveSpectrogramPlaceholder(c)
 	}
 
 	// Get file size for logging
@@ -1187,5 +1186,25 @@ func serveFileEfficiently(c echo.Context, filePath string) error {
 	// Use http.ServeContent for efficient serving
 	// This handles Range requests, caching, and proper buffer management
 	http.ServeContent(c.Response(), c.Request(), filepath.Base(filePath), stat.ModTime(), file)
+	return nil
+}
+
+// serveSpectrogramPlaceholder serves the embedded spectrogram placeholder SVG
+func serveSpectrogramPlaceholder(c echo.Context) error {
+	// Set appropriate headers for SVG
+	c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
+	c.Response().Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+	
+	// Create a reader from the embedded bytes
+	reader := bytes.NewReader(spectrogramPlaceholderSVG)
+	
+	// Use http.ServeContent for proper HTTP semantics
+	http.ServeContent(
+		c.Response(),
+		c.Request(),
+		"spectrogram-placeholder.svg",
+		time.Time{}, // No modification time for embedded content
+		reader,
+	)
 	return nil
 }

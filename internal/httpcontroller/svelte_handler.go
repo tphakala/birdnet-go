@@ -38,7 +38,12 @@ func (s *Server) SetupSvelteRoutes() {
 		// Get file info for http.ServeContent
 		stat, err := file.Stat()
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+			// Log the actual error for observability
+			log.Printf("Failed to stat file %s: %v", path, err)
+			// Return generic message to client but include error in Internal field for telemetry
+			httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+			httpErr.Internal = err
+			return httpErr
 		}
 
 		// Set correct MIME type based on file extension
@@ -63,9 +68,14 @@ func (s *Server) SetupSvelteRoutes() {
 		// Check if file implements io.ReadSeeker (required for http.ServeContent)
 		seeker, ok := file.(io.ReadSeeker)
 		if !ok {
-			// Fallback to less efficient streaming if not seekable
-			// This shouldn't happen with embed.FS files
-			return c.Stream(http.StatusOK, contentType, file)
+			// Try to build a ReadSeeker from a ReaderAt + size (common for embed.FS)
+			if ra, ok2 := file.(io.ReaderAt); ok2 {
+				seeker = io.NewSectionReader(ra, 0, stat.Size())
+			} else {
+				// Last-resort fallback to streaming if truly not seekable
+				log.Printf("File %s does not implement io.ReadSeeker or io.ReaderAt, falling back to streaming", path)
+				return c.Stream(http.StatusOK, contentType, file)
+			}
 		}
 
 		// Use http.ServeContent for efficient file serving with proper buffer management
