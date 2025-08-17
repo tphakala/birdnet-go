@@ -50,7 +50,6 @@ func NewSSEHandler() *SSEHandler {
 func (h *SSEHandler) ServeSSE(c echo.Context) error {
 	// Track active connections
 	atomic.AddInt64(&h.activeConnections, 1)
-	defer atomic.AddInt64(&h.activeConnections, -1)
 	
 	h.Debug("SSE: New connection request from %s (total active: %d)", c.Request().RemoteAddr, atomic.LoadInt64(&h.activeConnections))
 
@@ -63,13 +62,16 @@ func (h *SSEHandler) ServeSSE(c echo.Context) error {
 	clientChan := make(chan Notification, sseClientChannelBuffer)
 	h.addClient(clientChan)
 
+	// Single defer function to handle cleanup in correct order
+	defer func() {
+		h.removeClient(clientChan)
+		atomic.AddInt64(&h.activeConnections, -1)
+		h.Debug("SSE: Connection closed for %s (total active: %d)", c.Request().RemoteAddr, atomic.LoadInt64(&h.activeConnections))
+	}()
+
 	// Create a context with timeout for maximum connection duration
 	timeoutCtx, cancel := context.WithTimeout(c.Request().Context(), maxSSEConnectionDuration)
-	defer func() {
-		cancel()
-		h.removeClient(clientChan)
-		h.Debug("SSE: Connection closed for %s (total active: %d)", c.Request().RemoteAddr, atomic.LoadInt64(&h.activeConnections)-1)
-	}()
+	defer cancel()
 	
 	// Track connection start time
 	connectionStart := time.Now()
@@ -152,7 +154,7 @@ func (h *SSEHandler) removeClient(clientChan chan Notification) {
 	h.Debug("SSE: Client disconnected. Total clients: %d", len(h.clients))
 }
 
-func (h *SSEHandler) Debug(format string, v ...interface{}) {
+func (h *SSEHandler) Debug(format string, v ...any) {
 	if h.debug {
 		if len(v) == 0 {
 			log.Print(format)

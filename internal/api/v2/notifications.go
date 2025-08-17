@@ -171,7 +171,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
 		Request:      ctx.Request(),
 		Response:     ctx.Response(),
-		Done:         make(chan bool),
+		Done:         make(chan bool, 1), // Buffered to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
 		Context:      notificationCtx,
 	}

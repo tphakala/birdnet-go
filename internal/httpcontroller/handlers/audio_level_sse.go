@@ -239,7 +239,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	defer func() {
 		activeSSEConnections.Delete(clientIP)
 		if h.debug {
-			log.Printf("AudioLevelSSE: Cleaned up connection for %s (total active: %d)", clientIP, atomic.LoadInt64(&totalSSEConnections)-1)
+			log.Printf("AudioLevelSSE: Cleaned up connection for %s (total active: %d)", clientIP, atomic.LoadInt64(&totalSSEConnections))
 		}
 	}()
 
@@ -266,7 +266,7 @@ func (h *Handlers) checkDuplicateConnection(clientIP string) error {
 // setupSSEConnection initializes the SSE connection
 func (h *Handlers) setupSSEConnection(c echo.Context, clientIP string) error {
 	if h.debug {
-		log.Printf("AudioLevelSSE: New connection from %s (total active: %d)", clientIP, atomic.LoadInt64(&totalSSEConnections)+1)
+		log.Printf("AudioLevelSSE: New connection from %s (total active: %d)", clientIP, atomic.LoadInt64(&totalSSEConnections))
 	}
 
 	// Set up SSE headers
@@ -321,19 +321,13 @@ func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			// Context timeout or cancellation
+			// Context timeout or cancellation (covers both timeout and client disconnect)
 			if h.debug {
 				if timeoutCtx.Err() == context.DeadlineExceeded {
 					log.Printf("AudioLevelSSE: Connection exceeded max duration for %s (duration: %v)", clientIP, time.Since(connectionStart))
 				} else {
 					log.Printf("AudioLevelSSE: Connection cancelled for %s", clientIP)
 				}
-			}
-			return nil
-
-		case <-c.Request().Context().Done():
-			if h.debug {
-				log.Printf("AudioLevelSSE: Client disconnected: %s", clientIP)
 			}
 			return nil
 
@@ -367,14 +361,6 @@ func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
 			}
 
 		case <-heartbeat.C:
-			// Check if connection has exceeded maximum duration
-			if time.Since(connectionStart) > maxConnectionDuration {
-				if h.debug {
-					log.Printf("AudioLevelSSE: Maximum connection duration exceeded for %s, closing connection", clientIP)
-				}
-				return nil
-			}
-			
 			if err := h.sendHeartbeat(c); err != nil {
 				return err
 			}
