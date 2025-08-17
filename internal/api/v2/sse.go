@@ -78,7 +78,7 @@ type SSEClient struct {
 	SoundLevelChan chan SSESoundLevelData
 	Request        *http.Request
 	Response       http.ResponseWriter
-	Done           chan bool // Should be buffered to prevent blocking
+	Done           chan struct{} // Signal-only buffered channel to prevent blocking
 	StreamType     string // "detections", "soundlevels", or "all"
 }
 
@@ -259,7 +259,7 @@ func createSSEClient(clientID string, ctx echo.Context, streamType string) *SSEC
 		ID:         clientID,
 		Request:    ctx.Request(),
 		Response:   ctx.Response(),
-		Done:       make(chan bool, sseDoneChannelBuffer), // Buffered to prevent blocking on cleanup
+		Done:       make(chan struct{}, sseDoneChannelBuffer), // Signal-only buffered channel to prevent blocking on cleanup
 		StreamType: streamType,
 	}
 }
@@ -439,23 +439,9 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 	ticker := time.NewTicker(sseHeartbeatInterval)
 	defer ticker.Stop()
 
-	// Track connection start for timeout check
-	connectionStart := time.Now()
-
 	for {
 		select {
 		case <-ticker.C:
-			// Check if connection has exceeded maximum duration
-			if time.Since(connectionStart) > maxSSEStreamDuration {
-				if c.apiLogger != nil {
-					c.apiLogger.Info("SSE stream exceeded max duration, closing",
-						"client_id", clientID,
-						"endpoint", endpoint,
-						"duration", time.Since(connectionStart),
-					)
-				}
-				return nil
-			}
 			// Send heartbeat
 			if err := c.sendSSEHeartbeat(ctx, clientID, heartbeatType); err != nil {
 				if c.metrics != nil && c.metrics.HTTP != nil {

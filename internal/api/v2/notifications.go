@@ -30,8 +30,8 @@ const (
 	notificationChannelBuffer = 10 // Buffer size for notification channels
 	
 	// Rate limits
-	rateLimitRequestsPerWindow = 1  // Maximum requests per rate limit window for notifications
-	rateLimitBurst             = 5  // Rate limit burst allowance
+	rateLimitRequestsPerWindow = 10 // Maximum requests per rate limit window for notifications (increased from 1 to match other SSE endpoints)
+	rateLimitBurst             = 15 // Rate limit burst allowance (increased to handle quick navigation)
 )
 
 // SSENotificationData represents notification data sent via SSE
