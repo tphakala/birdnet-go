@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -54,7 +55,7 @@ type NotificationClient struct {
 	Channel      chan *notification.Notification
 	Request      *http.Request
 	Response     http.ResponseWriter
-	Done         chan bool
+	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
 	Context      context.Context
 }
@@ -117,11 +118,11 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		defer func() {
 			duration := time.Since(connectionStartTime).Seconds()
 			// Determine close reason based on context
-			closeReason := "closed"
+			closeReason := metrics.SSECloseReasonClosed
 			if ctx.Request().Context().Err() == context.DeadlineExceeded {
-				closeReason = "timeout"
+				closeReason = metrics.SSECloseReasonTimeout
 			} else if ctx.Request().Context().Err() == context.Canceled {
-				closeReason = "canceled"
+				closeReason = metrics.SSECloseReasonCanceled
 			}
 			c.metrics.HTTP.SSEConnectionClosed(sseEndpoint, duration, closeReason)
 		}()
@@ -143,7 +144,8 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	// Ensure cleanup happens regardless of how we exit
 	defer func() {
 		service.Unsubscribe(client.SubscriberCh)
-		close(client.Done) // Ensure Done channel is closed
+		// Note: We don't close client.Done to avoid race conditions with senders
+		// The buffered channel will signal shutdown and be reclaimed by GC
 	}()
 	
 	// Setup disconnect handler with proper cleanup
@@ -171,7 +173,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
 		Request:      ctx.Request(),
 		Response:     ctx.Response(),
-		Done:         make(chan bool, 1), // Buffered to prevent deadlock during disconnect
+		Done:         make(chan struct{}, 1), // Buffered signal channel to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
 		Context:      notificationCtx,
 	}
@@ -207,24 +209,17 @@ func (c *Controller) setNotificationSSEHeaders(ctx echo.Context) {
 // setupNotificationDisconnectHandler sets up client disconnect handling with timeout
 func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
 	go func() {
+		// Wait for client disconnect or timeout
+		<-ctx.Request().Context().Done()
+		
+		// Client disconnected or timeout reached
 		select {
-		case <-ctx.Request().Context().Done():
-			// Client disconnected or timeout reached
-			select {
-			case client.Done <- true:
-				// Successfully notified
-			case <-time.After(eventLoopCheckInterval):
-				// Done channel might be blocked or closed, continue
-			}
-			c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
-		case <-time.After(maxSSEConnectionDuration + time.Minute):
-			// Failsafe: Force cleanup if context doesn't signal within max duration + buffer
-			select {
-			case client.Done <- true:
-			default:
-			}
-			c.logNotificationConnection(client.ID, ctx.RealIP(), "timeout", false)
+		case client.Done <- struct{}{}:
+			// Successfully notified
+		case <-time.After(eventLoopCheckInterval):
+			// Done channel might be blocked, continue
 		}
+		c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
 	}()
 }
 

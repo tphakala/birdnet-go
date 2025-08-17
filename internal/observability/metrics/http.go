@@ -348,8 +348,25 @@ func (m *HTTPMetrics) SSEConnectionStarted(endpoint string) {
 	m.sseTotalConnections.WithLabelValues(endpoint, "established").Inc()
 }
 
+// SSE connection close reason constants to prevent high cardinality metrics
+const (
+	SSECloseReasonClosed   = "closed"   // Normal client disconnect
+	SSECloseReasonTimeout  = "timeout"  // Connection timed out
+	SSECloseReasonCanceled = "canceled" // Context canceled
+	SSECloseReasonError    = "error"    // Error occurred
+)
+
 // SSEConnectionClosed decrements active connections and records duration
+// Reason must be one of the SSECloseReason* constants to prevent high cardinality
 func (m *HTTPMetrics) SSEConnectionClosed(endpoint string, duration float64, reason string) {
+	// Validate reason to prevent high cardinality - map unknown reasons to "error"
+	switch reason {
+	case SSECloseReasonClosed, SSECloseReasonTimeout, SSECloseReasonCanceled, SSECloseReasonError:
+		// Valid reason, use as-is
+	default:
+		reason = SSECloseReasonError
+	}
+	
 	m.sseActiveConnections.Dec()
 	m.sseTotalConnections.WithLabelValues(endpoint, reason).Inc()
 	m.sseConnectionDuration.WithLabelValues(endpoint).Observe(duration)

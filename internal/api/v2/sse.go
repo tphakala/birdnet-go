@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // SSE connection configuration
@@ -333,11 +334,11 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 		c.metrics.HTTP.SSEConnectionStarted(endpoint)
 		defer func() {
 			duration := time.Since(connectionStartTime).Seconds()
-			closeReason := "closed"
+			closeReason := metrics.SSECloseReasonClosed
 			if ctx.Request().Context().Err() == context.DeadlineExceeded {
-				closeReason = "timeout"
+				closeReason = metrics.SSECloseReasonTimeout
 			} else if ctx.Request().Context().Err() == context.Canceled {
-				closeReason = "canceled"
+				closeReason = metrics.SSECloseReasonCanceled
 			}
 			c.metrics.HTTP.SSEConnectionClosed(endpoint, duration, closeReason)
 		}()
