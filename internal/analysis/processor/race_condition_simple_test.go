@@ -80,7 +80,7 @@ func createSimpleDetection() Detections {
 			CommonName:     "Test Bird",
 			ScientificName: "Testus birdus",
 			Confidence:     0.95,
-			Source:         "test-source",
+			Source: datastore.AudioSource{ID: "test-source", SafeString: "test-source", DisplayName: "test-source"},
 			Date:           now.Format("2006-01-02"),
 			Time:           now.Format("15:04:05"),
 			BeginTime:      now,

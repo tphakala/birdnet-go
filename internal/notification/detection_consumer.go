@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 	"log/slog"
 )
 
@@ -54,8 +53,8 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		return nil
 	}
 
-	// Sanitize location to remove RTSP credentials
-	sanitizedLocation := privacy.SanitizeRTSPUrl(event.GetLocation())
+	// Get the display location (already sanitized in the audio source registry)
+	displayLocation := event.GetLocation()
 
 	// Create notification for new species
 	title := fmt.Sprintf("New Species Detected: %s", event.GetSpeciesName())
@@ -65,7 +64,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		"First detection of %s (%s) at %s",
 		event.GetSpeciesName(),
 		event.GetScientificName(),
-		sanitizedLocation,
+		displayLocation,
 	)
 
 	notification := NewNotification(TypeDetection, PriorityHigh, title, message).
@@ -73,7 +72,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		WithMetadata("species", event.GetSpeciesName()).
 		WithMetadata("scientific_name", event.GetScientificName()).
 		WithMetadata("confidence", event.GetConfidence()).
-		WithMetadata("location", sanitizedLocation).
+		WithMetadata("location", displayLocation).
 		WithMetadata("is_new_species", true).
 		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
 		WithExpiry(24 * time.Hour) // New species notifications expire after 24 hours
@@ -94,7 +93,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	c.logger.Info("created new species notification",
 		"species", event.GetSpeciesName(),
 		"confidence", event.GetConfidence(),
-		"location", sanitizedLocation,
+		"location", displayLocation,
 	)
 
 	return nil

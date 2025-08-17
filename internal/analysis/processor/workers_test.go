@@ -212,6 +212,15 @@ func (s *MockSettings) IsDebug() bool {
 	return s.Debug
 }
 
+// testAudioSource returns a standard test audio source to avoid duplication
+func testAudioSource() datastore.AudioSource {
+	return datastore.AudioSource{
+		ID:          "test-source",
+		SafeString:  "test-source",
+		DisplayName: "test-source",
+	}
+}
+
 func TestSanitizeError(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -539,7 +548,7 @@ func TestEnqueueTask(t *testing.T) {
 							CommonName:     "Test Bird",
 							ScientificName: "Testus birdus",
 							Confidence:     0.95,
-							Source:         "test-source",
+							Source: testAudioSource(),
 							BeginTime:      time.Now(),
 							EndTime:        time.Now().Add(15 * time.Second),
 						},
@@ -582,7 +591,7 @@ func TestEnqueueTask(t *testing.T) {
 					CommonName:     "Test Bird",
 					ScientificName: "Testus birdus",
 					Confidence:     0.95,
-					Source:         "test-source",
+					Source: testAudioSource(),
 					BeginTime:      time.Now(),
 					EndTime:        time.Now().Add(15 * time.Second),
 				},
@@ -628,7 +637,7 @@ func TestEnqueueTask(t *testing.T) {
 						CommonName:     fmt.Sprintf("Test Bird %d", i),
 						ScientificName: "Testus birdus",
 						Confidence:     0.95,
-						Source:         "test-source",
+						Source: testAudioSource(),
 						BeginTime:      time.Now(),
 						EndTime:        time.Now().Add(15 * time.Second),
 					},
@@ -682,7 +691,7 @@ func TestEnqueueTask(t *testing.T) {
 				CommonName:     "Test Bird",
 				ScientificName: "Testus birdus",
 				Confidence:     0.95,
-				Source:         "test-source",
+				Source: testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -848,7 +857,7 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 						CommonName:     b.CommonName,
 						ScientificName: b.ScientificName,
 						Confidence:     b.Confidence,
-						Source:         "test-source",
+						Source: testAudioSource(),
 						BeginTime:      time.Now(),
 						EndTime:        time.Now().Add(15 * time.Second),
 					},
@@ -945,7 +954,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 				CommonName:     "Test Bird",
 				ScientificName: "Testus birdus",
 				Confidence:     0.95,
-				Source:         "test-source",
+				Source: testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1000,7 +1009,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 				CommonName:     "Failing Bird",
 				ScientificName: "Failurus maximus",
 				Confidence:     0.90,
-				Source:         "test-source",
+				Source: testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1123,7 +1132,7 @@ func TestRetryLogic(t *testing.T) {
 				CommonName:     "Retry Bird",
 				ScientificName: "Retryus maximus",
 				Confidence:     0.95,
-				Source:         "test-source",
+				Source: testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1230,7 +1239,7 @@ func TestRetryLogic(t *testing.T) {
 				CommonName:     "Exhausting Bird",
 				ScientificName: "Exhaustus maximus",
 				Confidence:     0.90,
-				Source:         "test-source",
+				Source: testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},

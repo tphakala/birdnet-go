@@ -47,6 +47,7 @@ type DatabaseAction struct {
 	Results           []datastore.Results
 	EventTracker      *EventTracker
 	NewSpeciesTracker *NewSpeciesTracker // Add reference to new species tracker
+	processor         *Processor         // Add reference to processor for source name resolution
 	Description       string
 	mu                sync.Mutex // Protect concurrent access to Note and Results
 }
@@ -217,7 +218,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		// when multiple detections of the same species arrive concurrently
 		isNewSpecies, daysSinceFirstSeen = a.NewSpeciesTracker.CheckAndUpdateSpecies(a.Note.ScientificName, time.Now())
 	}
-	
+
 	// Save note to database
 	if err := a.Ds.Save(&a.Note, a.Results); err != nil {
 		// Add structured logging
@@ -232,21 +233,21 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		log.Printf("❌ Failed to save note and results to database")
 		return err
 	}
-	
+
 	// After successful save, publish detection event for new species
 	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
 		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source, a.Note.BeginTime, 15)
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, 15)
 		if err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to read audio segment from buffer",
 				"component", "analysis.processor.actions",
 				"error", err,
 				"species", a.Note.CommonName,
-				"source", a.Note.Source,
+				"source", a.Note.Source.SafeString,
 				"begin_time", a.Note.BeginTime,
 				"duration_seconds", 15,
 				"operation", "read_audio_segment")
@@ -303,11 +304,14 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
+	// Use display name directly from the AudioSource struct for user-facing notifications
+	displayLocation := a.Note.Source.DisplayName
+
 	detectionEvent, err := events.NewDetectionEvent(
 		a.Note.CommonName,
 		a.Note.ScientificName,
 		float64(a.Note.Confidence),
-		a.Note.Source,
+		displayLocation,
 		isNewSpecies,
 		daysSinceFirstSeen,
 	)
@@ -586,11 +590,10 @@ func (a *MqttAction) Execute(data interface{}) error {
 		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
-	// Create a copy of the Note with sanitized RTSP URL
+	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
-	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
 
-	// Wrap note with bird image (using sanitized copy)
+	// Wrap note with bird image (using copy)
 	noteWithBirdImage := NoteWithBirdImage{Note: noteCopy, BirdImage: birdImage}
 
 	// Create a JSON representation of the note
@@ -766,9 +769,8 @@ func (a *SSEAction) Execute(data interface{}) error {
 		log.Printf("🟡 BirdImageCache is nil, cannot fetch image for %s", a.Note.ScientificName)
 	}
 
-	// Create a copy of the Note with sanitized RTSP URL
+	// Create a copy of the Note (source is already sanitized in SafeString field)
 	noteCopy := a.Note
-	noteCopy.Source = conf.SanitizeRTSPUrl(noteCopy.Source)
 
 	// Broadcast the detection with error handling
 	if err := a.SSEBroadcaster(&noteCopy, &birdImage); err != nil {
@@ -826,7 +828,7 @@ func (a *SSEAction) waitForAudioFile() error {
 
 	// Build the full path to the audio file using the configured export path
 	audioPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.Note.ClipName)
-	
+
 	// Wait up to 5 seconds for file to be written
 	timeout := 5 * time.Second
 	deadline := time.Now().Add(timeout)
@@ -839,19 +841,19 @@ func (a *SSEAction) waitForAudioFile() error {
 			if info.Size() > 1024 {
 				if a.Settings.Debug {
 					// Add structured logging
-				GetLogger().Debug("Audio file ready for SSE broadcast",
-					"component", "analysis.processor.actions",
-					"clip_name", a.Note.ClipName,
-					"file_size_bytes", info.Size(),
-					"species", a.Note.CommonName,
-					"operation", "wait_audio_file_success")
-				log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
+					GetLogger().Debug("Audio file ready for SSE broadcast",
+						"component", "analysis.processor.actions",
+						"clip_name", a.Note.ClipName,
+						"file_size_bytes", info.Size(),
+						"species", a.Note.CommonName,
+						"operation", "wait_audio_file_success")
+					log.Printf("🎵 Audio file ready for SSE broadcast: %s (size: %d bytes)", a.Note.ClipName, info.Size())
 				}
 				return nil
 			}
 			// File exists but might still be writing, wait a bit more
 		}
-		
+
 		time.Sleep(checkInterval)
 	}
 
@@ -891,7 +893,7 @@ func (a *SSEAction) waitForDatabaseID() error {
 			}
 			return nil
 		}
-		
+
 		time.Sleep(checkInterval)
 	}
 
@@ -920,7 +922,7 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	// The SearchNotes method expects a search query string that will match against
 	// common_name or scientific_name fields
 	query := a.Note.ScientificName
-	
+
 	// Search for notes, sorted by ID descending to get the most recent
 	notes, err := a.Ds.SearchNotes(query, false, 10, 0) // false = sort descending, limit 10, offset 0
 	if err != nil {
@@ -936,9 +938,9 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	for i := range notes {
 		note := &notes[i]
 		// Check if this note matches our expected characteristics
-		if note.Date == a.Note.Date && 
-		   note.ScientificName == a.Note.ScientificName &&
-		   note.Time == a.Note.Time { // Exact time match
+		if note.Date == a.Note.Date &&
+			note.ScientificName == a.Note.ScientificName &&
+			note.Time == a.Note.Time { // Exact time match
 			return note, nil
 		}
 	}

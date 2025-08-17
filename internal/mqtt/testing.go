@@ -355,7 +355,11 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 			CommonName:     "Whooper Swan",
 			ScientificName: "Cygnus cygnus",
 			Confidence:     0.95,
-			Source:         "MQTT Test",
+			Source:         datastore.AudioSource{
+				ID:          "mqtt_test",
+				SafeString:  "MQTT Test",
+				DisplayName: "MQTT Test",
+			},
 		}
 
 		// Convert to JSON
@@ -539,7 +543,11 @@ func (c *client) publishTestMessage(ctx context.Context) TestResult {
 		CommonName:     "Whooper Swan",
 		ScientificName: "Cygnus cygnus",
 		Confidence:     0.95,
-		Source:         "MQTT Test",
+		Source:         datastore.AudioSource{
+			ID:          "mqtt_test",
+			SafeString:  "MQTT Test",
+			DisplayName: "MQTT Test",
+		},
 	}
 
 	// Convert to JSON

@@ -54,6 +54,15 @@ func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, Pagin
 	return result, response
 }
 
+// testRealtimeSource returns a standard test realtime audio source to avoid duplication
+func testRealtimeSource() datastore.AudioSource {
+	return datastore.AudioSource{
+		ID:          "realtime",
+		SafeString:  "realtime",
+		DisplayName: "realtime",
+	}
+}
+
 // TestGetDetections tests the GetDetections endpoint with various query types
 func TestGetDetections(t *testing.T) {
 	// Setup
@@ -66,7 +75,7 @@ func TestGetDetections(t *testing.T) {
 			ID:             1,
 			Date:           "2025-03-07",
 			Time:           "08:15:00",
-			Source:         "realtime",
+			Source: testRealtimeSource(),
 			SpeciesCode:    "AMCRO",
 			ScientificName: "Corvus brachyrhynchos",
 			CommonName:     "American Crow",
@@ -89,7 +98,7 @@ func TestGetDetections(t *testing.T) {
 			ID:             2,
 			Date:           "2025-03-07",
 			Time:           "09:30:00",
-			Source:         "realtime",
+			Source: testRealtimeSource(),
 			SpeciesCode:    "RBWO",
 			ScientificName: "Melanerpes carolinus",
 			CommonName:     "Red-bellied Woodpecker",
@@ -321,7 +330,7 @@ func TestGetDetection(t *testing.T) {
 		ID:             1,
 		Date:           "2025-03-07",
 		Time:           "08:15:00",
-		Source:         "realtime",
+		Source: testRealtimeSource(),
 		SpeciesCode:    "AMCRO",
 		ScientificName: "Corvus brachyrhynchos",
 		CommonName:     "American Crow",
@@ -429,7 +438,7 @@ func TestGetRecentDetections(t *testing.T) {
 			ID:             1,
 			Date:           "2025-03-07",
 			Time:           "08:15:00",
-			Source:         "realtime",
+			Source: testRealtimeSource(),
 			SpeciesCode:    "AMCRO",
 			ScientificName: "Corvus brachyrhynchos",
 			CommonName:     "American Crow",
@@ -443,7 +452,7 @@ func TestGetRecentDetections(t *testing.T) {
 			ID:             2,
 			Date:           "2025-03-07",
 			Time:           "09:30:00",
-			Source:         "realtime",
+			Source: testRealtimeSource(),
 			SpeciesCode:    "RBWO",
 			ScientificName: "Melanerpes carolinus",
 			CommonName:     "Red-bellied Woodpecker",

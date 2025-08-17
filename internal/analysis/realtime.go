@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -163,21 +164,21 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			Context("operation", "initialize_metrics").
 			Build()
 	}
-	
+
 	// Update BirdNET model loaded metric now that metrics are available
 	UpdateBirdNETModelLoadedMetric(metrics.BirdNET)
 
 	// Connect metrics to datastore before opening
 	dataStore.SetMetrics(metrics.Datastore)
 	dataStore.SetSunCalcMetrics(metrics.SunCalc)
-	
+
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {
 		return err // Return error to stop execution if database connection fails.
 	}
 	// Ensure the database connection is closed when the function returns.
 	defer closeDataStore(dataStore)
-	
+
 	// Note: datastore monitoring is automatically started when the database is opened
 
 	// Initialize bird image cache if needed
@@ -243,7 +244,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		if err := bufferManager.UpdateMonitors(sources); err != nil {
 			// Use structured logging to improve error visibility and triage
 			logger := GetLogger()
-			
+
 			// Extract error details from the enhanced error if available
 			errorStr := err.Error()
 			logger.Warn("Buffer monitor setup completed with errors",
@@ -252,7 +253,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 				"sources", sources,
 				"component", "analysis.realtime",
 				"operation", "buffer_monitor_setup")
-			
+
 			// Also log to console for immediate visibility during startup
 			log.Printf("⚠️  Warning: Buffer monitor setup completed with errors: %v", err)
 			// Note: We continue execution as buffer monitoring errors are not critical for startup
@@ -313,27 +314,27 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		select {
 		case <-quitChan:
 			// Add structured logging
-		GetLogger().Info("Initiating graceful shutdown sequence",
-			"shutdown_timeout_seconds", shutdownTimeout.Seconds(),
-			"operation", "graceful_shutdown")
-		log.Println("🛑 Initiating graceful shutdown sequence...")
+			GetLogger().Info("Initiating graceful shutdown sequence",
+				"shutdown_timeout_seconds", shutdownTimeout.Seconds(),
+				"operation", "graceful_shutdown")
+			log.Println("🛑 Initiating graceful shutdown sequence...")
 			shutdownStart := time.Now()
-			
+
 			// Create context with timeout for the entire shutdown process
 			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-			
+
 			// Execute shutdown with context
 			shutdownComplete := make(chan struct{})
 			go func() {
 				defer close(shutdownComplete)
-				
+
 				// Step 1: Signal shutdown started (but don't close controlChan yet)
 				// Add structured logging
 				GetLogger().Info("Shutdown step 1: Beginning shutdown sequence",
 					"step", 1,
 					"operation", "shutdown_begin")
 				log.Println("  1️⃣ Beginning shutdown sequence...")
-				
+
 				// Check context cancellation between steps
 				if ctx.Err() != nil {
 					// Add structured logging
@@ -344,7 +345,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 1")
 					return
 				}
-				
+
 				// Step 2: Stop control monitor
 				if ctrlMonitorRef != nil {
 					// Add structured logging
@@ -354,7 +355,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Println("  2️⃣ Stopping control monitor...")
 					ctrlMonitorRef.Stop()
 				}
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 2",
@@ -364,7 +365,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 2")
 					return
 				}
-				
+
 				// Step 3: Stop analysis buffer monitors
 				// Add structured logging
 				GetLogger().Info("Shutdown step 3: Stopping analysis buffer monitors",
@@ -372,7 +373,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					"operation", "shutdown_buffer_monitors")
 				log.Println("  3️⃣ Stopping analysis buffer monitors...")
 				bufferManager.RemoveAllMonitors()
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 3",
@@ -382,7 +383,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 3")
 					return
 				}
-				
+
 				// Step 4: Clean up HLS resources asynchronously with timeout
 				// Add structured logging
 				GetLogger().Info("Shutdown step 4: Cleaning up HLS resources",
@@ -390,7 +391,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					"operation", "shutdown_hls_cleanup")
 				log.Println("  4️⃣ Cleaning up HLS resources...")
 				cleanupHLSWithTimeout(ctx)
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 4",
@@ -400,7 +401,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 4")
 					return
 				}
-				
+
 				// Step 5: Shutdown HTTP server
 				if httpServerRef != nil {
 					// Add structured logging
@@ -417,13 +418,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 						log.Printf("  ⚠️ Warning: Error shutting down HTTP server: %v", err)
 					}
 				}
-				
+
 				// Now it's safe to close controlChan after HTTP server is down
 				// Add structured logging
 				GetLogger().Info("Closing control channel after producers shutdown",
 					"operation", "close_control_channel")
 				close(controlChan)
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 5",
@@ -433,7 +434,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 5")
 					return
 				}
-				
+
 				// Step 6: Wait for all goroutines
 				// Add structured logging
 				GetLogger().Info("Shutdown step 6: Waiting for goroutines to finish",
@@ -441,7 +442,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					"operation", "shutdown_wait_goroutines")
 				log.Println("  6️⃣ Waiting for goroutines to finish...")
 				wg.Wait()
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 6",
@@ -451,7 +452,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 6")
 					return
 				}
-				
+
 				// Step 7: Stop system monitor
 				if systemMonitorRef != nil {
 					// Add structured logging
@@ -461,7 +462,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Println("  7️⃣ Stopping system monitor...")
 					systemMonitorRef.Stop()
 				}
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 7",
@@ -471,7 +472,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 7")
 					return
 				}
-				
+
 				// Step 8: Stop notification service
 				if notification.IsInitialized() {
 					// Add structured logging
@@ -483,7 +484,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 						service.Stop()
 					}
 				}
-				
+
 				if ctx.Err() != nil {
 					// Add structured logging
 					GetLogger().Warn("Shutdown context cancelled after step 8",
@@ -493,7 +494,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					log.Printf("  ⚠️ Shutdown context cancelled after step 8")
 					return
 				}
-				
+
 				// Step 9: Delete BirdNET interpreter
 				// Add structured logging
 				GetLogger().Info("Shutdown step 9: Cleaning up BirdNET interpreter",
@@ -501,14 +502,14 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 					"operation", "shutdown_birdnet_cleanup")
 				log.Println("  9️⃣ Cleaning up BirdNET interpreter...")
 				bn.Delete()
-				
+
 				// Add structured logging
 				GetLogger().Info("Graceful shutdown completed",
 					"duration_ms", time.Since(shutdownStart).Milliseconds(),
 					"operation", "shutdown_complete")
 				log.Printf("✅ Graceful shutdown completed in %v", time.Since(shutdownStart))
 			}()
-			
+
 			// Wait for shutdown to complete or context timeout
 			select {
 			case <-shutdownComplete:
@@ -517,10 +518,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 				return nil
 			case <-ctx.Done():
 				// Add structured logging
-			GetLogger().Warn("Shutdown timeout exceeded, forcing exit",
-				"timeout_seconds", shutdownTimeout.Seconds(),
-				"operation", "shutdown_forced_exit")
-			log.Printf("⚠️ Shutdown timeout exceeded (%v), forcing exit", shutdownTimeout)
+				GetLogger().Warn("Shutdown timeout exceeded, forcing exit",
+					"timeout_seconds", shutdownTimeout.Seconds(),
+					"operation", "shutdown_forced_exit")
+				log.Printf("⚠️ Shutdown timeout exceeded (%v), forcing exit", shutdownTimeout)
 				cancel()
 				return nil
 			}
@@ -596,10 +597,10 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 		// Use new audiocore implementation
 		go func() {
 			// Add structured logging
-		GetLogger().Info("Using new audiocore audio capture system",
-			"audio_system", "audiocore",
-			"operation", "start_audio_capture")
-		log.Println("🎵 Using new audiocore audio capture system")
+			GetLogger().Info("Using new audiocore audio capture system",
+				"audio_system", "audiocore",
+				"operation", "start_audio_capture")
+			log.Println("🎵 Using new audiocore audio capture system")
 			adapter.StartAudioCoreCapture(settings, wg, quitChan, restartChan, unifiedAudioChan)
 		}()
 	} else {
@@ -644,10 +645,10 @@ func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics
 		telemetryEndpoint, err := observability.NewEndpoint(settings, metrics)
 		if err != nil {
 			// Add structured logging
-		GetLogger().Error("Failed to initialize telemetry endpoint",
-			"error", err,
-			"operation", "initialize_telemetry_endpoint")
-		log.Printf("Error initializing telemetry endpoint: %v", err)
+			GetLogger().Error("Failed to initialize telemetry endpoint",
+				"error", err,
+				"operation", "initialize_telemetry_endpoint")
+			log.Printf("Error initializing telemetry endpoint: %v", err)
 			return
 		}
 
@@ -667,10 +668,10 @@ func monitorShutdownSignals(quitChan chan struct{}) {
 		sig := <-sigChan // Block until a signal is received
 
 		// Add structured logging
-	GetLogger().Info("Received shutdown signal",
-		"signal", sig.String(),
-		"operation", "shutdown_signal_received")
-	log.Printf("Received %s signal, initiating graceful shutdown", sig)
+		GetLogger().Info("Received shutdown signal",
+			"signal", sig.String(),
+			"operation", "shutdown_signal_received")
+		log.Printf("Received %s signal, initiating graceful shutdown", sig)
 		close(quitChan) // Close the quit channel to signal other goroutines to stop
 	}()
 }
@@ -704,7 +705,7 @@ func closeDataStore(store datastore.Interface) {
 			}
 		}
 	}
-	
+
 	// Close the database connection
 	if err := store.Close(); err != nil {
 		// Add structured logging
@@ -1303,16 +1304,16 @@ func initializeBuffers(sources []string) error {
 func cleanupHLSWithTimeout(ctx context.Context) {
 	// Create a channel to signal completion
 	cleanupDone := make(chan error, 1)
-	
+
 	// Run cleanup in a goroutine
 	go func() {
 		cleanupDone <- cleanupHLSStreamingFiles()
 	}()
-	
+
 	// Create a timeout context for cleanup operation (2 seconds max)
 	cleanupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	
+
 	select {
 	case err := <-cleanupDone:
 		if err != nil {
@@ -1480,22 +1481,22 @@ func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
 		"monitoring_enabled", settings.Realtime.Monitoring.Enabled,
 		"check_interval", settings.Realtime.Monitoring.CheckInterval,
 	)
-	
+
 	if !settings.Realtime.Monitoring.Enabled {
 		logging.Warn("System monitoring is disabled in settings")
 		return nil
 	}
-	
+
 	logging.Info("Creating system monitor instance")
 	systemMonitor := monitor.NewSystemMonitor(settings)
 	if systemMonitor == nil {
 		logging.Error("Failed to create system monitor instance")
 		return nil
 	}
-	
+
 	logging.Info("Starting system monitor")
 	systemMonitor.Start()
-	
+
 	logging.Info("System resource monitoring initialized",
 		"component", "monitor",
 		"interval", settings.Realtime.Monitoring.CheckInterval)
@@ -1532,12 +1533,54 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	var sources []string
 	if len(settings.Realtime.RTSP.URLs) > 0 || settings.Realtime.Audio.Source != "" {
 		if len(settings.Realtime.RTSP.URLs) > 0 {
-			sources = settings.Realtime.RTSP.URLs
+			// Register RTSP sources in the registry and get their source IDs
+			registry := myaudio.GetRegistry()
+			if registry == nil {
+				return nil, fmt.Errorf("audio source registry not available")
+			}
+			
+			var failedSources []string
+			for _, url := range settings.Realtime.RTSP.URLs {
+				if url == "" {
+					log.Printf("⚠️ Skipping empty RTSP URL")
+					continue
+				}
+				
+				// Register the source
+				source, err := registry.RegisterSource(url, myaudio.SourceConfig{
+					ID:          "", // Let registry generate UUID
+					DisplayName: "", // Let auto-generation use SafeString
+					Type:        myaudio.SourceTypeRTSP,
+				})
+				if err != nil {
+					safeURL := privacy.SanitizeRTSPUrl(url)
+					log.Printf("❌ Failed to register RTSP source %s: %v", safeURL, err)
+					failedSources = append(failedSources, safeURL)
+					continue
+				}
+				
+				sources = append(sources, source.ID)
+			}
+
+			// If some sources failed to register, log a summary
+			if len(failedSources) > 0 {
+				log.Printf("⚠️  %d out of %d RTSP sources failed to register: %v",
+					len(failedSources), len(settings.Realtime.RTSP.URLs), failedSources)
+			}
 		}
 		if settings.Realtime.Audio.Source != "" {
-			// We'll add malgo to sources only if device initialization succeeds
-			// This will be handled in CaptureAudio
-			sources = append(sources, "malgo")
+			// Register the audio device in the source registry and use its ID
+			// This ensures consistent UUID-based IDs like RTSP sources
+			registry := myaudio.GetRegistry()
+			source, err := registry.RegisterSource(settings.Realtime.Audio.Source, myaudio.SourceConfig{
+				Type:        myaudio.SourceTypeAudioCard,
+				DisplayName: settings.Realtime.Audio.Source,
+			})
+			if err != nil {
+				log.Printf("⚠️  Failed to register audio device source: %v", err)
+			} else {
+				sources = append(sources, source.ID)
+			}
 		}
 
 		// Initialize buffers for all audio sources

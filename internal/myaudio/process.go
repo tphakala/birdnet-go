@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -127,13 +128,48 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 			elapsedTime, effectiveBufferDuration, source)
 	}
 
+	// Get AudioSource struct from registry for the Results message
+	var audioSource datastore.AudioSource
+	registry := GetRegistry()
+	if registry != nil {
+		// Try to get existing source by ID first
+		if registrySource, exists := registry.GetSourceByID(source); exists {
+			audioSource = datastore.AudioSource{
+				ID:          registrySource.ID,
+				SafeString:  registrySource.SafeString,
+				DisplayName: registrySource.DisplayName,
+			}
+		} else if registrySource, exists := registry.GetSourceByConnection(source); exists {
+			// Try by connection string (legacy case)
+			audioSource = datastore.AudioSource{
+				ID:          registrySource.ID,
+				SafeString:  registrySource.SafeString,
+				DisplayName: registrySource.DisplayName,
+			}
+		} else {
+			// Source not in registry - create basic AudioSource
+			audioSource = datastore.AudioSource{
+				ID:          source,
+				SafeString:  source, // Assume safe for non-registered sources
+				DisplayName: source,
+			}
+		}
+	} else {
+		// Registry not available - create basic AudioSource
+		audioSource = datastore.AudioSource{
+			ID:          source,
+			SafeString:  source,
+			DisplayName: source,
+		}
+	}
+
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := birdnet.Results{
 		StartTime:   startTime,
 		ElapsedTime: elapsedTime,
 		PCMdata:     data,
 		Results:     results,
-		Source:      source,
+		Source:      audioSource,
 	}
 
 	// Send the results to the queue

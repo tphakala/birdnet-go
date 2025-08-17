@@ -1738,7 +1738,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 	// Select necessary fields, including potentially null fields from joins
 	query = query.Select("notes.id, notes.date, notes.time, notes.scientific_name, notes.common_name, notes.confidence, " +
-		"notes.latitude, notes.longitude, notes.clip_name, notes.source, notes.source_node, " +
+		"notes.latitude, notes.longitude, notes.clip_name, notes.source_safe, notes.source_node, " +
 		"note_reviews.verified AS review_verified, " + // Select review status
 		"note_locks.id IS NOT NULL AS is_locked") // Select lock status as boolean
 

@@ -3,6 +3,14 @@ package datastore
 
 import "time"
 
+// AudioSource represents a structured audio source with ID, safe string, and display name
+// This allows safe separation of concerns: ID for buffer operations, SafeString for logging, DisplayName for UI
+type AudioSource struct {
+	ID          string `json:"id"`          // Source ID for buffer operations (e.g., "rtsp_87b89761")
+	SafeString  string `json:"safeString"`  // Sanitized connection string for logging (credentials removed)
+	DisplayName string `json:"displayName"` // User-friendly name for UI display
+}
+
 // Note represents a single observation data point
 type Note struct {
 	ID         uint `gorm:"primaryKey"`
@@ -10,10 +18,10 @@ type Note struct {
 	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
 	Time       string `gorm:"index:idx_notes_time"`
 	//InputFile      string
-	Source         string
-	BeginTime      time.Time
-	EndTime        time.Time
-	SpeciesCode    string
+	Source      AudioSource `gorm:"-"` // Runtime only, not stored in database
+	BeginTime   time.Time
+	EndTime     time.Time
+	SpeciesCode string
 	// ScientificName includes optimized index (scientific_name, date) for new species tracking performance
 	ScientificName string  `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
 	CommonName     string  `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
