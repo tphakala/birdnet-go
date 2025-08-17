@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -16,7 +18,10 @@ import (
 // activeSSEConnections tracks active SSE connections per client IP
 var (
 	activeSSEConnections sync.Map
-	connectionTimeout    = 65 * time.Second // slightly longer than client retry
+	// Increased timeout to prevent unnecessary reconnections and goroutine leaks
+	// Client will auto-reconnect via ReconnectingEventSource if connection drops
+	maxConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
+	totalSSEConnections   int64              // Track total active connections for monitoring
 )
 
 // initializeSSEHeaders sets up the necessary headers for SSE connection
@@ -222,7 +227,7 @@ func (h *Handlers) AudioLevelSSE(c echo.Context) error {
 	defer func() {
 		activeSSEConnections.Delete(clientIP)
 		if h.debug {
-			log.Printf("AudioLevelSSE: Cleaned up connection for %s", clientIP)
+			log.Printf("AudioLevelSSE: Cleaned up connection for %s (total active: %d)", clientIP, atomic.LoadInt64(&totalSSEConnections)-1)
 		}
 	}()
 
@@ -249,7 +254,7 @@ func (h *Handlers) checkDuplicateConnection(clientIP string) error {
 // setupSSEConnection initializes the SSE connection
 func (h *Handlers) setupSSEConnection(c echo.Context, clientIP string) error {
 	if h.debug {
-		log.Printf("AudioLevelSSE: New connection from %s", clientIP)
+		log.Printf("AudioLevelSSE: New connection from %s (total active: %d)", clientIP, atomic.LoadInt64(&totalSSEConnections)+1)
 	}
 
 	// Set up SSE headers
@@ -257,11 +262,22 @@ func (h *Handlers) setupSSEConnection(c echo.Context, clientIP string) error {
 	return nil
 }
 
-// runSSEEventLoop handles the main event loop for SSE
+// runSSEEventLoop handles the main event loop for SSE with proper timeout management
 func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
-	// Start connection timeout timer
-	timeout := time.NewTimer(connectionTimeout)
-	defer timeout.Stop()
+	// Track connection metrics
+	atomic.AddInt64(&totalSSEConnections, 1)
+	defer atomic.AddInt64(&totalSSEConnections, -1)
+	
+	// Create a context with timeout for maximum connection duration
+	timeoutCtx, cancel := context.WithTimeout(c.Request().Context(), maxConnectionDuration)
+	defer cancel()
+	
+	// Override the request context with timeout context
+	originalReq := c.Request()
+	c.SetRequest(originalReq.WithContext(timeoutCtx))
+	
+	// Track connection start time for periodic duration checks
+	connectionStart := time.Now()
 
 	// Create tickers for heartbeat and activity check
 	heartbeat := time.NewTicker(10 * time.Second)
@@ -293,9 +309,14 @@ func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
 
 	for {
 		select {
-		case <-timeout.C:
+		case <-timeoutCtx.Done():
+			// Context timeout or cancellation
 			if h.debug {
-				log.Printf("AudioLevelSSE: Connection timeout for %s", clientIP)
+				if timeoutCtx.Err() == context.DeadlineExceeded {
+					log.Printf("AudioLevelSSE: Connection exceeded max duration for %s (duration: %v)", clientIP, time.Since(connectionStart))
+				} else {
+					log.Printf("AudioLevelSSE: Connection cancelled for %s", clientIP)
+				}
 			}
 			return nil
 
@@ -335,6 +356,14 @@ func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
 			}
 
 		case <-heartbeat.C:
+			// Check if connection has exceeded maximum duration
+			if time.Since(connectionStart) > maxConnectionDuration {
+				if h.debug {
+					log.Printf("AudioLevelSSE: Maximum connection duration exceeded for %s, closing connection", clientIP)
+				}
+				return nil
+			}
+			
 			if err := h.sendHeartbeat(c); err != nil {
 				return err
 			}

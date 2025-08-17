@@ -9,10 +9,16 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// SSE connection configuration
+const (
+	maxSSEConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
 )
 
 type Notification struct {
@@ -21,9 +27,10 @@ type Notification struct {
 }
 
 type SSEHandler struct {
-	clients    map[chan Notification]bool
-	clientsMux sync.Mutex
-	debug      bool
+	clients          map[chan Notification]bool
+	clientsMux       sync.Mutex
+	debug            bool
+	activeConnections int64 // Track total active connections
 }
 
 func NewSSEHandler() *SSEHandler {
@@ -33,26 +40,34 @@ func NewSSEHandler() *SSEHandler {
 	}
 }
 
-// ServeSSE handles Server-Sent Events connections
+// ServeSSE handles Server-Sent Events connections with proper timeout management
 // API: GET /api/v1/sse
 func (h *SSEHandler) ServeSSE(c echo.Context) error {
-	h.Debug("SSE: New connection request from %s", c.Request().RemoteAddr)
+	// Track active connections
+	atomic.AddInt64(&h.activeConnections, 1)
+	defer atomic.AddInt64(&h.activeConnections, -1)
+	
+	h.Debug("SSE: New connection request from %s (total active: %d)", c.Request().RemoteAddr, atomic.LoadInt64(&h.activeConnections))
 
 	c.Response().Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	c.Response().Header().Set("Cache-Control", "no-cache")
 	c.Response().Header().Set("Connection", "keep-alive")
 	c.Response().WriteHeader(http.StatusOK)
 
+	// Use buffered channel to prevent blocking on cleanup
 	clientChan := make(chan Notification, 100)
 	h.addClient(clientChan)
 
-	// Use a context with cancel for cleanup
-	ctx, cancel := context.WithCancel(c.Request().Context())
+	// Create a context with timeout for maximum connection duration
+	timeoutCtx, cancel := context.WithTimeout(c.Request().Context(), maxSSEConnectionDuration)
 	defer func() {
 		cancel()
 		h.removeClient(clientChan)
-		h.Debug("SSE: Connection closed for %s", c.Request().RemoteAddr)
+		h.Debug("SSE: Connection closed for %s (total active: %d)", c.Request().RemoteAddr, atomic.LoadInt64(&h.activeConnections)-1)
 	}()
+	
+	// Track connection start time
+	connectionStart := time.Now()
 
 	// Add heartbeat
 	heartbeat := time.NewTicker(30 * time.Second)
@@ -60,8 +75,13 @@ func (h *SSEHandler) ServeSSE(c echo.Context) error {
 
 	for {
 		select {
-		case <-ctx.Done():
-			h.Debug("SSE: Context cancelled for %s", c.Request().RemoteAddr)
+		case <-timeoutCtx.Done():
+			// Context timeout or cancellation
+			if timeoutCtx.Err() == context.DeadlineExceeded {
+				h.Debug("SSE: Connection exceeded max duration for %s (duration: %v)", c.Request().RemoteAddr, time.Since(connectionStart))
+			} else {
+				h.Debug("SSE: Context cancelled for %s", c.Request().RemoteAddr)
+			}
 			return nil
 		case notification := <-clientChan:
 			data, err := json.Marshal(notification)
@@ -76,6 +96,12 @@ func (h *SSEHandler) ServeSSE(c echo.Context) error {
 			}
 			c.Response().Flush()
 		case <-heartbeat.C:
+			// Check if connection has exceeded maximum duration
+			if time.Since(connectionStart) > maxSSEConnectionDuration {
+				h.Debug("SSE: Maximum connection duration exceeded for %s, closing connection", c.Request().RemoteAddr)
+				return nil
+			}
+			
 			_, err := fmt.Fprintf(c.Response(), ":\n\n")
 			if err != nil {
 				h.Debug("SSE: Heartbeat error for %s: %v", c.Request().RemoteAddr, err)
