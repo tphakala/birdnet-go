@@ -14,10 +14,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-// Connection configuration
+// SSE Connection configuration
 const (
-	maxSSEConnectionDuration = 30 * time.Minute // Maximum connection duration
-	sseEndpoint              = "/api/v2/notifications/stream"
+	// Connection timeouts
+	maxSSEConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
+	rateLimitWindow          = 1 * time.Minute  // Rate limiter time window
+	heartbeatInterval        = 30 * time.Second // Heartbeat interval for keep-alive
+	eventLoopCheckInterval   = 100 * time.Millisecond // Event loop check interval
+	
+	// Endpoints
+	sseEndpoint = "/api/v2/notifications/stream"
+	
+	// Buffer sizes
+	notificationChannelBuffer = 10 // Buffer size for notification channels
+	
+	// Rate limits
+	rateLimitRequestsPerWindow = 1  // Maximum requests per rate limit window for notifications
+	rateLimitBurst             = 5  // Rate limit burst allowance
 )
 
 // SSENotificationData represents notification data sent via SSE
@@ -58,9 +71,9 @@ func (c *Controller) SetupNotificationRoutes() {
 		Skipper: middleware.DefaultSkipper,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      1,               // 1 request
-				Burst:     5,               // Allow burst of 5
-				ExpiresIn: 1 * time.Minute, // Per minute
+				Rate:      rateLimitRequestsPerWindow, // Rate limit per window
+				Burst:     rateLimitBurst,             // Rate limit burst
+				ExpiresIn: rateLimitWindow,            // Rate limit window
 			},
 		),
 		IdentifierExtractor: func(ctx echo.Context) (string, error) {
@@ -155,7 +168,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	// Create notification client
 	client := &NotificationClient{
 		ID:           clientID,
-		Channel:      make(chan *notification.Notification, 10),
+		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
 		Request:      ctx.Request(),
 		Response:     ctx.Response(),
 		Done:         make(chan bool),
@@ -200,7 +213,7 @@ func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client
 			select {
 			case client.Done <- true:
 				// Successfully notified
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(eventLoopCheckInterval):
 				// Done channel might be blocked or closed, continue
 			}
 			c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
@@ -218,7 +231,7 @@ func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client
 // runNotificationEventLoop runs the main SSE event loop
 func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *NotificationClient) error {
 	// Send heartbeat every 30 seconds
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
 	// Track connection start time for monitoring

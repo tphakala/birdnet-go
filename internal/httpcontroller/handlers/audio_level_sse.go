@@ -15,13 +15,25 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
+// SSE connection configuration
+const (
+	// Connection timeouts
+	maxConnectionDuration   = 30 * time.Minute // Maximum connection duration to prevent resource leaks
+	heartbeatIntervalAudio  = 10 * time.Second // Heartbeat interval for audio level SSE
+	activityCheckInterval   = 1 * time.Second  // Activity check interval
+	inactivityThreshold     = 15 * time.Second // Threshold for marking sources as inactive
+	authRefreshInterval     = 1 * time.Minute  // Authentication refresh interval
+	debugLogInterval        = 5 * time.Second  // Debug log throttling interval
+	rateLimitUpdateInterval = 50 * time.Millisecond // Rate limit for sending updates
+	
+	// Buffer sizes
+	audioLevelChannelBuffer = 100 // Buffer size for SSE client channels
+)
+
 // activeSSEConnections tracks active SSE connections per client IP
 var (
 	activeSSEConnections sync.Map
-	// Increased timeout to prevent unnecessary reconnections and goroutine leaks
-	// Client will auto-reconnect via ReconnectingEventSource if connection drops
-	maxConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
-	totalSSEConnections   int64              // Track total active connections for monitoring
+	totalSSEConnections  int64 // Track total active connections for monitoring
 )
 
 // initializeSSEHeaders sets up the necessary headers for SSE connection
@@ -280,9 +292,9 @@ func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
 	connectionStart := time.Now()
 
 	// Create tickers for heartbeat and activity check
-	heartbeat := time.NewTicker(10 * time.Second)
+	heartbeat := time.NewTicker(heartbeatIntervalAudio)
 	defer heartbeat.Stop()
-	activityCheck := time.NewTicker(1 * time.Second)
+	activityCheck := time.NewTicker(activityCheckInterval)
 	defer activityCheck.Stop()
 
 	// Cache the authentication status at connection time to avoid constant checking
@@ -292,13 +304,12 @@ func (h *Handlers) runSSEEventLoop(c echo.Context, clientIP string) error {
 	}
 
 	// Initialize data structures
-	const inactivityThreshold = 15 * time.Second
 	levels, lastUpdateTime, lastNonZeroTime := h.initializeLevelsData(isAuthenticated)
 	lastLogTime := time.Now()
 	lastSentTime := time.Now()
 
-	// Authentication refresh ticker (check once per minute)
-	authRefresh := time.NewTicker(1 * time.Minute)
+	// Authentication refresh ticker
+	authRefresh := time.NewTicker(authRefreshInterval)
 	defer authRefresh.Stop()
 
 	// Send initial empty update to establish connection
@@ -403,7 +414,7 @@ func (h *Handlers) handleAudioUpdate(c echo.Context, audioData myaudio.AudioLeve
 	updatedLastLogTime = lastLogTime
 
 	if h.debug {
-		if time.Since(lastLogTime) > 5*time.Second {
+		if time.Since(lastLogTime) > debugLogInterval {
 			log.Printf("AudioLevelSSE: Received audio data from source %s (%s): %+v", audioData.Source, audioData.Name, audioData)
 			updatedLastLogTime = time.Now()
 		}
@@ -413,7 +424,7 @@ func (h *Handlers) handleAudioUpdate(c echo.Context, audioData myaudio.AudioLeve
 
 	updatedLastSentTime = lastSentTime
 	// Only send updates if enough time has passed (rate limiting)
-	if time.Since(lastSentTime) >= 50*time.Millisecond {
+	if time.Since(lastSentTime) >= rateLimitUpdateInterval {
 		if err = sendLevelsUpdate(c, levels); err != nil {
 			log.Printf("AudioLevelSSE: Error sending update: %v", err)
 			return

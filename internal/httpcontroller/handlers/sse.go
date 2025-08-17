@@ -18,7 +18,12 @@ import (
 
 // SSE connection configuration
 const (
+	// Connection timeouts
 	maxSSEConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
+	sseHeartbeatIntervalV1   = 30 * time.Second // Heartbeat interval for v1 SSE connections
+	
+	// Buffer sizes
+	sseClientChannelBuffer   = 100 // Buffer size for SSE client channels
 )
 
 type Notification struct {
@@ -55,7 +60,7 @@ func (h *SSEHandler) ServeSSE(c echo.Context) error {
 	c.Response().WriteHeader(http.StatusOK)
 
 	// Use buffered channel to prevent blocking on cleanup
-	clientChan := make(chan Notification, 100)
+	clientChan := make(chan Notification, sseClientChannelBuffer)
 	h.addClient(clientChan)
 
 	// Create a context with timeout for maximum connection duration
@@ -70,7 +75,7 @@ func (h *SSEHandler) ServeSSE(c echo.Context) error {
 	connectionStart := time.Now()
 
 	// Add heartbeat
-	heartbeat := time.NewTicker(30 * time.Second)
+	heartbeat := time.NewTicker(sseHeartbeatIntervalV1)
 	defer heartbeat.Stop()
 
 	for {
