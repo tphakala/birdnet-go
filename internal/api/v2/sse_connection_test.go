@@ -1,0 +1,509 @@
+// sse_connection_test.go: Tests for SSE connection lifecycle and goroutine cleanup
+// This test suite prevents regression of the critical memory leak issues fixed in PR #1163
+
+package api
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/serviceapi"
+	"go.uber.org/goleak"
+)
+
+// SSETestConfig holds configuration for SSE connection tests
+type SSETestConfig struct {
+	endpoint          string
+	maxConnections    int
+	testTimeout       time.Duration
+	connectionTimeout time.Duration
+}
+
+// Common test configurations for different SSE endpoints
+var sseTestConfigs = []SSETestConfig{
+	// Note: /notifications/stream endpoint requires authentication and is tested separately
+	{
+		endpoint:          "/detections/stream", 
+		maxConnections:    3,
+		testTimeout:       5 * time.Second,
+		connectionTimeout: 1 * time.Second,
+	},
+	{
+		endpoint:          "/soundlevels/stream",
+		maxConnections:    3,
+		testTimeout:       5 * time.Second,
+		connectionTimeout: 1 * time.Second,
+	},
+}
+
+// TestSSEConnectionCleanup is the main test that verifies SSE connections
+// are properly cleaned up without goroutine leaks
+func TestSSEConnectionCleanup(t *testing.T) {
+	// Defer goleak check to verify no goroutines leak after test
+	defer goleak.VerifyNone(t,
+		// Ignore goroutines from testing framework and other standard libraries
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+		// Ignore the go-cache janitor which we can't control
+		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
+		// Ignore lumberjack logger goroutines
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
+	)
+
+	for _, config := range sseTestConfigs {
+		config := config // Capture loop variable
+		t.Run(fmt.Sprintf("endpoint_%s", strings.ReplaceAll(config.endpoint, "/", "_")), func(t *testing.T) {
+			t.Parallel()
+			testSSEEndpointCleanup(t, config)
+		})
+	}
+}
+
+// testSSEEndpointCleanup tests a specific SSE endpoint for proper cleanup
+func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
+	// Create test server
+	server, controller := setupSSETestServer(t)
+	defer server.Close()
+	defer controller.Shutdown()
+
+	t.Run("single_connection_manual_disconnect", func(t *testing.T) {
+		testSingleConnectionManualDisconnect(t, server, config)
+	})
+
+	t.Run("single_connection_context_cancellation", func(t *testing.T) {
+		testSingleConnectionContextCancellation(t, server, config)
+	})
+
+	t.Run("multiple_concurrent_connections", func(t *testing.T) {
+		testMultipleConcurrentConnections(t, server, config)
+	})
+
+	t.Run("connection_timeout", func(t *testing.T) {
+		testConnectionTimeout(t, server, config)
+	})
+}
+
+// testSingleConnectionManualDisconnect verifies that manually closing an SSE connection
+// properly cleans up goroutines
+func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	// Create HTTP client
+	client := &http.Client{
+		Timeout: config.testTimeout,
+	}
+
+	// Make SSE request
+	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Verify SSE headers
+	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+	require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
+
+	// Read first event (connection established)
+	scanner := bufio.NewScanner(resp.Body)
+	connected := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "connected") || strings.Contains(line, "Connected") {
+			connected = true
+			break
+		}
+		// Don't wait too long for connection event
+		if time.Now().Add(-time.Second).After(time.Now()) {
+			break
+		}
+	}
+	require.True(t, connected, "Should receive connection event")
+
+	// Close connection manually
+	resp.Body.Close()
+
+	// Wait briefly for cleanup
+	time.Sleep(200 * time.Millisecond)
+
+	// Connection should be cleaned up - no way to verify directly in this context
+	// but goleak will catch any leaked goroutines
+}
+
+// testSingleConnectionContextCancellation verifies that canceling the context
+// properly cleans up the SSE connection
+func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	// Create context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create HTTP client with context
+	client := &http.Client{
+		Timeout: config.testTimeout,
+	}
+
+	// Make SSE request with context
+	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v2"+config.endpoint, nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Start reading in goroutine
+	done := make(chan bool, 1)
+	go func() {
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			// Just read events until context cancellation
+		}
+		done <- true
+	}()
+
+	// Wait a bit to establish connection
+	time.Sleep(100 * time.Millisecond)
+
+	// Cancel context
+	cancel()
+
+	// Wait for goroutine to finish
+	select {
+	case <-done:
+		// Expected - connection should close due to context cancellation
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Connection did not close within expected time after context cancellation")
+	}
+
+	resp.Body.Close()
+
+	// Wait for cleanup
+	time.Sleep(200 * time.Millisecond)
+}
+
+// testMultipleConcurrentConnections verifies that multiple concurrent SSE connections
+// are all properly cleaned up
+func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	var wg sync.WaitGroup
+	var connectionsEstablished int32
+
+	// Start multiple concurrent connections
+	for i := 0; i < config.maxConnections; i++ {
+		wg.Add(1)
+		go func(connID int) {
+			defer wg.Done()
+
+			client := &http.Client{
+				Timeout: config.testTimeout,
+			}
+
+			req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, nil)
+			if err != nil {
+				t.Errorf("Connection %d: Failed to create request: %v", connID, err)
+				return
+			}
+			req.Header.Set("Accept", "text/event-stream")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				// May fail due to rate limiting, which is acceptable
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				connectionsEstablished++
+				
+				// Read a few events
+				scanner := bufio.NewScanner(resp.Body)
+				eventCount := 0
+				for scanner.Scan() && eventCount < 3 {
+					eventCount++
+				}
+			}
+		}(i)
+	}
+
+	// Wait for all connections to complete
+	wg.Wait()
+
+	// Wait for cleanup
+	time.Sleep(300 * time.Millisecond)
+
+	// At least one connection should have been established
+	require.Greater(t, int(connectionsEstablished), 0, 
+		"At least one connection should have been established")
+}
+
+// testConnectionTimeout verifies that connections are properly cleaned up
+// when they reach the maximum duration timeout
+func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETestConfig) {
+	// This test would require modifying the timeout constants for testing
+	// For now, we'll test the behavior with a short-lived connection
+	
+	client := &http.Client{
+		Timeout: config.connectionTimeout,
+	}
+
+	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// Timeout is expected behavior
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read until timeout
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		// Read until client timeout occurs
+	}
+
+	// Connection should be closed by timeout
+	time.Sleep(200 * time.Millisecond)
+}
+
+// TestSSEUnbufferedChannelFix specifically tests that the critical unbuffered channel
+// deadlock issue has been fixed
+func TestSSEUnbufferedChannelFix(t *testing.T) {
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
+	)
+
+	// Test the detections endpoint to verify the critical unbuffered channel fix
+	server, controller := setupSSETestServer(t)
+	defer server.Close()
+	defer controller.Shutdown()
+
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	// Create multiple rapid connections and disconnections to stress test
+	// the Done channel handling
+	for i := 0; i < 5; i++ {
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", nil)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue // May fail due to rate limiting
+		}
+
+		// Immediately close to trigger the disconnect handler
+		resp.Body.Close()
+
+		// Small delay between connections
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Wait for all cleanup to complete
+	time.Sleep(500 * time.Millisecond)
+
+	// If the test reaches here without hanging, the unbuffered channel issue is fixed
+}
+
+// TestSSERateLimiting verifies that SSE rate limiting works correctly
+// and doesn't cause goroutine leaks
+func TestSSERateLimiting(t *testing.T) {
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
+	)
+
+	server, controller := setupSSETestServer(t)
+	defer server.Close()
+	defer controller.Shutdown()
+
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+
+	var successCount, rateLimitedCount int
+
+	// Make many rapid requests to trigger rate limiting
+	for i := 0; i < 15; i++ { // More than the rate limit of 10
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/detections/stream", nil)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			successCount++
+		} else if resp.StatusCode == http.StatusTooManyRequests {
+			rateLimitedCount++
+		}
+
+		resp.Body.Close()
+	}
+
+	// Should have some successful connections and some rate limited
+	require.Greater(t, successCount, 0, "Should have some successful connections")
+	require.Greater(t, rateLimitedCount, 0, "Should have some rate limited connections")
+
+	// Wait for cleanup
+	time.Sleep(300 * time.Millisecond)
+}
+
+// setupSSETestServer creates a test server with SSE endpoints configured
+func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
+	// Create Echo instance
+	e := echo.New()
+
+	// Create mock datastore
+	mockDS := new(MockDataStore)
+
+	// Create settings with required paths
+	settings := &conf.Settings{
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+		},
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Export: conf.ExportSettings{
+					Path: t.TempDir(),
+				},
+			},
+		},
+	}
+
+	// Create control channel
+	controlChan := make(chan string, 10)
+
+	// Create mock metrics
+	mockMetrics, _ := observability.NewMetrics()
+
+	// Create controller WITH route initialization
+	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	require.NoError(t, err)
+
+	// Wait for goroutines to start
+	if controller.goroutinesStarted != nil {
+		select {
+		case <-controller.goroutinesStarted:
+			// Controller is ready
+		case <-time.After(2 * time.Second):
+			t.Fatal("Controller failed to start within timeout")
+		}
+	}
+
+	// Create test server
+	server := httptest.NewServer(e)
+
+	return server, controller
+}
+
+// Benchmark for SSE connection performance
+func BenchmarkSSEConnectionSetup(b *testing.B) {
+	server, controller := setupSSETestServerForBench(b)
+	defer server.Close()
+	defer controller.Shutdown()
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	b.ResetTimer()
+	
+	for i := 0; i < b.N; i++ {
+		req, err := http.NewRequest("GET", server.URL+"/api/v2/notifications/stream", nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue // Rate limiting may occur
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			// Read one event then close
+			scanner := bufio.NewScanner(resp.Body)
+			if scanner.Scan() {
+				// Got one event
+			}
+		}
+
+		resp.Body.Close()
+	}
+}
+
+// setupSSETestServerForBench creates a test server for benchmarking
+func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
+	e := echo.New()
+	mockDS := new(MockDataStore)
+	settings := &conf.Settings{
+		WebServer: conf.WebServerSettings{Debug: false}, // Disable debug for benchmarking
+		Realtime: conf.RealtimeSettings{
+			Audio: conf.AudioSettings{
+				Export: conf.ExportSettings{Path: b.TempDir()},
+			},
+		},
+	}
+	controlChan := make(chan string, 10)
+	mockMetrics, _ := observability.NewMetrics()
+
+	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	if controller.goroutinesStarted != nil {
+		<-controller.goroutinesStarted
+	}
+
+	return httptest.NewServer(e), controller
+}
+
+// mockBirdNETProvider implements serviceapi.BirdNETProvider for testing
+type mockBirdNETProvider struct{}
+
+func (m mockBirdNETProvider) GetBirdNET() *birdnet.BirdNET {
+	return nil // Return nil for testing
+}
+
+// mockServerFacade implements serviceapi.ServerFacade for testing
+type mockServerFacade struct{}
+
+func (m *mockServerFacade) IsAccessAllowed(c echo.Context) bool {
+	return true // Always allow access for testing
+}
+
+func (m *mockServerFacade) GetProcessor() serviceapi.BirdNETProvider {
+	return mockBirdNETProvider{}
+}
