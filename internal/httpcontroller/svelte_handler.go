@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/frontend"
@@ -80,7 +81,8 @@ func (s *Server) SetupSvelteRoutes() {
 
 		// Use http.ServeContent for efficient file serving with proper buffer management
 		// This handles Range requests, caching headers, and prevents buffer accumulation
-		http.ServeContent(c.Response(), c.Request(), path, stat.ModTime(), seeker)
+		// Use base filename only to avoid internal path disclosure in headers/errors
+		http.ServeContent(c.Response(), c.Request(), filepath.Base(path), stat.ModTime(), seeker)
 		return nil
 	})
 }
