@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +15,37 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
+
+// SSE connection configuration
+const (
+	// Connection timeouts
+	maxSSEStreamDuration     = 30 * time.Minute   // Maximum stream duration to prevent resource leaks
+	sseHeartbeatInterval     = 30 * time.Second   // Heartbeat interval for keep-alive
+	sseBroadcastTimeout      = 3 * time.Second    // Timeout for broadcasting to slow clients
+	sseEventLoopSleep        = 10 * time.Millisecond // Sleep duration when no events
+	sseWriteDeadline         = 10 * time.Second   // Write deadline for SSE messages
+	
+	// Endpoints
+	detectionStreamEndpoint  = "/api/v2/detections/stream"
+	soundLevelStreamEndpoint = "/api/v2/soundlevels/stream"
+	
+	// Buffer sizes
+	sseDetectionBufferSize   = 100 // Buffer size for detection channels (high volume)
+	sseSoundLevelBufferSize  = 100 // Buffer size for sound level channels
+	sseMinimalBufferSize     = 1   // Minimal buffer for unused channels
+	sseDoneChannelBuffer     = 1   // Buffer for Done channels to prevent blocking
+	
+	// Rate limits
+	sseRateLimitRequests     = 10              // SSE rate limit requests per window
+	sseRateLimitWindow       = 1 * time.Minute // SSE rate limit time window
+)
+
+// WriteDeadlineSetter interface for response writers that support write deadlines
+type WriteDeadlineSetter interface {
+	SetWriteDeadline(time.Time) error
+}
 
 // SSEDetectionData represents the detection data sent via SSE
 type SSEDetectionData struct {
@@ -47,7 +78,7 @@ type SSEClient struct {
 	SoundLevelChan chan SSESoundLevelData
 	Request        *http.Request
 	Response       http.ResponseWriter
-	Done           chan bool
+	Done           chan struct{} // Signal-only buffered channel to prevent blocking
 	StreamType     string // "detections", "soundlevels", or "all"
 }
 
@@ -109,7 +140,7 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 		select {
 		case client.Channel <- *detection:
 			// Successfully sent to client
-		case <-time.After(3 * time.Second): // Increased timeout for slow connections
+		case <-time.After(sseBroadcastTimeout): // Timeout for slow connections
 			// Client channel is blocked, collect ID for removal
 			if m.logger != nil {
 				m.logger.Printf("SSE client %s appears blocked, will remove", clientID)
@@ -146,7 +177,7 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 				select {
 				case client.SoundLevelChan <- *soundLevel:
 					// Successfully sent to client
-				case <-time.After(3 * time.Second): // Increased timeout for slow connections
+				case <-time.After(sseBroadcastTimeout): // Timeout for slow connections
 					// Client channel is blocked, collect ID for removal
 					if m.logger != nil {
 						m.logger.Printf("SSE client %s appears blocked on sound level channel, will remove", clientID)
@@ -185,8 +216,8 @@ func (c *Controller) initSSERoutes() {
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      10,              // 10 requests
-				ExpiresIn: 1 * time.Minute, // per minute
+				Rate:      sseRateLimitRequests, // Requests per window
+				ExpiresIn: sseRateLimitWindow,   // Rate limit window
 			},
 		),
 		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
@@ -228,7 +259,7 @@ func createSSEClient(clientID string, ctx echo.Context, streamType string) *SSEC
 		ID:         clientID,
 		Request:    ctx.Request(),
 		Response:   ctx.Response(),
-		Done:       make(chan bool),
+		Done:       make(chan struct{}, sseDoneChannelBuffer), // Signal-only buffered channel to prevent blocking on cleanup
 		StreamType: streamType,
 	}
 }
@@ -265,7 +296,7 @@ func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string
 
 // sendSSEHeartbeat sends a heartbeat message to keep the connection alive
 func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType string) error {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"timestamp": time.Now().Unix(),
 		"clients":   c.sseManager.GetClientCount(),
 	}
@@ -285,8 +316,42 @@ func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType str
 	return nil
 }
 
-// handleSSEStream handles the common SSE stream setup and teardown
+// handleSSEStream handles the common SSE stream setup and teardown with timeout protection
 func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logPrefix string, setupFunc func(*SSEClient), eventLoop func(echo.Context, *SSEClient, string) error) error {
+	// Track connection start time for metrics
+	connectionStartTime := time.Now()
+	
+	// Track metrics if available
+	endpoint := ""
+	switch streamType {
+	case "detections":
+		endpoint = detectionStreamEndpoint
+	case "soundlevels":
+		endpoint = soundLevelStreamEndpoint
+	}
+	
+	if c.metrics != nil && c.metrics.HTTP != nil && endpoint != "" {
+		c.metrics.HTTP.SSEConnectionStarted(endpoint)
+		defer func() {
+			duration := time.Since(connectionStartTime).Seconds()
+			closeReason := metrics.SSECloseReasonClosed
+			if ctx.Request().Context().Err() == context.DeadlineExceeded {
+				closeReason = metrics.SSECloseReasonTimeout
+			} else if ctx.Request().Context().Err() == context.Canceled {
+				closeReason = metrics.SSECloseReasonCanceled
+			}
+			c.metrics.HTTP.SSEConnectionClosed(endpoint, duration, closeReason)
+		}()
+	}
+	
+	// Create a context with timeout for maximum connection duration
+	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
+	defer cancel()
+	
+	// Override the request context with timeout context
+	originalReq := ctx.Request()
+	ctx.SetRequest(originalReq.WithContext(timeoutCtx))
+	
 	// Set SSE headers
 	setSSEHeaders(ctx)
 
@@ -325,41 +390,24 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 func (c *Controller) StreamDetections(ctx echo.Context) error {
 	return c.handleSSEStream(ctx, "detections", "Connected to detection stream", "detection",
 		func(client *SSEClient) {
-			client.Channel = make(chan SSEDetectionData, 100) // Increased buffer for high detection periods
+			client.Channel = make(chan SSEDetectionData, sseDetectionBufferSize) // Buffer for high detection periods
 		},
 		func(ctx echo.Context, client *SSEClient, clientID string) error {
-			ticker := time.NewTicker(30 * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case detection := <-client.Channel:
-					// Send detection data
-					if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
-						if c.apiLogger != nil {
-							c.apiLogger.Error("Failed to send SSE detection",
-								"client_id", clientID,
-								"error", err.Error(),
-							)
+			return c.runSSEEventLoop(ctx, client, clientID, detectionStreamEndpoint, 
+				func() (any, bool) {
+					select {
+					case detection, ok := <-client.Channel:
+						if !ok {
+							return nil, false // Channel closed, no more data
 						}
-						return err
+						return detection, true
+					default:
+						return nil, false
 					}
-
-				case <-ticker.C:
-					// Send heartbeat
-					if err := c.sendSSEHeartbeat(ctx, clientID, ""); err != nil {
-						return err
-					}
-
-				case <-ctx.Request().Context().Done():
-					// Client disconnected
-					return nil
-
-				case <-client.Done:
-					// Client marked for removal
-					return nil
-				}
-			}
+				},
+				"detection",
+				"",
+			)
 		})
 }
 
@@ -367,48 +415,88 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
 	return c.handleSSEStream(ctx, "soundlevels", "Connected to sound level stream", "sound level",
 		func(client *SSEClient) {
-			client.Channel = make(chan SSEDetectionData, 1)    // Small buffer, not used for sound levels
-			client.SoundLevelChan = make(chan SSESoundLevelData, 100) // Buffer for sound level data
+			client.Channel = make(chan SSEDetectionData, sseMinimalBufferSize)    // Minimal buffer, not used for sound levels
+			client.SoundLevelChan = make(chan SSESoundLevelData, sseSoundLevelBufferSize) // Buffer for sound level data
 		},
 		func(ctx echo.Context, client *SSEClient, clientID string) error {
-			ticker := time.NewTicker(30 * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case soundLevel := <-client.SoundLevelChan:
-					// Send sound level data
-					if err := c.sendSSEMessage(ctx, "soundlevel", soundLevel); err != nil {
-						if c.apiLogger != nil {
-							c.apiLogger.Error("Failed to send SSE sound level",
-								"client_id", clientID,
-								"error", err.Error(),
-							)
+			return c.runSSEEventLoop(ctx, client, clientID, soundLevelStreamEndpoint,
+				func() (any, bool) {
+					select {
+					case soundLevel, ok := <-client.SoundLevelChan:
+						if !ok {
+							return nil, false // Channel closed, no more data
 						}
-						return err
+						return soundLevel, true
+					default:
+						return nil, false
 					}
-
-				case <-ticker.C:
-					// Send heartbeat
-					if err := c.sendSSEHeartbeat(ctx, clientID, "soundlevels"); err != nil {
-						return err
-					}
-
-				case <-ctx.Request().Context().Done():
-					// Client disconnected
-					return nil
-
-				case <-client.Done:
-					// Client marked for removal
-					return nil
-				}
-			}
+				},
+				"soundlevel",
+				"soundlevels",
+			)
 		})
 }
 
 
+// runSSEEventLoop handles the common SSE event loop pattern for all stream types
+func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, clientID string, endpoint string,
+	dataReceiver func() (any, bool), eventType string, heartbeatType string) error {
+	
+	ticker := time.NewTicker(sseHeartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Send heartbeat
+			if err := c.sendSSEHeartbeat(ctx, clientID, heartbeatType); err != nil {
+				if c.metrics != nil && c.metrics.HTTP != nil {
+					c.metrics.HTTP.RecordSSEError(endpoint, "heartbeat_failed")
+				}
+				return err
+			}
+			if c.metrics != nil && c.metrics.HTTP != nil {
+				c.metrics.HTTP.RecordSSEMessageSent(endpoint, "heartbeat")
+			}
+
+		case <-ctx.Request().Context().Done():
+			// Client disconnected
+			return nil
+
+		case <-client.Done:
+			// Client marked for removal
+			return nil
+
+		default:
+			// Check for data on the channel (non-blocking)
+			if data, hasData := dataReceiver(); hasData {
+				if err := c.sendSSEMessage(ctx, eventType, data); err != nil {
+					if c.apiLogger != nil {
+						c.apiLogger.Error("Failed to send SSE message",
+							"client_id", clientID,
+							"endpoint", endpoint,
+							"event_type", eventType,
+							"error", err.Error(),
+						)
+					}
+					if c.metrics != nil && c.metrics.HTTP != nil {
+						c.metrics.HTTP.RecordSSEError(endpoint, "send_failed")
+					}
+					return err
+				}
+				if c.metrics != nil && c.metrics.HTTP != nil {
+					c.metrics.HTTP.RecordSSEMessageSent(endpoint, eventType)
+				}
+			} else {
+				// Small sleep to prevent busy-waiting when no data
+				time.Sleep(sseEventLoopSleep)
+			}
+		}
+	}
+}
+
 // sendSSEMessage sends a Server-Sent Event message
-func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data interface{}) error {
+func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) error {
 	// Convert data to JSON
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -419,8 +507,8 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data interfa
 	message := fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))
 
 	// Set write deadline to prevent hanging on slow/disconnected clients
-	if conn, ok := ctx.Response().Writer.(interface{ SetWriteDeadline(time.Time) error }); ok {
-		deadline := time.Now().Add(10 * time.Second) // 10 second timeout
+	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+		deadline := time.Now().Add(sseWriteDeadline) // Write deadline timeout
 		if err := conn.SetWriteDeadline(deadline); err != nil {
 			// If we can't set deadline, log but continue - not all response writers support this
 			if c.apiLogger != nil {
@@ -445,13 +533,13 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data interfa
 // GetSSEStatus returns information about SSE connections
 func (c *Controller) GetSSEStatus(ctx echo.Context) error {
 	if c.sseManager == nil {
-		return ctx.JSON(http.StatusOK, map[string]interface{}{
+		return ctx.JSON(http.StatusOK, map[string]any{
 			"connected_clients": 0,
 			"status":            "disabled",
 		})
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]interface{}{
+	return ctx.JSON(http.StatusOK, map[string]any{
 		"connected_clients": c.sseManager.GetClientCount(),
 		"status":            "active",
 	})

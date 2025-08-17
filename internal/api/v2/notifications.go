@@ -11,7 +11,27 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+)
+
+// SSE Connection configuration
+const (
+	// Connection timeouts
+	maxSSEConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
+	rateLimitWindow          = 1 * time.Minute  // Rate limiter time window
+	heartbeatInterval        = 30 * time.Second // Heartbeat interval for keep-alive
+	eventLoopCheckInterval   = 100 * time.Millisecond // Event loop check interval
+	
+	// Endpoints
+	sseEndpoint = "/api/v2/notifications/stream"
+	
+	// Buffer sizes
+	notificationChannelBuffer = 10 // Buffer size for notification channels
+	
+	// Rate limits
+	rateLimitRequestsPerWindow = 10 // Maximum requests per rate limit window for notifications (increased from 1 to match other SSE endpoints)
+	rateLimitBurst             = 15 // Rate limit burst allowance (increased to handle quick navigation)
 )
 
 // SSENotificationData represents notification data sent via SSE
@@ -35,7 +55,7 @@ type NotificationClient struct {
 	Channel      chan *notification.Notification
 	Request      *http.Request
 	Response     http.ResponseWriter
-	Done         chan bool
+	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
 	Context      context.Context
 }
@@ -52,9 +72,9 @@ func (c *Controller) SetupNotificationRoutes() {
 		Skipper: middleware.DefaultSkipper,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      1,               // 1 request
-				Burst:     5,               // Allow burst of 5
-				ExpiresIn: 1 * time.Minute, // Per minute
+				Rate:      rateLimitRequestsPerWindow, // Rate limit per window
+				Burst:     rateLimitBurst,             // Rate limit burst
+				ExpiresIn: rateLimitWindow,            // Rate limit window
 			},
 		),
 		IdentifierExtractor: func(ctx echo.Context) (string, error) {
@@ -89,15 +109,46 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 		})
 	}
 
+	// Track connection start time for metrics
+	connectionStartTime := time.Now()
+
+	// Track active connections using metrics
+	if c.metrics != nil && c.metrics.HTTP != nil {
+		c.metrics.HTTP.SSEConnectionStarted(sseEndpoint)
+		defer func() {
+			duration := time.Since(connectionStartTime).Seconds()
+			// Determine close reason based on context
+			closeReason := metrics.SSECloseReasonClosed
+			if ctx.Request().Context().Err() == context.DeadlineExceeded {
+				closeReason = metrics.SSECloseReasonTimeout
+			} else if ctx.Request().Context().Err() == context.Canceled {
+				closeReason = metrics.SSECloseReasonCanceled
+			}
+			c.metrics.HTTP.SSEConnectionClosed(sseEndpoint, duration, closeReason)
+		}()
+	}
+
+	// Create a context with timeout for maximum connection duration
+	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEConnectionDuration)
+	defer cancel()
+
+	// Override the request context with timeout context
+	originalReq := ctx.Request()
+	ctx.SetRequest(originalReq.WithContext(timeoutCtx))
+
 	client, service, err := c.setupNotificationSSEClient(ctx)
 	if err != nil {
 		return err
 	}
 	
 	// Ensure cleanup happens regardless of how we exit
-	defer service.Unsubscribe(client.SubscriberCh)
+	defer func() {
+		service.Unsubscribe(client.SubscriberCh)
+		// Note: We don't close client.Done to avoid race conditions with senders
+		// The buffered channel will signal shutdown and be reclaimed by GC
+	}()
 	
-	// Setup disconnect handler
+	// Setup disconnect handler with proper cleanup
 	c.setupNotificationDisconnectHandler(ctx, client)
 	
 	// Run the main event loop
@@ -119,10 +170,10 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	// Create notification client
 	client := &NotificationClient{
 		ID:           clientID,
-		Channel:      make(chan *notification.Notification, 10),
+		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
 		Request:      ctx.Request(),
 		Response:     ctx.Response(),
-		Done:         make(chan bool),
+		Done:         make(chan struct{}, 1), // Buffered signal channel to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
 		Context:      notificationCtx,
 	}
@@ -134,6 +185,10 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	}); err != nil {
 		service.Unsubscribe(notificationCh)
 		return nil, nil, err
+	}
+	
+	if c.metrics != nil && c.metrics.HTTP != nil {
+		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "connected")
 	}
 
 	// Log the connection
@@ -151,11 +206,19 @@ func (c *Controller) setNotificationSSEHeaders(ctx echo.Context) {
 	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
 }
 
-// setupNotificationDisconnectHandler sets up client disconnect handling
+// setupNotificationDisconnectHandler sets up client disconnect handling with timeout
 func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
 	go func() {
+		// Wait for client disconnect or timeout
 		<-ctx.Request().Context().Done()
-		client.Done <- true
+		
+		// Client disconnected or timeout reached
+		select {
+		case client.Done <- struct{}{}:
+			// Successfully notified
+		case <-time.After(eventLoopCheckInterval):
+			// Done channel might be blocked, continue
+		}
 		c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
 	}()
 }
@@ -163,8 +226,11 @@ func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client
 // runNotificationEventLoop runs the main SSE event loop
 func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *NotificationClient) error {
 	// Send heartbeat every 30 seconds
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
+
+	// Track connection start time for monitoring
+	connectionStart := time.Now()
 
 	// Main event loop
 	for {
@@ -180,9 +246,20 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 			}
 
 		case <-ticker.C:
+			// Check if connection has exceeded maximum duration
+			if time.Since(connectionStart) > maxSSEConnectionDuration {
+				c.logNotificationConnection(client.ID, "", "max_duration_exceeded", false)
+				return nil
+			}
 			// Send heartbeat
 			if err := c.sendNotificationHeartbeat(ctx); err != nil {
+				if c.metrics != nil && c.metrics.HTTP != nil {
+					c.metrics.HTTP.RecordSSEError(sseEndpoint, "heartbeat_failed")
+				}
 				return err
+			}
+			if c.metrics != nil && c.metrics.HTTP != nil {
+				c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "heartbeat")
 			}
 
 		case <-client.Done:
@@ -214,9 +291,15 @@ func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *no
 	
 	if err := c.sendSSEMessage(ctx, "toast", toastEvent); err != nil {
 		c.logNotificationError("failed to send toast SSE", err, clientID)
+		if c.metrics != nil && c.metrics.HTTP != nil {
+			c.metrics.HTTP.RecordSSEError(sseEndpoint, "send_failed")
+		}
 		return err
 	}
 	
+	if c.metrics != nil && c.metrics.HTTP != nil {
+		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "toast")
+	}
 	c.logToastSent(clientID, notif)
 	return nil
 }
@@ -230,9 +313,15 @@ func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, no
 
 	if err := c.sendSSEMessage(ctx, "notification", event); err != nil {
 		c.logNotificationError("failed to send notification SSE", err, clientID)
+		if c.metrics != nil && c.metrics.HTTP != nil {
+			c.metrics.HTTP.RecordSSEError(sseEndpoint, "send_failed")
+		}
 		return err
 	}
 	
+	if c.metrics != nil && c.metrics.HTTP != nil {
+		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "notification")
+	}
 	c.logNotificationSent(clientID, notif)
 	return nil
 }

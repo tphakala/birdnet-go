@@ -3,8 +3,10 @@ package metrics
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // HTTPMetrics contains Prometheus metrics for HTTP handler operations
@@ -34,6 +36,13 @@ type HTTPMetrics struct {
 	// Template rendering metrics
 	templateRenderDuration *prometheus.HistogramVec
 	templateRenderErrors   *prometheus.CounterVec
+
+	// SSE (Server-Sent Events) metrics
+	sseActiveConnections   prometheus.Gauge
+	sseTotalConnections    *prometheus.CounterVec
+	sseConnectionDuration  *prometheus.HistogramVec
+	sseMessagesSent        *prometheus.CounterVec
+	sseErrors              *prometheus.CounterVec
 }
 
 // NewHTTPMetrics creates and registers new HTTP handler metrics
@@ -172,43 +181,87 @@ func (m *HTTPMetrics) initMetrics() error {
 		[]string{"template", "error_type"},
 	)
 
+	// SSE (Server-Sent Events) metrics
+	m.sseActiveConnections = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "http_sse_active_connections",
+			Help: "Current number of active SSE connections",
+		},
+	)
+
+	m.sseTotalConnections = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_sse_connections_total",
+			Help: "Total number of SSE connections established",
+		},
+		[]string{"endpoint", "status"}, // endpoint: /notifications/stream; status: established, closed, timeout, error
+	)
+
+	m.sseConnectionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_sse_connection_duration_seconds",
+			Help:    "Duration of SSE connections in seconds",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 15), // 1s to ~32768s (9+ hours)
+		},
+		[]string{"endpoint"},
+	)
+
+	m.sseMessagesSent = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_sse_messages_sent_total",
+			Help: "Total number of SSE messages sent",
+		},
+		[]string{"endpoint", "message_type"}, // message_type: notification, toast, heartbeat, connected
+	)
+
+	m.sseErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_sse_errors_total",
+			Help: "Total number of SSE errors",
+		},
+		[]string{"endpoint", "error_type"}, // error_type: send_failed, timeout, client_disconnect
+	)
+
 	return nil
+}
+
+// getCollectors returns all collectors in order for Describe/Collect operations
+func (m *HTTPMetrics) getCollectors() []prometheus.Collector {
+	return []prometheus.Collector{
+		m.httpRequestsTotal,
+		m.httpRequestDuration,
+		m.httpRequestErrors,
+		m.httpResponseSize,
+		m.handlerOperationsTotal,
+		m.handlerOperationDuration,
+		m.handlerOperationErrors,
+		m.handlerDatabaseOpsTotal,
+		m.handlerDatabaseOpsDuration,
+		m.handlerDatabaseOpsErrors,
+		m.authOperationsTotal,
+		m.authErrors,
+		m.templateRenderDuration,
+		m.templateRenderErrors,
+		m.sseActiveConnections,
+		m.sseTotalConnections,
+		m.sseConnectionDuration,
+		m.sseMessagesSent,
+		m.sseErrors,
+	}
 }
 
 // Describe implements the Collector interface
 func (m *HTTPMetrics) Describe(ch chan<- *prometheus.Desc) {
-	m.httpRequestsTotal.Describe(ch)
-	m.httpRequestDuration.Describe(ch)
-	m.httpRequestErrors.Describe(ch)
-	m.httpResponseSize.Describe(ch)
-	m.handlerOperationsTotal.Describe(ch)
-	m.handlerOperationDuration.Describe(ch)
-	m.handlerOperationErrors.Describe(ch)
-	m.handlerDatabaseOpsTotal.Describe(ch)
-	m.handlerDatabaseOpsDuration.Describe(ch)
-	m.handlerDatabaseOpsErrors.Describe(ch)
-	m.authOperationsTotal.Describe(ch)
-	m.authErrors.Describe(ch)
-	m.templateRenderDuration.Describe(ch)
-	m.templateRenderErrors.Describe(ch)
+	for _, collector := range m.getCollectors() {
+		collector.Describe(ch)
+	}
 }
 
 // Collect implements the Collector interface
 func (m *HTTPMetrics) Collect(ch chan<- prometheus.Metric) {
-	m.httpRequestsTotal.Collect(ch)
-	m.httpRequestDuration.Collect(ch)
-	m.httpRequestErrors.Collect(ch)
-	m.httpResponseSize.Collect(ch)
-	m.handlerOperationsTotal.Collect(ch)
-	m.handlerOperationDuration.Collect(ch)
-	m.handlerOperationErrors.Collect(ch)
-	m.handlerDatabaseOpsTotal.Collect(ch)
-	m.handlerDatabaseOpsDuration.Collect(ch)
-	m.handlerDatabaseOpsErrors.Collect(ch)
-	m.authOperationsTotal.Collect(ch)
-	m.authErrors.Collect(ch)
-	m.templateRenderDuration.Collect(ch)
-	m.templateRenderErrors.Collect(ch)
+	for _, collector := range m.getCollectors() {
+		collector.Collect(ch)
+	}
 }
 
 // HTTP request recording methods
@@ -285,4 +338,60 @@ func (m *HTTPMetrics) RecordTemplateRender(template string, duration float64) {
 // RecordTemplateRenderError records a template rendering error
 func (m *HTTPMetrics) RecordTemplateRenderError(template, errorType string) {
 	m.templateRenderErrors.WithLabelValues(template, errorType).Inc()
+}
+
+// SSE metrics recording methods
+
+// SSEConnectionStarted increments active connections and total connections counter
+func (m *HTTPMetrics) SSEConnectionStarted(endpoint string) {
+	m.sseActiveConnections.Inc()
+	m.sseTotalConnections.WithLabelValues(endpoint, "established").Inc()
+}
+
+// SSE connection close reason constants to prevent high cardinality metrics
+const (
+	SSECloseReasonClosed   = "closed"   // Normal client disconnect
+	SSECloseReasonTimeout  = "timeout"  // Connection timed out
+	SSECloseReasonCanceled = "canceled" // Context canceled
+	SSECloseReasonError    = "error"    // Error occurred
+)
+
+// SSEConnectionClosed decrements active connections and records duration
+// Reason must be one of the SSECloseReason* constants to prevent high cardinality
+func (m *HTTPMetrics) SSEConnectionClosed(endpoint string, duration float64, reason string) {
+	// Validate reason to prevent high cardinality - map unknown reasons to "error"
+	switch reason {
+	case SSECloseReasonClosed, SSECloseReasonTimeout, SSECloseReasonCanceled, SSECloseReasonError:
+		// Valid reason, use as-is
+	default:
+		reason = SSECloseReasonError
+	}
+	
+	m.sseActiveConnections.Dec()
+	m.sseTotalConnections.WithLabelValues(endpoint, reason).Inc()
+	m.sseConnectionDuration.WithLabelValues(endpoint).Observe(duration)
+}
+
+// RecordSSEMessageSent records an SSE message sent
+func (m *HTTPMetrics) RecordSSEMessageSent(endpoint, messageType string) {
+	m.sseMessagesSent.WithLabelValues(endpoint, messageType).Inc()
+}
+
+// RecordSSEError records an SSE error
+func (m *HTTPMetrics) RecordSSEError(endpoint, errorType string) {
+	m.sseErrors.WithLabelValues(endpoint, errorType).Inc()
+}
+
+// GetActiveSSEConnections returns the current number of active SSE connections
+func (m *HTTPMetrics) GetActiveSSEConnections() float64 {
+	metric := &dto.Metric{}
+	if err := m.sseActiveConnections.Write(metric); err != nil {
+		// Log the error with context for debugging metric registration issues
+		log.Printf("HTTPMetrics: Failed to write SSE active connections metric: %v", err)
+		return 0
+	}
+	if metric.Gauge != nil && metric.Gauge.Value != nil {
+		return *metric.Gauge.Value
+	}
+	return 0
 }
